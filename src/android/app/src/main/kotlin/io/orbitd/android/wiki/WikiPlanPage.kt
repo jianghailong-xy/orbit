@@ -48,6 +48,8 @@ internal class WikiPlanActions(
     val draft: () -> Unit = {},
     /** Redraft…: the sheet with the owner's words. */
     val redraft: () -> Unit = {},
+    /** Start over…, from the ⋯ menu: its own confirmation, naming the version it would not read. */
+    val startOver: (Int) -> Unit = {},
     val confirm: (Int) -> Unit = {},
     /** A version from the menu; null for the one the page shows first. */
     val pickVersion: (Int?) -> Unit = {},
@@ -70,25 +72,25 @@ internal class WikiPlanActions(
 
 // MARK: - the plan page
 
-/** The plan (mock 22 ②): the title with the version shown, where that version came from, Confirm plan and Redraft…, a
- * failed draft's hint, the job's card, the gate's report, the changes proposed, and the categories and documents —
- * `WikiPlanLogic.PageSection`'s order, which is the web phone's. [shown] null is the empty page; [base] is what the shown
- * version is held against; [written] how far the documents of the version in force are written. */
+/** The plan (mock 22 ②): the title with the version shown, where that version came from, Confirm plan and Redraft…, the
+ * job's card, the gate's report, the changes proposed, and the categories and documents — `WikiPlanLogic.PageSection`'s
+ * order, which is the web phone's. [shown] null is the empty page, or a job's head with no version: a job that left no
+ * draft keeps Redraft… over its card. [base] is what the shown version is held against; [written] how far the documents
+ * of the version in force are written. */
 @Composable
 internal fun WikiPlanPage(route: OrbitRoute, state: WikiPlanState, shown: WikiPlanLogic.Shown?, base: WikiPlanLogic.Shown?,
     versions: List<WikiPlanLogic.VersionRow>, jobCard: WikiPlanLogic.JobCard?, written: Pair<Int, Int>?, now: Instant,
     busy: Boolean = false, refused: Map<String, List<WikiPlanGateError>> = emptyMap(), actions: WikiPlanActions = WikiPlanActions()) {
     val open = WikiPlanLogic.openJob(state)
+    val failed = WikiPlanLogic.failedJob(state)
     val inForce = shown?.status == WikiPlanLogic.ShownStatus.CONFIRMED && state.confirmed?.version == shown.version
     PageBar.Bind(route, title = "") {
         BarIcon(R.drawable.ic_contents, WikiArticleCopy.contents, "wiki-plan-contents", onClick = actions.openContents)
     }
     // The version in force, which a change was proposed against.
     val changesBase = remember(state.confirmed) { state.confirmed?.let(WikiPlanLogic::fromVersion) }
-    val metaLine = if (shown != null) {
-        val job = if (shown.status == WikiPlanLogic.ShownStatus.FAILED) WikiPlanLogic.failedJob(state) else (open ?: state.job)
-        WikiPlanLogic.meta(shown, job, if (inForce) written else null).joinToString(" · ")
-    } else open?.let { WikiPlanLogic.jobHead(it) } ?: WikiPlanCopy.none
+    val metaLine = if (shown != null) WikiPlanLogic.meta(shown, open ?: state.job, if (inForce) written else null).joinToString(" · ")
+        else (open ?: failed)?.let { WikiPlanLogic.jobHead(it) } ?: WikiPlanCopy.none
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-plan-page"), contentPadding = PaddingValues(bottom = 24.dp)) {
         WikiPlanLogic.PageSection.entries.forEach { section ->
             when (section) {
@@ -106,13 +108,13 @@ internal fun WikiPlanPage(route: OrbitRoute, state: WikiPlanState, shown: WikiPl
                     Text(metaLine, Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp).testTag("wiki-plan-meta"),
                         style = WikiType.label, color = WikiPalette.secondary)
                 }
-                WikiPlanLogic.PageSection.ACTIONS -> if (shown != null) item(key = "actions") {
+                WikiPlanLogic.PageSection.ACTIONS -> if (shown != null || failed != null) item(key = "actions") {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (shown.status == WikiPlanLogic.ShownStatus.DRAFT || shown.status == WikiPlanLogic.ShownStatus.FAILED) {
-                            Button(onClick = { actions.confirm(shown.version) }, enabled = !(shown.status == WikiPlanLogic.ShownStatus.FAILED || busy),
+                        if (shown?.status == WikiPlanLogic.ShownStatus.DRAFT) {
+                            Button(onClick = { actions.confirm(shown.version) }, enabled = !busy,
                                 modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("wiki-plan-confirm")) { Text(WikiPlanCopy.confirm) }
                         }
-                        if (shown.status != WikiPlanLogic.ShownStatus.SUPERSEDED) {
+                        if (shown?.status != WikiPlanLogic.ShownStatus.SUPERSEDED) {
                             FilledTonalButton(onClick = actions.redraft, enabled = open == null && !busy,
                                 modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("wiki-plan-redraft")) {
                                 Icon(painterResource(R.drawable.ic_refresh), null, Modifier.size(18.dp))
@@ -120,17 +122,12 @@ internal fun WikiPlanPage(route: OrbitRoute, state: WikiPlanState, shown: WikiPl
                                 Text(WikiPlanCopy.redraft)
                             }
                         }
+                        WikiPlanLogic.startOver(state)?.let { version -> PlanMoreMenu(version, !busy, actions.startOver) }
                     }
                 } else if (open == null) item(key = "empty") { PlanEmpty(busy, actions.draft) }
-                WikiPlanLogic.PageSection.HINT -> if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) item(key = "hint") {
-                    Text(WikiPlanCopy.failedHint(state.confirmed?.version), Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)
-                        .testTag("wiki-plan-hint"), style = WikiType.label, color = WikiPalette.secondary)
-                }
                 WikiPlanLogic.PageSection.JOB -> if (jobCard != null) item(key = "job") { WikiPlanJobCardView(jobCard, actions) }
-                WikiPlanLogic.PageSection.GATE -> if (shown != null && (shown.status == WikiPlanLogic.ShownStatus.DRAFT ||
-                        shown.status == WikiPlanLogic.ShownStatus.FAILED)) item(key = "gate") {
-                    WikiPlanGateView(WikiPlanLogic.gate(shown, base,
-                        if (shown.status == WikiPlanLogic.ShownStatus.FAILED) WikiPlanLogic.failedJob(state) else state.job))
+                WikiPlanLogic.PageSection.GATE -> if (shown?.status == WikiPlanLogic.ShownStatus.DRAFT) item(key = "gate") {
+                    WikiPlanGateView(WikiPlanLogic.gate(shown, base, state.job))
                 }
                 WikiPlanLogic.PageSection.CHANGES -> {
                     val proposals = state.proposals.orEmpty()
@@ -166,6 +163,21 @@ internal fun WikiPlanPage(route: OrbitRoute, state: WikiPlanState, shown: WikiPl
                     }
                 }
             }
+        }
+    }
+}
+
+/** The ⋯ menu beside the head's actions: a fresh draft over the version stored, behind its own confirmation. */
+@Composable
+private fun PlanMoreMenu(version: Int, enabled: Boolean, startOver: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.testTag("wiki-plan-more")) {
+            Icon(painterResource(R.drawable.ic_more), WikiPlanCopy.more)
+        }
+        DropdownMenu(expanded, { expanded = false }) {
+            DropdownMenuItem(modifier = Modifier.testTag("wiki-plan-start-over"), text = { Text(WikiPlanCopy.startOver) },
+                onClick = { expanded = false; startOver(version) })
         }
     }
 }
@@ -217,17 +229,17 @@ private fun PlanEmpty(busy: Boolean, draft: () -> Unit) {
     }
 }
 
-/** `1.3  安全模型与密钥信任` over the reader's question and `2 errors · 7 sections · 1,500–2,400 chars`: the document row
+/** `1.3  安全模型与密钥信任` over the reader's question and `2 not found · 7 sections · 1,500–2,400 chars`: the document row
  * the home draws too ([WikiDocRow]), with the plan's counts under the question. */
 @Composable
 private fun PlanDocRow(doc: WikiPlanLogic.ShownDoc, shown: WikiPlanLogic.Shown, open: (String) -> Unit) {
-    val errors = WikiPlanLogic.docErrors(shown, doc).size
-    val error = MaterialTheme.colorScheme.error
+    val missing = WikiPlanLogic.docMissing(shown, doc).size
+    val amber = WikiPalette.amber
     WikiDocRow(WikiDocMark.Number(doc.number), doc.title, "wiki-plan-doc:${doc.slug}", line = doc.question, locked = doc.protected,
         onClick = { open(doc.slug) }) {
         Text(buildAnnotatedString {
-            if (errors > 0) {
-                withStyle(SpanStyle(color = error, fontWeight = FontWeight.Bold)) { append(WikiPlanCopy.errorCount(errors)) }
+            if (missing > 0) {
+                withStyle(SpanStyle(color = amber, fontWeight = FontWeight.Bold)) { append(WikiPlanCopy.notFoundCount(missing)) }
                 append(" · ")
             }
             append(WikiPlanLogic.docLine(doc))
@@ -362,53 +374,58 @@ internal fun WikiPlanJobCardView(card: WikiPlanLogic.JobCard, actions: WikiPlanA
                 }
             }
         }
-        card.progress?.let { progress ->
-            LinearProgressIndicator(progress = { progress.done.toFloat() / maxOf(1, progress.total) },
-                Modifier.fillMaxWidth().testTag("wiki-plan-job-progress"), color = MaterialTheme.colorScheme.primary)
-            progress.now?.let { now ->
-                Text(buildAnnotatedString {
-                    append(WikiPlanCopy.writingNow); append(" ")
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(now) }
-                }, style = WikiType.label)
-            }
-        }
+        card.progress?.let { WikiPlanProgress(it, "wiki-plan-job-progress") }
+    }
+}
+
+/** How far the writing has got: the bar, and the document being written now. */
+@Composable
+internal fun WikiPlanProgress(progress: WikiPlanLogic.JobCard.Progress, tag: String) {
+    LinearProgressIndicator(progress = { progress.done.toFloat() / maxOf(1, progress.total) },
+        Modifier.fillMaxWidth().testTag(tag), color = MaterialTheme.colorScheme.primary)
+    progress.now?.let { now ->
+        Text(buildAnnotatedString {
+            append(WikiPlanCopy.writingNow); append(" ")
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(now) }
+        }, style = WikiType.label)
     }
 }
 
 // MARK: - the gate's report
 
-/** The gate's report (mock 22 ②): passed in green, or failed in red with its four rows and the references not found,
- * the first few listed where they were named. */
+/** The gate's report (mock 40 ①, 22 ②): passed in green, or ready for review in amber with its four rows, the draft's
+ * notes under the check each belongs to, and the references not found, the first few listed where they stand. */
 @Composable
 internal fun WikiPlanGateView(gate: WikiPlanLogic.Gate) {
     var allRefs by rememberSaveable { mutableStateOf(false) }
     val green = LocalOrbitColors.current.success
-    val red = MaterialTheme.colorScheme.error
-    val tone = if (gate.passed) green else red
+    val amber = WikiPalette.amber
+    val tone = if (gate.passed) green else amber
+    val refsAt = gate.rows.indexOfFirst { it.check == "references" }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(10.dp))
         .background(MaterialTheme.colorScheme.surfaceVariant).testTag("wiki-plan-gate")) {
         Column(Modifier.fillMaxWidth().background(tone.copy(alpha = 0.10f)).padding(horizontal = 16.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(painterResource(if (gate.passed) R.drawable.ic_check_circle else R.drawable.ic_x_circle), null, Modifier.size(18.dp), tint = tone)
+                Icon(painterResource(if (gate.passed) R.drawable.ic_check_circle else R.drawable.ic_warning), null, Modifier.size(18.dp), tint = tone)
                 Text(gate.title, style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold), color = tone)
             }
             Text((listOf(gate.line) + listOfNotNull(gate.aside)).joinToString(" · "), style = WikiType.label, color = WikiPalette.secondary)
         }
-        if (!gate.passed) gate.rows.forEach { row ->
+        if (!gate.passed) gate.rows.forEachIndexed { at, row ->
             HorizontalDivider(Modifier.padding(start = 16.dp))
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).testTag("wiki-plan-gate-row:${row.check}"),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(painterResource(if (row.ok) R.drawable.ic_check_circle else R.drawable.ic_x_circle), null,
-                        Modifier.padding(top = 1.dp).size(18.dp), tint = if (row.ok) green else red)
+                    Icon(painterResource(if (row.ok) R.drawable.ic_check_circle else R.drawable.ic_warning), null,
+                        Modifier.padding(top = 1.dp).size(18.dp), tint = if (row.ok) green else amber)
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(row.title, style = WikiType.subtext)
                         Text(row.text, style = WikiType.label, color = WikiPalette.secondary)
                     }
                 }
-                if (row.check == "references" && gate.refs.isNotEmpty()) {
-                    // The references not found, the first few on a phone, each where it was named, what, and why.
+                if (at == refsAt && gate.refs.isNotEmpty()) {
+                    // The references not found, the first few on a phone, each where it stands, what, and why.
                     val shownRefs = if (allRefs) gate.refs else gate.refs.take(WikiPlanCopy.refsShownPhone)
                     Column(Modifier.padding(start = 26.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         shownRefs.forEachIndexed { i, ref ->
@@ -418,7 +435,7 @@ internal fun WikiPlanGateView(gate: WikiPlanLogic.Gate) {
                                 withStyle(SpanStyle(color = WikiPalette.secondary)) { append(ref.kind) }
                                 append(" ")
                                 withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(ref.ref) }
-                                withStyle(SpanStyle(color = red)) { append(" — ${ref.why}") }
+                                withStyle(SpanStyle(color = WikiPalette.secondary)) { append(" — ${ref.why}") }
                             }, Modifier.testTag("wiki-plan-gate-ref:$i"), style = WikiType.label)
                         }
                         if (gate.refs.size > shownRefs.size) TextButton(onClick = { allRefs = true },

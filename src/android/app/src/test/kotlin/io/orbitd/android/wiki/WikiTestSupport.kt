@@ -24,6 +24,7 @@ internal object WikiSharedFiles {
     val reviewMode: JsonObject by lazy { json("src/shared/src/wiki-review-mode.fixture.json") }
     val serverExecution: JsonObject by lazy { json("src/shared/src/wiki-server-execution.fixture.json") }
     val health: JsonObject by lazy { json("src/shared/src/wiki-health.fixture.json") }
+    val start: JsonObject by lazy { json("src/shared/src/wiki-start.fixture.json") }
     val contract: JsonObject by lazy { json("contracts/wiki.contract.json") }
 }
 
@@ -48,7 +49,7 @@ internal object WikiPlanFixture {
     fun online(name: String) = spec(name)["runnerOnline"].bool()
     fun state(name: String) = state(spec(name))
     fun state(spec: JsonObject) = WikiPlanState("sp1", if (spec["confirmed"].text() == "v1") version("v1") else null,
-        if (spec["draft"].text() == "v2") version("v2") else null, if (spec["proposals"].bool() == true) proposals else emptyList(),
+        spec["draft"].text()?.let { version(it) }, if (spec["proposals"].bool() == true) proposals else emptyList(),
         spec["job"].text()?.let { WikiPlanJob.read(plan.fobj("jobs")[it]) })
     /** The state as `GET /api/wiki/spaces/:id/plan` answers it. */
     fun read(name: String): JsonObject {
@@ -56,11 +57,22 @@ internal object WikiPlanFixture {
         return buildJsonObject {
             put("spaceId", "sp1")
             put("confirmed", if (spec["confirmed"].text() == "v1") plan.fobj("versions").fobj("v1") else JsonNull)
-            put("draft", if (spec["draft"].text() == "v2") plan.fobj("versions").fobj("v2") else JsonNull)
+            put("draft", spec["draft"].text()?.let { plan.fobj("versions").fobj(it) } ?: JsonNull)
             put("proposals", if (spec["proposals"].bool() == true) plan.farr("proposals") else JsonArray(emptyList()))
             put("job", spec["job"].text()?.let { plan.fobj("jobs").fobj(it) } ?: JsonNull)
         }
     }
+}
+
+/** `wiki-start.fixture.json` as `lib/wikiStart.test.ts` reads it: each state of `plan.states`, under the file's own `context`,
+ * with the docs fixture's directory once a version is confirmed, dates read in the file's time zone. */
+internal object WikiStartFixture {
+    val shared: JsonObject get() = WikiSharedFiles.start
+    private val given get() = shared.fobj("context")
+    fun context(spec: JsonObject, maintenance: Boolean = given["maintenance"].bool() == true, readsFrom: String? = given.fstr("readsFrom")) =
+        WikiStartLogic.Context(RelativeTime.parse(shared.fstr("now"))!!, maintenance, readsFrom, spec["runnerOnline"].bool(),
+            if (spec["confirmed"].text() != null) WikiPlanFixture.directory else null, java.time.ZoneId.of(shared.fstr("timeZone")))
+    fun card(name: String) = WikiPlanFixture.spec(name).let { spec -> WikiStartLogic.card(WikiPlanFixture.state(spec), context(spec)) }
 }
 
 /** `DRAFT_FAILED` as the web spells it: `draftFailed`. */

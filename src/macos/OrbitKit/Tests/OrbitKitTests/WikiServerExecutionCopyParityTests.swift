@@ -249,7 +249,7 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
                       "the web's empty plan body no longer names the System model as the drafter")
         XCTAssertTrue(lib.contains("`${WIKI_PLAN_DRAFTER_SERVER} · attempt ${draft.attempt ?? 1} of ${draft.attemptsMax}"),
                       "the web's job card no longer names the System model as the drafter")
-        XCTAssertTrue(lib.contains("`The ${WIKI_PLAN_DRAFTER_SERVER} drafts it again${base} with what you write here."),
+        XCTAssertTrue(lib.contains("`The ${WIKI_PLAN_DRAFTER_SERVER} drafts it again${base} with what you write here.`;"),
                       "the web's Redraft… dialog no longer names the System model as the drafter")
     }
 

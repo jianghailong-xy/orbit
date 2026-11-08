@@ -26,8 +26,10 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { ReaperService } from '../realtime/reaper.service';
 import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { RunnerFilesController } from '../runner-api/runner-files.controller';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import { AttachmentsService } from '../attachments/attachments.service';
+import { FilesService } from '../files/files.service';
 import { AutoRetryService } from '../sessions/auto-retry.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -50,7 +52,7 @@ import {
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/engine-session-guard.pg.spec.ts
  *
  * What it holds:
- *   • every door in `ENGINE_SESSION_DOORS` — the 33 user routes and 30 runner routes derived from
+ *   • every door in `ENGINE_SESSION_DOORS` — the 33 user routes and 32 runner routes derived from
  *     the tenant-isolation registries — refuses a LANDING session with 409
  *     SESSION_IS_PLATFORM_DRIVEN, and the six body/query field cases do the same;
  *   • Trash is refused (and the row is untouched);
@@ -99,6 +101,7 @@ interface Stack {
   autoRetry: AutoRetryService;
   api: RunnerApiController;
   runnerSessions: RunnerSessionsController;
+  runnerFiles: RunnerFilesController;
   queue: QueueService;
   reaper: ReaperService;
   providers: ProvidersService;
@@ -149,6 +152,7 @@ async function connect(): Promise<Stack> {
     autoRetry: new AutoRetryService(prisma, sessions, realtime),
     api,
     runnerSessions: new RunnerSessionsController(sessions, orchestration, receipts, attempts),
+    runnerFiles: new RunnerFilesController(prisma, new FilesService(prisma)),
     queue,
     reaper: new ReaperService(prisma, realtime),
     providers: new ProvidersService(prisma, realtime, undefined as never),
@@ -286,6 +290,7 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/merge-receipts': (s, w, id) =>
     s.receipts.record(w.ownerId, id, { result: 'ERROR', sourceSha: 'a'.repeat(40), targetBranch: 'main' }, 'USER'),
   'POST /sessions/:id/commit': (s, w, id) => s.sessions.commitWorktree(w.ownerId, id),
+  'POST /sessions/:id/checkout/discard': (s, w, id) => s.sessions.discardCheckout(w.ownerId, id),
   'POST /sessions/:id/adopt-branch': (s, w, id) => s.sessions.adoptWorktreeBranch(w.ownerId, id),
   'POST /sessions/:id/retry-message': (s, w, id) => s.autoRetry.resendRetryMessage(w.ownerId, id),
   'POST /sessions/:id/auto-retry': (s, w, id) => s.sessions.armAutoRetry(w.ownerId, id, future()),
@@ -318,6 +323,14 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.api.refreshOrchestrationCredential({ id: w.runnerId, ownerId: w.ownerId } as never, id),
   'POST /runner/sessions/:id/attachments': (s, w, id) =>
     s.api.uploadAttachment({ id: w.runnerId, ownerId: w.ownerId } as never, id, undefined),
+  'POST /runner/sessions/:id/files': (s, w, id) =>
+    s.api.uploadFile({ id: w.runnerId, ownerId: w.ownerId } as never, id, undefined, {}),
+  'POST /runner/sessions/:id/file-bundles': (s, w, id) =>
+    s.runnerFiles.createBundle({ id: w.runnerId, ownerId: w.ownerId } as never, id, { name: 'folder', files: [] }),
+  'PUT /runner/sessions/:id/files/:fileId/pin': (s, w, id) =>
+    s.runnerFiles.pin({ id: w.runnerId, ownerId: w.ownerId } as never, id, randomUUID()),
+  'DELETE /runner/sessions/:id/files/:fileId/pin': (s, w, id) =>
+    s.runnerFiles.unpin({ id: w.runnerId, ownerId: w.ownerId } as never, id, randomUUID()),
   'POST /runner/sessions/:id/artifacts/result': (s, w, id) =>
     s.api.artifactResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { requestId: randomUUID() } as never),
   'POST /runner/sessions/:id/approvals': (s, w, id) =>
@@ -343,8 +356,6 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.api.events({ id: w.runnerId, ownerId: w.ownerId } as never, id, { events: [] } as never),
   'POST /runner/sessions/:id/finalize': (s, w, id) =>
     s.api.finalize({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'CANCELLED' } as never),
-  'POST /runner/sessions/:id/complete': (s, w, id) =>
-    s.api.complete({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'CANCELLED' } as never),
   'POST /runner/sessions/:id/import-result': (s, w, id) =>
     s.api.importResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { ok: true }),
   'POST /runner/sessions/:id/merge-result': (s, w, id) =>

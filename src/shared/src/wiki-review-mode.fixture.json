@@ -26,8 +26,74 @@
     "crumb": "Settings",
     "sections": [
       "Review mode",
-      "Maintenance"
+      "Workspaces",
+      "Maintenance",
+      "Move to Trash"
     ],
+    "workspaces": {
+      "lead": "Agents in these workspaces read this wiki, and maintenance learns from their sessions.",
+      "leftOut": "Left out. It stays out until you turn it back on.",
+      "join": "New workspaces on this repository join by themselves. A workspace on another repository has its own wiki.",
+      "joinNoRepository": "This wiki has no repository behind it, so a workspace joins only when you add it.",
+      "empty": "No workspace is in this wiki yet.",
+      "add": "Add workspace…",
+      "addGroup": "Workspaces with no repository"
+    },
+    "trash": {
+      "title": "Move to Trash",
+      "open": "Move to Trash…",
+      "confirm": "Move to Trash",
+      "note": "It stays in Trash for 365 days and can be restored until then.",
+      "leaves": "It leaves your wikis now, and sessions stop reading it.",
+      "kept": "Workspaces and sessions are kept.",
+      "failedNative": "Couldn't move the wiki to Trash",
+      "question": { "name": "orbit · vLLM preview", "text": "Move wiki “orbit · vLLM preview” to Trash?" },
+      "moved": { "name": "orbit · vLLM preview", "text": "Moved wiki “orbit · vLLM preview” to Trash" },
+      "comesBack": { "repository": "github.com/acme/shop", "text": "Until you restore it, the next session on github.com/acme/shop to use the wiki starts a new, empty one." },
+      "bodies": [
+        { "entries": 11138, "documents": 0, "text": "Its 11,138 entries stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 5120, "documents": 30, "text": "Its 5,120 entries and 30 documents stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 1, "documents": 0, "text": "Its 1 entry stays in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 1, "documents": 1, "text": "Its 1 entry and 1 document stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 0, "documents": 1, "text": "Its 1 document stays in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 0, "documents": 2, "text": "Its 2 documents stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 0, "documents": 0, "text": "It stays in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": null, "documents": 0, "text": "Its entries stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": null, "documents": 14, "text": "Its entries and 14 documents stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." }
+      ],
+      "openTrash": "Open Trash",
+      "counts": [
+        { "wikis": 1, "settings": "Trash holds 1 wiki.", "empty": "1 wiki is in Trash.", "row": "1 wiki" },
+        { "wikis": 3, "settings": "Trash holds 3 wikis.", "empty": "3 wikis are in Trash.", "row": "3 wikis" }
+      ],
+      "page": {
+        "title": "Trash",
+        "lead": "A wiki stays here for 365 days after it was moved, then it is deleted for good.",
+        "empty": "Trash is empty.",
+        "restore": "Restore",
+        "deletePermanently": "Delete permanently…",
+        "deleteSwipe": "Delete",
+        "close": "Close",
+        "rows": [
+          { "deletedAt": "2026-11-07T12:00:00.000Z", "purgeAt": "2027-11-07T12:00:00.000Z", "entries": 11138, "text": "Moved to Trash Nov 7, 2026 · 11,138 entries · deleted for good Nov 7, 2027" },
+          { "deletedAt": "2026-02-01T12:00:00.000Z", "purgeAt": "2027-02-01T12:00:00.000Z", "entries": 1, "text": "Moved to Trash Feb 1, 2026 · 1 entry · deleted for good Feb 1, 2027" },
+          { "deletedAt": "2026-12-31T12:00:00.000Z", "purgeAt": "2026-12-31T12:30:00.000Z", "entries": 0, "text": "Moved to Trash Dec 31, 2026 · 0 entries · deleted for good Dec 31, 2026" }
+        ],
+        "restored": { "name": "orbit · vLLM preview", "text": "Restored wiki “orbit · vLLM preview”" },
+        "restoreFailedNative": "Couldn't restore the wiki",
+        "purge": {
+          "question": "Delete permanently?",
+          "confirm": "Delete permanently",
+          "failedNative": "Couldn't delete the wiki",
+          "bodies": [
+            { "entries": 11138, "text": "Its 11,138 entries and their history will be permanently deleted. This cannot be undone." },
+            { "entries": 1, "text": "Its 1 entry and its history will be permanently deleted. This cannot be undone." },
+            { "entries": 0, "text": "Its history will be permanently deleted. This cannot be undone." }
+          ]
+        }
+      },
+      "pickerItem": "Trash"
+    },
     "reviewModeHint": "Only you can switch it",
     "lead": "Who has to look at a change before agents get it.",
     "defaultTag": "default",
@@ -319,6 +385,39 @@
       "who": null,
       "when": null,
       "says": ""
+    },
+    {
+      "verification": {
+        "verdict": "supported",
+        "model": "local-vllm",
+        "evidence": "readable"
+      },
+      "tainted": false,
+      "who": "Wiki maintenance",
+      "when": "2h ago",
+      "says": "Checked by local-vllm: supported · Wiki maintenance, 2h ago"
+    },
+    {
+      "verification": {
+        "verdict": "supported",
+        "model": "local-vllm",
+        "evidence": "second_hand"
+      },
+      "tainted": false,
+      "who": "Import",
+      "when": "2h ago",
+      "says": "Checked by local-vllm: supported · capped at Unreviewed · Import, 2h ago"
+    },
+    {
+      "verification": {
+        "verdict": "unsupported",
+        "model": "local-vllm",
+        "evidence": "unreadable"
+      },
+      "tainted": false,
+      "who": "Import",
+      "when": "2h ago",
+      "says": "Checked by local-vllm: not supported · capped at Unreviewed · Import, 2h ago"
     }
   ],
   "runs": [
@@ -1417,6 +1516,193 @@
       },
       "revertOffered": false,
       "revert": null
+    },
+    {
+      "name": "an import whose entries this read does not hold: its marks come from what each verdict could read",
+      "view": {
+        "id": "0196b500-0000-7000-8000-000000000006",
+        "spaceId": "space-1",
+        "origin": "import",
+        "sessionId": null,
+        "toolCallId": null,
+        "rationale": "Import",
+        "status": "settled",
+        "createdAt": "2026-09-28T10:30:00.000Z",
+        "decidedAt": null,
+        "expiresAt": null,
+        "ops": [
+          {
+            "id": "run6-op1",
+            "changesetId": "0196b500-0000-7000-8000-000000000006",
+            "seq": 0,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "A note the check found supported",
+                "summary": "Read from the verdict, with no entry to read it from."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "n1",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "supported",
+              "reason": "what it read",
+              "model": "local-vllm",
+              "at": "2026-09-28T10:31:00.000Z",
+              "duplicateOf": null,
+              "evidence": "second_hand"
+            }
+          },
+          {
+            "id": "run6-op2",
+            "changesetId": "0196b500-0000-7000-8000-000000000006",
+            "seq": 1,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "A note the check found partly supported",
+                "summary": "Read from the verdict, with no entry to read it from."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "n2",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "partial",
+              "reason": "what it read",
+              "model": "local-vllm",
+              "at": "2026-09-28T10:31:00.000Z",
+              "duplicateOf": null,
+              "evidence": "second_hand"
+            }
+          },
+          {
+            "id": "run6-op3",
+            "changesetId": "0196b500-0000-7000-8000-000000000006",
+            "seq": 2,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "A record the check could not read",
+                "summary": "Read from the verdict, with no entry to read it from."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "n3",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "supported",
+              "reason": "what it read",
+              "model": "local-vllm",
+              "at": "2026-09-28T10:31:00.000Z",
+              "duplicateOf": null,
+              "evidence": "unreadable"
+            }
+          },
+          {
+            "id": "run6-op4",
+            "changesetId": "0196b500-0000-7000-8000-000000000006",
+            "seq": 3,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "A tool result the check found supported",
+                "summary": "Read from the verdict, with no entry to read it from."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "n4",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "supported",
+              "reason": "what it read",
+              "model": "local-vllm",
+              "at": "2026-09-28T10:31:00.000Z",
+              "duplicateOf": null,
+              "evidence": "readable"
+            }
+          }
+        ],
+        "appliedByMode": "automatic",
+        "entries": [],
+        "counts": {
+          "applied": 4,
+          "auto": 1,
+          "unreviewed": 3,
+          "rejectedByCheck": 0,
+          "toReview": 0
+        },
+        "revertible": false,
+        "revert": {
+          "adds": 0,
+          "amends": 0
+        }
+      },
+      "isRun": true,
+      "kicker": "Import · run",
+      "title": "Applied 4 changes",
+      "when": "Sep 28, 10:30",
+      "counts": [
+        "1 Auto",
+        "3 Unreviewed"
+      ],
+      "added": [
+        "A note the check found supported",
+        "A note the check found partly supported",
+        "A record the check could not read",
+        "A tool result the check found supported"
+      ],
+      "amended": [],
+      "reinforced": [],
+      "marks": {
+        "A note the check found supported": "unreviewed",
+        "A note the check found partly supported": "unreviewed",
+        "A record the check could not read": "unreviewed",
+        "A tool result the check found supported": "auto"
+      },
+      "revertOffered": false,
+      "revert": null
     }
   ],
   "revertDialog": {
@@ -1569,10 +1855,17 @@
   ],
   "challenge": {
     "answers": [
-      "Re-confirm",
-      "Amend",
-      "Retire"
+      "Keep",
+      "Amend…",
+      "Retire…"
     ],
+    "after": {
+      "label": "After",
+      "keep": "Agents get this entry again. You can still retire it later.",
+      "amend": "Agents get your version, and its anchors are checked again.",
+      "retire": "Agents stop getting it. This cannot be undone."
+    },
+    "retireNote": "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record. This cannot be undone.",
     "waits": "Agents stop getting this entry until you answer.",
     "challenged": "Challenged",
     "amendNote": "Your version replaces the entry, and its anchors are checked again."

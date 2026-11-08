@@ -54,7 +54,7 @@ const CODEX = 'gpt-5.5-codex';
 /** The Agent's own effort: what a run that is not routed gets. */
 const AGENT_EFFORT = 'max';
 const HINT_REASON = 'one service plus its spec';
-const TIER_M = `Tier M: suggested by the coordinator — ${HINT_REASON}`;
+const TIER_M = `[coordinator] Tier M: suggested by the coordinator — ${HINT_REASON}`;
 const OWN = "Engine claude: this agent's own engine";
 const WEEKLY_LIMIT = "You've hit your weekly limit · resets 1pm (Europe/Berlin)";
 /** Three days out: a window that stays in force for the whole spec. */
@@ -291,6 +291,8 @@ test('the engines a run may move to are the owner\'s to list: the user API write
         workspaces,
         { assert: async () => 'orchestrating-session' } as unknown as RunnerOrchestrationAuthorizer,
         quiet(),
+        // None of these writes names a field the owner's card covers, so nothing reads this.
+        {} as never,
       );
       const spawned = await agents.createWorkspace(runner, 'orchestrating-session', 'credential', {
         name: 'agent-made', modelRoutingProviders: ['codex'],

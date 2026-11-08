@@ -1,5 +1,5 @@
-import { Fragment, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   AimOutlined,
@@ -10,8 +10,9 @@ import {
   LeftOutlined,
   RightOutlined,
 } from '@ant-design/icons';
-import type { WikiEntryChanges } from '@orbit/shared';
+import { KIND_SPECS, type WikiEntryChanges, type WikiKind } from '@orbit/shared';
 import { relTime } from './Transcript';
+import { wikiReviewItemAnchor } from '../lib/wikiChat';
 import { WikiCard, WikiEmpty } from './WikiCards';
 import { WikiTitleSummaryFields } from './WikiEntryDrawer';
 import { WikiAim } from './WikiMarks';
@@ -20,10 +21,12 @@ import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Menu } from './ui/Menu';
+import { Textarea } from './ui/Textarea';
 import { wikiEntriesQuery, wikiEntryQuery, wikiReviewQuery, wikiSpacesQuery } from '../lib/queries';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import {
   WIKI_ACCEPT_NOTE,
+  WIKI_ACTION_RETIRE,
   WIKI_AFTER_RETIRE,
   WIKI_ALWAYS_ASKS,
   WIKI_ALWAYS_ASKS_NOTE,
@@ -44,6 +47,8 @@ import {
   WIKI_REVIEW_REJECT,
   WIKI_REVIEW_RETIRE,
   WIKI_REVIEW_TITLE,
+  WIKI_RETIRE_NOTE,
+  WIKI_RETIRE_REASON_PLACEHOLDER,
   WIKI_SHOW_THE_PAGES,
   WIKI_SIMILAR_ENTRIES,
   WIKI_SIMILAR_NONE,
@@ -76,11 +81,17 @@ import { useToast } from '../lib/toast';
 import { decideWikiChangeset, useWikiWrite, wikiEditedChanges, type WikiDecision } from '../lib/wikiWrites';
 import {
   WIKI_AMEND,
+  WIKI_AMEND_ANSWER,
   WIKI_AMEND_NOTE,
+  WIKI_CANCEL,
   WIKI_CHALLENGED,
+  WIKI_CHALLENGE_AFTER_AMEND,
+  WIKI_CHALLENGE_AFTER_KEEP,
+  WIKI_CHALLENGE_AFTER_RETIRE,
   WIKI_CHALLENGE_WAITS,
   WIKI_RECONFIRM,
   WIKI_RETIRE,
+  WIKI_RETIRE_ANSWER,
   wikiBrokenAnchors,
   wikiChallengeRef,
   wikiCheckedOnMain,
@@ -147,6 +158,29 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
   // the next one is better than being thrown back to the first.
   const current = shown.length === 0 ? 0 : Math.min(at, shown.length - 1);
   const visible = phone ? shown.slice(current, current + 1) : shown;
+  // Opened at one item (`#rv-<changeset>-<seq>`: a chat card whose challenge waits here): that card, in view — on a
+  // phone the page turns to it.
+  const location = useLocation();
+  const item = location.hash.slice(1);
+  const asked = item ? shown.findIndex(({ changeset, op }) => wikiReviewItemAnchor(changeset.id, op.seq) === item) : -1;
+  useEffect(() => {
+    if (asked < 0) return;
+    if (phone) setAt(asked);
+    document.getElementById(item)?.scrollIntoView?.({ block: 'center' });
+  }, [asked, item, phone]);
+  // When the card on a phone changes — an answer took the last one away, or Previous / Next — the new one is
+  // shown from its top: its head and its reason first, not its answers left under the finger that just pressed
+  // one (owner, 2026-11-07: four presses in a row answered four challenges). The card the page opened on stays
+  // where the page put it.
+  const list = useRef<HTMLDivElement>(null);
+  const shownId = phone ? visible[0]?.op.id : undefined;
+  const lastShown = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!shownId) return;
+    const before = lastShown.current;
+    lastShown.current = shownId;
+    if (before !== undefined && before !== shownId) list.current?.scrollIntoView?.({ block: 'start' });
+  }, [shownId]);
   const sessions = new Set(changesets.map((changeset) => changeset.sessionId).filter(Boolean));
   const oldest = [...changesets].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))[0]?.createdAt;
 
@@ -196,7 +230,7 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
       </div>
 
       <div className="rv-cols">
-        <div className="rv-list">
+        <div className="rv-list" ref={list}>
           {phone && shown.length > 1 && (
             <div className="wk-pager">
               <Button disabled={current === 0} onClick={() => setAt(current - 1)} icon={<LeftOutlined />}>
@@ -272,8 +306,9 @@ function ReviewCard({
   const draft = (payload.entry ?? {}) as Record<string, unknown>;
   const changes = (payload.changes ?? {}) as Record<string, unknown>;
   const retire = op.op === 'retire';
-  // A challenge is answered about the entry it names (contract `anchorRules.verify.answers`):
-  // Re-confirm it as it is on main, Amend it, or Retire it.
+  // A challenge is answered about the entry it names (contract `anchorRules.verify.answers`): Keep it as it is on
+  // main (`reconfirm`), Amend it, or Retire it — in words that say what becomes of the entry, none of them filled,
+  // the one that cannot be undone red and asking first (owner, 2026-11-07, docs/mocks/wiki-challenge-answers).
   const challenge = op.op === 'challenge';
   const diffed = !retire && Object.keys(changes).length > 0;
   // The entry this op is about, read for two reasons: what a proposal would REMOVE is a fact about
@@ -286,6 +321,9 @@ function ReviewCard({
   const title =
     typeof draft.title === 'string' ? draft.title : (target.data?.title ?? op.entryTitle ?? null);
   const kindWord = kind ? wikiKindWord(kind) : WIKI_ENTRY_WORD;
+  // Amend… only where an amend can land: a decision is only ever superseded, and the server refuses its amend
+  // (`KIND_SPECS.decision.amendable`). A kind this build does not know keeps the answer, as it always had it.
+  const amendable = !kind || !(kind in KIND_SPECS) || KIND_SPECS[kind as WikiKind].amendable;
 
   const write = useWikiWrite((decisions: WikiDecision[]) => decideWikiChangeset(changeset.id, decisions));
   const toast = useToast();
@@ -311,6 +349,7 @@ function ReviewCard({
 
   const [editing, setEditing] = useState(false);
   const [amending, setAmending] = useState(false);
+  const [retiring, setRetiring] = useState(false);
   // What Edit opens on. An amend's form waits for the entry it amends, because its title and one line
   // are that entry's with the amend's changes over them.
   const proposed = payload.entry || target.data || target.isError ? proposedText(payload, target.data) : null;
@@ -329,7 +368,7 @@ function ReviewCard({
     : [];
 
   return (
-    <div className="approval-card wk-prop">
+    <div className="approval-card wk-prop" id={wikiReviewItemAnchor(changeset.id, op.seq)}>
       <div className="approval-head">
         <WikiOpChip op={op.op} />
         <span className="kind">{kindWord}</span>
@@ -443,6 +482,24 @@ function ReviewCard({
                   ))
                 )}
               </span>
+              {challenge && (
+                <>
+                  <span className="k">After</span>
+                  <span className="v wk-challenge-after">
+                    <div>
+                      <b>{WIKI_RECONFIRM}</b> · {WIKI_CHALLENGE_AFTER_KEEP}
+                    </div>
+                    {amendable && (
+                      <div>
+                        <b>{WIKI_AMEND}</b> · {WIKI_CHALLENGE_AFTER_AMEND}
+                      </div>
+                    )}
+                    <div>
+                      <b className="wk-danger">{WIKI_RETIRE}</b> · {WIKI_CHALLENGE_AFTER_RETIRE}
+                    </div>
+                  </span>
+                </>
+              )}
             </>
           )}
         </div>
@@ -470,25 +527,23 @@ function ReviewCard({
           <>
             <button
               type="button"
-              className="card-action card-action--primary"
+              className="card-action card-action--secondary"
               onClick={() => decide({ opId: op.id, action: 'reconfirm' })}
             >
               {WIKI_RECONFIRM}
             </button>
-            <button
-              type="button"
-              className="card-action card-action--secondary"
-              onClick={() => setAmending(true)}
-              disabled={!target.data}
-            >
-              {WIKI_AMEND}
-            </button>
-            <button
-              type="button"
-              className="card-action card-action--secondary"
-              onClick={() => decide({ opId: op.id, action: 'retire' })}
-            >
-              {WIKI_RETIRE}
+            {amendable && (
+              <button
+                type="button"
+                className="card-action card-action--secondary"
+                onClick={() => setAmending(true)}
+                disabled={!target.data}
+              >
+                {WIKI_AMEND_ANSWER}
+              </button>
+            )}
+            <button type="button" className="card-action card-action--danger" onClick={() => setRetiring(true)}>
+              {WIKI_RETIRE_ANSWER}
             </button>
             <span className="grow" />
             <span className="note wk-challenge-note">{WIKI_CHALLENGE_WAITS}</span>
@@ -542,7 +597,88 @@ function ReviewCard({
           note={WIKI_AMEND_NOTE}
         />
       )}
+      {retiring && (
+        <ChallengeRetireDialog
+          reason={typeof payload.reason === 'string' ? payload.reason : ''}
+          onRetire={async (note) => {
+            const answer = await write.mutateAsync([{ opId: op.id, action: 'retire', note }]);
+            decided('retire', answer);
+          }}
+          onClose={() => setRetiring(false)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * A challenge's Retire…: the entry page's own Retire… dialog (`WikiEntryDrawer`), in its words — what retiring
+ * does, and that it cannot be undone — with the challenge's reason already in the reason field. The reason goes on
+ * the record as the decide's `note`; without one the server writes the challenge's reason itself, so the record is
+ * the same and the owner sees it, and may change it, before anything is final. No reason, no Retire, as on the
+ * entry's page. Focus starts on Cancel, the safe answer to what cannot be undone, and a refusal stays here.
+ */
+function ChallengeRetireDialog({
+  reason: proposed,
+  onRetire,
+  onClose,
+}: {
+  reason: string;
+  /** The decide request; it throws what the server refused it with. */
+  onRetire: (note: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState(proposed);
+  const [saving, setSaving] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+
+  const submit = async () => {
+    setSaving(true);
+    setRefusal(null);
+    try {
+      await onRetire(reason.trim());
+    } catch (error) {
+      setSaving(false);
+      setRefusal(error instanceof Error ? error.message : 'The server refused it');
+      return;
+    }
+    onClose();
+  };
+
+  return (
+    <Dialog
+      open
+      title={WIKI_ACTION_RETIRE}
+      onClose={onClose}
+      initialFocus={cancel}
+      className="wk-entry-edit-dialog wk-challenge-retire-dialog"
+      footer={
+        <>
+          <Button ref={cancel} onClick={onClose}>
+            {WIKI_CANCEL}
+          </Button>
+          <Button
+            variant="primary"
+            danger
+            disabled={reason.trim().length === 0}
+            loading={saving}
+            onClick={() => void submit()}
+          >
+            {WIKI_RETIRE}
+          </Button>
+        </>
+      }
+    >
+      <p className="wk-modal-note">{WIKI_RETIRE_NOTE}</p>
+      <Textarea
+        rows={6}
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        placeholder={WIKI_RETIRE_REASON_PLACEHOLDER}
+      />
+      {refusal && <Alert type="error" title={refusal} style={{ marginTop: 8 }} />}
+    </Dialog>
   );
 }
 

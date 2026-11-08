@@ -25,6 +25,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * (g) An EXECUTABLE task still goes admission → attempt → verdict with the protocol gone.
@@ -52,7 +53,7 @@ interface Fixture {
 
 function publishes(): RealtimeService {
   return new Proxy({}, {
-    get: (_target, name) => (name === 'waitForInbox'
+    get: (_target, name) => (name === 'waitForNotice'
       ? async () => undefined
       : () => undefined),
   }) as unknown as RealtimeService;

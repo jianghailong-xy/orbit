@@ -58,7 +58,7 @@ import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
-import { classifyDoc, docStatusOf, factTokens, findQuote, parseSectionBody, WikiDocs, wikiDocsBuildJobPrincipal } from './wiki-docs';
+import { classifyDoc, docStatusOf, factTokens, findQuote, parseSectionBody, WikiDocs, wikiDocsBuildJobPrincipal, type WikiDocWriteCause } from './wiki-docs';
 import { WikiDocsController } from './wiki-docs.controller';
 import { WikiPlans } from './wiki-plan';
 import { WikiPlanController } from './wiki-plan.controller';
@@ -470,9 +470,12 @@ function writeBody(planVersion: number, sections: SectionSpec[], extra: Record<s
   };
 }
 
+/** Why these writes replace what they replace, as a maintenance run says it (docs.versions). */
+const AS_MAINTENANCE: WikiDocWriteCause = { reason: 'maintenance', jobId: randomUUID() };
+
 /** One document's sections, written as the server's build and maintenance jobs write them (`WikiDocs.write`). */
 async function writeDoc(h: Harness, s: Scene, slug: string, body: unknown, who: WikiPrincipal = s.writer): Promise<Answer> {
-  return served(() => h.docs.write(who, s.spaceId, slug, body as Record<string, unknown>));
+  return served(() => h.docs.write(who, s.spaceId, slug, body as Record<string, unknown>, AS_MAINTENANCE));
 }
 
 /** A code footnote the runner checked at a sha, and found. */
@@ -625,7 +628,7 @@ test('with no confirmed plan a write is refused — a draft is not enough — an
   assert.equal(draftOnly.body.code, 'WIKI_PLAN_UNCONFIRMED');
   // The server's own import is held to the same guard.
   const importer: WikiPrincipal = { origin: 'import', ownerId: s.owner.id, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
-  await assert.rejects(h.docs.write(importer, s.spaceId, 'session-runtime', body), (error: unknown) => {
+  await assert.rejects(h.docs.write(importer, s.spaceId, 'session-runtime', body, AS_MAINTENANCE), (error: unknown) => {
     assert.ok(error instanceof WikiRefusalError, `refused with a wiki code, not ${String(error)}`);
     assert.equal(error.refusal.code, 'WIKI_PLAN_UNCONFIRMED');
     return true;
@@ -967,7 +970,7 @@ test('a section whose material did not change is not written again; one whose ma
     { key: 's1', material, markdown: 'pg spec 换了一种说法[1]。', footnotes: [code('run-pg-spec.sh', { path: 'scripts/run-pg-spec.sh', symbol: null })] },
   ]));
   expectStatus(again, 200, 'the same material again');
-  assert.deepEqual(again.body.sections, [{ key: 's1', outcome: 'unchanged', stats: null }]);
+  assert.deepEqual(again.body.sections, [{ key: 's1', outcome: 'unchanged', stats: null, versionId: null, changed: null }]);
   const kept = (await stored(h, s.spaceId, 'dev-testing')).sections.get('s1')!;
   assert.equal(kept.id, before.id, 'the section row is the one written first');
   assert.equal(kept.generatedAt.toISOString(), before.generatedAt.toISOString());
@@ -1243,7 +1246,7 @@ test('another owner reads none of it, and writes none of it: every route is a 40
   const body = writeBody(version, [{ key: 's1', markdown: '一句[1]。', footnotes: [code('x')] }]);
   for (const origin of ['maintenance', 'agent'] as const) {
     const asSession: WikiPrincipal = { origin, ownerId: s.owner.id, userId: null, sessionId: s.ordinary, toolCallId: null };
-    await assert.rejects(h.docs.write(asSession, s.spaceId, 'session-runtime', body), /written by the server's own jobs or import/u, `a session writes as ${origin}`);
+    await assert.rejects(h.docs.write(asSession, s.spaceId, 'session-runtime', body, AS_MAINTENANCE), /written by the server's own jobs or import/u, `a session writes as ${origin}`);
     await assert.rejects(h.docs.writerState(asSession, s.spaceId), /written by the server's own jobs or import/u, `a session reads what is written as ${origin}`);
   }
   for (const method of ['POST', 'PUT', 'PATCH']) {

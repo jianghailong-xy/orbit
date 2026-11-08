@@ -180,6 +180,43 @@ export function updateWikiSpace(spaceId: string, body: WikiSpaceUpdate): Promise
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}`, { method: 'PATCH', body });
 }
 
+/** What makes a wiki: its name, its repository, and its maintenance from the start. */
+export interface WikiSpaceCreate {
+  title: string;
+  repoUrl: string;
+  maintenance: NonNullable<WikiSpaceUpdate['maintenance']>;
+}
+
+/** `POST /api/wiki/spaces` — the owner's: the wiki, with maintenance on and its plan's first draft asked for. */
+export function createWikiSpace(body: WikiSpaceCreate): Promise<{ slug: string }> {
+  return api('/wiki/spaces', { method: 'POST', body });
+}
+
+/** `POST /api/wiki/spaces/:id/workspaces` — bring a workspace into the wiki, or back into it. */
+export function addWikiWorkspace(spaceId: string, workspaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces`, { method: 'POST', body: { workspaceId } });
+}
+
+/** `DELETE /api/wiki/spaces/:id/workspaces/:workspaceId` — leave a workspace out of the wiki. */
+export function leaveWikiWorkspaceOut(spaceId: string, workspaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'DELETE' });
+}
+
+/** `DELETE /api/wiki/spaces/:id` — move a wiki to Trash, where it is kept 365 days (contract `space.trash`). */
+export function moveWikiSpaceToTrash(spaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}`, { method: 'DELETE' });
+}
+
+/** `POST /api/wiki/spaces/:id/restore` — bring a wiki back from Trash (contract `space.trash.restore`). */
+export function restoreWikiSpace(spaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/restore`, { method: 'POST' });
+}
+
+/** `DELETE /api/wiki/spaces/:id/purge` — delete a wiki in Trash for good (contract `space.trash.purge`). */
+export function purgeWikiSpace(spaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/purge`, { method: 'DELETE' });
+}
+
 // ── The plan's writes (contract `plan.routes`), the owner's door only ───────────────────────────
 
 /**

@@ -25,12 +25,24 @@
 .orbit-image-preview-switch { top: 50%; transform: translateY(-50%); }
 .orbit-image-preview-switch-prev { left: 12px; }
 .orbit-image-preview-switch-next { right: 12px; }
-.orbit-image-preview-switch:disabled,
-.orbit-image-preview-switch:disabled:hover,
-.orbit-image-preview-switch:disabled:active { color: rgba(255, 255, 255, 0.25); background: transparent; cursor: not-allowed; }
+/* A button that can't act is aria-disabled, so it keeps focus (ImagePreview.tsx says why). */
+.orbit-image-preview-switch[aria-disabled='true'],
+.orbit-image-preview-switch[aria-disabled='true']:hover,
+.orbit-image-preview-switch[aria-disabled='true']:active { color: rgba(255, 255, 255, 0.25); background: transparent; cursor: not-allowed; }
 .orbit-image-preview-footer {
   position: absolute; bottom: 32px; left: 50%; display: flex; flex-direction: column; align-items: center; gap: 16px;
   color: rgba(255, 255, 255, 0.65); transform: translateX(-50%);
+}
+/* A caption is a path and a line of facts, which the 15% of the window under a 70% picture cannot hold: the picture
+   takes the room above the footer instead, and the footer the window's width. It is text to be read, so the page behind
+   it is all but put out, and on a phone the pill gives up its gaps for the extra buttons to fit. */
+.orbit-image-preview-captioned .orbit-image-preview-mask { background: rgba(0, 0, 0, 0.85); }
+.orbit-image-preview-captioned .orbit-image-preview-body { bottom: 196px; top: 56px; }
+.orbit-image-preview-captioned .orbit-image-preview-img { max-height: 100%; }
+.orbit-image-preview-captioned .orbit-image-preview-footer { width: calc(100% - 32px); }
+.orbit-image-preview-caption { max-width: 100%; line-height: 20px; overflow-wrap: anywhere; user-select: text; }
+@media (max-width: 600px) {
+  .orbit-image-preview-captioned .orbit-image-preview-actions { gap: 0; padding: 0 8px; }
 }
 .orbit-image-preview-actions {
   display: flex; gap: 12px; padding: 0 24px; border-radius: 100px; background-color: rgba(0, 0, 0, 0.1); font-size: 18px;
@@ -38,8 +50,8 @@
 .orbit-image-preview-action {
   display: flex; margin: 0; padding: 12px; border: 0; color: inherit; background: transparent; font: inherit; cursor: pointer;
 }
-.orbit-image-preview-action:not(:disabled):hover { color: rgba(255, 255, 255, 0.85); }
-.orbit-image-preview-action:disabled { color: rgba(255, 255, 255, 0.25); cursor: not-allowed; }
+.orbit-image-preview-action:not([aria-disabled='true']):hover { color: rgba(255, 255, 255, 0.85); }
+.orbit-image-preview-action[aria-disabled='true'] { color: rgba(255, 255, 255, 0.25); cursor: not-allowed; }
 .orbit-image-preview-close:focus-visible,
 .orbit-image-preview-switch:focus-visible,
 .orbit-image-preview-action:focus-visible {

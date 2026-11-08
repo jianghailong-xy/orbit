@@ -7,12 +7,12 @@
 import type { WikiSystemModelErrorKind } from './wikiSystemModel';
 
 /**
- * What a job is (contract `jobs.kinds`): the seven pipelines, and `smoke` — a job that makes one model
- * call and writes the answer into its report, which is the queue's own end-to-end probe and runs no
- * pipeline at all. The pipeline kinds arrive with the phases that implement them (P3–P8); until then a
- * worker runs the kinds it knows and leaves the others queued.
+ * What a job is (contract `jobs.kinds`): the pipelines, `smoke` — a job that makes one model call and writes
+ * the answer into its report, which is the queue's own end-to-end probe and runs no pipeline at all — and,
+ * since the wiki chat (migration 0477), `docs_follow`, the rewrite a chat's press or a change that reached main
+ * asks for (contract `docs.follow`). A worker runs the kinds it knows and leaves the others queued.
  */
-export const WIKI_JOB_KINDS = ['verify', 'articles', 'import', 'plan_draft', 'plan_revise', 'docs_build', 'maintain', 'smoke'] as const;
+export const WIKI_JOB_KINDS = ['verify', 'articles', 'import', 'plan_draft', 'plan_revise', 'docs_build', 'maintain', 'smoke', 'docs_follow'] as const;
 export type WikiJobKind = (typeof WIKI_JOB_KINDS)[number];
 
 /** Where a job is (contract `jobs.states`): `waiting` is on something outside it — a repo operation or the model. */
@@ -85,6 +85,7 @@ export const WIKI_MODEL_QUEUE = {
   defaultWaitLimitSeconds: 900,
   waitLimitSeconds: {
     extract: 180,
+    claims: 180,
     docs: 180,
     import: 600,
     plan: 1200,

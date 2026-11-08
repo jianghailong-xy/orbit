@@ -31,7 +31,7 @@ import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import { Fragment, lazy, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Markdown from 'react-markdown';
+import Markdown from './Markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api, getShareLink, type ModelHintLevel, type ModelHintOption, type TaskRunRoute } from '../api';
@@ -2016,9 +2016,14 @@ export function TaskDetailPanel({
                       <div className="tdp-route-why">
                         <div className="tdp-route-why-title">Why {routePick(route)}</div>
                         <ul>
-                          {route.reasons.map((reason, i) => (
-                            <li key={i}>{reason}</li>
-                          ))}
+                          {route.reasons.map((reason, i) => {
+                            const source = reason.match(/^\[(coordinator|rule|default|escalate|not-routed|classifier)\]\s*/);
+                            return (
+                              <li key={i}>
+                                {source ? <><span className="tdp-route-source">[{source[1]}]</span>{' '}{reason.slice(source[0].length)}</> : reason}
+                              </li>
+                            );
+                          })}
                         </ul>
                         <div className="tdp-route-why-foot">{routeWhyFooter(route)}</div>
                       </div>

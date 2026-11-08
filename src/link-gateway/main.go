@@ -1,8 +1,7 @@
 // Command link-gateway is the runner link's gateway (docs/runner-link-design.md §6.1): the WebSocket endpoint each
 // runner keeps one connection to, in place of the daemon's HTTP long polls. It authenticates connections, greets
-// them, keeps them alive and drains them. In MODE_HTTP, the shadow period, it compares what runners mirror to it and
-// forwards nothing; in MODE_LINK it forwards their requests, heartbeats and events to the apiserver and their live
-// streams to NATS (version 1). README.md describes all of it.
+// them, keeps them alive and drains them, and forwards their requests, heartbeats and events to the apiserver and their
+// live streams to NATS (version 1). README.md describes all of it.
 package main
 
 import (
@@ -17,9 +16,10 @@ const usage = `usage: link-gateway [command]
 
   serve     serve runners (the default); configured by LINK_* environment variables (README.md)
   dump      decode frames given as base64 or hex lines, or as a length-delimited capture
-  client    a test runner: connect, heartbeat, mirror, follow Drain (link-gateway client -h)
+  client    a test runner: connect, heartbeat, follow Drain, or run a drill (link-gateway client -h)
   health    exit 0 when this container's gateway answers its health check
   nkey      print a new NATS user nkey pair (seed and public key), for LINK_NATS_SEED and nats.conf
+  secrets   print a new deployment's runner link secrets as .env lines (scripts/install-server.sh and /upgrade write them)
   version   print the version
 `
 
@@ -43,6 +43,8 @@ func run(args []string) int {
 		return healthMain(args)
 	case "nkey":
 		return nkeyMain(args, os.Stdout, os.Stderr)
+	case "secrets":
+		return secretsMain(args, os.Stdout, os.Stderr)
 	case "version":
 		fmt.Println(version)
 		return 0

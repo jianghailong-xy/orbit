@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +21,7 @@ import (
 	"orbit/linkpb"
 )
 
-// The link mode's switch (D15) and what it decides: which transport each call goes over, and what changes it.
+// Which way each call goes: the daemon's calls over the link and nothing else, every other process's over HTTPS.
 
 // recordedRequest is one request a recording control plane received, whole.
 type recordedRequest struct {
@@ -84,16 +84,6 @@ func linkDaemonWorkout(t *testing.T, tr *Transport) {
 	if _, err := tr.inbox(ctx, "session-a", "gen-1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tr.waitForWake(ctx); err != nil {
-		t.Fatal(err)
-	}
-	batch := linkTestEvents(1, 3, 10)
-	for i := range batch.Events {
-		batch.Events[i].TS = "2026-10-25T00:00:00.000Z" // the same in every workout, which are compared byte for byte
-	}
-	if err := tr.postEvents(ctx, "session-a", batch); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := tr.turnComplete(ctx, "session-a", TurnCompleteRequest{TurnID: "turn-1", Status: "completed"}); err != nil {
 		t.Fatal(err)
 	}
@@ -124,89 +114,156 @@ func linkDaemonWorkout(t *testing.T, tr *Transport) {
 // linkTestCheckID is a Cursor key check's id, as an apiserver mints one (cursor-key-check-relay.ts).
 const linkTestCheckID = "0123456789abcdef0123456789abcdef"
 
-// While the control plane has not asked for the link, a transport with a link mode makes exactly the requests a
-// transport without one makes: the same methods, paths, bodies and headers, all over HTTPS, and the gateway hears
-// nothing. That is what "the switch is off" means.
-func TestTheLinkIsNotUsedUntilTheControlPlaneAsks(t *testing.T) {
-	plain, linked := newRecordingControlPlane(t), newRecordingControlPlane(t)
-	g := newFakeWorkGateway(t)
-	a := NewTransport(plain.URL, "runner-token")
-	b := NewTransport(linked.URL, "runner-token")
-	b.leaseOwner = a.leaseOwner
-	b.link = newLinkMode(b, (&linkTestLog{}).log)
-	t.Cleanup(b.link.close)
-	linkDaemonWorkout(t, a)
-	linkDaemonWorkout(t, b)
-	got, want := linked.requests(), plain.requests()
-	if len(got) != len(want) || len(want) < 10 {
-		t.Fatalf("%d requests with a link mode, %d without", len(got), len(want))
-	}
-	for i := range want {
-		if !reflect.DeepEqual(got[i], want[i]) {
-			t.Errorf("request %d differs:\n with a link mode: %+v\n without:          %+v", i, got[i], want[i])
-		}
-	}
-	if conns, rpcs, beats := g.snapshot(); len(conns)+len(rpcs)+len(beats) != 0 {
-		t.Errorf("the gateway heard from a runner whose link is not in use: %d connections", len(conns))
-	}
-	if b.link.inUse() || b.link.work.running() {
-		t.Error("the link came into use with nothing asking for it")
-	}
-}
-
-// An HTTPS daemon call answered UPGRADE_REQUIRED puts the link in use and is made again over it, within its own
-// timeout; from then on daemon calls go over the link and nothing else changes way: the agent tool API stays on
-// HTTPS.
-func TestUpgradeRequiredMovesTheWorkToTheLink(t *testing.T) {
-	r, in := newLinkEventsRig(t)
-	r.cp.status = func(path string) int {
-		if path == "/api/runner/agents" {
-			return 0
-		}
-		return http.StatusUpgradeRequired
-	}
+// The link is the one way the daemon's work goes: every call of each kind goes over it from the first, with no call over
+// HTTPS before it, and HTTPS hears only what stays there (D14): the link token and the agent tool API.
+func TestEveryDaemonCallGoesOverTheLink(t *testing.T) {
+	r := newLinkWorkRig(t)
 	r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
 		return fakeWorkAnswer(rpc, 200, `{"id":"runner-1","name":"over-the-link"}`)
 	}
+	r.useLink(t)
+	linkDaemonWorkout(t, r.t)
 	me, err := r.t.me()
 	if err != nil {
-		t.Fatalf("GET /runner/me after UPGRADE_REQUIRED: %v", err)
+		t.Fatal(err)
 	}
 	if me.Name != "over-the-link" {
 		t.Errorf("answered %+v", me)
 	}
-	if !r.m.inUse() {
-		t.Fatal("the link is not in use after UPGRADE_REQUIRED")
+	for _, path := range []string{"/runner/sessions/claim", "/runner/sessions/session-a/inbox", "/runner/sessions/session-a/turn-complete",
+		"/runner/sessions/session-a/merge-result", "/runner/sessions/session-a/approvals/ap-1", "/runner/me",
+		"/runner/cursor-key-check-result", "/runner/sessions/session-a/cursor-key-check", "/runner/sessions/session-a/notify"} {
+		if len(r.g.rpcsTo(path)) == 0 {
+			t.Errorf("%s did not go over the link", path)
+		}
 	}
-	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(1, 2, 10)); err != nil {
-		t.Fatal(err)
+	if _, _, beats := r.g.snapshot(); len(beats) == 0 {
+		t.Error("the heartbeat did not go over the link")
 	}
-	if n := len(r.cp.requests("/api/runner/sessions/session-a/events")); n != 0 {
-		t.Errorf("%d event batches went over HTTPS after the cutover", n)
-	}
-	if n := len(in.batchesOf("session-a")); n != 1 {
-		t.Errorf("%d event batches over the link", n)
-	}
-	var agents json.RawMessage
-	if err := r.t.do(context.Background(), http.MethodGet, "/runner/agents", nil, &agents, 10*time.Second); err != nil {
-		t.Fatal(err)
+	if n := len(r.g.rpcsTo("/runner/agents")); n != 0 {
+		t.Errorf("the agent tool API went over the link %d times", n)
 	}
 	if n := len(r.cp.requests("/api/runner/agents")); n != 1 {
 		t.Errorf("the agent tool API went over HTTPS %d times, want 1", n)
 	}
-	if n := len(r.g.rpcsTo("/runner/agents")); n != 0 {
-		t.Errorf("the agent tool API went over the link")
+	for _, req := range r.cp.everything() {
+		if req.path != "/api/runner/link-token" && req.path != "/api/runner/agents" {
+			t.Errorf("%s went over HTTPS", req.path)
+		}
 	}
-	if !strings.Contains(strings.Join(r.logs.all(), "\n"), "UPGRADE_REQUIRED") {
-		t.Errorf("the log does not say why the link came into use: %v", r.logs.all())
+}
+
+// A daemon call with no connection to go on fails as a network failure, which callers retry, within its own deadline,
+// and goes nowhere else.
+func TestADaemonCallWithNoLinkFailsAsRetryable(t *testing.T) {
+	r := newLinkWorkRig(t)
+	r.g.refuse = func(*http.Request) (int, string, string) {
+		return http.StatusServiceUnavailable, `{"code":"DRAINING"}`, "30"
+	}
+	r.m.start()
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	_, err := r.t.claimSession(ctx, nil)
+	if err == nil {
+		t.Fatal("a claim with no connection succeeded")
+	}
+	if !isRetryableTransportError(err) {
+		t.Errorf("%v is not retryable: the claim loop would stop the runner", err)
+	}
+	if n := len(r.cp.requests("/api/runner/sessions/claim")); n != 0 {
+		t.Errorf("the claim went over HTTPS %d times", n)
+	}
+}
+
+// A gateway that says MODE_HTTP forwards nothing: it is older than this binary and its server's RUNNER_LINK_REQUIRED is
+// off, or it has not read it yet. Nothing goes over HTTPS for it. A connection welcomed in MODE_HTTP is closed and the
+// next one opens after a wait, a beat answered MODE_HTTP fails, and a call refused LINK_MODE_HTTP is sent again until its
+// deadline. Once the gateway says MODE_LINK the work goes on.
+func TestAGatewayInModeHTTPLeavesTheWorkWaitingForTheLink(t *testing.T) {
+	t.Run("Welcome", func(t *testing.T) {
+		r := newLinkWorkRig(t)
+		r.g.setMode(linkpb.Mode_MODE_HTTP)
+		r.m.start()
+		r.g.waitWelcomed(t, 1)
+		linkWaitFor(t, 5*time.Second, "the connection welcomed in MODE_HTTP to close", func() bool { return len(r.g.open()) == 0 })
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		if _, err := r.t.claimSession(ctx, nil); !errors.Is(err, errLinkNotConnected) {
+			t.Errorf("a claim while the only gateway says MODE_HTTP: %v", err)
+		}
+		if n := len(r.cp.requests("/api/runner/sessions/claim")); n != 0 {
+			t.Errorf("the claim went over HTTPS %d times", n)
+		}
+		r.g.setMode(linkpb.Mode_MODE_LINK)
+		linkWaitFor(t, 20*time.Second, "the next connection to carry the work", func() bool { return r.m.work.current() != nil })
+		if _, err := r.t.me(); err != nil {
+			t.Fatal(err)
+		}
+		if !logged(r.logs, errLinkGatewayModeHTTP.Error()) {
+			t.Errorf("the log does not say why: %v", r.logs.all())
+		}
+	})
+	t.Run("HeartbeatAck", func(t *testing.T) {
+		r := newLinkWorkRig(t)
+		r.useLink(t)
+		r.g.setMode(linkpb.Mode_MODE_HTTP)
+		if _, err := r.t.heartbeat(HeartbeatRequest{Status: "ONLINE", LeaseOwner: r.t.leaseOwner}); !errors.Is(err, errLinkGatewayModeHTTP) {
+			t.Errorf("a beat answered MODE_HTTP: %v", err)
+		}
+		if n := len(r.cp.requests("/api/runner/heartbeat")); n != 0 {
+			t.Errorf("the beat went over HTTPS %d times", n)
+		}
+		r.g.setMode(linkpb.Mode_MODE_LINK)
+		if _, err := r.t.heartbeat(HeartbeatRequest{Status: "ONLINE", LeaseOwner: r.t.leaseOwner}); err != nil {
+			t.Errorf("a beat once the gateway says MODE_LINK: %v", err)
+		}
+	})
+	t.Run("LINK_MODE_HTTP", func(t *testing.T) {
+		r := newLinkWorkRig(t)
+		r.useLink(t)
+		r.g.setMode(linkpb.Mode_MODE_HTTP) // its Rpcs are refused LINK_MODE_HTTP from now on
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			r.g.setMode(linkpb.Mode_MODE_LINK)
+		}()
+		if _, err := r.t.me(); err != nil {
+			t.Fatalf("the refused call, sent again: %v", err)
+		}
+		if n := len(r.cp.requests("/api/runner/me")); n != 0 {
+			t.Errorf("the refused call went over HTTPS %d times", n)
+		}
+		if calls := r.g.rpcsTo("/runner/me"); len(calls) < 2 || calls[0].requestID != calls[len(calls)-1].requestID {
+			t.Errorf("the refused call went as %+v: want it sent again under its request_id", calls)
+		}
+	})
+}
+
+// The daemon's transport names no caller on any request; every other transport made with the runner credential
+// names its caller on every request (runnerCallerHeader).
+func TestTheDaemonNeverSaysWhoIsCalling(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	cp := newRecordingControlPlane(t)
+	daemon := newCallerTransport(cp.URL, "runner-token", runnerCallerCLI)
+	stop := startLink(daemon) // what runLoop does with its transport
+	defer stop()
+	var agents json.RawMessage
+	if err := daemon.do(context.Background(), http.MethodGet, "/runner/agents", nil, &agents, 10*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = daemon.fetchAttachment(context.Background(), "session-a", "att-1")
+	requests := cp.requests()
+	if len(requests) < 2 {
+		t.Fatalf("%d requests over HTTPS", len(requests))
+	}
+	for _, r := range requests {
+		if v := r.Header.Get(runnerCallerHeader); v != "" {
+			t.Errorf("the daemon's %s %s says %s: %s", r.Method, r.URI, runnerCallerHeader, v)
+		}
 	}
 }
 
 // The daemon's calls that went beside the agent tool API until 2026-10-28 go where its other calls go: a Cursor key
-// check's answer, a session's own key check and a background job's alert travel over the link while it is in use, and
-// not over HTTPS; answered UPGRADE_REQUIRED over HTTPS, the first moves the work to the link and is made again there.
-// With the link not in use they go over HTTPS exactly as before (linkDaemonWorkout,
-// TestTheLinkIsNotUsedUntilTheControlPlaneAsks).
+// check's answer, a session's own key check and a background job's alert travel over the link, and not over HTTPS.
 func TestTheCursorKeyChecksAndTheJobAlertGoOverTheLink(t *testing.T) {
 	calls := []struct {
 		path string
@@ -226,249 +283,22 @@ func TestTheCursorKeyChecksAndTheJobAlertGoOverTheLink(t *testing.T) {
 				return tr.sessionNotify("session-a", "Background shell job-1 ended (exit code 0): make")
 			}},
 	}
-	overTheLink := func(t *testing.T, r *linkWorkRig) {
-		t.Helper()
-		for _, c := range calls {
-			rpcs := r.g.rpcsTo(c.path)
-			if len(rpcs) != 1 {
-				t.Errorf("%s went over the link %d times, want 1", c.path, len(rpcs))
-				continue
-			}
-			if rpcs[0].method != http.MethodPost || string(rpcs[0].body) != c.body || rpcs[0].requestID == "" {
-				t.Errorf("%s over the link: %s %s %q", c.path, rpcs[0].method, rpcs[0].body, rpcs[0].requestID)
-			}
-		}
-	}
-	t.Run("in use", func(t *testing.T) {
-		r := newLinkWorkRig(t)
-		r.useLink(t)
-		for _, c := range calls {
-			if err := c.call(r.t); err != nil {
-				t.Fatalf("%s: %v", c.path, err)
-			}
-			if n := len(r.cp.requests("/api" + c.path)); n != 0 {
-				t.Errorf("%s went over HTTPS %d times with the link in use", c.path, n)
-			}
-		}
-		overTheLink(t, r)
-	})
-	t.Run("UPGRADE_REQUIRED", func(t *testing.T) {
-		r := newLinkWorkRig(t)
-		r.cp.status = func(string) int { return http.StatusUpgradeRequired }
-		for i, c := range calls {
-			if err := c.call(r.t); err != nil {
-				t.Fatalf("%s after UPGRADE_REQUIRED: %v", c.path, err)
-			}
-			want := 0
-			if i == 0 {
-				want = 1 // refused over HTTPS, which put the link in use
-			}
-			if n := len(r.cp.requests("/api" + c.path)); n != want {
-				t.Errorf("%s went over HTTPS %d times, want %d", c.path, n, want)
-			}
-		}
-		if !r.m.inUse() {
-			t.Fatal("the link is not in use after UPGRADE_REQUIRED")
-		}
-		overTheLink(t, r)
-	})
-}
-
-// A call answered UPGRADE_REQUIRED while the link cannot come up fails as a network failure, which callers retry,
-// never as the 426, which they read as permanent.
-func TestUpgradeRequiredWithNoLinkYetFailsAsRetryable(t *testing.T) {
 	r := newLinkWorkRig(t)
-	r.cp.status = func(string) int { return http.StatusUpgradeRequired }
-	r.g.refuse = func(*http.Request) (int, string, string) {
-		return http.StatusServiceUnavailable, `{"code":"DRAINING"}`, "30"
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	_, err := r.t.claimSession(ctx, nil)
-	if err == nil {
-		t.Fatal("a claim with neither way open succeeded")
-	}
-	if !isRetryableTransportError(err) {
-		t.Errorf("%v is not retryable: the claim loop would stop the runner", err)
-	}
-}
-
-// The control plane sends the work back to HTTPS by saying MODE_HTTP: in a HeartbeatAck, which hands the beat to
-// HTTPS, in a Welcome, which is not adopted, and in a call refused for MODE_HTTP, which goes over HTTPS instead.
-func TestTheControlPlaneSendsTheWorkBackToHTTPS(t *testing.T) {
-	t.Run("HeartbeatAck", func(t *testing.T) {
-		r := newLinkWorkRig(t)
-		conn := r.useLink(t)
-		r.g.setMode(linkpb.Mode_MODE_HTTP)
-		if _, err := r.t.heartbeat(HeartbeatRequest{Status: "ONLINE", LeaseOwner: r.t.leaseOwner}); err != nil {
-			t.Fatal(err)
+	r.useLink(t)
+	for _, c := range calls {
+		if err := c.call(r.t); err != nil {
+			t.Fatalf("%s: %v", c.path, err)
 		}
-		if n := len(r.cp.requests("/api/runner/heartbeat")); n != 1 {
-			t.Errorf("the beat answered MODE_HTTP went over HTTPS %d times", n)
+		if n := len(r.cp.requests("/api" + c.path)); n != 0 {
+			t.Errorf("%s went over HTTPS %d times", c.path, n)
 		}
-		if r.m.inUse() {
-			t.Fatal("still in link mode after MODE_HTTP")
+		rpcs := r.g.rpcsTo(c.path)
+		if len(rpcs) != 1 {
+			t.Errorf("%s went over the link %d times, want 1", c.path, len(rpcs))
+			continue
 		}
-		linkWaitFor(t, 5*time.Second, "the work connection to close", func() bool { return len(r.g.open()) == 0 })
-		if _, err := r.t.me(); err != nil {
-			t.Fatal(err)
-		}
-		if n := len(r.cp.requests("/api/runner/me")); n != 1 {
-			t.Errorf("GET /runner/me went over HTTPS %d times after MODE_HTTP", n)
-		}
-		_ = conn
-	})
-	t.Run("Welcome", func(t *testing.T) {
-		r := newLinkWorkRig(t)
-		r.g.setMode(linkpb.Mode_MODE_HTTP)
-		r.m.observe(linkpb.Mode_MODE_LINK, "the test")
-		r.g.waitWelcomed(t, 1)
-		linkWaitFor(t, 5*time.Second, "the link to go out of use", func() bool { return !r.m.inUse() })
-		if _, err := r.t.me(); err != nil {
-			t.Fatal(err)
-		}
-		if n := len(r.cp.requests("/api/runner/me")); n != 1 {
-			t.Errorf("GET /runner/me went over HTTPS %d times", n)
-		}
-		linkWaitFor(t, 5*time.Second, "the connection welcomed in MODE_HTTP to close", func() bool { return len(r.g.open()) == 0 })
-	})
-	t.Run("LINK_MODE_HTTP", func(t *testing.T) {
-		r := newLinkWorkRig(t)
-		r.useLink(t)
-		r.g.setMode(linkpb.Mode_MODE_HTTP) // its Rpcs are refused LINK_MODE_HTTP from now on
-		if _, err := r.t.me(); err != nil {
-			t.Fatal(err)
-		}
-		if n := len(r.cp.requests("/api/runner/me")); n != 1 {
-			t.Errorf("the refused call went over HTTPS %d times", n)
-		}
-		if r.m.inUse() {
-			t.Error("still in link mode after LINK_MODE_HTTP")
-		}
-	})
-}
-
-// ORBIT_LINK_MODE=off, or "linkMode": "off", keeps every call on HTTPS: no link mode at all, and an UPGRADE_REQUIRED
-// is the caller's to read.
-func TestLinkModeOffKeepsEveryCallOnHTTPS(t *testing.T) {
-	t.Setenv(linkShadowEnv, "0")
-	t.Setenv(linkModeEnv, "off")
-	cp := newRecordingControlPlane(t)
-	cp.answer = func(*http.Request) (int, string) { return http.StatusUpgradeRequired, `{"code":"UPGRADE_REQUIRED"}` }
-	tr := NewTransport(cp.URL, "runner-token")
-	stop := startLink(&RunnerConfig{}, tr)
-	defer stop()
-	if tr.link != nil {
-		t.Fatal("ORBIT_LINK_MODE=off attached a link mode")
-	}
-	if _, err := tr.me(); !isTransportHTTPStatus(err, http.StatusUpgradeRequired) {
-		t.Errorf("GET /runner/me answered %v", err)
-	}
-	os.Unsetenv(linkModeEnv)
-	if off, why := linkModeOff(&RunnerConfig{LinkMode: "off"}); !off || !strings.Contains(why, `"linkMode": "off"`) {
-		t.Errorf("the config's linkMode off reads as %v %q", off, why)
-	}
-	if off, _ := linkModeOff(&RunnerConfig{}); off {
-		t.Error("an absent linkMode reads as off")
-	}
-}
-
-// The shadow gives way: a gateway saying MODE_LINK on the shadow's connection puts the work on the link, the shadow
-// closes its connection and sends no mirror on it, and the process holds one connection, the work's. When the work
-// goes back to HTTPS, the shadow connects again.
-func TestTheShadowGivesWayToTheWorkConnection(t *testing.T) {
-	r := newLinkWorkRig(t)
-	logs := &linkTestLog{}
-	s := newLinkShadow(newLinkTestClient(r.cp, r.t.leaseOwner, r.g.roots(), nil), logs.log)
-	s.pingEvery = 200 * time.Millisecond
-	s.coord = r.m
-	if err := installLinkShadowTap(r.t, s); err != nil {
-		t.Fatal(err)
-	}
-	stop := s.start()
-	defer stop()
-	shadowConn := r.g.waitWelcomed(t, 1)
-	work := r.g.waitWelcomed(t, 2)
-	linkWaitFor(t, 5*time.Second, "one connection for the process", func() bool { return len(r.g.open()) == 1 })
-	if open := r.g.open(); open[0] != work || !r.m.inUse() {
-		t.Fatalf("the open connection is %s, the work's is %s", open[0].id, work.id)
-	}
-	if !strings.EqualFold(shadowConn.hello.GetProcessId(), work.hello.GetProcessId()) {
-		t.Error("the shadow and the work connect as different processes")
-	}
-	if _, err := r.t.heartbeat(linkTestHeartbeat(r.t.leaseOwner)); err != nil {
-		t.Fatal(err)
-	}
-	_, rpcs, beats := r.g.snapshot()
-	for _, b := range beats {
-		if b.conn == shadowConn.id {
-			t.Errorf("the shadow sent a heartbeat on a connection in MODE_LINK")
-		}
-	}
-	for _, c := range rpcs {
-		if strings.HasPrefix(c.requestID, linkShadowPrefix) {
-			t.Errorf("the shadow mirrored on a connection in MODE_LINK: %s", c.requestID)
-		}
-	}
-	// Back to HTTPS: the shadow takes the process's connection again.
-	r.g.setMode(linkpb.Mode_MODE_HTTP)
-	if _, err := r.t.heartbeat(linkTestHeartbeat(r.t.leaseOwner)); err != nil {
-		t.Fatal(err)
-	}
-	again := r.g.waitWelcomed(t, 3)
-	if !strings.EqualFold(again.hello.GetProcessId(), r.t.leaseOwner) {
-		t.Errorf("connection %s after MODE_HTTP is process %s", again.id, again.hello.GetProcessId())
-	}
-	linkWaitFor(t, 5*time.Second, "the shadow alone to hold the process's connection", func() bool {
-		open := r.g.open()
-		return len(open) == 1 && open[0] == again
-	})
-}
-
-// With the link mode off, a shadow whose gateway says MODE_LINK mirrors nothing there: in MODE_LINK the gateway
-// forwards a Heartbeat and stores an EventBatch, and a mirror is neither. Each one is counted as dropped.
-func TestTheShadowMirrorsNothingOnAConnectionInModeLink(t *testing.T) {
-	g := newFakeWorkGateway(t)
-	cp := newFakeLinkControlPlane(t, g.linkURL())
-	tr := NewTransport(cp.URL, "runner-token")
-	logs := &linkTestLog{}
-	s := newLinkShadow(newLinkTestClient(cp, tr.leaseOwner, g.roots(), nil), logs.log)
-	if err := installLinkShadowTap(tr, s); err != nil {
-		t.Fatal(err)
-	}
-	stop := s.start()
-	defer stop()
-	g.waitWelcomed(t, 1)
-	if _, err := tr.heartbeat(linkTestHeartbeat(tr.leaseOwner)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tr.postEvents(context.Background(), "session-a", linkTestEvents(1, 2, 10)); err != nil {
-		t.Fatal(err)
-	}
-	linkWaitFor(t, 5*time.Second, "both mirrors to be dropped", func() bool {
-		return s.counts[linkMirrorHeartbeat].dropped[linkDropLinkMode].Load() == 1 && s.counts[linkMirrorEvents].dropped[linkDropLinkMode].Load() == 1
-	})
-	if _, rpcs, beats := g.snapshot(); len(rpcs)+len(beats) != 0 {
-		t.Errorf("the gateway in MODE_LINK received %d mirrored Rpcs and %d heartbeats", len(rpcs), len(beats))
-	}
-	if !strings.Contains(strings.Join(logs.all(), "\n"), "link mode off") {
-		t.Errorf("the shadow did not say why it mirrors nothing: %v", logs.all())
-	}
-}
-
-// The daemon's transport names no caller on any request; every other transport made with the runner credential
-// names its caller on every request (runnerCallerHeader).
-func TestTheDaemonNeverSaysWhoIsCalling(t *testing.T) {
-	t.Setenv(linkShadowEnv, "0")
-	cp := newRecordingControlPlane(t)
-	daemon := newCallerTransport(cp.URL, "runner-token", runnerCallerCLI)
-	stop := startLink(&RunnerConfig{}, daemon) // what runLoop does with its transport
-	defer stop()
-	linkDaemonWorkout(t, daemon)
-	_, _ = daemon.fetchAttachment(context.Background(), "session-a", "att-1")
-	for _, r := range cp.requests() {
-		if v := r.Header.Get(runnerCallerHeader); v != "" {
-			t.Errorf("the daemon's %s %s says %s: %s", r.Method, r.URI, runnerCallerHeader, v)
+		if rpcs[0].method != http.MethodPost || string(rpcs[0].body) != c.body || rpcs[0].requestID == "" {
+			t.Errorf("%s over the link: %s %s %q", c.path, rpcs[0].method, rpcs[0].body, rpcs[0].requestID)
 		}
 	}
 }
@@ -484,7 +314,7 @@ func TestEveryOtherCallerSaysWhoItIs(t *testing.T) {
 			if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			_, _ = tr.uploadSessionAttachment(context.Background(), "session-a", file, "text/plain")
+			_, _ = uploadTestAttachment(tr, "session-a", file, "text/plain")
 			requests := cp.requests()
 			if len(requests) < 12 {
 				t.Fatalf("%d requests", len(requests))
@@ -498,16 +328,15 @@ func TestEveryOtherCallerSaysWhoItIs(t *testing.T) {
 	}
 }
 
-// Every transport outside the daemon is made by newCallerTransport naming its caller, so the cutover can tell it from
-// the daemon: NewTransport appears only where the daemon builds its own, where no runner credential is held, or where a
-// request is no daemon route's or deliberately asks as the daemon would.
+// Every transport outside the daemon is made by newCallerTransport naming its caller, so the control plane can tell it
+// from the daemon: NewTransport appears only where the daemon builds its own, where no runner credential is held, or
+// where a request is no daemon route's.
 func TestOnlyTheDaemonBuildsAnUnmarkedTransport(t *testing.T) {
 	allowed := map[string]string{
-		"runloop.go":     "t := NewTransport(cfg.ServerURL, cfg.RunnerToken)",                            // the daemon's own
-		"transport.go":   "t := NewTransport(baseURL, token)",                                            // newCallerTransport
-		"main.go":        `t := NewTransport(server, "")`,                                                // registration, no credential
-		"selfupdate.go":  `err = NewTransport(server, token).do(ctx, http.MethodGet, "/runner/release?"`, // not a daemon route
-		"link_doctor.go": "_, err := NewTransport(serverURL, runnerToken).me()",                          // asks as the daemon would
+		"runloop.go":    "t := NewTransport(cfg.ServerURL, cfg.RunnerToken)",                            // the daemon's own
+		"transport.go":  "t := NewTransport(baseURL, token)",                                            // newCallerTransport
+		"main.go":       `t := NewTransport(server, "")`,                                                // registration, no credential
+		"selfupdate.go": `err = NewTransport(server, token).do(ctx, http.MethodGet, "/runner/release?"`, // not a daemon route
 	}
 	callers := map[string]string{
 		"mcp.go": "runnerCallerMCP", "antigravity_approval.go": "runnerCallerAntigravityHook",
@@ -592,15 +421,19 @@ func TestLinkDaemonRoutesAreTheControllersGuardedRoutes(t *testing.T) {
 	if !reflect.DeepEqual(guarded, ours) {
 		t.Errorf("the controller's guarded routes and linkDaemonRoutes differ:\n controller: %v\n runner:     %v", guarded, ours)
 	}
-	if want := []string{"POST /runner/device/poll", "POST /runner/device/start", "POST /runner/register"}; !reflect.DeepEqual(open, want) {
+	// GET /runner/wake serves nobody: it answers every caller UPGRADE_REQUIRED, for the runners of 0.1.246 that still ask
+	// once as they start. This binary never calls it, so it is not in linkDaemonRoutes.
+	if want := []string{"GET /runner/wake", "POST /runner/device/poll", "POST /runner/device/start", "POST /runner/register"}; !reflect.DeepEqual(open, want) {
 		t.Errorf("the controller's routes without the runner guard are %v, want %v", open, want)
 	}
 	// 49 counted on 2026-10-25, the daemon's three calls that went beside the agent tool API until 2026-10-28 (a
 	// Cursor key check's answer, a session's own key check and a background job's alert), since 2026-10-31 the
-	// directory probe's answer (docs/first-workspace-contract.md §2.4), and since 2026-11-01 the Claude region check
-	// (docs/claude-region-check-contract.md §3).
-	if n := len(guarded) + len(open); n != 54 {
-		t.Errorf("the controller has %d routes; 54 since 2026-11-01", n)
+	// directory probe's answer (docs/first-workspace-contract.md §2.4), since 2026-11-01 the Claude region check
+	// (docs/claude-region-check-contract.md §3), and since 2026-11-02 the upload of a file an agent keeps
+	// (docs/orbit-files-design.md §2.3), and since 2026-11-05 the abandoned-checkout inventory; less /complete, since the
+	// cleanup after the cut-over.
+	if n := len(guarded) + len(open); n != 55 {
+		t.Errorf("the controller has %d routes; 55 since the cleanup after the cut-over and the abandoned-checkout inventory", n)
 	}
 }
 
@@ -609,6 +442,7 @@ func TestLinkDaemonRouteMatchesAsTheControllerRoutes(t *testing.T) {
 		"GET /runner/sessions/claim":                        "GET /runner/sessions/claim",
 		"GET /runner/sessions/abc/inbox?acceptsSteer=1":     "GET /runner/sessions/:id/inbox",
 		"POST /runner/sessions/worktrees-removable":         "POST /runner/sessions/worktrees-removable",
+		"POST /runner/abandoned-checkouts":                  "POST /runner/abandoned-checkouts",
 		"POST /runner/sessions/abc/turns/t-1/suggestion":    "POST /runner/sessions/:id/turns/:id/suggestion",
 		"GET /runner/sessions/abc/approvals/ap-1":           "GET /runner/sessions/:id/approvals/:id",
 		"GET /runner/sessions/abc/events?after=3&limit=200": "GET /runner/sessions/:id/events",
@@ -681,7 +515,7 @@ func TestReleaseCheckInstallsWhatTheLinkAssigns(t *testing.T) {
 	}
 }
 
-// doctor's link mode lines: which way the daemon calls go, and, on the link, whether one goes through it.
+// doctor's lines on the daemon's work: whether a call goes through the link, or why the link cannot carry it.
 func TestDoctorChecksTheLinkMode(t *testing.T) {
 	t.Run("MODE_LINK", func(t *testing.T) {
 		g := newFakeWorkGateway(t)
@@ -700,26 +534,6 @@ func TestDoctorChecksTheLinkMode(t *testing.T) {
 			t.Errorf("doctor's call over the link: %+v", calls)
 		}
 	})
-	t.Run("cutover", func(t *testing.T) {
-		g := newFakeWorkGateway(t)
-		cp := newFakeLinkControlPlane(t, g.linkURL())
-		cp.status = func(path string) int {
-			if path == "/api/runner/me" {
-				return http.StatusUpgradeRequired
-			}
-			return 0
-		}
-		p := probeRunnerLink(context.Background(), cp.URL, "runner-token", linkNoProxy, g.roots())
-		p.localOff = linkModeEnv + "=off"
-		report := strings.Join(p.report(), "\n")
-		t.Log("\n" + report)
-		for _, want := range []string{"HTTPS:  the control plane answers daemon calls over HTTPS with UPGRADE_REQUIRED",
-			"✗ link mode is off on this machine (ORBIT_LINK_MODE=off), but the control plane asks for the link"} {
-			if !strings.Contains(report, want) {
-				t.Errorf("the report does not say %q", want)
-			}
-		}
-	})
 	t.Run("a call that gets no answer", func(t *testing.T) {
 		g := newFakeWorkGateway(t)
 		g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
@@ -735,7 +549,16 @@ func TestDoctorChecksTheLinkMode(t *testing.T) {
 		g := newFakeLinkGateway(t)
 		cp := newFakeLinkControlPlane(t, g.linkURL())
 		report := strings.Join(probeRunnerLink(context.Background(), cp.URL, "runner-token", linkNoProxy, g.roots()).report(), "\n")
-		if !strings.Contains(report, "mode:   MODE_HTTP — the runner's daemon calls go over HTTPS") || strings.Contains(report, "call:") {
+		if !strings.Contains(report, "✗ mode:   MODE_HTTP — the gateway forwards nothing, and this runner works only over the link") || strings.Contains(report, "call:") {
+			t.Errorf("the report:\n%s", report)
+		}
+	})
+	t.Run("not configured", func(t *testing.T) {
+		g := newFakeLinkGateway(t)
+		cp := newFakeLinkControlPlane(t, g.linkURL())
+		cp.tokenStatus = http.StatusNotFound
+		report := strings.Join(probeRunnerLink(context.Background(), cp.URL, "runner-token", linkNoProxy, g.roots()).report(), "\n")
+		if !strings.Contains(report, "✗ not configured on this server") || !strings.Contains(report, "this runner works only over the link") {
 			t.Errorf("the report:\n%s", report)
 		}
 	})
@@ -748,11 +571,5 @@ func TestLinkRetryAfterReadsAsAnHTTPRetryAfter(t *testing.T) {
 		if got := linkRetryAfterHeader(ms); got != want {
 			t.Errorf("%dms reads as Retry-After %q, want %q", ms, got, want)
 		}
-	}
-	if !linkUpgradeRequired(&transportHTTPError{statusCode: 426}) ||
-		!linkUpgradeRequired(&transportHTTPError{statusCode: 400, body: `{"code":"UPGRADE_REQUIRED"}`}) ||
-		linkUpgradeRequired(&transportHTTPError{statusCode: 409, body: `{"code":"CONFLICT"}`}) ||
-		linkUpgradeRequired(fmt.Errorf("network")) {
-		t.Error("UPGRADE_REQUIRED is read wrong")
 	}
 }

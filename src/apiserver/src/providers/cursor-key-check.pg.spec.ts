@@ -260,7 +260,7 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
     assert.deepEqual({ state: row.keyCheckState, at: row.keyCheckedAt }, { state: null, at: null });
   });
 
-  await t.test('P2 follow-up only a runner that declares cursor-key-check/v1 and has the pinned Cursor CLI is handed the key, on its own heartbeat', async () => {
+  await t.test('P2 follow-up only the runner asked, with the pinned Cursor CLI, is handed the key, on its own heartbeat', async () => {
     const owner = await account('gate');
     const stranger = await account('stranger');
     const older = await machine(owner, { capabilities: OLDER.split(',') });
@@ -272,12 +272,12 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
     const pending = connect(owner, typed);
     await woken(ready, 1);
     for (const at of [older, notInstalled, anotherBuild, theirs]) assert.equal(wakes(at), 0, 'a runner that is not the one asked was woken');
-    // None of them is handed the key, whatever it declares; nor an older process of the ready machine.
+    // None of them is handed the key, whatever it declares. (Every runner that can reach this server over the link
+    // declares cursor-key-check/v1, which arrived with 0.1.232, so a process of the ready machine is handed it whatever it says.)
     assert.equal('cursorKeyChecks' in await beat(older, OLDER), false);
     assert.equal('cursorKeyChecks' in await beat(notInstalled, DECLARES, NOT_INSTALLED), false);
     assert.equal('cursorKeyChecks' in await beat(anotherBuild, DECLARES, ANOTHER_BUILD), false);
     assert.equal('cursorKeyChecks' in await beat(theirs), false);
-    assert.equal('cursorKeyChecks' in await beat(ready, OLDER), false, 'a process that does not declare the check was handed a key');
     const { cursorKeyChecks } = await beat(ready);
     assert.equal(cursorKeyChecks?.[0]?.apiKey, typed);
     // Another runner's answer about it settles nothing; the one it was handed to settles it.

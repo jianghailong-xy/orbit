@@ -11,6 +11,7 @@ import { Button } from './ui/Button';
 import { Result } from './ui/Result';
 import { Spinner } from './ui/Spinner';
 import { WorkspaceView } from './WorkspaceView';
+import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 
 // The workspace console, mounted as the layout route shared by /workspaces/:id(/new), a machine's own
 // /runners/:id/new, /sessions/:id and a project's Landings window, /projects/:id/landings. Being their parent route, it stays mounted as the child match changes
@@ -117,6 +118,15 @@ export function WorkspaceConsole() {
       <div className="app-view">
         {viewRunner ? (
           <WorkspaceView runner={viewRunner} managed={consoleManaged} fleet={runners.data} />
+        ) : landingsProjectId && runners.isFetched && !runners.data?.length ? (
+          // An account with no machine has no console to open, and the window does not need one.
+          <div className="workspace-view" style={{ padding: '16px 20px' }}>
+            <ProjectLandingsWindow
+              key={landingsProjectId}
+              projectId={landingsProjectId}
+              onOpenSession={(id) => navigate(`/sessions/${encodeId(id)}`)}
+            />
+          </div>
         ) : sessionNotFound ? (
           <Result
             status="404"

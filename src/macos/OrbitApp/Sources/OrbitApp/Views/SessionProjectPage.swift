@@ -105,6 +105,21 @@ struct SessionProjectRowView: View {
     }
 }
 
+/// The project's progress leading the second line of a member's own row, where its project has no row
+/// (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A): the project row's own chip. A
+/// phone does not press it on its own (the long press has Sessions), so it reads as the web's hover.
+struct SessionProjectMarkChip: View {
+    let mark: SessionProjectMark
+
+    var body: some View {
+        SessionProjectProgressChip(counts: mark.taskCounts, running: mark.runningCount, status: mark.status)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(SessionProjectCopy.markHint(title: mark.title))
+            .accessibilityValue(mark.taskCounts.map { SessionProjectCopy.progress(done: $0.done, total: $0.total) }
+                                ?? mark.status.label)
+    }
+}
+
 private struct SessionProjectProgressChip: View {
     let counts: ProjectSidebarTaskCounts?
     let running: Int
@@ -154,11 +169,13 @@ private struct SessionProjectProgressBar: View {
     }
 }
 
-/// Pin and Move affect the coordinator; the project has no completion, sharing or deletion action.
+/// Pin and Move affect the coordinator. An OPEN project has no completion, sharing or deletion
+/// action; a finished one in Open leads with Complete, which moves all its open sessions (§4.3).
 private struct SessionProjectRowActions: ViewModifier {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let row: SessionProjectRow
+    let view: SessionView
     let onOpen: () -> Void
     let onSessions: () -> Void
     let onProject: () -> Void
@@ -184,6 +201,12 @@ private struct SessionProjectRowActions: ViewModifier {
 
     @ViewBuilder
     private var menu: some View {
+        if row.offersComplete(in: view) {
+            Button { app.completeProjectSessions(row) } label: {
+                Label(SessionProjectCopy.complete, systemImage: "checkmark")
+            }
+            Divider()
+        }
         Button(action: onOpen) {
             Label(SessionProjectCopy.openSession, systemImage: "bubble.left")
         }
@@ -222,10 +245,10 @@ private struct SessionProjectRowActions: ViewModifier {
 }
 
 extension View {
-    func sessionProjectRowActions(_ row: SessionProjectRow, onOpen: @escaping () -> Void,
+    func sessionProjectRowActions(_ row: SessionProjectRow, view: SessionView, onOpen: @escaping () -> Void,
                                   onSessions: @escaping () -> Void, onProject: @escaping () -> Void,
                                   onMove: @escaping () -> Void) -> some View {
-        modifier(SessionProjectRowActions(row: row, onOpen: onOpen, onSessions: onSessions,
+        modifier(SessionProjectRowActions(row: row, view: view, onOpen: onOpen, onSessions: onSessions,
                                           onProject: onProject, onMove: onMove))
     }
 }
@@ -446,7 +469,7 @@ struct SessionProjectPage: View {
             }
         }
         // The jobs a landing row counts (docs/mocks/landing-jobs-sheet), hosted here rather than by
-        // either row, so neither their clocks nor the 4-second poll can take it down. It reads the
+        // either row, so neither their clocks nor the page's poll can take it down. It reads the
         // page's own landing read at every tick; a Retry that went through reads it again at once.
         .sheet(isPresented: $showsLandingJobs) {
             ProjectLandingJobsSheet(
@@ -465,44 +488,44 @@ struct SessionProjectPage: View {
                     app.openFromConversation(.task(taskID), overConsole: rowNavigation == .push)
                 })
         }
-        // Side by side, each on its own 4-second poll: the landing line, the merge card, the start
-        // row and the ending never wait behind the member lists, the slowest reads the page makes,
-        // and a poll of the members asks for neither list again unless something moved
-        // (`pollProjectSessions`).
+        // Side by side, each on its own poll: the landing line, the merge card, the start row and
+        // the ending never wait behind the member lists, the slowest reads the page makes, and a
+        // poll of the members asks for neither list again unless something moved
+        // (`pollProjectSessions`). Every poll stops while the app cannot be seen, and the ones that
+        // read the server follow the control stream (`ViewPoll`, docs/list-freshness-design.md §4 R6).
         .task(id: address) {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { @MainActor in
                     await app.loadProjectSessions(address)
-                    await Self.poll { await app.pollProjectSessions(address) }
+                    await ViewPoll.run(app, every: 4, inFlight: { 4 }) { await app.pollProjectSessions(address) }
                 }
+                // No event reports a landing or a merge as it moves (contract §2.7a), so while one
+                // runs its card is read every 4 s; otherwise on the project's hints and a minute's
+                // safety read with the stream live, every 15 s without it.
                 group.addTask { @MainActor in
                     await app.loadProjectIntegration(address)
-                    await Self.poll { await app.loadProjectIntegration(address) }
+                    await ViewPoll.run(app, every: 15, hints: { app.projectHints },
+                                       inFlight: { app.projectSessionsLandingRunning ? 4 : nil }) {
+                        await app.loadProjectIntegration(address)
+                    }
                 }
                 group.addTask { @MainActor in
                     await app.loadProjectMerge(address)
-                    await Self.poll { await app.loadProjectMerge(address) }
+                    await ViewPoll.run(app, every: 15, hints: { app.projectHints },
+                                       inFlight: { app.projectSessionsMergeRunning ? 4 : nil }) {
+                        await app.loadProjectMerge(address)
+                    }
                 }
                 group.addTask { @MainActor in
                     await app.projects?.load()
                     await app.loadProjectStart(address)
                     await app.loadProjectDone(address)
-                    await Self.poll {
+                    await ViewPoll.run(app, every: 4, hints: { app.projectHints }) {
                         await app.loadProjectStart(address)
                         await app.loadProjectDone(address)
                     }
                 }
             }
-        }
-    }
-
-    /// `read` again 4 seconds after each one ends, until the page's task is cancelled: the page
-    /// went, or its address changed.
-    private static func poll(_ read: () async -> Void) async {
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(4))
-            if Task.isCancelled { break }
-            await read()
         }
     }
 

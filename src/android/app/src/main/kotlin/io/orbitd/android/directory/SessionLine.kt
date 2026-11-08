@@ -7,6 +7,8 @@ import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectTime
 import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.tasks.OwnerConfirmationCopy
+import io.orbitd.android.core.cards.CoordinatorDeliveryLine
+import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.watch.WatchSessionSummary
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
@@ -43,9 +45,10 @@ data class SessionLine(val text: String, val tone: Tone) {
         /** The line for [s]. [live] is false in Trash. [watching] is the session as an observer, parked with a live watch
          * that will resume it. [recaps] is the account's Session recaps switch (Settings): on unless turned off, and off means
          * the line falls through to the raw reply exactly as it did before the recap existed — it gates that one line and
-         * nothing else. */
+         * nothing else. [machine] is the runner it runs on, by name: a session held for the Claude region says Anthropic is
+         * unavailable there, where it is known. */
         internal fun make(s: DirectorySession, live: Boolean, watching: WatchSessionSummary? = null,
-                          recaps: Boolean = true, now: Instant = Instant.now()): SessionLine {
+                          recaps: Boolean = true, now: Instant = Instant.now(), machine: String? = null): SessionLine {
             // Somebody waiting on YOU outranks everything else the row could say, outside the generating gate: an owner
             // decision is held open by no turn, so it sits on a parked conversation.
             if (live && s.pendingApprovals > 0) return SessionLine(SessionHeader.waitingWord(s), Tone.APPROVAL)
@@ -55,12 +58,12 @@ data class SessionLine(val text: String, val tone: Tone) {
                 s.lastToolUse?.takeIf { it.isNotEmpty() }?.let { return SessionLine(SessionLineCopy.runningTool(fmtTool(it)), Tone.RUNNING) }
                 // A sub-agent or workflow in flight: its launch cleared the tool line at once.
                 s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
-                // The agent hasn't answered yet: the message you sent, not the previous turn's reply.
-                s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return sentLine(it) }
+                // The agent hasn't answered yet: the message it was sent, not the previous turn's reply.
+                s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
                 s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
                 return SessionLine(SessionLineCopy.running, Tone.RUNNING)
             }
-            if (live && s.effectiveRunState == RunState.QUEUED) return SessionLine(SessionLineCopy.queued, Tone.QUEUED)
+            if (live && s.effectiveRunState == RunState.QUEUED) return SessionLine(ClaudeRegion.heldWords(s.regionHeld, machine) ?: SessionLineCopy.queued, Tone.QUEUED)
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
             if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
             // Parked on a live watch that will resume it, in the Watching strip's own line.
@@ -68,7 +71,7 @@ data class SessionLine(val text: String, val tone: Tone) {
             // Parked, with a background process still up: not idle, not the agent working either.
             if (live) s.runningBgCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.bgRunning(it)), Tone.BACKGROUND) }
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
-            s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return sentLine(it) }
+            s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
             // above the raw reply. Off with the account's Session recaps switch, the line falls through to the reply exactly
             // as it did before the recap existed. Unlabelled (the owner, 2026-10-22): the whole line is the sentence, and when
@@ -79,7 +82,32 @@ data class SessionLine(val text: String, val tone: Tone) {
             return SessionLine(SessionHeader.statusWord(s, now = now), Tone.PREVIEW)
         }
 
-        private fun sentLine(text: String) = SessionLine(SessionLineCopy.sent(plainPreview(text)), Tone.PREVIEW)
+        private fun sentLine(text: String, from: SessionMessageFrom?) = SessionLine(SessionLineCopy.sent(sender(from), plainPreview(text)), Tone.PREVIEW)
+
+        /** The line for a message somebody outside Orbit sent — a connected Feishu group's member (OrbitKit `SessionLine.externalLine`,
+         * web `sentBy`; docs/feishu-bot-design.md §8.2) — or null for anybody else's: named as the conversation names them over their
+         * words, `From Feishu · <name>`, never "You". */
+        internal fun externalLine(text: String, from: ExternalMessageFrom?): SessionLine? =
+            from?.let { SessionLine(SessionLineCopy.sent(ExternalSender.label(it), plainPreview(text)), Tone.PREVIEW) }
+
+        /** Who sent a message the agent hasn't answered (OrbitKit `SessionLine.sender`, web `sentBy`): [SessionLineCopy.you] only for the
+         * owner's own words — and for every message from an older server, which names no sender. A message another Orbit session sent
+         * names that session as the conversation's card names it: its title, or what an untitled one is called (design §3.5, owner
+         * 2026-11-07). A coordinator's unanswered message is usually a task's report, which "You:" put in the owner's mouth. */
+        internal fun sender(from: SessionMessageFrom?): String =
+            if (from == null) SessionLineCopy.you else from.title?.trim()?.takeIf { it.isNotEmpty() } ?: TaskDetailCopy.untitledSession
+
+        /** The line for a message Orbit wrote itself (OrbitKit `SessionLine.orbitLine`, web `orbitLine`; design §3.5, owner 2026-11-07),
+         * or null for anybody else's: Orbit says it, never "You", which put "You: From Orbit · project …" on a coordinator's row while it
+         * read the notification. A notification the conversation draws as a line says that line's own sentence
+         * ([CoordinatorDeliveryLine.sentence]); any other says its first line, flattened like a preview — the rest is written for the
+         * agent. */
+        internal fun orbitLine(text: String, mark: OrbitMessageFrom?): SessionLine? {
+            mark ?: return null
+            val said = mark.coordinatorDelivery?.let { CoordinatorDeliveryLine.sentence(it) }
+                ?: plainPreview(text.split('\n').firstOrNull { it.isNotBlank() }.orEmpty())
+            return SessionLine(SessionLineCopy.sent(SessionLineCopy.orbit, said), Tone.PREVIEW)
+        }
     }
 }
 
@@ -91,8 +119,12 @@ internal object SessionLineCopy {
     const val running = "Running…"
     const val queued = "Queued"
     fun runningTool(tool: String) = "Running $tool…"
-    /** A message of yours the agent hasn't answered yet: marked, since the line is otherwise the agent's voice. */
-    fun sent(text: String) = "You: $text"
+    /** A message the agent hasn't answered yet, marked with who sent it ([SessionLine.sender]), since the line is otherwise the agent's voice. */
+    fun sent(sender: String, text: String) = "$sender: $text"
+    /** The owner, as the sender of their own message (web `SENT_BY_YOU`). */
+    const val you = "You"
+    /** Orbit, as the sender of its own messages (web `SENT_BY_ORBIT`). */
+    const val orbit = "Orbit"
     /** Work still under way, as the line says it: the label and an ellipsis ("Running Agent…"). */
     fun ongoing(label: String) = "$label…"
     /** The runtime's own sub-agents and workflows (web `subagentRunningLabel`). */
@@ -218,18 +250,27 @@ internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null
 private val DirectorySession.reviewerTitle get() = (confirmationUnderReview?.get("reviewerTitle") as? JsonPrimitive)?.contentOrNull
 
 /** OrbitKit `SessionLine.plainPreview`: a reply flattened into one line of prose — code blocks dropped, a link down to its text
- * and an image to its alt, the common markdown markers gone, whitespace collapsed. ICU's `\s`, which the Swift matches with, is
- * spelled out so the JVM and the device read whitespace alike. */
+ * and an image to its alt, only what Markdown would draw as a mark gone, whitespace collapsed. The `_` and `*` of
+ * `tea_user_*_cnch`, the `~` of `~/.orbit`, the `--` of `--force` and the `#` of `#123` are words someone wrote. ICU's `\s`, which
+ * the Swift matches with, is spelled out so the JVM and the device read whitespace alike. */
 internal fun plainPreview(md: String): String {
     val space = "\\t\\n\\f\\r\\p{Z}"
     var s = md
     s = s.replace(Regex("```[\\s\\S]*?```"), " ")
-    // A code span is matched first and put back as it was, which leaves brackets inside it alone.
-    s = s.replace(Regex("(`[^`]+`)|!\\[([^\\[\\]]*)\\]\\([^)]*\\)")) { it.groups[1]?.value ?: it.groups[2]?.value.orEmpty() }
-    s = s.replace(Regex("(`[^`]+`)|\\[([^\\[\\]]*)\\]\\([^)]*\\)")) { it.groups[1]?.value ?: it.groups[2]?.value.orEmpty() }
-    s = s.replace(Regex("`([^`]+)`")) { it.groupValues[1] }
-    s = s.replace(Regex("(?m)^[#>\\-*$space]+"), "")
-    s = s.replace(Regex("[*_~]"), "")
+    // Inline code is held out of every rule and put back at the end, which leaves the brackets and marks inside it alone. A span
+    // closes on a run of backticks as long as the one that opened it.
+    val code = mutableListOf<String>()
+    s = s.replace(Regex("(?<!`)(`+)(?!`)([\\s\\S]*?[^`])\\1(?!`)")) { code += it.groupValues[2]; "\uE000${code.size - 1}\uE000" }
+    s = s.replace(Regex("!\\[([^\\[\\]]*)\\]\\([^)]*\\)")) { it.groupValues[1] }
+    s = s.replace(Regex("\\[([^\\[\\]]*)\\]\\([^)]*\\)")) { it.groupValues[1] }
+    s = s.replace(Regex("(?m)^[ \\t]*([-*_])[ \\t]*(?:\\1[ \\t]*){2,}$"), "")
+    s = s.replace(Regex("(?m)^(?:[ \\t]*(?:>|(?:#{1,6}|[-*])(?=[ \\t]|$)))+"), "")
+    // Underscores before stars: whether a `_` is a mark depends on what stands beside it as written.
+    s = s.replace(Regex("(?<![\\p{L}\\p{N}_])(_{1,3})(?=[^${space}_])(.*?[^${space}_])\\1(?![\\p{L}\\p{N}_])")) { it.groupValues[2] }
+    s = s.replace(Regex("(\\*{2,3})(?=[^$space*])(.*?[^$space*])\\1")) { it.groupValues[2] }
+    s = s.replace(Regex("\\*(?=[^$space*])(.*?[^$space*])\\*")) { it.groupValues[1] }
+    s = s.replace(Regex("~~(?=[^$space~])(.*?[^$space~])~~")) { it.groupValues[1] }
+    code.forEachIndexed { index, span -> s = s.replace("\uE000$index\uE000", span) }
     s = s.replace(Regex("[$space]+"), " ")
     return s.trim()
 }

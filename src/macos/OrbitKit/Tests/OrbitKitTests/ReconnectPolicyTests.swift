@@ -41,8 +41,41 @@ final class ReconnectPolicyTests: XCTestCase {
     func testCleanCloseWaitsABeatAndResets() {
         var p = ReconnectPolicy()
         _ = p.next(after: .failed)
+        p.noteHealthy()   // the connection that is now closing delivered a message
         XCTAssertEqual(p.next(after: .ended), .reconnect(afterMs: 300))
         XCTAssertEqual(p.attempt, 0)
+    }
+
+    // MARK: health is the first message, never the connection (docs/list-freshness-design.md §4 R4)
+
+    /// A proxy that accepts the stream and closes it before anything arrives. Closing cleanly used to
+    /// count as health — the ramp reset and the loop came back every 300 ms, forever.
+    func testAConnectionThatClosesBeforeItsFirstMessageIsAFailedAttempt() {
+        var p = ReconnectPolicy()
+        XCTAssertEqual(p.next(after: .ended), .reconnect(afterMs: 1_000))
+        XCTAssertEqual(p.next(after: .ended), .reconnect(afterMs: 2_000))
+        XCTAssertEqual(p.next(after: .ended), .reconnect(afterMs: 4_000))
+        XCTAssertEqual(p.attempt, 3, "no message arrived, so nothing was healthy")
+    }
+
+    /// Only a message resets the ramp: connections that fail before one keep backing off, and the
+    /// first message — on whichever connection — brings it back to the bottom.
+    func testOnlyTheFirstMessageResetsTheRamp() {
+        var p = ReconnectPolicy()
+        XCTAssertEqual(p.next(after: .failed), .reconnect(afterMs: 1_000))
+        XCTAssertEqual(p.next(after: .ended), .reconnect(afterMs: 2_000), "accepted, then closed: no message")
+        XCTAssertEqual(p.next(after: .failed), .reconnect(afterMs: 4_000))
+        p.noteHealthy()
+        XCTAssertEqual(p.attempt, 0)
+        XCTAssertEqual(p.next(after: .failed), .reconnect(afterMs: 1_000), "a message, then a drop: from the bottom")
+    }
+
+    /// Health belongs to one connection: the next one has to earn it again.
+    func testHealthIsPerConnection() {
+        var p = ReconnectPolicy()
+        p.noteHealthy()
+        XCTAssertEqual(p.next(after: .ended), .reconnect(afterMs: 300))
+        XCTAssertEqual(p.next(after: .ended), .reconnect(afterMs: 1_000), "the next connection sent nothing")
     }
 
     /// A `resync` reconnects (the caller re-seeds in between) without touching the ramp: re-seeding

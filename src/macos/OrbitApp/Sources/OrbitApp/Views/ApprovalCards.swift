@@ -247,6 +247,12 @@ struct ToolApprovalCard: View {
         }
     }
 
+    /// A write of what decides a workspace's next session: what the server read about it when it filed
+    /// the card, and the write itself.
+    private var writing: WorkspaceWritePreview? {
+        approval.input.flatMap { Approvals.workspaceWritePreview(toolName: approval.toolName ?? "", from: $0) }
+    }
+
     /// The field written for the agent that will execute the task, folded to a line that carries its
     /// length. It is the longest thing on the card by an order of magnitude — 1.4k to 3.9k characters
     /// across the last twenty single creates in this deployment — and the one field nobody decides
@@ -425,10 +431,46 @@ struct ToolApprovalCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else if let writing {
+            // A value is on its own block in full: a value cut short would be a yes to something nobody read.
+            ApprovalHeader(symbol: "gearshape", title: writing.heading, tone: .orange, badge: writing.badge)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(writing.name).font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(writing.status).font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let workDir = writing.workDir {
+                    workspaceWriteBlock(workDir)
+                }
+                if let env = writing.env {
+                    Text(Approvals.workspaceVariables).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if env.isEmpty {
+                        Text(Approvals.workspaceNoVariables).font(.orbitLabel).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    ForEach(env) { workspaceWriteBlock($0.line) }
+                }
+                if !writing.envRemoved.isEmpty {
+                    Text(Approvals.workspaceVariablesRemoved).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ForEach(writing.envRemoved, id: \.self) { workspaceWriteBlock($0) }
+                }
+                ForEach(writing.fields) { field in
+                    Text(field.caption).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    workspaceWriteBlock(field.value)
+                }
+                Text(Approvals.workspaceWriteNote).font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
                            tone: .orange, badge: approval.toolName ?? "Tool")
-            if let command {
+            if let raw = approval.input.flatMap({ Approvals.workspaceWriteRawInput(toolName: approval.toolName ?? "", from: $0) }) {
+                workspaceWriteBlock(raw)
+            } else if let command {
                 ToolBodyView(kind: .command(command))
             } else if let subject {
                 Text(subject)
@@ -437,6 +479,14 @@ struct ToolApprovalCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    /// One value of a workspace write, whole and selectable, however long it runs.
+    private func workspaceWriteBlock(_ text: String) -> some View {
+        Text(text).font(.orbitMono).foregroundStyle(.primary)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// What goes with a runner, by name: the workspaces are what the owner may not have had in mind.
@@ -478,6 +528,7 @@ struct ToolApprovalCard: View {
         if dag != nil { return "Apply changes" }
         if blocker != nil { return "Resolve it" }
         if deleting != nil { return Approvals.deleteAction }
+        if let writing { return writing.action }
         return "Allow"
     }
     /// The single-task card's second yes, offered only when nothing would start the task otherwise and
@@ -536,6 +587,7 @@ struct ToolApprovalCard: View {
         if let dag { return dag.listTitle }
         if let blocker { return blocker.declineName }
         if let deleting { return deleting.declineName }
+        if let writing { return writing.declineName }
         return approval.toolName ?? ""
     }
 }
@@ -832,12 +884,6 @@ private struct AnsweredOptionRow: View {
 /// is re-derived from the console's read on every body pass, which is what makes a disabled button
 /// honest rather than a guess. Every word it shows comes from `EvidenceDecisions`, so macOS, iOS and
 /// the browser cannot come apart on it.
-///
-/// It is also the one card a version keeps while its project's coordinator is paused
-/// (`docs/evidence-waits-for-coordinator-design.md`): folded while the version waits for the
-/// coordinator (`QueuedEvidenceCard`), whose Decide it myself opens this card in the review sheet;
-/// one line once it is handed over (`SentToCoordinatorLine`); this card if it becomes the reader's
-/// question after all — in the same place throughout.
 private struct EvidenceDecisionCard: View {
     @Environment(\.inApprovalReview) private var inReview
     @Environment(\.dismissApprovalReview) private var dismissReview
@@ -855,8 +901,6 @@ private struct EvidenceDecisionCard: View {
         switch standing.state {
         case .sent(let sent) where !inReview:
             SentToCoordinatorLine(sent: sent)
-        case .waiting(let row) where !inReview:
-            QueuedEvidenceCard(console: console, row: row)
         default:
             if inReview { review(standing) } else { card(standing) }
         }
@@ -872,7 +916,6 @@ private struct EvidenceDecisionCard: View {
             Text(CriteriaDecisions.provenanceLabel)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-
             facts(standing)
 
             ApprovalActions {
@@ -888,40 +931,13 @@ private struct EvidenceDecisionCard: View {
         .approvalChrome(.blue)
     }
 
-    /// The same card in the review sheet the folded card's Decide it myself opens
-    /// (`phone-sheet.png`): scrolling, with its two answers pinned under it, and — while the version
-    /// still waits for the coordinator — why, and what deciding here means, above everything else.
-    /// Whatever becomes of the version while the sheet is open, the sheet says it in the card's own
-    /// words: the question it became, the line it left once handed over, or why it is gone.
     private func review(_ standing: EvidenceDecisionStanding) -> some View {
-        ApprovalReviewLayout(title: standing.waitsForCoordinator ? EvidenceDecisions.queuedHeading
-                                                                 : EvidenceDecisions.heading(standing),
+        ApprovalReviewLayout(title: EvidenceDecisions.heading(standing),
                              symbol: "checkmark.seal.fill", tone: .blue,
                              summary: EvidenceDecisions.heading(standing)) {
             Text(CriteriaDecisions.provenanceLabel)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if standing.waitsForCoordinator {
-                VStack(alignment: .leading, spacing: 4) {
-                    CoordinatorPauseStatus(pause: console.coordinatorPause)
-                    Text(EvidenceDecisions.queuedOpenNote)
-                        .font(.orbitLabel).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, 10).padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.10),
-                            in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius)
-                        .strokeBorder(Color.orange.opacity(0.28))
-                }
-                // The question itself, under why it is not the coordinator's answer yet: the
-                // sheet's title is the folded card's.
-                Text(EvidenceDecisions.heading(standing))
-                    .font(.orbitProse.bold())
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
             facts(standing)
             if case .sent(let sent) = standing.state {
                 SentToCoordinatorLine(sent: sent)
@@ -941,7 +957,7 @@ private struct EvidenceDecisionCard: View {
     /// it can no longer be answered.
     @ViewBuilder private func facts(_ standing: EvidenceDecisionStanding) -> some View {
         if let row = standing.row {
-            EvidenceDecisionFacts(row: row)
+            EvidenceDecisionFacts(console: console, row: row)
         } else {
             // The address and nothing else: a revision that has left the read is not published
             // any more, and this card kept no copy of what it said.
@@ -1013,6 +1029,7 @@ private struct EvidenceDecisionCard: View {
 /// One row, in the order a person decides in: what is claimed, what is admitted missing, and what
 /// was checked for them. Every visible string is a field of the row or a count of one.
 private struct EvidenceDecisionFacts: View {
+    let console: ConsoleModel
     let row: EvidenceDecisionRow
 
     @State private var claimOpen = false
@@ -1032,6 +1049,12 @@ private struct EvidenceDecisionFacts: View {
                 .font(.orbitLabel.bold()).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             standardBlock
+            // What the evidence is, right under what it is measured against, and only when the version
+            // cites a file: a card with none is the card it has always been, and reads nothing more.
+            if EvidenceFiles.citesFiles(row.citations) {
+                EvidenceFilesArea(console: console, taskID: row.taskId, revision: row.evidenceRevision,
+                                  citations: row.citations)
+            }
             gapsBlock
             checksBlock
             accountBlock
@@ -1191,92 +1214,6 @@ private struct DisclosureToggle: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isButton)
-    }
-}
-
-// MARK: - while the coordinator is paused
-
-/// A version waiting for this conversation's coordinator, folded
-/// (`docs/mocks/evidence-waits-for-coordinator/phone-queued.png`): the heading and when the version
-/// was submitted, the task, why the coordinator does not have it, what that means, and Decide it
-/// myself — which opens the evidence card in the review sheet, pressed as that card is. Web's
-/// `QueuedEvidenceCard`, in its words (`EvidenceDecisionCopyParityTests`).
-///
-/// Grey, because nobody is being asked anything yet: the bar over the transcript does not count it
-/// (`EvidenceDecisions.isOpen`), and the folded card has no answer of its own to press.
-private struct QueuedEvidenceCard: View {
-    @Environment(\.approvalReviewTarget) private var target
-    @Environment(\.openApprovalReview) private var openReview
-    let console: ConsoleModel
-    let row: EvidenceDecisionRow
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            HStack(spacing: 8) {
-                Image(systemName: "hourglass")
-                    .font(.orbitMeta)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
-                    .background(Color.secondary.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
-                Text(EvidenceDecisions.queuedHeading)
-                    .font(.orbitProse.bold())
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                Spacer(minLength: 4)
-                if let submitted = row.submittedAt {
-                    Text(EvidenceDecisions.receiptTime(submitted))
-                        .font(.orbitLabel).foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            Text(row.title)
-                .font(.orbitProse.bold())
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 4) {
-                CoordinatorPauseStatus(pause: console.coordinatorPause)
-                Text(EvidenceDecisions.queuedNote)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Divider()
-            Button {
-                PlatformHaptics.tap()
-                console.openedEvidence(row.taskId, row.evidenceRevision)
-                if let target { openReview(target) }
-            } label: {
-                HStack {
-                    Text(EvidenceDecisions.decideMyselfAction)
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right").accessibilityHidden(true)
-                }
-                .font(.orbitLabel.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(maxWidth: .infinity, minHeight: ApprovalMetrics.rowMinHeight, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .approvalChrome(.gray)
-    }
-}
-
-/// Why a version waits: amber while the coordinator is paused, quiet once it is back — the line
-/// under the folded card's title, and the first line of the card it opens into (web's
-/// `CoordinatorPauseStatus`).
-private struct CoordinatorPauseStatus: View {
-    let pause: CoordinatorPause
-
-    var body: some View {
-        let paused = pause != .back
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: paused ? "pause.circle" : "clock").accessibilityHidden(true)
-            Text(EvidenceDecisions.pauseLine(pause))
-        }
-        .font(.orbitLabel)
-        .foregroundStyle(paused ? Color.orange : Color.secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -2226,7 +2163,7 @@ struct AnsweredDecisionView: View {
                 Text(CriteriaDecisions.provenanceLabel)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                EvidenceDecisionFacts(row: row)
+                EvidenceDecisionFacts(console: console, row: row)
             } actions: {
                 EmptyView()
             }
@@ -2600,6 +2537,7 @@ private struct CriteriaDecisionReceiptCard: View {
 /// browser's, held by `EvidenceDecisionCopyParityTests`.
 private struct EvidenceDecisionReceiptCard: View {
     let decided: RecordedEvidenceDecision
+    @Environment(\.openEvidenceFiles) private var openFiles
 
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
@@ -2618,8 +2556,26 @@ private struct EvidenceDecisionReceiptCard: View {
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // The one way to an older version's files, and so to where they are seen to expire: the latest
+            // version's do not (§2.8), and only the latest is ever a card. Read when it is pressed, not here.
+            if decided.citesFiles == true { filesEntry }
         }
         .approvalChrome(.blue)
+    }
+
+    private var filesEntry: some View {
+        Button {
+            PlatformHaptics.tap()
+            openFiles(EvidenceFilesTarget(taskID: decided.taskId, revision: decided.evidenceRevision, citations: []))
+        } label: {
+            HStack(spacing: 6) {
+                Text(EvidenceFiles.title).font(.orbitLabel).foregroundStyle(Color.accentColor)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.orbitMeta).foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

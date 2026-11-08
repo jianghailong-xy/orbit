@@ -195,8 +195,52 @@ class SessionLineTest {
         assertEquals("a b", plainPreview("a　　b"))
     }
 
+    @Test fun whatIsNotAMarkStays() {
+        // The message whose row read `teauserprofilebuildcnch` under a bubble that said this.
+        listOf(
+            "把其他的 tea_user_profile_build_*_cnch 也修复了",
+            "file_path and snake_case_name",
+            "看_重点_吧",
+            "~/.orbit/bin takes ~30 minutes",
+            "2 * 3 * 4",
+            "foo* and bar*",
+            "** BUILD SUCCEEDED **",
+            "*.ts files",
+            "*_cnch too",
+            "--force is needed",
+            "-1 is wrong",
+            "#123 is broken",
+            "_private and __dunder",
+        ).forEach { assertEquals(it, plainPreview(it)) }
+    }
+
+    @Test fun aRealMarkGoes() {
+        assertEquals("bold, italic and both", plainPreview("**bold**, *italic* and ***both***"))
+        assertEquals("em, strong and both", plainPreview("_em_, __strong__ and ___both___"))
+        assertEquals("gone stays", plainPreview("~~gone~~ stays"))
+        assertEquals("这是重点内容", plainPreview("这是**重点**内容"))
+        assertEquals("a b c and d e f", plainPreview("**a *b* c** and *d **e** f*"))
+        assertEquals("a*b", plainPreview("**a*b**"))
+        assertEquals("foo_bar", plainPreview("_foo_bar_"))
+        // Two globs in one message: Markdown reads their marks as emphasis, and the bubble draws it so.
+        assertEquals("把 tea_cnch 和 foo_bar 都修了", plainPreview("把 tea_*_cnch 和 foo_*_bar 都修了"))
+        assertEquals("run npm test now", plainPreview("**run `npm test` now**"))
+        assertEquals("above below", plainPreview("above\n\n---\n***\n___\n- - -\n\nbelow"))
+        assertEquals("nested item", plainPreview("> - ## nested\n* item"))
+    }
+
+    @Test fun everyMarkInsideCodeStays() {
+        assertEquals("a*b*c and _x_ and ~~y~~", plainPreview("`a*b*c` and `_x_` and `~~y~~`"))
+        assertEquals("(v1-beta.*), and no android-v* tags", plainPreview("(v1-beta.*), and no `android-v*` tags"))
+        assertEquals("- x and #1 start this", plainPreview("`- x` and `#1` start this"))
+        assertEquals("see tea_*_cnch and foo_*_bar", plainPreview("see `tea_*_cnch` and `foo_*_bar`"))
+        assertEquals("a_b_c and d`e and f", plainPreview("``a_b_c`` and ``d`e`` and `f`"))
+        assertEquals("one `` tick pair stays", plainPreview("one `` tick pair stays"))
+    }
+
     @Test fun theListRowShowsLinkText() {
         assertEquals(SessionLine("Filed Fix login redirect.", Tone.PREVIEW), line(session("AWAITING_INPUT", "Filed [Fix login redirect](orbit-task:34TqaiYd61qX2pspp4su0).")))
         assertEquals(SessionLine("You: Look at this run", Tone.PREVIEW), line(session("AWAITING_INPUT", lastUserText = "Look at [this run](https://github.com/o/r/actions/runs/123)")))
+        assertEquals(SessionLine("You: 把其他的 tea_user_profile_build_*_cnch 也修复了", Tone.PREVIEW), line(session("AWAITING_INPUT", lastUserText = "把其他的 tea_user_profile_build_*_cnch 也修复了")))
     }
 }

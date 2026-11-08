@@ -56,6 +56,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * WHILE AN AUTOMATIC PROJECT'S COORDINATOR IS PAUSED, ITS EVIDENCE WAITS FOR IT.
@@ -68,9 +69,8 @@ import { WakeDispositionService } from './wake-disposition.service';
  * coordinator that had ended: a revision submitted meanwhile was refused delivery and was the owner's
  * card at once, a revision delivered before it stopped stopped being held the moment it did, and
  * nothing handed either to it once it was back. Now such a coordinator is PAUSED, as one parked on a
- * retry is, and the revision waits for it: in nobody's `pending`, counted nowhere, listed for the
- * coordinator's conversation in `waitingOnCoordinator`, and handed over — oldest first, with a
- * sentence saying it waited — when a turn of the conversation ends, when the conversation is
+ * retry is, and the revision waits for it: in nobody's `pending`, counted nowhere, hidden from
+ * `waitingOnCoordinator`, and handed over — oldest first, with a sentence saying it waited — when a turn of the conversation ends, when the conversation is
  * replaced, and on the task service's tick for one that is back and idle.
  *
  * Every case drives the doors production drives: the evidence ledger's submit, the runner's
@@ -627,17 +627,9 @@ test('a revision submitted while the coordinator is down waits for it: not asked
       assert.deepEqual(await ownerAsked(stack, w, new Date(Date.now() + (ESCALATION_SECONDS + 60) * 1_000)), [],
         'no clock runs while the coordinator is paused');
 
-      // Listed as waiting in the coordinator's conversation, shaped as a pending row is.
+      // Queued evidence is hidden even in the coordinator's conversation.
       const read = await readFor(stack, w, w.coordinatorSessionId);
-      assert.deepEqual(read.waitingOnCoordinator.map((r) => r.taskId), [w.taskId]);
-      const [waiting] = read.waitingOnCoordinator;
-      assert.equal(waiting!.title, w.title);
-      assert.equal(waiting!.projectId, w.projectId);
-      assert.equal(waiting!.evidenceRevision, '1');
-      assert.deepEqual(waiting!.criterion, { key: w.criterionKey, text: STANDARD });
-      assert.deepEqual(waiting!.decidability, { decidable: true, refusal: null, requiredAction: null });
-      assert.equal(waiting!.independence.independent, true);
-      assert.deepEqual(waiting!.gaps, ['did not run the suite on a second machine']);
+      assert.deepEqual(read.waitingOnCoordinator, []);
       assert.equal(read.count, 0);
       assert.equal(read.oldestAgeSeconds, null);
       assert.deepEqual(read.sentToCoordinator, []);
@@ -672,7 +664,7 @@ test('a revision submitted while the coordinator is parked on a retry waits too,
 
       assert.deepEqual(await ownerAsked(stack, w), []);
       assert.equal(await ownerCount(stack, w), 0);
-      assert.deepEqual(await waitingFor(stack, w), [w.taskId]);
+      assert.deepEqual(await waitingFor(stack, w), []);
 
       // A turn end while it is still parked hands nothing over either.
       await stack.waiting.deliverOwedTo(w.coordinatorSessionId);
@@ -686,7 +678,61 @@ test('a revision submitted while the coordinator is parked on a retry waits too,
     }
   });
 
-test('once the coordinator is back and its turn ends, the waiting revision is delivered, says it waited, and is held from then',
+for (const state of ['FAILED', 'retryAt', 'PENDING', 'RUNNING'] as const) {
+  test(`evidence submitted while the coordinator is ${state} stays hidden until its delivery is taken`,
+    { skip, timeout: 180_000 }, async () => {
+      const stack = await connect();
+      try {
+        const w = await world(stack, `queued-${state}`, { coordinator: 'RUNNING' });
+        if (state === 'FAILED') await knockDown(stack, w);
+        else if (state === 'retryAt') {
+          await stack.db.session.update({
+            where: { id: w.coordinatorSessionId },
+            data: { retryAt: new Date(Date.now() + 3_600_000) },
+          });
+        } else if (state === 'PENDING') {
+          await stack.db.session.update({
+            where: { id: w.coordinatorSessionId }, data: { status: RunStatus.PENDING },
+          });
+        }
+        const badgeBefore = await badge(stack, w);
+        await submit(stack, w);
+        const later = new Date(Date.now() + 10 * ESCALATION_SECONDS * 1_000);
+        for (const sessionId of [w.coordinatorSessionId, w.readerSessionId, w.runSessionId]) {
+          const read = await readFor(stack, w, sessionId, later);
+          assert.deepEqual(read.pending, []);
+          assert.equal(read.count, 0);
+          assert.deepEqual(read.waitingOnCoordinator, []);
+          const counts = await countPendingEvidenceJudgments(stack.prisma, w.ownerId,
+            [{ projectId: w.projectId, session: { id: sessionId, taskId: null } }], later);
+          assert.equal(counts.get(w.projectId) ?? 0, 0);
+        }
+        assert.equal(await badge(stack, w), badgeBefore);
+        if (state === 'PENDING' || state === 'RUNNING') {
+          const [wake] = await evidenceWakes(stack.db, w.taskId);
+          assert.equal(wake!.status, 'DELIVERED');
+          const key = coordinatorDeliveryTurnId(wake!.idempotencyKey);
+          const [message] = await evidenceMessages(stack.db, w.coordinatorSessionId, w.taskId);
+          assert.equal(message!.status, 'PENDING');
+          assert.equal(message!.deliveredAt, null);
+          await stack.db.conversationTurn.updateMany({
+            where: { sessionId: w.coordinatorSessionId, clientTurnId: key },
+            data: { status: 'IN_FLIGHT', deliveredAt: later },
+          });
+          const due = new Date(later.getTime() + ESCALATION_SECONDS * 1_000);
+          assert.deepEqual(await ownerAsked(stack, w, new Date(due.getTime() - 1)), []);
+          assert.equal(await ownerCount(stack, w, new Date(due.getTime() - 1)), 0);
+          assert.deepEqual(await ownerAsked(stack, w, due), [w.taskId]);
+          assert.equal(await ownerCount(stack, w, due), 1);
+          assert.deepEqual((await readFor(stack, w, w.coordinatorSessionId, due)).waitingOnCoordinator, []);
+        }
+      } finally {
+        await stack.db.$disconnect();
+      }
+    });
+}
+
+test('once the coordinator is back, waiting evidence is delivered and held until a full window after pickup',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -694,14 +740,14 @@ test('once the coordinator is back and its turn ends, the waiting revision is de
       await knockDown(stack, w);
       await submit(stack, w);
       const submitted = await submittedAt(stack.db, w.taskId);
-      assert.deepEqual(await waitingFor(stack, w), [w.taskId]);
+      assert.deepEqual(await waitingFor(stack, w), []);
 
       // Back: revived, queued, claimed, running its turn. Until that turn ends nothing is handed over,
       // and the owner is still not asked.
       const turnId = await revive(stack, w);
       assert.deepEqual(await ownerAsked(stack, w), [], 'asked between the recovery and the end of its turn');
       assert.equal(await ownerCount(stack, w), 0);
-      assert.deepEqual(await waitingFor(stack, w), [w.taskId]);
+      assert.deepEqual(await waitingFor(stack, w), []);
       assert.deepEqual(await evidenceMessages(stack.db, w.coordinatorSessionId, w.taskId), []);
       await claim(stack, w);
       assert.equal((await dequeue(stack, w.coordinatorSessionId, w.runnerId))?.turnId, turnId);
@@ -726,8 +772,15 @@ test('once the coordinator is back and its turn ends, the waiting revision is de
       assert.ok(messages[0]!.content!.includes(waitedSentence(submitted)), messages[0]!.content!);
       assert.match(messages[0]!.content!, /evidenceRevision: "1"/);
 
-      // Held from the delivery for the project's window, and listed as sent meanwhile.
-      const deliveredAt = delivered.updatedAt.getTime();
+      // Queued beyond the window: no clock until the coordinator takes this turn.
+      const takenAt = new Date(delivered.updatedAt.getTime() + 3 * ESCALATION_SECONDS * 1_000);
+      assert.deepEqual(await ownerAsked(stack, w, takenAt), []);
+      assert.equal(await ownerCount(stack, w, takenAt), 0);
+      await stack.db.conversationTurn.updateMany({
+        where: { sessionId: w.coordinatorSessionId, clientTurnId: turnKey },
+        data: { status: 'IN_FLIGHT', deliveredAt: takenAt },
+      });
+      const deliveredAt = takenAt.getTime();
       const justBefore = new Date(deliveredAt + ESCALATION_SECONDS * 1_000 - 1_000);
       assert.deepEqual(await ownerAsked(stack, w), []);
       assert.deepEqual(await ownerAsked(stack, w, justBefore), []);
@@ -778,9 +831,9 @@ test('a delivery the coordinator never read before it went down waits for it, an
       assert.deepEqual(await ownerAsked(stack, w), []);
       assert.deepEqual(await ownerAsked(stack, w, new Date(Date.now() + (ESCALATION_SECONDS + 60) * 1_000)), []);
       assert.equal(await ownerCount(stack, w), 0);
-      assert.deepEqual(await waitingFor(stack, w), [w.taskId]);
+      assert.deepEqual(await waitingFor(stack, w), []);
 
-      // Back, and its turn ends: delivered again, under a key of its own, the hold restarting now.
+      // Back, and its turn ends: delivered again under a new key, still without a clock until pickup.
       const turnId = await revive(stack, w);
       await runToTheEnd(stack, w, turnId);
       const [requeued, ...others] = await evidenceWakes(stack.db, w.taskId);
@@ -788,7 +841,7 @@ test('a delivery the coordinator never read before it went down waits for it, an
       assert.equal(requeued!.status, 'DELIVERED');
       const secondKey = coordinatorRedeliveryTurnId(first!.idempotencyKey, firstKey);
       assert.deepEqual(requeued!.delivery, { clientTurnId: secondKey, waited: true, replaces: firstKey });
-      assert.ok(requeued!.updatedAt.getTime() > first!.updatedAt.getTime(), 'the hold did not restart');
+      assert.ok(requeued!.updatedAt.getTime() > first!.updatedAt.getTime(), 'the redelivery receipt was not updated');
       let messages = await evidenceMessages(stack.db, w.coordinatorSessionId, w.taskId);
       assert.deepEqual(messages.map((m) => m.clientTurnId), [firstKey, secondKey]);
       assert.ok(messages[1]!.content!.includes(waitedSentence(submitted)));
@@ -825,12 +878,12 @@ test('a coordinator that is back and idle is handed what waits for it within one
       });
       await submit(stack, w);
       const submitted = await submittedAt(stack.db, w.taskId);
-      assert.deepEqual(await waitingFor(stack, w), [w.taskId]);
+      assert.deepEqual(await waitingFor(stack, w), []);
 
       // The retry it was parked on is withdrawn without a turn: live and idle, and no turn of its own
       // is going to end. Still waiting — nothing has handed it over yet.
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { retryAt: null } });
-      assert.deepEqual(await waitingFor(stack, w), [w.taskId]);
+      assert.deepEqual(await waitingFor(stack, w), []);
       assert.deepEqual(await evidenceMessages(stack.db, w.coordinatorSessionId, w.taskId), []);
 
       // One tick of the timer the task service owns.
@@ -869,7 +922,7 @@ test('the revisions waiting for a coordinator that is replaced go to the convers
       await knockDown(stack, w);
       await submit(stack, w);
       const submitted = await submittedAt(stack.db, w.taskId);
-      assert.deepEqual(await waitingFor(stack, w), [w.taskId]);
+      assert.deepEqual(await waitingFor(stack, w), []);
 
       const replaced = await stack.projects.coordinator(w.ownerId, w.projectId, undefined, 'replace');
       assert.equal(replaced.created, true);
@@ -1031,9 +1084,9 @@ test('a revision the owner decided while the coordinator was down is not handed 
       const w = await world(stack, 'decided-meanwhile', { coordinator: 'RUNNING' });
       await knockDown(stack, w);
       await submit(stack, w);
-      assert.deepEqual(await waitingFor(stack, w), [w.taskId]);
+      assert.deepEqual(await waitingFor(stack, w), []);
 
-      // "Decide it myself", pressed on the waiting card in the coordinator's conversation.
+      // The owner may still decide directly while the revision is queued.
       const decided = await stack.evidence.decide(
         w.ownerId,
         w.taskId,

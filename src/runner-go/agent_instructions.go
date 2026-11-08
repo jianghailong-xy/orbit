@@ -96,9 +96,11 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		"Cite a wiki entry the same way, as `[title](orbit-wiki:<id>)`. " +
 		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
 		orbitReplyFileInstructions +
+		orbitEvidenceFileInstructions +
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
+		orbitWikiPathInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
 		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +
@@ -121,6 +123,23 @@ const orbitReplyFileInstructions = "To hand the user a file, link it in your rep
 	"uploads directory; from anywhere else, /tmp included, the user cannot open it, so copy the file there first and " +
 	"link the copy. Whatever git does not ignore in your working directory can end up in a commit, so a file that " +
 	"does not belong in the repository goes in the uploads directory or a git-ignored path.\n\n"
+
+// orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
+// until file_upload (docs/orbit-files-design.md §2.3): 96% of its history was evidence and mocks. It follows
+// orbitReplyFileInstructions and repeats its rule: file_upload reads from the same two directories a reply links from
+// (localFileScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
+// because the tool call that printed it is already stored. The FILE check is what spares the file a commit: it binds the
+// bytes into the evidence the way a commit would, and it is how whoever judges the work gets to read it. ASCII like the rest.
+const orbitEvidenceFileInstructions = "For evidence, cite a command's output by its tool call rather than saving a log, " +
+	"and keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
+	"directories and returns a link that also works in a reply, and an id to cite as a FILE check.\n\n"
+
+// orbitWikiPathInstructions sends an agent to the wiki at the moment it can use what is there: searches by
+// path found nothing 3 times in 21 up to 2026-11-02, where multi-word ones did 124 times in 188
+// (docs/wiki-memory-claims-design.md). "If your tool list has it" because this text goes to every session, and
+// an account with the wiki off has no such tool (wikiToolDescriptors). ASCII like the rest of the paragraph.
+const orbitWikiPathInstructions = "Before changing a file, use wiki_search with its path to look up known pitfalls, " +
+	"if your tool list has it.\n\n"
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn
@@ -192,6 +211,29 @@ func orbitProjectInstructions(insideRecordedWork bool) string {
 // the server attaches to its turns, which is where its role-specific instructions already live.
 func (s *ClaimedSession) insideRecordedWork() bool {
 	return s != nil && s.TaskID != ""
+}
+
+// appendSystemPrompt is what a session's engine is given after its system prompt, ahead of Orbit's own
+// instructions (withOrbitCLIInstructions): the agent's appended prompt, then what the runner has to say about the
+// checkout the session runs in (checkoutInstructions). It is read from the checkout each time an engine's
+// instructions are built, so a checkout made or brought back since the last spawn is described as it now is.
+func (s *ClaimedSession) appendSystemPrompt() string {
+	note := checkoutInstructions(s.WT)
+	if note == "" {
+		return s.Agent.AppendSystemPrompt
+	}
+	if strings.TrimSpace(s.Agent.AppendSystemPrompt) == "" {
+		return note
+	}
+	return strings.TrimRight(s.Agent.AppendSystemPrompt, "\r\n") + "\n\n" + note
+}
+
+// instructionAgent is the session's agent as an engine's instructions are built from it: its appended prompt is
+// the session's (appendSystemPrompt).
+func (s *ClaimedSession) instructionAgent() AgentExecConfig {
+	agent := s.Agent
+	agent.AppendSystemPrompt = s.appendSystemPrompt()
+	return agent
 }
 
 func withOrbitCLIInstructions(configured, executable string, insideRecordedWork, watches bool) string {
@@ -268,10 +310,17 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// learned is not a power over anybody else's session, so it needs no orchestration grant —
 		// and the agent most likely to learn something worth recording is the plain single-session
 		// one. The commands themselves need ORBIT_SESSION_ID, which a session has.
-		// verify asks the server to verify the session's own proposals and waits for its verdicts: no
-		// more of a power.
-		for _, action := range []string{"search", "get", "propose", "verify"} {
+		// verify asks the server to verify the session's own proposals and waits for its verdicts, and note
+		// leaves a claim for maintenance to check against the session's own records: no more of a power.
+		// draft makes a card in the session's own wiki chat, which only the owner can press (the server refuses it
+		// to any other session): less of a power than propose.
+		for _, action := range []string{"search", "get", "propose", "verify", "note", "draft"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
+		}
+		// Every file verb: keeping and reading back your own files is no power over anybody else's session, and the
+		// instructions send every agent here for its evidence.
+		for _, action := range []string{"upload", "fetch", "list", "pin"} {
+			rules = append(rules, "Bash("+command+" file "+action+" *)")
 		}
 		// import hands the server, for a space its owner named, files the owner asked for, and the
 		// server's model reads them: no more of a power than propose, and the server holds what it
@@ -294,16 +343,15 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			rules = append(rules, "Bash("+command+" session "+action+" *)")
 		}
 		if allowOrchestration {
-			// The session family as advertised, minus `import`: it is the one session verb that
-			// refuses to run in a session at all (cliSessionImport), and the capability document
-			// withholds it from a running agent for the same reason (HeadlessOnly), so there is no
-			// reader here to pre-approve it for.
-			for _, action := range []string{"create", "list", "search", "get", "await", "send", "reply", "interrupt", "merge", "end", "complete", "delete"} {
+			// The session family as advertised, `import` included: it brings a conversation on this
+			// machine's disk into Orbit as a new session, behind the same gate as create.
+			for _, action := range []string{"create", "import", "list", "search", "get", "await", "send", "reply", "interrupt", "merge", "end", "complete", "delete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
 			// The agent verbs ride the same gate and have no headless form: no service-token scope
-			// names them, so they are advertised only where a live session has the grant. A delete is
-			// put on a confirmation card in front of the owner first, and the server refuses it without one.
+			// names them, so they are advertised only where a live session has the grant. A delete, and a
+			// write of what decides the agent's next session, are put on a confirmation card in front of the
+			// owner first, and the server refuses them without one.
 			for _, action := range []string{"list", "create", "update", "delete"} {
 				rules = append(rules, "Bash("+command+" agent "+action+" *)")
 			}

@@ -75,6 +75,9 @@ internal data class WikiState(
     val systemModel: WikiSystemModelStatus? = null,
     /** The space on screen's server runs, and the space they were read for (P9). */
     val jobs: WikiJobsRead? = null,
+    /** The owner's wikis in Trash, the newest move first: the Trash page, and the ways to it while it holds one — the
+     * settings page's row, the space picker's item and the first-wiki card's line. */
+    val trash: List<WikiTrashRow> = emptyList(), val trashState: LoadState = LoadState(),
     val selectedSlug: String? = null,
     /** The titles the link-preview cards gave the tasks and sessions a page names, by `kind:key` (iOS `model.linkCards`). */
     val linkTitles: Map<String, String> = emptyMap(),
@@ -361,6 +364,21 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         }
     }
 
+    /** The owner's wikis in Trash (contract `space.trash.list`). A server from before Trash, or one the wiki is off on,
+     * answers 404, which reads as none: no way to Trash is drawn. */
+    suspend fun loadTrash() {
+        val ticket = ask(TRASH)
+        set { it.copy(trashState = it.trashState.begin()) }
+        try {
+            val read = client.trash()
+            if (newest(TRASH, ticket)) set { it.copy(trash = read.spaces, trashState = it.trashState.succeed()) }
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
+            if (!newest(TRASH, ticket)) return
+            if (error is ApiError && error.status == 404) set { it.copy(trash = emptyList(), trashState = it.trashState.succeed()) }
+            else set { it.copy(trashState = it.trashState.fail()) }
+        }
+    }
+
     suspend fun loadReview() {
         val ticket = ask(REVIEW)
         set { it.copy(reviewState = it.reviewState.begin()) }
@@ -471,6 +489,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     suspend fun reloadLoaded() {
         val s = current
         if (s.homeSpaceId != null || s.homeState.hasLoaded) loadHome() else loadSpaces()
+        if (current.trashState.hasLoaded) loadTrash()
         if (current.activity != null || current.activityState.hasLoaded) loadActivity()
         if (current.directory != null) loadDirectory()
         if (current.articleIndex != null) loadArticleIndex()
@@ -621,13 +640,14 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
      * what the server recorded for the op: `conflict` (the entry moved past it, or is no longer active) and
      * `withdrawn` applied nothing, and say so — but a challenge's Retire is recorded `withdrawn` when it went
      * through (see [WikiLogic.decisionRefusal]). An op that went through leaves the queue at once (`answered`),
-     * and the reads catch the queue, the drawer's count and the home page up behind it. */
+     * and the reads catch the queue, the drawer's count and the home page up behind it. [note] goes on the record with
+     * the answer: a challenge's Retire… says why. */
     suspend fun decide(card: WikiLogic.ReviewCard, action: String, reason: String? = null,
-        edited: JsonObject? = null): String? {
+        edited: JsonObject? = null, note: String? = null): String? {
         val subject = WikiLogic.knownTitle(card, card.op.entryId?.let { current.detail(it)?.entry })
         return owned({ refusal -> notice(refusal, WikiLogic.decidedToast(card.op.op, action), subject) }) {
             val refusal = try {
-                val answer = client.decide(card.changeset.id, card.op.id, action, edited, reason)
+                val answer = client.decide(card.changeset.id, card.op.id, action, edited, reason, note)
                 outdate(REVIEW, SPACES, HOME, ACTIVITY)
                 WikiLogic.decisionRefusal(WikiLogic.recordedDecision(answer, card.op.id), card.op.op, action)
             } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { reloadAfterWrite(); return@owned wikiRefusal(error) }
@@ -654,8 +674,55 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     // MARK: Wiki settings
 
     suspend fun updateSpace(space: WikiSpace, update: JsonObject): String? = owned({ refusal -> notice(refusal, WikiCopy.settingsSaved, space.slug) }) {
-        try { client.updateSpace(space.id, update); outdate(SPACES, HOME, ACTIVITY); reloadAfterWrite(); null }
-        catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadSpaces(); wikiRefusal(error) }
+        try {
+            client.updateSpace(space.id, update); outdate(SPACES, HOME, ACTIVITY); reloadAfterWrite()
+            // A held draft goes on once maintenance has a workspace, and the home's setup card says so from this read.
+            if (current.plan != null || current.planState.hasLoaded) loadPlan()
+            null
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadSpaces(); wikiRefusal(error) }
+    }
+
+    /** Create wiki: the space, in one request, and then that space on screen — a home that finds it in the spaces list, so it is
+     * read before it is picked. Nothing is left to say of one that landed, whoever is still there to hear it: the home shows it.
+     * Null on success, else the sentence to show. */
+    suspend fun createSpace(title: String, request: JsonObject): String? = owned({ refusal: String? -> refusal?.let { notice(it, "", title) } }) {
+        try { val space = client.createSpace(request); outdate(SPACES); loadSpaces(); select(space.slug); null }
+        catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { wikiRefusal(error) }
+    }
+
+    /** Bring a workspace into a space or leave it out, written at once. Null on success, else the sentence to show. */
+    suspend fun setWorkspace(space: WikiSpace, workspaceId: String, inWiki: Boolean): String? = owned({ refusal -> notice(refusal, WikiCopy.settingsSaved, space.slug) }) {
+        try {
+            if (inWiki) client.addWorkspace(space.id, workspaceId) else client.leaveWorkspaceOut(space.id, workspaceId)
+            outdate(SPACES, HOME, ACTIVITY); reloadAfterWrite(); null
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { wikiRefusal(error) }
+    }
+
+    /** Move a wiki to Trash (contract `space.trash`), where what it holds is kept 365 days. [leave] runs the moment it is
+     * gone, before the wikis are read again, so the page that asked never draws the next wiki's settings. Null on success,
+     * else the sentence to show. */
+    suspend fun moveToTrash(space: WikiSpace, leave: () -> Unit): String? = owned({ refusal -> refusal?.let { notice(it, WikiModeCopy.trashTitle, space.slug) } }) work@{
+        try { client.moveToTrash(space.id) }
+        catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { return@work wikiRefusal(error) }
+        leave()
+        outdate(SPACES, HOME, ACTIVITY, TRASH); reloadAfterWrite(); null
+    }
+
+    // MARK: Trash
+
+    /** Bring a wiki back from Trash (contract `space.trash.restore`): it leaves Trash and is one of the wikis again. Null
+     * on success, else the sentence to show — the server's own when a newer wiki holds its repository. */
+    suspend fun restore(row: WikiTrashRow): String? =
+        owned({ refusal -> if (refusal == null) notice(null, WikiModeCopy.restored(row.name), null) else notice(refusal, "", row.name) }) {
+            try { client.restoreSpace(row.id); outdate(SPACES, HOME, ACTIVITY, TRASH); reloadAfterWrite(); null }
+            catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadTrash(); wikiRefusal(error) }
+        }
+
+    /** Delete a wiki in Trash for good (contract `space.trash.purge`): it leaves Trash at once, and the server deletes
+     * what it holds in the background. Null on success, else the sentence to show. */
+    suspend fun purge(row: WikiTrashRow): String? = owned({ refusal: String? -> refusal?.let { notice(it, "", row.name) } }) {
+        try { client.purgeSpace(row.id); outdate(TRASH); loadTrash(); null }
+        catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadTrash(); wikiRefusal(error) }
     }
 
     // MARK: an entry a review mode applied
@@ -721,6 +788,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
 
     private suspend fun reloadAfterWrite() {
         loadSpaces()
+        if (current.trashState.hasLoaded) loadTrash()
         if (current.reviewState.hasLoaded) loadReview()
         if (current.homeState.hasLoaded) loadHome()
         if (current.activityState.hasLoaded) loadActivity()
@@ -758,6 +826,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         private const val PLAN = "plan"
         private const val DOCS = "docs"
         private const val JOBS = "jobs"
+        private const val TRASH = "trash"
         private const val ENTRY = "entry:"
         private const val RUN = "run:"
         private var shared: WikiStore? = null

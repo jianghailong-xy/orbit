@@ -115,15 +115,6 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
   ]);
 });
 
-test('old runner heartbeats cannot claim recovery commands', async () => {
-  let where: Record<string, unknown> = {};
-  await service({ session: { findMany: async (args: { where: Record<string, unknown> }) => {
-    where = args.where;
-    return [];
-  } } }).drainMergeRequests(RUNNER_ID, NEW_OWNER, false);
-  assert.equal(where.mergeRecoveryAction, null);
-});
-
 test('recovery redelivery carries the saved candidate, checks, and the same operation identity', async () => {
   const recovery = { code: 'PUSH_FAILED', targetBranch: 'develop', previewId: 'reviewed', candidateSha: 'd'.repeat(40) };
   const [command] = await service({
@@ -138,7 +129,7 @@ test('recovery redelivery carries the saved candidate, checks, and the same oper
     },
     task: { findUnique: async () => ({ project: { codebases: [{ mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: 45 }] } }) },
     $queryRaw: async () => [],
-  }).drainMergeRequests(RUNNER_ID, NEW_OWNER, true);
+  }).drainMergeRequests(RUNNER_ID, NEW_OWNER);
   assert.equal(command.operationId, OPERATION_ID);
   assert.equal(command.leaseOwner, NEW_OWNER);
   assert.equal(command.recoveryAction, 'apply');
@@ -281,7 +272,7 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
     },
   };
 
-  const commands = await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER);
+  const commands = await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER, true);
 
   assert.deepEqual(commands, [
     {
@@ -322,7 +313,9 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
           },
         ],
       },
-      select: { id: true, branch: true, commitOperationId: true, status: true },
+      // commitAction too: a queued discard is not handed to a runner that would read it as a
+      // plain commit (drainCommitRequests' third argument).
+      select: { id: true, branch: true, commitOperationId: true, commitAction: true, status: true },
     },
   ]);
   const restampedAt = (writes[0] as { data: { commitRequestedAt: Date } }).data.commitRequestedAt;
@@ -356,7 +349,7 @@ test('commit is not dispatched when the idle-state CAS loses', async () => {
     },
   };
 
-  assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), []);
+  assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER, true), []);
 });
 
 /**
@@ -387,7 +380,7 @@ test('terminal commit reaches its owner, and a fresh owner only for a dirty chec
       },
     };
 
-    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), [
+    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER, true), [
       {
         sessionId: SESSION_ID,
         operationId: OPERATION_ID,
@@ -436,7 +429,7 @@ test('terminal commit reaches its owner, and a fresh owner only for a dirty chec
       },
     };
 
-    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), []);
+    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER, true), []);
     assert.deepEqual((writes[0] as { where: Record<string, unknown> }).where.OR, [
       { commitOperationOwner: NEW_OWNER },
       { commitOperationOwner: null, worktreeDirty: true },

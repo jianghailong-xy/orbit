@@ -13,6 +13,7 @@ import {
 import type { IntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
@@ -31,6 +32,7 @@ import {
 import { taskLandingSql } from './project-criterion-landing';
 import { canonicalRepoUrl } from './project-integration-line';
 import { landingFailureClass } from './project-integration-job';
+import { openItemMessage, readOpenItemDeliveryCard } from './project-open-item';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
 
@@ -60,7 +62,15 @@ import { ProjectPromotionService } from './project-promotion.service';
  *  (5) §10.9 4: the owner's own Merge opens no LANDED_WITHOUT_CONFIRMATION, while a Merge pressed from a
  *      session does — both retiring the candidate (M-T13);
  *  (6) O-L2: an AGENT_PUSH project's DONE builds no candidate and queues no CHECK_PROMOTION — the
- *      observation carries the work — and the DONE that starts its line back-fills none either.
+ *      observation carries the work — and the DONE that starts its line back-fills none either;
+ *  (7) §10.5 O-L8: a TASK_BRANCH check's SOURCE_BRANCH_MISSING from a runner that does not declare
+ *      integration-observe/v1 at that moment names that runner on its title, detail line, next step and
+ *      delivery text, with its state, code, class and doors unmoved, and the rerun it asks for retires
+ *      the candidate; every other SOURCE_BRANCH_MISSING keeps its words, a project branch its title;
+ *  (8) §10.5 O-L8: a TASK_BRANCH candidate's failure, in each class, says what is true of a MAIN line on
+ *      each door it is served from, with its state, code, class and doors unmoved; a project branch's
+ *      keeps its words. What those words promise holds: a fix's landing and more commits on the branch
+ *      leave the candidate and the item as they are, the merge always asks, and the item closes by hand.
  *
  * Not destructive: every case owns freshly generated ids and reads only its own rows.
  */
@@ -159,6 +169,8 @@ async function world(
     started?: boolean;
     /** Whether a DONE already started the line (L3); false leaves the line to the next DONE. */
     lineStarted?: boolean;
+    /** A branch of its own for the line, instead of main: its candidates are PROJECT_BRANCH ones. */
+    projectBranch?: boolean;
   } = {},
 ): Promise<World> {
   const db = stack.db;
@@ -196,7 +208,8 @@ async function world(
   await db.projectCodebase.create({
     data: {
       ownerId, projectId, canonicalRepoUrl: canonicalRepoUrl(repoUrl)!, upstreamRef: 'refs/heads/main',
-      integrationRef: 'refs/heads/main', refAuthority: 'REMOTE', remoteName: 'origin',
+      integrationRef: options.projectBranch ? `refs/heads/project/${projectId}` : 'refs/heads/main',
+      refAuthority: 'REMOTE', remoteName: 'origin',
       integrationRefSource: 'EXPLICIT', deliveryMode: options.deliveryMode ?? 'PLATFORM',
       ...(options.lineStarted === false ? {} : { integrationStartedAt: new Date() }),
     },
@@ -382,7 +395,7 @@ function itemsOf(stack: Stack, w: World, kind: string) {
     where: { projectId: w.projectId, kind },
     orderBy: { createdAt: 'asc' },
     select: {
-      id: true, state: true, resolution: true, assignee: true, assigneeReason: true, dedupeKey: true,
+      id: true, title: true, state: true, resolution: true, assignee: true, assigneeReason: true, dedupeKey: true,
       taskId: true, promotionId: true, integrationJobId: true, payload: true, handlingJobId: true,
     },
   });
@@ -800,6 +813,520 @@ test('(6) O-L2: an AGENT_PUSH project\'s DONE builds no candidate and queues no 
       assert.ok(line.integrationStartedAt, 'CONTROL: this DONE started the line');
       const [promotions, promotionJobs] = await routes(fresh);
       assert.deepEqual([promotions, promotionJobs], [0, 0], 'nothing back-filled as a candidate');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (7) O-L8: the out-of-date runner's item ═════════════════════════════════════════════════
+
+/** What a fetch of a branch the remote does not have answers (M-S1, `fetchRefFailure`). */
+const branchMissing = (ref: string) => ({
+  state: 'ERROR', phase: 'FETCH', errorCode: 'SOURCE_BRANCH_MISSING',
+  errorDetail: { ref, detail: `fatal: couldn't find remote ref ${ref}` },
+});
+
+/** The next step this item's failure has on a project on main, when no task's branch is named. */
+const REPAIR = 'The project branch cannot reach main until this integration is repaired — re-run it or ask the coordinator to fix it.';
+/** The same failure of a TASK_BRANCH candidate, in its coordinator's cell (§10.5 O-L8). */
+const REPAIR_TASK_BRANCH = 'This task’s branch cannot reach main until this integration is repaired — re-run it or file a fix task.';
+
+/** The one sentence the delivery text gains, for a runner of this name. */
+const doesNotDeclare = (name: string) => `Runner ${name} does not declare integration-observe/v1, so it looked for this task's `
+  + 'branch on the remote by name. That says nothing about whether the task has work to land. '
+  + 'Update the runner, then run integration_retry on this candidate.';
+
+/**
+ * The project's one failure of this kind, as each door serves it: its row, the open items read, the
+ * delivery card and the turn its coordinator is told in.
+ */
+async function servedError(stack: Stack, w: World, kind = 'INTEGRATION_ERROR') {
+  const [item, ...more] = await itemsOf(stack, w, kind);
+  assert.ok(item, 'CONTROL: the failure opened an item');
+  assert.equal(more.length, 0, 'one failure, one item');
+  await stack.openItems.deliverOwed(w.projectId);
+  await receiveOpenItem(stack.db, item.id);
+  const listed = await stack.openItems.list(w.ownerId, w.projectId);
+  const row = [...listed.needsYou, ...listed.withCoordinator].find((each) => each.itemId === item.id);
+  assert.ok(row, 'CONTROL: the open items read lists it');
+  const card = await readOpenItemDeliveryCard(stack.prisma, item.id, w.ownerId);
+  assert.ok(card, 'CONTROL: it reads as a card');
+  assert.equal(card.requiredAction, row.requiredAction, 'the card and the list say one next step');
+  const told = openItemMessage({
+    id: item.id, kind, title: item.title, projectId: w.projectId, taskId: item.taskId,
+    promotionId: item.promotionId, payload: item.payload,
+  });
+  return {
+    item, row, card, told,
+    payload: item.payload as { outdatedRunner?: unknown; errorCode?: unknown; failureClass?: unknown; sourceKind?: unknown },
+  };
+}
+
+/** The check of a TASK_BRANCH candidate for a task whose branch was never pushed and never moved off `base`. */
+async function checkOfAnEmptyBranch(stack: Stack, w: World, label: string, capabilities: string[]) {
+  const t = await finishedTask(stack, w, 'Backfill order stats', {
+    branch: `orbit/${label}`, branchSha: sha('b'), baseSha: sha('b'), changedFiles: [],
+  });
+  const candidate = await candidateOf(stack, t.taskId);
+  const check = await handed(stack, w.runnerId, `${label}-1`, capabilities, candidate.checkJobId);
+  assert.ok(check, 'CONTROL: the source session\'s runner is handed the check');
+  return { ...t, candidate, check };
+}
+
+test('(7) §10.5 O-L8: a TASK_BRANCH check\'s SOURCE_BRANCH_MISSING from a runner that does not declare integration-observe/v1 names that runner, with its state, code, class and doors unmoved, and the rerun it asks for retires the candidate',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const old = await world(stack, 'outdated', { capabilities: LEGACY });
+      const { taskId, candidate, check } = await checkOfAnEmptyBranch(stack, old, 'outdated', LEGACY);
+      assert.equal(check.sourceSha, undefined, 'CONTROL: this runner is handed no commit, so it looks for the branch by name');
+      await report(stack, old, check, branchMissing('refs/heads/orbit/outdated'));
+
+      const outdated = await servedError(stack, old);
+      assert.equal(outdated.item.title, 'Integration error: merging “Backfill order stats” into main');
+      assert.equal(outdated.row.detailLine, 'Runner outdated-runner is out of date: update it, then run this check again.');
+      assert.equal(outdated.row.requiredAction, 'Update runner outdated-runner, then run this check again.');
+      assert.equal(outdated.payload.outdatedRunner, 'outdated-runner', 'at the payload\'s top level');
+      assert.ok(outdated.told.includes(`The integration job ended with an error: SOURCE_BRANCH_MISSING.\n${doesNotDeclare('outdated-runner')}\n`),
+        `the sentence follows the error code:\n${outdated.told}`);
+
+      // A runner that declares it: the same failure of the same kind of candidate, which is what the
+      // new case's state, code, class and doors are held against. Its title is its source's (O-L8 names
+      // the source there, not the runner), and nothing else about it changes.
+      const current = await world(stack, 'declares');
+      const named = await checkOfAnEmptyBranch(stack, current, 'declares', CURRENT);
+      await report(stack, current, named.check, branchMissing('refs/heads/orbit/declares'));
+      const today = await servedError(stack, current);
+      assert.equal(today.item.title, 'Integration error: merging “Backfill order stats” into main');
+      assert.equal(today.row.detailLine, '');
+      assert.equal(today.row.requiredAction, REPAIR_TASK_BRANCH);
+      assert.equal(today.payload.outdatedRunner, undefined);
+      assert.doesNotMatch(today.told, /does not declare|out of date/);
+
+      for (const [what, served, jobId, taskIdOf] of [
+        ['the out-of-date runner', outdated, check.jobId, taskId],
+        ['the current runner', today, named.check.jobId, named.taskId],
+      ] as const) {
+        const job = await jobOf(stack, jobId);
+        assert.deepEqual([job.state, job.errorCode, landingFailureClass(job)], ['ERROR', 'SOURCE_BRANCH_MISSING', 'ERROR'], what);
+        assert.deepEqual([served.item.state, served.item.assignee, served.item.assigneeReason, served.payload.errorCode, served.payload.failureClass],
+          ['OPEN', 'COORDINATOR', 'DEFAULT', 'SOURCE_BRANCH_MISSING', 'ERROR'], what);
+        const blocked = await candidateOf(stack, taskIdOf);
+        assert.deepEqual([blocked.state, blocked.blockedReason, blocked.sourceSha], ['BLOCKED', 'ERROR', sha('b')],
+          `${what}: a candidate still named by the commit it delivered`);
+      }
+      assert.deepEqual([outdated.row.kind, outdated.row.actions, outdated.row.primaryAction, outdated.row.facts?.errorCode],
+        [today.row.kind, today.row.actions, today.row.primaryAction, today.row.facts?.errorCode], 'the same doors');
+      assert.ok(outdated.row.actions.includes('RETRY'), 'CONTROL: and they include the rerun it asks for');
+
+      // Its promise: the runner is updated, the rerun checks by the commit, and the line answers.
+      await stack.db.runner.update({ where: { id: old.runnerId }, data: { capabilities: CURRENT } });
+      const retried = await stack.openItems.retryPromotionCheck(
+        old.ownerId, old.projectId, candidate.id, { reason: 'the runner is updated' }, old.coordinatorSessionId,
+      );
+      const byCommit = await handed(stack, old.runnerId, 'outdated-2', CURRENT, retried.jobId);
+      assert.equal(byCommit?.sourceSha, sha('b'), 'the rerun names the commit');
+      await report(stack, old, byCommit!, alreadyThere(sha('b')));
+      assert.equal((await candidateOf(stack, taskId)).state, 'SUPERSEDED');
+      const [closed] = await itemsOf(stack, old, 'INTEGRATION_ERROR');
+      assert.deepEqual([closed.id, closed.state, closed.resolution], [outdated.item.id, 'RESOLVED', 'PROMOTION_MOVED_ON']);
+      const [receipt] = await receiptsOf(stack, taskId);
+      assert.deepEqual(receipt?.detail, { integrationJobId: retried.jobId, observed: true, empty: true });
+
+      // The same code over real work: what it said about the task was indeed nothing. The rerun's check
+      // passes, the owner is asked about the merge, and the item's settled row asks nothing any more.
+      const working = await world(stack, 'outdated-work', { capabilities: LEGACY });
+      const fix = await finishedTask(stack, working, 'Fix the order totals', {
+        branch: 'orbit/outdated-work', branchSha: sha('a'), baseSha: sha('b'), changedFiles: [{ path: 'totals.ts' }],
+      });
+      const fixCandidate = await candidateOf(stack, fix.taskId);
+      const firstCheck = await handed(stack, working.runnerId, 'outdated-work-1', LEGACY, fixCandidate.checkJobId);
+      await report(stack, working, firstCheck!, branchMissing('refs/heads/orbit/outdated-work'));
+      const failed = await servedError(stack, working);
+      assert.equal(failed.row.requiredAction, 'Update runner outdated-work-runner, then run this check again.');
+      await stack.db.runner.update({ where: { id: working.runnerId }, data: { capabilities: CURRENT } });
+      const rerun = await stack.openItems.retryPromotionCheck(
+        working.ownerId, working.projectId, fixCandidate.id, { reason: 'the runner is updated' }, working.coordinatorSessionId,
+      );
+      const secondCheck = await handed(stack, working.runnerId, 'outdated-work-2', CURRENT, rerun.jobId);
+      assert.equal(secondCheck?.sourceSha, sha('a'));
+      await report(stack, working, secondCheck!, passed(sha('a')));
+      assert.equal((await candidateOf(stack, fix.taskId)).state, 'READY');
+      const { settled } = await stack.openItems.list(working.ownerId, working.projectId);
+      const settledRow = settled.find((each) => each.itemId === failed.item.id);
+      assert.ok(settledRow, 'CONTROL: the rerun handled the item, so it reads as settled');
+      assert.equal(settledRow.outcome?.resolution, 'HANDLED');
+      assert.equal(settledRow.detailLine, '');
+      assert.equal(settledRow.requiredAction, 'This item is already settled — no action is required.');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(7) §10.5 O-L8: the name is the runner\'s display name, else its name, and it is read at the moment of the result',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const shown = await world(stack, 'shown', { capabilities: LEGACY });
+      await stack.db.runner.update({ where: { id: shown.runnerId }, data: { displayName: 'DeskMac' } });
+      const first = await checkOfAnEmptyBranch(stack, shown, 'shown', LEGACY);
+      await report(stack, shown, first.check, branchMissing('refs/heads/orbit/shown'));
+      const served = await servedError(stack, shown);
+      assert.equal(served.payload.outdatedRunner, 'DeskMac');
+      assert.equal(served.row.detailLine, 'Runner DeskMac is out of date: update it, then run this check again.');
+      assert.equal(served.row.requiredAction, 'Update runner DeskMac, then run this check again.');
+      assert.match(served.told, /Runner DeskMac does not declare integration-observe\/v1/);
+
+      // Updated between the claim and the result: it is not out of date any more, so it is not called so.
+      const updated = await world(stack, 'updated', { capabilities: LEGACY });
+      const second = await checkOfAnEmptyBranch(stack, updated, 'updated', LEGACY);
+      await stack.db.runner.update({ where: { id: updated.runnerId }, data: { capabilities: CURRENT } });
+      await report(stack, updated, second.check, branchMissing('refs/heads/orbit/updated'));
+      const notAnyMore = await servedError(stack, updated);
+      assert.equal(notAnyMore.payload.outdatedRunner, undefined);
+      assert.equal(notAnyMore.row.requiredAction, REPAIR_TASK_BRANCH);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(7) §10.5 O-L8: every other SOURCE_BRANCH_MISSING from such a runner keeps its words, a project branch its title, and an item already open what it says',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      /** No field, no line, this source's next step, no such sentence: only the title differs by case. */
+      const keepsItsWords = (served: Awaited<ReturnType<typeof servedError>>, requiredAction: string) => {
+        assert.equal(served.payload.outdatedRunner, undefined);
+        assert.equal(served.row.detailLine, '');
+        assert.equal(served.row.requiredAction, requiredAction);
+        assert.doesNotMatch(served.told, /does not declare|out of date/);
+      };
+
+      // A task branch's check, on such a runner, for another reason.
+      const otherCode = await world(stack, 'other-code', { capabilities: LEGACY });
+      const fetchFailed = await checkOfAnEmptyBranch(stack, otherCode, 'other-code', LEGACY);
+      await report(stack, otherCode, fetchFailed.check, {
+        state: 'ERROR', phase: 'FETCH', errorCode: 'FETCH_FAILED', errorDetail: { detail: 'the remote hung up' },
+      });
+      const failedFetch = await servedError(stack, otherCode);
+      keepsItsWords(failedFetch, REPAIR_TASK_BRANCH);
+      assert.equal(failedFetch.item.title, 'Integration error: merging “Backfill order stats” into main');
+
+      // A task branch's landing: O-L8 is about the check, and the title is about the source.
+      const landing = await world(stack, 'landing', { capabilities: LEGACY });
+      const passing = await checkOfAnEmptyBranch(stack, landing, 'landing', LEGACY);
+      await report(stack, landing, passing.check, passed(sha('c')));
+      await stack.promotions.confirm({ userId: landing.ownerId }, landing.projectId, passing.candidate.id, sha('c'));
+      const land = await handed(stack, landing.runnerId, 'landing-2', LEGACY,
+        (await candidateOf(stack, passing.taskId)).landJobId);
+      assert.equal(land?.kind, 'LAND_PROMOTION');
+      await report(stack, landing, land!, branchMissing('refs/heads/orbit/landing'));
+      const failedLanding = await servedError(stack, landing);
+      keepsItsWords(failedLanding, REPAIR_TASK_BRANCH);
+      assert.equal(failedLanding.item.title, 'Integration error: merging “Backfill order stats” into main');
+
+      // A project branch's candidate: the branch the title names is there, and the code is about it.
+      const line = await world(stack, 'project-line', { capabilities: LEGACY, projectBranch: true });
+      const t = await finishedTask(stack, line, 'lands on the project branch', {
+        branch: 'orbit/project-line', branchSha: sha('a'), baseSha: sha('b'),
+      });
+      const onTheLine = (await dispatch(stack, line.runnerId, 'project-line-1', LEGACY)).find((command) => command.kind === 'LAND_TASK');
+      assert.ok(onTheLine, 'CONTROL: the DONE queued a landing on the project branch');
+      await report(stack, line, onTheLine, {
+        state: 'LANDED', phase: 'VERIFY', sourceSha: sha('a'), targetShaBefore: UPSTREAM, upstreamSha: UPSTREAM,
+        testedSha: sha('c'), testedTreeSha: sha('e'), landedSha: sha('c'), landedTreeSha: sha('e'), aheadOfUpstream: 1,
+      });
+      assert.deepEqual((await receiptsOf(stack, t.taskId)).map((receipt) => receipt.result), ['MERGED'], 'CONTROL: it landed');
+      const made = await stack.promotions.considerCandidate(line.projectId);
+      assert.ok(made, 'CONTROL: the landing made a candidate');
+      const lineCheck = (await dispatch(stack, line.runnerId, 'project-line-2', LEGACY)).find((command) => command.kind === 'CHECK_PROMOTION');
+      assert.equal(lineCheck?.promotionSourceKind, 'PROJECT_BRANCH');
+      await report(stack, line, lineCheck!, branchMissing(`refs/heads/project/${line.projectId}`));
+      const failedLine = await servedError(stack, line);
+      keepsItsWords(failedLine, REPAIR);
+      assert.equal(failedLine.item.title, 'Integration error: merging the project branch into main');
+
+      // A task's own landing on that line: named after the task, as it always was.
+      const own = await world(stack, 'own-landing', { capabilities: LEGACY, projectBranch: true });
+      await finishedTask(stack, own, 'lands by itself', { branch: 'orbit/own-landing', branchSha: sha('a'), baseSha: sha('b') });
+      const ownLanding = (await dispatch(stack, own.runnerId, 'own-landing-1', LEGACY)).find((command) => command.kind === 'LAND_TASK');
+      assert.ok(ownLanding, 'CONTROL: the DONE queued its landing');
+      await report(stack, own, ownLanding, branchMissing('refs/heads/orbit/own-landing'));
+      const [ownItem] = await itemsOf(stack, own, 'INTEGRATION_ERROR');
+      assert.equal(ownItem?.title, 'Integration error: lands by itself');
+      assert.equal((ownItem?.payload as { outdatedRunner?: unknown }).outdatedRunner, undefined);
+
+      // An item opened before this revision keeps the title it was opened with and says nothing new.
+      const before = await world(stack, 'opened-before', { capabilities: LEGACY });
+      const opened = await checkOfAnEmptyBranch(stack, before, 'opened-before', LEGACY);
+      const now = new Date();
+      await stack.db.projectOpenItem.create({
+        data: {
+          projectId: before.projectId, ownerId: before.ownerId, kind: 'INTEGRATION_ERROR', state: 'OPEN',
+          assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', promotionId: opened.candidate.id,
+          dedupeKey: `IE:${randomUUID()}`, title: 'Integration error: merging the project branch into main',
+          payload: { jobKind: 'CHECK_PROMOTION', errorCode: 'SOURCE_BRANCH_MISSING', errorDetail: null, failureClass: 'ERROR', generation: 1 },
+          waitingSince: now, assignedAt: now,
+        },
+      });
+      const stillOpen = await servedError(stack, before);
+      keepsItsWords(stillOpen, REPAIR);
+      assert.equal(stillOpen.item.title, 'Integration error: merging the project branch into main');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (8) O-L8: a task branch's failure, in the words of a MAIN line ══════════════════════════════════
+
+const RED_CHECK = { name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, exitCode: 1, timedOut: false, durationMs: 1_200, outputTail: 'not ok 1\n' };
+const SLOW_CHECK = { name: 'TASK_ACCEPTANCE', command: 'go test ./...', expectedExitCode: 0, exitCode: null, timedOut: true, durationMs: 3_600_000, outputTail: '' };
+const CONFLICTING = 'src/orders.ts';
+
+/**
+ * Each failure class as a runner reports it about the commit `source`, with the item it opens and what
+ * that item's coordinator is told to do next, on a project on main: the task's branch, then the project's.
+ */
+const FAILURE_CLASSES: Array<{
+  failureClass: 'CONFLICT' | 'CHECK_FAILED' | 'CHECK_TIMED_OUT' | 'ERROR';
+  kind: string;
+  state: string;
+  body: (source: string) => object;
+  taskBranch: string;
+  projectBranch: string;
+}> = [
+  {
+    failureClass: 'CONFLICT',
+    kind: 'INTEGRATION_CONFLICT',
+    state: 'CONFLICT',
+    body: (source) => ({ state: 'CONFLICT', phase: 'REBASE', sourceSha: source, upstreamSha: UPSTREAM, targetShaBefore: UPSTREAM, conflicts: [CONFLICTING] }),
+    taskBranch: 'This task’s branch cannot reach main until this conflict is repaired — file a task that puts its work on main.',
+    projectBranch: 'The project branch cannot reach main until this promotion conflict is repaired — create a sync task or ask the coordinator to fix it.',
+  },
+  {
+    failureClass: 'CHECK_FAILED',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    state: 'CHECK_FAILED',
+    body: (source) => ({
+      state: 'CHECK_FAILED', phase: 'CHECK', sourceSha: source, upstreamSha: UPSTREAM, targetShaBefore: UPSTREAM,
+      testedSha: sha('7'), testedTreeSha: sha('6'), checks: [RED_CHECK], conflicts: [],
+    }),
+    taskBranch: REPAIR_TASK_BRANCH,
+    projectBranch: REPAIR,
+  },
+  {
+    failureClass: 'CHECK_TIMED_OUT',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    state: 'CHECK_FAILED',
+    body: (source) => ({
+      state: 'CHECK_FAILED', phase: 'CHECK', sourceSha: source, upstreamSha: UPSTREAM, targetShaBefore: UPSTREAM,
+      testedSha: sha('7'), testedTreeSha: sha('6'), checks: [SLOW_CHECK], conflicts: [],
+    }),
+    taskBranch: 'This task’s branch cannot reach main until this check finishes — re-run it with a reason or file a fix task.',
+    projectBranch: 'The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
+  },
+  {
+    failureClass: 'ERROR',
+    kind: 'INTEGRATION_ERROR',
+    state: 'ERROR',
+    body: () => ({ state: 'ERROR', phase: 'FETCH', errorCode: 'FETCH_FAILED', errorDetail: { detail: 'the remote hung up' } }),
+    taskBranch: REPAIR_TASK_BRANCH,
+    projectBranch: REPAIR,
+  },
+];
+
+/** A TASK_BRANCH candidate on a MAIN line whose check comes back with `body`. */
+async function failedTaskBranch(stack: Stack, label: string, body: (source: string) => object) {
+  const w = await world(stack, label);
+  const t = await finishedTask(stack, w, 'Backfill order stats', {
+    branch: `orbit/${label}`, branchSha: sha('a'), baseSha: sha('b'), changedFiles: [{ path: 'orders.ts' }],
+  });
+  const candidate = await candidateOf(stack, t.taskId);
+  const check = await handed(stack, w.runnerId, `${label}-1`, CURRENT, candidate.checkJobId);
+  assert.ok(check, 'CONTROL: the source session\'s runner is handed the check');
+  assert.equal(check.promotionSourceKind, 'TASK_BRANCH');
+  await report(stack, w, check, body(sha('a')));
+  return { w, ...t, candidate, check };
+}
+
+/** A PROJECT_BRANCH candidate, the landing that made it behind it, whose check comes back with `body`. */
+async function failedProjectBranch(stack: Stack, label: string, body: (source: string) => object) {
+  const w = await world(stack, label, { projectBranch: true });
+  const t = await finishedTask(stack, w, 'lands on the project branch', {
+    branch: `orbit/${label}`, branchSha: sha('a'), baseSha: sha('b'), changedFiles: [{ path: 'orders.ts' }],
+  });
+  const landing = (await dispatch(stack, w.runnerId, `${label}-1`, CURRENT)).find((command) => command.kind === 'LAND_TASK');
+  assert.ok(landing, 'CONTROL: the DONE queued a landing on the project branch');
+  await report(stack, w, landing, {
+    state: 'LANDED', phase: 'VERIFY', sourceSha: sha('a'), targetShaBefore: UPSTREAM, upstreamSha: UPSTREAM,
+    testedSha: sha('c'), testedTreeSha: sha('e'), landedSha: sha('c'), landedTreeSha: sha('e'), aheadOfUpstream: 1,
+  });
+  assert.deepEqual((await receiptsOf(stack, t.taskId)).map((receipt) => receipt.result), ['MERGED'], 'CONTROL: it landed');
+  assert.ok(await stack.promotions.considerCandidate(w.projectId), 'CONTROL: the landing made a candidate');
+  const check = (await dispatch(stack, w.runnerId, `${label}-2`, CURRENT)).find((command) => command.kind === 'CHECK_PROMOTION');
+  assert.equal(check?.promotionSourceKind, 'PROJECT_BRANCH');
+  await report(stack, w, check!, body(sha('c')));
+  return { w, check: check! };
+}
+
+test('(8) §10.5 O-L8: a TASK_BRANCH candidate\'s failure, in each class, says what is true of a MAIN line on each door it is served from; a project branch\'s keeps its words, and the state, code, class and doors do not move',
+  { skip, timeout: 420_000 }, async () => {
+    const stack = await connect();
+    try {
+      for (const { failureClass, kind, state, body, taskBranch, projectBranch } of FAILURE_CLASSES) {
+        const label = failureClass.toLowerCase().replaceAll('_', '-');
+        const ofTask = await failedTaskBranch(stack, `words-task-${label}`, body);
+        const served = await servedError(stack, ofTask.w, kind);
+        const what = `${failureClass}, a task's branch`;
+
+        assert.equal(served.payload.sourceKind, 'TASK_BRANCH', `${what}: at the payload's top level`);
+        assert.equal(served.row.requiredAction, taskBranch, `${what}: the list`);
+        assert.equal(served.card.requiredAction, taskBranch, `${what}: the delivery card`);
+        for (const words of [served.row.requiredAction, served.told]) {
+          assert.doesNotMatch(words, /project branch/i, what);
+          assert.doesNotMatch(words, /No task stands behind/, what);
+          assert.match(words, /[Tt]his task’s branch/, what);
+        }
+        assert.match(served.told, /A task stands behind this item, the one its title names/, what);
+        assert.match(served.item.title, /“Backfill order stats” into main$/, what);
+
+        const ofProject = await failedProjectBranch(stack, `words-project-${label}`, body);
+        const before = await servedError(stack, ofProject.w, kind);
+        const whatBefore = `${failureClass}, a project branch`;
+        assert.equal('sourceKind' in before.payload, false, `${whatBefore}: no such field`);
+        assert.equal(before.row.requiredAction, projectBranch, `${whatBefore}: the list`);
+        assert.equal(before.card.requiredAction, projectBranch, `${whatBefore}: the delivery card`);
+        assert.match(before.told, /No task stands behind this item: it comes from the job of a promotion \(merging the project branch into main\)/, whatBefore);
+        assert.match(before.item.title, /merging the project branch into main$/, whatBefore);
+
+        // Only the words moved: the two read alike wherever the source does not decide.
+        const job = await jobOf(stack, ofTask.check.jobId);
+        const jobBefore = await jobOf(stack, ofProject.check.jobId);
+        assert.deepEqual([job.state, job.errorCode, landingFailureClass(job)], [state, jobBefore.errorCode, failureClass], what);
+        assert.deepEqual([jobBefore.state, landingFailureClass(jobBefore)], [state, failureClass], whatBefore);
+        assert.deepEqual([served.item.state, served.item.assignee, served.item.assigneeReason, served.payload.failureClass, served.payload.errorCode],
+          [before.item.state, before.item.assignee, before.item.assigneeReason, before.payload.failureClass, before.payload.errorCode], what);
+        assert.deepEqual([served.row.kind, served.row.actions, served.row.primaryAction], [before.row.kind, before.row.actions, before.row.primaryAction],
+          `${failureClass}: the same doors`);
+        assert.equal(served.row.actions.includes('RETRY'), failureClass !== 'CONFLICT', `${failureClass}: a conflict has no rerun, and its words offer none`);
+        assert.deepEqual((await candidateOf(stack, ofTask.taskId)).state, 'BLOCKED', what);
+        const { status } = await stack.db.task.findUniqueOrThrow({ where: { id: ofTask.taskId }, select: { status: true } });
+        assert.equal(status, TaskStatus.DONE, `${what}: the failure does not change the task's status, as its words say`);
+      }
+
+      // The other job a candidate has: the landing, recorded the same way.
+      const w = await world(stack, 'words-landing');
+      const t = await finishedTask(stack, w, 'Backfill order stats', {
+        branch: 'orbit/words-landing', branchSha: sha('a'), baseSha: sha('b'), changedFiles: [{ path: 'orders.ts' }],
+      });
+      const candidate = await candidateOf(stack, t.taskId);
+      const check = await handed(stack, w.runnerId, 'words-landing-1', CURRENT, candidate.checkJobId);
+      await report(stack, w, check!, passed(sha('a')));
+      await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, candidate.id, sha('a'));
+      const land = await handed(stack, w.runnerId, 'words-landing-2', CURRENT, (await candidateOf(stack, t.taskId)).landJobId);
+      assert.equal(land?.kind, 'LAND_PROMOTION');
+      await report(stack, w, land!, { state: 'CONFLICT', phase: 'REBASE', sourceSha: sha('a'), upstreamSha: UPSTREAM, targetShaBefore: UPSTREAM, conflicts: [CONFLICTING] });
+      const failedLanding = await servedError(stack, w, 'INTEGRATION_CONFLICT');
+      assert.equal(failedLanding.payload.sourceKind, 'TASK_BRANCH');
+      assert.equal(failedLanding.row.requiredAction, FAILURE_CLASSES[0]!.taskBranch);
+      assert.doesNotMatch(failedLanding.told, /project branch/i);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(8) §10.5 O-L8: what those words promise: a fix is a candidate of its own that always asks, its landing leaves this candidate and this item as they are, and the item closes by hand',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const { w, candidate } = await failedTaskBranch(stack, 'fix-of-a-branch', FAILURE_CLASSES[0]!.body);
+      const { item } = await servedError(stack, w, 'INTEGRATION_CONFLICT');
+      const assignedAt = () => stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: item.id }, select: { assignedAt: true, state: true } });
+      const before = await assignedAt();
+      const { coordinatorEnabled } = await stack.db.project.findUniqueOrThrow({ where: { id: w.projectId }, select: { coordinatorEnabled: true } });
+      assert.equal(coordinatorEnabled, true, 'CONTROL: Automatic is on, so "whatever the Automatic setting says" is what is being measured');
+
+      // The rerun its words do not offer is one the door refuses.
+      await assert.rejects(
+        stack.openItems.retryPromotionCheck(w.ownerId, w.projectId, candidate.id, { reason: 'once more' }, w.coordinatorSessionId),
+        (error: { getStatus?: () => number }) => error.getStatus?.() === 409,
+      );
+
+      // `task_create` with `fixesOpenItemId`, from the conversation the project is coordinated from. How
+      // the task then reaches DONE is not what this measures, so it reaches it through this file's Confirm.
+      const filed = await stack.tasks.create(w.ownerId, {
+        title: 'Put the order stats on main', assigneeId: w.workspaceId, projectId: w.projectId,
+        completionCriterion: 'EVIDENCE_JUDGMENT', fixesOpenItemId: item.id,
+      } as never, undefined, w.coordinatorSessionId);
+      await stack.db.task.update({
+        where: { id: filed.id }, data: { status: TaskStatus.IN_PROGRESS, completionCriterion: 'OWNER_CONFIRMED' },
+      });
+      await workSession(stack, w, filed.id, {
+        branch: 'orbit/the-fix', branchSha: sha('d'), baseSha: UPSTREAM, finishedMinutesAgo: 2, changedFiles: [{ path: 'orders.ts' }],
+      });
+      await confirm(stack, w, filed.id);
+
+      // Its branch is a candidate of its own, with its own check and the owner's own card.
+      const own = await candidateOf(stack, filed.id);
+      assert.notEqual(own.id, candidate.id);
+      assert.deepEqual([own.state, own.sourceRef, own.sourceSha], ['CHECKING', 'refs/heads/orbit/the-fix', sha('d')]);
+      const ownCheck = await handed(stack, w.runnerId, 'fix-of-a-branch-2', CURRENT, own.checkJobId);
+      await report(stack, w, ownCheck!, passed(sha('d')));
+      const asked = await candidateOf(stack, filed.id);
+      assert.equal(asked.state, 'READY', 'a clean check of a task\'s branch asks, with Automatic on');
+      assert.ok(asked.openItemId, 'and the owner has its card');
+      const { assignee: cardHolder } = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: asked.openItemId }, select: { assignee: true } });
+      assert.equal(cardHolder, 'OWNER');
+
+      // Its landing, all the way in.
+      await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, own.id, sha('d'));
+      const land = await handed(stack, w.runnerId, 'fix-of-a-branch-3', CURRENT, (await candidateOf(stack, filed.id)).landJobId);
+      await report(stack, w, land!, {
+        state: 'LANDED', phase: 'VERIFY', sourceSha: sha('d'), upstreamSha: UPSTREAM, targetShaBefore: UPSTREAM,
+        testedSha: sha('5'), testedTreeSha: sha('6'), landedSha: sha('5'), landedTreeSha: sha('6'), checks: [],
+      });
+      assert.equal((await candidateOf(stack, filed.id)).state, 'MERGED', 'CONTROL: the fix is on main');
+
+      // This candidate and this item are as they were, and the item was not brought back.
+      const still = await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: candidate.id }, select: { state: true, sourceSha: true } });
+      assert.deepEqual([still.state, still.sourceSha], ['BLOCKED', sha('a')]);
+      const after = await assignedAt();
+      assert.equal(after.state, 'OPEN');
+      assert.equal(after.assignedAt?.getTime(), before.assignedAt?.getTime(), 'not delivered again (X-D4 5 is a task landing\'s)');
+
+      // The door the words close it with.
+      const closed = await stack.openItems.resolveOpenItem(
+        w.ownerId, w.projectId, item.id, { note: 'the fix carried this task\'s work onto main' },
+        { kind: 'SESSION', sessionId: w.coordinatorSessionId },
+      );
+      assert.deepEqual([closed.state, closed.resolution], ['RESOLVED', 'HANDLED']);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(8) §10.5 O-L8: what those words promise: more commits on this task\'s branch do not change a blocked candidate',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const { w, taskId, candidate } = await failedTaskBranch(stack, 'more-commits', FAILURE_CLASSES[0]!.body);
+      const { item } = await servedError(stack, w, 'INTEGRATION_CONFLICT');
+
+      // `task_reopen`'s own body, a further commit on the same branch, and the DONE that delivers it.
+      await stack.tasks.update(w.ownerId, taskId, { status: TaskStatus.OPEN, supersededByTaskId: null, terminalReason: null } as never);
+      await workSession(stack, w, taskId, {
+        branch: 'orbit/more-commits', branchSha: sha('c'), baseSha: sha('b'), finishedMinutesAgo: 1, changedFiles: [{ path: 'orders.ts' }],
+      });
+      await confirm(stack, w, taskId);
+      assert.equal((await identityOf(stack, taskId)).sha, sha('c'), 'CONTROL: the task delivered the new commit');
+
+      const candidates = await stack.db.projectPromotion.findMany({
+        where: { taskId, sourceKind: 'TASK_BRANCH' }, select: { id: true, state: true, sourceSha: true, checkJobId: true },
+      });
+      assert.deepEqual(candidates, [{ id: candidate.id, state: 'BLOCKED', sourceSha: sha('a'), checkJobId: candidate.checkJobId }],
+        'one branch is one question, and the blocked candidate is still asking it about the old commit');
+      const [same, ...more] = await itemsOf(stack, w, 'INTEGRATION_CONFLICT');
+      assert.deepEqual([same?.id, same?.state, more.length], [item.id, 'OPEN', 0]);
     } finally {
       await stack.db.$disconnect();
     }

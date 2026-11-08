@@ -547,6 +547,15 @@ public struct RunnerLoginState: Codable, Equatable, Sendable {
         self.reason = reason
     }
 
+    /// The page at `url` a browser may be sent to, or nil: only ever an https page, whatever the runner
+    /// reported. The system hands any other scheme to whatever claims it, so a card opens nothing else.
+    /// The server keeps no other (web `signInPage`); this holds for whatever a row still carries.
+    public var signInPage: URL? {
+        guard let url, let page = URL(string: url),
+              page.scheme?.lowercased() == "https", page.host?.isEmpty == false else { return nil }
+        return page
+    }
+
     private enum CodingKeys: String, CodingKey {
         case status, engine, url, userCode, message, account, expiresAt, reason
     }
@@ -820,15 +829,23 @@ public struct PlanUsageIncludedUsage: Codable, Equatable, Sendable {
     public let resetsAt: String?
     /// Share used, in percent — present only above 0, since Cursor's 0% is no reading.
     public let percentUsed: Double?
+    /// Cents left of the included allowance (`planUsage.remaining`); 0 means exhausted when
+    /// `limitCents` is also present. Nil when Cursor named no remaining.
+    public let remainingCents: Double?
+    /// Cents of included allowance this period (`planUsage.limit`). Nil when Cursor named none.
+    public let limitCents: Double?
     /// When a turn on the account last met Cursor's usage limit within this period.
     public let limitReachedAt: String?
 
     public init(period: String? = nil, startsAt: String? = nil, resetsAt: String? = nil,
-                percentUsed: Double? = nil, limitReachedAt: String? = nil) {
+                percentUsed: Double? = nil, remainingCents: Double? = nil, limitCents: Double? = nil,
+                limitReachedAt: String? = nil) {
         self.period = period
         self.startsAt = startsAt
         self.resetsAt = resetsAt
         self.percentUsed = percentUsed
+        self.remainingCents = remainingCents
+        self.limitCents = limitCents
         self.limitReachedAt = limitReachedAt
     }
 }
@@ -983,6 +1000,8 @@ public struct PlanUsageRow: Equatable, Sendable, Identifiable {
     public let groupLabel: String?
     public let window: PlanUsageWindow
     public var remaining: Bool = false
+    /// Replaces the percent text when set (Cursor included usage as "$12.34 left").
+    public var headline: String? = nil
     public var id: String { key }
     /// Antigravity reports remaining quota; other providers report consumed quota.
     public var percent: Int {
@@ -1025,15 +1044,27 @@ private func codexWindowLabel(_ window: PlanUsageWindow, secondary: Bool) -> Str
 public extension PlanUsageSnapshot {
     /// Present windows in provider order, preserving every Codex TUI rate-limit bucket.
     var rows: [PlanUsageRow] {
-        // A Cursor CLI account's included usage, one window, and only while Cursor reports some of it
-        // used: its 0% is no reading (web `cursorRows`), so an account with none has no row and every
-        // reader says "Usage unavailable" rather than draw 0%.
+        // A Cursor CLI account's included usage, one window (web `cursorRows`): prefer remaining/limit
+        // cents when Cursor sent them; else percentUsed above 0. Its bare 0% is no reading, so an
+        // account with neither has no row and every reader says "Usage unavailable" rather than 0%.
         if provider == "cursor" {
-            guard let included = includedUsage, let used = included.percentUsed, used.isFinite, used > 0 else {
-                return []
+            guard let included = includedUsage else { return [] }
+            let label = included.period == "weekly" ? "Weekly limit" : "Monthly limit"
+            if let allowance = included.limitCents, allowance.isFinite, allowance > 0,
+               let remaining = included.remainingCents, remaining.isFinite {
+                let used = max(0, min(100, ((allowance - remaining) / allowance) * 100))
+                return [PlanUsageRow(key: "included", label: label, groupLabel: nil,
+                                     window: PlanUsageWindow(utilization: used, resetsAt: included.resetsAt),
+                                     remaining: true, headline: CursorRuntime.centsLeftLabel(remaining))]
             }
-            return [PlanUsageRow(key: "included", label: included.period == "weekly" ? "Weekly limit" : "Monthly limit",
-                                 groupLabel: nil, window: PlanUsageWindow(utilization: used, resetsAt: included.resetsAt))]
+            if let remaining = included.remainingCents, remaining.isFinite {
+                return [PlanUsageRow(key: "included", label: label, groupLabel: nil,
+                                     window: PlanUsageWindow(utilization: 0, resetsAt: included.resetsAt),
+                                     remaining: true, headline: CursorRuntime.centsLeftLabel(remaining))]
+            }
+            guard let used = included.percentUsed, used.isFinite, used > 0 else { return [] }
+            return [PlanUsageRow(key: "included", label: label, groupLabel: nil,
+                                 window: PlanUsageWindow(utilization: used, resetsAt: included.resetsAt))]
         }
         if provider == "antigravity" {
             return (buckets ?? []).map { bucket in

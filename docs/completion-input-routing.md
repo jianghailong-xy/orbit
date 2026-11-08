@@ -32,6 +32,15 @@ agent. `AWAITING_INPUT` neither refuses nor delays evidence/request routing. EVI
 consumers are people and use the request/inbox surface. Only VERIFICATION uses its deterministic
 verifier Task and the ordinary one-shot task execution machinery.
 
+**Since 0467, a run that has stopped is a fact, and this paragraph's contract still holds.**
+`AWAITING_INPUT` alone is still read as nothing. What `TaskRunStoppedProducer` reads is a committed
+turn's end, on a session with no wake source (`sessionWakeSourceSql`), of an unsettled
+EVIDENCE_JUDGMENT task with no revision waiting for a decision: the same reading
+`closeUnansweredRequests` makes at the same moment. It delivers `TASK_RUN_STOPPED` to the project's
+coordinator (`docs/project-integration-line-contract.md`, revision 32), because the three facts that
+could otherwise reach it all need something a stopped run never produces: a revision, a terminal
+status, or the run ending.
+
 The one clock added by the integration-line contract writes only what the account owner reads. It
 escalates an unhandled open item to the owner, closes items nobody owes any more, and opens one
 owner item when an integration job's lease has been expired for fifteen minutes, so that the owner
@@ -431,15 +440,18 @@ fact any more" note at the `route(...)` call (lines 389-391):
 >     FAILED with no end recorded is only down, not over), and the turn that carried it was not taken
 >     off the queue unread. While that conversation is **paused** — down (`conversationIsDown`), or
 >     parked on a retry (`retryAt`) — the hold has no clock. While it is live, the hold lasts
->     `exceptionEscalationSeconds` from the delivery, as before; a delivery re-sent after waiting
->     starts that window again.
+>     `exceptionEscalationSeconds` from the current delivery turn's `conversation_turn.delivered_at`
+>     (owner 2026-11-08). A queued turn with no `delivered_at` has no deadline, including PENDING
+>     waiting for an account or a conversation busy on another long turn. A re-sent unread message
+>     starts its full window only when the replacement turn is actually taken off the queue.
 >   - **Waiting for the coordinator.** The project is Automatic, no fuse holds it, the conversation
 >     the project is coordinated from has not ended, took no part in the work and could decide the
 >     evidence — and that conversation is paused, or nothing has reached it yet (no delivery to it, or
 >     the last attempt was refused because it was paused), or the turn that carried it left the queue
 >     unread (answered with nothing delivered — the drain a failed run does — or deleted by an
->     interrupt or a withdrawal). Such a revision is not in `pending`, not counted, and is listed for
->     that conversation alone in `waitingOnCoordinator`.
+>     interrupt or a withdrawal). Such a revision is not in `pending` or any
+>     owner-facing list or count. `waitingOnCoordinator` remains in the response as `[]` for
+>     compatibility with released native clients; it never lists a revision (owner 2026-11-08).
 >   - **The owner's card**, at once, as on 2026-09-10: a project that is not Automatic, a fuse, a
 >     conversation that ended or is in Trash, one that took part in the work, a delivery refused for
 >     any reason but a pause, a revision that was only recorded, and a hold whose window ran out.
@@ -472,3 +484,23 @@ fact any more" note at the `route(...)` call (lines 389-391):
 > queue from the submission to the delivery when it is back, and
 > `decision-facts-no-coordinator-turn.pg.spec.ts` holds that a project that is not Automatic still
 > gets no turn for its evidence, beside the Automatic one that does.
+
+> **Changed on 2026-11-08 — owner decision: queue only until actually taken.**
+>
+> This replaces the 10-09 waiting-card presentation and any use of the wake's delivery time as
+> the hold's clock. FAILED without an ended conversation, `session.retryAt`, PENDING waiting for
+> an account (`Account paused until …`), and another long-running turn all leave evidence and
+> exception items queued only in that conversation. There is no owner card, Needs you entry,
+> countdown or waiting limit. The project-page item list and its related counts omit exception
+> items until the coordinator takes the currently assigned ITEM delivery turn. Only its
+> `conversation_turn.delivered_at` starts a full `exceptionEscalationSeconds` window; the existing
+> taken-up and repair-in-flight exemptions remain. An ended or trashed coordinator, or turning
+> Automatic off, still hands the item to the owner immediately.
+>
+> Web, macOS/iOS and Android remove the Waiting for the coordinator card and Decide it myself.
+> `waitingOnCoordinator` is always `[]`, retained for native-client compatibility. The same rule
+> applies to a non-project task's dispatching reviewer: FAILED without an end is temporary
+> unavailability, not REVIEWER_ENDED; redeliver once on recovery, with a new key when an unread
+> turn was drained, and start the 30-minute window only at that turn's `delivered_at`. An actually
+> ended or trashed reviewer still falls back to the owner immediately. See
+> `evidence-waits-for-coordinator-design.md` and integration-line contract revision 35.

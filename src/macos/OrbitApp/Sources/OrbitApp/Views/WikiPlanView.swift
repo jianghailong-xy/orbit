@@ -20,6 +20,8 @@ struct WikiPlanActions {
     var draft: () -> Void = {}
     /// Redraft…: the sheet with the owner's words.
     var redraft: () -> Void = {}
+    /// Start over…, from the ⋯ menu: its own confirmation, naming the version it would not read.
+    var startOver: (Int) -> Void = { _ in }
     var confirm: (Int) -> Void = { _ in }
     /// A version from the menu; nil for the one the page shows first.
     var pickVersion: (Int?) -> Void = { _ in }
@@ -42,9 +44,9 @@ struct WikiPlanActions {
 
 // MARK: - the plan page
 
-/// The plan (mock 22 ②): the title with the version shown, where that version came from, Confirm plan and
-/// Redraft…, a failed draft's hint, the job's card, the gate's report, the changes proposed, and the
-/// categories and documents — `WikiPlanLogic.PageSection`'s order, which is the web phone's.
+/// The plan (mock 22 ②): the title with the version shown, where that version came from, Confirm plan, Redraft…
+/// and the ⋯ menu, the job's card, the gate's report, the changes proposed, and the categories and documents —
+/// `WikiPlanLogic.PageSection`'s order, which is the web phone's.
 struct WikiPlanPage: View {
     let state: WikiPlanState
     /// The version shown, or nil: the empty page.
@@ -61,6 +63,8 @@ struct WikiPlanPage: View {
     var actions = WikiPlanActions()
 
     private var open: WikiPlanJob? { WikiPlanLogic.openJob(state) }
+    /// The job that left no draft: one card over whatever version stands, and Redraft… even with none.
+    private var failed: WikiPlanJob? { WikiPlanLogic.failedJob(state) }
     private var inForce: Bool { shown?.status == .confirmed && state.confirmed?.version == shown?.version }
 
     var body: some View {
@@ -106,16 +110,16 @@ struct WikiPlanPage: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
         case .actions:
-            if let shown {
+            if shown != nil || failed != nil {
                 HStack(spacing: 10) {
-                    if shown.status == .draft || shown.status == .failed {
+                    if let shown, shown.status == .draft {
                         Button { actions.confirm(shown.version) } label: {
                             Text(WikiPlanCopy.confirm).frame(maxWidth: .infinity, minHeight: 30)
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(shown.status == .failed || busy)
+                        .disabled(busy)
                     }
-                    if shown.status != .superseded {
+                    if shown?.status != .superseded {
                         Button(action: actions.redraft) {
                             Label(WikiPlanCopy.redraft, systemImage: "arrow.clockwise")
                                 .frame(maxWidth: .infinity, minHeight: 30)
@@ -123,28 +127,20 @@ struct WikiPlanPage: View {
                         .buttonStyle(.bordered)
                         .disabled(open != nil || busy)
                     }
+                    if let version = WikiPlanLogic.startOver(state) { moreMenu(version) }
                 }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             } else if open == nil {
                 empty
             }
-        case .hint:
-            if shown?.status == .failed {
-                Text(WikiPlanCopy.failedHint(inForce: state.confirmed?.version))
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
         case .job:
             if let jobCard {
                 Section { WikiPlanJobCardView(card: jobCard, actions: actions) }
             }
         case .gate:
-            if let shown, shown.status == .draft || shown.status == .failed {
-                WikiPlanGateView(gate: WikiPlanLogic.gate(shown, base: base, job: shown.status == .failed ? WikiPlanLogic.failedJob(state) : state.job))
+            if let shown, shown.status == .draft {
+                WikiPlanGateView(gate: WikiPlanLogic.gate(shown, base: base, job: state.job))
             }
         case .changes:
             let proposals = state.proposals ?? []
@@ -187,11 +183,24 @@ struct WikiPlanPage: View {
 
     private var metaLine: String {
         if let shown {
-            let job = shown.status == .failed ? WikiPlanLogic.failedJob(state) : (open ?? state.job)
-            return WikiPlanLogic.meta(shown, job: job, docs: inForce ? written : nil).joined(separator: " · ")
+            return WikiPlanLogic.meta(shown, job: open ?? state.job, docs: inForce ? written : nil).joined(separator: " · ")
         }
-        if let open { return WikiPlanLogic.jobHead(open) }
+        if let job = open ?? failed { return WikiPlanLogic.jobHead(job) }
         return WikiPlanCopy.none
+    }
+
+    /// The ⋯ menu beside the head's actions: a fresh draft over the version stored, behind its own confirmation.
+    private func moreMenu(_ version: Int) -> some View {
+        Menu {
+            Button(WikiPlanCopy.startOver) { actions.startOver(version) }
+        } label: {
+            Image(systemName: "ellipsis")
+                .frame(minWidth: 30, minHeight: 30)
+                .contentShape(Rectangle())
+        }
+        .fixedSize()
+        .disabled(busy)
+        .accessibilityLabel(WikiPlanCopy.more)
     }
 
     /// The version beside the title: a menu of every version, the shown one ticked, each with where it came from.
@@ -248,13 +257,13 @@ struct WikiPlanPage: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// `1.3  安全模型与密钥信任` over the reader's question and `2 errors · 7 sections · 1,500–2,400 chars`: the
+    /// `1.3  安全模型与密钥信任` over the reader's question and `2 not found · 7 sections · 1,500–2,400 chars`: the
     /// document row the home draws too, with the plan's counts under the question.
     private func docRow(_ doc: WikiPlanLogic.ShownDoc, in shown: WikiPlanLogic.Shown) -> some View {
-        let errors = WikiPlanLogic.docErrors(shown, doc: doc).count
+        let missing = WikiPlanLogic.docMissing(shown, doc: doc).count
         return WikiDocRow(mark: .number(doc.number), title: doc.title, line: doc.question, locked: doc.protected,
                           action: { actions.openDoc(doc.slug) }) {
-            ((errors > 0 ? Text(WikiPlanCopy.errorCount(errors)).foregroundColor(.red).bold() + Text(" · ") : Text(""))
+            ((missing > 0 ? Text(WikiPlanCopy.notFoundCount(missing)).foregroundColor(.orange).bold() + Text(" · ") : Text(""))
                 + Text(WikiPlanLogic.docLine(doc)))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
@@ -290,7 +299,7 @@ struct WikiDocRow<Extra: View>: View {
     /// What ends the row in the chevron's place: a principle's day.
     var end: String? = nil
     let action: () -> Void
-    /// Under the line: the plan's counts, and the errors its check found.
+    /// Under the line: the plan's counts, and the references its check didn't find.
     let extra: Extra
 
     /// The number column, as wide as `10.3` (the web's 34 px).
@@ -484,30 +493,33 @@ struct WikiPlanJobCardView: View {
 
 // MARK: - the gate's report
 
-/// The gate's report (mock 22 ②): passed in green, or failed in red with its four rows and the references
-/// not found, the first few listed where they were named.
+/// The gate's report (mock 22 ②, mock 40 ①): passed in green, or Ready for review in amber with its four rows
+/// and the draft's notes, and the references not found, the first few listed where they stand.
 struct WikiPlanGateView: View {
     let gate: WikiPlanLogic.Gate
 
     @State private var allRefs = false
 
+    /// The references' own row, not a note under it: the list stands there.
+    private var refsAt: Int? { gate.rows.firstIndex { $0.check == .references } }
+
     var body: some View {
         Section {
             VStack(alignment: .leading, spacing: 3) {
-                Label(gate.title, systemImage: gate.passed ? "checkmark.circle" : "xmark.circle.fill")
+                Label(gate.title, systemImage: gate.passed ? "checkmark.circle" : "exclamationmark.circle.fill")
                     .font(.orbitSubtext.weight(.semibold))
-                    .foregroundStyle(gate.passed ? Color.green : Color.red)
+                    .foregroundStyle(gate.passed ? Color.green : Color.orange)
                 Text(([gate.line] + (gate.aside.map { [$0] } ?? [])).joined(separator: " · "))
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
             }
-            .listRowBackground((gate.passed ? Color.green : Color.red).opacity(0.10))
+            .listRowBackground((gate.passed ? Color.green : Color.orange).opacity(0.10))
             if !gate.passed {
-                ForEach(gate.rows) { row in
+                ForEach(Array(gate.rows.enumerated()), id: \.offset) { at, row in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Image(systemName: row.ok ? "checkmark.circle" : "xmark.circle.fill")
-                                .foregroundStyle(row.ok ? Color.green : Color.red)
+                            Image(systemName: row.ok ? "checkmark.circle" : "exclamationmark.circle.fill")
+                                .foregroundStyle(row.ok ? Color.green : Color.orange)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(row.title)
                                     .font(.orbitSubtext)
@@ -517,21 +529,21 @@ struct WikiPlanGateView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                        if row.check == .references && !gate.refs.isEmpty { refs }
+                        if at == refsAt && !gate.refs.isEmpty { refs }
                     }
                 }
             }
         }
     }
 
-    /// The references not found, the first few on a phone, each where it was named, what, and why.
+    /// The references not found, the first few on a phone, each where it stands, what, and why.
     @ViewBuilder
     private var refs: some View {
         let shown = allRefs ? gate.refs : Array(gate.refs.prefix(WikiPlanCopy.refsShownPhone))
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(shown.enumerated()), id: \.offset) { _, ref in
                 (Text(ref.where_).foregroundColor(.accentColor).bold() + Text(" ") + Text(ref.kind).foregroundColor(.secondary)
-                    + Text(" ") + Text(ref.ref).font(.system(.caption, design: .monospaced)) + Text(" — \(ref.why)").foregroundColor(.red))
+                    + Text(" ") + Text(ref.ref).font(.system(.caption, design: .monospaced)) + Text(" — \(ref.why)").foregroundColor(.secondary))
                     .font(.orbitLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -738,13 +750,12 @@ struct WikiPlanChangeCard: View {
 
 // MARK: - a document of the plan, and a section of it
 
-/// A plan document's own page (mock 22 ③): its number, title and lock; its version, errors and length; its
-/// fields — question, readers, what it covers and leaves out, length, protection, what it draws on — and
-/// its sections, a protected document's lost ones in red where they were — `WikiPlanLogic.DocSection`'s order.
+/// A plan document's own page (mock 22 ③): its number, title and lock; its version, references not found and
+/// length; its fields — question, readers, what it covers and leaves out, length, protection, what it draws
+/// on — and its sections — `WikiPlanLogic.DocSection`'s order.
 struct WikiPlanDocPage: View {
     let shown: WikiPlanLogic.Shown
     let doc: WikiPlanLogic.ShownDoc
-    let base: WikiPlanLogic.Shown?
     var canEdit = false
     var actions = WikiPlanActions()
 
@@ -790,9 +801,9 @@ struct WikiPlanDocPage: View {
             .listRowSeparator(.hidden)
             .accessibilityAddTraits(.isHeader)
         case .meta:
-            let errors = WikiPlanLogic.docErrors(shown, doc: doc).count
+            let missing = WikiPlanLogic.docMissing(shown, doc: doc).count
             (Text("\(WikiPlanCopy.versionLabel(shown.version)) · \(shown.status.label) · ")
-                + (errors > 0 ? Text(WikiPlanCopy.errorCount(errors)).foregroundColor(.red).bold() + Text(" · ") : Text(""))
+                + (missing > 0 ? Text(WikiPlanCopy.notFoundCount(missing)).foregroundColor(.orange).bold() + Text(" · ") : Text(""))
                 + Text(WikiPlanLogic.docLine(doc)))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
@@ -836,10 +847,8 @@ struct WikiPlanDocPage: View {
                 field(WikiPlanCopy.drawsOn) { Text(WikiPlanLogic.drawsOn(doc)).font(.orbitSubtext) }
             }
         case .sections:
-            let lost = WikiPlanLogic.lostSections(shown, base: base, slug: doc.slug)
             Section {
                 ForEach(Array(doc.sections.enumerated()), id: \.offset) { index, section in
-                    ForEach(lost.filter { $0.number - 1 == index }, id: \.number) { row in lostRow(row) }
                     Button { actions.openSection(doc.slug, index) } label: {
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Text("\(index + 1)")
@@ -864,7 +873,6 @@ struct WikiPlanDocPage: View {
                     }
                     .buttonStyle(.plain)
                 }
-                ForEach(lost.filter { $0.number - 1 >= doc.sections.count }, id: \.number) { row in lostRow(row) }
             } header: {
                 HStack(spacing: 6) {
                     Text(WikiPlanCopy.sections)
@@ -872,20 +880,6 @@ struct WikiPlanDocPage: View {
                 }
             }
         }
-    }
-
-    /// A section a protected document lost in the draft, in red where it was: `v1 §7 已知的坑`.
-    private func lostRow(_ row: (number: Int, title: String, movedTo: String?)) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("− \(WikiPlanCopy.lostLabel(base: base?.version ?? 0, number: row.number, title: row.title))")
-                .font(.orbitProse)
-                .strikethrough()
-                .foregroundStyle(.secondary)
-            Text(WikiPlanCopy.protectedMovePhone(movedTo: row.movedTo, number: doc.number))
-                .font(.orbitLabel)
-                .foregroundStyle(.red)
-        }
-        .listRowBackground(Color.red.opacity(0.08))
     }
 
     private func field<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
@@ -1017,7 +1011,7 @@ struct WikiPlanSectionPage: View {
     private func sourceRow(_ path: String, detail: String?, found: Bool?) -> some View {
         (Text(path).font(.system(.footnote, design: .monospaced))
             + Text(detail.map { " \($0)" } ?? "").foregroundColor(.secondary)
-            + (found.map { Text(" \($0 ? WikiPlanCopy.found : WikiPlanCopy.notFound)").foregroundColor($0 ? .green : .red).bold() } ?? Text("")))
+            + (found.map { Text(" \($0 ? WikiPlanCopy.found : WikiPlanCopy.notFound)").foregroundColor($0 ? .green : .orange).bold() } ?? Text("")))
             .font(.orbitSubtext)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -1048,17 +1042,27 @@ struct WikiPlanSectionPage: View {
 
 // MARK: - Redraft…
 
-/// Redraft the plan (mock 22 ⑧): what to change, in the owner's words — empty is a fresh draft — and the
-/// protected documents a redraft keeps as they are.
+/// Redraft the plan (mock 22 ⑧): what to change, in the owner's words, which a version stored needs — a fresh
+/// draft over one is Start over…'s — and the protected documents a redraft keeps as they are. It opens holding
+/// the words of the run that failed.
 struct WikiPlanRedraftSheet: View {
+    let state: WikiPlanState
     let note: String
     let protectedDocs: [String]
     /// Sends it; true once the server took it.
     let redraft: (String) async -> Bool
 
     @Environment(\.dismiss) private var dismiss
-    @State private var words = ""
+    @State private var words: String
     @State private var sending = false
+
+    init(state: WikiPlanState, note: String, protectedDocs: [String], redraft: @escaping (String) async -> Bool) {
+        self.state = state
+        self.note = note
+        self.protectedDocs = protectedDocs
+        self.redraft = redraft
+        _words = State(initialValue: WikiPlanLogic.redraftWords(state))
+    }
 
     var body: some View {
         NavigationStack {
@@ -1100,7 +1104,7 @@ struct WikiPlanRedraftSheet: View {
                             if done { dismiss() }
                         }
                     }
-                    .disabled(sending)
+                    .disabled(sending || !WikiPlanLogic.redraftReady(state, words: words))
                 }
             }
         }

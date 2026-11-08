@@ -3,9 +3,10 @@ import Foundation
 /// The line a review sheet ends on once THIS window's answer was taken, where its buttons were:
 /// who answered, when, and what became of it (the owner's boards of 2026-10-15, one per card).
 ///
-/// The sheet does not close and does not swap to a receipt page: the card stays as it was asked,
-/// read-only, and this line is what changed — the coordinator question's record
-/// (`CoordinatorQuestions.footerLine`) for every card a review answers.
+/// The sheet does not swap to a receipt page: the card stays as it was asked, read-only, and this
+/// line is what changed — the coordinator question's record (`CoordinatorQuestions.footerLine`) for
+/// every card a review answers — until the sheet leaves on its own a moment later
+/// (`ApprovalReviewSheet`).
 public struct ReviewRecordFooter: Equatable, Sendable {
     /// The mark beside the line: the answer went through as asked, the reader kept it open
     /// (Keep planning), or the reader refused it.

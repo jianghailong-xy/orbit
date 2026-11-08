@@ -1,0 +1,3090 @@
+[
+  {
+    "theme": "light",
+    "frame": "a-bottom",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": -35,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -35,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 26,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 95,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 95,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 156,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 225,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 225,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 286,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 389,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 389,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 450,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(51, 112, 255)",
+          "background": "rgb(234, 241, 255)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 553,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [],
+    "record": null,
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 164,
+      "height": 986,
+      "client": 822
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "light",
+    "frame": "b-history",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 129,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 129,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 190,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 259,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 259,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 320,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 389,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 389,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 450,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 553,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 553,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 614,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(51, 112, 255)",
+          "background": "rgb(234, 241, 255)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 717,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [],
+    "record": null,
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 0,
+      "height": 986,
+      "client": 822
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "light",
+    "frame": "c-open",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": -73,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -73,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -12,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 57,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 57,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 118,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 187,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 187,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 248,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 351,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 351,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 645,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(51, 112, 255)",
+          "background": "rgb(234, 241, 255)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 748,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [
+      "2zwQZ2hd93IvLb59t6pYV"
+    ],
+    "record": {
+      "text": "Generation 100:10≡Task marked done · queued to land on project/34qA6WJMbY7fxSXILV3ht00:10↻Claimed by runner workstation-gpu · claim 100:10↻Merge check started · claim 1 · workstation-gpu00:19✓Merge check passed · 8m 41sLog ›00:19✓Landed on project/34qA6WJMbY7fxSXILV3ht · 4b1d0e2Open Task ›Open Source Session ›",
+      "look": {
+        "radius": "12px",
+        "border": "0px none rgb(31, 35, 41)",
+        "background": "rgb(247, 248, 250)",
+        "shadow": "none"
+      },
+      "noteLook": {
+        "radius": "10px",
+        "border": "0px none rgb(31, 35, 41)",
+        "background": "rgb(247, 248, 250)",
+        "shadow": "none"
+      },
+      "sameFillAsNote": true,
+      "width": 759,
+      "columnWidth": 759
+    },
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 202,
+      "height": 1219,
+      "client": 822
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "light",
+    "frame": "d-menu",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": -35,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -35,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 26,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 95,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 95,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 156,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 225,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 225,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 286,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 389,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 389,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 450,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(51, 112, 255)",
+          "background": "rgb(234, 241, 255)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 553,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [],
+    "record": null,
+    "menu": [
+      "Open Task",
+      "Open Source Session",
+      "Open Coordinator"
+    ],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 164,
+      "height": 986,
+      "client": 822
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "light",
+    "frame": "e-focused",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": -39,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -39,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 22,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 91,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 91,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 355,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 424,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 424,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 485,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 588,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 588,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 649,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(51, 112, 255)",
+          "background": "rgb(234, 241, 255)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 752,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [
+      "2zwQZ2hd93IvLb59t6pYR"
+    ],
+    "outlinedBubbleShadow": "rgb(51, 112, 255) 0px 0px 0px 2px",
+    "open": [
+      "2zwQZ2hd93IvLb59t6pYR"
+    ],
+    "record": {
+      "text": "Generation 122:56≡Task marked done · queued to land on project/34qA6WJMbY7fxSXILV3ht22:56↻Claimed by runner workstation-gpu · claim 123:06✓Merge check passed · 9m 02sLog ›23:07✓Landed on project/34qA6WJMbY7fxSXILV3ht · 7a90c3eOpen Task ›Open Source Session ›",
+      "look": {
+        "radius": "12px",
+        "border": "0px none rgb(31, 35, 41)",
+        "background": "rgb(247, 248, 250)",
+        "shadow": "none"
+      },
+      "noteLook": {
+        "radius": "10px",
+        "border": "0px none rgb(31, 35, 41)",
+        "background": "rgb(247, 248, 250)",
+        "shadow": "none"
+      },
+      "sameFillAsNote": true,
+      "width": 759,
+      "columnWidth": 759
+    },
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 168,
+      "height": 1189,
+      "client": 822
+    },
+    "url": "/sessions/2zwQZ2hd93IvLb59t6pYR?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "light",
+    "frame": "f-phone",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 125,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 125,
+                  "w": 278,
+                  "h": 78
+                },
+                "gutter": 44
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 207,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 53
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 276,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 276,
+                  "w": 278,
+                  "h": 78
+                },
+                "gutter": 44
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 358,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 55
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 427,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 427,
+                  "w": 278,
+                  "h": 78
+                },
+                "gutter": 44
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 509,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 50
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(100, 106, 115)",
+          "background": "rgb(241, 241, 244)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 612,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 612,
+                  "w": 278,
+                  "h": 78
+                },
+                "gutter": 44
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 694,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 54
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(51, 112, 255)",
+          "background": "rgb(234, 241, 255)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 797,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [],
+    "record": null,
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(222, 224, 227)",
+        "background": "rgb(255, 255, 255)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 0,
+      "height": 1130,
+      "client": 637
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "dark",
+    "frame": "a-bottom",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": -35,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -35,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 26,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 95,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 95,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 156,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 225,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 225,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 286,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 389,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 389,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 450,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(91, 140, 255)",
+          "background": "rgba(91, 140, 255, 0.16)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 553,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [],
+    "record": null,
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 164,
+      "height": 986,
+      "client": 822
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "dark",
+    "frame": "b-history",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 129,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 129,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 190,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 259,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 259,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 320,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 389,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 389,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 450,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 553,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 553,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 614,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(91, 140, 255)",
+          "background": "rgba(91, 140, 255, 0.16)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 717,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [],
+    "record": null,
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 0,
+      "height": 986,
+      "client": 822
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "dark",
+    "frame": "c-open",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": -73,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -73,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -12,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 57,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 57,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 118,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 187,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 187,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 248,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 351,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 351,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 645,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(91, 140, 255)",
+          "background": "rgba(91, 140, 255, 0.16)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 748,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [
+      "2zwQZ2hd93IvLb59t6pYV"
+    ],
+    "record": {
+      "text": "Generation 100:10≡Task marked done · queued to land on project/34qA6WJMbY7fxSXILV3ht00:10↻Claimed by runner workstation-gpu · claim 100:10↻Merge check started · claim 1 · workstation-gpu00:19✓Merge check passed · 8m 41sLog ›00:19✓Landed on project/34qA6WJMbY7fxSXILV3ht · 4b1d0e2Open Task ›Open Source Session ›",
+      "look": {
+        "radius": "12px",
+        "border": "0px none rgb(201, 206, 213)",
+        "background": "rgb(23, 23, 26)",
+        "shadow": "none"
+      },
+      "noteLook": {
+        "radius": "10px",
+        "border": "0px none rgb(201, 206, 213)",
+        "background": "rgb(23, 23, 26)",
+        "shadow": "none"
+      },
+      "sameFillAsNote": true,
+      "width": 759,
+      "columnWidth": 759
+    },
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 202,
+      "height": 1219,
+      "client": 822
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "dark",
+    "frame": "d-menu",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": -35,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -35,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 26,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 95,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 95,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 156,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 225,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 225,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 286,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 389,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 389,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 450,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(91, 140, 255)",
+          "background": "rgba(91, 140, 255, 0.16)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 553,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [],
+    "record": null,
+    "menu": [
+      "Open Task",
+      "Open Source Session",
+      "Open Coordinator"
+    ],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 164,
+      "height": 986,
+      "client": 822
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "dark",
+    "frame": "e-focused",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": -39,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": -39,
+                  "w": 335,
+                  "h": 57
+                },
+                "gutter": 424
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 22,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 490
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 91,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 91,
+                  "w": 332,
+                  "h": 57
+                },
+                "gutter": 427
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 355,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 492
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 424,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 424,
+                  "w": 343,
+                  "h": 57
+                },
+                "gutter": 416
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 485,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 487
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 588,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 588,
+                  "w": 299,
+                  "h": 57
+                },
+                "gutter": 460
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 661,
+                  "y": 649,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 491
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(91, 140, 255)",
+          "background": "rgba(91, 140, 255, 0.16)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 621,
+              "y": 752,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [
+      "2zwQZ2hd93IvLb59t6pYR"
+    ],
+    "outlinedBubbleShadow": "rgb(91, 140, 255) 0px 0px 0px 2px",
+    "open": [
+      "2zwQZ2hd93IvLb59t6pYR"
+    ],
+    "record": {
+      "text": "Generation 122:56≡Task marked done · queued to land on project/34qA6WJMbY7fxSXILV3ht22:56↻Claimed by runner workstation-gpu · claim 123:06✓Merge check passed · 9m 02sLog ›23:07✓Landed on project/34qA6WJMbY7fxSXILV3ht · 7a90c3eOpen Task ›Open Source Session ›",
+      "look": {
+        "radius": "12px",
+        "border": "0px none rgb(201, 206, 213)",
+        "background": "rgb(23, 23, 26)",
+        "shadow": "none"
+      },
+      "noteLook": {
+        "radius": "10px",
+        "border": "0px none rgb(201, 206, 213)",
+        "background": "rgb(23, 23, 26)",
+        "shadow": "none"
+      },
+      "sameFillAsNote": true,
+      "width": 759,
+      "columnWidth": 759
+    },
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 168,
+      "height": 1189,
+      "client": 822
+    },
+    "url": "/sessions/2zwQZ2hd93IvLb59t6pYR?project=2zwQZ2hd93IvLb59t6p9d"
+  },
+  {
+    "theme": "dark",
+    "frame": "f-phone",
+    "placed": true,
+    "errors": [],
+    "unhandled": [],
+    "windowTitle": "Landings",
+    "windowSub": "Run by Orbit · install.sh on multi-user machines",
+    "days": [
+      {
+        "chip": "Yesterday",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 125,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYP",
+                "words": "T1 install.sh: keep one orbit binary per account",
+                "foot": "✓Landed22:11",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 125,
+                  "w": 278,
+                  "h": 78
+                },
+                "gutter": 44
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYQ",
+                "words": "Merged into main",
+                "foot": "⇢3c1e9a0 · 1 task · automatically22:13",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 207,
+                  "w": 269,
+                  "h": 57
+                },
+                "gutter": 53
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 276,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYR",
+                "words": "T2 host setup refuses a binary it did not install",
+                "foot": "✓Landed23:07",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 276,
+                  "w": 278,
+                  "h": 78
+                },
+                "gutter": 44
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYS",
+                "words": "Merged into main",
+                "foot": "⇢b74d2f1 · 1 task · automatically23:09",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 358,
+                  "w": 267,
+                  "h": 57
+                },
+                "gutter": 55
+              }
+            ]
+          },
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 427,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYT",
+                "words": "T4 install.sh under sudo writes the unit file once",
+                "foot": "✓Landed23:25",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 427,
+                  "w": 278,
+                  "h": 78
+                },
+                "gutter": 44
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYU",
+                "words": "Merged into main",
+                "foot": "⇢e05a8c3 · 1 task · automatically23:29",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 509,
+                  "w": 272,
+                  "h": 57
+                },
+                "gutter": 50
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Today",
+        "chipLook": {
+          "color": "rgb(167, 173, 182)",
+          "background": "rgb(56, 56, 60)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 612,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYV",
+                "words": "T3 sudo hints name the binary’s real path",
+                "foot": "✓Landed00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 612,
+                  "w": 278,
+                  "h": 78
+                },
+                "gutter": 44
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYW",
+                "words": "Merged into main",
+                "foot": "⇢91fd6b2 · 1 task · automatically00:19",
+                "cut": false,
+                "bubble": {
+                  "x": 54,
+                  "y": 694,
+                  "w": 268,
+                  "h": 57
+                },
+                "gutter": 54
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "chip": "Now",
+        "chipLook": {
+          "color": "rgb(91, 140, 255)",
+          "background": "rgba(91, 140, 255, 0.16)",
+          "radius": "999px",
+          "centered": true
+        },
+        "groups": [
+          {
+            "avatars": 1,
+            "avatar": {
+              "x": 14,
+              "y": 797,
+              "w": 32,
+              "h": 32
+            },
+            "entries": [
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYX",
+                "words": "T5 orbit doctor reports the runner’s own binary",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              },
+              {
+                "id": "2zwQZ2hd93IvLb59t6pYe",
+                "words": "T6 upgrade keeps each account’s service running",
+                "foot": null,
+                "cut": false,
+                "bubble": null,
+                "gutter": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outlined": [],
+    "outlinedBubbleShadow": null,
+    "open": [],
+    "record": null,
+    "menu": [],
+    "footer": {
+      "line": "Orbit runs these landings — nothing to type here.",
+      "bar": "Decisions: the coordinatorOpen coordinator",
+      "door": "Open coordinator",
+      "inputs": 0,
+      "look": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "composerLook": {
+        "radius": "24px",
+        "border": "1px solid rgb(66, 66, 70)",
+        "background": "rgb(43, 43, 46)",
+        "shadow": "rgba(31, 35, 41, 0.05) 0px 2px 10px 0px, rgba(31, 35, 41, 0.04) 0px 10px 30px 0px"
+      },
+      "sameLookAsComposer": true
+    },
+    "composer": false,
+    "bodyScroll": {
+      "top": 0,
+      "height": 1130,
+      "client": 637
+    },
+    "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
+  }
+]

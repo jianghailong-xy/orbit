@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -409,6 +410,15 @@ async function age(stack: Stack, itemId: string, minutes: number): Promise<void>
       WHERE "item_id" = $1::uuid`,
     [itemId, minutes],
   );
+  await stack.sql.query(
+    `UPDATE "conversation_turn" turn
+        SET "delivered_at" = turn."delivered_at" - make_interval(mins => $2)
+       FROM "project_open_item_delivery" delivery
+      WHERE delivery."item_id" = $1::uuid AND delivery."purpose" = 'ITEM'
+        AND turn."session_id" = delivery."session_id"
+        AND turn."client_turn_id" = delivery."client_turn_id"`,
+    [itemId, minutes],
+  );
 }
 
 // (a)(c) -------------------------------------------------------------------------------------
@@ -441,6 +451,7 @@ test('an Automatic project hands a path warning to its coordinator as a delivery
     });
 
     const [item] = await itemsOf(stack, f.projectId, 'DELIVERY_REVIEW');
+    await receiveOpenItem(stack.db, item!.id);
 
     await t.test('the review is the coordinator’s, with the project’s window and the paths',
       async () => {
@@ -686,6 +697,7 @@ test('a review ends when its task is sent back, cancelled or replaced, and one n
       assert.equal(before.state, 'OPEN');
       // Not yet: the window is ten minutes, and nothing has moved the clock.
       assert.deepEqual((await stack.escalation.sweep()).filter((one) => one.itemId === before.id), []);
+      await receiveOpenItem(stack.db, before.id);
       await age(stack, before.id, 20);
       const escalated = await stack.escalation.sweep();
       assert.ok(escalated.some((one) => one.itemId === before.id), 'the silent review did not escalate');
@@ -877,6 +889,10 @@ test('a failed landing under a path warning is the coordinator’s to rerun with
     const f = await fixture(stack, 'rerun');
     const [criterionKey] = await state(stack, f, ['rerun 的那条标准']);
     const landing = await scopedFailedLanding(stack, f, 'rerun', criterionKey!);
+    await stack.openItems.deliverForTasks([landing.taskId]);
+    for (const item of await stack.db.projectOpenItem.findMany({ where: { projectId: f.projectId } })) {
+      await receiveOpenItem(stack.db, item.id);
+    }
     const reason = 'MERGE_CHECK 红在 TestRealClaude*：主干上同样红，是引擎版本漂移，修复任务已落地。';
 
     await t.test('both questions are the coordinator’s, and none is the owner’s', async () => {

@@ -116,7 +116,8 @@ func TestServicePathReversesInstallerDirsSoLocalBinLeads(t *testing.T) {
 	for i := len(dirs) - 1; i >= 0; i-- {
 		reversed = append(reversed, dirs[i])
 	}
-	want := strings.Join(reversed, ":") + ":/usr/bin"
+	// Orbit's own ripgrep directory goes at the other end (managed_rg.go).
+	want := pathWithManagedRgLast(strings.Join(reversed, ":") + ":/usr/bin")
 	if got := runnerEnginePath(home, "/usr/bin"); got != want {
 		t.Errorf("service PATH = %q, want %q", got, want)
 	}

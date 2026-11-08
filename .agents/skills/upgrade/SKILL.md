@@ -11,7 +11,7 @@ Database migrations are not a separate step: the apiserver container runs `prism
 
 ## Workflow
 
-1. Check the current branch, worktree status, and Compose availability. On `main` the helper runs `git pull --ff-only` before building, so the deploy is origin's main and not a stale checkout; it never overwrites or discards local changes and stops if a fast-forward is impossible.
+1. Run in the installed checkout, the one the deployment runs from, and never from a worktree (see "Where to run it" below). Check the current branch, worktree status, and Compose availability. On `main` the helper runs `git pull --ff-only` before building, so the deploy is origin's main and not a stale checkout; it never overwrites or discards local changes and stops if a fast-forward is impossible.
 
    The helper refuses to build when tracked files are modified: images are built from the working tree, not from `HEAD`, so uncommitted edits reach production while existing in no commit and are silently reverted by the next clean rebuild. Commit or stash first; pass `--allow-dirty` only when deliberately deploying an uncommitted change.
 
@@ -42,11 +42,14 @@ Without `--pull-base`, the helper:
 1. Builds `apiserver` (whose image `wiki-worker` runs) and `web`.
 2. Runs `docker compose up -d --wait apiserver wiki-worker web gateway`.
 3. Where `docker-compose.override.yml` adds other apiservers (`apiserver-2` and on; docs/self-hosting.md, "Several apiservers"), recreates them once `apiserver` is healthy and the migrations are applied, so they find none to apply.
-4. Prints `docker compose ps`.
+4. Brings `pgbackup` up to date, last (see "pgbackup" below).
+5. Prints `docker compose ps`.
 
 Postgres is omitted from the recreate set. With `--pull-base`, the helper pulls `postgres` and `gateway`, then runs a full `up -d --wait` so changed base images take effect.
 
-The helper never writes `.env`, so managed runners stay as the deployment's `.env` has them: off unless it switches them on, which only a fresh install (`scripts/install-server.sh`) or an administrator does (docs/self-hosting.md, "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile, Compose does not list `docker-channel`, and the helper builds, recreates and writes exactly what it did before managed runners existed: nothing under `data/`, no managed runner image.
+The helper writes nothing of managed runners to `.env`, so they stay as the deployment's `.env` has them: off unless it switches them on, which only a fresh install (`scripts/install-server.sh`) or an administrator does (docs/self-hosting.md, "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile, Compose does not list `docker-channel`, and the helper builds, recreates and writes exactly what it did before managed runners existed: nothing under `data/`, no managed runner image.
+
+The helper also brings up the runner link (docs/self-hosting.md, "Runner link"; the section marked in the script, the same in both copies), and what `.env` says decides what it may do. With no link in it, it builds `src/link-gateway`, has that image make the link's secrets, and appends them to `.env` with `RUNNER_LINK_URL=same-origin`, in one write that changes no line and prints none of them. With `RUNNER_LINK_URL=same-origin` it rebuilds the gateway, named by the last commit under `src/link-gateway`, so that a commit elsewhere recreates nothing. With anything else, as production's own host name, `.env` is not opened for writing, and `link-gateway` and `nats` are neither built nor restarted. After the images are built and before the apiserver is recreated, it starts `nats` and `link-gateway`, recreates the web gateway if the `gateway/nginx.conf` it runs is not this checkout's, which Compose does not see, and checks that `/runner-link` reaches the link gateway. This build's `docker-compose.yml` requires `RUNNER_LINK_SIGNING_KEY`, since it has no HTTPS work path, so a failure there stops the upgrade before the apiserver is recreated, and the deployment goes on running the build it has. A pull that changes this script runs the new one, from the start.
 
 Where `.env` turns that profile on, the helper also keeps managed runners current (the section marked in the script, the same in both copies of /upgrade's script):
 
@@ -59,8 +62,39 @@ A managed runner's container keeps the image it was made from and is never stopp
 
 Concurrent upgrades are serialized with `/tmp/orbit-upgrade.lock`; a second invocation exits instead of starting another deployment.
 
+## Where to run it
+
+Run the helper in the installed checkout, the one the deployment runs from, and never from a worktree. A deployment's bind mounts are relative (`./data/postgres`, `./data/pg-archive`, `./data/files`), so from any other directory Compose would bind that directory's empty `./data`: the database, the archive the off-host mirror reads, and every attachment's bytes.
+
+So the helper stops first, before it pulls, builds, tags or recreates anything, if the postgres container this checkout's Compose names has its `/archive` anywhere else. The refusal names the checkout to run from and says nothing was changed. With no such container there is no deployment yet, and a first install goes ahead. A separate deployment on the same Docker passes on its own `/archive` if its containers have names of their own, set in its `docker-compose.override.yml`, and it exports its own `COMPOSE_PROJECT_NAME` for this helper: the check goes by the name Compose renders, so one with the same names cannot be told from that deployment and is refused.
+
+## pgbackup
+
+The backup sidecar needs a step of its own. Compose bind-mounts `scripts/pg-backup.sh` into it as a single file, so a new checkout replaces the file under a running container, which keeps the one it started on, and Compose sees no change. The helper compares what the container has with the checkout: if they differ it runs `docker compose up -d --wait --no-deps --force-recreate pgbackup`, otherwise the same without `--force-recreate`, which recreates it for a change of configuration, such as a new mount, and leaves it running if there is none. `--no-deps` keeps `postgres` out of it, and recreating it cuts short a base backup in progress, which it takes again as it starts.
+
+A sidecar that is not running is left as it is, and the helper says `pgbackup was NOT updated` as its last lines, with the command to run.
+
+The step is in the script, so it runs once the script on disk has it. A run from an older version pulls the new script from inside itself and finishes as the old one, reporting success with `pgbackup` unchanged. Put the new version on disk first and pass `--no-pull`, or run it a second time.
+
+After an upgrade, confirm it took effect:
+
+```bash
+# The mount, read-only: prints "/var/lib/orbit/files false".
+docker inspect orbit-pgbackup --format '{{range .Mounts}}{{println .Destination .RW}}{{end}}' | grep /var/lib/orbit/files
+# The script is this checkout's: prints nothing, and exits 0.
+docker exec orbit-pgbackup cat /usr/local/bin/pg-backup.sh | cmp - scripts/pg-backup.sh
+# Both copies are named and working: "watching" names <target> and <target>-files, with no ERROR after it.
+docker logs orbit-pgbackup 2>&1 | grep -E 'watching|mirrored|ERROR' | tail
+# A file from ./data/files reached the target, within a poll (15 minutes) of the sidecar starting. With
+# ORBIT_BACKUP_SYNC_TARGET=root@backup-host:/data/backup/orbit-pg-archive:
+f="$(find data/files -type f -not -path 'data/files/tmp/*' | tail -1)"
+ssh root@backup-host ls -l "/data/backup/orbit-pg-archive-files/${f#data/files/}"
+```
+
+With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_FILES_BACKEND=s3`, the last two have nothing to show: see the backup and restore runbook, `docs/postgres-backup-restore.md`, "Attachment files".
+
 ## Requirements
 
 - Docker Compose v2 is preferred. The legacy `docker-compose` binary is a fallback, but `--wait` requires v2 support.
-- Run against an Orbit checkout with the normal deployment environment, including values normally supplied through the root `.env`.
+- Run against the checkout the deployment runs from, with the normal deployment environment, including values normally supplied through the root `.env`.
 - Never delete or recreate the `orbit_pg` volume as part of this workflow.

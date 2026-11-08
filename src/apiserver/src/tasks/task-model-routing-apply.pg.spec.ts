@@ -304,25 +304,25 @@ test('a bulk run applies routing per item: a provider pin only fixes the engine,
       const expected = new Map([
         // Pinned to claude, so routed within claude.
         [enginePinned, {
-          applied: true, level: 'S', reason: 'Tier S: suggested by the coordinator — one service plus its spec',
+          applied: true, level: 'S', reason: '[coordinator] Tier S: suggested by the coordinator — one service plus its spec',
           dispatched: { provider: 'claude', model: SONNET, effort: 'low' },
           session: { provider: 'claude', model: SONNET, effort: 'low' },
         }],
         // No pin at all: routed on the Agent's own engine, which the target writes out.
         [unpinned, {
-          applied: true, level: 'L', reason: 'Tier L: suggested by the coordinator — one service plus its spec',
+          applied: true, level: 'L', reason: '[coordinator] Tier L: suggested by the coordinator — one service plus its spec',
           dispatched: { provider: 'claude', model: OPUS, effort: 'high' },
           session: { provider: 'claude', model: OPUS, effort: 'high' },
         }],
         // Nothing to route on: the baseline, with or without the switch.
         [unsuggested, {
-          applied: false, level: null, reason: "No suggestion — keeps the agent's model, as today",
+          applied: false, level: null, reason: "[not-routed] No suggestion — keeps the agent's model, as today",
           dispatched: { provider: 'claude', model: null, effort: null },
           session: { provider: 'claude', model: null, effort: AGENT_EFFORT },
         }],
         // The pin wins over the suggestion.
         [modelPinned, {
-          applied: false, level: null, reason: `Task pin: ${OPUS}`,
+          applied: false, level: null, reason: `[not-routed] Task pin: ${OPUS}`,
           dispatched: { provider: 'claude', model: OPUS, effort: null },
           session: { provider: 'claude', model: OPUS, effort: AGENT_EFFORT },
         }],
@@ -368,6 +368,7 @@ test('a model pinned on the task wins: the run is created on the pin, and the de
     try {
       // XL would route to Opus at max; the pin says Sonnet.
       const target = await fixture(services, 'pin', [{ model: SONNET, modelHint: 'XL' }]);
+      await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: 'intelligence' });
       const [taskId] = target.taskIds;
       const press = randomUUID();
 
@@ -376,7 +377,7 @@ test('a model pinned on the task wins: the run is created on the pin, and the de
       const [row] = await decisionsOf(services.db, taskId);
       assert.deepEqual(
         { applied: row.applied, level: row.level, model: row.model, reasons: row.reasons },
-        { applied: false, level: null, model: SONNET, reasons: [`Task pin: ${SONNET}`] },
+        { applied: false, level: null, model: SONNET, reasons: [`[not-routed] Task pin: ${SONNET}`] },
       );
       const bound = await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press);
       assert.deepEqual(dispatchedBy(bound.target), { provider: 'claude', model: SONNET, effort: null });
@@ -396,7 +397,8 @@ test('continuing a paused run is not routed again, with smart selection on',
       const run = await runNow(services, target, taskId, randomUUID());
       assert.deepEqual(await sessionOf(services.db, run), { provider: 'claude', model: SONNET, effort: 'low' });
       await pause(services.db, run);
-      // The suggestion has gone up since: routing afresh would pick Opus at max.
+      // Changing the mode and suggestion affects only later CREATE plans.
+      await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: 'intelligence' });
       await services.db.task.update({ where: { id: taskId }, data: { modelHint: 'XL' } });
       const press = randomUUID();
 
@@ -481,7 +483,7 @@ test('a takeover creates the run on the route that was bound, not on one decided
       const press = randomUUID();
       // Decided at S by a holder that died between binding and creating; the task now says M.
       const route = {
-        policyVersion: 1, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
+        policyVersion: 2, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
         baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
         features: { modelHint: 'S', modelRouting: true }, reasons: ['decided by the holder that died'],
       };
@@ -514,7 +516,7 @@ test('a routed run refused by a run already holding the task names no pin the ta
       const press = randomUUID();
       await boundReceipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press, `task:${taskId}`,
         routedTarget(target, taskId, press, {
-          policyVersion: 1, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
+          policyVersion: 2, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
           baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
           features: { modelHint: 'M', modelRouting: true }, reasons: ['decided by the holder that died'],
         }));
@@ -539,6 +541,13 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
         const ok = plainToInstance(Dto, { name: 'agent', modelRouting: true });
         assert.deepEqual(await validate(ok, { whitelist: true }), []);
         assert.equal(ok.modelRouting, true, `${Dto.name} keeps it`);
+        for (const mode of ['cost', 'balance', 'intelligence']) {
+          const preference = plainToInstance(Dto, { name: 'agent', modelRoutingOptimizeFor: mode });
+          assert.deepEqual(await validate(preference, { whitelist: true }), []);
+          assert.equal(preference.modelRoutingOptimizeFor, mode);
+        }
+        assert.deepEqual((await validate(plainToInstance(Dto, { name: 'agent', modelRoutingOptimizeFor: 'fast' })))
+          .map((error) => error.property), ['modelRoutingOptimizeFor']);
         const refused = await validate(plainToInstance(Dto, { name: 'agent', modelRouting: 'yes' }), { whitelist: true });
         assert.deepEqual(refused.map((error) => error.property), ['modelRouting']);
       }
@@ -549,9 +558,10 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
         (await db.workspace.findUniqueOrThrow({ where: { id }, select: { modelRouting: true } })).modelRouting;
 
       const ownerMade = await workspaces.create(target.ownerId, {
-        name: 'owner-made', runnerId: target.runnerId, modelRouting: true,
+        name: 'owner-made', runnerId: target.runnerId, modelRouting: true, modelRoutingOptimizeFor: 'balance',
       });
       assert.equal(await routingOf(ownerMade.id), true);
+      assert.equal((await db.workspace.findUniqueOrThrow({ where: { id: ownerMade.id } })).modelRoutingOptimizeFor, 'balance');
       const plain = await workspaces.create(target.ownerId, { name: 'owner-default', runnerId: target.runnerId });
       assert.equal(await routingOf(plain.id), false, 'off unless the owner turns it on');
       await workspaces.update(target.ownerId, ownerMade.id, { description: 'renamed' });
@@ -566,13 +576,17 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
         workspaces,
         { assert: async () => 'orchestrating-session' } as unknown as RunnerOrchestrationAuthorizer,
         quiet(),
+        // None of these writes names a field the owner's card covers, so nothing reads this.
+        {} as never,
       );
       const spawned = await agents.createWorkspace(runner, 'orchestrating-session', 'credential', {
-        name: 'agent-made', modelRouting: true,
+        name: 'agent-made', modelRouting: true, modelRoutingOptimizeFor: 'intelligence',
       });
       assert.equal(await routingOf(spawned.id), false, 'an agent cannot create an Agent with it on');
-      await agents.updateWorkspace(runner, 'orchestrating-session', 'credential', spawned.id, { modelRouting: true });
+      assert.equal((await db.workspace.findUniqueOrThrow({ where: { id: spawned.id } })).modelRoutingOptimizeFor, 'cost');
+      await agents.updateWorkspace(runner, 'orchestrating-session', 'credential', spawned.id, { modelRouting: true, modelRoutingOptimizeFor: 'intelligence' });
       assert.equal(await routingOf(spawned.id), false, 'nor turn it on');
+      assert.equal((await db.workspace.findUniqueOrThrow({ where: { id: spawned.id } })).modelRoutingOptimizeFor, 'cost');
       await workspaces.update(target.ownerId, target.agentId, { modelRouting: true });
       await agents.updateWorkspace(runner, 'orchestrating-session', 'credential', target.agentId, {
         modelRouting: false, description: 'touched by an agent',
@@ -584,6 +598,32 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
         { modelRouting: true, description: 'touched by an agent' },
         'nor turn it off: the update went through and left the switch where the owner put it',
       );
+    } finally {
+      await services.db.$disconnect();
+    }
+  });
+
+test('Optimize For is frozen with CREATE; changed modes affect only later fresh runs',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const services = connect();
+    try {
+      const target = await fixture(services, 'optimize', [{ modelHint: null }]);
+      const [taskId] = target.taskIds;
+      for (const [mode, level] of [['cost', null], ['balance', 'M'], ['intelligence', 'L']] as const) {
+        await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: mode });
+        const press = randomUUID();
+        const run = await runNow(services, target, taskId, press);
+        const row = (await decisionsOf(services.db, taskId)).find((r) => r.sessionId === run)!;
+        assert.equal(row.level, level);
+        assert.equal((row.features as Record<string, unknown>).optimizeFor, mode);
+        const bound = await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press);
+        assert.equal(bound.target.route.features.optimizeFor, mode);
+        await services.workspaces.update(target.ownerId, target.agentId, { modelRoutingOptimizeFor: 'intelligence' });
+        assert.equal(await runNow(services, target, taskId, press), run);
+        assert.equal((await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press)).target.route.features.optimizeFor, mode);
+        await services.db.session.update({ where: { id: run }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() } });
+      }
     } finally {
       await services.db.$disconnect();
     }

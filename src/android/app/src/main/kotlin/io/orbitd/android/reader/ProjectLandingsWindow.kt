@@ -3,6 +3,7 @@ package io.orbitd.android.reader
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -19,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -30,10 +32,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.cards.PromotionReceiptSheet
@@ -58,6 +63,8 @@ import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
 import io.orbitd.android.projects.ProjectApi
 import io.orbitd.android.projects.failureReason
+import io.orbitd.android.realtime.PagePoll
+import io.orbitd.android.realtime.PagePolls
 import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.PageBar
@@ -74,11 +81,16 @@ import kotlinx.serialization.json.JsonObject
 // A project's Landings window (owner 2026-10-27, docs/mocks/landings-one-window; contract §2.9 LS6 and §3.6, revision 28; web
 // `ProjectLandingsWindow.tsx`): every landing the project has had, read like a conversation — the settled ones by day, oldest at the
 // top, and the ones still in hand under `Now` at the bottom, where the window opens. A landing session id opens this window on its
-// landing: scrolled to, opened and outlined for a moment.
+// landing: scrolled to, opened and outlined for a moment. Since owner 2026-11-02 (docs/mocks/landings-chat-bubbles, option C) it is
+// drawn as a chat: each settled landing a message bubble from Orbit, in groups Orbit sent close together, its avatar once beside each
+// group; the days centred chips; and the footer a read-only bar shaped like the session composer.
 
 /** How long a landing the window was opened on stays outlined (board 03 f). */
 private const val FOCUS_OUTLINE_MS = 1_500L
-/** How often the two lists are read again while the window shows (the web's 15 s), and the merges into main (its 60 s). */
+/** The room a settled bubble's column leaves at its end, like an incoming chat message's (board 01 b); `Now`'s cards take it. */
+private val BUBBLE_END_GUTTER = 44.dp
+/** How often the two lists are read again while the window shows a landing in hand (the web's 15 s), and the merges into main (its
+ *  60 s); with none in hand, as the account stream says (PagePoll). */
 private const val LISTS_READ_MS = 15_000L
 private const val MERGES_READ_MS = 60_000L
 
@@ -113,19 +125,20 @@ internal class LandingsWindowState(focus: JsonObject?) {
     val coordinatorId: String? get() = coordinator?.obj("coordination")?.obj("session")?.text("id")?.takeIf { it.isNotEmpty() }
 }
 
-/** One item of the window's list: a day's heading, a settled landing, `Now`'s heading or a landing in hand, or the note a window says
- *  before its lists have answered. [landingId] is the landing an item is, for the focus to find. */
+/** One item of the window's list: a day's chip, a settled landing, `Now`'s chip or a landing in hand, or the note a window says before
+ *  its lists have answered. [landingId] is the landing an item is, for the focus to find. A landing is one message of its group: the
+ *  [first] carries the group's avatar, and a settled group's [last] the room before the next group. */
 private sealed interface WindowItem {
     val key: String
     val landingId: String? get() = null
 
     data class Note(val failed: Boolean) : WindowItem { override val key get() = "note" }
     data class Day(val title: String, val now: Boolean = false) : WindowItem { override val key get() = if (now) "now" else "day:$title" }
-    data class Settled(val row: LandingsWindowRow) : WindowItem {
+    data class Settled(val row: LandingsWindowRow, val first: Boolean, val last: Boolean) : WindowItem {
         override val key get() = "row:${row.key}"
         override val landingId get() = row.id
     }
-    data class InHand(val card: LandingsWindowCard) : WindowItem {
+    data class InHand(val card: LandingsWindowCard, val first: Boolean) : WindowItem {
         override val key get() = "card:${card.sessionId}"
         override val landingId get() = card.sessionId
     }
@@ -135,11 +148,14 @@ private fun windowItems(window: LandingsWindow, listed: Boolean, listFailed: Boo
     if (!listed) add(WindowItem.Note(listFailed))
     window.days.forEach { day ->
         add(WindowItem.Day(day.title))
-        day.rows.forEach { add(WindowItem.Settled(it)) }
+        SessionProjectLandings.groups(day.rows).forEach { group ->
+            group.forEachIndexed { index, row -> add(WindowItem.Settled(row, first = index == 0, last = index == group.lastIndex)) }
+        }
     }
+    // What is still in hand is Orbit's last message: one group, under `Now`.
     if (window.now.isNotEmpty()) {
         add(WindowItem.Day(SessionLandingsCopy.now, now = true))
-        window.now.forEach { add(WindowItem.InHand(it)) }
+        window.now.forEachIndexed { index, card -> add(WindowItem.InHand(card, first = index == 0)) }
     }
 }
 
@@ -198,16 +214,23 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
     }
     /** A card whose read says it settled moves into its day: the lists and the merges are read again at once. */
     fun settled() { scope.launch { coroutineScope { launch { readLists() }; launch { readMerged() } } } }
+    /** Whether a landing is in hand, as the window's state says when a poll asks: a row not settled, or a card whose own read says so
+     * (the landing the window was opened on may be no row yet). */
+    fun inHand() = state.rows.any { row -> row.landing?.let { (it.state ?: if (it.settledAt != null) "SETTLED" else "IN_FLIGHT") != "SETTLED" } == true } ||
+        state.cards.values.any { it.view != null && it.view.settledAt == null }
 
     LaunchedEffect(state) {
         if (focusId != null && state.focus == null) launch {
             val detail = attempt { api.objectRead(listOf("sessions", focusId)) }
             if (detail != null) state.focus = detail else state.focusFailed = true
         }
-        launch { while (true) { readLists(); delay(LISTS_READ_MS) } }
-        launch { while (true) { readMerged(); delay(MERGES_READ_MS) } }
         launch { while (true) { delay(1_000); now = Instant.now() } }
     }
+    // The lists and the merges into main. A landing publishes no event (§2.9 LS6): while one is in hand they keep their cadence, 15 s and
+    // 60 s; with none they follow the account stream as every page does (docs/list-freshness-design.md R6). Neither reads while the
+    // Activity is stopped.
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, state, inFlightMs = { if (inHand()) LISTS_READ_MS else null }) { readLists() }
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, state, inFlightMs = { if (inHand()) MERGES_READ_MS else null }) { readMerged() }
 
     // The landing the window was opened on, when no list carries it: a landing whose row is not inserted yet (LS1's pre-generated id),
     // its subject read off its own view — or, when this device cannot read that view, the job an integration read last described,
@@ -231,19 +254,23 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
     val window = remember(rows, state.merged, minute) { SessionProjectLandings.window(rows, state.merged, now, zone) }
     val entries = windowItems(window, state.listed, state.listFailed)
 
-    // Only cards poll: each one's own view, on the landing page's cadence (RUNNING 4 s, QUEUED 15 s, nothing once settled).
+    // Each card polls its own view on the landing page's cadence (RUNNING 4 s, QUEUED 15 s, nothing once settled), while the Activity is
+    // started: a stopped one reads nothing, and one started again reads each card at once.
     val cardIds = window.now.map { it.sessionId }
-    LaunchedEffect(cardIds) {
-        for (id in cardIds) launch {
-            while (true) {
-                LandingSessionReads.read(api, projects, id, state.cards[id] ?: LandingSessionRead(), app.landingJobs, handle) { read ->
-                    // A read carries the card as it was when it left: one that left before a press, or while one was out, must neither
-                    // let the doors up under it nor hold them down after it.
-                    state.cards[id] = read.copy(acting = state.cards[id]?.acting ?: false)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(cardIds, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            for (id in cardIds) launch {
+                while (true) {
+                    LandingSessionReads.read(api, projects, id, state.cards[id] ?: LandingSessionRead(), app.landingJobs, handle) { read ->
+                        // A read carries the card as it was when it left: one that left before a press, or while one was out, must neither
+                        // let the doors up under it nor hold them down after it.
+                        state.cards[id] = read.copy(acting = state.cards[id]?.acting ?: false)
+                    }
+                    val view = state.cards[id]?.view
+                    if (view?.settledAt != null) { settled(); break }
+                    delay(LandingSessionModel.nextReadMs(view) ?: break)
                 }
-                val view = state.cards[id]?.view
-                if (view?.settledAt != null) { settled(); break }
-                delay(LandingSessionModel.nextReadMs(view) ?: break)
             }
         }
     }
@@ -371,8 +398,8 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         else CircularProgressIndicator(Modifier.size(20.dp).testTag("landings:loading"), strokeWidth = 2.dp)
                     }
-                    is WindowItem.Day -> DayHeading(item.title, item.now)
-                    is WindowItem.Settled -> {
+                    is WindowItem.Day -> DayChip(item.title, item.now)
+                    is WindowItem.Settled -> GroupMessage(item.first, item.last, gap = 4.dp, gutter = BUBBLE_END_GUTTER) {
                         val row = item.row
                         val record = row.sessionId?.let(::recordOf)
                         val expanded = row.id in state.expanded
@@ -392,7 +419,8 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
                             onAction = { action -> act(row.id, record?.view, coordinator, row.promotion, action) },
                             onLog = onLog(row.sessionId ?: row.key))
                     }
-                    is WindowItem.InHand -> {
+                    // `Now`'s cards are wider than a bubble: they take the whole column beside the avatar, no end gutter.
+                    is WindowItem.InHand -> GroupMessage(item.first, last = false, gap = 8.dp, gutter = 0.dp) {
                         val card = item.card
                         val read = state.cards[card.sessionId] ?: LandingSessionRead()
                         LandingWindowCard(card, read, card.sessionId in state.expanded, state.outlined == card.sessionId,
@@ -412,25 +440,43 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
     receipt?.let { record -> PromotionReceiptSheet(record) { receipt = null } }
 }
 
-/** A day's heading in the window — the session list's own words, centred like a conversation's — and `Now`'s, in the accent. */
+/** A day's chip in the window — the session list's own words on a capsule, centred like a conversation's date — and `Now`'s, in the
+ *  accent on its tint (board 01 b ④, 02 d ①). */
 @Composable
-private fun DayHeading(title: String, now: Boolean) {
-    Text(title, Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp).semantics { heading() }.testTag("landings:day:$title"),
-        textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
-        color = if (now) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+private fun DayChip(title: String, now: Boolean) {
+    val ink = if (now) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 10.dp), contentAlignment = Alignment.Center) {
+        Text(title, Modifier.background(ink.copy(alpha = 0.1f), CircleShape).padding(horizontal = 11.dp, vertical = 4.dp)
+            .semantics { heading() }.testTag("landings:day:$title"),
+            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink)
+    }
+}
+
+/** One message of a group (board 01 b ③): Orbit's avatar beside the group's first, top-aligned, and the room it takes beside the rest;
+ *  then the message's column, which leaves [gutter] at its end. [gap] parts it from the message above; a group's [last] keeps the
+ *  room before the next group. */
+@Composable
+private fun GroupMessage(first: Boolean, last: Boolean, gap: Dp, gutter: Dp, content: @Composable ColumnScope.() -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = if (first) 0.dp else gap, bottom = if (last) 14.dp else 0.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+        if (first) Image(painterResource(R.drawable.orbit_app_icon), contentDescription = null, Modifier.size(32.dp).testTag("landings:avatar"))
+        else Spacer(Modifier.width(32.dp))
+        Column(Modifier.weight(1f).padding(end = gutter), content = content)
+    }
 }
 
 /** The outline the landing the window was opened on wears for a moment (board 03 f), fading in and out. */
 @Composable
-private fun outline(outlined: Boolean): Modifier {
+private fun outline(outlined: Boolean, shape: Shape): Modifier {
     val ink by animateColorAsState(if (outlined) MaterialTheme.colorScheme.primary else Color.Transparent, tween(300), label = "landing-outline")
-    return Modifier.border(2.dp, ink, RoundedCornerShape(14.dp))
+    return Modifier.border(2.dp, ink, shape)
 }
 
 /**
- * One settled landing (board 02 d): the merged line's head — the mark that says how it ended, the task's name, the moment it settled
- * and one line under them — that opens in place to its record, the old landing page's timeline (board 03 e, f); a merge into main
- * opens to its receipt first. An open row shows an up arrow; pressed again it folds. A long-press opens its menu.
+ * One settled landing, a message bubble from Orbit (board 01 b ①②): the task's name whole, then a foot with the mark that says how it
+ * ended, the line under it and the moment it settled at the end. It hugs what it says, up to its column. A tap opens its record under
+ * it, at the column's width on a quiet panel — the old landing page's timeline (board 03 e); a merge into main opens to its receipt
+ * first — and folds it again. A long-press opens its menu.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -444,34 +490,30 @@ private fun LandingWindowRow(row: LandingsWindowRow, record: LandingSessionRead?
         LandingsWindowTone.QUIET -> muted
     }
     val view = record?.view
-    Column(Modifier.fillMaxWidth().padding(vertical = 2.dp).then(outline(outlined)).testTag("landing-entry:${row.id}")) {
+    val bubble = RoundedCornerShape(16.dp)
+    val foot = MaterialTheme.typography.bodySmall
+    Column(Modifier.fillMaxWidth().testTag("landing-entry:${row.id}"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (outlined) Box(Modifier.size(0.dp).testTag("landing:outlined"))
         Box {
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                .background(if (expanded) muted.copy(alpha = 0.08f) else Color.Transparent)
+            Column(Modifier.width(IntrinsicSize.Max).then(outline(outlined, bubble)).clip(bubble)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .combinedClickable(role = Role.Button, onLongClickLabel = "Landing actions", onClick = onToggle, onLongClick = onMenu)
-                .padding(horizontal = 8.dp, vertical = 10.dp).testTag("landing-row:${row.id}"),
-                verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-                Box(Modifier.size(30.dp).background(ink.copy(alpha = 0.14f), CircleShape), contentAlignment = Alignment.Center) {
+                .padding(start = 13.dp, end = 13.dp, top = 9.dp, bottom = 8.dp).testTag("landing-row:${row.id}"),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(row.title, Modifier.testTag("landing-row:title"), style = MaterialTheme.typography.bodyLarge)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(when (row.tone) { LandingsWindowTone.OK -> "✓"; LandingsWindowTone.MERGE -> "⇢"; LandingsWindowTone.QUIET -> "◌" },
-                        Modifier.testTag("landing-row:mark"), fontWeight = FontWeight.SemiBold, color = ink)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(row.title, Modifier.weight(1f).testTag("landing-row:title"), fontWeight = FontWeight.SemiBold, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis)
-                        if (row.time.isNotEmpty()) Text(row.time, Modifier.testTag("landing-row:time"), style = MaterialTheme.typography.labelMedium,
-                            color = muted, maxLines = 1, softWrap = false)
-                        if (expanded) LandingUpArrow()
-                    }
-                    Text(row.detail, Modifier.testTag("landing-row:detail"), style = MaterialTheme.typography.bodyMedium, color = muted,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Modifier.testTag("landing-row:mark"), style = foot, fontWeight = FontWeight.SemiBold, color = ink)
+                    Text(row.detail, Modifier.weight(1f).testTag("landing-row:detail"), style = foot, color = muted, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                    if (row.time.isNotEmpty()) Text(row.time, Modifier.padding(start = 8.dp).testTag("landing-row:time"),
+                        style = foot.copy(fontFeatureSettings = "tnum"), color = muted, maxLines = 1, softWrap = false)
                 }
             }
             LandingEntryMenu(menuOpen && menuItems?.isEmpty() != true, menuItems, onMenuDismiss, onAction)
         }
-        if (expanded) Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (expanded) Column(Modifier.fillMaxWidth().testTag("landing:record-panel").background(muted.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+            .padding(start = 12.dp, end = 12.dp, top = 11.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (row.tone == LandingsWindowTone.MERGE) LandingReceiptBlock(LandingSessionModel.mergeReceipt(row.promotion, view))
             if (row.sessionId != null) {
                 if (view != null) {
@@ -511,7 +553,7 @@ private fun LandingWindowCard(card: LandingsWindowCard, read: LandingSessionRead
             LandingMenuAction.REVIEW_CARD.takeIf { view.subject == "PROMOTION" && read.currentPromotion() != null })
     val toggle by rememberUpdatedState(onToggle)
     val menu by rememberUpdatedState(onMenu)
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).then(outline(outlined)).testTag("landing-entry:${card.sessionId}"),
+    Column(Modifier.fillMaxWidth().then(outline(outlined, RoundedCornerShape(14.dp))).testTag("landing-entry:${card.sessionId}"),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (outlined) Box(Modifier.size(0.dp).testTag("landing:outlined"))
         Box {
@@ -537,13 +579,15 @@ private fun LandingWindowCard(card: LandingsWindowCard, read: LandingSessionRead
     }
 }
 
-/** `Open task ›` and `Open source session ›`, under a task segment's open record (board 03 f). */
+/** `Open task ›` and `Open source session ›`, under a task segment's open record (board 03 f); in a bubble's narrower column the
+ *  second goes under the first rather than breaking. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LandingEntryLinks(view: LandingView, onAction: (LandingMenuAction) -> Unit) {
     if (view.subject != "TASK") return
     val source = view.currentAttempt?.sourceSessionId?.takeIf { it.isNotEmpty() }
     if (view.taskId.isNullOrEmpty() && source == null) return
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (!view.taskId.isNullOrEmpty()) TextButton(onClick = { onAction(LandingMenuAction.OPEN_TASK) }, modifier = Modifier.testTag("landing:link:task")) {
             Text("${LandingSessionCopy.OPEN_TASK} ›", fontWeight = FontWeight.SemiBold)
         }
@@ -574,27 +618,35 @@ private fun LandingReceiptBlock(receipt: LandingMergeReceipt) {
     }
 }
 
-/** The window's read-only footer (LS6): what this window is, who decides, and the way to them. No composer. */
+/**
+ * The window's read-only bar (LS6, board 01 b ⑤): the session composer's band and the outline of its field, with what this window is
+ * where a message would be typed; under it who decides, and the way to them in Send's place. No text field.
+ */
 @Composable
 private fun LandingsFooter(coordinatorId: String?, onOpenCoordinator: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val words = SessionLandingsCopy.orbitRunsTheseLandings
     val cut = words.indexOf(" — ")
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp).testTag("landings:footer"), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-        Text(buildAnnotatedString {
-            if (cut < 0) append(words) else {
-                append(words.substring(0, cut + 3))
-                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(words.substring(cut + 3)) }
+    Surface(tonalElevation = 2.dp) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("landings:footer")) {
+            Box(Modifier.fillMaxWidth().heightIn(min = OutlinedTextFieldDefaults.MinHeight)
+                .border(OutlinedTextFieldDefaults.UnfocusedBorderThickness, MaterialTheme.colorScheme.outline, OutlinedTextFieldDefaults.shape)
+                .padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.CenterStart) {
+                Text(buildAnnotatedString {
+                    if (cut < 0) append(words) else {
+                        append(words.substring(0, cut + 3))
+                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(words.substring(cut + 3)) }
+                    }
+                }, Modifier.testTag("landings:footer-line"), style = MaterialTheme.typography.bodyMedium, color = muted)
             }
-        }, Modifier.testTag("landings:footer-line"), style = MaterialTheme.typography.bodySmall, color = muted)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(LandingSessionCopy.DECISIONS_THE_COORDINATOR, style = MaterialTheme.typography.bodySmall, color = muted)
-            if (coordinatorId != null) {
-                Text(" · ", style = MaterialTheme.typography.bodySmall, color = muted)
-                TextButton(onClick = onOpenCoordinator, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                    modifier = Modifier.heightIn(min = 0.dp).testTag("landings:open-coordinator")) {
-                    Text("${LandingSessionCopy.OPEN_COORDINATOR} ›", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(LandingSessionCopy.DECISIONS_THE_COORDINATOR, Modifier.weight(1f).padding(start = 16.dp, end = 8.dp)
+                    .testTag("landings:footer-decisions"), style = MaterialTheme.typography.bodySmall, color = muted)
+                if (coordinatorId != null) OutlinedButton(onClick = onOpenCoordinator, modifier = Modifier.testTag("landings:open-coordinator"),
+                    contentPadding = PaddingValues(start = 12.dp, end = 16.dp)) {
+                    Icon(painterResource(R.drawable.ic_person), null, Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                    Text(LandingSessionCopy.OPEN_COORDINATOR, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

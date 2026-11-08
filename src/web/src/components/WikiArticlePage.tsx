@@ -6,6 +6,7 @@ import { WikiEmpty } from './WikiCards';
 import { WikiContentsButton } from './WikiDirectory';
 import { WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
 import { WikiTopicGroup, WikiTopicPage } from './WikiTopicPage';
+import { WikiWords } from './WikiWords';
 import { Button } from './ui/Button';
 import { Drawer } from './ui/Drawer';
 import { Popover } from './ui/Popover';
@@ -39,7 +40,7 @@ import {
   wikiBrowsePath,
   wikiEntriesCited,
   wikiNoteLabel,
-  wikiSentenceSegments,
+  wikiSentenceGap,
   wikiSourceCounts,
   wikiSourcesLine,
   type WikiArticleFootnote,
@@ -211,7 +212,11 @@ function WikiArticleText({
     <div className="wk-art">
       {article.blocks.map((block, b) => (
         <Fragment key={b}>
-          {block.heading && <h2>{block.heading}</h2>}
+          {block.heading && (
+            <h2>
+              <WikiWords text={block.heading} />
+            </h2>
+          )}
           <p>
             {block.sentences.map((sentence, s) => {
               const at = `${b}.${s}`;
@@ -219,15 +224,7 @@ function WikiArticleText({
               return (
                 <Fragment key={at}>
                   <span className={lit ? 'hl' : undefined}>
-                    {wikiSentenceSegments(sentence.text).map((segment, i) =>
-                      segment.kind === 'code' ? (
-                        <code key={i}>{segment.text}</code>
-                      ) : segment.kind === 'strong' ? (
-                        <strong key={i}>{segment.text}</strong>
-                      ) : (
-                        <Fragment key={i}>{segment.text}</Fragment>
-                      ),
-                    )}
+                    <WikiWords text={sentence.text} />
                   </span>
                   <sup className="wk-fn">
                     {sentence.notes.map((n) => {
@@ -261,7 +258,8 @@ function WikiArticleText({
                         </Popover>
                       );
                     })}
-                  </sup>{' '}
+                  </sup>
+                  {wikiSentenceGap(sentence.text)}
                 </Fragment>
               );
             })}

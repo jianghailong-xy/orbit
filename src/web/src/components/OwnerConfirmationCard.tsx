@@ -38,6 +38,7 @@ import {
   type ReviewChoice,
   type ReviewChoices,
 } from './OwnerConfirmationReview';
+import { streamPoll } from '../lib/listBudget';
 
 /**
  * The card that asks the account owner whether an OWNER_CONFIRMED task is done.
@@ -229,6 +230,8 @@ export const IF_YOU_CONFIRM = 'IF YOU CONFIRM';
 export const IF_CONFIRMED_NOT_ON_MAIN = 'Not on main yet';
 export const IF_CONFIRMED_NO_RECORD_ON_MAIN = 'No record of this branch on main';
 export const IF_CONFIRMED_DOES_NOT_MERGE = 'confirming doesn’t merge it';
+/** The branch row when the branch has no changes and the read says nothing lands (§10.5 O-L8). */
+export const IF_CONFIRMED_NO_CHANGES = 'No changes on this branch, so nothing lands';
 export const IF_CONFIRMED_LINE_THEN_OWNER = 'Goes onto the integration line; merging into main asks you again';
 export const IF_CONFIRMED_AUTO_MAIN = 'Lands on main by itself if the checks pass';
 /** An AGENT_PUSH project's task (§10.5 O-L2): no merge card follows the confirmation — the agent
@@ -288,6 +291,10 @@ const START_TIERS: readonly OwnerConfirmationStart[] = ['NOW', 'WHEN_SLOT_FREES'
  * The branch row says confirming does not merge it only where the landing is read and is not
  * Automatic's — there the DONE does lead to main, as the landing row says. An AGENT_PUSH project's
  * DONE merges nothing either: its agent pushes, which is what its landing row says.
+ *
+ * A branch with no changes where nothing lands has nothing to merge, so its row says that instead
+ * (§10.5 O-L8). `files` alone cannot say it: a line that still lands other work sends 0 for this
+ * branch too.
  */
 export function ifConfirmedRows(ifConfirmed: OwnerConfirmationIfConfirmed | null | undefined): IfConfirmedRow[] {
   if (!ifConfirmed) return [];
@@ -305,14 +312,16 @@ export function ifConfirmedRows(ifConfirmed: OwnerConfirmationIfConfirmed | null
   const { branch, landing, endsSession } = ifConfirmed;
   const main = mainBranchName(ifConfirmed.mainBranch);
   if (branch && (branch.onMain === 'NO' || branch.onMain === 'UNKNOWN')) {
-    rows.push({
-      kind: 'BRANCH',
-      lead: branch.onMain === 'NO' ? ifConfirmedNotOn(main) : ifConfirmedNoRecordOn(main),
-      added: branch.onMain === 'NO' && branch.linesAdded > 0 ? `+${branch.linesAdded.toLocaleString('en-US')}` : null,
-      detail: landing === 'NONE' || landing === 'LINE_THEN_OWNER' || landing === 'AGENT_PUSHED'
-        ? `${branch.name} — ${IF_CONFIRMED_DOES_NOT_MERGE}`
-        : branch.name,
-    });
+    rows.push(landing === 'NONE' && branch.files === 0
+      ? { kind: 'BRANCH', lead: IF_CONFIRMED_NO_CHANGES, added: null, detail: branch.name }
+      : {
+        kind: 'BRANCH',
+        lead: branch.onMain === 'NO' ? ifConfirmedNotOn(main) : ifConfirmedNoRecordOn(main),
+        added: branch.onMain === 'NO' && branch.linesAdded > 0 ? `+${branch.linesAdded.toLocaleString('en-US')}` : null,
+        detail: landing === 'NONE' || landing === 'LINE_THEN_OWNER' || landing === 'AGENT_PUSHED'
+          ? `${branch.name} — ${IF_CONFIRMED_DOES_NOT_MERGE}`
+          : branch.name,
+      });
   }
   if (landing === 'LINE_THEN_OWNER' || landing === 'AUTO_MAIN') {
     rows.push({
@@ -723,7 +732,7 @@ export function SessionOwnerConfirmationCard({
   const read = useQuery({
     ...ownerConfirmationQuery(taskId ?? ''),
     enabled: Boolean(taskId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const waiting = ownerConfirmationWaitingIn(read.data, sessionId);
   const answer = useMutation({

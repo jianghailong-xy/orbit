@@ -1426,6 +1426,8 @@ export const COORDINATOR_DELIVERY_KINDS = [
   'TASK_DISPATCH_REFUSED',
   /** `PROJECT_BLOCKER_RAISED`: a task's delivery raised a blocker only the owner can rule on. */
   'PROJECT_BLOCKER_RAISED',
+  /** `TASK_RUN_STOPPED`: a task's run stopped working with its task still owed something. */
+  'TASK_RUN_STOPPED',
   /** `CRITERION_UNLANDED`: a criterion's tasks are done and their work is not on main. */
   'CRITERION_UNLANDED',
   /** `PROJECT_ACCEPTANCE_LANDED`, its criteria not confirmed: the owner is to be asked. */
@@ -1465,8 +1467,8 @@ export type CoordinatorDeliveryKind = (typeof COORDINATOR_DELIVERY_KINDS)[number
 export interface CoordinatorDeliveryCard {
   kind: CoordinatorDeliveryKind;
   /**
-   * The task the fact is about, by the title the coordinator was told — for the four facts that
-   * name one (evidence, a task that can start, a refused start, a blocker). Null for the rest.
+   * The task the fact is about, by the title the coordinator was told — for the five facts that
+   * name one (evidence, a task that can start, a refused start, a blocker, a stopped run). Null for the rest.
    */
   task: { id: string; title: string } | null;
   /** The evidence revision the sentence names (`EVIDENCE_SUBMITTED`, `EVIDENCE_MOVED_IN`). Null otherwise. */

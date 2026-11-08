@@ -66,6 +66,8 @@ function doors() {
       };
     },
     assertHostedByRunner: async () => undefined,
+    // The rule on who may reach whom is sessions/session-reach.pg.spec.ts's, not this spec's.
+    assertMayReach: async () => ({ narrower: false }),
   };
   const browser = new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never, {} as never);
   const runner = new RunnerSessionsController(sessions as never, {
@@ -276,8 +278,8 @@ test('SessionsService still carries the DI metadata Nest resolves it from', () =
   const watermark = Reflect.getMetadata('__injectable__', SessionsService);
   assert.equal(watermark, true, '@Injectable() must sit immediately above the service');
   assert.equal(
-    Reflect.getMetadata('design:paramtypes', SessionsService)?.length, 4,
-    'and its four constructor dependencies (the managed runner demand hook the fourth) must still be visible to the injector',
+    Reflect.getMetadata('design:paramtypes', SessionsService)?.length, 5,
+    'and its five constructor dependencies (the managed runner demand hook the fourth, the file store the fifth) must still be visible to the injector',
   );
   assert.equal(
     Reflect.getMetadata('__injectable__', SessionNotSendable), undefined,

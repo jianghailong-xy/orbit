@@ -381,6 +381,7 @@ private struct CompactSections: View {
                         case .wikiReview:             WikiReviewView()
                         case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
+                        case .wikiTrash:              WikiTrashView()
                         case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)
                         case .wikiJob(let jobID):     WikiJobView(jobID: jobID)
                         case .wikiArticle(let topic, let part):
@@ -399,6 +400,9 @@ private struct CompactSections: View {
                         }
                     }
             }
+            // The wiki chat on every page of this stack but Settings: its round button, its two-height sheet
+            // and the line a rewrite floats (docs/wiki-chat-design.md §9).
+            .wikiChatHost()
 
         // RUNNERS — the Infrastructure page → a machine's record → an engine's or its name's page, a
         // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a

@@ -136,9 +136,6 @@ public enum WikiDocCopy {
     public static func docsWritten(total: Int, written: Int) -> String {
         "\(plural(total, "document", "documents")) · \(WikiArticleCopy.count(written)) written"
     }
-    /// A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_NO_DOCUMENTS_NOTE`).
-    public static let noDocumentsNote =
-        "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space."
     /// A category's documents not written yet, folded into one row under its written ones (`wikiNotWrittenYet`).
     public static func notWrittenYet(_ n: Int) -> String { "+\(WikiArticleCopy.count(n)) not written yet" }
     /// A category none of whose documents is written yet, as its one row (`wikiDocsNotWrittenYet`).

@@ -1,3 +1,4 @@
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -75,10 +76,11 @@ import { ProjectsService } from './projects.service';
  *  (4) M-T11 does not hold an automatic landing back on a zombie, and does on the owed item;
  *  (5) a project that looks finished still does with a zombie open, and not with an owed item;
  *  (6) the endings a task's own facts decide: a failure whose task is done, cancelled, replaced or
- *      being attempted again, and a delivery review whose task left DONE, was replaced or cancelled,
- *      each closed by the backstop with the resolution `resolveByFact` writes for that same fact —
- *      asserted against the edge, on an item of the same shape — and neither closing the ones that
- *      are still owed.
+ *      being attempted again — by a new session, or by the failed session itself having been
+ *      resumed after the item opened — and a delivery review whose task left DONE, was replaced or
+ *      cancelled, each closed by the backstop with the resolution `resolveByFact` writes for that
+ *      same fact — asserted against the edge, on an item of the same shape — and neither closing
+ *      the ones that are still owed, including a failure whose own turn is still running.
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own project. The
  * backstop is database-wide, so what each case reads of it is narrowed to its own project.
@@ -624,8 +626,8 @@ test('(2) the sweep neither escalates nor announces an item nobody owes, and the
       const w = await world(stack, 'sweep');
       const superseded = await candidate(stack, w, 'SUPERSEDED');
       const blocked = await candidate(stack, w, 'BLOCKED');
-      // Both opened five hours ago with the default two-hour window, and never put on the
-      // conversation: due three hours ago, by the item's own clock.
+      // Both opened five hours ago with the default two-hour window. The owed control below
+      // was received then, so its delivery window expired three hours ago.
       const opened = new Date(Date.now() - 5 * HOUR);
       const due = {
         waitingSince: opened, assignedAt: opened, escalateAt: new Date(opened.getTime() + 2 * HOUR),
@@ -636,6 +638,8 @@ test('(2) the sweep neither escalates nor announces an item nobody owes, and the
       const owed = await openItem(stack, w, {
         kind: 'INTEGRATION_CHECK_FAILED', promotionId: blocked, ...due,
       });
+      await stack.openItems.deliverForItems([owed]);
+      await receiveOpenItem(stack.db, owed);
       // And a failure whose task is DONE: overdue by the same clock, owed by nobody.
       const done = await task(stack, w, TaskStatus.DONE, 'done');
       const failureZombie = await openItem(stack, w, { kind: 'TASK_FAILED', taskId: done, ...due });
@@ -811,14 +815,14 @@ test('(3) every reader leaves out an item nobody owes, and counts the owed one b
 
       assert.deepEqual(await reads(), {
         needsYou: [escalated],
-        withCoordinator: [held, failureHeld],
+        withCoordinator: [],
         rowOwnerItems: [escalated],
         rowCount: 1,
         workspaceNeedsYou: 1,
         badge: true,
         signals: [escalated],
         listOwnerItems: [['ESCALATED', 1]],
-        listCoordinatorItems: 2,
+        listCoordinatorItems: 0,
       }, 'every reader counts the owed items, and only those');
       await push.notifyOwnerItem(escalated);
       assert.deepEqual(pushed, [escalated], 'the owed one rings the phone');
@@ -971,6 +975,85 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
           startedAt: new Date(),
         },
       });
+      // A retry can also be the failed session ITSELF resumed — an auto-retry, a coordinator
+      // continuing the conversation, the failure card's Retry. The item names that session, so a
+      // live session alone does not answer it; the message written to it afterwards does.
+      const resumed = await task(stack, w, TaskStatus.FAILED, 'resumed');
+      const resumedFailure = await stack.db.session.create({
+        data: {
+          id: randomUUID(),
+          ownerId: w.ownerId,
+          creatorId: w.ownerId,
+          taskId: resumed,
+          workspaceId: w.workspaceId,
+          assignedRunnerId: w.runnerId,
+          title: 'the attempt that failed',
+          prompt: 'do the work',
+          provider: 'claude',
+          status: RunStatus.FAILED,
+          dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: true,
+          startedAt: new Date(Date.now() - 180_000),
+          finishedAt: new Date(Date.now() - 150_000),
+          numTurns: 1,
+        },
+      });
+      // The item is older than the resume: its `waitingSince` is the old failure, so the turn below
+      // is unambiguously the one written after it.
+      const openedAt = new Date(Date.now() - 120_000);
+      const resumedItem = await openItem(stack, w, {
+        kind: 'TASK_FAILED', taskId: resumed, sessionId: resumedFailure.id, waitingSince: openedAt,
+      });
+      await stack.db.session.update({
+        where: { id: resumedFailure.id },
+        data: { status: RunStatus.PENDING, finishedAt: null },
+      });
+      await stack.db.conversationTurn.create({
+        data: {
+          sessionId: resumedFailure.id,
+          seq: 1,
+          clientTurnId: 'the-resume-after-failure',
+          kind: 'message',
+          content: 'keep going',
+          status: 'PENDING',
+          createdAt: new Date(Date.now() - 60_000),
+        },
+      });
+      // The control beside it: the session that filed the failure is still running, and its turn
+      // was written BEFORE the item — the failing attempt itself, which answers nothing.
+      const midTurn = await task(stack, w, TaskStatus.FAILED, 'failed mid-turn');
+      const midTurnSession = await stack.db.session.create({
+        data: {
+          id: randomUUID(),
+          ownerId: w.ownerId,
+          creatorId: w.ownerId,
+          taskId: midTurn,
+          workspaceId: w.workspaceId,
+          assignedRunnerId: w.runnerId,
+          title: 'the attempt that is still running',
+          prompt: 'do the work',
+          provider: 'claude',
+          status: RunStatus.RUNNING,
+          dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: true,
+          startedAt: new Date(Date.now() - 180_000),
+        },
+      });
+      await stack.db.conversationTurn.create({
+        data: {
+          sessionId: midTurnSession.id,
+          seq: 1,
+          clientTurnId: 'the-failing-turn',
+          kind: 'message',
+          content: 'do the work',
+          status: 'IN_FLIGHT',
+          createdAt: new Date(Date.now() - 120_000),
+        },
+      });
+      const midTurnItem = await openItem(stack, w, {
+        kind: 'TASK_FAILED', taskId: midTurn, sessionId: midTurnSession.id,
+        waitingSince: new Date(Date.now() - 60_000),
+      });
       const stillFailed = await task(stack, w, TaskStatus.FAILED, 'still failed');
 
       // The delivery reviews: one whose task left the DONE delivery it describes, one whose task was
@@ -989,12 +1072,14 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
         cancelled: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: cancelled }),
         replaced: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: replaced }),
         retried: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: retried }),
+        resumed: resumedItem,
         reviewReturned: await openItem(stack, w, { kind: 'DELIVERY_REVIEW', taskId: returned }),
         reviewReplaced: await openItem(stack, w, { kind: 'DELIVERY_REVIEW', taskId: replacedReview }),
         reviewCancelled: await openItem(stack, w, { kind: 'DELIVERY_REVIEW', taskId: cancelledReview }),
       };
       const owed = {
         failure: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: stillFailed }),
+        midTurn: midTurnItem,
         review: await openItem(stack, w, { kind: 'DELIVERY_REVIEW', taskId: reviewing }),
       };
 
@@ -1007,7 +1092,7 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
         (await audit(stack, w.projectId)).sort((a, b) => a.kind.localeCompare(b.kind)),
         [
           { kind: 'DELIVERY_REVIEW', openNotOwed: 3, withOwner: 0 },
-          { kind: 'TASK_FAILED', openNotOwed: 4, withOwner: 0 },
+          { kind: 'TASK_FAILED', openNotOwed: 5, withOwner: 0 },
         ],
         'before the backstop, the audit counts every one of these by kind',
       );
@@ -1040,6 +1125,10 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
         'RESOLVED', 'RETRIED', 'PLATFORM',
         `backstop: task ${retried}@FAILED is being attempted again${tail}`,
       ], 'a failure whose task is being attempted again ends RETRIED');
+      assert.deepEqual(await ended(zombie.resumed), [
+        'RESOLVED', 'RETRIED', 'PLATFORM',
+        `backstop: task ${resumed}@FAILED is being attempted again${tail}`,
+      ], 'a failure whose own session was resumed after it opened is being attempted again');
       assert.deepEqual(await ended(zombie.reviewReturned), [
         'RESOLVED', 'RETRIED', 'PLATFORM',
         `backstop: task ${returned}@IN_PROGRESS left DONE${tail}`,
@@ -1069,17 +1158,22 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
 
       // And the same facts through the edge, on an item of the same shape: `resolveByFact` writes the
       // resolution the backstop just wrote, and leaves the two owed controls exactly where they are.
-      const cases: Array<[string, 'TASK_FAILED' | 'DELIVERY_REVIEW', string]> = [
+      const cases: Array<[
+        string, 'TASK_FAILED' | 'DELIVERY_REVIEW', string, Record<string, unknown>?,
+      ]> = [
         ['done', 'TASK_FAILED', landed],
         ['cancelled', 'TASK_FAILED', cancelled],
         ['replaced', 'TASK_FAILED', replaced],
         ['retried', 'TASK_FAILED', retried],
+        // The twin must name the same session the resumed item names, and be older than the resume,
+        // or the distinct-session arm would answer it and the resumed one would go untested.
+        ['resumed', 'TASK_FAILED', resumed, { sessionId: resumedFailure.id, waitingSince: openedAt }],
         ['reviewReturned', 'DELIVERY_REVIEW', returned],
         ['reviewReplaced', 'DELIVERY_REVIEW', replacedReview],
         ['reviewCancelled', 'DELIVERY_REVIEW', cancelledReview],
       ];
-      for (const [what, kind, taskId] of cases) {
-        const twin = await openItem(stack, w, { kind, taskId });
+      for (const [what, kind, taskId, extra] of cases) {
+        const twin = await openItem(stack, w, { kind, taskId, ...extra });
         await stack.openItems.resolveByFact([taskId]);
         const edge = await reread(stack, twin);
         const backstop = await reread(stack, zombie[what as keyof typeof zombie]);

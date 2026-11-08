@@ -257,15 +257,13 @@ test('S1 a repair session\'s turn has its parent\'s merge recovery checked again
 
     // The heartbeat hands the runner exactly that one preview, with the recovery it checks again.
     const leaseOwner = randomUUID();
-    const commands = await realtime.drainMergeRequests(w.runnerId, leaseOwner, true);
+    const commands = await realtime.drainMergeRequests(w.runnerId, leaseOwner);
     assert.equal(commands.length, 1);
     assert.equal(commands[0].sessionId, parent.id);
     assert.equal(commands[0].recoveryAction, 'preview');
     assert.equal(commands[0].operationId, row.merge_operation_id);
     assert.equal(commands[0].targetBranch, 'main');
     assert.deepEqual(commands[0].recovery, recovery);
-    // A runner that cannot check is handed nothing, as for the owner's own preview.
-    assert.deepEqual(await realtime.drainMergeRequests(w.runnerId, leaseOwner, false), []);
 
     // A recovery no check has stamped yet (an early error carries no checkedAt) reads as checked before
     // the turn: it is queued too.
@@ -305,7 +303,7 @@ test('S1 a repair session\'s turn has its parent\'s merge recovery checked again
     // The check fails before it reaches the repair, as a fetch can: an early error, which carries no
     // checkedAt, so by time alone the same turn would qualify again.
     const leaseOwner = randomUUID();
-    const [command] = await realtime.drainMergeRequests(w.runnerId, leaseOwner, true);
+    const [command] = await realtime.drainMergeRequests(w.runnerId, leaseOwner);
     assert.equal(command.operationId, queued.merge_operation_id);
     const failed: MergeRecovery = { ...command.recovery!, code: 'FETCH_FAILED' };
     delete failed.checkedAt;
@@ -371,7 +369,7 @@ test('S1 a repair session\'s turn has its parent\'s merge recovery checked again
     assert.equal(queued.merge_status, 'pending');
     assert.equal(queued.merge_recovery_action, 'preview');
     assert.equal(queued.owed_ms, null, 'what was owed is taken up');
-    const [command] = await realtime.drainMergeRequests(w.runnerId, parentLease, true);
+    const [command] = await realtime.drainMergeRequests(w.runnerId, parentLease);
     assert.equal(command.sessionId, parent.id);
     assert.equal(command.recoveryAction, 'preview');
     assert.deepEqual(command.recovery, recovery);
@@ -440,7 +438,7 @@ test('S1 a repair session\'s turn has its parent\'s merge recovery checked again
     const row = await mergeRow(sql, parent.id);
     assert.equal(row.merge_status, 'conflict', 'no preview queued');
     assert.equal(row.owed_ms, null);
-    assert.deepEqual(await realtime.drainMergeRequests(w.runnerId, randomUUID(), false), []);
+    assert.deepEqual(await realtime.drainMergeRequests(w.runnerId, randomUUID()), []);
   });
 
   await t.test('S1 the parent\'s detail carries the repair session\'s lastTurnAt, finishedAt and last reply, and tells its check from another merge operation', async () => {
@@ -469,7 +467,7 @@ test('S1 a repair session\'s turn has its parent\'s merge recovery checked again
     // The check comes back with a candidate, and the owner applies it: another operation in flight,
     // and the detail says which.
     const leaseOwner = randomUUID();
-    const [command] = await realtime.drainMergeRequests(w.runnerId, leaseOwner, true);
+    const [command] = await realtime.drainMergeRequests(w.runnerId, leaseOwner);
     const ready: MergeRecovery = {
       ...command.recovery!, code: 'READY', candidateSha: 'd'.repeat(40), candidateTreeSha: 'e'.repeat(40),
       patch: 'complete candidate diff', check: { status: 'unconfigured' }, conflicts: [], checkedAt: rfc3339(new Date()),

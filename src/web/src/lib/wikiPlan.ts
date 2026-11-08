@@ -8,29 +8,25 @@
  * `WikiPlanCopyParityTests` looks each one up here, and both ends are held to the cases in
  * `src/shared/src/wiki-docs.fixture.json`.
  *
- * TWO SHAPES OF A PLAN, ONE PAGE. A stored version is read back with ids, positions and its projects
- * resolved (`WikiPlanVersion`); the draft a job that failed the gate last had is kept as it was sent to
- * the gate (`WikiPlanDraftInput`) — the server stores nothing that did not pass. The page draws both, so
- * both are read into `WikiPlanShown` first. And the other way: an owner's edit is sent in the DRAFT's
- * shape (no ids or positions, a session condition's projects as ids), never as it was read back.
+ * TWO SHAPES OF A PLAN. A stored version is read back with ids, positions and its projects resolved
+ * (`WikiPlanVersion`), and read into `WikiPlanShown` for the page. An owner's edit is sent in the DRAFT's
+ * shape (`WikiPlanDraftInput`: no ids or positions, a session condition's projects as ids), never as it was read back.
  */
 import {
   WIKI_PLAN_GATE_CHECKS,
   WIKI_PLAN_JOB_RULES,
-  WIKI_PLAN_RULES,
   type WikiDocsDirectory,
   type WikiPlanCategoryInput,
   type WikiPlanDoc,
   type WikiPlanDocInput,
   type WikiPlanDraftInput,
   type WikiPlanGateCheck,
-  type WikiPlanGateError,
   type WikiPlanGateReport,
   type WikiPlanJob,
   type WikiPlanJobHeldReason,
-  type WikiPlanJobReport,
   type WikiPlanProposal,
   type WikiPlanRepoCheck,
+  type WikiPlanRepoRefKind,
   type WikiPlanSection,
   type WikiPlanSectionInput,
   type WikiPlanSectionKind,
@@ -83,7 +79,7 @@ export const WIKI_PLAN_HIDE_COMPARE = 'Hide comparison';
 
 /** A version as the head and the version menu name it. */
 export const wikiPlanVersionLabel = (version: number): string => `v${version}`;
-export const WIKI_PLAN_STATUS_LABELS = { draft: 'Draft', confirmed: 'Confirmed', superseded: 'Superseded', failed: 'Draft' } as const;
+export const WIKI_PLAN_STATUS_LABELS = { draft: 'Draft', confirmed: 'Confirmed', superseded: 'Superseded' } as const;
 
 /** The empty page (mock 21 ⑨ A, 22 ①). */
 export const WIKI_PLAN_NONE = 'This space has no plan yet';
@@ -104,12 +100,6 @@ export const WIKI_PLAN_EMPTY_TEXT =
 export const WIKI_PLAN_NOTE_SERVER = 'System model · about 1–2 hours';
 export const WIKI_PLAN_EMPTY_NOTE_SERVER =
   'Runs on the server with the System model — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles.';
-
-/** The sentence under the head of a draft that failed the gate (mock 21 ①): what the owner can do about it. */
-export const wikiPlanFailedHint = (inForce: number | null): string =>
-  `Confirm needs a passing check. Redraft with what to change — ${
-    inForce !== null ? `v${inForce} stays in force until you confirm` : 'until you confirm a plan, the Wiki shows its topic articles'
-  }.`;
 
 /** The documents list's heading on the version in force, under its changes (mock 21 ②). */
 export const WIKI_PLAN_DOCUMENTS = 'Documents';
@@ -179,10 +169,10 @@ export interface WikiPlanShownCategory {
   docs: WikiPlanShownDoc[];
 }
 
-/** A version, or the draft a failed job last had, read into one shape. */
+/** A version, read into the shape the page draws. */
 export interface WikiPlanShown {
   version: number;
-  status: 'draft' | 'confirmed' | 'superseded' | 'failed';
+  status: 'draft' | 'confirmed' | 'superseded';
   origin: 'maintenance' | 'owner';
   baseVersion: number | null;
   proposalId: string | null;
@@ -195,8 +185,6 @@ export interface WikiPlanShown {
   model: string | null;
   createdAt: string | null;
   confirmedAt: string | null;
-  /** A failed draft's: the gate's errors on its last round. */
-  errors: WikiPlanGateError[];
 }
 
 const sessionsOf = (sessions: WikiPlanSources['sessions']): WikiPlanShownSessions | null =>
@@ -286,78 +274,6 @@ export function wikiPlanFromVersion(version: WikiPlanVersion): WikiPlanShown {
     model: version.model,
     createdAt: version.createdAt,
     confirmedAt: version.confirmedAt,
-    errors: [],
-  };
-}
-
-/**
- * A draft's or a revision's report — the gate's rounds, the references checked, the spend — or null: a
- * build reports what it wrote (`WikiPlanBuildReport`), which says nothing of a draft.
- */
-export function wikiPlanDraftReport(job: WikiPlanJob | null | undefined): WikiPlanJobReport | null {
-  return job && job.kind !== 'build' ? ((job.report as WikiPlanJobReport | null) ?? null) : null;
-}
-
-/** The draft a failed job last had, as the page draws it — numbered as the version it would have been. */
-export function wikiPlanFromFailedJob(job: WikiPlanJob, number: number, baseVersion: number | null): WikiPlanShown | null {
-  const draft: WikiPlanDraftInput | null = job.draft;
-  const report = wikiPlanDraftReport(job);
-  if (!draft || !Array.isArray(draft.docs) || !Array.isArray(draft.categories)) return null;
-  const { categories, docs } = numbered(
-    draft.categories.map((category) => ({ ...category, title: category.title ?? category.key })),
-    draft.docs.map((doc, index) => ({
-      index,
-      slug: doc.slug,
-      category: doc.category,
-      title: doc.title,
-      question: doc.question ?? '',
-      audience: doc.audience ?? [],
-      scopeIn: doc.scopeIn ?? [],
-      scopeOut: (doc.scopeOut ?? []).map((out) => ({ text: out.text, docs: out.docs ?? [] })),
-      length: doc.length ?? { min: 0, max: 0 },
-      protected: doc.protected ?? false,
-      sections: (doc.sections ?? []).map((section) => ({
-        key: section.key ?? null,
-        title: section.title,
-        kind: section.kind,
-        covers: section.covers ?? '',
-        length: section.length ?? 0,
-        sources: {
-          docs: (section.sources?.docs ?? []).map((source) => ({ path: source.path, section: source.section ?? null })),
-          code: (section.sources?.code ?? []).map((source) => ({ path: source.path, symbols: source.symbols ?? [] })),
-          contracts: section.sources?.contracts ?? [],
-          sessions: section.sources?.sessions
-            ? {
-                projects: (section.sources.sessions.projects ?? []).map((project) => ({ id: null, title: project })),
-                since: section.sources.sessions.since ?? null,
-                until: section.sources.sessions.until ?? null,
-                keywords: section.sources.sessions.keywords ?? [],
-                anchorPaths: section.sources.sessions.anchorPaths ?? [],
-                entryKinds: section.sources.sessions.entryKinds ?? [],
-                topics: section.sources.sessions.topics ?? [],
-                evidence: section.sources.sessions.evidence ?? '',
-              }
-            : null,
-        },
-      })),
-      stored: null,
-    })),
-  );
-  return {
-    version: number,
-    status: 'failed',
-    origin: 'maintenance',
-    baseVersion,
-    proposalId: null,
-    categories,
-    docs,
-    target: report?.target ?? { min: WIKI_PLAN_RULES.docsMin, max: WIKI_PLAN_RULES.docsMax },
-    gate: null,
-    repoCheck: report?.repo ? { sha: report.repo.sha, checked: report.repo.checked, missing: [] } : null,
-    model: report?.model ?? null,
-    createdAt: job.endedAt,
-    confirmedAt: null,
-    errors: job.errors,
   };
 }
 
@@ -367,7 +283,7 @@ export function wikiPlanNewest(state: Pick<WikiPlanState, 'confirmed' | 'draft'>
 }
 
 /**
- * The job whose failure the page and the home still show: a draft or a revision that ended failed with
+ * The job whose failure the page and the home still show: a draft or a revision that left no draft, with
  * no version stored since it was asked for — a later draft, edit or confirmation answers it.
  */
 export function wikiPlanFailedJob(state: Pick<WikiPlanState, 'confirmed' | 'draft' | 'job'>): WikiPlanJob | null {
@@ -389,16 +305,8 @@ export function wikiPlanNextVersion(state: Pick<WikiPlanState, 'confirmed' | 'dr
   return Math.max(state.confirmed?.version ?? 0, state.draft?.version ?? 0) + 1;
 }
 
-/**
- * What the page shows with no version asked for: the failed draft, the draft waiting, the version in
- * force — or nothing, the empty page.
- */
+/** What the page shows with no version asked for: the draft waiting, the version in force — or nothing, the empty page. */
 export function wikiPlanDefault(state: WikiPlanState): WikiPlanShown | null {
-  const failed = wikiPlanFailedJob(state);
-  if (failed) {
-    const shown = wikiPlanFromFailedJob(failed, wikiPlanNextVersion(state), wikiPlanNewest(state)?.version ?? null);
-    if (shown) return shown;
-  }
   if (state.draft) return wikiPlanFromVersion(state.draft);
   if (state.confirmed) return wikiPlanFromVersion(state.confirmed);
   return null;
@@ -448,17 +356,14 @@ export function wikiPlanMeta(
   return parts;
 }
 
-/** A row of the version menu (mock 21 strip): `v2` · `Redraft · Sep 28, 20:43 · didn’t pass the check` · Draft. */
+/** A row of the version menu (mock 21 strip): `v2` · `Redraft · Sep 28, 20:43 · waiting for you` · Draft. */
 export interface WikiPlanVersionRow {
   version: number;
   status: keyof typeof WIKI_PLAN_STATUS_LABELS;
   note: string;
 }
 
-export function wikiPlanVersionRows(
-  versions: readonly WikiPlanVersionSummary[],
-  failed: { version: number; at: string | null } | null,
-): WikiPlanVersionRow[] {
+export function wikiPlanVersionRows(versions: readonly WikiPlanVersionSummary[]): WikiPlanVersionRow[] {
   const rows: WikiPlanVersionRow[] = versions.map((row) => {
     const at = wikiMonthDayTime(row.confirmedAt ?? row.createdAt) ?? '';
     const made = row.origin === 'owner' ? (row.proposalId ? 'Accepted change' : 'Your edit') : row.baseVersion !== null ? 'Redraft' : 'First draft';
@@ -466,9 +371,6 @@ export function wikiPlanVersionRows(
       row.status === 'confirmed' ? `${at} · confirmed by you` : row.status === 'draft' ? `${made} · ${at} · waiting for you` : `${made} · ${at}`;
     return { version: row.version, status: row.status, note };
   });
-  if (failed) {
-    rows.unshift({ version: failed.version, status: 'failed', note: `Redraft · ${wikiMonthDayTime(failed.at) ?? ''} · didn’t pass the check` });
-  }
   return rows.sort((a, b) => b.version - a.version);
 }
 
@@ -563,18 +465,21 @@ export interface WikiPlanJobCard {
 export const WIKI_PLAN_QUEUED = 'Queued';
 export const WIKI_PLAN_DRAFTING = 'Drafting';
 export const WIKI_PLAN_HELD = 'Held';
-export const WIKI_PLAN_FAILED = 'Didn’t pass the plan check';
+export const WIKI_PLAN_READY = 'Ready for review';
 export const WIKI_PLAN_PASSED = 'Passed the plan check';
 export const WIKI_PLAN_WRITING = 'Writing documents';
 export const WIKI_PLAN_JOB_FAILED = 'The draft didn’t finish';
+export const WIKI_PLAN_REDRAFT_FAILED = 'The redraft didn’t finish';
 export const WIKI_PLAN_BUILD_FAILED = 'Writing documents didn’t finish';
 /** What stands after a queued job's title: it waits for the maintenance run that is going. */
 export const WIKI_PLAN_QUEUED_TEXT = 'starts after the Wiki maintenance run that’s going now';
 
-const attemptsOf = (job: WikiPlanJob): number => job.attempt ?? wikiPlanDraftReport(job)?.attempts.length ?? job.attemptsMax;
-
-/** How many of the gate's four checks a failed draft's errors fall under. */
-export const wikiPlanFailedChecks = (errors: readonly WikiPlanGateError[]): number => new Set(errors.map((error) => error.check)).size;
+/** Why a job left no draft, and what stands: its own words, then the version nothing happened to. */
+export function wikiPlanFailedText(job: Pick<WikiPlanJob, 'error'>, state: Pick<WikiPlanState, 'confirmed' | 'draft'>): string {
+  const why = job.error ?? 'Its run ended without a draft.';
+  if (state.draft) return `${why} Draft v${state.draft.version} is unchanged.`;
+  return `${why} ${state.confirmed ? `v${state.confirmed.version} stays in force.` : 'Nothing was saved.'}`;
+}
 
 /** The run a job's card opens: the session of a job a task made before server execution, which kept it. */
 const runLink = (sessionId: string | null | undefined): WikiPlanJobCard['link'] =>
@@ -586,14 +491,15 @@ const runLink = (sessionId: string | null | undefined): WikiPlanJobCard['link'] 
  * documents being written, with how many and the one being written now (the build its confirmation asked
  * for), or that the writing stopped short.
  *
- * `job` is the plan's job as read; `failed` the failed draft the page shows, if it shows one.
+ * `job` is the plan's job as read; `failed` the job that left no draft, if the plan shows one, with the versions it
+ * left as they were.
  */
 export function wikiPlanJobCard(
   job: WikiPlanJob | null,
   context: {
     now: number;
     runnerOnline: boolean | null;
-    failed?: WikiPlanJob | null;
+    failed?: { job: WikiPlanJob; state: Pick<WikiPlanState, 'confirmed' | 'draft'> } | null;
     /** The version shown is the one in force: its writing is what the card says. */
     inForce?: boolean;
     directory?: WikiDocsDirectory | null;
@@ -634,16 +540,8 @@ export function wikiPlanJobCard(
   }
   const failed = context.failed ?? null;
   if (failed) {
-    if (failed.errors.length === 0) {
-      return { look: 'failed', title: WIKI_PLAN_JOB_FAILED, text: failed.error ?? 'Its run ended without a draft.', link: runLink(failed.sessionId), progress: null };
-    }
-    return {
-      look: 'failed',
-      title: WIKI_PLAN_FAILED,
-      text: `${wikiPlanFailedChecks(failed.errors)} of ${WIKI_PLAN_GATE_CHECKS.length} checks failed · after ${plural(attemptsOf(failed), 'attempt', 'attempts')} · ${plural(failed.errors.length, 'error', 'errors')} listed below`,
-      link: null,
-      progress: null,
-    };
+    const title = failed.state.confirmed || failed.state.draft ? WIKI_PLAN_REDRAFT_FAILED : WIKI_PLAN_JOB_FAILED;
+    return { look: 'failed', title, text: wikiPlanFailedText(failed.job, failed.state), link: runLink(failed.job.sessionId), progress: null };
   }
   const stopped = context.inForce && job && job.kind === 'build' && job.state === 'failed' ? job : null;
   if (stopped) {
@@ -710,7 +608,7 @@ export interface WikiPlanGate {
   refs: WikiPlanRefRow[];
 }
 
-/** How many of a failed draft's reference rows the report lists before `Show N more`. */
+/** How many of a draft's references not found the report lists before `Show N more`. */
 export const WIKI_PLAN_REFS_SHOWN = 6;
 /** The phone's, which lists fewer. */
 export const WIKI_PLAN_REFS_SHOWN_PHONE = 3;
@@ -731,41 +629,13 @@ function refKind(path: string): [string, string] {
   return ['Reference', 'references'];
 }
 
-/** The document and section a gate error's path names: `plan.docs[12].sections[2]…` is `7.2 §3`. */
+/** The document and section a reference's path names: `plan.docs[12].sections[2]…` is `7.2 §3`. */
 export function wikiPlanErrorWhere(shown: WikiPlanShown, path: string): { doc: WikiPlanShownDoc | null; where: string } {
   const doc = /(?:^|\.)docs\[(\d+)\]/u.exec(path);
   const section = /\.sections\[(\d+)\]/u.exec(path);
   const row = doc ? (shown.docs[Number(doc[1])] ?? null) : null;
   if (!row) return { doc: null, where: '—' };
   return { doc: row, where: section ? `${row.number} §${Number(section[1]) + 1}` : row.number };
-}
-
-/** The value at a gate error's path in the shown plan: the reference it could not find. */
-function valueAt(shown: WikiPlanShown, path: string): string | null {
-  const doc = /(?:^|\.)docs\[(\d+)\]/u.exec(path);
-  const section = /\.sections\[(\d+)\]/u.exec(path);
-  const row = doc ? shown.docs[Number(doc[1])] : undefined;
-  const s = row && section ? row.sections[Number(section[1])] : undefined;
-  if (!s) return null;
-  let m: RegExpExecArray | null;
-  if ((m = /\.sources\.code\[(\d+)\]\.symbols\[(\d+)\]$/u.exec(path))) {
-    const code = s.sources.code[Number(m[1])];
-    return code ? `${code.symbols[Number(m[2])] ?? ''} in ${code.path}` : null;
-  }
-  if ((m = /\.sources\.code\[(\d+)\]/u.exec(path))) return s.sources.code[Number(m[1])]?.path ?? null;
-  if ((m = /\.sources\.docs\[(\d+)\]\.section$/u.exec(path))) {
-    const source = s.sources.docs[Number(m[1])];
-    return source ? `${source.path} § ${source.section ?? ''}` : null;
-  }
-  if ((m = /\.sources\.docs\[(\d+)\]/u.exec(path))) return s.sources.docs[Number(m[1])]?.path ?? null;
-  if ((m = /\.sources\.contracts\[(\d+)\]/u.exec(path))) return s.sources.contracts[Number(m[1])]?.path ?? null;
-  const sessions = s.sources.sessions;
-  if (!sessions) return null;
-  if ((m = /\.projects\[(\d+)\]$/u.exec(path))) return sessions.projects[Number(m[1])]?.title ?? null;
-  if ((m = /\.topics\[(\d+)\]$/u.exec(path))) return sessions.topics[Number(m[1])] ?? null;
-  if ((m = /\.anchorPaths\[(\d+)\]$/u.exec(path))) return sessions.anchorPaths[Number(m[1])] ?? null;
-  if ((m = /\.entryKinds\[(\d+)\]$/u.exec(path))) return sessions.entryKinds[Number(m[1])] ?? null;
-  return null;
 }
 
 /** The sections a protected document of the base lost in the shown draft, and where each went. */
@@ -814,10 +684,27 @@ export function wikiPlanProtectedText(shown: WikiPlanShown, base: WikiPlanShown 
   return `${changed.join('; ')}.${rest}`;
 }
 
+/** What a reference not found was looked for in: why the report lists it. */
+const MISS_WHY: Record<WikiPlanRepoRefKind, string> = {
+  file: 'no such file',
+  docSection: 'no such heading',
+  symbol: 'not in the file',
+  contract: 'no such file',
+};
+
+/** How many things a stored draft says to look at: its references not found, a count outside its target, its notes. */
+export function wikiPlanToLook(version: { gate: WikiPlanGateReport | null; repoCheck: WikiPlanRepoCheck | null; target: { min: number; max: number }; docs: readonly unknown[] }): number {
+  const docs = version.gate?.docs ?? version.docs.length;
+  const target = version.gate?.target ?? version.target;
+  const outside = docs < target.min || docs > target.max;
+  return (version.repoCheck?.missing.length ?? 0) + (version.gate?.notes?.length ?? 0) + (outside ? 1 : 0);
+}
+
 /**
- * The gate's report for what the page shows (mock 21 ①, E): a stored version passed it — its report says
- * what was checked, and the runner's repository check how many references were found — and a failed
- * draft carries the errors of its last round, each placed where it was found.
+ * The gate's report for what the page shows (mock 40, 21 E): what was checked, and what the draft says to look at —
+ * the references not found, each placed where it stands, a count outside the target, and the notes of its last
+ * round under the check each belongs to. A stored draft can always be confirmed: the amber look says read this, and
+ * nothing here stands in the way.
  */
 export function wikiPlanGate(
   shown: WikiPlanShown,
@@ -825,80 +712,61 @@ export function wikiPlanGate(
 ): WikiPlanGate {
   const sha = shown.repoCheck ? shortSha(shown.repoCheck.sha) : null;
   const at = sha ? ` · references checked at ${sha}` : '';
-  if (shown.status !== 'failed') {
-    const gate = shown.gate;
-    const docs = gate?.docs ?? shown.docs.length;
-    const target = gate?.target ?? shown.target;
-    const skipped = gate?.checks.protected === 'skipped';
-    const newFields = gate?.needsNewFields ?? [];
-    const attempt = context.job?.version === shown.version && context.job.attempt ? `attempt ${context.job.attempt}` : null;
-    return {
-      passed: true,
-      title: WIKI_PLAN_PASSED,
-      line: `${WIKI_PLAN_GATE_CHECKS.length} checks${at}`,
-      aside: attempt,
-      rows: WIKI_PLAN_GATE_ORDER.map((check) => ({
-        check,
-        ok: true,
-        title: WIKI_PLAN_GATE_TITLES[check],
-        text:
-          check === 'docCount'
-            ? `${plural(docs, 'document', 'documents')} — within ${target.min}–${target.max}`
-            : check === 'protected'
-              ? skipped
-                ? 'Not checked — the version is your own edit'
-                : wikiPlanProtectedText(shown, context.base)
-              : check === 'references'
-                ? shown.repoCheck
-                  ? `All ${wikiCount(shown.repoCheck.checked)} found at ${sha}`
-                  : 'Every project and topic is this space’s'
-                : newFields.length === 0
-                  ? 'Every field is one the plan has'
-                  : `${plural(newFields.length, 'field', 'fields')} to add: ${newFields.map((field) => `${field.name} (${field.at})`).join(', ')}`,
-      })),
-      refKinds: [],
-      refs: [],
-    };
-  }
-
-  const byCheck = new Map<WikiPlanGateCheck, WikiPlanGateError[]>();
-  for (const error of shown.errors) byCheck.set(error.check, [...(byCheck.get(error.check) ?? []), error]);
-  const refErrors = byCheck.get('references') ?? [];
-  const kinds = new Map<string, number>();
-  const refs: WikiPlanRefRow[] = refErrors.map((error) => {
-    const [kind, many] = refKind(error.path);
-    kinds.set(many, (kinds.get(many) ?? 0) + 1);
-    const { where } = wikiPlanErrorWhere(shown, error.path);
-    return { where, kind, ref: valueAt(shown, error.path) ?? error.path, why: error.message };
-  });
-  const checked = wikiPlanDraftReport(context.job)?.repo?.checked ?? null;
-  const job = context.job;
-  const rows = WIKI_PLAN_GATE_ORDER.map((check): WikiPlanGateRow => {
-    const errors = byCheck.get(check) ?? [];
-    const ok = errors.length === 0;
-    let text: string;
+  const gate = shown.gate;
+  const docs = gate?.docs ?? shown.docs.length;
+  const target = gate?.target ?? shown.target;
+  const skipped = gate?.checks.protected === 'skipped';
+  const newFields = gate?.needsNewFields ?? [];
+  const notes = gate?.notes ?? [];
+  const missing = shown.repoCheck?.missing ?? [];
+  const outside = docs < target.min || docs > target.max;
+  const toLook = wikiPlanToLook(shown);
+  const attempt = context.job?.version === shown.version && context.job.attempt ? `attempt ${context.job.attempt}` : null;
+  const rowOf = (check: WikiPlanGateCheck): WikiPlanGateRow => {
+    const title = WIKI_PLAN_GATE_TITLES[check];
     if (check === 'docCount') {
-      text = `${plural(shown.docs.length, 'document', 'documents')} — ${ok ? 'within' : 'the plan asks for'} ${shown.target.min}–${shown.target.max}`;
-    } else if (check === 'protected') {
-      text = ok ? wikiPlanProtectedText(shown, context.base) : context.base ? wikiPlanProtectedText(shown, context.base) : errors.map((e) => e.message).join(' ');
-    } else if (check === 'references') {
-      text = ok
-        ? checked !== null && sha
-          ? `All ${wikiCount(checked)} found at ${sha}`
-          : 'Every reference was found'
-        : `${wikiCount(errors.length)}${checked !== null ? ` of ${wikiCount(checked)}` : ''} not found${sha ? ` at ${sha}` : ''} — files, symbols and headings on origin/main; projects and topics in this space`;
-    } else {
-      text = ok ? 'Every field is one the plan has' : `${plural(errors.length, 'field isn’t', 'fields aren’t')} the plan’s: ${errors.slice(0, 3).map((e) => `${e.path} ${e.message}`).join('; ')}`;
+      return outside
+        ? { check, ok: false, title, text: `${plural(docs, 'document', 'documents')} — the plan asks for ${target.min}–${target.max}. Confirm it as it is, or Redraft with what to merge or split.` }
+        : { check, ok: true, title, text: `${plural(docs, 'document', 'documents')} — within ${target.min}–${target.max}` };
     }
-    return { check, ok, title: WIKI_PLAN_GATE_TITLES[check], text };
+    if (check === 'protected') return { check, ok: true, title, text: skipped ? 'Not checked — the version is your own edit' : wikiPlanProtectedText(shown, context.base) };
+    if (check === 'references') {
+      if (missing.length > 0) {
+        const checked = shown.repoCheck!.checked;
+        return {
+          check,
+          ok: false,
+          title,
+          text: `${wikiCount(Math.max(0, checked - missing.length))} of ${wikiCount(checked)} found at ${sha} — the rest stay on their sections, and a document is written without any that’s still missing`,
+        };
+      }
+      return { check, ok: true, title, text: shown.repoCheck ? `All ${wikiCount(shown.repoCheck.checked)} found at ${sha}` : 'Every project and topic is this space’s' };
+    }
+    return {
+      check,
+      ok: true,
+      title,
+      text: newFields.length === 0
+        ? 'Every field is one the plan has'
+        : `${plural(newFields.length, 'field', 'fields')} to add: ${newFields.map((field) => `${field.name} (${field.at})`).join(', ')}`,
+    };
+  };
+  const kinds = new Map<string, number>();
+  const refs: WikiPlanRefRow[] = missing.map((miss) => {
+    const path = miss.at ?? '';
+    const [kind, many] = refKind(path);
+    kinds.set(many, (kinds.get(many) ?? 0) + 1);
+    return { where: wikiPlanErrorWhere(shown, path).where, kind, ref: miss.ref, why: MISS_WHY[miss.kind] };
   });
-  const failedChecks = wikiPlanFailedChecks(shown.errors);
   return {
-    passed: false,
-    title: WIKI_PLAN_FAILED,
-    line: `${failedChecks} of ${WIKI_PLAN_GATE_CHECKS.length} checks failed${at}`,
-    aside: job ? `${shown.model ?? WIKI_HISTORY_MAINTENANCE} tried ${plural(attemptsOf(job), 'time', 'times')}` : null,
-    rows,
+    passed: toLook === 0,
+    title: toLook === 0 ? WIKI_PLAN_PASSED : WIKI_PLAN_READY,
+    line: toLook === 0 ? `${WIKI_PLAN_GATE_CHECKS.length} checks${at}` : `${wikiCount(toLook)} to look at${at}`,
+    aside: attempt,
+    rows: WIKI_PLAN_GATE_ORDER.flatMap((check) => [
+      rowOf(check),
+      ...notes.filter((note) => note.check === check).map((note): WikiPlanGateRow => ({ check, ok: false, title: WIKI_PLAN_GATE_TITLES[check], text: note.text })),
+    ]),
     refKinds: [...kinds.entries()].sort((a, b) => b[1] - a[1]).map(([many, count]) => `${wikiCount(count)} ${count === 1 ? many.replace(/ies$/u, 'y').replace(/s$/u, '') : many}`),
     refs,
   };
@@ -917,13 +785,14 @@ export const wikiPlanCategoryLine = (category: Pick<WikiPlanShownCategory, 'docs
 /** A document's line: `5 sections · 1,200–2,000 chars`. */
 export const wikiPlanDocLine = (doc: Pick<WikiPlanShownDoc, 'sections' | 'length'>): string =>
   `${plural(doc.sections.length, 'section', 'sections')} · ${wikiPlanChars(doc.length)}`;
-export const wikiPlanErrorCount = (count: number): string => plural(count, 'error', 'errors');
+export const wikiPlanNotFoundCount = (count: number): string => `${wikiCount(count)} not found`;
 export const wikiPlanChangeCount = (count: number): string => plural(count, 'change', 'changes');
 
-/** The failed draft's errors that fall in one document. */
-export function wikiPlanDocErrors(shown: WikiPlanShown, doc: Pick<WikiPlanShownDoc, 'index'>): WikiPlanGateError[] {
-  const at = new RegExp(`(?:^|\\.)docs\\[${doc.index}\\](?:\\.|$)`, 'u');
-  return shown.errors.filter((error) => at.test(error.path));
+/** The references not found in one document. */
+export function wikiPlanDocMissing(shown: WikiPlanShown, doc: Pick<WikiPlanShownDoc, 'index'>): WikiPlanRepoCheck['missing'] {
+  // From the path's start: `.sources.docs[1]` further along is a section's source, not the second document.
+  const at = new RegExp(`^(?:plan\\.)?docs\\[${doc.index}\\](?:\\.|$)`, 'u');
+  return (shown.repoCheck?.missing ?? []).filter((miss) => !!miss.at && at.test(miss.at));
 }
 
 export const WIKI_PLAN_QUESTION = 'Question';
@@ -981,13 +850,6 @@ export function wikiPlanSourcesSummary(section: Pick<WikiPlanShownSection, 'kind
 export const wikiPlanSectionLine = (section: WikiPlanShownSection): string =>
   [wikiSectionKindLabel(section.kind), wikiPlanSectionChars(section.length), wikiPlanSourcesSummary(section)].join(' · ');
 
-/** A section lost from a protected document, in the draft's own rows (mock 21 ④): `v1 §7 已知的坑`. */
-export const wikiPlanLostLabel = (base: number, n: number, title: string): string => `v${base} §${n} ${title}`;
-export const wikiPlanMovedTo = (number: string): string => `moved to ${number}`;
-export const wikiPlanProtectedMove = (number: string): string => `${number} is protected — a redraft can’t move its sections out`;
-/** The same on a phone, in one line: `Moved to 11.3 — 3.1 is protected`. */
-export const wikiPlanProtectedMovePhone = (movedTo: string | null, number: string): string =>
-  `${movedTo ? `Moved to ${movedTo}` : 'Moved out'} — ${number} is protected`;
 
 /** A section's sources, opened (mock 21 ④, 22 ④⑤). */
 export const WIKI_PLAN_SOURCE_DOCS = 'Design docs';
@@ -1023,9 +885,8 @@ export function wikiPlanSectionMeta(shown: WikiPlanShown, section: WikiPlanShown
 }
 
 /**
- * Whether a section's repository source was found: the runner's check says what it missed, at a path
- * (`docs[3].sections[2].code[0]`), and a failed draft's errors say where. Null for a version no runner
- * checked — an owner's edit — which the page then marks neither way.
+ * Whether a section's repository source was found: the check says what it missed, at a path
+ * (`docs[3].sections[2].code[0]`). Null for a version no check reached, which the page marks neither way.
  */
 export function wikiPlanSourceFound(
   shown: WikiPlanShown,
@@ -1036,9 +897,7 @@ export function wikiPlanSourceFound(
 ): boolean | null {
   const tail = `docs[${doc.index}].sections[${section}].sources.${kind}[${at}]`;
   const plain = `docs[${doc.index}].sections[${section}].${kind}[${at}]`;
-  const missed =
-    shown.errors.some((error) => error.check === 'references' && (error.path.includes(tail) || error.path.includes(plain)))
-    || (shown.repoCheck?.missing ?? []).some((miss) => !!miss.at && (miss.at.includes(tail) || miss.at.includes(plain)));
+  const missed = (shown.repoCheck?.missing ?? []).some((miss) => !!miss.at && (miss.at.includes(tail) || miss.at.includes(plain)));
   if (missed) return false;
   return shown.repoCheck ? true : null;
 }
@@ -1209,7 +1068,7 @@ export const wikiPlanConfirmed = (version: number): string => `Plan v${version} 
 export const wikiPlanChangeAdded = (version: number): string => `Change added to draft v${version}`;
 export const WIKI_PLAN_CHANGE_REJECTED = 'Change rejected';
 export const wikiPlanDraftSaved = (version: number): string => `Draft v${version} saved`;
-export const WIKI_PLAN_REDRAFT_ASKED = 'Redraft asked for — it runs as a Wiki maintenance task';
+export const WIKI_PLAN_REDRAFT_ASKED = 'Redraft asked for — it runs on the server with the System model';
 export const WIKI_PLAN_REDRAFT_ALREADY = 'A draft is already on its way';
 /** The gate refused an accepted change on the plan it now meets (the plan moved since it was proposed). */
 export const WIKI_PLAN_ACCEPT_REFUSED = 'This change no longer passes the plan check, so nothing was confirmed:';
@@ -1240,15 +1099,34 @@ export function wikiPlanUpdateDocs(
 
 export const WIKI_PLAN_REDRAFT_TITLE = 'Redraft the plan';
 export const WIKI_PLAN_REDRAFT_GO = 'Redraft';
-export const WIKI_PLAN_REDRAFT_PLACEHOLDER = 'What should change: what to merge, split, move or leave out';
+export const WIKI_PLAN_REDRAFT_PLACEHOLDER = 'What should change: what to merge, add or leave out';
 
-/** The dialog's sentence: what drafts it again, from which version, and how often it retries. */
+/** Whether the words can be sent: a redraft reads the version stored, so it needs them; with none stored, it may go empty. */
+export const wikiPlanRedraftReady = (state: Pick<WikiPlanState, 'confirmed' | 'draft'>, words: string): boolean =>
+  wikiPlanNewest(state) === null || words.trim() !== '';
+
+/** What the box opens holding: the words of the run that failed, to send again or change. */
+export const wikiPlanRedraftWords = (state: Pick<WikiPlanState, 'confirmed' | 'draft' | 'job'>): string =>
+  wikiPlanFailedJob(state)?.instructions ?? '';
+
+/** The dialog's sentence: what drafts it again, and from which version. */
 export function wikiPlanRedraftNote(from: { version: number; inForce: boolean } | null): string {
   const base = from ? (from.inForce ? ` from v${from.version}, the plan in force,` : ` from draft v${from.version},`) : '';
-  return (
-    `The ${WIKI_PLAN_DRAFTER_SERVER} drafts it again${base} with what you write here. A draft that doesn’t pass the plan check is `
-    + `redrafted with its errors, up to ${WIKI_PLAN_JOB_RULES.attemptsMax} times.`
-  );
+  return `The ${WIKI_PLAN_DRAFTER_SERVER} drafts it again${base} with what you write here.`;
+}
+
+export const WIKI_PLAN_START_OVER = 'Start over…';
+export const WIKI_PLAN_START_OVER_TITLE = 'Start over';
+export const WIKI_PLAN_START_OVER_GO = 'Start over';
+export const wikiPlanStartOverText = (version: number): string =>
+  `Writes a new plan from the repository. It doesn’t read v${version}: only protected documents stay. Once you confirm it, most documents are written again.`;
+
+/**
+ * The version Start over… would leave unread, or null when the menu has no such item: only with a version stored, since
+ * Draft plan asks for a first one, and no draft job open. It sends the redraft with no instructions: a fresh draft.
+ */
+export function wikiPlanStartOver(state: Pick<WikiPlanState, 'confirmed' | 'draft' | 'job'>): number | null {
+  return wikiPlanOpenJob(state) ? null : (wikiPlanNewest(state)?.version ?? null);
 }
 
 /** `Protected, kept as they are: 3.1 · 4.2 · 7.1`. */
@@ -1476,7 +1354,7 @@ export function wikiPlanBanner(
         : { text: `${what} — set up maintenance`, tone: 'amber', to: 'settings' };
     }
     case 'draftFailed':
-      return { text: 'Plan draft didn’t pass the check', tone: 'amber', to: 'plan' };
+      return { text: 'Plan draft didn’t finish', tone: 'amber', to: 'plan' };
     case 'draftReady':
       return { text: 'Plan draft ready to confirm', tone: 'amber', to: 'plan' };
     case 'changes':
@@ -1559,14 +1437,11 @@ export function wikiPlanCard(
     }
     case 'draftFailed': {
       const job = wikiPlanFailedJob(state)!;
-      const version = wikiPlanNextVersion(state);
-      const checks = wikiPlanFailedChecks(job.errors);
-      const how = job.errors.length > 0 ? ` after ${plural(attemptsOf(job), 'attempt', 'attempts')} — ${checks} of ${WIKI_PLAN_GATE_CHECKS.length} checks failed` : '';
       return {
         dot: 'amber',
         count: 1,
         sub: null,
-        text: `Draft v${version} didn’t pass the plan check${how}.${inForce ? ` ${inForce} stays in force.` : ''}`,
+        text: `${state.confirmed || state.draft ? WIKI_PLAN_REDRAFT_FAILED : WIKI_PLAN_JOB_FAILED}. ${wikiPlanFailedText(job, state)}`,
         primary: planButton,
         secondary: null,
         note: inForce ? `redraft of ${inForce}` : null,
@@ -1574,11 +1449,12 @@ export function wikiPlanCard(
     }
     case 'draftReady': {
       const draft = state.draft!;
+      const toLook = wikiPlanToLook(draft);
       return {
         dot: 'amber',
         count: 1,
         sub: null,
-        text: `Draft v${draft.version} passed the plan check and waits for you. Documents are written once you confirm it.`,
+        text: `Draft v${draft.version} ${toLook === 0 ? 'passed the plan check and waits for you' : `is ready for review, with ${wikiCount(toLook)} to look at`}. Documents are written once you confirm it.`,
         primary: planButton,
         secondary: null,
         note: `${plural(draft.categories.length, 'category', 'categories')} · ${plural(draft.docs.length, 'document', 'documents')}`,
@@ -1653,7 +1529,7 @@ export function wikiPlanCardRow(proposal: WikiPlanProposal, base: WikiPlanShown 
 // ── The page's order ────────────────────────────────────────────────────────────────────────────
 
 /** The plan page's blocks, top to bottom — the web phone's order, and the one iOS draws (mock 22 ②). */
-export const WIKI_PLAN_PAGE_SECTIONS = ['crumb', 'title', 'meta', 'actions', 'hint', 'job', 'gate', 'changes', 'documents'] as const;
+export const WIKI_PLAN_PAGE_SECTIONS = ['crumb', 'title', 'meta', 'actions', 'job', 'gate', 'changes', 'documents'] as const;
 /** A document's own page on a phone (mock 22 ③). */
 export const WIKI_PLAN_DOC_SECTIONS = ['crumb', 'title', 'meta', 'fields', 'sections'] as const;
 /** A section's own page on a phone (mock 22 ④⑤). */

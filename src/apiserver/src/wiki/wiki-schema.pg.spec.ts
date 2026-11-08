@@ -359,6 +359,14 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
         })),
       },
       {
+        // 0488: who answered a challenge. NULL reads as the owner's, so only the three sources are values.
+        table: 'wiki_changeset_op', column: 'answered_by', constraint: 'wiki_changeset_op_answered_by_chk',
+        values: CONTRACT.reviewModes.challenge.answeredBy,
+        write: (answeredBy) => insert(client, 'wiki_changeset_op', opRow({
+          id: PROBE, op: 'challenge', entry_id: ENTRY, answered_by: answeredBy,
+        })),
+      },
+      {
         table: 'wiki_exposure', column: 'channel', constraint: 'wiki_exposure_channel_chk',
         values: Object.keys(CONTRACT.exposureChannels),
         write: (channel) => insert(client, 'wiki_exposure', exposureRow({ id: PROBE, channel })),
@@ -545,6 +553,13 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
     await refuses(op({ spot_check: true }), 'wiki_changeset_op_spot_check_chk',
       'a spot check of an op no review mode applied');
     await admits(client, () => op({ op: 'amend', entry_id: ENTRY, base_revision: 1, applied_by_mode: 'tiered', spot_check: true })());
+    // 0488: only an amend answers a challenge, and only a challenge records who answered it.
+    await admits(client, () => op({ op: 'amend', entry_id: ENTRY, base_revision: 1, answers_challenge: id(62) })());
+    await refuses(op({ op: 'add', answers_challenge: id(62) }), 'wiki_changeset_op_answers_challenge_op_chk',
+      'an add answers no challenge');
+    await admits(client, () => op({ op: 'challenge', entry_id: ENTRY, answered_by: 'agent' })());
+    await refuses(op({ answered_by: 'agent' }), 'wiki_changeset_op_answered_by_op_chk',
+      'an add records no answer source');
     // 0312: an op waiting for its verdict is undecided and carries none; a verdict is a whole trail;
     // a duplicate names what it duplicates and nothing else names anything; only an add or an amend
     // ever waits for a verdict or carries one.
@@ -583,15 +598,17 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
       'wiki_changeset_op_verification_duplicate_chk', 'a supported op naming a duplicate');
     await refuses(op({ verification_duplicate_of: ENTRY }),
       'wiki_changeset_op_verification_duplicate_chk', 'a duplicate named with no verdict at all');
-    // 0314: what the verifier could read is one of two words, and only ever beside a verdict; the
+    // 0314, 0470: what the verifier could read is one of three words, and only ever beside a verdict; the
     // earlier verdicts of a reopened op are a list, empty for every other op.
-    for (const evidence of ['readable', 'unreadable']) {
+    for (const evidence of ['readable', 'second_hand', 'unreadable']) {
       await admits(client, () => op({ decision: 'auto_applied', decided_at: new Date(), applied_by_mode: 'automatic', ...trail, verification_evidence: evidence })());
     }
     await refuses(op({ decision: 'auto_applied', decided_at: new Date(), ...trail, verification_evidence: 'partly' }),
-      'wiki_changeset_op_verification_evidence_chk', 'a mark that is neither of the two');
-    await refuses(op({ decision: 'verifying', verification_evidence: 'unreadable' }),
-      'wiki_changeset_op_verification_evidence_chk', 'what a verifier could read, with no verdict beside it');
+      'wiki_changeset_op_verification_evidence_chk', 'a mark that is none of the three');
+    for (const evidence of ['unreadable', 'second_hand']) {
+      await refuses(op({ decision: 'verifying', verification_evidence: evidence }),
+        'wiki_changeset_op_verification_evidence_chk', 'what a verifier could read, with no verdict beside it');
+    }
     await refuses(op({ verification_history: JSON.stringify({ verdict: 'unsupported' }) }),
       'wiki_changeset_op_verification_history_chk', 'earlier verdicts that are not a list');
     await admits(client, () => op({ decision: 'verifying', verification_history: JSON.stringify([{ verdict: 'unsupported', reopenedAt: '2026-09-28T00:00:00.000Z' }]) })());

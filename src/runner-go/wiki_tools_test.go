@@ -37,6 +37,16 @@ func wikiSurface(t *testing.T) map[string]interface{} {
 	return wikiContract(t)["agentSurface"].(map[string]interface{})
 }
 
+// wikiJSONNames is the names a struct's fields are serialized under, in the order they are declared.
+func wikiJSONNames(typ reflect.Type) []string {
+	var names []string
+	for i := 0; i < typ.NumField(); i++ {
+		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+		names = append(names, name)
+	}
+	return names
+}
+
 func wikiDescriptor(t *testing.T, name string) map[string]interface{} {
 	t.Helper()
 	for _, tool := range toolDescriptors(false, false) {
@@ -90,15 +100,20 @@ func wikiMCP(t *testing.T, serverURL string) *mcpServer {
 	return &mcpServer{t: NewTransport(serverURL, "runner-token"), sessionID: "caller-session"}
 }
 
+const wikiNoteReply = `{"noted":true,"noteId":"n1","created":true,"readBy":"the next maintenance run"}`
+
 const wikiSearchReply = `{"q":"trgm index","semantic":false,"hits":[` +
 	`{"id":"34UuAT2stjMI2hEFUKr9X","kind":"decision","title":"pg_trgm over ILIKE","summary":"The keyword leg uses the trigram index.",` +
-	`"trust":"confirmed","anchorState":"verified","match":["keyword"],"score":0.032787}]}`
+	`"trust":"confirmed","anchorState":"verified","match":["keyword"],"score":0.032787,` +
+	`"recordedAt":"2026-10-03T11:39:54.768Z","changedAt":"2026-10-05T08:00:12.001Z",` +
+	`"anchorCheckedRef":"7de4f86bcf1c01d2fcff6d154a039e5c54961df8","anchorCheckedAt":"2026-10-10T06:46:16.532Z"}]}`
 
 // ── The surface ─────────────────────────────────────────────────────────────────────────────────
 
-// Three tools, and no more: the contract names them, the CLI has a command per tool (the parity test
+// Five tools, and no more: the contract names them, the CLI has a command per tool (the parity test
 // walks that), and the two halves of this file — tool descriptors and capability specs — are here.
-// A fourth tool added on one side is caught by whichever table the other side did not grow.
+// A sixth tool added on one side is caught by whichever table the other side did not grow. The
+// fifth, wiki_draft, joined with the binary that serves it (contract `agentSurface.chat.draft.arrival`).
 func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 	surface := wikiSurface(t)
 	tools := surface["tools"].([]interface{})
@@ -119,11 +134,11 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 		}
 	}
 
-	// The risk split, which is the whole reason there are three tools: the contract says which are
-	// read-only and whether the one that writes destroys anything, and the annotations say it to the
+	// The risk split, which is the whole reason there are five tools: the contract says which are
+	// read-only and whether the ones that write destroy anything, and the annotations say it to the
 	// engine that decides whether to ask a human first.
 	specs := surface["toolSpecs"].(map[string]interface{})
-	for _, name := range []string{"wiki_search", "wiki_get", "wiki_propose"} {
+	for _, name := range []string{"wiki_search", "wiki_get", "wiki_propose", "wiki_note", "wiki_draft"} {
 		spec := specs[name].(map[string]interface{})
 		annotations, _ := wikiDescriptor(t, name)["annotations"].(map[string]interface{})
 		if annotations == nil {
@@ -148,9 +163,18 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 	params := map[string][]string{
 		"wiki_search":  {"query", "kinds", "topic", "paths", "limit"},
 		"wiki_get":     {"ids", "include"},
-		"wiki_propose": {"ops", "rationale", "idempotencyKey", "dryRun"},
+		"wiki_propose": {"ops", "rationale", "idempotencyKey", "dryRun", "replaces"},
+		"wiki_note":    {"text", "paths", "corrects", "replaces"},
+		"wiki_draft":   {"kind", "sections", "change", "reason", "replaces", "idempotencyKey"},
 	}
 	for name, want := range params {
+		// And the contract's own list for the tool, name for name: a parameter in one and not the other is caught here.
+		contractParams := sortedParamNames(specs[name].(map[string]interface{})["params"].(map[string]interface{}))
+		sortedWant := append([]string(nil), want...)
+		sort.Strings(sortedWant)
+		if !reflect.DeepEqual(contractParams, sortedWant) {
+			t.Errorf("the contract gives %s the params %v, this binary %v", name, contractParams, sortedWant)
+		}
 		schema := wikiDescriptor(t, name)["inputSchema"].(map[string]interface{})
 		props, _ := schema["properties"].(map[string]interface{})
 		for _, param := range want {
@@ -214,6 +238,30 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 		t.Errorf("wiki_search's hits say trust is one of %v, the contract %v", got, wikiTrustLevels)
 	}
 
+	// A hit is the contract's `hit`, field for field and in its order. The struct is all that reaches the
+	// engine — structuredContent and `orbit wiki search --json` are it serialized — so a field the server
+	// sends and the struct does not name never reaches the agent; and the outputSchema is what an engine
+	// holds structuredContent to. This is where a new hit field is first missed (age, 2026-11-06).
+	searchSpec := specs["wiki_search"].(map[string]interface{})
+	var hitFields []string
+	for _, field := range searchSpec["hit"].([]interface{}) {
+		hitFields = append(hitFields, field.(string))
+	}
+	if got := wikiJSONNames(reflect.TypeOf(wikiSearchHit{})); !reflect.DeepEqual(got, hitFields) {
+		t.Errorf("wikiSearchHit serializes %v, the contract's hit is %v", got, hitFields)
+	}
+	declared := sortedParamNames(hits.(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{}))
+	sortedHit := append([]string(nil), hitFields...)
+	sort.Strings(sortedHit)
+	if !reflect.DeepEqual(declared, sortedHit) {
+		t.Errorf("wiki_search's outputSchema declares %v, the contract's hit is %v", declared, hitFields)
+	}
+	for field := range searchSpec["age"].(map[string]interface{}) {
+		if field != "why" && !contains(hitFields, field) {
+			t.Errorf("the contract's age describes %s, which its hit does not carry", field)
+		}
+	}
+
 	// The limits a schema states are the contract's, or the tool promises a request the server
 	// refuses with a code the caller was never warned about.
 	limits := wikiContract(t)["limits"].(map[string]interface{})
@@ -254,7 +302,7 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 	if notTools == "" || !strings.Contains(notTools, "decide") {
 		t.Errorf("the contract stopped saying what an agent cannot do: %q", notTools)
 	}
-	if !wikiToolNames["wiki_propose"] || wikiToolNames["wiki_decide"] || wikiToolNames["wiki_accept"] {
+	if !wikiToolNames["wiki_propose"] || !wikiToolNames["wiki_note"] || wikiToolNames["wiki_decide"] || wikiToolNames["wiki_accept"] {
 		t.Errorf("the wiki tools = %v, and deciding is not one of them", wikiToolNames)
 	}
 }
@@ -272,7 +320,7 @@ func TestWikiProposeDescriptionIsAPrecondition(t *testing.T) {
 	}
 	description, _ := wikiDescriptor(t, "wiki_propose")["description"].(string)
 
-	// Every sentence of it, verbatim: a paraphrase is how "waits for the owner's review" becomes
+	// Every sentence of it, verbatim: a paraphrase is how "never call a pending op saved" becomes
 	// "the owner will see it" and the reader starts treating the write as done.
 	for _, sentence := range strings.Split(contract, ". ") {
 		sentence = strings.TrimSpace(sentence)
@@ -301,17 +349,35 @@ func TestWikiProposeDescriptionIsAPrecondition(t *testing.T) {
 		"a pitfall and its fix, a convention",
 		"Cite the turns or records it came from",
 		"a claim you cannot cite is not ready",
-		"What you propose waits for the owner's review",
-		"do not tell the user it is saved",
-		// And what the caller may not do with it: there is no tool, and the owner's decision is
-		// the only door. A model that believes it can confirm will offer to.
-		"You cannot accept, confirm, delete or overwrite an entry",
-		"the owner's decision is the only door",
-		// Recording it is not the same as it being true: what is recorded is a proposal either way.
-		"nothing here is knowledge yet",
+		"Whether it takes effect depends on the space's review mode",
+		"what has taken effect other sessions can find in a search",
+		"never call a pending op saved",
+		// What each status means in each mode (contract `reviewModes.effect`).
+		"applied: it is live now, and other sessions of this space can find it",
+		"in a Tiered space most adds and amends",
+		"In a Manual space it waits for the owner in Review",
+		"in an Automatic space a verification reads the sources it cites and its verdict decides",
+		"a supersede or a retire waits for the owner in every mode",
+		// And what the caller may not do with it: there is no tool. A model that believes it can
+		// confirm will offer to.
+		"You cannot accept, confirm or delete an entry",
 	} {
 		if !strings.Contains(description, phrase) {
 			t.Errorf("the wiki_propose description does not say %q", phrase)
+		}
+	}
+	// What it said until 2026-11, true of a Manual space alone: in a Tiered space an add is live and
+	// searchable at once, and an Automatic space's verdict decides with no owner involved. So each of
+	// these told a session something false about where what it wrote had gone.
+	for _, phrase := range []string{
+		"waits for the owner's review",
+		"nothing here reached any other session",
+		"nothing here is knowledge",
+		"PROPOSAL either way",
+		"the owner's decision is the only door",
+	} {
+		if strings.Contains(description, phrase) {
+			t.Errorf("the wiki_propose description still says %q, which holds in a Manual space alone", phrase)
 		}
 	}
 	// Both halves of the copy the memory rule is about: ask first, and say what happens next.
@@ -324,7 +390,7 @@ func TestWikiProposeDescriptionIsAPrecondition(t *testing.T) {
 	// tool is noise, and noise is what makes the reader skim the real one.
 	for _, name := range []string{"wiki_search", "wiki_get"} {
 		text, _ := wikiDescriptor(t, name)["description"].(string)
-		if strings.Contains(text, "do not tell the user it is saved") {
+		if strings.Contains(text, "never call a pending op saved") {
 			t.Errorf("%s carries the proposal precondition", name)
 		}
 	}
@@ -394,6 +460,72 @@ func TestWikiToolsSendWhatWasAskedToTheirRoutes(t *testing.T) {
 			},
 			reply: `{"changesetId":null,"replayed":false,"ops":[{"seq":0,"status":"applied","revision":2,"entryId":"e1"}]}`,
 		},
+		{
+			name: "wiki_note",
+			args: map[string]interface{}{
+				"text":     "  release.sh next tags at once.\n",
+				"paths":    []interface{}{" scripts/release.sh ", "scripts/release.sh", "docs/release-process.md"},
+				"corrects": " e1 ",
+			},
+			uri: "/api/runner/wiki/notes",
+			body: map[string]interface{}{
+				"text":     "release.sh next tags at once.",
+				"paths":    []interface{}{"scripts/release.sh", "docs/release-process.md"},
+				"corrects": "e1",
+			},
+			reply: wikiNoteReply,
+		},
+		{
+			name:  "wiki_note: a claim alone sends nothing else",
+			args:  map[string]interface{}{"text": "release.sh next tags at once."},
+			uri:   "/api/runner/wiki/notes",
+			body:  map[string]interface{}{"text": "release.sh next tags at once."},
+			reply: wikiNoteReply,
+		},
+		{
+			name: "wiki_note: in a wiki chat, the card a corrects replaces",
+			args: map[string]interface{}{"text": "The lease is two minutes now.", "corrects": "e1", "replaces": " d1 "},
+			uri:  "/api/runner/wiki/notes",
+			body: map[string]interface{}{"text": "The lease is two minutes now.", "corrects": "e1", "replaces": "d1"},
+			reply: `{"noted":true,"noteId":"n1","created":true,"readBy":"the next maintenance run",` +
+				`"challenged":{"status":"draft","draftId":"d2","entryId":"e1"}}`,
+		},
+		{
+			name: "wiki_propose: in a wiki chat, the card it replaces",
+			args: map[string]interface{}{
+				"ops":            []interface{}{map[string]interface{}{"op": "retire", "entryId": "e1", "baseRevision": float64(2), "reason": "gone"}},
+				"rationale":      "the owner says it is gone",
+				"idempotencyKey": "chat-2",
+				"replaces":       "d1",
+			},
+			uri: "/api/runner/wiki/changesets",
+			body: map[string]interface{}{
+				"ops":            []interface{}{map[string]interface{}{"op": "retire", "entryId": "e1", "baseRevision": float64(2), "reason": "gone"}},
+				"rationale":      "the owner says it is gone",
+				"idempotencyKey": "chat-2",
+				"replaces":       "d1",
+			},
+			reply: `{"status":"draft","draftId":"d2","replayed":false,"ops":[{"seq":0,"status":"draft","entryId":"e1"}],"similar":[],"rewrites":[]}`,
+		},
+		{
+			name: "wiki_draft",
+			args: map[string]interface{}{
+				"kind":           " Rewrite ",
+				"sections":       []interface{}{map[string]interface{}{"doc": " sessions-runtime ", "section": "leases"}},
+				"reason":         " The lease moved to two minutes on main. ",
+				"idempotencyKey": " draft-1 ",
+				"replaces":       "d1",
+			},
+			uri: "/api/runner/wiki/drafts",
+			body: map[string]interface{}{
+				"kind":           "rewrite",
+				"sections":       []interface{}{map[string]interface{}{"doc": "sessions-runtime", "section": "leases"}},
+				"reason":         "The lease moved to two minutes on main.",
+				"idempotencyKey": "draft-1",
+				"replaces":       "d1",
+			},
+			reply: `{"status":"draft","draftId":"d2","kind":"rewrite","replayed":false,"rewrites":[{"doc":"sessions-runtime","key":"leases","where":"1.1 §3","title":"Leases"}]}`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -411,7 +543,7 @@ func TestWikiToolsSendWhatWasAskedToTheirRoutes(t *testing.T) {
 				t.Fatalf("request = %s %s (session %q), want %s from caller-session", got.method, got.uri, got.session, tc.uri)
 			}
 			wantMethod := http.MethodGet
-			if name == "wiki_propose" {
+			if name == "wiki_propose" || name == "wiki_note" || name == "wiki_draft" {
 				wantMethod = http.MethodPost
 			}
 			if got.method != wantMethod {
@@ -471,6 +603,10 @@ func TestWikiToolsRefuseMalformedRequestsWithoutSendingThem(t *testing.T) {
 		{"wiki_get", map[string]interface{}{"ids": []interface{}{"../sessions"}}, "single safe path segment"},
 		{"wiki_get", map[string]interface{}{"ids": oneID, "include": []interface{}{"none", "history"}}, "cannot be combined"},
 		{"wiki_get", map[string]interface{}{"ids": oneID, "include": []interface{}{"everything"}}, "include must name"},
+		{"wiki_note", map[string]interface{}{}, "text is required"},
+		{"wiki_note", map[string]interface{}{"text": "   "}, "text is required"},
+		{"wiki_note", map[string]interface{}{"text": strings.Repeat("字", wikiNoteTextMaxChars+1)}, "at most 2000"},
+		{"wiki_note", map[string]interface{}{"text": "x", "paths": []interface{}{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}}, "at most 10"},
 		{"wiki_propose", map[string]interface{}{}, "ops is required"},
 		{"wiki_propose", map[string]interface{}{"ops": []interface{}{map[string]interface{}{"op": "delete", "entryId": "e1"}}, "rationale": "r", "idempotencyKey": "k"}, "ops[0].op must be one of"},
 		{"wiki_propose", map[string]interface{}{"ops": []interface{}{"add"}, "rationale": "r", "idempotencyKey": "k"}, "ops[0] must be an object"},
@@ -512,9 +648,10 @@ func TestWikiProposeReportsAProposalNotASavedEntry(t *testing.T) {
 	}
 	text := wikiToolText(t, result)
 	for _, phrase := range []string{
-		"Recorded as a proposal for the owner's review",
+		"What is pending is a proposal for the owner's review",
 		"It is not saved",
 		"never as a saved entry",
+		"What is applied is live now, and other sessions of this space can find it",
 		"op 0 add: pending",
 		"op 1 reinforce: applied (now revision 2)",
 		"similar: e9 The same trap",
@@ -526,6 +663,23 @@ func TestWikiProposeReportsAProposalNotASavedEntry(t *testing.T) {
 	structured, _ := result["structuredContent"].(wikiProposeAnswer)
 	if structured.ChangesetID != "cs-1" || len(structured.Ops) != 2 {
 		t.Errorf("structuredContent = %#v, want the server's own answer", result["structuredContent"])
+	}
+
+	// Everything applied, as in a Tiered space: it is live, and the answer does not call it unsaved.
+	allApplied := `{"changesetId":"cs-2","replayed":false,"ops":[{"seq":0,"status":"applied","opId":"o3","entryId":"e3","revision":1}]}`
+	srv, _ = wikiDoor(t, http.StatusOK, allApplied)
+	text = wikiToolText(t, wikiMCP(t, srv.URL).callTool("wiki_propose", map[string]interface{}{
+		"ops":            []interface{}{map[string]interface{}{"op": "add"}},
+		"rationale":      "learned it fixing T5",
+		"idempotencyKey": "t5-applied",
+	}))
+	if !strings.Contains(text, "What is applied is live now") || !strings.Contains(text, "op 0 add: applied (now revision 1)") {
+		t.Errorf("an applied op is not reported as live:\n%s", text)
+	}
+	for _, phrase := range []string{"not saved", "never as a saved entry", "owner's review", "no other session reads it"} {
+		if strings.Contains(text, phrase) {
+			t.Errorf("an answer whose every op applied says %q:\n%s", phrase, text)
+		}
 	}
 
 	// A dry run records nothing, and says so before it says anything else — a model that reports
@@ -730,6 +884,7 @@ func TestWikiSearchAnswersWithEntriesAndTheirMatch(t *testing.T) {
 		"confirmed",
 		"anchor verified",
 		"matched: keyword",
+		"recorded 2026-10-03 11:39Z",
 		"wiki_get",
 		"orbit-wiki:<id>",
 	} {
@@ -785,6 +940,76 @@ func TestWikiSearchStructuredContentMatchesItsSchema(t *testing.T) {
 	}
 	if len(structured.Hits) != 1 || structured.Hits[0].Kind != "decision" || structured.Hits[0].Match[0] != "keyword" {
 		t.Errorf("structuredContent lost the answer: %#v", structured)
+	}
+}
+
+// How old each entry is reaches the agent both ways (contract `agentSurface.toolSpecs.wiki_search.age`):
+// in structuredContent as the server wrote it, and in the text on the line under its hit. A check not
+// made yet, and a server that predates the fields, leave them out rather than claim an empty time.
+func TestWikiSearchSaysHowOldEachEntryIs(t *testing.T) {
+	search := func(reply string) (wikiSearchHit, map[string]interface{}, string) {
+		t.Helper()
+		srv, _ := wikiDoor(t, http.StatusOK, reply)
+		result := wikiMCP(t, srv.URL).callTool("wiki_search", map[string]interface{}{"query": "x"})
+		structured, ok := result["structuredContent"].(wikiSearchAnswer)
+		if !ok || len(structured.Hits) != 1 {
+			t.Fatalf("structuredContent = %#v, want one hit", result["structuredContent"])
+		}
+		// What the engine is sent: the struct serialized.
+		raw, _ := json.Marshal(structured.Hits[0])
+		var sent map[string]interface{}
+		if err := json.Unmarshal(raw, &sent); err != nil {
+			t.Fatal(err)
+		}
+		return structured.Hits[0], sent, wikiToolText(t, result)
+	}
+
+	hit, sent, text := search(wikiSearchReply)
+	for field, want := range map[string]string{
+		"recordedAt":       "2026-10-03T11:39:54.768Z",
+		"changedAt":        "2026-10-05T08:00:12.001Z",
+		"anchorCheckedRef": "7de4f86bcf1c01d2fcff6d154a039e5c54961df8",
+		"anchorCheckedAt":  "2026-10-10T06:46:16.532Z",
+	} {
+		if sent[field] != want {
+			t.Errorf("structuredContent says %s is %v, the server said %q: %#v", field, sent[field], want, hit)
+		}
+	}
+	line := "    recorded 2026-10-03 11:39Z · current revision 2026-10-05 08:00Z · " +
+		"anchors last checked at 7de4f86bcf1c on 2026-10-10 06:46Z\n"
+	if !strings.Contains(text, "matched: keyword\n"+line) {
+		t.Errorf("the text does not say how old the entry is, under its hit:\n%s", text)
+	}
+
+	// No check yet: the server's nulls are left out, and the text says nothing of a check — the hit's own
+	// "anchor unchecked" already does.
+	_, sent, text = search(`{"q":"x","semantic":false,"hits":[{"id":"e1","kind":"pitfall","title":"t","summary":"s",` +
+		`"trust":"auto","anchorState":"unchecked","match":["path"],"score":0.016393,"recordedAt":"2026-11-05T00:51:02.000Z",` +
+		`"changedAt":"2026-11-05T07:14:40.250Z","anchorCheckedRef":null,"anchorCheckedAt":null}]}`)
+	for _, field := range []string{"anchorCheckedRef", "anchorCheckedAt"} {
+		if value, present := sent[field]; present {
+			t.Errorf("a check not made yet is sent as %s=%#v rather than left out", field, value)
+		}
+	}
+	if !strings.Contains(text, "anchor unchecked") || !strings.Contains(text, "    recorded 2026-11-05 00:51Z · current revision 2026-11-05 07:14Z\n") {
+		t.Errorf("an unchecked entry's age is not what the server said:\n%s", text)
+	}
+
+	// A server that predates the fields: nothing is made up, in either half.
+	_, sent, text = search(`{"q":"x","semantic":false,"hits":[{"id":"e1","kind":"pitfall","title":"t","summary":"s",` +
+		`"trust":"auto","anchorState":"verified","match":["keyword"],"score":0.016393}]}`)
+	for _, field := range []string{"recordedAt", "changedAt", "anchorCheckedRef", "anchorCheckedAt"} {
+		if value, present := sent[field]; present {
+			t.Errorf("an older server's hit is sent with %s=%#v it never had", field, value)
+		}
+	}
+	if strings.Contains(text, "recorded") || strings.Contains(text, "checked at") {
+		t.Errorf("an older server's hit is given an age it never had:\n%s", text)
+	}
+
+	// A time or a ref that is not one is shown as it came.
+	if got := describeWikiHitAge(wikiSearchHit{RecordedAt: "yesterday", AnchorCheckedRef: "origin/main"}); got != "recorded yesterday · anchors last checked at origin/main" {
+		t.Errorf("describeWikiHitAge = %q", got)
 	}
 }
 
@@ -984,6 +1209,23 @@ func TestWikiCLIRunsTheSameToolAsMCP(t *testing.T) {
 	if len(decoded.Hits) != 1 || decoded.Hits[0].ID == "" {
 		t.Errorf("the structured answer lost its hits: %#v", decoded)
 	}
+	// With how old each entry is, under the contract's names: --json is the MCP door's struct serialized.
+	var printed struct {
+		Hits []map[string]interface{} `json:"hits"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut.String()), &printed); err != nil || len(printed.Hits) != 1 {
+		t.Fatalf("--json printed %q (%v)", jsonOut.String(), err)
+	}
+	for field, want := range map[string]string{
+		"recordedAt":       "2026-10-03T11:39:54.768Z",
+		"changedAt":        "2026-10-05T08:00:12.001Z",
+		"anchorCheckedRef": "7de4f86bcf1c01d2fcff6d154a039e5c54961df8",
+		"anchorCheckedAt":  "2026-10-10T06:46:16.532Z",
+	} {
+		if printed.Hits[0][field] != want {
+			t.Errorf("orbit wiki search --json prints %s as %v, the server said %q", field, printed.Hits[0][field], want)
+		}
+	}
 
 	// And a proposal goes the same way, with the answer the batch came back with.
 	proposal := `{"changesetId":null,"replayed":false,"ops":[{"seq":0,"status":"pending","opId":null,"entryId":null}]}`
@@ -1120,6 +1362,273 @@ func TestWikiCLIFlagsBecomeTheToolArguments(t *testing.T) {
 	}
 }
 
+// The description goes to the model word for word, and to whoever reads the help: this is the copy that keeps a
+// session from telling its user a note is saved, and from noting progress instead of knowledge.
+func TestWikiNoteDescriptionIsTheContracts(t *testing.T) {
+	contract, _ := wikiSurface(t)["noteDescription"].(string)
+	if contract == "" {
+		t.Fatal("the contract lost agentSurface.noteDescription")
+	}
+	if wikiNoteDescription != contract {
+		t.Fatalf("the description this binary ships is not the contract's:\n here: %q\n there: %q", wikiNoteDescription, contract)
+	}
+	if got, _ := wikiDescriptor(t, "wiki_note")["description"].(string); got != contract {
+		t.Errorf("wiki_note's descriptor says %q", got)
+	}
+	if help := strings.Join(strings.Fields(wikiActionHelp["note"]), " "); !strings.Contains(help, contract) {
+		t.Errorf("orbit wiki note --help does not say it: %q", wikiActionHelp["note"])
+	}
+	rules := wikiSurface(t)["note"].(map[string]interface{})["rules"].(map[string]interface{})
+	for name, value := range map[string]int{"textMaxChars": wikiNoteTextMaxChars, "pathsMax": wikiNotePathsMax, "pathMaxChars": wikiNotePathMaxChars} {
+		if int(rules[name].(float64)) != value {
+			t.Errorf("the contract's %s is %v, this binary's %d", name, rules[name], value)
+		}
+	}
+	routes := wikiSurface(t)["doors"].(map[string]interface{})["runner"].(map[string]interface{})["routes"].([]interface{})
+	found := false
+	for _, route := range routes {
+		found = found || route == "POST /api/runner/wiki/notes"
+	}
+	if !found {
+		t.Errorf("the runner door's routes do not name the note route: %v", routes)
+	}
+}
+
+// What the answer tells the agent decides what it tells its user: kept, not knowledge, and who reads it, in the
+// server's words so that a space with no maintenance is not promised a run. What it corrects is said apart.
+func TestWikiNoteSaysItIsAClaimAndWhatBecameOfTheEntry(t *testing.T) {
+	cases := []struct {
+		name, reply string
+		want, not   []string
+	}{
+		{
+			name:  "a new note",
+			reply: wikiNoteReply,
+			want:  []string{"Noted as n1.", "not in the wiki yet and may never be", "Read by: the next maintenance run."},
+			not:   []string{"flagged", "saved"},
+		},
+		{
+			name:  "a text the space holds, from elsewhere",
+			reply: `{"noted":true,"noteId":"n1","created":false,"readBy":"not this session's maintenance run: the space already holds this text from elsewhere"}`,
+			want:  []string{"already holds this text as note n1", "nothing new was written", "Read by: not this session's maintenance run"},
+			not:   []string{"Noted as"},
+		},
+		{
+			name:  "maintenance off",
+			reply: `{"noted":true,"noteId":"n1","created":true,"readBy":"no maintenance run yet: maintenance is off in this space"}`,
+			want:  []string{"Read by: no maintenance run yet: maintenance is off in this space."},
+		},
+		{
+			name:  "corrects, and the entry is flagged",
+			reply: `{"noted":true,"noteId":"n1","created":true,"readBy":"the next maintenance run","challenged":{"status":"applied","changesetId":"cs1","opId":"op1","entryId":"e1"}}`,
+			want:  []string{"Noted as n1.", "Entry e1 is flagged now", "the owner answers that in Review"},
+			not:   []string{"NOT flagged"},
+		},
+		{
+			name:  "corrects, and the entry is not",
+			reply: `{"noted":true,"noteId":"n1","created":true,"readBy":"the next maintenance run","challenged":{"status":"refused","reasons":[{"message":"no such wiki entry"}]}}`,
+			want:  []string{"Noted as n1.", "NOT flagged: no such wiki entry", "wiki_search", "writes no second note"},
+			not:   []string{"flagged now"},
+		},
+		{
+			name:  "corrects, and the flag is past a limit",
+			reply: `{"noted":true,"noteId":"n1","created":false,"readBy":"the next maintenance run","challenged":{"status":"refused","reasons":[{"code":"WIKI_QUOTA","message":"a session records at most 15"}]}}`,
+			want:  []string{"NOT flagged: WIKI_QUOTA a session records at most 15"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _ := wikiDoor(t, http.StatusOK, tc.reply)
+			result := wikiMCP(t, srv.URL).callTool("wiki_note", map[string]interface{}{"text": "A claim."})
+			text := wikiToolText(t, result)
+			if result["isError"] == true {
+				t.Fatalf("an answer read as a failure: %s", text)
+			}
+			for _, phrase := range tc.want {
+				if !strings.Contains(text, phrase) {
+					t.Errorf("does not say %q: %s", phrase, text)
+				}
+			}
+			for _, phrase := range tc.not {
+				if strings.Contains(text, phrase) {
+					t.Errorf("says %q: %s", phrase, text)
+				}
+			}
+			data, _ := result["structuredContent"].(wikiSessionNoteAnswer)
+			if !data.Noted || data.NoteID != "n1" {
+				t.Errorf("the structured answer lost the note: %#v", result["structuredContent"])
+			}
+		})
+	}
+}
+
+// The server's refusals reach the agent as they are, with the code and the sentence.
+func TestWikiNoteRelaysTheServersRefusals(t *testing.T) {
+	for _, tc := range []struct {
+		name, reply string
+		status      int
+		want        string
+	}{
+		{"a probe", `{"code":"WIKI_PROBE_REFUSED","message":"this reads as a tool probe: do not retry it"}`, 422, "do not retry"},
+		{"past the session's notes", `{"code":"WIKI_QUOTA","message":"a session writes at most 15 notes"}`, 429, "at most 15 notes"},
+		{"a session that judges work", `{"code":"WIKI_SESSION_EXCLUDED","message":"knowledge is not evidence"}`, 403, "WIKI_SESSION_EXCLUDED"},
+		{"a workspace in no space", `{"code":"WIKI_SPACE_UNBOUND","message":"this workspace is bound to no wiki space"}`, 409, "bound to no wiki space"},
+		{"a field that failed", `{"code":"WIKI_SCHEMA","message":"the note does not have the shape","errors":[{"path":"paths[0]","message":"must be a repo-relative path"}]}`, 400, "paths[0]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, requests := wikiDoor(t, tc.status, tc.reply)
+			result := wikiMCP(t, srv.URL).callTool("wiki_note", map[string]interface{}{"text": "A claim."})
+			text := wikiToolText(t, result)
+			if result["isError"] != true || !strings.Contains(text, tc.want) {
+				t.Errorf("isError %v, text %q: want an error saying %q", result["isError"], text, tc.want)
+			}
+			if strings.Contains(text, "too old") {
+				t.Errorf("a refusal reads as a server that is too old: %s", text)
+			}
+			if len(*requests) != 1 {
+				t.Errorf("%d requests: a refusal is an answer, and is not sent again", len(*requests))
+			}
+		})
+	}
+}
+
+// A runner is often newer than its server. Nest answers a plain 404 for a route it does not have, and on a
+// server with the rest of the wiki the note route's absence is not "no wiki door": the agent is told the server is too
+// old and that nothing was recorded, through both doors, and nothing breaks.
+func TestWikiNoteOnAnOlderServerSaysSo(t *testing.T) {
+	missingRoute := `{"message":"Cannot POST /api/runner/wiki/notes","error":"Not Found","statusCode":404}`
+	srv, requests := wikiDoor(t, http.StatusNotFound, missingRoute)
+	result := wikiMCP(t, srv.URL).callTool("wiki_note", map[string]interface{}{"text": "A claim.", "corrects": "e1"})
+	text := wikiToolText(t, result)
+	if result["isError"] != true {
+		t.Fatalf("an older server's 404 read as an answer: %s", text)
+	}
+	for _, phrase := range []string{"too old for wiki_note", "NOT recorded", "was not flagged", "Upgrade the Orbit server", "wiki_propose"} {
+		if !strings.Contains(text, phrase) {
+			t.Errorf("does not say %q: %s", phrase, text)
+		}
+	}
+	if strings.Contains(text, "no wiki door") {
+		t.Errorf("a server with the rest of the wiki is told it has none: %s", text)
+	}
+	if len(*requests) != 1 {
+		t.Errorf("%d requests: a 404 is an answer, and is not sent again", len(*requests))
+	}
+
+	// The command says the same, as its error: `orbit` prints it and exits non-zero.
+	home := t.TempDir()
+	if err := os.Chmod(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := `{"serverUrl":` + strconv.Quote(srv.URL) + `,"runnerId":"r1","runnerToken":"runner-token","name":"test"}`
+	if err := os.WriteFile(filepath.Join(home, "config.json"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", home)
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	t.Setenv(envWiki, "on")
+	var out strings.Builder
+	err := cmdWikiCLI([]string{"note", "A claim."}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "too old for wiki_note") {
+		t.Errorf("orbit wiki note on an older server = %v, printed %q", err, out.String())
+	}
+
+	// A wiki that is off is no older server: it is said as what it is.
+	srv, _ = wikiDoor(t, http.StatusNotFound, `{"code":"WIKI_DISABLED","message":"the wiki is off for this account"}`)
+	text = wikiToolText(t, wikiMCP(t, srv.URL).callTool("wiki_note", map[string]interface{}{"text": "A claim."}))
+	if strings.Contains(text, "too old") || !strings.Contains(text, wikiDisabledCode) {
+		t.Errorf("a wiki that is off reads as an older server: %s", text)
+	}
+}
+
+func TestWikiNoteCLIFlagsBecomeTheToolArguments(t *testing.T) {
+	srv, requests := wikiDoor(t, http.StatusOK, wikiNoteReply)
+	home := t.TempDir()
+	if err := os.Chmod(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := `{"serverUrl":` + strconv.Quote(srv.URL) + `,"runnerId":"r1","runnerToken":"runner-token","name":"test"}`
+	if err := os.WriteFile(filepath.Join(home, "config.json"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", home)
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	t.Setenv(envWiki, "on")
+
+	for _, tc := range []struct {
+		name  string
+		args  []string
+		stdin string
+		body  map[string]interface{}
+	}{
+		{"words", []string{"note", "release.sh", "next", "tags"}, "", map[string]interface{}{"text": "release.sh next tags"}},
+		{"quoted, with flags after", []string{"note", "release.sh next tags", "--path", "a.sh", "--path", "b.md", "--corrects", "e1"}, "",
+			map[string]interface{}{"text": "release.sh next tags", "paths": []interface{}{"a.sh", "b.md"}, "corrects": "e1"}},
+		{"--text, for words that start with a dash", []string{"note", "--text", "--force tags at once"}, "", map[string]interface{}{"text": "--force tags at once"}},
+		{"--text-file -", []string{"note", "--text-file", "-", "--path", "a.sh"}, "A claim with `backticks` and \"quotes\".\n",
+			map[string]interface{}{"text": "A claim with `backticks` and \"quotes\".", "paths": []interface{}{"a.sh"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			*requests = nil
+			var out strings.Builder
+			if err := cmdWikiCLI(tc.args, strings.NewReader(tc.stdin), &out); err != nil {
+				t.Fatalf("orbit wiki %v: %v", tc.args, err)
+			}
+			if len(*requests) != 1 || (*requests)[0].method != http.MethodPost || (*requests)[0].uri != "/api/runner/wiki/notes" || (*requests)[0].session != "caller-session" {
+				t.Fatalf("requests = %#v, want one POST to the note door from the session", *requests)
+			}
+			if !reflect.DeepEqual((*requests)[0].body, tc.body) {
+				t.Errorf("body = %#v\nwant %#v", (*requests)[0].body, tc.body)
+			}
+			if !strings.Contains(out.String(), "Noted as n1.") {
+				t.Errorf("the answer was not printed: %q", out.String())
+			}
+		})
+	}
+
+	*requests = nil
+	var jsonOut strings.Builder
+	if err := cmdWikiCLI([]string{"note", "A claim.", "--json"}, strings.NewReader(""), &jsonOut); err != nil {
+		t.Fatalf("--json: %v", err)
+	}
+	var decoded wikiSessionNoteAnswer
+	if err := json.Unmarshal([]byte(jsonOut.String()), &decoded); err != nil || decoded.NoteID != "n1" || decoded.ReadBy == "" {
+		t.Errorf("--json printed %q (%v)", jsonOut.String(), err)
+	}
+
+	*requests = nil
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"note"}, "text is required"},
+		{[]string{"note", "  "}, "text is required"},
+		{[]string{"note", "words", "--text", "more"}, "given twice"},
+		{[]string{"note", "--text", "a", "--text-file", "-"}, "cannot be used together"},
+		{[]string{"note", "--text-file", "notes.txt"}, "accepts only '-'"},
+		{[]string{"note", "x", "--nonsense"}, "nonsense"},
+	} {
+		var out strings.Builder
+		if err := cmdWikiCLI(tc.args, strings.NewReader(""), &out); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("orbit wiki %v = %v, want it to say %q", tc.args, err, tc.want)
+		}
+	}
+	if len(*requests) != 0 {
+		t.Errorf("a refused command reached the server: %#v", *requests)
+	}
+
+	// Outside a session, and with the wiki off, there is nothing to act for.
+	t.Setenv("ORBIT_SESSION_ID", "")
+	if err := cmdWikiCLI([]string{"note", "A claim."}, strings.NewReader(""), &strings.Builder{}); err == nil || !strings.Contains(err.Error(), "ORBIT_SESSION_ID") {
+		t.Errorf("outside a session = %v", err)
+	}
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	t.Setenv(envWiki, "off")
+	if err := cmdWikiCLI([]string{"note", "A claim."}, strings.NewReader(""), &strings.Builder{}); err == nil || !strings.Contains(err.Error(), "ORBIT_WIKI=off") {
+		t.Errorf("with the wiki off = %v", err)
+	}
+}
+
 // wikiCLIOnlyCapabilities are the wiki verbs no MCP tool stands beside: verify waits for the server's
 // verdicts (contract `agentSurface.verify.tool`).
 var wikiCLIOnlyCapabilities = map[string]bool{"wiki_verify": true}
@@ -1176,6 +1685,12 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.Int("limit", 0, "")
 	case "get":
 		fs.Var(&list, "include", "")
+	case "note":
+		fs.String("text", "", "")
+		fs.String("text-file", "", "")
+		fs.Var(&list, "path", "")
+		fs.String("corrects", "", "")
+		fs.String("replaces", "", "")
 	case "propose":
 		fs.String("ops", "", "")
 		fs.String("ops-file", "", "")
@@ -1183,6 +1698,14 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("rationale-file", "", "")
 		fs.String("idempotency-key", "", "")
 		fs.Bool("dry-run", false, "")
+		fs.String("replaces", "", "")
+	case "draft":
+		fs.String("kind", "", "")
+		fs.Var(&list, "section", "")
+		fs.String("reason", "", "")
+		fs.String("idempotency-key", "", "")
+		fs.String("replaces", "", "")
+		fs.String("change", "", "")
 	case "verify":
 		fs.String("space", "", "")
 	default:
@@ -1208,6 +1731,13 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 	}
 	if !strings.Contains(instructions, "`[title](orbit-wiki:<id>)`") {
 		t.Errorf("the citation is not the link shape the clients draw: %q", instructions)
+	}
+	// Every form says where a known pitfall is looked up, and only for a session that has the tool.
+	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
+		got := orbitCLIInstructions(exe, form.inside, form.watches)
+		if !strings.Contains(got, "Before changing a file, use wiki_search with its path to look up known pitfalls, if your tool list has it.") {
+			t.Errorf("instructions (inside=%v, watches=%v) do not say to look a file up before changing it: %q", form.inside, form.watches, got)
+		}
 	}
 	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
 	for _, action := range []string{"search", "get", "propose", "verify", "import"} {

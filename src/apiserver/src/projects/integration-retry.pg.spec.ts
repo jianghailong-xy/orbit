@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import {
   IntegrationJobCommand,
   IntegrationJobResultRequest,
@@ -50,6 +51,7 @@ import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * `integration_retry` (docs/project-integration-line-contract.md §2.3 J-T1b): a project's coordinator
@@ -1020,6 +1022,7 @@ test('escalated: a failure that went to the owner on the clock is theirs, and th
       const w = await world(stack, 'retry-escalated');
       const { task } = await failedLanding(stack, w, 'retry-escalated');
       const [item] = await itemsOf(stack.db, task.taskId);
+      await receiveOpenItem(stack.db, item!.id);
       await stack.db.$executeRaw(
         Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                     WHERE "id" = ${item!.id}::uuid`,

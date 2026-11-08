@@ -103,10 +103,12 @@ public enum WikiCopy {
     /// The three forms the entry page's actions open (`EntryEditor`), and what each says when done.
     public static let editNote = "Only the title and the one-line summary change here."
     public static let supersedeNote = "The replacement keeps this entry’s kind, fields and anchor, and this entry points at it."
-    public static let retireNote = "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record."
+    /// Retire…'s dialog, on an entry's page and on a challenge's card: what retiring does, and that it is final
+    /// (contract `reviewModes.effect.rule`: no revert or Reject brings a retired lineage back).
+    public static let retireNote = "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record. This cannot be undone."   // WIKI_RETIRE_NOTE
     public static let titlePlaceholder = "Title"
     public static let summaryPlaceholder = "One line"
-    public static let reasonPlaceholder = "Why it no longer holds"
+    public static let reasonPlaceholder = "Why it no longer holds"          // WIKI_RETIRE_REASON_PLACEHOLDER
     public static let save = "Save"
     public static let supersedeConfirm = "Supersede"
     public static let retireConfirm = "Retire"
@@ -169,7 +171,6 @@ public enum WikiCopy {
     public static let decidedEdited = "Accepted with your edits"            // WIKI_DECIDED_EDITED
     public static let rejected = "Rejected"                                 // WIKI_DECIDED_REJECTED
     public static let decidedKept = "Kept"                                  // WIKI_DECIDED_KEPT
-    public static let decidedReconfirmed = "Re-confirmed"                   // WIKI_DECIDED_RECONFIRMED
     public static let decidedAmended = "Amended"                            // WIKI_DECIDED_AMENDED
     /// A Review answer the server refused: what failed, with its reason under it.
     public static let decideFailed = "Couldn't record your answer"          // WIKI_DECIDE_FAILED
@@ -384,36 +385,37 @@ public enum WikiLogic {
     public enum HomeDocuments: Equatable, Sendable {
         /// The first read is out: grey bars in the rows' shape (mock 31 ⑦).
         case loading
-        /// The confirmed plan's documents, a category a group (mock 30 ③).
-        case categories([WikiDocLogic.HomeCategory])
+        /// The confirmed plan's documents, a category a group (mock 30 ③). `start`: none is written yet, so the
+        /// setup card stands above them (mock 41 ⑦).
+        case categories([WikiDocLogic.HomeCategory], start: Bool)
         /// Before a plan is confirmed: the topic articles, as the directory groups them, a title a row.
         case topics([WikiArticleLogic.DirectoryGroup])
-        /// Neither, and maintenance not set up: the one card that says how a space comes to have documents
-        /// (mock 31 ⑥).
-        case newSpace
-        /// Neither, with maintenance set up: nothing, the line under the head saying `No documents yet`.
-        case nothing
+        /// Neither: the setup card alone (mock 41), which says how the wiki comes to have something to read.
+        case start
 
         /// Whether the home ends on Browse by category · A–Z index: once its first read is in, with
         /// something listed.
         public var listed: Bool {
             switch self {
             case .categories, .topics: return true
-            case .loading, .newSpace, .nothing: return false
+            case .loading, .start: return false
             }
         }
     }
 
-    /// The home's documents: the confirmed plan's, by category; before one, the topic articles; else a new
-    /// space's card, or nothing once maintenance is set up. `loading` is the first read alone — a read the
-    /// page already has stays drawn while it is read again.
+    /// The home's documents: the confirmed plan's, by category; before one, the topic articles; else the setup
+    /// card, which also stands above a plan's categories while none of them is written (`wikiStartShown`).
+    /// `loading` is the first read alone — a read the page already has stays drawn while it is read again.
     public static func homeDocuments(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Bool,
-                                     maintenance: Bool, seen: Double?) -> HomeDocuments {
+                                     seen: Double?) -> HomeDocuments {
         if loading { return .loading }
-        if let docs, WikiDocLogic.readsByDocs(docs) { return .categories(WikiDocLogic.homeCategories(docs, seen: seen)) }
+        if let docs, WikiDocLogic.readsByDocs(docs) {
+            return .categories(WikiDocLogic.homeCategories(docs, seen: seen),
+                               start: WikiStartLogic.shown(written: docs.docs?.written ?? 0, topics: 0))
+        }
         let groups = articles.map(WikiArticleLogic.directoryGroups) ?? []
         if groups.contains(where: { !$0.topics.isEmpty }) { return .topics(groups) }
-        return maintenance ? .nothing : .newSpace
+        return .start
     }
 
     /// The line under the home's head (`WikiHomeState`): what `WikiDocLogic.homeLine` says of the reads the
@@ -805,7 +807,8 @@ public enum WikiLogic {
     public static func decidedToast(op: WikiOpKind?, action: WikiDecideAction) -> String {
         switch action {
         case .edit:      return WikiCopy.decidedEdited
-        case .reconfirm: return WikiCopy.decidedReconfirmed
+        // A challenge's Keep: the toast says the button's word, so a press meant as Retire reads as what it did.
+        case .reconfirm: return WikiCopy.decidedKept
         case .amend:     return WikiCopy.decidedAmended
         case .retire:    return WikiCopy.retired
         case .reject:    return op == .retire ? WikiCopy.decidedKept : WikiCopy.rejected

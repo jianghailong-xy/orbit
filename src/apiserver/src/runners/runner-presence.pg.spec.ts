@@ -59,7 +59,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { MASS_DISCONNECT_HOLD_MS, ReaperService } from '../realtime/reaper.service';
+import { MASS_DISCONNECT_HOLD_MS, ReaperService, RUNNER_REAP_AFTER_MS } from '../realtime/reaper.service';
 import { readLinkBeat } from '../runner-api/link-heartbeat';
 import { runnerLinkCredential } from '../runner-api/runner-link-token';
 import {
@@ -72,6 +72,7 @@ import {
   runnerLastBeatSql,
   runnerOfflineSql,
 } from './runner-presence';
+import '../test-support/daemon-routes-over-http';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -250,9 +251,10 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const reaperOf = () => new ReaperService(db as unknown as PrismaService, realtime, undefined, presence);
     const sweep = (reaper: ReaperService) => (reaper as unknown as { sweep(): Promise<void> }).sweep();
     const now = Date.now();
-    // The runner that went quiet: its presence row four minutes old, its own record ten.
+    // The runner that went quiet: its presence row a minute past the reaper's line (RUNNER_REAP_AFTER_MS, five minutes),
+    // its own record ten minutes old.
     const silent = await runner(fay.id, 'silent', { lastHeartbeatAt: new Date(now - 10 * MINUTE) });
-    await db.runnerPresence.create({ data: { runnerId: silent.id, lastBeatAt: new Date(now - 4 * MINUTE), linkState: 'HTTP' } });
+    await db.runnerPresence.create({ data: { runnerId: silent.id, lastBeatAt: new Date(now - RUNNER_REAP_AFTER_MS - MINUTE), linkState: 'HTTP' } });
     const workspaceId = randomUUID();
     await db.workspace.create({ data: { id: workspaceId, ownerId: fay.id, runnerId: silent.id, name: `reaper-${RUN}`, enabled: true } });
     const running = async (
@@ -311,7 +313,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     await crowdBeats();
     const beforeSleep = await counts();
     const asleep = [];
-    for (let i = 0; i < 12; i += 1) asleep.push(await managedRunner(i % 2 === 0 ? 'SLEEPING' : 'DRAINING', 2 * MINUTE));
+    for (let i = 0; i < 12; i += 1) asleep.push(await managedRunner(i % 2 === 0 ? 'SLEEPING' : 'DRAINING', RUNNER_REAP_AFTER_MS + MINUTE));
     assert.deepEqual(await counts(), beforeSleep, 'managed runners put to sleep are not counted');
     const amongAsleep = await running('reaped while a fifth of the runners are asleep');
     const ofAsleep = await running('run of a managed runner put to sleep', asleep[0]);
@@ -348,9 +350,10 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     assert.equal(kept.length, 1, `the mass silence was kept: ${JSON.stringify(kept, (_, v) => (typeof v === 'bigint' ? String(v) : v))}`);
     await sweep(reaperOf());
     assert.equal((await stateOf(held)).status, RunStatus.RUNNING, 'the disconnection kept holds the runner silent in it');
-    // A runner that went quiet on its own after the cell was heard again, past the line now: no disconnection holds it.
+    // A runner that went quiet on its own a minute before the disconnection's first beat, and so outside it, past the line
+    // now: no disconnection holds it.
     const alone = await runner(fay.id, 'alone', { lastHeartbeatAt: new Date(Date.now() - 10 * MINUTE) });
-    await db.runnerPresence.create({ data: { runnerId: alone.id, lastBeatAt: new Date(Date.now() - 100_000), linkState: 'HTTP' } });
+    await db.runnerPresence.create({ data: { runnerId: alone.id, lastBeatAt: new Date(now - RUNNER_REAP_AFTER_MS - 2 * MINUTE), linkState: 'HTTP' } });
     const ofAlone = await running('its runner went quiet on its own', { runnerId: alone.id, ownerId: fay.id, workspaceId });
     await sweep(reaperOf());
     assert.deepEqual(await stateOf(ofAlone), { status: RunStatus.FAILED, error: 'runner offline' });

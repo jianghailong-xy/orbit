@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApprovalPanel, CREATE_CRITERIA_CONFIRMED_AT_START, decliningPrefix } from './ApprovalPanel';
+import { ApprovalPanel, CREATE_CRITERIA_CONFIRMED_AT_START, WORKSPACE_WRITE_NOTE, decliningPrefix } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
 import { decisionRowKey, type PendingDecisionQueue, type PendingDecisionRow } from './DecisionRail';
 import { DECISION_CONFIRM_ACTION } from './EvidenceDecisionCard';
@@ -89,6 +89,13 @@ const render = (a: ApprovalInfo) => renderToStaticMarkup(<ApprovalPanel approval
 
 const batchApproval = (preview: Record<string, unknown>): ApprovalInfo =>
   ({ id: 'b1', toolName: 'orbit_task_batch', input: { preview } }) as ApprovalInfo;
+
+describe('a plan to approve', () => {
+  it('keeps a word of its code whole, as a reply does (lib/codeWords)', () => {
+    const html = render({ id: 'p1', toolName: 'ExitPlanMode', input: { plan: '先预览、`--enable_part_writer` 再构建' } } as ApprovalInfo);
+    expect(html).toContain('<span class="code-break"></span><code><span class="code-word">--enable_part_writer</span></code>');
+  });
+});
 
 describe('single create approval', () => {
   const create = (toolName: string, input: Record<string, unknown>): ApprovalInfo =>
@@ -297,6 +304,101 @@ describe('runner and workspace delete approval', () => {
   it('says what is kept when it is declined', () => {
     expect(decliningPrefix('orbit_runner_delete')).toBe('Keeping it: ');
     expect(decliningPrefix('orbit_agent_delete')).toBe('Keeping it: ');
+  });
+});
+
+describe('workspace write approval', () => {
+  const card = (toolName: string, input: Record<string, unknown>): ApprovalInfo =>
+    ({ id: 'w1', sessionId: 's1', toolName, input, status: 'PENDING', createdAt: new Date(0).toISOString() }) as ApprovalInfo;
+  const update = (over: Record<string, unknown> = {}, changes: Record<string, unknown> = {}) => card('orbit_agent_update', {
+    agentId: '019fe1dd-3f39-7610-8e5d-507e36a4ea9c',
+    name: 'nightly-build',
+    workDir: '/srv/build',
+    runner: { id: '019fe1dd-3f39-7610-8e5d-507e36a4ea9b', name: 'instance-1', displayName: 'Build box' },
+    envRemoved: [],
+    writeSalt: 'salt',
+    writeDigest: 'digest',
+    changes,
+    ...over,
+  });
+  const render = (a: ApprovalInfo) => renderToStaticMarkup(
+    <ApprovalPanel approval={a} onDecide={() => {}} />,
+  );
+
+  it('names the workspace, and each variable by name and whole value', () => {
+    const value = `sk-${'x'.repeat(4000)}`;
+    const html = render(update({ envRemoved: ['OLD_TOKEN'] }, { env: { API_KEY: value, REGION: 'eu' } }));
+    expect(html).toContain('Confirm: change workspace “nightly-build”?');
+    expect(html).toContain('On Build box');
+    expect(html).toContain('/srv/build');
+    expect(html).toContain('Environment variables');
+    expect(html).toContain(`API_KEY=${value}`);
+    expect(html).toContain('REGION=eu');
+    expect(html).toContain('Variables removed');
+    expect(html).toContain('OLD_TOKEN');
+    expect(html).toContain(WORKSPACE_WRITE_NOTE.slice(0, 40));
+    expect(html).toContain('Save changes');
+    expect(html).toContain('is-plan');
+    expect(html).not.toContain('orbit_agent_update');
+    expect(html).not.toContain('digest');
+  });
+
+  it('says what the folder, the prompts, the runner and the worktree become', () => {
+    const html = render(update({}, {
+      workDir: '/srv/other',
+      systemPrompt: 'Answer in French.',
+      appendSystemPrompt: 'And briefly.',
+      runner: { id: 'r2', name: 'gpu-2', displayName: null },
+      enableWorktree: false,
+      name: 'renamed',
+      description: 'builds at night',
+      defaultMergeTarget: 'develop',
+    }));
+    for (const line of ['Working directory', '/srv/other', 'System prompt', 'Answer in French.', 'Appended system prompt',
+      'And briefly.', 'Runner', 'gpu-2', 'Worktree', 'Sessions run in the shared folder', 'Name', 'renamed', 'Description',
+      'builds at night', 'Merge target', 'develop']) {
+      expect(html).toContain(line);
+    }
+    expect(html).not.toContain('Environment variables');
+  });
+
+  it('says so when a field or the whole map is being cleared', () => {
+    const html = render(update({ envRemoved: ['A', 'B'] }, { env: {}, systemPrompt: '' }));
+    expect(html).toContain('No variables');
+    expect(html).toContain('Cleared');
+  });
+
+  it('reads a create as a create', () => {
+    const html = render(card('orbit_agent_create', {
+      agentId: null, name: 'one-off', workDir: null, runner: { id: 'r1', name: 'hpc', displayName: null }, envRemoved: [],
+      changes: { name: 'one-off', env: { FCM_KEY: 'k' }, workDir: '/srv/new', enableWorktree: true },
+    }));
+    expect(html).toContain('Confirm: create workspace “one-off”?');
+    expect(html).toContain('On hpc');
+    expect(html).toContain('FCM_KEY=k');
+    expect(html).toContain('Each session gets its own git worktree');
+    expect(html).toContain('Create it');
+    expect(html).not.toContain('>Name<');
+  });
+
+  it('offers no standing yes, in any session', () => {
+    for (const a of [update({}, { env: { A: 'b' } }), card('orbit_agent_create', { name: 'x', changes: { env: { A: 'b' } } })]) {
+      expect(render(a)).not.toContain('Always allow');
+    }
+  });
+
+  it('shows all a card holds when a server that predates it filed what the asker sent', () => {
+    const html = render(card('orbit_agent_update', { agentId: 'w1', env: { API_KEY: 'sk-1' }, workDir: '/srv/other' }));
+    expect(html).toContain('orbit_agent_update');
+    expect(html).toContain('API_KEY');
+    expect(html).toContain('sk-1');
+    expect(html).toContain('/srv/other');
+    expect(html).not.toContain('Always allow');
+  });
+
+  it('says what is kept when it is declined', () => {
+    expect(decliningPrefix('orbit_agent_update')).toBe('Leaving it as it is: ');
+    expect(decliningPrefix('orbit_agent_create')).toBe('Not creating: ');
   });
 });
 
@@ -626,9 +728,12 @@ describe('batch create approval', () => {
       // Waited out in act slices, not one act: the picture arrives through a `lazy()` import that
       // resolves on its own schedule, and React queues every render scheduled inside an in-flight
       // act callback until that callback settles. In slices the card can draw inside the wait.
-      for (let attempt = 0; attempt < 20 && !host!.querySelector('[data-testid="project-canvas"]'); attempt += 1) {
+      // A deadline, not a count of slices: under a loaded merge check (`--maxWorkers=2`, load ~30)
+      // the import alone outlasts 200 ms. `vi.waitFor` would be one act around the whole wait.
+      const deadline = Date.now() + 8_000;
+      while (!host!.querySelector('[data-testid="project-canvas"]') && Date.now() < deadline) {
         await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await new Promise((resolve) => setTimeout(resolve, 20));
         });
       }
       expect(host!.querySelector('[data-testid="project-canvas"]')).not.toBeNull();

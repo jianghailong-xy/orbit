@@ -7,7 +7,7 @@ import {
   RightOutlined,
   RollbackOutlined,
 } from '@ant-design/icons';
-import Markdown from 'react-markdown';
+import Markdown from './Markdown';
 import remarkGfm from 'remark-gfm';
 import type {
   CoordinatorQuestion,
@@ -22,10 +22,12 @@ import { Alert } from './ui/Alert';
 import { Textarea } from './ui/Textarea';
 import { api } from '../api';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
+import { rehypeCodeWords } from '../lib/codeWords';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainText } from '../lib/markdownText';
 import { projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
+import { streamPoll } from '../lib/listBudget';
 
 /**
  * The question a project's coordinator put to the account owner, as a card (mock 5,
@@ -207,6 +209,7 @@ export function CoordinatorQuestionCard({
         <div className="coordinator-question-text md">
           <Markdown
             remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeCodeWords]}
             urlTransform={referenceUrlTransform}
             components={{ a: ReferenceLink }}
           >
@@ -309,7 +312,7 @@ export function CoordinatorQuestions({
   const items = useQuery({
     ...projectOpenItemsQuery(projectId ?? ''),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const questions = coordinatorQuestions(items.data);
   if (!projectId || questions.length === 0) return null;
@@ -590,6 +593,7 @@ export function AnsweredQuestionCard({
           <div className="coordinator-question-text md">
             <Markdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeCodeWords]}
               urlTransform={referenceUrlTransform}
               components={{ a: ReferenceLink }}
             >

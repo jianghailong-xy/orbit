@@ -14,6 +14,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { BackgroundWakeDto } from '../runner-api/background-job-wake';
 import { ScheduledWakeupDto } from '../runner-api/scheduled-wakeup';
 import { ScheduledWakeupWorker } from '../runner-api/scheduled-wakeup.worker';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The queued state of a wake turn, against the real application schema.

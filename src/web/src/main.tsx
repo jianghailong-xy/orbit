@@ -13,7 +13,7 @@ import './index.css';
 import './components/ui/foundation.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AppBoundary, BootGate } from './components/BootGate';
@@ -23,6 +23,7 @@ import { installPaneSlideOnPopState } from './lib/paneTransition';
 import { installScrollbarAutohide } from './lib/scrollbarAutohide';
 import { ToastViewport } from './components/ToastViewport';
 import { AppRoot } from './components/ui/AppRoot';
+import { createAppQueryClient } from './lib/queryClient';
 
 // Arm the access-token auto-refresh as early as possible: if a valid session is already stored,
 // schedule a silent refresh just before it expires so an active tab is never bounced to /login.
@@ -36,9 +37,7 @@ installPaneSlideOnPopState();
 // The nav and session lists keep their scrollbars hidden until they're scrolled.
 installScrollbarAutohide();
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
-});
+const queryClient = createAppQueryClient();
 
 // lib/toast.tsx posts toasts into one feed and <ToastViewport /> draws it (docs/mocks/toast-system),
 // inside the router so a toast that names a session can open it. How long one stays is picked by

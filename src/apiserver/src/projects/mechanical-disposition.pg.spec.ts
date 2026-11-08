@@ -53,6 +53,7 @@ import {
   TaskExceptionInputProducer,
 } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The four rounds that needed no judgement, and the one action each one settles.
@@ -192,6 +193,7 @@ async function connect(): Promise<Stack> {
     },
     routeReadyDependents: (ids: ReadonlyArray<string | null | undefined>) =>
       router.routeReadyDependents(ids),
+    routeStoppedRun: async () => null,
   } as unknown as CompletionInputRouter;
   const tasks = new TasksService(prisma, sessions, realtime, undefined, watched);
   const api = new RunnerApiController(

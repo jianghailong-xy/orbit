@@ -41,7 +41,7 @@ func TestLinkResumesAfterADroppedConnection(t *testing.T) {
 	if _, err := r.t.heartbeat(HeartbeatRequest{Status: "ONLINE", LeaseOwner: r.t.leaseOwner, SupervisedSessionIDs: []string{"session-a"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(1, 5, 10)); err != nil {
+	if err := r.deliver(t, context.Background(), "session-a", linkTestEvents(1, 5, 10)); err != nil {
 		t.Fatal(err)
 	}
 	inbox := newInboxPoller(r.t, "session-a", "gen-1")
@@ -332,48 +332,6 @@ func TestLinkDrainOnOneNodeCountsOnlyTheTimeWithoutAConnection(t *testing.T) {
 	}
 }
 
-// Back on the link after a time on HTTPS, the work connects at once: failed attempts before it was sent back say
-// nothing about this time, and Welcomes that said MODE_HTTP hold it back only when they were just now. The reconnect
-// it logs counts no time on HTTPS as one without a link.
-func TestLinkComesBackAtOnceAfterATimeOnHTTPS(t *testing.T) {
-	for _, before := range []string{"failed attempts", "a flap long ago"} {
-		t.Run(before, func(t *testing.T) {
-			r := newLinkWorkRig(t)
-			first := r.useLink(t)
-			first.drop()
-			r.g.waitWelcomed(t, 2)
-			r.g.setMode(linkpb.Mode_MODE_HTTP)
-			if _, err := r.t.heartbeat(HeartbeatRequest{Status: "ONLINE", LeaseOwner: r.t.leaseOwner}); err != nil {
-				t.Fatal(err)
-			}
-			linkWaitFor(t, 5*time.Second, "the work to stop", func() bool { return !r.m.work.running() && len(r.g.open()) == 0 })
-			r.m.work.wait(5 * time.Second)
-			r.m.work.mu.Lock()
-			if before == "failed attempts" {
-				r.m.work.attempt += 4 // a run of failures, just now
-			} else {
-				r.m.work.flaps, r.m.work.stoppedAt = 4, time.Now().Add(-2*linkBackoffMax)
-			}
-			r.m.work.mu.Unlock()
-			r.g.setMode(linkpb.Mode_MODE_LINK)
-			began := time.Now()
-			r.m.observe(linkpb.Mode_MODE_LINK, "the test")
-			third := r.g.waitWelcomed(t, 3)
-			if took := third.welcomed.Sub(began); took > 500*time.Millisecond {
-				t.Errorf("the work connection came %s after the link was back in use", took)
-			}
-			linkWaitFor(t, 5*time.Second, "the connection to be logged", func() bool {
-				return strings.Contains(strings.Join(r.logs.all(), "\n"), third.id+" to ")
-			})
-			for _, line := range r.logs.all() {
-				if strings.Contains(line, third.id+" to ") && strings.Contains(line, "without one") {
-					t.Errorf("the time on HTTPS was logged as one without a link: %s", line)
-				}
-			}
-		})
-	}
-}
-
 // fakeClaims is a backend that claims as the control plane does under request ids (task B2): a claim sent again
 // under the id of one that claimed is answered with that claim's session, and never claims another.
 type fakeClaims struct {
@@ -491,10 +449,10 @@ func TestATranscriptPageTooLargeForTheLinkIsAskedForInHalves(t *testing.T) {
 func TestEventsGoOverTheLinkAsEventBatches(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	r.useLink(t)
-	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(1, 4, 10)); err != nil {
+	if err := r.deliver(t, context.Background(), "session-a", linkTestEvents(1, 4, 10)); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(5, 2, 10)); err != nil {
+	if err := r.deliver(t, context.Background(), "session-a", linkTestEvents(5, 2, 10)); err != nil {
 		t.Fatal(err)
 	}
 	in.assertContiguous(t, "session-a", 1, 6)
@@ -559,7 +517,7 @@ func TestATurnCompletionWaitsForItsEventsWithAfterSeq(t *testing.T) {
 		return fakeWorkAnswer(rpc, 200, `{}`)
 	}
 	r.useLink(t)
-	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(1, 7, 10)); err != nil {
+	if err := r.deliver(t, context.Background(), "session-a", linkTestEvents(1, 7, 10)); err != nil {
 		t.Fatal(err)
 	}
 	status, err := r.t.turnComplete(context.Background(), "session-a", TurnCompleteRequest{TurnID: "turn-1", Status: "completed"})
@@ -587,7 +545,7 @@ func TestATurnCompletionWaitsForItsEventsWithAfterSeq(t *testing.T) {
 // A turn completion whose events never get stored (a batch the session gave up on) does not wait forever: past
 // linkAfterSeqWait it depends only on the events the control plane acknowledged.
 func TestATurnCompletionStopsWaitingForEventsThatWillNeverBeStored(t *testing.T) {
-	shortenLinkWaits(t, linkLongPoll, linkApprovalRecheck, 400*time.Millisecond)
+	shortenLinkWaits(t, linkHintWait, linkApprovalRecheck, 400*time.Millisecond)
 	r, in := newLinkEventsRig(t)
 	in.refuseBatch = func(eb *linkpb.EventBatch) *linkpb.Failure {
 		if eb.GetEvents()[0].GetSeq() == 6 {
@@ -606,10 +564,10 @@ func TestATurnCompletionStopsWaitingForEventsThatWillNeverBeStored(t *testing.T)
 		return fakeWorkAnswer(rpc, 200, `{"status":"AWAITING_INPUT"}`)
 	}
 	r.useLink(t)
-	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(1, 5, 10)); err != nil {
+	if err := r.deliver(t, context.Background(), "session-a", linkTestEvents(1, 5, 10)); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(6, 2, 10)); err == nil {
+	if err := r.deliver(t, context.Background(), "session-a", linkTestEvents(6, 2, 10)); err == nil {
 		t.Fatal("the refused batch was accepted")
 	}
 	began := time.Now()
@@ -953,7 +911,7 @@ func TestLinkWorkReconnectsNoSoonerThanItIsTold(t *testing.T) {
 		}
 		return 0, "", ""
 	}
-	r.m.observe(linkpb.Mode_MODE_LINK, "the test")
+	r.m.start()
 	r.g.waitWelcomed(t, 1)
 	r.g.mu.Lock()
 	upgrades := append([]time.Time{}, r.g.upgrades...)
@@ -1036,5 +994,30 @@ func TestLinkAssignedReleaseFeedsTheSelfUpdate(t *testing.T) {
 	}
 	if a := linkAssignedRelease.Load(); a != nil {
 		t.Errorf("a HeartbeatAck assigning nothing left %+v assigned", a)
+	}
+}
+
+// A beat can go out the moment a connection is current, so what its Welcome assigns is taken before that, however long
+// taking it lasts. Held at the log line between recording the release and owing the check, a connection published first
+// carries a beat that finds the release recorded and nothing owed, and asks for no check until the next beat.
+func TestABeatOnANewConnectionFindsTheReleaseItsWelcomeAssigned(t *testing.T) {
+	t.Cleanup(func() { setLinkAssignedRelease(nil) })
+	r := newLinkWorkRig(t)
+	assigned := &linkpb.AssignedRelease{Version: "999.0.0"}
+	r.g.welcome = func(c *fakeWorkConn, w *linkpb.Welcome) { w.Release = assigned }
+	r.g.ackRelease = assigned
+	r.m.log = func(args ...any) {
+		if strings.Contains(fmt.Sprint(args...), "assigns release") {
+			time.Sleep(100 * time.Millisecond)
+		}
+		r.logs.log(args...)
+	}
+	r.useLink(t)
+	resp, err := r.t.heartbeat(HeartbeatRequest{Status: "ONLINE", LeaseOwner: r.t.leaseOwner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.CheckSelfUpdate {
+		t.Fatal("the first beat on the connection did not ask for the release check its Welcome owes")
 	}
 }

@@ -30,21 +30,27 @@ file under `app/realtime`; it does not replace those entrypoints.
 | --- | --- |
 | `handle` | Captured A03 identity. A consumer must match it with the current `AuthState.SignedIn.handle` by identity before showing account data. |
 | `directory` | Nullable full REST snapshot; non-null cached rows may be shown while stale. |
-| `directoryRefreshing`, `directoryFresh`, `directoryError` | REST progress, freshness and failure. Failure retains old rows. |
+| `directoryRefreshing`, `directoryFresh`, `directoryError` | REST progress, freshness and failure. Failure retains old rows. An account event withdraws neither of the first two: the directory is read again behind the rows, and a read the event overtakes still lands. Only `refreshDirectory()` or `rereadDirectory()` outranks a read on the wire, which may have left before the write they follow. A connect withdraws `directoryFresh` until a read that left after it lands; one that left before lands its rows but is not fresh. |
 | `directoryCached` | `directory` is the copy restored from the device cache, not yet replaced by a REST read. P01's fully-drawn line reports it as `source=cache`. |
+| `directoryRestored` | The device's copy has been read, whether or not there was one. Until then having no rows says nothing yet. |
 | `controlConnection`, `controlError` | Account SSE status, separate from REST success. |
 | `session` | Selected session's transcript, pending-state snapshot, freshness, connection and error. |
-| `invalidationRevision` | Increments on control reconnect and every non-ping control event, including an empty `sessionId`. Other pages use it to reload their authority. |
+| `invalidationRevision` | Increments on control reconnect, and once for each 500 ms window of account events that held a type this build knows (`INVALIDATING_EVENTS`: every `ControlEventType` but `wiki.changed` and `notification`), including an empty `sessionId`. Other pages use it to reload their authority. |
+| `accountEvents`, `controlConnects` | How many events of each type the stream has delivered, at once and uncoalesced, and how many times it connected. A page that reads its own list keys on the types that move it (`PagePoll`). |
 
 `DirectorySnapshot` keeps complete `JsonObject`s, keyed by each object's `id`:
-`workspaces`, `folders`, `tags`, `runners`, and `sessions` grouped under
-`open`/`completed`/`trash`. Capability, permission, explicit null and unknown
+`workspaces`, `folders`, `tags`, `runners`, and `sessions` with the `open` list.
+Open is the app's list, as on iOS: a launch, a connect and an event read it and
+nothing else. Completed and Trash are read by the page showing them
+(`SessionScopeList`), when the scope is chosen, on a pull and behind a change
+this phone asked for (`directoryAsks`, which moves on every `refreshDirectory`);
+an owner's Completed is 18 MB. Capability, permission, explicit null and unknown
 fields survive REST and caching. A05 converts these to its directory DTOs.
 All directory requests form one snapshot; a failed component does not silently
 erase rows from another component. Each list is read row by row from the
 response bytes, never as one string, and a row equal to the published
 snapshot's row with the same `id` is kept as that object: reading an unchanged
-directory again (on every account event) holds one copy of it, not two. New
+directory again (on an account event) holds one copy of it, not two. New
 rows are compacted: objects with the same keys share one key table and keep
 their values in an array, and equal primitives are one object (an owner's
 5,945 Completed rows took 72 MB of heap as plain trees, 4.2 times their JSON).
@@ -68,10 +74,27 @@ open its own SSE or persist these state objects.
 
 ## Two streams and authority
 
-The account stream is `/api/events`. It has no replay cursor. Connecting it or
-receiving any non-ping event invalidates REST data, including all directory
-views, folders, tags, workspaces and runners. Raw control summaries never
-overwrite full permission/capability fields from a REST snapshot.
+The account stream is `/api/events`. It has no replay cursor. Connecting it
+reads every directory list at once, and an ask (`refreshDirectory`,
+`rereadDirectory`) does too. An account event reads only the lists it moves
+(docs/list-freshness-design.md §4 R1 and R5), once for a burst: the window opens
+at its first event and the read leaves 500 ms later. `session.*`, `approval.*`
+and `background.task` read Open; `tag.changed` the tags, `folder.changed` the
+folders, `agent.changed` the workspaces; nothing reads the runners but a connect
+or an ask; every other type reads no list of the store's. One loop reads, so no
+list is on the wire twice at once: windows that close during a read leave one
+more read behind it. Raw control summaries never overwrite full
+permission/capability fields from a REST snapshot.
+
+Pages that read their own lists (a project's sessions page, the sidebar, the
+drawer's projects, Projects, Following, the Landings window) follow the stream
+through `PagePoll`: on the account events that move what they show and on each
+connect, once a minute without one, on a 4, 8, 16 then 30 s backoff while the
+stream is down, and not at all while the Activity is stopped. A landing in
+flight publishes no event (§2.9 LS6), so while one is, the reads that draw it
+keep their own cadence (the project page's landing and merge 4 s, the Landings
+window's lists 15 s and merges 60 s, its cards and the running check's log
+§2.7a's 4 s / 15 s), still only while the Activity is started.
 
 The selected session opens `/api/sessions/:id/events?sinceSeq=...&maxPayload=2048`.
 A cold open reads `events/page?tail=200`. A window seeded before the attempt
@@ -130,18 +153,28 @@ deduplicates events already cached. On every connection, clear live drafts
 before accepting the server's full current prefix; appending to a previous
 connection's draft would duplicate text on mid-turn entry.
 
-`RealtimeCache` uses A03's account/server-scoped `DataKind.CACHE` key
-`realtime-v1`. One atomic record couples durable events with their cursor,
-directory and last selected session. It retains up to eight sessions and
-8 MiB, and a write never encodes more than that into memory: each part is
-first measured by a streaming encoder that stops once it passes the room left,
-keeping no bytes, and only parts that fit are encoded. The directory comes
-first and is left out only when it cannot fit on its own (an owner's directory
-of thousands of sessions passed 17 MB). Session windows follow newest first,
-each kept whole or not at all: a window that cannot fit in what is left is
-evicted, older windows that still fit stay, and no window is cut. A record
-within 8 MiB is byte for byte the plain encoding. The application encodes it
-off the main thread.
+`SavedDirectory` is what a launch draws before any read has landed (iOS
+`LaunchSnapshot`): A03's account/server-scoped `DataKind.CACHE` key
+`directory-v1`, holding the workspaces, folders, tags, runners and Open list. It
+is written once, as the app leaves the foreground, only if a read of this run
+brought something new, so a run that never reached the server leaves the copy it
+started from. It is decoded off the main thread before the connection starts, and
+nothing in it is an answer: the launch's own reads replace it, and the rows may be
+stale until they land. A copy that names no workspace reads as none, so an empty
+account's landing is decided by a read. Past 8 MiB, measured by a streaming encoder
+that stops there and keeps no bytes, it is not kept, and an empty record takes the
+older copy's place. A launch without one draws a spinner until its first read.
+
+`RealtimeCache` uses `DataKind.CACHE` key `realtime-v1`. One atomic record couples
+durable events with their cursor and the last selected session. It retains up to
+eight sessions and 8 MiB, and a write never encodes more than that into memory: each
+window is first measured by a streaming encoder that stops once it passes the room
+left, keeping no bytes, and only windows that fit are encoded, newest first, each
+kept whole or not at all: a window that cannot fit in what is left is evicted, older
+windows that still fit stay, and no window is cut. A record within 8 MiB is byte for
+byte the plain encoding. A record an older build wrote may still name a directory;
+it is ignored, and the next write drops it. The application encodes and decodes both
+records off the main thread.
 Live animation and pending authority are excluded. Writes coalesce for 100 ms;
 death before a write is recovered by the earlier persisted cursor. Corrupt,
 unsupported-schema or inconsistent records fall back to a cold load.

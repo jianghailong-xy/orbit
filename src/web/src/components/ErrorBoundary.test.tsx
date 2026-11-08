@@ -207,8 +207,9 @@ describe('AppBoundary', () => {
   });
 
   it('takes the boot splash down: it covers the page, and a throw behind it is a bar that stopped', async () => {
-    const bootDone = vi.fn();
-    vi.stubGlobal('__bootDone', bootDone);
+    const boot = document.createElement('div');
+    boot.id = 'boot';
+    document.body.append(boot);
 
     await mount(
       <AppBoundary>
@@ -216,7 +217,8 @@ describe('AppBoundary', () => {
       </AppBoundary>,
     );
 
-    expect(bootDone).toHaveBeenCalled();
+    expect(boot.classList.contains('hide')).toBe(true);
+    boot.remove();
   });
 
   it('leaves a page that renders alone', async () => {

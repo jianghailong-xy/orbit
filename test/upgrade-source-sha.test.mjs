@@ -167,13 +167,27 @@ test('the docker build carries the checkout commit into the runner-binary stage'
   }
 });
 
+// A link of the deployment's own, complete and running, as production's is: the runner link's steps
+// (test/upgrade-runner-link.test.mjs) look at it and leave it, and the .env, alone, in a build that needs the link too.
+const LINK_OF_ITS_OWN = {
+  ...Object.fromEntries(['SIGNING_KEY', 'GATEWAY_TOKEN', 'PUBLIC_KEY', 'NATS_APISERVER_SEED', 'NATS_APISERVER_KEY', 'NATS_GATEWAY_SEED',
+    'NATS_GATEWAY_KEY'].map((name) => [`RUNNER_LINK_${name}`, 'fixture'])),
+  RUNNER_LINK_URL: 'wss://link.fixture.invalid',
+  COMPOSE_PROFILES: 'runner-link',
+};
+const LINK_GATEWAY_ANSWERS = `case "$*" in
+  'compose ps -q link-gateway') echo link-gateway-0 ;;
+  'inspect -f {{with index .State "Health"}}{{.Status}}{{end}} link-gateway-0') echo healthy ;;
+esac
+`;
+
 test('legacy upgrade passes the checked-out commit to the web image build', () => {
   const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-upgrade-source-sha-'));
   const dockerLog = path.join(fixture, 'docker.log');
   const fakeDocker = path.join(fixture, 'docker');
   writeFileSync(fakeDocker, `#!/bin/sh
 printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
-`);
+${LINK_GATEWAY_ANSWERS}`);
   chmodSync(fakeDocker, 0o755);
 
   try {
@@ -181,6 +195,7 @@ printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
       ...process.env,
       PATH: `${fixture}:${process.env.PATH}`,
       ORBIT_FAKE_DOCKER_LOG: dockerLog,
+      ...LINK_OF_ITS_OWN,
     };
     delete env.ORBIT_SOURCE_SHA;
     // --no-pull: this runs in the repository itself, which a pull would move.
@@ -222,12 +237,13 @@ test('upgrade on main pulls origin first, so the build names the commit that lan
     const fakeDocker = path.join(fixture, 'docker');
     writeFileSync(fakeDocker, `#!/bin/sh
 printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
-`);
+${LINK_GATEWAY_ANSWERS}`);
     chmodSync(fakeDocker, 0o755);
     const env = {
       ...process.env,
       PATH: `${fixture}:${process.env.PATH}`,
       ORBIT_FAKE_DOCKER_LOG: dockerLog,
+      ...LINK_OF_ITS_OWN,
       GIT_AUTHOR_NAME: 'fixture',
       GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
       GIT_COMMITTER_NAME: 'fixture',
@@ -309,3 +325,138 @@ printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
     }
   }
 });
+
+// A deployment runs from one checkout, because its bind mounts are relative, so both copies of the skill stop anywhere
+// else before they touch anything: from there /archive would bind an empty directory, which the mirror's --delete reads,
+// and every attachment would stop reading. And no list of services names pgbackup, which runs a script bind-mounted as a
+// single file: where the deployment does run from, they bring it up to date themselves.
+const DEPLOYMENT_FAKE_DOCKER = `#!/bin/sh
+printf '%s\n' "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
+case "$*" in
+  'compose config --services') printf '%s\n' postgres apiserver wiki-worker web gateway pgbackup ;;
+  'compose config postgres')
+    [ -z "$ORBIT_FAKE_NO_ENV" ] || exit 1
+    echo "    container_name: \${ORBIT_FAKE_POSTGRES:-orbit-postgres}" ;;
+  'compose ps -q pgbackup') [ -z "$ORBIT_FAKE_PGBACKUP" ] || echo "$ORBIT_FAKE_PGBACKUP" ;;
+  'inspect --format '*' orbit-postgres')
+    [ -n "$ORBIT_FAKE_ARCHIVE" ] || { echo 'Error: No such object' >&2; exit 1; }
+    echo "$ORBIT_FAKE_ARCHIVE" ;;
+  'inspect --format '*' orbit-qa-postgres') echo "$PWD/data/pg-archive" ;;
+  "exec $ORBIT_FAKE_PGBACKUP cat /usr/local/bin/pg-backup.sh") cat "$ORBIT_FAKE_RUNNING_SCRIPT" ;;
+esac
+${LINK_GATEWAY_ANSWERS}`;
+
+for (const relative of ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upgrade/scripts/upgrade.sh']) {
+  test(`${relative} stops anywhere but the checkout the deployment runs from, and brings pgbackup up to date there`, () => {
+    const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-upgrade-deployment-'));
+    const deployed = path.join(fixture, 'deployed');
+    const dockerLog = path.join(fixture, 'docker.log');
+    const running = path.join(fixture, 'running-script');
+    const fakeDocker = path.join(fixture, 'docker');
+    writeFileSync(fakeDocker, DEPLOYMENT_FAKE_DOCKER);
+    chmodSync(fakeDocker, 0o755);
+    const env = {
+      ...process.env,
+      PATH: `${fixture}:${process.env.PATH}`,
+      ORBIT_FAKE_DOCKER_LOG: dockerLog,
+      ...LINK_OF_ITS_OWN,
+      ORBIT_FAKE_RUNNING_SCRIPT: running,
+      GIT_AUTHOR_NAME: 'fixture',
+      GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
+      GIT_COMMITTER_NAME: 'fixture',
+      GIT_COMMITTER_EMAIL: 'fixture@example.invalid',
+    };
+    delete env.COMPOSE_PROJECT_NAME;
+    const git = (...args) => execFileSync('git', args, { cwd: deployed, env, encoding: 'utf8', stdio: 'pipe' }).trim();
+    const script = '#!/bin/sh\n# the sidecar, as this checkout has it\n';
+    const here = path.join(deployed, 'data/pg-archive');
+    const installed = path.join(fixture, 'installed');
+    const elsewhere = path.join(installed, 'data/pg-archive');
+    // One upgrade. `archive` is where the running postgres binds /archive, empty with no such container; `pgbackup` the
+    // sidecar's id in this run's Compose project, empty where it is not running; `container` the name Compose renders.
+    const upgradeWith = ({ runningScript = script, archive = here, pgbackup = 'pgbackup-id', container = '', args = [], noEnv = '' } = {}) => {
+      writeFileSync(dockerLog, '');
+      writeFileSync(running, runningScript);
+      const run = spawnSync(path.join(deployed, relative), ['--no-pull', ...args], {
+        cwd: fixture,
+        env: { ...env, ORBIT_FAKE_ARCHIVE: archive, ORBIT_FAKE_PGBACKUP: pgbackup, ORBIT_FAKE_POSTGRES: container, ORBIT_FAKE_NO_ENV: noEnv },
+        encoding: 'utf8',
+      });
+      const calls = readFileSync(dockerLog, 'utf8').trim().split('\n');
+      return {
+        run,
+        calls,
+        ups: calls.filter((call) => call.startsWith('compose up ')),
+        why: `${relative}\n${run.stdout}\n${run.stderr}`,
+      };
+    };
+    // Stopped before it changed anything: no later call than the two questions of the check, and it says where to go.
+    const assertRefused = (r) => {
+      assert.notEqual(r.run.status, 0, r.why);
+      assert.deepEqual(r.calls.filter((call) => /^(compose (build|pull|up|run)|tag|exec) /.test(call)), [], r.why);
+      assert.equal(r.calls.at(-1).endsWith(' orbit-postgres'), true, r.why);
+      assert.ok(r.run.stderr.includes(`this deployment runs from ${installed}, not from this checkout (${deployed})`), r.why);
+      assert.ok(r.run.stderr.includes(`Nothing was pulled, built, tagged or recreated. Run the upgrade in ${installed}.`), r.why);
+    };
+
+    try {
+      mkdirSync(path.dirname(path.join(deployed, relative)), { recursive: true });
+      mkdirSync(path.join(deployed, 'scripts'));
+      copyFileSync(path.join(repo, relative), path.join(deployed, relative));
+      chmodSync(path.join(deployed, relative), 0o755);
+      writeFileSync(path.join(deployed, 'scripts/pg-backup.sh'), script);
+      git('init', '-q', '--initial-branch=main');
+      git('add', '.');
+      git('commit', '-q', '-m', 'install');
+
+      // Nothing changed: `up` is asked, which recreates it only for a change of configuration, and it is never forced.
+      let r = upgradeWith();
+      assert.equal(r.run.status, 0, r.why);
+      assert.equal(r.ups.at(-1), 'compose up -d --wait --no-deps pgbackup', r.why);
+      assert.equal(r.ups.filter((up) => up.includes('pgbackup')).length, 1, r.why);
+
+      // Only the script changed, which Compose cannot see: the container is recreated, and after the other services.
+      r = upgradeWith({ runningScript: '#!/bin/sh\n# the sidecar, as the container started on it\n' });
+      assert.equal(r.run.status, 0, r.why);
+      assert.equal(r.ups.at(-1), 'compose up -d --wait --no-deps --force-recreate pgbackup', r.why);
+      assert.ok(r.ups.length >= 2 && r.ups.at(-2).includes('apiserver'), r.why);
+
+      // Never postgres: the default path's calls do not name it, and pgbackup's cannot bring it along.
+      assert.deepEqual(r.ups.filter((up) => /\bpostgres\b/.test(up)), [], r.why);
+      assert.deepEqual(r.ups.filter((up) => up.includes('pgbackup') && !up.includes('--no-deps')), [], r.why);
+
+      // Anywhere else, whether or not this run's Compose project can see the sidecar, and with --pull-base too.
+      assertRefused(upgradeWith({ archive: elsewhere }));
+      assertRefused(upgradeWith({ archive: elsewhere, pgbackup: '' }));
+      assertRefused(upgradeWith({ archive: elsewhere, args: ['--pull-base'] }));
+      // Compose cannot render a worktree with no .env: the default name is asked instead of the check being skipped.
+      assertRefused(upgradeWith({ archive: elsewhere, noEnv: '1' }));
+
+      // A first install: no such container, so nothing to stop for.
+      r = upgradeWith({ archive: '', pgbackup: '' });
+      assert.equal(r.run.status, 0, r.why);
+      assert.ok(r.calls.includes('compose build apiserver wiki-worker web'), r.why);
+
+      // A separate deployment on the same Docker, the first deployment's container elsewhere: its containers have names of
+      // their own, so it is held to its own /archive and goes ahead.
+      r = upgradeWith({ archive: elsewhere, container: 'orbit-qa-postgres' });
+      assert.equal(r.run.status, 0, r.why);
+      assert.ok(r.calls.some((call) => call.endsWith(' orbit-qa-postgres')), r.why);
+      assert.ok(!r.calls.some((call) => call.startsWith('inspect ') && call.endsWith(' orbit-postgres')), r.why);
+
+      // A sidecar that is stopped here stays as its operator left it, and the run says so last of all.
+      r = upgradeWith({ pgbackup: '' });
+      assert.equal(r.run.status, 0, r.why);
+      assert.deepEqual(r.ups.filter((up) => up.includes('pgbackup')), [], r.why);
+      assert.match(r.run.stderr.trim().split('\n').slice(-2).join('\n'), /pgbackup was NOT updated/, r.why);
+      assert.ok(r.run.stderr.includes(`run this in ${deployed}: docker compose up -d --no-deps --force-recreate pgbackup`), r.why);
+
+      // --pull-base from the installed checkout still brings a changed script up to date, after its own recreate.
+      r = upgradeWith({ runningScript: '#!/bin/sh\n# older\n', args: ['--pull-base'] });
+      assert.equal(r.run.status, 0, r.why);
+      assert.equal(r.ups.at(-1), 'compose up -d --wait --no-deps --force-recreate pgbackup', r.why);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+}

@@ -46,6 +46,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import { doorsForOpenItem } from './open-item-doors';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The complete promotion-failure path: a real CHECK_PROMOTION failure opens one item, the

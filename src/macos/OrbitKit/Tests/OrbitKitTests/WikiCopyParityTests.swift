@@ -133,8 +133,9 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_DECIDED_REJECTED", WikiCopy.rejected),
             ("WIKI_DECIDED_RETIRED", WikiCopy.retired),
             ("WIKI_DECIDED_KEPT", WikiCopy.decidedKept),
-            ("WIKI_DECIDED_RECONFIRMED", WikiCopy.decidedReconfirmed),
             ("WIKI_DECIDED_AMENDED", WikiCopy.decidedAmended),
+            ("WIKI_RETIRE_NOTE", WikiCopy.retireNote),
+            ("WIKI_RETIRE_REASON_PLACEHOLDER", WikiCopy.reasonPlaceholder),
             ("WIKI_DECIDE_FAILED", WikiCopy.decideFailed),
             ("WIKI_DECIDE_CONFLICT", WikiCopy.conflictRefused),
             ("WIKI_DECIDE_INACTIVE", WikiCopy.inactiveRefused),
@@ -171,13 +172,17 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_MANAGE_SPACES", WikiCopy.manageSpaces),
         ]
         for (name, word) in pairs { assertDeclares(web, name, word) }
+        // A challenge's Keep toasts the button's word; "Re-confirmed" is gone at both ends.
+        XCTAssertFalse(web.contains("WIKI_DECIDED_RECONFIRMED"), "\(Self.lib) still declares WIKI_DECIDED_RECONFIRMED")
     }
 
     /// What a landed Review answer's toast says: the web's `wikiDecidedToast`, case by case.
     func testTheReviewToastSaysWhatTheAnswerDid() throws {
         let web = try source(Self.lib)
+        // A challenge's Keep (`reconfirm` on the wire) toasts the button's word, Kept.
+        let keep = try slice(web, from: "case 'reconfirm':", to: "case 'amend':")
+        XCTAssertTrue(keep.contains("return WIKI_DECIDED_KEPT;"), "\(Self.lib): a challenge's Keep no longer toasts Kept")
         for line in ["case 'edit': return WIKI_DECIDED_EDITED;",
-                     "case 'reconfirm': return WIKI_DECIDED_RECONFIRMED;",
                      "case 'amend': return WIKI_DECIDED_AMENDED;",
                      "case 'retire': return WIKI_DECIDED_RETIRED;",
                      "case 'reject': return op === 'retire' ? WIKI_DECIDED_KEPT : WIKI_DECIDED_REJECTED;",
@@ -190,7 +195,8 @@ final class WikiCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiLogic.decidedToast(op: .retire, action: .accept), "Retired")
         XCTAssertEqual(WikiLogic.decidedToast(op: .retire, action: .reject), "Kept",
                        "Keep is a rejection on the wire, but the owner kept the entry")
-        XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .reconfirm), "Re-confirmed")
+        XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .reconfirm), "Kept",
+                       "a challenge's Keep says the button's word, so a press meant as Retire reads as what it did")
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .amend), "Amended")
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .retire), "Retired")
     }
@@ -324,8 +330,8 @@ final class WikiCopyParityTests: XCTestCase {
     // MARK: the drawer's Wiki row
 
     /// The row sits right after Projects, draws the book, and its amber number is what waits on the owner
-    /// across every space — each space's proposals and the things its plan waits for (`wikiWaiting`) —
-    /// nothing at zero, and "3 waiting on you" as its accessible name, the Projects row's own words. The
+    /// across every space — each space's proposals, the things its plan waits for and its chat rewrites that wait
+    /// (`wikiWaiting`) — nothing at zero, and "3 waiting on you" as its accessible name, the Projects row's own words. The
     /// head's Activity badge is the same number from the same function.
     func testTheDrawerRowCountsWhatTheWebSidebarCounts() throws {
         let web = try source(Self.sidebar)
@@ -335,10 +341,12 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(web, "t.key === 'wiki' && wikiWaitingCount > 0", in: Self.sidebar)
         assertSays(web, "aria-label={wikiWaitingOnYou(wikiWaitingCount)}", in: Self.sidebar)
         let rules = try source(Self.spaceLib)
-        assertSays(rules, "return (space.pendingOps ?? 0) + (space.planWaiting ?? 0);", in: Self.spaceLib)
+        assertSays(rules, "return (space.pendingOps ?? 0) + (space.planWaiting ?? 0) + (space.chatWaiting ?? 0);", in: Self.spaceLib)
         assertSays(rules, "return spaces.reduce((sum, space) => sum + wikiWaitingIn(space), 0);", in: Self.spaceLib)
         XCTAssertEqual(WikiSpaceLogic.waiting([WikiSpace(id: "a", slug: "a", pendingOps: 1, planWaiting: 2),
                                                WikiSpace(id: "b", slug: "b", pendingOps: 3)]), 6)
+        XCTAssertEqual(WikiSpaceLogic.waiting([WikiSpace(id: "a", slug: "a", pendingOps: 1, planWaiting: 2, chatWaiting: 3),
+                                               WikiSpace(id: "b", slug: "b", pendingOps: 3)]), 9)
         XCTAssertEqual(WikiCopy.waitingOnYou(6), "6 waiting on you")
         let page = try source(Self.page)
         assertSays(page, "<WikiActivityButton spaceSlug={space.slug} waiting={wikiWaiting(rows)} on={activity} />",
@@ -445,6 +453,7 @@ final class WikiCopyParityTests: XCTestCase {
     /// head, the line and the search, `WikiHome.tsx` the rest, and index.css's phone rules keep them one
     /// column in that order — and iOS draws `WikiLogic.HomeBand` in the same one. No block says how the wiki
     /// is kept: the status row, Review, the plan, the decisions, the changes and the agents' use are Activity's.
+    /// The setup card alone does, in the documents' place, until there is something to read (mock 41).
     func testTheHomeBandsAreTheWebPhonesInItsOrder() throws {
         let page = try source(Self.page)
         let frame = try slice(page, from: "function WikiFrame(", to: "function WikiHeadSpace(")
@@ -455,8 +464,8 @@ final class WikiCopyParityTests: XCTestCase {
                             "<div className={`wk-layout${home ? ' home' : ''}`}>"], "the web's head, line and search")
         let home = try source(Self.home)
         let body = try slice(home, from: "export function WikiHome(", to: "export function WikiHomeState(")
-        assertOrder(body, ["{principles.length > 0 && <HomePrinciples", "<HomeSkeleton />", "<HomeCategory key={category.key}",
-                           "<HomeTopics key={group.key}", "<HomeNewSpace", "<div className=\"wk-home-more\">",
+        assertOrder(body, ["{principles.length > 0 && <HomePrinciples", "{start && <WikiStartCard space={space} />}", "<HomeSkeleton />",
+                           "<HomeCategory key={category.key}", "<HomeTopics key={group.key}", "<div className=\"wk-home-more\">",
                            "{WIKI_BROWSE}", "{WIKI_AZ_INDEX}"], "the web's home")
         for gone in ["wk-cols", "<ReviewCard", "WIKI_RECENT_DECISIONS", "WIKI_RECENTLY_CHANGED", "<UsageCard", "wk-banner"] {
             XCTAssertFalse(body.contains(gone), "the home draws \(gone) again: that is Activity's")
@@ -480,17 +489,15 @@ final class WikiCopyParityTests: XCTestCase {
 
     /// What each band draws of what the home read — the web's branches, the native `homeDocuments` and
     /// `homeLine`: grey bars while the first read is out; the confirmed plan's documents; before a plan, the
-    /// topic articles; else a new space's card, or nothing once maintenance is set up. Browse · A–Z ends the
-    /// home only once something is listed.
+    /// topic articles; with nothing to read the setup card, above the categories of a plan none of whose documents
+    /// is written. Browse · A–Z ends the home only once something is listed.
     func testTheHomeDrawsWhatItReadAsTheWebDoes() throws {
         let home = try source(Self.home)
         assertSays(home, "loading: docs.isPending || (!byDocs && articles.isPending),", in: Self.home)
         assertSays(home, "const listed = home.directory !== null || home.topics > 0;", in: Self.home)
-        assertSays(home, "!space.settings?.maintenance?.enabled && <HomeNewSpace spaceSlug={space.slug} />", in: Self.home)
+        assertSays(home, "const start = !home.loading && wikiStartShown(home.directory?.docs.written ?? 0, home.topics);", in: Self.home)
         assertSays(home, "{!home.loading && listed && (", in: Self.home)
         assertSays(home, "{home.loading ? <span className=\"wk-sk\" aria-hidden=\"true\" /> : wikiHomeLine(home.directory, home.topics)}",
-                   in: Self.home)
-        assertSays(home, "<p>{WIKI_NO_DOCUMENTS_NOTE}</p> <Link to={wikiSettingsPath(spaceSlug)}>{WIKI_PLAN_SET_UP} ›</Link>",
                    in: Self.home)
 
         let plan = try JSONDecoder().decode(WikiDocsDirectory.self, from: Data(#"""
@@ -509,41 +516,51 @@ final class WikiCopyParityTests: XCTestCase {
         let none = try JSONDecoder().decode(WikiArticleDirectory.self, from: Data(#"{"categories":[],"uncategorized":[]}"#.utf8))
         let unplanned = try JSONDecoder().decode(WikiDocsDirectory.self, from: Data(#"{"plan":null,"docs":null,"categories":[]}"#.utf8))
 
-        XCTAssertEqual(WikiLogic.homeDocuments(docs: plan, articles: articles, loading: true, maintenance: false, seen: 0), .loading)
+        XCTAssertEqual(WikiLogic.homeDocuments(docs: plan, articles: articles, loading: true, seen: 0), .loading)
         XCTAssertNil(WikiLogic.homeLine(docs: plan, articles: articles, loading: true))
-        guard case .categories(let categories) = WikiLogic.homeDocuments(docs: plan, articles: articles, loading: false,
-                                                                          maintenance: false, seen: 0) else {
+        guard case .categories(let categories, let start) = WikiLogic.homeDocuments(docs: plan, articles: articles, loading: false,
+                                                                                    seen: 0) else {
             return XCTFail("a confirmed plan's home lists its documents")
         }
+        XCTAssertFalse(start, "a document is written: the setup card has gone")
         XCTAssertEqual(categories.map(\.number), [1, 4], "a category with no document is left out")
         XCTAssertEqual(categories.map(WikiDocLogic.notWrittenRow), ["+1 not written yet", "1 document · Not written yet"])
         XCTAssertEqual(WikiLogic.homeLine(docs: plan, articles: articles, loading: false), "3 documents · 1 written")
 
-        let topics = WikiLogic.homeDocuments(docs: unplanned, articles: articles, loading: false, maintenance: false, seen: 0)
+        let topics = WikiLogic.homeDocuments(docs: unplanned, articles: articles, loading: false, seen: 0)
         XCTAssertEqual(topics, .topics(WikiArticleLogic.directoryGroups(articles)), "before a plan: the topic articles")
         XCTAssertTrue(topics.listed)
         XCTAssertEqual(WikiLogic.homeLine(docs: unplanned, articles: articles, loading: false), "2 articles")
 
-        XCTAssertEqual(WikiLogic.homeDocuments(docs: unplanned, articles: none, loading: false, maintenance: false, seen: 0), .newSpace)
-        XCTAssertEqual(WikiLogic.homeDocuments(docs: nil, articles: nil, loading: false, maintenance: true, seen: 0), .nothing,
-                       "maintenance set up: the line says No documents yet, and nothing more")
-        XCTAssertFalse(WikiLogic.HomeDocuments.newSpace.listed)
+        XCTAssertEqual(WikiLogic.homeDocuments(docs: unplanned, articles: none, loading: false, seen: 0), .start,
+                       "nothing to read: the setup card, maintenance on or off")
+        XCTAssertEqual(WikiLogic.homeDocuments(docs: nil, articles: nil, loading: false, seen: 0), .start)
+        XCTAssertFalse(WikiLogic.HomeDocuments.start.listed)
         XCTAssertEqual(WikiLogic.homeLine(docs: unplanned, articles: none, loading: false), WikiCopy.noDocuments)
-        XCTAssertEqual(WikiDocCopy.noDocumentsNote,
-                       "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.")
         XCTAssertEqual(WikiPlanCopy.setUp, "Set up maintenance")
+
+        // A plan confirmed and nothing written: the card over its categories, then Browse · A–Z, as the web lists them.
+        let nothingWritten = try JSONDecoder().decode(WikiDocsDirectory.self, from: Data(#"""
+            {"spaceId":"s","plan":{"version":1,"confirmedAt":"2026-10-01T00:00:00.000Z"},"docs":{"total":1,"written":0},
+             "categories":[{"key":"overview","number":1,"title":"Product overview","docs":[
+               {"slug":"product","number":"1.1","title":"Overview","written":false}]}]}
+            """#.utf8))
+        let writing = WikiLogic.homeDocuments(docs: nothingWritten, articles: none, loading: false, seen: 0)
+        XCTAssertEqual(writing, .categories(WikiDocLogic.homeCategories(nothingWritten, seen: 0), start: true))
+        XCTAssertTrue(writing.listed)
+        XCTAssertEqual(WikiLogic.homeLine(docs: nothingWritten, articles: none, loading: false), "1 document · 0 written")
     }
 
     /// The home page's rows are the web's: principles oldest recorded first, the four newest
     /// decisions, the five newest changes, the three most used — and the verbs.
     func testTheHomeRowsAreTheWebsRows() throws {
         let activity = try source(Self.activity)
-        // Recently changed is Activity's now (design §12.3.2). One run is one row: the five newest rows,
+        // Recently changed is Activity's now (design §12.3.2). One run is one row: the five newest entry rows,
         // every run folded in by the changeset its items name (`wikiRecentRows`) — the same five
-        // `WikiHomeContent.recentRows` the native Activity draws.
-        assertSays(activity, "const rows = useMemo(() => wikiRecentRows(timeline.data?.items ?? []).slice(0, 5), [timeline.data]);",
-                   in: Self.activity)
-        assertSays(activity, "{rows.map((row) =>", in: Self.activity)
+        // `WikiHomeContent.recentRows` the native Activity draws. The web's list also holds the documents' newest
+        // five by time (Docs rows, docs/wiki-chat-design.md §8.4, C9), which that design's §13 gives the web alone.
+        assertSays(activity, "const entryRows = wikiRecentRows(timeline.data?.items ?? []) .slice(0, 5)", in: Self.activity)
+        assertSays(activity, "{rows.map((entry) =>", in: Self.activity)
         let lib = try source(Self.lib)
         for verb in ["if (item.decision === 'accepted') return WIKI_HISTORY_CONFIRMED_BY;",
                      "if (item.decision === 'edited') return 'Edited by you';",
@@ -680,12 +697,16 @@ final class WikiCopyParityTests: XCTestCase {
                              "{ key: 'supersede', icon: <SwapOutlined />, label: WIKI_ACTION_SUPERSEDE,",
                              "{ key: 'retire', icon: <StopOutlined />, label: WIKI_ACTION_RETIRE, danger: true,",
                              "label: copied ? WIKI_LINK_COPIED : WIKI_ACTION_COPY_LINK"], "the entry's actions")
-        for text in [WikiCopy.editNote, WikiCopy.supersedeNote, WikiCopy.retireNote] {
+        for text in [WikiCopy.editNote, WikiCopy.supersedeNote] {
             assertSays(drawer, text, in: Self.drawer)
         }
-        for placeholder in [WikiCopy.titlePlaceholder, WikiCopy.summaryPlaceholder, WikiCopy.reasonPlaceholder] {
+        for placeholder in [WikiCopy.titlePlaceholder, WikiCopy.summaryPlaceholder] {
             assertSays(drawer, "placeholder=\"\(placeholder)\"", in: Self.drawer)
         }
+        // Retire…'s note and reason are the lib's constants (`WIKI_RETIRE_NOTE`, `WIKI_RETIRE_REASON_PLACEHOLDER`,
+        // whose words the table above holds to WikiCopy's), the same Review's Retire… dialog says.
+        assertSays(drawer, "<p className=\"wk-modal-note\">{WIKI_RETIRE_NOTE}</p>", in: Self.drawer)
+        assertSays(drawer, "placeholder={WIKI_RETIRE_REASON_PLACEHOLDER}", in: Self.drawer)
         assertSays(drawer, "{mode === 'retire' ? '\(WikiCopy.retireConfirm)' : mode === 'supersede' ? "
                    + "'\(WikiCopy.supersedeConfirm)' : '\(WikiCopy.save)'}", in: Self.drawer)
         assertSays(drawer, "message.success(mode === 'retire' ? '\(WikiCopy.retired)' : mode === 'supersede' ? "

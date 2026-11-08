@@ -67,6 +67,13 @@ function fixture() {
       },
     },
     attachment: {
+      // The bytes are read through the file store's door (FilesService.open): these rows keep theirs in `data`, as a row
+      // from before Orbit Files does, so the store names none.
+      findFirst: async ({ where }: Row) => {
+        const row = attachments.find((att) => matches(att, where));
+        return row ? { ...row, sha256: null, blob: null } : null;
+      },
+      findUnique: async ({ where }: Row) => attachments.find((att) => att.id === where.id) ?? null,
       updateMany: async ({ where, data }: Row) => {
         const selected = attachments.filter((row) => matches(row, where));
         for (const row of selected) Object.assign(row, data);
@@ -89,7 +96,7 @@ function fixture() {
     }
   };
   // RealtimeService's two halves of a file request's wait: the runner's answer (notifyWaiters) wakes the request
-  // parked on it (waitForInbox), as across replicas.
+  // parked on it (waitForNotice), as across replicas.
   const waiters = new EventEmitter();
   const notified: string[] = [];
   const api = new RunnerApiController(db as never, {} as never, {
@@ -103,7 +110,7 @@ function fixture() {
     {} as never,
     {
       notifyRunnerWake: (runnerId: string) => void woken.push(runnerId),
-      waitForInbox: (key: string, timeoutMs: number) => new Promise<void>((resolve) => {
+      waitForNotice: (key: string, timeoutMs: number) => new Promise<void>((resolve) => {
         const timer = setTimeout(done, timeoutMs);
         function done() { clearTimeout(timer); waiters.off(key, done); resolve(); }
         waiters.once(key, done);
@@ -151,6 +158,27 @@ test('only the owner can fetch an existing changed file and an offline runner qu
   await assert.rejects(f.service.getWorktreeFileForOwner(OWNER, SESSION, 'one/card.png'), expectStatus(503));
   assert.equal(f.turns().length, 0);
   assert.deepEqual(f.woken, [], 'a refused request wakes no runner');
+});
+
+// A reply names a file the way the agent worked with it, relative to the checkout. The artifact
+// door reads that spelling through the runner too — and unlike the changed-file preview, it does
+// not require the file to still be on the run's changed list, which a reply outlives.
+test('a transcript\'s checkout-relative path is read out of the checkout, changed file or not', async () => {
+  const f = fixture();
+  let asked = '';
+  f.onRead(async (turn) => {
+    asked = turn.content;
+    const upload = f.addAttachment({ data: Buffer.from('the mock') });
+    await f.result(turn.id, { status: 'uploaded', attachmentId: upload.id });
+  });
+  const path = 'docs/mocks/card.png';
+  assert.equal(f.session.changedFiles.some((file) => file.path === path), false, 'not a changed file');
+
+  const result = await f.service.getLegacyArtifactForOwner(OWNER, SESSION, path);
+  assert.equal(result.data.toString(), 'the mock');
+  assert.equal(result.mimeType, 'image/png');
+  assert.deepEqual(JSON.parse(asked), { source: 'worktree', path });
+  assert.deepEqual(f.woken, [RUNNER]);
 });
 
 test('same-basename files and repeated previews fetch fresh request-scoped bytes, then remove only their temporary upload', async () => {

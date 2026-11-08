@@ -719,7 +719,7 @@ test('the settings door asks no provider, and dailyRunLimit is 8, within 1 to 48
     await h.prisma.wikiJob.create({ data: { id: jobId, ownerId: space.owner.id, spaceId: space.spaceId, kind: 'maintain', input: {}, state: 'queued' } });
     await h.prisma.wikiMaintenanceRun.create({
       data: {
-        spaceId: space.spaceId, ownerId: space.owner.id, jobId, createdAt, outcome,
+        spaceId: space.spaceId, ownerId: space.owner.id, jobId, due: 'backlog', createdAt, outcome,
         endedAt: outcome ? createdAt : null, failureKind: outcome === 'failed' ? 'content' : null,
       },
     });
@@ -1279,7 +1279,7 @@ async function buildDocuments(h: Harness, s: PlannedSpace): Promise<ReturnType<t
   ] as const) {
     const wrote = await h.docs.write(wikiDocsBuildJobPrincipal(s.owner.id), s.spaceId, slug, {
       planVersion: s.version, repoSha: 'b'.repeat(40), model: 'qwen3.8-27b-fp8', sections,
-    });
+    }, { reason: 'build', jobId: build!.job_id!, planVersion: s.version });
     assert.ok(wrote.sections.every((one) => one.outcome === 'written'), `the build writes ${slug}: ${JSON.stringify(wrote.sections)}`);
   }
   assert.equal(await h.plans.finishServerJob({ ownerId: s.owner.id, spaceId: s.spaceId, planJobId: build!.id, wikiJobId: build!.job_id! }, {
@@ -1323,7 +1323,7 @@ test('the entries a run wrote make only the sections they fit to be written; wha
   // The run writes the pitfalls section again, and nothing else is touched.
   const rewrote = await h.docs.write(writer, s.spaceId, 'runner-ops', {
     planVersion: s.version, repoSha: 'c'.repeat(40), model: 'qwen3.8-27b-fp8', sections: [writtenSection(pitfall, 'p2', '长迁移会被 statement_timeout 打断')],
-  });
+  }, { reason: 'maintenance', jobId: run });
   assert.deepEqual(rewrote.sections.map((one) => [one.key, one.outcome]), [[pitfall, 'written']]);
   const now = await sectionRows(h, s.spaceId);
   for (const key of [`runner-ops#${convention}`, `plan-flow#${flow}`, `plan-flow#${decision}`]) {
@@ -1403,7 +1403,7 @@ test('a space with no confirmed plan writes no document: the run reads no plan, 
   assert.deepEqual([affected.plan, affected.sections, affected.unplaced, affected.build], [null, [], [], null]);
   await assert.rejects(h.docs.write(wikiMaintainJobPrincipal(s.owner.id, run), s.spaceId, 'runner-ops', {
     planVersion: s.version, repoSha: 'b'.repeat(40), sections: [writtenSection('s2', 'c1', '全量测试在 runner 宿主上跑')],
-  }), refusedWith('WIKI_PLAN_UNCONFIRMED'), 'no document is written from a plan nobody confirmed');
+  }, { reason: 'maintenance', jobId: run }), refusedWith('WIKI_PLAN_UNCONFIRMED'), 'no document is written from a plan nobody confirmed');
   assert.equal((await h.sql.query(`SELECT 1 FROM "wiki_doc" WHERE "space_id" = $1`, [s.spaceId])).rowCount, 0);
   assert.equal((await builds(h, s.spaceId)).length, 0, 'no confirmation, no build');
 });
@@ -1414,7 +1414,8 @@ test('a repository file gone from origin/main withdraws the sentences citing it,
   await confirm(h, s, s.version);
   const { flow } = await sectionKeys(h, s);
   const build = wikiDocsBuildJobPrincipal(s.owner.id);
-  const wrote = await h.docs.write(build, s.spaceId, 'plan-flow', { planVersion: s.version, repoSha: 'b'.repeat(40), sections: [writtenSection(flow, 'f1', '起草分四步')] });
+  const wrote = await h.docs.write(build, s.spaceId, 'plan-flow', { planVersion: s.version, repoSha: 'b'.repeat(40), sections: [writtenSection(flow, 'f1', '起草分四步')] },
+    { reason: 'build', jobId: randomUUID(), planVersion: s.version });
   assert.deepEqual(wrote.sections.map((one) => one.outcome), ['written'], 'the build writes the flow section');
   const run = wikiMaintainJobPrincipal(s.owner.id, await serverRun(h, s));
   await assert.rejects(h.docs.withdrawPaths(run, s.spaceId, { repoSha: 'short', paths: [] }), refusedWith('WIKI_DOC_INVALID'),

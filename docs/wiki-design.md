@@ -96,10 +96,11 @@ owner 明确要求内容覆盖「用户开发的东西」本身。落法如下�
   - `git@github.com:a/b.git` 与 `https://github.com/a/b` 都归一成 `github.com/a/b`；
   - 来源是 `workspace.repo_url`（`schema.prisma:702`）和 `project_codebase.canonical_repo_url`（`:2057`）；
   - `root_commit_sha`（`:2062`，目前全为 NULL）等 runner 心跳补报后用来消歧，依据 `:2052-2062` 的注释「URL 加 root commit 才是身份」。
-- **绑定**：`wiki_space_workspace(space_id, workspace_id UNIQUE)`。
-  - 带 repo_url 的 workspace 在第一次使用时自动绑到对应 space；
-  - 没有 repo_url 的，由 owner 在 Wiki 设置里手动绑；
-  - 未绑定时，工具返回 `WIKI_SPACE_UNBOUND` 并附一句人话说明。
+- **绑定**：`wiki_space_workspace(space_id, workspace_id UNIQUE, left_out_at)`，owner 在 Wiki 设置的 Workspaces 卡里看和改（效果图 38）。
+  - 仓库和 space 相同的 workspace 自动在这个 space 里：读取时按 repo_url 判定，不靠写入，所以不需要等 agent 调 wiki 工具；
+  - 没有 repo_url 的，由 owner 在 Wiki 设置里手动加入；别的仓库的不能加入，它们有自己的 space；
+  - owner 可以把 workspace 留在外面：它的会话不再进维护，调 wiki 工具被拒，已写进 wiki 的内容保留，也不会自己回来；
+  - 不在任何 space 里或被留在外面时，工具返回 `WIKI_SPACE_UNBOUND` 并附一句人话说明。
   - 项目通过其 codebase 的 URL 推导所属 space，不另外建表。
 - **为什么按代码库而不是按项目**：43% 的活跃会话既不挂任务，也不是协调会话，大量「为什么」恰恰在这些自由会话里。项目页只作为二级索引。
 
@@ -300,7 +301,13 @@ agent（MCP / CLI）、owner（web / iOS / CLI）、维护作业、导入，全�
 ```
 GET    /wiki/spaces                                  列表 + 待审数（侧栏数字）
 POST   /wiki/spaces  |  PATCH /wiki/spaces/:id       设置：push / autoAccept / maintenance / embedding
-POST   /wiki/spaces/:id/workspaces                   绑定 workspace
+GET    /wiki/spaces/:id/workspaces                   列出 workspace 和可加入的 workspace
+POST   /wiki/spaces/:id/workspaces                   加入 workspace，或把留在外面的打开
+DELETE /wiki/spaces/:id/workspaces/:workspaceId      把 workspace 留在外面
+DELETE /wiki/spaces/:id                               移进回收站，保留 365 天（`docs/mocks/wiki-trash`）
+POST   /wiki/spaces/:id/restore                       从回收站恢复
+DELETE /wiki/spaces/:id/purge                         永久删除回收站里的这个 wiki，后台分批删
+GET    /wiki/trash                                    回收站
 GET    /wiki/spaces/:id                              首页数据：principles、topics、recent decisions、health、usage
 GET    /wiki/spaces/:id/entries?kind&topic&status&q&cursor
 GET    /wiki/entries/:id?include=sources,history,exposure
@@ -324,7 +331,7 @@ GET    /runner/wiki/context         推送块预览（调试用；正式投递�
 原先只对维护作业会话开放的 dossiers、anchors、anchor-checks、cursor 四条路由已在 P11（2026-10-19）删除：维护运行是服务端的 `maintain` 作业，在进程内读案卷、推进游标，git 锚点由 runner 的 `anchors` 仓库操作检查。
 
 - **service token 一律拒绝。** 理由同 `session_search`（`runner-sessions.controller.ts:251-266`）：条目衍生自其他机器上的对话正文。
-- **读条目的边界**：只有绑定在该 space 的 workspace 里的会话能读。owner 把 workspace 绑进 space，就是同意在这些 workspace 之间共享**已确认**的条目。待审内容不跨会话可见。
+- **读条目的边界**：只有在该 space 里的 workspace 的会话能读。workspace 在 space 里，就是 owner 同意在这些 workspace 之间共享**已确认**的条目；把它留在外面就是收回。待审内容不跨会话可见。
 
 ### 5.2 MCP 工具（只加 3 个）
 
@@ -485,7 +492,7 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
 
 ### 8.2 维护作业「Wiki maintenance」（阶段 2）
 
-- **开关**：在 space 设置里打开维护，指定 workspace（决定从哪台 runner 读仓库）和每日运行次数（`dailyRunLimit`）。
+- **开关**：在 space 设置或首页的设置卡里打开维护，指定 workspace（决定从哪台 runner 读仓库）和每日运行次数（`dailyRunLimit`）。
   - 模型是部署配置的 System model：不再选 provider（P11 起 provider 不是设置），不花账号自己的 key、订阅或账号池，也不占 runner 槽位。
 - **触发（事实驱动，不用时钟）**
   - 每个已提交事实都会让 `wiki_cursor.backlog` 加一：会话结算、任务终态、审批回答、merge receipt、判据修订。
@@ -583,7 +590,7 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
 - 读过网页的会话，其后的 op 标 `tainted`：不能自动生效，审阅卡上有琥珀警示，接受之后才可推送。
 - 知识以 user 级、「参考而非指令」的形式投递，不进 system 层。
 - `wiki_propose` 本身就是一条持久化通道，由 Review、信任闸和污染标记三道闸约束。
-- 顺带建议（不在本方案范围内）：`tasklist_update` / `agent_update` 目前没有确认卡，而且 `ALWAYS_ALLOWED_TOOLS=['mcp__orbit__*']`（`permission-mode.ts:29`）连权限提示都不弹，是另一条二次持久化路径。
+- 顺带建议（不在本方案范围内）：`tasklist_update` 目前没有确认卡，而且 `ALWAYS_ALLOWED_TOOLS=['mcp__orbit__*']`（`permission-mode.ts:30`）连权限提示都不弹，是另一条二次持久化路径。`agent_update` 写 `systemPrompt`、`appendSystemPrompt`、`env` 这些字段现在要所有者的卡片（`runner-api/runner-workspace-approval.ts`）。
 - **渲染**：markdown 净化；不自动加载远程图片，防 CamoLeak 式外泄。
 
 ### 10.4 Rule of Two
@@ -650,6 +657,11 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
 ### 12.1 Web（效果图 01–05）
 
 - **侧栏**：TOP 在 Projects 下面新增 `Wiki`，带琥珀待审数（沿用 `tp-count needs-you` 样式）。10-06 改为：数的是「等你」数，即待审提议加上 plan 等你的件数（§12.3.3）。
+  - 11-02 起（owner 定，效果图 `docs/mocks/sidebar-wiki-group`），Workspaces 和 Projects 之间多一组 `Wiki`，写法同 Projects 组：组头是名字、个数和折叠箭头，一个 space 一行，名字按 §12.3.4，琥珀数是这个 space 自己的「等你」数（`wikiWaitingIn`），0 不画。
+  - 放在 Projects 上面：Projects 是长列表，放它下面就滚到最底了。滚动规则不变（`docs/mocks/sidebar-projects-scroll`），这一组算进固定的部分：Workspaces、这一组和 Projects 组头都放得下时只滚 Projects，否则一起滚。
+  - TOP 的 `Wiki` 行留着：它是 W（§12.3.3）、侧栏收起后的入口，也是没有 space 时的入口。
+  - 亮哪一行：屏幕上是哪个 space 就亮它那一行，`/wiki` 不带 slug 时亮默认打开的那个（§12.3.4）；TOP 的 `Wiki` 只在不属于这一组的页面亮，即跨 space 的 Review、不存在的 space，以及这一组折叠时。收起的图标栏没有这一组，所有 wiki 路由都亮 Wiki 图标。
+  - 这一组目前只在 web（桌面侧栏和手机网页的抽屉）；iOS、iPad、macOS、Android 的抽屉还是 §12.2 那一行。
 - **路由**：`/wiki`、`/wiki/:space`、`/wiki/:space/t/:topic`、`/wiki/:space/e/:entry`（右侧抽屉）、`/wiki/review`。10-06 起加 `/wiki/:space/activity`；`/wiki` 不带 slug 时按 §12.3.4 的默认规则打开，不再是第一个 space。
 - **首页**：Principles → Topics 网格 → Recent decisions；右栏依次是 Review、Recently changed、Agents used the wiki。10-06 改为：首页是内容，即原则组和按大类排的文档；Review、Plan、Recent decisions、Recently changed、Agents used 连同状态行都进 Activity 页（§12.3.1–12.3.2，效果图 30、31、33）。
 - **主题页**：Summary（生成的、每句都有脚注、标注生成时的 ref）加上按类型分组的条目。
@@ -657,6 +669,7 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
   - 不推送给 agent。
 - **条目详情**：字段、Detector 读数、Sources（OrbitLinkCard）、Anchors、Where it's used、History；操作为 Edit / Supersede / Retire / Pin。
 - **Review**：逐 op 卡片，含 diff、污染警示、`similar[]`；按钮 Accept / Edit / Reject▾。
+  - 质疑卡（11-07 owner 定，效果图 `docs/mocks/wiki-challenge-answers`，三端相同）：回答写成结果，依次是 `Keep` · `Amend…` · `Retire…`，没有实心主按钮（Review 里实心按钮的意思是「照这张卡的提议做」，质疑卡上没有这样的回答）。`Retire…` 红色排最后，按下先打开条目页已有的 Retire… 对话框，理由框预填质疑的理由，说明末尾是 “This cannot be undone.”。按钮上方 `After` 一行写清每个回答之后 agent 会怎样、Retire 不能撤回。toast 用按钮上的词（Kept）。手机上答完一张，下一张从它的顶上开始。decision 类条目不显示 `Amend…`（契约里 decision 不能改写）。起因：11-06 所有者四次想按 Retire，按成了实心的 Re-confirm。
 - **会话接触点**
   - 任务启动卡沿用「⊕ Orbit attached: Wiki context · N entries」折叠条（05a）；
   - `describeNote` 加 `wiki context` 种类；
@@ -704,8 +717,14 @@ iPhone 抽屉、web 手机抽屉、web 桌面侧栏、iPad 与 macOS 侧栏都�
 - **类目怎么排**：手机与 iOS 一类一组（iOS 是分组卡片，grouped 背景）。web 桌面一类一张卡：主区 ≥1100px（容器查询）排两列，否则一列（图 33 ①②）。
 - **末尾**：手机与 iOS 是 `Browse by category · A–Z index`。web 桌面不放这一行，目录栏最上面就有。
 - **没有确认的 plan 时**：照今天目录的逻辑列主题文章（`wikiReadsByDocs` 为假的那支），每行只有标题、没有导语。内容状态行写 `N articles`。
-- **新 space**（还没有文档、也没配维护，图 31 ⑥）：只画一张卡，写 `This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.`，加一个 `Set up maintenance`，进 Wiki 设置的 Maintenance。内容状态行写 `No documents yet`。
-- **首页上不再有任何管理区块**：状态行、待审横幅 / Review 卡、plan 横幅 / Plan 卡、Recent decisions、Recently changed、Agents used 都在 Activity。web 桌面撤掉右栏（图 33）。
+- **还没有能读的东西时**（没有写好的文档，也没有主题文章，图 41）：主区画一张设置卡，三步是 `Connect the repository`、`Confirm the plan`、`Write the documents`。一次只有一步在动，最多一个主按钮。颜色沿用全站约定：琥珀等 owner，蓝色是系统在做，绿勾做完了，灰色还没到。内容状态行照旧写 `No documents yet`。
+  - 卡不存状态，每次按读到的内容判断：plan 的状态和 Activity 的 Plan 卡读同一份（`wikiPlanLook`），规则在 web 的 `wikiStart.ts`，三端都对 `src/shared/src/wiki-start.fixture.json`，那里列出 plan 每种状态下卡说什么。
+  - 第 1 步等 owner 时，`Set up…` 原地打开 Set up maintenance 表单，不跳设置页。下拉框只列这个 wiki 的 workspace（一个都没有时列全部），默认选读者刚才所在的那个，它的 runner 离线就选第一台在线的；离线的排最后，标 `offline`。Wiki 设置里打开的是同一个表单。
+  - plan 确认之后、第一篇写完之前，卡在类目上面。第一篇写完或出现主题文章，卡就走，这些状态回到 Activity。有原则时卡在原则组下面。
+- **账号里还没有 wiki**（图 41 ④）：同一张卡，标题换成 `Set up your first wiki`，第 1 步的 `Create wiki…` 打开同一个表单，下拉框按仓库分组，没有仓库的 workspace 不列。提交走 `POST /wiki/spaces`，一次建 space、开维护、起草第一版 plan，成功后进新 wiki，卡已经在第 2 步。没有一个 workspace 有仓库时，第 1 步说明缺什么，不给按钮。
+  - 建 wiki 就等于开维护（owner 2026-11-02 定）：没有「只建不开」，那种 wiki 什么也不会发生。
+  - 卡上不写 space，用户看到的词一直是 wiki。
+- **首页上不再有任何管理区块**：状态行、待审横幅 / Review 卡、plan 横幅 / Plan 卡、Recent decisions、Recently changed、Agents used 都在 Activity。web 桌面撤掉右栏（图 33）。设置卡是唯一的例外（owner 2026-11-02 定）：它只在没有内容时出现，有内容之后管理信息仍然只在 Activity。
 
 #### 12.3.2 Activity：管理信息
 
@@ -779,9 +798,9 @@ iPhone 抽屉、web 手机抽屉、web 桌面侧栏、iPad 与 macOS 侧栏都�
 
 #### 12.3.7 新句子
 
-`Activity` · `N waiting on you` · `N new since you last looked` · `· N in <space>` · `N documents · M written` · `+N not written yet` · `N documents · Not written yet` · `No documents yet` · `This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.` · `Set up maintenance` · `Manage spaces` · `· N waiting`。另外单数写作 `1 proposal to review`。
+`Activity` · `N waiting on you` · `N new since you last looked` · `· N in <space>` · `N documents · M written` · `+N not written yet` · `N documents · Not written yet` · `No documents yet` · `Manage spaces` · `· N waiting`。另外单数写作 `1 proposal to review`。设置卡的句子全部在 `wikiStart.ts`（图 41）。
 
-每个新句子先在 web 的 lib（`src/web/src/lib/wiki.ts`、`wikiDocs.ts`、`wikiPlan.ts`）里定义，再在 Swift 的 `WikiCopy` 里镜像。`WikiCopyParityTests` 等 parity 测试跟着改：缺了对应项必须红，不许 skip。
+每个新句子先在 web 的 lib（`src/web/src/lib/wiki.ts`、`wikiDocs.ts`、`wikiPlan.ts`、`wikiStart.ts`）里定义，再在 Swift 的 `WikiCopy` 里镜像。`WikiCopyParityTests` 等 parity 测试跟着改：缺了对应项必须红，不许 skip。
 
 ---
 
@@ -906,9 +925,13 @@ H4 精度 <50%、出现任何一次泄漏，或 H5 显示检索不比编译差�
 | `06–09-phone-*` | 手机：入口、首页、详情、Review；排成「web 手机 \| iOS \| 说明」三栏逐区块对照 |
 | `10-architecture` | 技术架构图 |
 | `30-drawer-entry` | 从抽屉进入 Wiki 的第一屏：抽屉那一行的数、现状（一张管理看板）、改后（首页是内容）；web 手机 \| iOS \| 说明（§12.3） |
-| `31-home-states` | 首页往下、Activity 页、有原则时、换 space（一个时只有名字 / 两个以上的菜单）、多个 space 时四处同一个数、新 space、加载中 |
+| `31-home-states` | 首页往下、Activity 页、有原则时、换 space（一个时只有名字 / 两个以上的菜单）、多个 space 时四处同一个数、新 space、加载中；新 space 的那张卡已由图 41 取代 |
 | `32-ipad-entry` | iPad 三栏：中栏是目录，详情栏默认是内容首页 |
 | `33-desktop` | web 桌面（1920×1080、1440×900）：首页主区是内容；Activity 页沿用图 29 的卡片排法 |
+| `38-workspaces` | Wiki 设置的 Workspaces 卡（web、iOS）：谁在这个 wiki 里、开关、`Add workspace…`、没有仓库的 wiki，以及开和关的规则（owner 2026-11-02 定） |
+| `41-home-setup` | 还没有内容的 Wiki：今天和提议对比、设置卡的四个样子（web 桌面、web 手机、iOS）、没有 wiki 时的 `Create wiki` 表单，以及每种状态说什么、按钮去哪里的规则表 |
+| `../wiki-delete/01-delete-wiki` | 删除 Wiki（web、iOS、Android）：侧栏 ⋯ 菜单、设置页底部、确认框、删除之后；已由回收站取代 |
+| `../wiki-trash/01-wiki-trash` | Wiki 回收站（web、iOS、Android）：Move to Trash、三处入口、回收站弹窗、恢复被拒、永久删除，以及规则（owner 2026-11-07 定） |
 
 ## 附 B：Wikova 借鉴对照
 

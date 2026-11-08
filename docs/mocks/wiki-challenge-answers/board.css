@@ -1,0 +1,54 @@
+/* Boards for the Review challenge card (task 34tDf8rxHzhwoGyK6r0kj). Chinese captions, English UI copy.
+   Every picture under shots/ is a real capture; the proposal on web is drawn into the real page, on iPhone and
+   Android over the real capture (b-over). Board-only classes are prefixed b- so the app's rules never reach them. */
+body { margin: 0; width: max-content; padding: 40px 48px 56px; background: #e9e9ee; color: #16161a;
+       font: 15px/1.6 Inter, "Noto Sans SC", -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 27px; letter-spacing: -.02em; margin: 0 0 8px; line-height: 1.3; }
+p.lede { color: #45454d; margin: 0 0 14px; width: 1560px; }
+.b-part { margin: 34px 0 0; width: 1600px; }
+.b-part > h2 { font-size: 20px; letter-spacing: -.01em; margin: 0 0 4px; display: flex; gap: 10px; align-items: center; }
+.b-part > p.b-sub { color: #4a4a52; margin: 0 0 16px; width: 1560px; }
+.b-row { display: flex; gap: 26px; align-items: flex-start; }
+.b-col { display: flex; flex-direction: column; gap: 14px; }
+.b-frame { margin: 0; flex: none; }
+.b-frame figcaption { font-size: 14px; color: #2f2f35; font-weight: 650; margin: 0 0 8px; line-height: 1.45; }
+.b-frame figcaption .b-dim { display: block; font-weight: 500; color: #6a6a72; font-size: 13px; }
+.b-shot { position: relative; border-radius: 12px; background: #fff; overflow: hidden;
+          box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); }
+.b-shot img { display: block; width: 100%; height: auto; }
+.b-shot.b-phone { border-radius: 26px; border: 8px solid #1d1d22; }
+.b-shot.b-phone img { border-radius: 18px; }
+.b-cut { height: 22px; background: repeating-linear-gradient(-45deg, #d8d8de 0 6px, #e9e9ee 6px 12px); border-radius: 4px; margin: 6px 0;
+         font-size: 12px; line-height: 22px; text-align: center; color: #6a6a72; }
+.b-ring { position: absolute; border: 2.5px dashed #f5222d; border-radius: 9px; pointer-events: none; }
+.b-badge { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #f5222d; color: #fff;
+           font: 650 13px/24px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+.b-badge.b-g { background: #1d8a3a; }
+.b-ring.b-g { border-color: #1d8a3a; }
+ul.b-notes { margin: 12px 0 0; padding: 0; list-style: none; color: #2a2a30; font-size: 14.5px; line-height: 1.6; }
+ul.b-notes li { margin: 7px 0; padding-left: 30px; position: relative; }
+ul.b-notes li::before { content: '•'; position: absolute; left: 10px; color: #8a8a92; }
+ul.b-notes li.n::before { content: attr(data-n); left: 0; top: 2px; width: 20px; height: 20px; border-radius: 50%; background: #f5222d;
+       color: #fff; font: 650 12px/20px Inter, sans-serif; text-align: center; }
+ul.b-notes li.g::before { background: #1d8a3a; }
+ul.b-notes b { color: #16161a; }
+code, .b-mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .9em; background: rgba(0,0,0,.05); padding: 0 4px; border-radius: 4px; }
+.tag { white-space: nowrap; display: inline-block; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 1px 10px; }
+.tag.rec { background: #d7f2dd; color: #1d6b31; }
+.tag.now { background: #dcdce2; color: #3a3a40; }
+.tag.real { background: #d6e4ff; color: #14428f; }
+.tag.warn { background: #ffe7ba; color: #874d00; }
+table.b-table { border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; font-size: 14px; width: 1600px; }
+table.b-table th { text-align: left; color: #5a5a62; font-weight: 650; padding: 9px 14px; border-bottom: 2px solid #eee; vertical-align: bottom; }
+table.b-table td { padding: 9px 14px; border-bottom: 1px solid #f1f1f4; vertical-align: top; line-height: 1.55; }
+table.b-table td:first-child { color: #45454d; font-weight: 650; white-space: nowrap; }
+table.b-table tr.b-hot td { background: #fff6f6; }
+.b-box { background: #fff; border-radius: 14px; padding: 16px 22px; box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+.b-opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 20px; width: 1600px; }
+.b-opt { background: #fff; border-radius: 14px; padding: 14px 20px 12px; box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+.b-opt.b-rec { box-shadow: 0 0 0 2px #52c41a inset; }
+.b-opt h4 { font-size: 16px; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+.b-opt p { margin: 4px 0; font-size: 14px; color: #2a2a30; }
+.b-pro::before { content: '＋ '; color: #1d6b31; font-weight: 700; }
+.b-con::before { content: '－ '; color: #b42318; font-weight: 700; }
+.b-vs { font-size: 13px; font-weight: 700; color: #6a6a72; align-self: center; }

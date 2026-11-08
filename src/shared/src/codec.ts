@@ -243,6 +243,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'senderSessionId',
   'fromSessionId',
   'fromTaskId',
+  // The session that sent the message a session row previews (`session.last_user_from_session_id`,
+  // migration 0485): the column behind a row's `lastUserFrom.sessionId`, the same address as
+  // `fromSessionId` above, written by the server from a turn's sender and never from a request.
+  'lastUserFromSessionId',
   // The session a request was asked of (`session_request.to_session_id`, migration 0350) — where the
   // request sits and who answers it, the far end of `fromSessionId` on the same row. An address.
   'toSessionId',
@@ -559,6 +563,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'toolCallId',
   'authorUserId',
   'authorToolCallId',
+  // The challenge an amend answers (migration 0488): the opId the session was shown on its challenge
+  // and hands back, so it is an address like `changesetOpId` — no foreign key (a history reference that
+  // outlives the op it names), decoded on the way in, never a fence.
+  'answersChallenge',
   // The entry a duplicate verdict named (migration 0312): the column, and the op's `verification`
   // read's `duplicateOf`, which is how a verifier names it back. An address like `resultEntryId`,
   // with no foreign key on purpose (the trail outlives the entry), so it may 404 — never a fence.
@@ -609,6 +617,26 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // and this column is that same address on the fragment rows. Never a fence: the stop-the-old-
   // claim comparison is on (`lease_owner`, `claim_generation`), not on this.
   'opId',
+  // The folder bundle an attachment belongs to (migration 0462, docs/orbit-files-design.md §2.2): the
+  // bundle a reader opens to browse the upload it came with. An address, never a fence. Named for
+  // Orbit Files because `bundleId` on the wire is a push device's app bundle (`io.orbitd.app`).
+  'fileBundleId',
+  // The versions a section keeps (migration 0475, contract `docs.versions`): a version's id as the document read,
+  // Activity's Docs rows and a write's answer name it (`versionId`), the version a restore put back
+  // (`restoredVersionId`, a history reference with no foreign key) and the one it kept of what it replaced
+  // (`keptVersionId`). `POST /wiki/doc-versions/:id/restore` takes each back. Addresses, never a fence.
+  'versionId',
+  'restoredVersionId',
+  'keptVersionId',
+  // The wiki space a session is a chat of (migration 0476, wiki contract `chat.binding.read`): what the
+  // session page's From Wiki label opens. A history reference with no foreign key, so it may 404 —
+  // never a fence.
+  'wikiChatSpaceId',
+  // A wiki chat's cards (migration 0483, contract `chat.drafts`): the card a drafting tool answers (`draftId`), which the
+  // panel draws and `GET /wiki/chat-drafts/:id` reads, and the card a newer one replaced (`replacesId`, a history
+  // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.
+  'draftId',
+  'replacesId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

@@ -383,12 +383,14 @@ public enum ComposerLogic {
     /// instead of into this one (the Send button's menu, decided 2026-10-16). Otherwise no intent
     /// goes out and the server places the message as it always has.
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
-                                attachmentIds: [String], queueForNextTurn: Bool = false) -> SessionTurnRequest {
+                                attachmentIds: [String], queueForNextTurn: Bool = false,
+                                wikiContext: WikiChatContext? = nil) -> SessionTurnRequest {
         SessionTurnRequest(clientTurnId: clientTurnId,
                            content: text,
                            kind: shell ? "shell" : "message",
                            attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
-                           intent: queueForNextTurn ? "NEXT_TURN" : nil)
+                           intent: queueForNextTurn ? "NEXT_TURN" : nil,
+                           wikiContext: wikiContext)
     }
 
     /// Split a composer draft into the text to send and whether it's a raw shell command. A

@@ -45,6 +45,8 @@ interface BackgroundJob {
   reportedBy?: string;
   /** Still `running` in the log, but the runner process hosting it no longer holds the session. */
   outlivedItsRunner?: boolean;
+  /** Reported `running` while its card waits for the owner: the command has not started. */
+  waitingForOwner?: boolean;
 }
 
 /** What can be said of a job whose runner process stopped without reporting how the job ended. */
@@ -125,6 +127,7 @@ function foldJobs(rows: BackgroundEventRow[]): Map<string, BackgroundJob> {
     if (typeof payload.exitCode === 'number') job.exitCode = payload.exitCode;
     if (typeof payload.reason === 'string' && payload.reason) job.reason = payload.reason;
     if (TERMINAL_STATUSES.has(status)) job.endedAt = row.createdAt;
+    job.waitingForOwner = payload.waitingForOwner === true;
     jobs.set(id, job);
   }
   return jobs;
@@ -218,7 +221,10 @@ function buildBackgroundJobsBlock(
   const lines: string[] = ['<background-jobs>'];
   if (live.length > 0) {
     lines.push('  Still running (runner-hosted, so an engine restart does not kill them):');
-    for (const job of live) lines.push(`    ${describe(job)}${outputOf(job)}`);
+    for (const job of live) {
+      const waiting = job.waitingForOwner ? "｜not started yet: it waits for the owner's answer on its card" : '';
+      lines.push(`    ${describe(job)}${waiting}${outputOf(job)}`);
+    }
   }
   if (ended.length > 0) {
     lines.push('  Ended while you were away:');

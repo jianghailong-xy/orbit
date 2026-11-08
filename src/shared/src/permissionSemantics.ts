@@ -161,13 +161,15 @@ export function autoAvailable(
 export const ROOT_REFUSED_PERMISSION_MODES: ReadonlySet<string> = new Set([PermissionMode.BYPASS]);
 
 /**
- * What a root runner runs instead of a mode it must refuse. Don't Ask is the honest neighbour of
- * Bypass: both never consult a human, so an unattended session still runs unattended rather than
- * parking on an approval card nobody is watching — but an action nobody pre-approved is denied
- * instead of allowed. Strictly narrower than what was asked for, which is the only direction a
- * substitution may ever go.
+ * What a root runner runs instead of a mode it must refuse. Auto is the neighbour of Bypass that
+ * Claude Code will start under root: it runs commands without stopping for a person, so an
+ * unattended session still runs unattended. Don't Ask would not: it asks nobody but refuses whatever
+ * nobody pre-approved, so a session that asked for Bypass could not run a single command, and a
+ * background job would be refused with it. A model with no Auto gets Default, by the rule every
+ * Auto follows (`normalizeBuiltinPermissionMode`). Never wider than what was asked for, which is the
+ * only direction a substitution may go.
  */
-export const ROOT_FALLBACK_PERMISSION_MODE = PermissionMode.DONT_ASK;
+export const ROOT_FALLBACK_PERMISSION_MODE = PermissionMode.AUTO;
 
 /**
  * Whether a runner can actually run a mode.
@@ -355,18 +357,29 @@ export function derivePermissionSemantics(
 
   // Bypass on a runner deployed as root. Unlike every other unhonored mode here this one is not a
   // difference of degree: the CLI refuses to start at all, so the session produces nothing. It runs
-  // as Don't Ask instead (normalizeBuiltinPermissionMode), which still never asks — disclosed here
-  // rather than hidden, on the same terms as Auto below.
+  // as Auto instead, or as Default on a model with no Auto (normalizeBuiltinPermissionMode), which is
+  // disclosed here rather than hidden, on the same terms as Auto below.
   if (!permissionModeAvailableOnRunner(mode, runsAsRoot)) {
+    const refused = 'This runner is deployed as root, and Claude Code refuses Bypass under root.';
+    if (model !== undefined && !autoAvailable(provider, model, false, modelCatalog)) {
+      return {
+        mode,
+        unapproved: 'ask',
+        approvalSupport,
+        honored: false,
+        note:
+          `${refused} This model has no Auto, so the session runs as Default instead: you are asked ` +
+          'before an action nobody pre-approved.',
+        shortNote: 'unavailable on a root runner, runs as Default',
+      };
+    }
     return {
       mode,
-      unapproved: 'deny',
+      unapproved: 'allow',
       approvalSupport,
       honored: false,
-      note:
-        'This runner is deployed as root, and Claude Code refuses Bypass under root. The session ' +
-        "runs as Don't Ask instead: it never asks, but an action nobody pre-approved is denied.",
-      shortNote: 'unavailable on a root runner, runs as Don’t Ask',
+      note: `${refused} The session runs as Auto instead, which runs without stopping for a person.`,
+      shortNote: 'unavailable on a root runner, runs as Auto',
     };
   }
 

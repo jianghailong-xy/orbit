@@ -79,8 +79,6 @@ class LandingAndStartDeviceTest {
                 compose.onNodeWithText("Password").performTextReplacement("a11f-fixture-password")
                 compose.pressSignIn()
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
-                await { exists(hasTestTag("workspace:$alpha")) }
-                compose.onNodeWithTag("workspace:$alpha").performClick()
                 await { exists(hasTestTag("project-row:$launch")) }
                 compose.onNodeWithTag("project-row:$launch").performClick()
 

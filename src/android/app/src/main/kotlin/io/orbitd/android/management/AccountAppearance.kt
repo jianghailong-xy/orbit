@@ -12,6 +12,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.core.auth.DataKind
+import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.ui.OrbitTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -56,7 +60,9 @@ private val DarkScrim = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     val auth by app.session.state.collectAsState()
     val handle = (auth as? AuthState.SignedIn)?.handle
-    val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
+    // `users/me` is read as the app comes to the front and as the account stream connects, which replays nothing; no account event
+    // names the preferences, so none reads them (docs/list-freshness-design.md D2).
+    val live by remember(app) { app.realtime.state.map { it.handle to it.controlConnects }.distinctUntilChanged() }
         .collectAsState(null to 0L)
     val revision = if (live.first === handle) live.second else 0L
     var theme by remember(handle) { mutableStateOf("system") }
@@ -68,6 +74,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     var savedModels by remember(handle) { mutableStateOf(emptyMap<String, String>()) }
     var pendingModels by remember(handle) { mutableStateOf(emptyMap<String, String>()) }
     var modelsVersion by remember(handle) { mutableLongStateOf(0L) }
+    var restored by remember(handle) { mutableStateOf(false) }
     var resume by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -77,6 +84,11 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     }
     LaunchedEffect(handle, resume, revision) {
         if (handle != null) {
+            // What the first frame draws in (iOS `LaunchSnapshot.user`): what this phone last knew, until the read below answers.
+            if (!restored) {
+                readSavedAppearance(app, handle)?.let { theme = it.theme; sessionRecaps = it.recaps }
+                restored = true
+            }
             val version = appearanceVersion
             val smartVersion = smartSelectionVersion
             val recapsVersion = sessionRecapsVersion
@@ -91,6 +103,9 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { /* Keep this account's last known preference until the next refresh. */ }
         }
+    }
+    LaunchedEffect(handle, restored, theme, sessionRecaps) {
+        if (handle != null && restored) writeSavedAppearance(app, handle, SavedAppearance(theme, sessionRecaps))
     }
     val scope = rememberCoroutineScope()
     val modelWrites = remember(handle) { Mutex() }
@@ -127,6 +142,20 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
         OrbitTheme(darkTheme = dark, content = content)
     }
 }
+
+/** The account's preferences a launch draws with before `users/me` answers: in the account's cache, so a logout clears them. */
+@Serializable
+private data class SavedAppearance(val theme: String, val recaps: Boolean)
+
+private const val SAVED_APPEARANCE = "account-appearance"
+
+private suspend fun readSavedAppearance(app: OrbitApplication, handle: SessionHandle): SavedAppearance? = try {
+    app.session.readData(handle, DataKind.CACHE, SAVED_APPEARANCE)?.let { Wire.decode(it, SavedAppearance.serializer()) }
+} catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+
+private suspend fun writeSavedAppearance(app: OrbitApplication, handle: SessionHandle, appearance: SavedAppearance) = try {
+    app.session.writeData(handle, DataKind.CACHE, SAVED_APPEARANCE, Wire.json.encodeToString(SavedAppearance.serializer(), appearance).encodeToByteArray())
+} catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
 
 /** `preferences.defaultModels` as the strings it maps. */
 private fun defaultModels(preferences: JsonObject?): Map<String, String> =

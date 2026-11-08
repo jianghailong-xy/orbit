@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="io.orbitd.sample.PendingQueueTest" tests="6" skipped="2" failures="2" errors="0" timestamp="2026-11-02T07:43:32.786Z" hostname="workstation" time="0.027">
+  <properties/>
+  <testcase name="onlyOnTheBigEndian" classname="io.orbitd.sample.PendingQueueTest" time="0.012">
+    <skipped/>
+  </testcase>
+  <testcase name="anEmptyQueueHasNoOldestAge" classname="io.orbitd.sample.PendingQueueTest" time="0.0"/>
+  <testcase name="theOldestRevisionComesFirst" classname="io.orbitd.sample.PendingQueueTest" time="0.0"/>
+  <testcase name="aDecidedRevisionLeavesTheQueue" classname="io.orbitd.sample.PendingQueueTest" time="0.006">
+    <failure message="java.lang.AssertionError: expected:&lt;2&gt; but was:&lt;3&gt;" type="java.lang.AssertionError">java.lang.AssertionError: expected:&lt;2&gt; but was:&lt;3&gt;
+	at io.orbitd.sample.PendingQueueTest.aDecidedRevisionLeavesTheQueue(PendingQueueTest.java:12)
+</failure>
+  </testcase>
+  <testcase name="theCardShowsTheCount" classname="io.orbitd.sample.PendingQueueTest" time="0.0">
+    <skipped/>
+  </testcase>
+  <testcase name="anUnexpectedExceptionIsAnError" classname="io.orbitd.sample.PendingQueueTest" time="0.004">
+    <failure message="java.lang.IllegalStateException: queue &lt;closed&gt; &amp; drained" type="java.lang.IllegalStateException">java.lang.IllegalStateException: queue &lt;closed&gt; &amp; drained
+	at io.orbitd.sample.PendingQueueTest.anUnexpectedExceptionIsAnError(PendingQueueTest.java:13)
+</failure>
+  </testcase>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

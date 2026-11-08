@@ -272,7 +272,7 @@ describe('the "On your runners" section', () => {
   it.each([
     [{ supported: false, installed: true, version: '1.2.16', envKeyAvailable: false }, 'Update runner'],
     [{ supported: true, installed: false, version: null, envKeyAvailable: false }, 'Not installed'],
-    [{ supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false }, 'Unknown'],
+    [{ supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false }, 'Couldn’t check'],
   ] as const)('shows Antigravity readiness and the upgrade required for older runners: %s', (state, label) => {
     const box = runner({ antigravity: state, engines: [health({ engine: 'kimi' })] });
     const html = render([box], { path: `/providers?runner=${encodeId(box.id)}&engine=antigravity` });

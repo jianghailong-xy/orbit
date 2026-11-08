@@ -111,6 +111,49 @@ switch, so ending, deleting, reassigning, or turning orchestration off revokes a
 expiry. When orchestration is on, `orbit agent list`, `agent create`, and `agent update` expose the same
 agent-management surface to the CLI. Only a human can switch orchestration.
 
+### Permission modes, shell commands and background jobs
+
+A session's permission mode decides what runs without a person. It covers the engine's own shell tool and the
+background jobs a session starts with `bg_run`. A job runs under the runner's account, outside any sandbox the
+engine has, so the runner checks every job against the session's current mode before it starts, whichever engine
+asks and whichever way the request reaches the runner.
+
+| Mode | `bg_run` | Claude Code's `Bash` and `Monitor` |
+| --- | --- | --- |
+| Plan | Refused, with what to do instead | A card for each command; the Auto classifier is off in Plan |
+| Default, Accept Edits | A card showing what would run: allow once, always allow, or reject | A card for each command not already allowed |
+| Don't Ask | Refused, with what to do instead | Refused unless already allowed |
+| Auto | Started | Run without asking |
+| Bypass | Started | Run without asking |
+
+- **A person can take as long as they like.** A card answered within about 20 seconds is answered in the tool call.
+  After that the call returns with the job in status `waiting_for_owner`, under the id it will keep. Orbit wakes the
+  session when the owner answers: on a yes the job starts under that id, on anything else it never runs and ends as
+  `killed` with the reason `not_allowed`. `bg_list` and `bg_output` show where it stands, and `bg_kill` withdraws it.
+- **Always allow** on a job's card remembers the command's prefix, one rule per sub-command, as it does on a `Bash`
+  card, and the same rules answer both. DeepSeek Harness has no always allow, as on its other cards.
+- **Don't Ask refuses every job,** including one whose command a rule already allows.
+- **Unattended work that has to run commands belongs in Auto.** Don't Ask asks nobody, but it refuses anything not
+  already approved, so a session in it cannot run a command nobody allowed, in a shell or as a job. On a runner
+  deployed as root, where Claude Code refuses Bypass, a session whose account default is Bypass runs as Auto, or as
+  Default on a model with no Auto.
+- **A mode change counts from the next call.** That includes Claude Code leaving Plan when a plan is approved.
+- **DeepSeek Harness:** its Auto keeps a file sandbox, so a job outside it needs what any escalation there needs: a
+  routine command that stays in the workspace starts, and anything else, or a job that sets its own variables, gets a
+  card. Plan, Accept Edits and Bypass do not exist on this engine.
+- **Other engines' own shell tools** follow each engine's own rules for the mode. Codex does not enforce Don't Ask on
+  its shell tool: it runs commands there without asking, although a job is refused.
+- **A question for a person is not a job.** A call that files a card and waits for the answer, such as `task_create`,
+  works in every mode, on the engines whose tool calls have a deadline too.
+
+An upgrade changes two things people may notice. Background jobs now follow this table on every engine; before, a job
+started in nearly any mode. And Claude Code in Default and Accept Edits now asks before each `Bash` command that is not
+already allowed, and Don't Ask refuses one; before, these modes did not. A session that used Don't Ask to run commands
+unattended has to move to Auto.
+
+This protects against an agent acting ahead of a person, not against a hostile process on the machine. See
+[Security notes](#security-notes).
+
 ### Installing an engine on a runner
 
 With orchestration on, `orbit runner list` (MCP `runner_list`) shows the account's runners: their ids, whether
@@ -213,9 +256,11 @@ at `/v1/messages`. What decides which endpoint a session actually talks to:
   `ANTHROPIC_AUTH_TOKEN` out of them, or every session on that machine or project goes where they say.
 - The URL is resolved on the machine the session runs on: `http://127.0.0.1:8000` is that runner's own port.
   Start the session on an agent whose runner hosts the endpoint (`orbit agent list` shows each agent's runner).
-- `contextWindow` reaches Claude Code as the model's real window (`CLAUDE_CODE_MAX_CONTEXT_TOKENS`), so
-  auto-compact keeps the session inside what the server was started with (`--max-model-len`). Without it Claude
-  Code assumes 200k for a model it does not know.
+- `contextWindow` reaches Claude Code as the model's real window (`CLAUDE_CODE_MAX_CONTEXT_TOKENS`), less an
+  eighth held back, so auto-compact keeps the session inside what the server was started with
+  (`--max-model-len`) — including the compaction request the CLI sends when it reaches its own line, which is
+  larger than the conversation that triggered it. Without it Claude Code assumes 200k for a model it does not
+  know.
 - Claude Code sends an effort (`output_config.effort`) for a model it does not recognise — `high` when the
   session sets none — and vLLM hands it to the chat template as `reasoning_effort`. A template that takes only
   some levels fails every request: Qwen3.8's accepts `xhigh`, `medium` and `low`, and anything else is
@@ -261,16 +306,26 @@ orbit wiki search src/apiserver/src/wiki --limit 5 --json
 orbit wiki get <entry-id>[,<entry-id>...] --include sources --json
 orbit wiki propose --ops '[...]' --rationale "why it is worth recording" --idempotency-key <key> --json
 orbit wiki propose --ops-file ops.json --dry-run --json
+orbit wiki note "release.sh next tags at once: it is no dry run" --path scripts/release.sh --json
+orbit wiki note --text-file - --corrects <entry-id> < correction.txt
 ```
 
-The three verbs are the three MCP tools of the same name (`wiki_search`, `wiki_get`, `wiki_propose`)
-with the same parameters. Each acts for the session it runs in (`ORBIT_SESSION_ID`): what that
+The four verbs are the four MCP tools of the same name (`wiki_search`, `wiki_get`, `wiki_propose`,
+`wiki_note`) with the same parameters. Each acts for the session it runs in (`ORBIT_SESSION_ID`): what that
 session may read is what its bound workspace shares, and its proposal is recorded against it, so
 there is no headless form. `search` and `get` only read. `propose` records a changeset that waits
 for the owner in Review — `--dry-run` checks every op and records nothing — and an agent cannot
 accept, edit, reject, delete or overwrite an entry: deciding is the owner's, and a request carrying
 a session header is refused `WIKI_OWNER_CHANNEL_ONLY` on the decide route. Cite an entry to the
 user as `[title](orbit-wiki:<id>)`, the way every other Orbit thing is cited.
+
+`note` tells the wiki one thing the session learned, and is not in the wiki when it returns: the
+next maintenance run reads it against that session's records, and writes an entry only if they bear
+it out. It takes no place in Review. A session writes at most 15, a text the space already holds is
+not written again, and a session that verifies or judges work is refused. `--corrects <entry-id>`
+also flags that entry at once, for the owner to answer in Review; if that is refused, the answer says
+so and the note is kept. A server older than this command answers that it is too old, and nothing is
+recorded.
 
 A proposal is answered per op — `pending`, `applied`, `conflict` (with the entry's current revision
 and a diff) or `refused` (with the contract's reason codes and, for a schema failure, every field
@@ -284,6 +339,79 @@ The wiki is switched on per account by the server's rollout flag. A session spaw
 off answers `404 WIKI_DISABLED` — which this binary reports as the wiki being off, not as a missing
 entry. A runner newer than the server it talks to says in words that the server has no wiki door
 rather than reporting a bare 404.
+
+## Files
+
+Screenshots and reports belong in Orbit rather than in the repository. A file stays with the session
+that uploads it, and arrives in that session's uploads directory, outside the checkout, so neither
+direction can put it in a commit.
+
+```bash
+orbit file upload shots/home.png --label "home page, dark" --json
+orbit file upload shots --label "viewport matrix" --json
+orbit file upload report.json --as test-report --json
+orbit file fetch <id> --json
+orbit file list --json
+orbit file list --task-id <task-id> --json
+orbit file list --evidence-id <evidence-id> --json
+orbit file pin <id> --json
+orbit file pin <id> --unpin --json
+```
+
+The four verbs are the four MCP tools of the same name (`file_upload`, `file_fetch`, `file_list`,
+`file_pin`) with the same parameters. `upload`, `fetch` and `pin` act for the session they run in
+(`ORBIT_SESSION_ID`), so they have no headless form; `list` runs anywhere the runner's credential does,
+as long as it names what to list. With nothing named it lists the session it runs in.
+
+A file expires 14 days after upload unless evidence cites it, and 30 days after a version citing it is
+sent back or replaced; a confirmed version holds it until its task is deleted. Only the bytes go: the
+file's name, size, sha256 and test summary stay, and `list` answers `expiredAt`. `pin`, or
+`upload --pin`, keeps a file past that date, and pinning an expired file brings it back while its bytes
+are still kept.
+
+`upload` reads only the session's checkout and its uploads directory, the same two directories a reply
+can link from. The check goes by a path's real location, with links resolved, so a link in a repository
+does not reach out of it; anywhere else is refused, and the refusal names the uploads directory to copy
+a file into. The checkout is the session's own worktree or, in a session with none, the working
+directory. The worktree and the uploads directory count only as real directories at their own names,
+and a directory inside the worktree counts as the worktree. A working directory that is `/` or holds
+the home directory does not count, and a session started there uploads from its uploads directory; a
+reply's links still reach such a working directory, where the engine can read anyway. Inside the
+runner's own directory (`~/.orbit`), by any name the filesystem takes for it, nothing but this session's
+directories is ever read. A file is opened as it is sent, so one that changed after a directory was
+read is listed under `skipped` and not sent.
+
+`upload` answers `id`, `sha256`, `sizeBytes` and `link`, an `orbit-attachment:` link to put in a reply:
+`![name](link)` for an image, `[name](link)` for anything else. A directory becomes one folder bundle:
+every file under it, each with its own id, and a manifest of their relative paths, which is what the
+bundle's id and sha256 name. A directory walk follows no symbolic link; links, empty files and
+anything else that cannot be kept are listed under `skipped`. One file may be 25 MiB and a folder 1000
+files, and a folder over either limit is refused before anything is sent. `--task-id` may only name
+the task the session is running, which is what a file counts as anyway; any other task is refused,
+and a file reaches another task as an input through `orbit task create --attachment-id`, a folder
+file by file.
+
+`--as test-report` reads one Playwright JSON or JUnit XML report, told by what the file holds and not
+by its name, and keeps a summary with the file: `total`, `passed`, `failed`, `skipped`, `durationMs`,
+and `failedNames` and `skippedNames`, at most 20 of each. `upload` answers it as `testReport`, `fetch`
+and `list` show it, and `orbit task evidence-list` shows it on a citation of the file, in the `label`
+and as `testReport`. It stays after the file has expired. A test that passed on a retry counts as
+passed, and an error outside any test counts as a failed case, so a run that failed cannot read as
+green. Anything else is kept all the same and `note` says why: a file that is no report or only part
+of one, a directory, which stays a plain bundle, or a server that does not read reports.
+
+`fetch` saves the file under the uploads directory, checks it against the sha256 Orbit holds, and
+answers its absolute path as `path`. A link anywhere under that directory refuses the fetch. A session
+fetches its own files and those cited by evidence it judges: as the project's coordinator, a judgment
+session opened for the project, the session that dispatched a task in no project, or a verifier of
+the task. Given a bundle's id, it saves the manifest and lists the bundle's files with their ids, so that you fetch only the ones you
+need. `list` answers one task's, one session's or one evidence version's files, newest first, and
+shows a bundle as one row of kind `bundle`; a task's files are its inputs and what the sessions that
+ran it kept with `upload`. An id that names nothing of the account's is refused rather than answered
+with an empty list.
+
+A runner newer than the server it talks to says in words that the server has no file door rather than
+reporting a bare 404, and nothing is uploaded.
 
 ## Headless runner-local access
 
@@ -430,6 +558,7 @@ yourself has no such mark.
 - `~/.orbit/user.json` holds a personal access token that acts as you. Run `orbit logout` (or revoke the token
   under Settings → Access tokens) when a machine no longer needs it.
 - The runner machine's OS account is the local trust boundary; sibling processes owned by that account are
-  not isolated from each other.
+  not isolated from each other. That includes permission modes: a process that can read this account's files can
+  act with what they hold, whatever mode the session it came from is in.
 - Capability output is contextual. Treat it as the source of truth after upgrades or credential changes.
 - Prefer `--message-file` for untrusted or multiline input so shell interpolation does not change the content.

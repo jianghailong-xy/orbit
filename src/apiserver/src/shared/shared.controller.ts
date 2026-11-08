@@ -2,13 +2,17 @@ import {
   BadRequestException,
   Controller,
   Get,
+  NotFoundException,
   Param,
   Query,
+  Res,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
 import { AttachmentsService } from '../attachments/attachments.service';
+import { streamable } from '../files/files.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 import { linkNotFound, withoutToolOutput } from '../share-links/share-link';
@@ -175,17 +179,19 @@ export class SharedController {
 
   /** Bytes of an inline image/file the link shares: one in the shared session's transcript, or — on a
    *  task or project link — one of its tasks' input files or of the conversations it opens, as its
-   *  layers allow. */
+   *  layers allow. Streamed from the file store, or from the row for one stored before it. */
   @Get(':token/attachments/:id')
   async attachment(
     @Param('token') token: string,
     @Param('id', PublicIdPipe) id: string,
+    @Res({ passthrough: true }) res?: Response,
   ): Promise<StreamableFile> {
     const link = await this.links.resolve(token);
-    const { data, mimeType } = link.sessionId
-      ? await this.attachments.getForSharedSession(link.sessionId, id)
-      : await this.links.rootAttachment(link, id);
-    return new StreamableFile(data, { type: mimeType, disposition: 'inline', length: data.length });
+    const file = link.sessionId
+      ? await this.attachments.open({ id, sessionId: link.sessionId })
+      : await this.attachments.open(await this.links.rootAttachment(link, id));
+    if (!file) throw link.sessionId ? new NotFoundException('attachment not found') : linkNotFound();
+    return streamable(file, res);
   }
 
   /** A legacy runner-local artifact path from the shared transcript — only once its bytes are

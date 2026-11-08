@@ -1,0 +1,14 @@
+fix: ⋯ frame (402.0, 411.0, 30.0, 32.0)
+middle: opens
+up 6: opens
+down 6: opens
+up 9: opens
+down 9: opens
+up 12: opens
+down 12: opens
+up 15: opens
+down 15: nothing
+up 20: nothing
+down 20: nothing
+left 12: opens
+right 12: opens

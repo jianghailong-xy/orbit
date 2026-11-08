@@ -2,6 +2,7 @@ import type { ManagedRunner } from '@prisma/client';
 
 import type { CapacityBudget, ComputeAmounts, StorageAmounts } from './managed-runner-capacity';
 import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof } from './managed-runner-fencing';
+import type { VolumeFigures } from './managed-runner-storage';
 
 /**
  * Where a managed runner's data volume lives and its instance runs: the one surface between the
@@ -47,8 +48,10 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *     ended, which is half a stop proof; `exit` says how it ended (exit code, out of memory), for
  *     the log and the owner's reason. Only a backend whose host reports every stop it makes may
  *     also stop an instance (`stopInstance`, Docker), and the manager asks it only for a drain that
- *     overran its drain time. A stop asked for is never a proof: the same report and removal are
- *     waited for. Kubernetes has no such call — a deleted Pod on an unreachable node proves nothing.
+ *     overran its drain time, or for an instance of a previous image (`previousImage`) that a
+ *     link-only server has long stopped hearing. A stop asked for is never a proof: the same report
+ *     and removal are waited for. Kubernetes has no such call — a deleted Pod on an unreachable node
+ *     proves nothing.
  *   - Removal by UID. An instance or a credential is removed only by the UID it was observed with,
  *     so a successor under the same name is never removed; and an instance only once its stop is
  *     proven (the manager's gate).
@@ -158,6 +161,9 @@ export interface ManagedInstance {
   /** How it ended, by its host's report: its runner's exit code (null when the host gives none) and
    *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
   readonly exit: { readonly code: number | null; readonly outOfMemory: boolean } | null;
+  /** The image it was made from, when its host says and that is not the one this backend makes instances from
+   *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on). Absent otherwise. */
+  readonly previousImage?: string;
 }
 
 /** A fencing receipt left for an instance, and what reading it concluded. */
@@ -265,6 +271,13 @@ export interface ManagedRunnerBackend {
   backingProblem(backing: ManagedVolumeBacking, mapping: ManagedRunner): string | null;
   /** What still holds a verified volume on a machine (Kubernetes: its VolumeAttachments). Empty: released. */
   volumeHolders(volume: VerifiedVolume): Promise<string[]>;
+  /**
+   * What the backend last measured of a volume it read: the most it may hold and what it held, which the manager
+   * keeps for the runner's heartbeat to relay as its storage budget (managed-runner-storage.ts); null while it has
+   * measured nothing. Absent where statfs inside the instance already reports the volume (Kubernetes: the PVC is
+   * the filesystem), so nothing is kept.
+   */
+  volumeMeasurement?(volume: ManagedVolume): VolumeFigures | null;
 
   // ── an operator's switch to a restored volume: Kubernetes only ──
   /**

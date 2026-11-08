@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { providerPoolsQuery, type ProviderPool } from '../lib/providerPools';
 import { meQuery, runnersQuery, workspacesQuery, type UserPreferences } from '../lib/queries';
 import { sharedPoolsQuery } from '../lib/sharedPools';
+import { feishuIntegrationQuery } from './FeishuIntegrationPage';
 import { SettingsPage } from './SettingsPage';
 
 // The theme control reaches for localStorage and matchMedia, neither of which Node has, and it
@@ -17,9 +18,11 @@ vi.mock('../lib/theme', () => ({ useThemeMode: () => ({ mode: 'system', setMode:
 function render(
   preferences: UserPreferences,
   machines?: { runners: unknown[]; pools: ProviderPool[]; workspaces?: unknown[] | null },
+  feishu?: unknown,
 ) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(meQuery().queryKey, { id: 'u1', email: 'a@b.c', name: 'A', preferences });
+  if (feishu) qc.setQueryData(feishuIntegrationQuery().queryKey, feishu);
   if (machines) {
     qc.setQueryData(runnersQuery().queryKey, machines.runners);
     if (machines.workspaces !== null) qc.setQueryData(workspacesQuery().queryKey, machines.workspaces ?? []);
@@ -69,6 +72,24 @@ describe('the way into Settings → Shared links', () => {
     expect(html).toContain('<div>Shared links</div>');
     expect(html).toContain('Everything you’ve made viewable by link');
     expect(html).toMatch(/<button[^>]*><span>Manage<\/span><\/button>/);
+  });
+});
+
+describe('the way into Settings → Integrations → Feishu (docs/feishu-bot-design.md §4.1)', () => {
+  const value = (html: string) => html.match(/class="settings-feishu-value"[^>]*>([^<]*)</)?.[1] ?? null;
+  const app = { platform: 'LARK', appId: 'cli_mine', secretUnreadable: false, enabled: true };
+
+  it('is an Integrations card with a Feishu row and Manage, saying what the page holds once it is read', () => {
+    const html = render({});
+    expect(html).toMatch(/<h2[^>]*>Integrations<\/h2>/);
+    expect(html).toContain('<div>Feishu</div>');
+    expect(html).toContain('A Feishu or Lark app of your own, connected to Orbit as its bot.');
+    expect(value(html), 'nothing said while it is being read').toBeNull();
+    expect(value(render({}, undefined, { allowed: true, app: null }))).toBe('Not connected');
+    expect(value(render({}, undefined, { allowed: true, app }))).toBe('Lark · cli_mine');
+    expect(value(render({}, undefined, { allowed: true, app: { ...app, enabled: false } }))).toBe('Lark · cli_mine · Off');
+    expect(value(render({}, undefined, { allowed: true, app: { ...app, secretUnreadable: true } }))).toBe('cli_mine needs its App Secret again');
+    expect(value(render({}, undefined, { allowed: false, app }))).toBe('Turned off by an administrator');
   });
 });
 
@@ -172,10 +193,10 @@ describe('the way into Machines & models (docs/mocks/machines-and-models, 02)', 
 });
 
 describe('the order of the cards', () => {
-  it('reads how sessions start, then where agents run, then the alerts and the look, then sharing', () => {
+  it('reads how sessions start, then where agents run, then the alerts and the look, then what is stored, then sharing and integrations', () => {
     // The phones open with Machines & models instead and keep the session cards on a page of their own
     // (SettingsHome and SessionSettings in OrbitKit, docs/mocks/ios-settings-order); this page keeps its
-    // order. Access tokens comes last: the web's alone until the apps list tokens too.
+    // order. Access tokens and Integrations come last: the web's alone until the apps have them too.
     const html = render({});
     const titles = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1].replace(/&amp;/g, '&'));
     expect(titles).toEqual([
@@ -184,8 +205,10 @@ describe('the order of the cards', () => {
       'Machines & models',
       'Notifications',
       'Appearance',
+      'Storage',
       'Sharing',
       'Access tokens',
+      'Integrations',
     ]);
   });
 });

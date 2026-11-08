@@ -80,6 +80,8 @@ export class CreateWorkspaceDto {
   // The owner's alone: it decides what runs cost, so the agent tools' whitelist
   // (runner-agents.controller.ts ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) deliberately leaves it out.
   @IsOptional() @IsBoolean() modelRouting?: boolean;
+  @IsOptional() @IsIn(['cost', 'balance', 'intelligence'])
+  modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   // The other engines smart selection may move this Agent's task runs to (§6): only engines with a
   // tier table, and only the owner's to name, for the same reason as the switch. Empty (the
   // default) keeps every run on this Agent's own engine.
@@ -128,6 +130,8 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsString() defaultMergeTarget?: string;
   /** See CreateWorkspaceDto.modelRouting. Absent leaves the switch as it is. */
   @IsOptional() @IsBoolean() modelRouting?: boolean;
+  @IsOptional() @IsIn(['cost', 'balance', 'intelligence'])
+  modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** See CreateWorkspaceDto.modelRoutingProviders. Absent leaves the list as it is; [] empties it. */
   @IsOptional() @IsArray() @ArrayMaxSize(MODEL_ROUTING_ENGINES.length)
   @IsIn(MODEL_ROUTING_ENGINES, { each: true })

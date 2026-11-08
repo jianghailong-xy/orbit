@@ -36,6 +36,7 @@ import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.DetailFold
+import io.orbitd.android.directory.ExternalSender
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
@@ -96,7 +97,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     // the answers after the cut, would otherwise be missing from the one place they are shown.
     LaunchedEffect(row.key, questions.isNotEmpty()) { if (questions.isNotEmpty() && (event.truncated || row.result?.truncated == true)) loadFull(reveal = false) }
     val title = when (event.type) {
-        "user" -> if (cards.isNotEmpty()) "Orbit" else (event.fields["sessionMessage"] as? JsonObject)?.let { "From ${it.string("fromTitle") ?: "another Orbit session"}" } ?: "You"
+        "user" -> if (cards.isNotEmpty()) "Orbit" else (event.fields["sessionMessage"] as? JsonObject)?.let { "From ${it.string("fromTitle") ?: "another Orbit session"}" }
+            // Somebody outside Orbit — a connected Feishu group's member (`externalSender`, docs/feishu-bot-design.md §8.2): their
+            // words, headed `From Feishu · <name>` so they do not read as the owner's own (web `.chat-user-from`, OrbitKit `UserBubbleView`).
+            ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: "You"
         "assistant" -> "Assistant"
         "thinking" -> "Thinking"
         "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"

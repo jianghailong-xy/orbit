@@ -59,8 +59,10 @@ import {
   projectDetailsQuery,
   sessionQuery,
   wikiSpacesQuery,
+  wikiTrashQuery,
   workspaceSessionCountsQuery,
 } from '../lib/queries';
+import { listPollMs, streamDown, streamPoll } from '../lib/listBudget';
 import { workspaceListPath } from '../lib/workspaceListFolder';
 import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
 import { machineDraftPath, machineName, machinesToSetUp } from '../lib/machineSetup';
@@ -73,12 +75,22 @@ import {
   sidebarProjects,
   type SidebarProject,
 } from '../lib/projectAttention';
-import { wikiShown, wikiWaitingOnYou } from '../lib/wiki';
-import { wikiWaiting, writeWikiFromWorkspace } from '../lib/wikiSpace';
+import { WIKI_PATH, wikiShown, wikiSpacePath, wikiWaitingOnYou, type WikiSpaceRow } from '../lib/wiki';
+import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, WIKI_TRASH_PAGE_TITLE, wikiSettingsPath } from '../lib/wikiReviewMode';
+import {
+  readWikiFromWorkspace,
+  readWikiLastSpace,
+  wikiDefaultSpace,
+  wikiSpaceNames,
+  wikiWaiting,
+  wikiWaitingIn,
+  writeWikiFromWorkspace,
+} from '../lib/wikiSpace';
 import { SidebarNavIcon } from './SidebarNavIcon';
 import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
+import { WikiTrashDialog, useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
@@ -150,7 +162,9 @@ const TOP: TopNavItem[] = [
   // The Wiki sits under Projects because it is the other thing a codebase has: Projects is the work
   // in it, and the Wiki is what the work learned. Its amber count is the proposals waiting for the
   // owner, which is the same `needs-you` pill a workspace row shows — and the same rule applies with
-  // it: a row carrying an amber number shows no shortcut.
+  // it: a row carrying an amber number shows no shortcut. Each wiki has its own row in the group under
+  // the Workspaces; this one stands for them all, as Projects does: the whole count, the one way in on
+  // the collapsed rail, and the way to a first wiki for an account with none to list.
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
@@ -318,8 +332,8 @@ async function logout() {
 }
 
 // Every row is a destination, as on the iPhone drawer (OrbitKit `DrawerDestination`): a section, a
-// workspace's session list, or a project's sessions page. A row is lit while the screen belongs to
-// it, a click on the lit row goes nowhere, and any other click lands on its destination's root.
+// workspace's session list, a wiki, or a project's sessions page. A row is lit while the screen belongs
+// to it, a click on the lit row goes nowhere, and any other click lands on its destination's root.
 // `onNavigate` is told of every click, so the narrow layout's drawer closes even when the click
 // changed nothing, or only the query (a project's page is a `?project=` on the console).
 export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; onNavigate?: () => void }) {
@@ -342,6 +356,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
   const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
+  // The wikis the Wiki group lists, in the server's order, each called what the Wiki's own head calls it.
+  const wikiRows = wikiSpaces.data ?? [];
+  const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
+  const [wikiOpen, setWikiOpen] = useState(true);
+  // The wikis in Trash (docs/mocks/wiki-trash): the Wiki group's last row while there are any, which opens Trash.
+  const wikiTrash = useQuery({ ...wikiTrashQuery(), enabled: !!me.data });
+  const wikiTrashCount = wikiTrash.data?.spaces?.length ?? 0;
+  const [wikiTrashOpen, setWikiTrashOpen] = useState(false);
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -414,6 +436,17 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   useEffect(() => {
     if (!onWiki) writeWikiFromWorkspace(hereWorkspaceId);
   }, [onWiki, hereWorkspaceId]);
+  // The wiki on screen lights its row in the Wiki group rather than the Wiki entry, a project's rule:
+  // the one its URL names, or on `/wiki` the one that page opens, by the same reads. A page of no wiki
+  // the group shows — Review across all of them, a name that is none of them's, the group folded —
+  // keeps the entry lit instead, so the rail still says where you are.
+  const wikiAsked = useMatch('/wiki/:space/*')?.params.space;
+  const wikiOnScreen = !onWiki
+    ? null
+    : wikiAsked
+      ? wikiRows.find((space) => space.slug === wikiAsked)
+      : wikiDefaultSpace(wikiRows, { workspaceId: readWikiFromWorkspace(), lastSlug: readWikiLastSpace() });
+  const wikiRowKey = wikiOpen && wikiOnScreen ? `wiki:${wikiOnScreen.slug}` : null;
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
   // row, while an unresolved deep link briefly leaves the fixed nav unselected. Machines & models and
@@ -428,10 +461,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       ? ''
       : loc.pathname.startsWith('/projects/')
           ? (projectRowKey ?? 'projects')
-          // Every wiki route — a space, a topic, an entry's drawer, Review — is the Wiki's own
-          // destination, so the row stays lit across all of them.
-          : loc.pathname === '/wiki' || loc.pathname.startsWith('/wiki/')
-            ? 'wiki'
+          : onWiki
+            ? (wikiRowKey ?? 'wiki')
             // Every task route — all tasks, one task, a list, the tasks in none — is the Tasks
             // page, whose title picks among them.
             : loc.pathname.startsWith('/tasks/') || loc.pathname.startsWith('/lists/')
@@ -439,6 +470,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
+  // The collapsed rail has no Wiki group to light, so there every wiki route is its one Wiki icon's.
+  const railSel = onWiki ? 'wiki' : sel;
 
   const [projectsOpen, setProjectsOpen] = useState(true);
   // The Workspaces group folds like the Projects group. Its rows move only while being arranged
@@ -446,8 +479,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const [workspacesOpen, setWorkspacesOpen] = useState(true);
   const [editingWorkspaces, setEditingWorkspaces] = useState(false);
 
-  // Under the fixed entries, Workspaces and Projects scroll as one; while every Workspace fits with
-  // the Projects head still showing under them, the Workspaces stay put and only Projects scrolls
+  // Under the fixed entries, the groups scroll as one; while every Workspace and wiki fits with the
+  // Projects head still showing under them, those stay put and only Projects scrolls
   // (docs/mocks/sidebar-projects-scroll, 02).
   const listsRef = useRef<HTMLDivElement>(null);
   const [pinWorkspaces, setPinWorkspaces] = useState(false);
@@ -510,12 +543,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     window.addEventListener('mouseup', onUp);
   };
 
-  // Runners carry the computed `online` flag and the names the rows show. Poll on the same 15s
-  // cadence as a machine's page so status stays in sync while the sidebar is up.
+  // Runners carry the computed `online` flag and the names the rows show. A runner going on or off
+  // line is not on the control-plane stream, so this is read on the list budget's safety read while
+  // the stream is live, and on its shared backoff while it is down (listBudget).
   const runners = useQuery({
     queryKey: ['runners'],
     queryFn: () => api<Runner[]>('/runners'),
-    refetchInterval: 15_000,
+    refetchInterval: streamPoll(15_000),
   });
   const runnerOnlineById = useMemo(
     () => new Map((runners.data ?? []).map((runner) => [runner.id, runner.online])),
@@ -611,13 +645,42 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       },
     ];
   };
+  // A wiki's row has the same two ways to its actions (docs/mocks/wiki-trash). Moving the wiki on screen to Trash leaves
+  // for the one `/wiki` opens; moving another leaves the reader where they are.
+  const [askMoveWikiToTrash, wikiTrashConfirmation] = useMoveWikiToTrash((space) => {
+    if (wikiOnScreen?.id !== space.id) return;
+    onNavigate?.();
+    navigate(WIKI_PATH);
+  });
+  const wikiMenu = (space: WikiSpaceRow): MenuItem[] => [
+    {
+      key: 'settings',
+      icon: <SettingOutlined />,
+      label: WIKI_SETTINGS_TITLE,
+      onSelect: () => {
+        onNavigate?.();
+        navigate(wikiSettingsPath(space.slug));
+      },
+    },
+    { type: 'separator' as const, key: 'divider' },
+    {
+      key: 'trash',
+      icon: <DeleteOutlined />,
+      label: WIKI_TRASH_OPEN,
+      danger: true,
+      onSelect: () => askMoveWikiToTrash(space, wikiNames.get(space.id) ?? space.title),
+    },
+  ];
   // Measured before paint, and again whenever the list or the Workspaces group changes size. With no
   // ResizeObserver (jsdom) the default stands: the two groups scroll as one.
+  const hasWorkspaceRows = orderedWorkspaces.length > 0 || bareMachines.length > 0;
+  const hasWikis = wikiRows.length > 0;
   const hasProjects = openProjects.length > 0;
   useLayoutEffect(() => {
     const lists = listsRef.current;
     if (!lists || typeof ResizeObserver === 'undefined') return undefined;
     const workspacesGroup = lists.querySelector<HTMLElement>(':scope > .tp-group-workspaces');
+    const wikiGroup = lists.querySelector<HTMLElement>(':scope > .tp-group-wiki');
     const measure = () => {
       const projectsHead = lists.querySelector<HTMLElement>(':scope > .tp-group-projects > .tp-group-head');
       if (!workspacesGroup || !projectsHead) return setPinWorkspaces(false);
@@ -630,8 +693,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     const observer = new ResizeObserver(measure);
     observer.observe(lists);
     if (workspacesGroup) observer.observe(workspacesGroup);
+    if (wikiGroup) observer.observe(wikiGroup);
     return () => observer.disconnect();
-  }, [hasProjects]);
+  }, [hasProjects, hasWikis]);
 
   const workspaceSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -656,10 +720,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // badges per workspace. Sessions with no workspace still belong to no row, as before.
   const sessionCounts = useQuery({
     ...workspaceSessionCountsQuery(),
-    // Keep this small aggregate polling even with the control-plane stream connected: the
-    // engineTurnActive/runningSubagents transitions behind `running` are intentionally finer than
-    // its coarse session.updated events, so SSE alone cannot keep the spinner truthful.
-    refetchInterval: (q) => workspaceCountsPollInterval(q.state.data ?? []),
+    // Every session event re-reads it (useControlPlane). The engineTurnActive/runningSubagents
+    // transitions behind `running` are finer than those events, and wait for the list budget's
+    // safety read while the stream is live (docs/list-freshness-design.md W4); while it is down,
+    // the shared backoff, never faster than the cadence below.
+    refetchInterval: (q) => listPollMs(!streamDown(), q, workspaceCountsPollInterval(q.state.data ?? [])),
   });
   // The "needs you" signal per workspace: how many of its Open sessions are blocked on an approval.
   // Lets a workspace row show its own attention count so you can jump straight to the workspace
@@ -698,9 +763,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   );
 
   const openTopNav = useCallback(
-    (key: string) => {
+    (key: string, lit: string = sel) => {
       onNavigate?.();
-      if (key === sel) return;
+      if (key === lit) return;
       navigate(`/${key}`);
     },
     [navigate, onNavigate, sel],
@@ -754,17 +819,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     return () => window.removeEventListener('keydown', onKey);
   }, [activeWorkspaceId, orderedWorkspaces, openWorkspace]);
 
-  // A Workspace reached by ⌘↑/↓ or ⌘1‒9 while its row is scrolled out of the shared list scrolls into
-  // view there. Only the list moves: scrollIntoView would also move the off-canvas drawer's ancestors.
+  // A Workspace reached by ⌘↑/↓ or ⌘1‒9, or a wiki opened by the Wiki entry, while its row is scrolled
+  // out of the shared list scrolls into view there, or nothing lit would say where you are. Only the
+  // list moves: scrollIntoView would also move the off-canvas drawer's ancestors.
   useEffect(() => {
     const lists = listsRef.current;
-    const row = lists?.querySelector<HTMLElement>('.tp-group-workspaces .tp-item.active');
+    const row = lists?.querySelector<HTMLElement>('.tp-group-workspaces .tp-item.active, .tp-group-wiki .tp-item.active');
     if (!lists || !row) return;
     const list = lists.getBoundingClientRect();
     const box = row.getBoundingClientRect();
     if (box.top < list.top) lists.scrollTop -= list.top - box.top;
     else if (box.bottom > list.bottom) lists.scrollTop += box.bottom - list.bottom;
-  }, [litWorkspaceId]);
+  }, [litWorkspaceId, sel]);
 
   // A project's row opens its sessions page over the workspace showing (members span workspaces,
   // so the workspace only decides where the page's back leads), or the first one; with no
@@ -782,6 +848,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     }
     const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;
     navigate(over ? `/workspaces/${encodeId(over)}?project=${key}` : `/projects/${key}`);
+  };
+
+  // A wiki's row opens its home, where the picker in the Wiki's own head goes.
+  const openWiki = (slug: string) => {
+    onNavigate?.();
+    if (sel === `wiki:${slug}`) return;
+    navigate(wikiSpacePath(slug));
   };
 
   return (
@@ -820,18 +893,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       </div>
 
       {/* Collapsed-only icon rail: the fixed top-nav as icons. The dynamic lists (workspaces,
-          projects) have no icon form, so they fold away — expand to bring them back. The
+          wikis, projects) have no icon form, so they fold away — expand to bring them back. The
           workspaces themselves stay as monogram avatars below. Shown only when collapsed, on desktop. */}
       <div className="tp-rail">
         {topItems.map((t) => (
           <div
             key={t.key}
-            className={`tp-rail-item ${sel === t.key ? 'active' : ''}`}
-            onClick={() => openTopNav(t.key)}
-            onKeyDown={(event) => handleNavActivation(event, () => openTopNav(t.key))}
+            className={`tp-rail-item ${railSel === t.key ? 'active' : ''}`}
+            onClick={() => openTopNav(t.key, railSel)}
+            onKeyDown={(event) => handleNavActivation(event, () => openTopNav(t.key, railSel))}
             role="link"
             tabIndex={0}
-            aria-current={sel === t.key ? 'page' : undefined}
+            aria-current={railSel === t.key ? 'page' : undefined}
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
@@ -925,7 +998,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           className={`tp-lists autohide-scrollbar${pinWorkspaces ? ' pin-workspaces' : ''}`}
         >
           <div className="tp-group tp-group-workspaces">
-            {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && (
+            {hasWorkspaceRows && (
               <WorkspacesHead
                 count={orderedWorkspaces.length}
                 open={workspacesOpen}
@@ -1011,11 +1084,52 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 </div>
               ))}
             {confirmation}
+            {wikiTrashConfirmation}
           </div>
 
-          {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && openProjects.length > 0 && (
-            <div className="tp-divider" />
+          {hasWorkspaceRows && hasWikis && <div className="tp-divider" />}
+
+          {/* The wikis, in the Projects group's grammar. They stand above the Projects because those
+              are the long list and these a short one that hardly changes: under Projects they would
+              sit past every project, and here the rail's scrolling stays the one rule it was. */}
+          {hasWikis && (
+            <div className="tp-group tp-group-wiki">
+              <div className="tp-group-head" onClick={() => setWikiOpen((o) => !o)}>
+                <span className="tp-group-name">Wiki</span>
+                <span className="tp-count">{wikiRows.length}</span>
+                <CaretDownOutlined className={`tp-caret ${wikiOpen ? '' : 'collapsed'}`} />
+              </div>
+              {wikiOpen &&
+                wikiRows.map((space) => (
+                  <WikiRow
+                    key={space.id}
+                    name={wikiNames.get(space.id) ?? space.title}
+                    waiting={wikiWaitingIn(space)}
+                    active={sel === `wiki:${space.slug}`}
+                    onOpen={() => openWiki(space.slug)}
+                    menu={wikiMenu(space)}
+                  />
+                ))}
+              {wikiOpen && wikiTrashCount > 0 && (
+                <div
+                  className="tp-item tp-wiki-trash"
+                  onClick={() => setWikiTrashOpen(true)}
+                  onKeyDown={(event) => handleNavActivation(event, () => setWikiTrashOpen(true))}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <span className="tp-ico">
+                    <DeleteOutlined />
+                  </span>
+                  <span className="tp-label">{WIKI_TRASH_PAGE_TITLE}</span>
+                  <span className="tp-count">{wikiTrashCount}</span>
+                </div>
+              )}
+            </div>
           )}
+          {wikiTrashOpen && <WikiTrashDialog onClose={() => setWikiTrashOpen(false)} />}
+
+          {(hasWorkspaceRows || hasWikis) && hasProjects && <div className="tp-divider" />}
 
           {/* The open projects close the rail, as they close the iPhone drawer: the ones waiting on
               you first, then by the newest activity (lib/projectAttention `sidebarProjects`). The
@@ -1203,6 +1317,67 @@ export function ProjectRow({
           {needsYou}
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * One wiki in the rail's Wiki group. The book stands in the icon column, where a Workspace draws its
+ * folder, so the name lines up with theirs; what waits on you in this wiki is the amber count at the
+ * far end, the pill a Project row counts with. The Wiki entry's count is these added up.
+ */
+export function WikiRow({
+  name,
+  waiting,
+  active,
+  onOpen,
+  menu,
+}: {
+  name: string;
+  waiting: number;
+  active: boolean;
+  onOpen: () => void;
+  menu: MenuItem[];
+}) {
+  const waitingOnYou = wikiWaitingOnYou(waiting);
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <div
+      className={`tp-item ${active ? 'active' : ''}${menuOpen ? ' menu-open' : ''}`}
+      onClick={onOpen}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenuOpen(true);
+      }}
+      onKeyDown={(event) => handleNavActivation(event, onOpen)}
+      role="link"
+      tabIndex={0}
+      aria-current={active ? 'page' : undefined}
+    >
+      <span className="tp-ico">
+        <SidebarNavIcon name="wiki" />
+      </span>
+      <span className="tp-label">{name}</span>
+      {waiting > 0 && (
+        <span className="tp-count needs-you" title={waitingOnYou} aria-label={waitingOnYou}>
+          {waiting}
+        </span>
+      )}
+      {/* Inside the row's link: a press or an Enter on the menu is the menu's, and opens no wiki. */}
+      <span className="tp-workspace-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+        <Menu
+          side="bottom"
+          align="end"
+          items={menu}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          trigger={
+            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`} title="Actions">
+              <MoreOutlined />
+            </button>
+          }
+        />
+      </span>
     </div>
   );
 }

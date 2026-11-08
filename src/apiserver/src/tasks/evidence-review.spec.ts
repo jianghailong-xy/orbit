@@ -74,6 +74,26 @@ test('the send-back message names the task, the revision, the decider and the no
   assert.match(session, /sent back by the session that reviewed it/);
 });
 
+test('the send-back message of a session names it and its mode, and carries the sentence it is given before the note', () => {
+  const from = { attributes: ['from-session="s1"', 'from-mode="default"'], lines: ['The sender runs in default.'] };
+  const message = evidenceSendBackMessage({
+    taskId: EVIDENCE, taskTitle: 't', revision: '1', decidedByType: 'AGENT', note: 'the note', from,
+  });
+  assert.match(message, /^<orbit-evidence-send-back task="[0-9A-Za-z]+" revision="1" from-session="s1" from-mode="default">/);
+  assert.ok(message.indexOf('The sender runs in default.') < message.indexOf('the note'));
+  // A session the door recorded as USER, because its call named no workspace, is a session all the same.
+  const recordedAsUser = evidenceSendBackMessage({
+    taskId: EVIDENCE, taskTitle: 't', revision: '1', decidedByType: 'USER', note: 'n', from,
+  });
+  assert.match(recordedAsUser, /sent back by the session that reviewed it/);
+  // The account owner's press has no session to name.
+  const pressed = evidenceSendBackMessage({
+    taskId: EVIDENCE, taskTitle: 't', revision: '1', decidedByType: 'USER', note: 'n', from: null,
+  });
+  assert.match(pressed, /sent back by the account owner/);
+  assert.doesNotMatch(pressed, /from-session=|from-mode=/);
+});
+
 test('the window is the 30 minutes a confirmation review gets outside a project', () => {
   assert.equal(EVIDENCE_REVIEW_WINDOW_SECONDS, 1_800);
   assert.equal(EVIDENCE_REVIEW_WINDOW_SECONDS, OWNER_CONFIRMATION_REVIEW_WINDOW_SECONDS_OUTSIDE_PROJECTS);

@@ -1,7 +1,8 @@
-import { ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   KIND_SPECS,
+  WIKI_BACKFILL,
   WIKI_CHALLENGE_ANSWERS,
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_KINDS,
@@ -19,10 +20,12 @@ import {
   validateWikiSources,
   toUuid,
   uuidToBase62,
+  wikiEvidenceClass,
   wikiReviewEffect,
   wikiSpaceSettings,
   wikiTieredBasis,
   wikiVerdictEffect,
+  type WikiPromptedBy,
   type WikiAnchor,
   type WikiAnchorInput,
   type WikiAnchorOutcome,
@@ -35,6 +38,7 @@ import {
   type WikiEntryChanges,
   type WikiEntryKind,
   type WikiEntryStatus,
+  type WikiEvidenceClass,
   type WikiFieldError,
   type WikiKind,
   type WikiOp,
@@ -50,6 +54,7 @@ import {
   type WikiSourceKind,
   type WikiSpaceSettings,
   type WikiTieredBasis,
+  type WikiTrash,
   type WikiTrust,
   type WikiVerdictInput,
   type WikiVerificationEvidence,
@@ -61,6 +66,7 @@ import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { sha256 } from '../common/crypto.util';
 import { redactSecrets } from '../common/secret-redaction';
+import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import {
   anchorChallengeReason,
   anchorIdentityMatches,
@@ -74,7 +80,7 @@ import {
   type AnchorReportEntry,
 } from './wiki-anchors';
 import { docWithdrawReason, withdrawDocSentences } from './wiki-doc-withdrawal';
-import { mergeReceiptText, ownerResolutionText } from './wiki-dossier';
+import { memoryWriteWords, mergeReceiptText, ownerResolutionText } from './wiki-dossier';
 import { wikiMaintenanceRunChanges } from './wiki-maintenance-breaker';
 import {
   ChangesetNeighbours,
@@ -94,9 +100,23 @@ import { canonicalRepoUrl } from '../projects/project-integration-line';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { approvalText, evidenceOf, readBeforeRevision4, runEventText, toolCallText, verifierText } from './wiki-verify-evidence';
+import {
+  approvalText,
+  callCommand,
+  evidenceOf,
+  eventCall,
+  hasText,
+  noteOriginSessionId,
+  promptedEvidenceOf,
+  readBeforeRevision4,
+  runEventText,
+  toolCallText,
+  verifierText,
+} from './wiki-verify-evidence';
 import { enqueueWikiVerifyJob, wikiVerifyJobNeeded } from './wiki-verify-jobs';
 import { entryAppliedBy } from './wiki-run-reads';
+import { listWikiTrash, moveWikiSpaceToTrash, requestWikiSpacePurge, restoreWikiSpace } from './wiki-trash';
+import { wikiChatChoices, wikiSpaceWorkspaces, wikiWorkspacesOfSpaces } from './wiki-workspaces';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
 type Tx = Prisma.TransactionClient;
@@ -161,6 +181,19 @@ export interface WikiPrincipal {
    * owner's and everything else an agent's.
    */
   authorKind?: WikiAuthor['authorKind'];
+  /**
+   * A wiki chat's write (contract `agentSurface.chat`, `reviewModes.chat`): `draft` checks a chat's ops for a card
+   * (`draftChatOps`), and `apply` records the card the owner pressed as the changeset its acceptance decides in the same
+   * transaction (`applyChatOps`). Either way the ops are checked as ever — shape, sources, quotes, redaction,
+   * compare-and-set, the taint mark — but not held to the owner-only kinds (the owner's press writes them), the quotas,
+   * the review queue or the breaker, which a card takes no place in; and the space's review mode decides nothing of them.
+   */
+  chat?: 'draft' | 'apply';
+  /**
+   * The card a chat's `apply` presses: as of its drafting a tool_use_id names another session's call, since what was cited
+   * pending then can only be the chat's own (contract `sourceInput.toolUseId`).
+   */
+  draftId?: string;
 }
 
 /**
@@ -229,6 +262,24 @@ export class WikiRefusalError extends HttpException {
   }
 }
 
+/** Who is in a space is who reads its entries, so it is the owner's to say, as a review mode is. */
+function refuseWorkspaceChange(): never {
+  return refuse(
+    'WIKI_OWNER_CHANNEL_ONLY',
+    'which workspaces are in a wiki is the account owner\'s to say, through an owner channel with no acting session: '
+      + 'report what should change, and let a person change it.',
+  );
+}
+
+/** Moving a wiki to Trash, restoring it and deleting it for good are the owner's, as deleting it was. */
+function refuseTrashChange(): never {
+  return refuse(
+    'WIKI_OWNER_CHANNEL_ONLY',
+    'moving a wiki to Trash, restoring it and deleting it for good are the account owner\'s to do, through an owner '
+      + 'channel with no acting session: report what should change, and let a person change it.',
+  );
+}
+
 function refuse(code: WikiRefusalCode, message: string, errors?: WikiFieldError[]): never {
   throw new WikiRefusalError(errors ? { code, message, errors } : { code, message });
 }
@@ -290,6 +341,14 @@ interface ResolvedSource {
   ownerWords: boolean;
   /** The session the record belongs to, where it belongs to one: what "independent sessions" count. */
   sessionId: string | null;
+  /**
+   * A tool call of the calling session's own that is not stored yet (contract `sourceInput.toolUseId`): the runner
+   * delivers a turn's calls in batches, so a call made a moment before can be cited before its row exists. It is kept by
+   * the tool_use_id it was cited by, its quote unverified, and stored nowhere until the op settles, which resolves it again.
+   * So is one stored without its result yet, whose quote is not in what is stored of it (contract `sourceInput.pending`):
+   * the result comes in a later batch, and the settle checks the quote against the whole record.
+   */
+  pending?: boolean;
 }
 
 /** An entry's content, as it is about to be written. */
@@ -314,6 +373,8 @@ interface PreparedOp {
   payload: Record<string, unknown>;
   similar: WikiSimilar[];
   tainted: boolean;
+  /** The agent's note the op came from: the server's own word (`submitChangeset`), and null for every other op. */
+  promptedBy?: WikiPromptedBy | null;
   /** The effect policy's answer (§4.2), under the space's review mode: does this op take effect before the owner sees it? */
   applied: boolean;
   /**
@@ -335,6 +396,12 @@ interface PreparedOp {
    * to press and the entry out of the push forever.
    */
   waitsForOwner: boolean;
+  /**
+   * The pending challenge of the same entry this amend answers (`answersChallenge`, contract
+   * `reviewModes.challenge`): written on the op's row, and closed when the amend takes effect. Null for
+   * every other op, and for an amend that names none.
+   */
+  answersChallenge: string | null;
   sources: ResolvedSource[];
   draft: PreparedDraft | null;
   changes: WikiEntryChanges | null;
@@ -347,10 +414,11 @@ interface PreparedOp {
  * exactly one writer. `reopen` is the one way back out of a rejection: a lineage a verdict rejected
  * without being able to read its sources, proposed again (`reviewModes.verification.reopen`).
  * `anchor_check` is not a wiki op either: it is what a maintenance run's re-verification found
- * (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too.
+ * (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too. `downgrade` is
+ * neither: it is the close of a history backfill (`downgradeNoteEntries`), which moves an entry's trust alone.
  */
 interface WikiApplyInstruction {
-  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check';
+  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check' | 'downgrade';
   entryId: string | null;
   draft: PreparedDraft | null;
   changes: WikiEntryChanges | null;
@@ -397,8 +465,66 @@ interface ChangesetBudget {
   appliedByModeBefore: number;
 }
 
-/** A revert's restorations, by entry: the sources of the revision each amend puts back. */
-type Restorations = ReadonlyMap<string, readonly ResolvedSource[]>;
+/**
+ * What the close of a history backfill read and did (contract `maintenance.job.server.backfill.downgrade`): the printed
+ * report. `examined` is every live `auto` entry with a live note source on its current revision, `firstHand` those it leaves
+ * alone, `noFirstHand` those without, with their ids and kinds, whether or not this call was asked to write. `downgraded` is
+ * what it wrote, `moved` what it no longer could, because the entry had changed since it was read.
+ */
+export interface WikiNoteDowngradeReport {
+  spaceId: string;
+  apply: boolean;
+  examined: number;
+  firstHand: number;
+  noFirstHand: number;
+  downgraded: number;
+  moved: number;
+  batches: number;
+  byKind: Record<string, number>;
+  entryIds: string[];
+}
+
+/**
+ * A revert's restorations, by entry: the sources of the revision each amend puts back, and the trust it leaves —
+ * `unreviewed` for what a review mode applied (`trust.onApply.undoneByRevertOrSpotCheck`), and for a chat's Apply the
+ * trust the entry had before the press (`chat.presses.undo`).
+ */
+type Restorations = ReadonlyMap<string, { sources: readonly ResolvedSource[]; trust: WikiTrust }>;
+
+/** One op of a chat's card, as `draftChatOps` checked it: drafted, or the conflict or refusal it met. */
+export interface CheckedChatOp {
+  seq: number;
+  outcome: WikiOpOutcome;
+  /** What the card keeps of a drafted op; null for a conflict or a refusal. */
+  drafted: {
+    op: WikiOp;
+    entryId: string | null;
+    baseRevision: number | null;
+    payload: Record<string, unknown>;
+    similar: WikiSimilar[];
+    tainted: boolean;
+  } | null;
+}
+
+/** A chat's ops as `draftChatOps` hands them to the card's writer, in the drafting call's transaction. */
+export interface CheckedChatOps {
+  space: { id: string; settings: WikiSpaceSettings };
+  ops: CheckedChatOp[];
+  /** The request's digest under its key, as a changeset's is: a replay is told apart by it. */
+  requestSha256: string | null;
+  /** Whether the chat had read the web before this call (contract `effectPolicy.taintedRule`). */
+  sessionTainted: boolean;
+}
+
+/** What a chat's Apply recorded (`applyChatOps`). */
+export interface ChatApplyRecord {
+  changesetId: string;
+  ops: Array<{ seq: number; op: WikiOp; opId: string; decision: string; entryId: string | null; revision: number | null }>;
+  /** Each entry an amend of the card changed, with the trust it had before the press: what Undo puts back. */
+  trustBefore: Record<string, WikiTrust>;
+  /** The entries the press wrote or flagged: a new lineage's, and every other op's target. */
+  entryIds: string[];
+}
 
 /**
  * How long a submission's transaction may stay open, and wait for a connection to open in: 15 s and
@@ -483,6 +609,17 @@ function quoteHolds(sourceText: string, quote: string): boolean {
 }
 
 /**
+ * Is a quote that is not in the record verbatim there as the redactor leaves the record (contract `sourceRules.quote`)?
+ * Only a quote the redactor would leave as it is — one in redacted form, as a quote kept after its redaction is — is
+ * looked for in the record's text redacted with the same literals. A quote that still carries a value is held to the
+ * record's own words, so a value the record does not hold is never found because both would read [redacted].
+ */
+function quoteHoldsRedacted(sourceText: string, quote: string, literals: readonly string[]): boolean {
+  if (redactSecrets(quote, { literals }).redacted) return false;
+  return quoteHolds(redactSecrets(sourceText, { literals }).text, quote);
+}
+
+/**
  * Does this read as a tool probe rather than as knowledge (`WIKI_PROBE_REFUSED`, Wikova 4db6610f)?
  *
  * Deliberately narrow. An entry whose title CONTAINS the word is knowledge — "Testing strategy" is a
@@ -518,6 +655,26 @@ export function isOwnerTurn(turn: { kind: string; sendIntent: string | null; cli
 function isOwnerAnswer(approval: { toolName: string; status: string; answers: unknown; decidedById: string | null }): boolean {
   return approval.toolName === 'AskUserQuestion' && approval.status === 'ALLOWED' && approval.answers !== null
     && approval.decidedById !== null;
+}
+
+/** Where a conversation turn's words came from (`wikiEvidenceClass`). */
+function turnEvidenceClass(turn: {
+  kind: string;
+  sendIntent: string | null;
+  clientTurnId: string;
+  senderSessionId: string | null;
+  session: { taskId: string | null; parentSessionId: string | null };
+}): WikiEvidenceClass {
+  return wikiEvidenceClass({
+    kind: 'turn',
+    ownerWords: isOwnerTurn(turn),
+    turnKind: turn.kind,
+    clientTurnId: turn.clientTurnId,
+    orbitAuthored: isOrbitAuthoredTurn(turn.clientTurnId),
+    senderSessionId: turn.senderSessionId,
+    sessionTaskId: turn.session.taskId,
+    sessionParentId: turn.session.parentSessionId,
+  });
 }
 
 /**
@@ -800,11 +957,15 @@ export class WikiService {
       });
       if (!session) throw new NotFoundException('no such session');
       if (session.workspaceId) {
+        // A row naming a wiki in Trash reads as no row (contract `space.trash.sessions`): a workspace on a repository
+        // goes on to the wiki in use for it, made empty if there is none, and one with no repository is told why.
         const bound = await this.prisma.wikiSpaceWorkspace.findFirst({
           where: { workspaceId: session.workspaceId, ownerId },
-          select: { spaceId: true },
+          select: { spaceId: true, leftOutAt: true, space: { select: { deletedAt: true } } },
         });
-        if (bound) return bound.spaceId;
+        const inUse = bound && bound.space.deletedAt === null ? bound : null;
+        if (inUse?.leftOutAt) return refuse('WIKI_SPACE_UNBOUND', 'The owner left this workspace out of its wiki.');
+        if (inUse) return inUse.spaceId;
         const workspace = await this.prisma.workspace.findFirst({
           where: { id: session.workspaceId, ownerId },
           select: { id: true, name: true, repoUrl: true },
@@ -812,11 +973,18 @@ export class WikiService {
         if (workspace?.repoUrl) {
           return this.bindOnFirstUse(ownerId, workspace.id, workspace.repoUrl, workspace.name);
         }
+        if (bound && !namedSpaceId) {
+          return refuse(
+            'WIKI_SPACE_UNBOUND',
+            'The wiki this workspace is in was moved to Trash: the owner restores it from Trash, or binds the workspace '
+              + 'to another wiki in Wiki settings.',
+          );
+        }
       }
     }
     if (namedSpaceId) {
       const space = await this.prisma.wikiSpace.findFirst({
-        where: { id: namedSpaceId, ownerId },
+        where: { id: namedSpaceId, ownerId, deletedAt: null },
         select: { id: true },
       });
       if (!space) throw new NotFoundException('no such wiki space');
@@ -859,6 +1027,12 @@ export class WikiService {
           create: { spaceId, ownerId, workspaceId },
           update: {},
           select: { id: true },
+        });
+        // A row naming a wiki in Trash moves to this one, and the workspace with it: it joined another wiki meanwhile,
+        // so a restore of that one leaves it here (contract `space.trash.restore`).
+        await tx.wikiSpaceWorkspace.updateMany({
+          where: { workspaceId, ownerId, space: { deletedAt: { not: null } } },
+          data: { spaceId, leftOutAt: null },
         });
         return { spaceId, created: !existing };
       },
@@ -929,13 +1103,13 @@ export class WikiService {
   /**
    * The owner's spaces, each with what the contract's `space.list` adds to a row: the ops waiting in
    * Review (`pendingOps`) and the things of its plan that wait on the owner (`planWaiting`) — the two the
-   * drawer's and the sidebar's number adds up over the spaces (design §12.3.3) — the live workspaces bound
-   * to it (`workspaceIds`), and its confirmed plan's documents, written of how many — the directory's
+   * drawer's and the sidebar's number adds up over the spaces (design §12.3.3) — the live workspaces in it
+   * (`workspaceIds`), and its confirmed plan's documents, written of how many — the directory's
    * `docs`, null while it has no confirmed plan.
    */
   async listSpaces(ownerId: string): Promise<Array<Record<string, unknown>>> {
     const spaces = await this.prisma.wikiSpace.findMany({
-      where: { ownerId },
+      where: { ownerId, deletedAt: null },
       orderBy: { slug: 'asc' },
       select: {
         id: true,
@@ -957,13 +1131,9 @@ export class WikiService {
       counts.set(op.changeset.spaceId, (counts.get(op.changeset.spaceId) ?? 0) + 1);
     }
     const ids = spaces.map((space) => space.id);
-    const [waiting, bindings, plans] = await Promise.all([
+    const [waiting, workspaces, plans] = await Promise.all([
       wikiPlanWaitingOfSpaces(this.prisma, ownerId, spaces),
-      this.prisma.wikiSpaceWorkspace.findMany({
-        where: { ownerId, spaceId: { in: ids }, workspace: { deletedAt: null } },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        select: { spaceId: true, workspaceId: true },
-      }),
+      wikiWorkspacesOfSpaces(this.prisma, ownerId, spaces, { live: true }),
       this.prisma.wikiPlan.findMany({
         where: { ownerId, spaceId: { in: ids }, status: 'confirmed' },
         select: { spaceId: true, docs: { select: { slug: true } } },
@@ -985,7 +1155,7 @@ export class WikiService {
       updatedAt: space.updatedAt.toISOString(),
       pendingOps: counts.get(space.id) ?? 0,
       planWaiting: waiting.get(space.id) ?? 0,
-      workspaceIds: bindings.filter((binding) => binding.spaceId === space.id).map((binding) => binding.workspaceId),
+      workspaceIds: workspaces.get(space.id) ?? [],
       docs: docs.get(space.id) ?? null,
     }));
   }
@@ -1026,10 +1196,10 @@ export class WikiService {
     return this.requireSpace(ownerId, spaceId);
   }
 
-  /** One of the owner's spaces, or a plain 404 (§10.1: another owner's is a 404 as well). */
+  /** One of the owner's spaces in use, or a plain 404 (§10.1: another owner's is a 404 as well, and one in Trash). */
   async requireSpace(ownerId: string, spaceId: string) {
     const space = await this.prisma.wikiSpace.findFirst({
-      where: { id: spaceId, ownerId },
+      where: { id: spaceId, ownerId, deletedAt: null },
       select: {
         id: true,
         slug: true,
@@ -1064,6 +1234,10 @@ export class WikiService {
    *
    * The three owner-channel fields are refused to a personal access token as well, by `credential`,
    * and the whole request with them (docs/personal-access-token-design.md §5); the rest are a token's.
+   *
+   * Where the space's chats run (`chat.workspaceId`, contract `space.settings.chat`) is the owner channel's in
+   * the same way, as the chat's create that also writes it is: refused to a session header and to a token. Only
+   * a workspace the space's chats may run in is stored (`wikiChatChoices`); null forgets the one remembered.
    */
   async updateSpace(
     ownerId: string,
@@ -1074,6 +1248,7 @@ export class WikiService {
       reviewMode?: WikiReviewMode;
       automaticSpotChecks?: boolean;
       maintenance?: WikiMaintenanceInput;
+      chat?: { workspaceId: string | null };
       title?: string;
     },
     actingSessionId: string | null = null,
@@ -1100,12 +1275,29 @@ export class WikiService {
           + 'channel with no acting session: report what should change, and let a person change it.',
       );
     }
+    if (input.chat !== undefined && actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        "where a space's wiki chats run is the account owner's to choose, through an owner channel with no acting "
+          + 'session: report which workspace they should run in, and let a person choose it.',
+      );
+    }
     refuseOwnerFieldsToToken(credential, {
       reviewMode: input.reviewMode,
       maintenance: input.maintenance,
       automaticSpotChecks: input.automaticSpotChecks,
+      chat: input.chat,
     });
     const current = await this.requireSpace(ownerId, spaceId);
+    const chatWorkspaceId = input.chat === undefined ? undefined : (input.chat.workspaceId ?? null);
+    if (chatWorkspaceId) {
+      const choices = await wikiChatChoices(this.prisma, ownerId, current);
+      if (!choices.some((choice) => choice.id === chatWorkspaceId)) {
+        throw new BadRequestException(
+          "this space's chats can run only in a workspace of the space that runs its sessions in worktrees of their own",
+        );
+      }
+    }
     // Maintenance is written by its own unit, under the space row's lock and with the cursor start it
     // may need (`setWikiMaintenance`); every other key below is merged over the row as it stands, so
     // neither write can put back what the other just changed.
@@ -1114,10 +1306,13 @@ export class WikiService {
       // The settings a held plan job waited for may be here now (contract `plan.jobs.held`).
       await this.planJobFact(() => resumeWikiPlanJobs(this.prisma, ownerId, { spaceId }));
     }
-    const { maintenance: _maintenance, ...settings }: Record<string, unknown> = { ...current.settings };
+    // `chat` is left out the same way unless the request names it: a chat's create remembers a workspace with a
+    // statement of its own (WikiChat.create), which this merge must not put back.
+    const { maintenance: _maintenance, chat: _chat, ...settings }: Record<string, unknown> = { ...current.settings };
     if (input.push !== undefined) settings.push = input.push;
     if (input.autoAcceptReinforce !== undefined) settings.autoAcceptReinforce = input.autoAcceptReinforce;
     if (input.automaticSpotChecks !== undefined) settings.automaticSpotChecks = input.automaticSpotChecks;
+    if (chatWorkspaceId !== undefined) settings.chat = { workspaceId: chatWorkspaceId };
     if (input.reviewMode !== undefined && input.reviewMode !== current.settings.reviewMode) {
       settings.reviewMode = input.reviewMode;
       settings.reviewModeChangedAt = new Date().toISOString();
@@ -1131,21 +1326,109 @@ export class WikiService {
     return this.requireSpace(ownerId, spaceId);
   }
 
-  /** Bind a workspace the owner named: the manual half of §2.1's binding. */
-  async bindWorkspace(ownerId: string, spaceId: string, workspaceId: string) {
+  /** Who is in a space and who can be added: Wiki settings' Workspaces card (contract `space.workspaces`). */
+  async spaceWorkspaces(ownerId: string, spaceId: string) {
+    return wikiSpaceWorkspaces(this.prisma, ownerId, await this.requireSpace(ownerId, spaceId));
+  }
+
+  /**
+   * Bring a workspace into a space: one with no repository, or one of the space's own that the owner left out. One on
+   * another repository is refused, because that repository has its own space and what its sessions teach would be
+   * dropped here as another repository's knowledge (`buildWikiMaintainOps`).
+   */
+  async bindWorkspace(ownerId: string, spaceId: string, workspaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseWorkspaceChange();
     const workspace = await this.prisma.workspace.findFirst({
       where: { id: workspaceId, ownerId },
-      select: { id: true },
+      select: { id: true, repoUrl: true },
     });
     if (!workspace) throw new NotFoundException('no such workspace');
-    await this.requireSpace(ownerId, spaceId);
+    const space = await this.requireSpace(ownerId, spaceId);
+    const repository = workspace.repoUrl ? normalizeRepoUrl(workspace.repoUrl) : null;
+    if (repository !== null && repository !== space.repoUrlNorm) {
+      throw new BadRequestException('this workspace is on another repository, which has its own wiki');
+    }
     await this.prisma.wikiSpaceWorkspace.upsert({
       where: { workspaceId },
       create: { spaceId, ownerId, workspaceId },
-      update: { spaceId },
+      update: { spaceId, leftOutAt: null },
       select: { id: true },
     });
+    this.realtime?.publishWikiChanged(ownerId, spaceId);
     return { spaceId, workspaceId };
+  }
+
+  /**
+   * Leave a workspace out of its space: its sessions stop feeding the space and reading it, what it already taught
+   * stays, and it does not rejoin by itself. The row is what says so, so a workspace that was in by its repository
+   * alone gets one. Leaving out one that is out changes nothing.
+   */
+  async leaveWorkspaceOut(ownerId: string, spaceId: string, workspaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseWorkspaceChange();
+    const { workspaces } = await this.spaceWorkspaces(ownerId, spaceId);
+    const listed = workspaces.find((row) => row.id === workspaceId);
+    if (!listed) throw new NotFoundException('no such workspace in this wiki');
+    if (listed.inWiki) {
+      const leftOutAt = new Date();
+      await this.prisma.wikiSpaceWorkspace.upsert({
+        where: { workspaceId },
+        create: { spaceId, ownerId, workspaceId, leftOutAt },
+        update: { leftOutAt },
+        select: { id: true },
+      });
+      this.realtime?.publishWikiChanged(ownerId, spaceId);
+    }
+    return { spaceId, workspaceId };
+  }
+
+  /**
+   * Move a space to Trash (contract `space.trash`): one short write under its row lock, which hides it from every door,
+   * frees its name and repository for a new wiki, turns its maintenance off and drops the work queued or running for it.
+   * What it holds stays for WIKI_TRASH_RETENTION_DAYS, and a restore brings it back. The owner's alone, as who is in a
+   * space is: a session header is refused here and a personal access token at the guard.
+   */
+  async moveSpaceToTrash(ownerId: string, spaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseTrashChange();
+    const moved = await withTransactionRetry(
+      this.prisma,
+      (tx) => moveWikiSpaceToTrash(tx, ownerId, spaceId),
+      loggedRetry(this.logger, 'wiki.moveSpaceToTrash'),
+    );
+    this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return { spaceId, deletedAt: moved.deletedAt.toISOString(), purgeAt: moved.purgeAt.toISOString() };
+  }
+
+  /**
+   * Bring a space back from Trash (contract `space.trash.restore`): its name, or the next free one; its repository,
+   * unless a wiki in use holds it now, which is refused with what to do; its settings with maintenance still off; and
+   * what it holds, its public link and the workspaces that did not join another wiki meanwhile. Answers the space; one
+   * in use is answered as it is, so a second press changes nothing.
+   */
+  async restoreSpace(ownerId: string, spaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseTrashChange();
+    const { restored } = await withTransactionRetry(
+      this.prisma,
+      (tx) => restoreWikiSpace(tx, ownerId, spaceId),
+      loggedRetry(this.logger, 'wiki.restoreSpace'),
+    );
+    if (restored) this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return this.requireSpace(ownerId, spaceId);
+  }
+
+  /**
+   * Delete a space in Trash for good (contract `space.trash.purge`): it leaves Trash at once, and the purge takes what it
+   * holds in the background, a batch at a time (`WikiTrashPurge`). One not in Trash is the plain 404.
+   */
+  async purgeSpace(ownerId: string, spaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseTrashChange();
+    if (!(await requestWikiSpacePurge(this.prisma, ownerId, spaceId))) throw new NotFoundException('no such wiki in Trash');
+    this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return { spaceId };
+  }
+
+  /** The owner's wikis in Trash, the newest move first (contract `space.trash.list`). */
+  async listTrash(ownerId: string): Promise<WikiTrash> {
+    return { spaces: await listWikiTrash(this.prisma, ownerId) };
   }
 
   // ── The single write entry point (§4.1) ───────────────────────────────────────────────────────
@@ -1161,6 +1444,12 @@ export class WikiService {
     principal: WikiPrincipal,
     spaceId: string,
     input: WikiProposeInput,
+    /**
+     * What only the server's own maintenance run says of its ops, by their place in `input.ops` (contract
+     * `opRules.promptedBy`). Beside the input rather than in it: no door hands it on, so an op that carries the field is
+     * refused for its shape whoever sends it.
+     */
+    serverSays: { promptedBy?: ReadonlyArray<WikiPromptedBy | null> } = {},
   ): Promise<Record<string, unknown>> {
     const space = await this.requireSpace(principal.ownerId, spaceId);
     const ops = input.ops;
@@ -1193,7 +1482,7 @@ export class WikiService {
           const replay = await this.replayIdempotent(tx, principal.ownerId, input.idempotencyKey, requestSha256!);
           if (replay) return replay;
         }
-        return this.recordChangeset(tx, principal, space, ops, input, requestSha256, literals, null, neighbours);
+        return this.recordChangeset(tx, principal, space, ops, input, requestSha256, literals, null, neighbours, serverSays.promptedBy);
       },
       loggedRetry(this.logger, 'wiki.submitChangeset', { transaction: CHANGESET_TRANSACTION }),
     );
@@ -1328,6 +1617,7 @@ export class WikiService {
     literals: readonly string[],
     restorations: Restorations | null = null,
     neighbours: ChangesetNeighbours | null = null,
+    promptedBy: ReadonlyArray<WikiPromptedBy | null> = [],
   ): Promise<Record<string, unknown>> {
     const dryRun = input.dryRun === true;
     const lookups = neighbours ? await neighbours.recheck(tx, principal.ownerId) : null;
@@ -1419,6 +1709,11 @@ export class WikiService {
           );
         }
         const prepared = await this.prepareOp(tx, principal, space.id, seq, ops[seq], budget, literals, lookups);
+        prepared.promptedBy = promptedBy[seq] ?? null;
+        // A note a backfill read again: what was drawn from it is what this op may turn out to repeat, whatever words it says it in.
+        if (principal.origin === 'maintenance' && prepared.promptedBy && 'noteId' in prepared.promptedBy) {
+          prepared.similar = await this.withEntriesOfNote(tx, principal.ownerId, space.id, prepared, prepared.promptedBy.noteId);
+        }
         if (prepared.byMode?.mode === 'tiered') {
           // Tiered's spot check (`reviewModes.spotChecks`): one in every block of the ops it applies at
           // once, drawn by position. Automatic applies nothing here — its verdicts draw theirs, when the
@@ -1499,10 +1794,16 @@ export class WikiService {
     if (errors.length > 0) {
       return refuse('WIKI_SCHEMA', 'the op does not have the shape this contract gives it', errors);
     }
+    // And the challenge an amend names must be one it can answer (contract `reviewModes.challenge`): a
+    // pending challenge of the very entry it changes, named by an id that decodes to it.
+    const answersChallenge = opName === 'amend'
+      ? await this.answeredChallenge(tx, principal.ownerId, seq, op, target?.id ?? null)
+      : null;
     const writtenKind = opName === 'add' || opName === 'supersede' ? draftKind(op.entry) : targetKind;
 
-    // 2. Only the owner writes a kind that only the owner writes (kinds.<kind>.ownerOnlyOps).
-    if (principal.origin !== 'owner') {
+    // 2. Only the owner writes a kind that only the owner writes (kinds.<kind>.ownerOnlyOps). A chat's op is not refused
+    //    here: it is a card the owner's press writes, as the owner's own write (contract `reviewModes.chat.floors`).
+    if (principal.origin !== 'owner' && !principal.chat) {
       for (const candidate of new Set([writtenKind, targetKind])) {
         if (!candidate) continue;
         const spec = KIND_SPECS[candidate as WikiKind];
@@ -1515,10 +1816,18 @@ export class WikiService {
       }
     }
 
-    // 3. Every source resolves among the owner's own rows, and every quote is in the text it cites.
+    // 3. Every source resolves among the owner's own rows, and every quote is in the text it cites. A session's own call
+    //    not stored yet — or stored without its result yet, for a quote not in what is stored — resolves pending where
+    //    something ahead of the op resolves it again: a card's press, and for any other op but a challenge — whose flag
+    //    is written at once — the owner's decision. A press resolves it as of the card it presses (contract
+    //    `sourceInput.toolUseId`, `sourceInput.pending`).
     const found = await this.resolveSources(tx, principal, rawOpSources(op), {
       required: requiresSource(opName, principal),
       path: `ops[${seq}].sources`,
+      literals,
+      pending: principal.origin === 'agent' && principal.sessionId !== null
+        && (principal.chat === 'draft' || (principal.chat === undefined && opName !== 'challenge')),
+      ...(principal.chat === 'apply' && principal.draftId ? { settles: principal.draftId } : {}),
     });
 
     // 4. Redaction: nothing stored carries a credential, and a field it changed is marked. The quotes
@@ -1561,8 +1870,39 @@ export class WikiService {
     //    read before any of them because a tainted op WAITS: a space at its cap must not take in what the
     //    policy was going to apply, only for the mark to turn it into a queue entry.
     const tainted = await this.isTainted(tx, principal, sources);
-    const reviewing = budget.mode !== 'manual' && principal.origin !== 'owner';
-    const decided = wikiReviewEffect({
+    if (principal.chat) {
+      // A chat's op (contract `reviewModes.chat`): no review mode touches it, in Manual, Tiered and Automatic alike, and it
+      // takes no place in the quotas, the review queue or the breaker. Recorded for an Apply, it waits for the owner's
+      // acceptance, which `applyChatOps` gives in the same transaction — a challenge's flag is written at once and the
+      // challenge waits in Review, as a challenge does (`recordOp`).
+      const similar = draft
+        ? (lookups?.answer(seq, neighbourText(draft), target?.id ?? null)
+          ?? await this.nearNeighbours(tx, principal.ownerId, spaceId, draft, target?.id ?? null))
+        : [];
+      return {
+        seq,
+        op: opName,
+        entryId: target?.id ?? null,
+        baseRevision,
+        payload: redacted.value,
+        similar,
+        tainted,
+        applied: false,
+        verifying: false,
+        byMode: null,
+        spotCheck: false,
+        waitsForOwner: true,
+        answersChallenge,
+        sources,
+        draft: draft ? preparedDraft(draft) : null,
+        changes: (redacted.value.changes ?? null) as WikiEntryChanges | null,
+      };
+    }
+    // A source that resolved pending is resolved again by the owner's decision, so until then nothing of the op applies:
+    // not on the effect policy's word, a review mode's or a verdict's (contract `sourceInput.toolUseId`).
+    const held = sources.some((source) => source.pending === true);
+    const reviewing = !held && budget.mode !== 'manual' && principal.origin !== 'owner';
+    const decided: WikiReviewEffect = held ? { effect: 'pending', byMode: null } : wikiReviewEffect({
       mode: budget.mode,
       origin: principal.origin,
       op: opName,
@@ -1631,10 +1971,47 @@ export class WikiService {
       byMode: decided.byMode,
       spotCheck: false,
       waitsForOwner,
+      answersChallenge,
       sources,
       draft: draft ? preparedDraft(draft) : null,
       changes: (redacted.value.changes ?? null) as WikiEntryChanges | null,
     };
+  }
+
+  /**
+   * The challenge an amend names in `answersChallenge` (contract `reviewModes.challenge`): one op, a
+   * challenge, of the very entry this amend changes, and still pending. Anything else is refused for its
+   * shape, and the op writes nothing — an amend that names a challenge it cannot answer was written
+   * against a world that has moved. An amend naming none answers none.
+   */
+  private async answeredChallenge(
+    tx: Tx,
+    ownerId: string,
+    seq: number,
+    op: Record<string, unknown>,
+    entryId: string | null,
+  ): Promise<string | null> {
+    const named = op.answersChallenge;
+    if (named === undefined || named === null) return null;
+    const at = `ops[${seq}].answersChallenge`;
+    if (typeof named !== 'string' || !isDecodableId(named)) {
+      return refuse('WIKI_SCHEMA', `${at} names no op: hand back the opId of the challenge this amend answers`, [
+        { path: at, message: 'names no op' },
+      ]);
+    }
+    const challenge = await tx.wikiChangesetOp.findFirst({
+      where: { id: toUuid(named), ownerId },
+      select: { id: true, op: true, entryId: true, decision: true },
+    });
+    if (challenge?.op !== 'challenge' || challenge.decision !== 'pending' || entryId === null || challenge.entryId !== entryId) {
+      return refuse(
+        'WIKI_SCHEMA',
+        `${at} names no pending challenge of this entry: an amend answers a challenge of the very entry it changes, `
+          + 'and only while that challenge waits for one',
+        [{ path: at, message: 'names no pending challenge of this entry' }],
+      );
+    }
+    return challenge.id;
   }
 
   /** Record one prepared op: its row, its effect, and the answer its caller reads. */
@@ -1668,10 +2045,12 @@ export class WikiService {
               payload: prepared.payload as Prisma.InputJsonValue,
               similar: prepared.similar as unknown as Prisma.InputJsonValue,
               tainted: prepared.tainted,
+              answersChallenge: prepared.answersChallenge,
               decision: prepared.verifying ? 'verifying' : 'pending',
               // What Automatic took is not applied yet: its verdict names the mode when it applies it.
               appliedByMode: prepared.applied ? (prepared.byMode?.mode ?? null) : null,
               spotCheck: prepared.spotCheck,
+              promptedBy: prepared.promptedBy ? { ...prepared.promptedBy } : Prisma.DbNull,
             },
             select: { id: true },
           })
@@ -1697,11 +2076,13 @@ export class WikiService {
           draft: prepared.draft,
           changes: prepared.changes,
           payload: prepared.payload,
-          sources: restored ?? prepared.sources,
+          // A source that resolved pending names no row yet, or a quote not checked yet: the owner's decision stores it once
+          // it resolves (`settledSources`).
+          sources: restored?.sources ?? prepared.sources.filter((source) => source.pending !== true),
           tainted: prepared.tainted,
           proposed: !prepared.applied,
           promotedTrust: principal.origin === 'owner' ? 'owner' : (prepared.byMode?.trust ?? 'confirmed'),
-          trustAfter: restored ? 'unreviewed' : (prepared.byMode?.trust ?? undefined),
+          trustAfter: restored ? restored.trust : (prepared.byMode?.trust ?? undefined),
         }, author)
       : null;
     if (opRowId) {
@@ -1724,6 +2105,216 @@ export class WikiService {
     return prepared.verifying
       ? { seq, status: 'pending', opId: opRowId, entryId: outcomeEntryId, similar, waitsFor: 'verification' }
       : { seq, status: 'pending', opId: opRowId, entryId: outcomeEntryId, similar };
+  }
+
+  // ── A wiki chat's cards (contract `agentSurface.chat`, `reviewModes.chat`) ───────────────────
+
+  /**
+   * A chat's ops, checked for a card (contract `agentSurface.chat.propose`, design §7.1): every op — the reinforce and the
+   * challenge that apply at once elsewhere among them — is checked as `submitChangeset` checks it, in the contract's order:
+   * shape, sources, quotes, redaction, compare-and-set and the taint mark, with its near neighbours. Not the owner-only
+   * kinds (the owner's press writes a principle), the quotas, the review queue or the breaker, which a card takes no place
+   * in, and not the space's review mode, which never touches a card. NOTHING of the wiki is written: no changeset, no op,
+   * no entry, no flag.
+   *
+   * In one transaction with the card's writer, which this hands the ops as checked (`card.write`) — after `card.replay`
+   * has had the chance to answer a request it already made a card for under the same key.
+   */
+  async draftChatOps<T>(
+    principal: WikiPrincipal,
+    spaceId: string,
+    input: WikiProposeInput & { replaces?: string | null },
+    card: {
+      replay: (tx: Tx, requestSha256: string | null) => Promise<T | null>;
+      write: (tx: Tx, checked: CheckedChatOps) => Promise<T>;
+    },
+  ): Promise<T> {
+    const space = await this.requireSpace(principal.ownerId, spaceId);
+    const ops = input.ops;
+    if (!Array.isArray(ops) || ops.length === 0) {
+      return refuse('WIKI_SCHEMA', 'ops must hold at least one op', [{ path: 'ops', message: 'is required' }]);
+    }
+    if (typeof input.rationale !== 'string' || input.rationale.trim() === '') {
+      return refuse('WIKI_SCHEMA', 'rationale is required: what this card would change, and why', [
+        { path: 'rationale', message: 'is required' },
+      ]);
+    }
+    if (lengthOf(input.rationale) > WIKI_LIMITS.fieldTextMaxChars) {
+      return refuse('WIKI_SCHEMA', `a card's rationale is at most ${WIKI_LIMITS.fieldTextMaxChars} characters`, [
+        { path: 'rationale', message: `must be at most ${WIKI_LIMITS.fieldTextMaxChars} characters` },
+      ]);
+    }
+    if (input.idempotencyKey && lengthOf(input.idempotencyKey) > 200) {
+      return refuse('WIKI_SCHEMA', 'idempotencyKey is at most 200 characters', [
+        { path: 'idempotencyKey', message: 'must be at most 200 characters' },
+      ]);
+    }
+    const requestSha256 = input.idempotencyKey
+      ? sha256(canonicalJson({ spaceId, ops, rationale: input.rationale, replaces: input.replaces ?? null, chat: 'entry' }))
+      : null;
+    const literals = await this.envLiterals(this.prisma, principal.ownerId);
+    const neighbours = await ChangesetNeighbours.read(this.prisma, principal.ownerId, space.id, this.neighbourDrafts(ops, literals));
+    const drafting: WikiPrincipal = { ...principal, chat: 'draft' };
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const replayed = await card.replay(tx, requestSha256);
+        if (replayed !== null) return replayed;
+        const lookups = await neighbours.recheck(tx, principal.ownerId);
+        // Read by none of the checks a chat's op takes (`prepareOp`): a card waits for no queue and trips no breaker.
+        const budget: ChangesetBudget = {
+          mode: space.settings.reviewMode,
+          autoAcceptReinforce: space.settings.autoAcceptReinforce !== false,
+          pendingInSpace: 0,
+          waitingInRequest: 0,
+          waitingInSession: 0,
+          activeAtStart: 0,
+          changedByMode: new Set<string>(),
+          breakerScope: 'changeset',
+          appliedByModeBefore: 0,
+        };
+        const checked: CheckedChatOp[] = [];
+        for (let seq = 0; seq < ops.length; seq += 1) {
+          try {
+            if (seq >= WIKI_LIMITS.opsPerChangeset) {
+              return refuse('WIKI_QUOTA', `a card holds at most ${WIKI_LIMITS.opsPerChangeset} ops: draft the rest on another card`);
+            }
+            const prepared = await this.prepareOp(tx, drafting, space.id, seq, ops[seq], budget, literals, lookups);
+            const similar = prepared.similar.length > 0 ? prepared.similar : undefined;
+            checked.push({
+              seq,
+              outcome: { seq, status: 'pending', opId: null, entryId: prepared.entryId, ...(similar ? { similar } : {}) },
+              drafted: {
+                op: prepared.op,
+                entryId: prepared.entryId,
+                baseRevision: prepared.baseRevision,
+                payload: prepared.payload,
+                similar: prepared.similar,
+                tainted: prepared.tainted,
+              },
+            });
+          } catch (error) {
+            if (error instanceof WikiConflict) checked.push({ seq, outcome: error.outcome, drafted: null });
+            else if (error instanceof WikiRefusalError) checked.push({ seq, outcome: { seq, status: 'refused', reasons: [error.refusal] }, drafted: null });
+            else throw error;
+          }
+        }
+        const sessionTainted = principal.sessionId ? await this.sessionWasTainted(tx, principal.sessionId) : false;
+        return card.write(tx, { space: { id: space.id, settings: space.settings }, ops: checked, requestSha256, sessionTainted });
+      },
+      loggedRetry(this.logger, 'wiki.draftChatOps', { transaction: CHANGESET_TRANSACTION }),
+    );
+  }
+
+  /**
+   * Whether a chat had read the web before now (contract `effectPolicy.taintedRule`): what a card's `tainted` says, so
+   * the card reads Based on web content before it is pressed (`reviewModes.chat.floors`).
+   */
+  async chatWasTainted(tx: Tx, sessionId: string): Promise<boolean> {
+    return this.sessionWasTainted(tx, sessionId);
+  }
+
+  /**
+   * The owner's press of a chat's entry card (contract `chat.presses.apply` and `.edit`, `reviewModes.chat`), in the press's
+   * own transaction: the card's ops checked again — sources, quotes, compare-and-set — and recorded as ONE changeset of
+   * origin `agent` whose session is the chat, then accepted by the owner op by op, as Review's Accept and Edit are
+   * (`applyDecision`): an add, a supersede and an amend confirmed, a principle the owner's (`owner`), a reinforce's sources
+   * added with the trust it found, a retire retired. A challenge's flag is written at once and the challenge waits for the
+   * owner's answer in Review, as every challenge does: accepting it would close the very challenge the press raised. No
+   * review mode decides any of it — no verification in Automatic, no spot check in Tiered, nothing the breaker counts —
+   * and nothing of it takes a place in the quotas or the queue.
+   *
+   * An op whose base moved, or that no longer holds, refuses the press — WIKI_REVISION_CONFLICT, or the op's own refusal —
+   * and the transaction writes nothing: the card reads changed. `edits` lays the owner's changes over the named ops
+   * (`effectPolicy.decide.edit`), each such revision the owner's.
+   */
+  async applyChatOps(
+    tx: Tx,
+    input: {
+      ownerId: string;
+      userId: string;
+      spaceId: string;
+      chatId: string;
+      draftId: string;
+      rationale: string;
+      ops: ReadonlyArray<Record<string, unknown>>;
+      edits: ReadonlyMap<number, WikiEntryChanges>;
+    },
+  ): Promise<ChatApplyRecord> {
+    const { ownerId } = input;
+    const space = await tx.wikiSpace.findFirstOrThrow({ where: { id: input.spaceId, ownerId }, select: { id: true, settings: true } });
+    const literals = await this.envLiterals(tx, ownerId);
+    // What each entry an amend changes is trusted as before the press: what the card's Undo puts back.
+    const trustBefore: Record<string, WikiTrust> = {};
+    for (const op of input.ops) {
+      if (op.op !== 'amend' || typeof op.entryId !== 'string' || !isDecodableId(op.entryId)) continue;
+      const entry = await this.ownEntryById(tx, ownerId, toUuid(op.entryId));
+      if (entry) trustBefore[entry.id] = entry.trust as WikiTrust;
+    }
+    const principal: WikiPrincipal = {
+      origin: 'agent', ownerId, userId: null, sessionId: input.chatId, toolCallId: null, chat: 'apply', draftId: input.draftId,
+    };
+    const ops = [...input.ops];
+    const idempotencyKey = `wiki-chat:${input.draftId}`;
+    const recorded = await this.recordChangeset(
+      tx,
+      principal,
+      space,
+      ops,
+      { ops, rationale: input.rationale, idempotencyKey },
+      sha256(canonicalJson({ spaceId: space.id, ops, rationale: input.rationale, draftId: input.draftId })),
+      literals,
+    );
+    const outcomes = (recorded.ops ?? []) as WikiOpOutcome[];
+    const failed = outcomes.find((outcome) => outcome.status === 'refused' || outcome.status === 'conflict');
+    if (failed?.status === 'conflict') {
+      return refuse(
+        'WIKI_REVISION_CONFLICT',
+        `op ${failed.seq}: the entry it changes is at revision ${failed.currentRevision} now, and this card was drafted against `
+          + `revision ${failed.baseRevision}: nothing was applied. Ask for the card again from what the entry says now.`,
+      );
+    }
+    if (failed?.status === 'refused') {
+      const [reason] = failed.reasons;
+      throw new WikiRefusalError(reason ?? { code: 'WIKI_SCHEMA', message: `op ${failed.seq} no longer holds: nothing was applied` });
+    }
+    const changesetId = recorded.changesetId as string;
+    const changeset = await tx.wikiChangeset.findFirstOrThrow({ where: { id: changesetId, ownerId }, select: CHANGESET_SELECT });
+    for (const op of [...changeset.ops].sort((a, b) => a.seq - b.seq)) {
+      // Flagged by its record already; its answer is the owner's in Review (Re-confirm, Amend or Retire).
+      if (op.op === 'challenge') continue;
+      const edited = input.edits.get(op.seq);
+      await this.applyDecision(tx, ownerId, input.userId, changeset, {
+        opId: op.id,
+        action: edited ? 'edit' : 'accept',
+        ...(edited ? { edited } : {}),
+      }, literals, true);
+    }
+    await this.settleChangeset(tx, ownerId, changesetId);
+    const rows = await tx.wikiChangesetOp.findMany({
+      where: { changesetId, ownerId },
+      orderBy: { seq: 'asc' },
+      select: { id: true, seq: true, op: true, decision: true, entryId: true, resultEntryId: true, resultRevision: true },
+    });
+    const conflicted = rows.find((row) => row.decision === 'conflict');
+    if (conflicted) {
+      return refuse('WIKI_REVISION_CONFLICT', `op ${conflicted.seq}: the entry it changes moved while the press was recorded: nothing was applied`);
+    }
+    const entryOf = (row: (typeof rows)[number]): string | null =>
+      row.op === 'add' || row.op === 'supersede' ? (row.resultEntryId ?? null) : row.entryId;
+    return {
+      changesetId,
+      ops: rows.map((row) => ({
+        seq: row.seq,
+        op: row.op as WikiOp,
+        opId: row.id,
+        decision: row.decision,
+        entryId: entryOf(row),
+        revision: row.resultRevision,
+      })),
+      trustBefore,
+      entryIds: [...new Set(rows.map(entryOf).filter((id): id is string => id !== null))],
+    };
   }
 
   // ── decide: the owner channel (contract `effectPolicy.decide`) ────────────────────────────────
@@ -1756,7 +2347,7 @@ export class WikiService {
       this.prisma,
       async (tx) => {
         const changeset = await tx.wikiChangeset.findFirst({
-          where: { id: changesetId, ownerId },
+          where: { id: changesetId, ownerId, space: { deletedAt: null } },
           select: CHANGESET_SELECT,
         });
         if (!changeset) throw new NotFoundException('no such changeset');
@@ -1816,100 +2407,9 @@ export class WikiService {
     const answer = await withTransactionRetry(
       this.prisma,
       async (tx) => {
-        const changeset = await tx.wikiChangeset.findFirst({ where: { id: changesetId, ownerId }, select: CHANGESET_SELECT });
+        const changeset = await tx.wikiChangeset.findFirst({ where: { id: changesetId, ownerId, space: { deletedAt: null } }, select: CHANGESET_SELECT });
         if (!changeset) throw new NotFoundException('no such changeset');
-        const idempotencyKey = `revert:${changeset.id}`;
-        const earlier = await tx.wikiChangeset.findFirst({ where: { ownerId, idempotencyKey }, select: CHANGESET_SELECT });
-        if (earlier) {
-          return { revertedChangesetId: changeset.id, changesetId: earlier.id, replayed: true, ops: recordedOutcomes(earlier), skipped: [] };
-        }
-        const space = await tx.wikiSpace.findFirstOrThrow({
-          where: { id: changeset.spaceId, ownerId },
-          select: { id: true, settings: true },
-        });
-        const undone = changeset.ops.filter(
-          (op) => op.appliedByMode !== null && (op.decision === 'auto_applied' || (op.decision === 'pending' && op.spotCheck)),
-        );
-        const ops: Record<string, unknown>[] = [];
-        const skipped: Array<{ entryId: string; reason: string }> = [];
-        const reason = `Reverted with the run that applied it (changeset ${uuidToBase62(changeset.id)}).`;
-        for (const op of undone.filter((row) => row.op === 'add' && row.resultEntryId)) {
-          const entry = await this.ownEntryById(tx, ownerId, op.resultEntryId!);
-          if (entry?.status !== 'active') {
-            skipped.push({ entryId: op.resultEntryId!, reason: 'no longer active' });
-            continue;
-          }
-          ops.push({ op: 'retire', entryId: entry.id, baseRevision: entry.currentRevision, reason });
-        }
-        // An entry the run amended more than once goes back to where the run found it, in one amend.
-        const amended = new Map<string, { from: number; to: number }>();
-        for (const op of undone.filter((row) => row.op === 'amend' && row.entryId)) {
-          const seen = amended.get(op.entryId!);
-          amended.set(op.entryId!, {
-            from: Math.min(seen?.from ?? op.baseRevision!, op.baseRevision!),
-            to: Math.max(seen?.to ?? 0, op.resultRevision ?? 0),
-          });
-        }
-        const restorations = new Map<string, ResolvedSource[]>();
-        for (const [entryId, span] of amended) {
-          const entry = await this.ownEntryById(tx, ownerId, entryId);
-          if (entry?.status !== 'active' || entry.currentRevision !== span.to) {
-            skipped.push({ entryId, reason: entry?.status !== 'active' ? 'no longer active' : 'changed again since' });
-            continue;
-          }
-          const before = await tx.wikiEntryRevision.findFirstOrThrow({
-            where: { entryId, ownerId, revision: span.from },
-            select: { id: true, title: true, summary: true, fields: true, topics: true, aliases: true, anchors: true },
-          });
-          restorations.set(entryId, await this.sourcesOfRevision(tx, ownerId, before.id));
-          ops.push({
-            op: 'amend',
-            entryId,
-            baseRevision: entry.currentRevision,
-            changes: {
-              title: before.title,
-              summary: before.summary,
-              fields: before.fields,
-              topics: before.topics,
-              aliases: before.aliases,
-              anchors: before.anchors,
-            },
-          });
-        }
-        // The run's own open spot checks go with it: there is nothing left for the owner to check.
-        await tx.wikiChangesetOp.updateMany({
-          where: { changesetId: changeset.id, ownerId, decision: 'pending', spotCheck: true },
-          data: { decision: 'withdrawn', decidedAt: new Date() },
-        });
-        // And so does what of it still waits for a verdict, so that no verdict can apply it later
-        // (`reviewModes.revert`): the op withdrawn, and an add's proposed lineage rejected with it
-        // (`states.entry`: proposed -> rejected when its op is withdrawn).
-        const owner: WikiAuthor = { authorKind: 'owner', authorUserId: userId, authorSessionId: null, authorToolCallId: null, changesetOpId: null };
-        for (const op of changeset.ops.filter((row) => row.decision === 'verifying')) {
-          if (op.op === 'add' && op.resultEntryId) {
-            await this.applyOp(tx, ownerId, changeset.spaceId, {
-              op: 'reject', entryId: op.resultEntryId, draft: null, changes: null, payload: {}, sources: [], tainted: op.tainted,
-            }, { ...owner, changesetOpId: op.id });
-          }
-          await this.writeOpDecision(tx, ownerId, op.id, { decision: 'withdrawn', decisionNote: null });
-        }
-        await this.settleChangeset(tx, ownerId, changeset.id);
-        if (ops.length === 0) {
-          return { revertedChangesetId: changeset.id, changesetId: null, replayed: false, ops: [], skipped };
-        }
-        const principal: WikiPrincipal = { origin: 'owner', ownerId, userId, sessionId: null, toolCallId: null };
-        const rationale = `Revert of changeset ${uuidToBase62(changeset.id)}: what its review mode applied at once, taken back.`;
-        const recorded = await this.recordChangeset(
-          tx,
-          principal,
-          space,
-          ops,
-          { ops, rationale, idempotencyKey },
-          sha256(canonicalJson({ spaceId: space.id, ops, rationale })),
-          literals,
-          restorations,
-        );
-        return { revertedChangesetId: changeset.id, ...recorded, skipped };
+        return this.revertIn(tx, ownerId, userId, changeset, literals, null);
       },
       loggedRetry(this.logger, 'wiki.revertChangeset'),
     );
@@ -1918,6 +2418,139 @@ export class WikiService {
       if (spaceId) this.realtime?.publishWikiChanged(ownerId, spaceId.spaceId);
     }
     return answer;
+  }
+
+  /**
+   * A chat's Undo of the changeset its Apply recorded (contract `chat.presses.undo`, `reviewModes.chat.revert`), in the
+   * Undo's own transaction: revert's writes and its key (`revert:<changeset id>`), though the owner accepted these ops by
+   * that press — an add's entry retired, an entry an amend changed put back to the revision before the Apply with the
+   * trust it had then (`trustBefore`). An entry that left active or changed again since is named in `skipped` and left.
+   * The caller holds the card's row and has decided it may be undone; this writes entries alone, never a document.
+   */
+  async revertChatApplyIn(
+    tx: Tx,
+    input: { ownerId: string; userId: string; changesetId: string; trustBefore: Readonly<Record<string, WikiTrust>> },
+  ): Promise<Record<string, unknown>> {
+    const changeset = await tx.wikiChangeset.findFirst({ where: { id: input.changesetId, ownerId: input.ownerId }, select: CHANGESET_SELECT });
+    if (!changeset) throw new NotFoundException('no such changeset');
+    const literals = await this.envLiterals(tx, input.ownerId);
+    return this.revertIn(tx, input.ownerId, input.userId, changeset, literals, { trustBefore: input.trustBefore });
+  }
+
+  /**
+   * One revert, inside its caller's transaction (`revertChangeset`, `revertChatApplyIn`): what is undone is what the review
+   * mode applied that the owner has not answered — or, for a chat's Apply (`chat`), the adds and amends the press accepted.
+   */
+  private async revertIn(
+    tx: Tx,
+    ownerId: string,
+    userId: string,
+    changeset: ChangesetRow,
+    literals: readonly string[],
+    chat: { trustBefore: Readonly<Record<string, WikiTrust>> } | null,
+  ): Promise<Record<string, unknown>> {
+    const idempotencyKey = `revert:${changeset.id}`;
+    const earlier = await tx.wikiChangeset.findFirst({ where: { ownerId, idempotencyKey }, select: CHANGESET_SELECT });
+    if (earlier) {
+      return { revertedChangesetId: changeset.id, changesetId: earlier.id, replayed: true, ops: recordedOutcomes(earlier), skipped: [] };
+    }
+    const space = await tx.wikiSpace.findFirstOrThrow({
+      where: { id: changeset.spaceId, ownerId },
+      select: { id: true, settings: true },
+    });
+    const undone = chat
+      ? changeset.ops.filter((op) => (op.decision === 'accepted' || op.decision === 'edited') && (op.op === 'add' || op.op === 'amend'))
+      : changeset.ops.filter(
+        (op) => op.appliedByMode !== null && (op.decision === 'auto_applied' || (op.decision === 'pending' && op.spotCheck)),
+      );
+    const ops: Record<string, unknown>[] = [];
+    const skipped: Array<{ entryId: string; reason: string }> = [];
+    const reason = chat
+      ? `Undone with the chat card that applied it (changeset ${uuidToBase62(changeset.id)}).`
+      : `Reverted with the run that applied it (changeset ${uuidToBase62(changeset.id)}).`;
+    for (const op of undone.filter((row) => row.op === 'add' && row.resultEntryId)) {
+      const entry = await this.ownEntryById(tx, ownerId, op.resultEntryId!);
+      if (entry?.status !== 'active') {
+        skipped.push({ entryId: op.resultEntryId!, reason: 'no longer active' });
+        continue;
+      }
+      ops.push({ op: 'retire', entryId: entry.id, baseRevision: entry.currentRevision, reason });
+    }
+    // An entry the run amended more than once goes back to where the run found it, in one amend.
+    const amended = new Map<string, { from: number; to: number }>();
+    for (const op of undone.filter((row) => row.op === 'amend' && row.entryId)) {
+      const seen = amended.get(op.entryId!);
+      amended.set(op.entryId!, {
+        from: Math.min(seen?.from ?? op.baseRevision!, op.baseRevision!),
+        to: Math.max(seen?.to ?? 0, op.resultRevision ?? 0),
+      });
+    }
+    const restorations = new Map<string, { sources: ResolvedSource[]; trust: WikiTrust }>();
+    for (const [entryId, span] of amended) {
+      const entry = await this.ownEntryById(tx, ownerId, entryId);
+      if (entry?.status !== 'active' || entry.currentRevision !== span.to) {
+        skipped.push({ entryId, reason: entry?.status !== 'active' ? 'no longer active' : 'changed again since' });
+        continue;
+      }
+      const before = await tx.wikiEntryRevision.findFirstOrThrow({
+        where: { entryId, ownerId, revision: span.from },
+        select: { id: true, title: true, summary: true, fields: true, topics: true, aliases: true, anchors: true },
+      });
+      restorations.set(entryId, {
+        sources: await this.sourcesOfRevision(tx, ownerId, before.id),
+        // What a review mode applied comes back unreviewed; what a chat's press changed, with the trust it had before it.
+        trust: chat ? (chat.trustBefore[entryId] ?? 'unreviewed') : 'unreviewed',
+      });
+      ops.push({
+        op: 'amend',
+        entryId,
+        baseRevision: entry.currentRevision,
+        changes: {
+          title: before.title,
+          summary: before.summary,
+          fields: before.fields,
+          topics: before.topics,
+          aliases: before.aliases,
+          anchors: before.anchors,
+        },
+      });
+    }
+    // The run's own open spot checks go with it: there is nothing left for the owner to check.
+    await tx.wikiChangesetOp.updateMany({
+      where: { changesetId: changeset.id, ownerId, decision: 'pending', spotCheck: true },
+      data: { decision: 'withdrawn', decidedAt: new Date() },
+    });
+    // And so does what of it still waits for a verdict, so that no verdict can apply it later
+    // (`reviewModes.revert`): the op withdrawn, and an add's proposed lineage rejected with it
+    // (`states.entry`: proposed -> rejected when its op is withdrawn).
+    const owner: WikiAuthor = { authorKind: 'owner', authorUserId: userId, authorSessionId: null, authorToolCallId: null, changesetOpId: null };
+    for (const op of changeset.ops.filter((row) => row.decision === 'verifying')) {
+      if (op.op === 'add' && op.resultEntryId) {
+        await this.applyOp(tx, ownerId, changeset.spaceId, {
+          op: 'reject', entryId: op.resultEntryId, draft: null, changes: null, payload: {}, sources: [], tainted: op.tainted,
+        }, { ...owner, changesetOpId: op.id });
+      }
+      await this.writeOpDecision(tx, ownerId, op.id, { decision: 'withdrawn', decisionNote: null });
+    }
+    await this.settleChangeset(tx, ownerId, changeset.id);
+    if (ops.length === 0) {
+      return { revertedChangesetId: changeset.id, changesetId: null, replayed: false, ops: [], skipped };
+    }
+    const principal: WikiPrincipal = { origin: 'owner', ownerId, userId, sessionId: null, toolCallId: null };
+    const rationale = chat
+      ? `Undo of changeset ${uuidToBase62(changeset.id)}: what a chat's Apply wrote, taken back.`
+      : `Revert of changeset ${uuidToBase62(changeset.id)}: what its review mode applied at once, taken back.`;
+    const recorded = await this.recordChangeset(
+      tx,
+      principal,
+      space,
+      ops,
+      { ops, rationale, idempotencyKey },
+      sha256(canonicalJson({ spaceId: space.id, ops, rationale })),
+      literals,
+      restorations,
+    );
+    return { revertedChangesetId: changeset.id, ...recorded, skipped };
   }
 
   /**
@@ -2141,7 +2774,7 @@ export class WikiService {
   async listVerifications(
     principal: WikiPrincipal,
     spaceId: string,
-    options: { after?: string | null; limit?: number; adopt?: boolean } = {},
+    options: { after?: string | null; limit?: number; adopt?: boolean; promptedBy?: boolean } = {},
   ): Promise<{ spaceId: string; mode: WikiReviewMode; items: WikiVerificationItem[]; next: string | null }> {
     const space = await this.requireSpace(principal.ownerId, spaceId);
     const asked = Number.isFinite(options.limit) ? Math.trunc(options.limit as number) : 20;
@@ -2166,6 +2799,7 @@ export class WikiService {
         ownerId: principal.ownerId,
         decision: 'verifying',
         ...(after ? { id: { gt: after } } : {}),
+        ...(options.promptedBy === undefined ? {} : { promptedBy: options.promptedBy ? { not: Prisma.AnyNull } : { equals: Prisma.AnyNull } }),
         changeset: { spaceId: space.id, ...scope },
       },
       // uuid(7): the id order is the order the ops were recorded in, and the partial index 0312 made.
@@ -2179,6 +2813,7 @@ export class WikiService {
         resultEntryId: true,
         payload: true,
         similar: true,
+        promptedBy: true,
         changeset: { select: { sessionId: true } },
       },
     });
@@ -2210,6 +2845,7 @@ export class WikiService {
       resultEntryId: string | null;
       payload: Prisma.JsonValue;
       similar: Prisma.JsonValue;
+      promptedBy: Prisma.JsonValue;
       changeset: { sessionId: string | null };
     },
     literals: readonly string[],
@@ -2240,7 +2876,7 @@ export class WikiService {
         aliases: (draft.aliases ?? []) as string[],
       };
     }
-    const { sources, evidence } = await this.verifierSources(reader, ownerId, row.changeset.sessionId, payload, literals);
+    const { sources, evidence } = await this.verifierSources(reader, ownerId, row.changeset.sessionId, payload, literals, row.promptedBy);
     // The neighbours as recorded, each as it reads now: a duplicate may only name one still live.
     const recorded = (Array.isArray(row.similar) ? row.similar : []) as unknown as WikiSimilar[];
     const now = recorded.length === 0
@@ -2300,6 +2936,7 @@ export class WikiService {
     sessionId: string | null,
     payload: Record<string, unknown>,
     literals: readonly string[],
+    promptedBy: Prisma.JsonValue = null,
   ): Promise<{
     sources: WikiVerificationItem['sources'];
     evidence: WikiVerificationEvidence;
@@ -2307,23 +2944,41 @@ export class WikiService {
   }> {
     const as: WikiPrincipal = { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null };
     const sources: WikiVerificationItem['sources'] = [];
+    const read: Array<{ text: string | null; evidenceClass: WikiEvidenceClass | null }> = [];
     const before: Array<string | null> = [];
     for (const raw of rawOpSources(payload)) {
       const cited = raw as { kind: WikiSourceKind; ref?: string; session?: 'self'; seq?: number; quote?: string };
       const found = await this.sourceText(reader, as, cited);
+      const handed = verifierText(found?.text ?? null, literals);
       sources.push({
         kind: cited.kind,
         ref: found?.ref ?? cited.ref ?? '',
         quote: typeof cited.quote === 'string' ? cited.quote : null,
-        ...verifierText(found?.text ?? null, literals),
+        ...handed,
       });
+      read.push({ text: handed.text, evidenceClass: found?.evidenceClass ?? null });
       before.push(found ? readBeforeRevision4({ kind: cited.kind, eventType: found.eventType }, found.text) : null);
     }
     return {
       sources,
-      evidence: evidenceOf(sources.map((source) => source.text)),
-      evidenceBeforeRevision4: evidenceOf(before),
+      evidence: promptedBy === null ? evidenceOf(read) : promptedEvidenceOf(read, await this.promptedNote(reader, ownerId, promptedBy, literals)),
+      evidenceBeforeRevision4: before.some(hasText) ? 'readable' : 'unreadable',
     };
+  }
+
+  /**
+   * The words of the note an op came from, redacted as what they are held against was, read from the write or the row it
+   * names; null when that can no longer be read.
+   */
+  private async promptedNote(reader: Tx, ownerId: string, promptedBy: Prisma.JsonValue, literals: readonly string[]): Promise<string | null> {
+    const by = promptedBy as unknown as WikiPromptedBy;
+    if ('noteId' in by) {
+      const note = await reader.wikiNote.findFirst({ where: { id: by.noteId, ownerId }, select: { text: true } });
+      return note ? redactSecrets(memoryWriteWords({ content: note.text }), { literals }).text : null;
+    }
+    const event = await reader.runEvent.findFirst({ where: { id: by.eventId, session: { ownerId } }, select: { payload: true } });
+    if (!event) return null;
+    return redactSecrets(memoryWriteWords((event.payload as { input?: unknown } | null)?.input), { literals }).text;
   }
 
   /**
@@ -2566,6 +3221,7 @@ export class WikiService {
         payload: true,
         similar: true,
         tainted: true,
+        promptedBy: true,
         decision: true,
         decisionReason: true,
         decidedAt: true,
@@ -2644,9 +3300,11 @@ export class WikiService {
     };
     // What the verifier could read decides how far its verdict reaches, and the server reads it here
     // rather than taking the verifier's word (contract `reviewModes.verification.evidence`): with no
-    // source readable, whatever it said leaves the op no more than unreviewed and is not counted; and a
-    // tainted op is never more than unreviewed, its duplicate adding nothing (`floors.taintedWaits`).
-    const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals);
+    // source readable, whatever it said leaves the op no more than unreviewed and is not counted; with
+    // only a note's words to read, or an op that came from a note with no first-hand source for it, its
+    // supported is no more than unreviewed and it counts; and a tainted op is never more than unreviewed,
+    // its duplicate adding nothing (`floors.taintedWaits`).
+    const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals, op.promptedBy);
     let effect = wikiVerdictEffect({ verdict: verdict.verdict, tainted: op.tainted, evidence });
     // An adopted add waited while the space moved on: the entry a later op made of the very same content
     // is the one it duplicates, whatever its verdict would have applied (`verification.adoption.twin`).
@@ -2676,7 +3334,7 @@ export class WikiService {
         const target = await this.ownEntryById(tx, ownerId, op.entryId);
         const floor = target ? await this.reviewTarget(tx, ownerId, target) : null;
         if (target && floor && target.currentRevision === op.baseRevision && floor.machineWritten && !floor.ownerVouched) {
-          const sources = await this.sourcesOfOp(tx, ownerId, op.changeset.sessionId, payload);
+          const sources = await this.sourcesOfOp(tx, ownerId, op.changeset.sessionId, payload, op.id);
           try {
             const written = await this.applyOp(tx, ownerId, spaceId, {
               op: 'amend', entryId: op.entryId, draft: null, changes: null, payload, sources, tainted: op.tainted, trustAfter: trust,
@@ -2726,7 +3384,7 @@ export class WikiService {
             : null;
           const sources = lineage
             ? await this.sourcesOfRevision(tx, ownerId, lineage.id)
-            : await this.sourcesOfOp(tx, ownerId, op.changeset.sessionId, payload);
+            : await this.sourcesOfOp(tx, ownerId, op.changeset.sessionId, payload, op.id);
           await this.applyOp(tx, ownerId, spaceId, {
             op: 'reinforce', entryId: duplicated, draft: null, changes: null, payload, sources, tainted: op.tainted,
           }, author);
@@ -2790,14 +3448,15 @@ export class WikiService {
     const since = settings.reviewModeChangedAt ? new Date(settings.reviewModeChangedAt) : new Date(0);
     const window = WIKI_REVIEW_RULES.verificationWindow;
     // A verdict given when none of its op's sources could be read is out of the window altogether
-    // (`verification.evidence`); one recorded before the server kept the mark is in it, as it was.
+    // (`verification.evidence`); one that read only a note did read text, so it is in, and so is one
+    // recorded before the server kept the mark, as it was.
     const latest = await tx.wikiChangesetOp.findMany({
       where: {
         ownerId,
         verificationVerdict: { not: null },
         verifiedAt: { gte: since },
         changeset: { spaceId },
-        OR: [{ verificationEvidence: null }, { verificationEvidence: 'readable' }],
+        OR: [{ verificationEvidence: null }, { verificationEvidence: { in: ['readable', 'second_hand'] } }],
       },
       orderBy: [{ verifiedAt: 'desc' }, { id: 'desc' }],
       take: window,
@@ -2817,6 +3476,109 @@ export class WikiService {
          AND "owner_id" = ${ownerId}::uuid
          AND "settings"->>'reviewMode' = 'automatic'`;
     return switched === 1 ? { spaceId, title: space.title, unsupported, window } : null;
+  }
+
+  // ── The close of a history backfill (contract `maintenance.job.server.backfill.downgrade`) ──────
+
+  /**
+   * What is left of the old note entries once a history backfill has read their sessions again (design §5): a live `auto`
+   * entry with a live note source on its current revision and no first-hand source there, by the rule a note's op is verified
+   * under ({@link hasFirstHandSource}), goes down to `unreviewed`. No revision: what it says has not changed.
+   *
+   * ASKED, IT ONLY REPORTS. It writes only with `apply`, and then needs why. A run through the same entries again finds nothing
+   * more to write: what it wrote is `auto` no longer, and the rest it leaves alone have a first-hand source.
+   *
+   * IN BATCHES, each in a transaction of its own with its one `activity` row: since it writes no revision, that row is the
+   * only trail of which entries it moved, and why. An entry is judged before its transaction, and written only if it is still
+   * live, `auto` and at that revision. A source a duplicate adds in between moves none of those: that entry goes down all the
+   * same, which errs on the side this exists for, and its owner can confirm it. No model is asked and no repository is read.
+   */
+  async downgradeNoteEntries(
+    ownerId: string,
+    spaceId: string,
+    options: { apply?: boolean; reason?: string; batchSize?: number } = {},
+  ): Promise<WikiNoteDowngradeReport> {
+    const apply = options.apply === true;
+    const reason = (options.reason ?? '').trim();
+    if (apply && reason === '') return refuse('WIKI_SCHEMA', 'a reason is required to write: why these entries go down to unreviewed');
+    const size = options.batchSize ?? WIKI_BACKFILL.downgradeBatch;
+    const literals = await this.envLiterals(this.prisma, ownerId);
+    const reader = this.prisma as unknown as Tx;
+    const report: WikiNoteDowngradeReport = { spaceId, apply, examined: 0, firstHand: 0, noFirstHand: 0, downgraded: 0, moved: 0, batches: 0, byKind: {}, entryIds: [] };
+    let after: string | null = null;
+    for (;;) {
+      const page: Array<{ id: string; kind: string; revision: number }> = await this.prisma.$queryRaw`
+        SELECT e."id" AS "id", e."kind" AS "kind", e."current_revision" AS "revision"
+          FROM "wiki_entry" e
+         WHERE e."owner_id" = ${ownerId}::uuid AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active' AND e."trust" = 'auto'
+           AND (${after}::uuid IS NULL OR e."id" > ${after}::uuid)
+           AND EXISTS (SELECT 1 FROM "wiki_entry_revision" r JOIN "wiki_source" s ON s."revision_id" = r."id"
+                        WHERE r."entry_id" = e."id" AND r."revision" = e."current_revision" AND s."kind" = 'note' AND s."state" = 'live')
+         ORDER BY e."id"
+         LIMIT ${size}::int`;
+      if (page.length === 0) break;
+      report.batches += 1;
+      report.examined += page.length;
+      const due: typeof page = [];
+      for (const entry of page) {
+        if (await this.hasFirstHandSource(reader, ownerId, entry, literals)) report.firstHand += 1;
+        else due.push(entry);
+      }
+      report.noFirstHand += due.length;
+      for (const { id, kind } of due) {
+        report.byKind[kind] = (report.byKind[kind] ?? 0) + 1;
+        report.entryIds.push(id);
+      }
+      if (apply && due.length > 0) {
+        const written = await withTransactionRetry(
+          this.prisma,
+          async (tx) => {
+            const moved: string[] = [];
+            for (const { id, revision } of due) {
+              const done = await this.applyOp(tx, ownerId, spaceId, {
+                op: 'downgrade', entryId: id, draft: null, changes: null, payload: { revision }, sources: [], tainted: false,
+              }, { authorKind: 'system', authorUserId: null, authorSessionId: null, authorToolCallId: null, changesetOpId: null });
+              if (done.revision !== null) moved.push(id);
+            }
+            if (moved.length > 0) {
+              await tx.activity.create({
+                data: { actorId: null, type: WIKI_BACKFILL.downgradeActivity, payload: { userId: ownerId, spaceId, reason, entryIds: moved }, credentialKind: null },
+              });
+            }
+            return moved.length;
+          },
+          loggedRetry(this.logger, 'wiki.downgradeNoteEntries', { transaction: CHANGESET_TRANSACTION }),
+        );
+        report.downgraded += written;
+        report.moved += due.length - written;
+      }
+      after = page[page.length - 1]!.id;
+    }
+    return report;
+  }
+
+  /**
+   * Whether what an entry's current revision cites is first-hand, by the very function a note's op is held to at its verdict
+   * (`promptedEvidenceOf`): a source the verifier could read, of a first-hand class (`wikiEvidenceClass`), and, if it is what
+   * happened, not repeating the note. Each read as a verifier reads it, a turn cited as the calling session's own by the turn
+   * its locator names.
+   */
+  private async hasFirstHandSource(reader: Tx, ownerId: string, entry: { id: string; revision: number }, literals: readonly string[]): Promise<boolean> {
+    const cited = await reader.wikiSource.findMany({
+      where: { ownerId, state: 'live', revision: { entryId: entry.id, revision: entry.revision } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { kind: true, ref: true, locator: true },
+    });
+    const as: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null };
+    const read: Array<{ text: string | null; evidenceClass: WikiEvidenceClass | null }> = [];
+    const notes: string[] = [];
+    for (const source of cited) {
+      const turnId = source.kind === 'turn' ? (source.locator as { turnId?: unknown } | null)?.turnId : undefined;
+      const found = await this.sourceText(reader, as, { kind: source.kind as WikiSourceKind, ref: typeof turnId === 'string' ? turnId : source.ref });
+      read.push({ text: verifierText(found?.text ?? null, literals).text, evidenceClass: found?.evidenceClass ?? null });
+      if (source.kind === 'note' && found?.text) notes.push(memoryWriteWords({ content: found.text }));
+    }
+    return promptedEvidenceOf(read, redactSecrets(notes.join('\n'), { literals }).text) === 'readable';
   }
 
   // ── Anchor re-verification: what a maintenance run found (contract `anchorRules.verify`) ───────
@@ -2988,12 +3750,12 @@ export class WikiService {
         appliedByMode: 'tiered',
         decision: { in: ['auto_applied', 'pending'] },
       },
-      select: { payload: true, changeset: { select: { sessionId: true } } },
+      select: { id: true, payload: true, changeset: { select: { sessionId: true } } },
     });
     if (!op) return false;
     let sources: ResolvedSource[];
     try {
-      sources = await this.sourcesOfOp(tx, ownerId, op.changeset.sessionId, (op.payload ?? {}) as Record<string, unknown>);
+      sources = await this.sourcesOfOp(tx, ownerId, op.changeset.sessionId, (op.payload ?? {}) as Record<string, unknown>, op.id);
     } catch (error) {
       // A source that no longer resolves supports nothing: the entry stays as it is.
       if (error instanceof WikiRefusalError) return false;
@@ -3061,6 +3823,7 @@ export class WikiService {
             decision: 'rejected',
             decisionReason: 'not_true',
             verificationVerdict: 'unsupported',
+            // Only for want of text: `second_hand` read what it rejected, as `readable` did, and stands.
             OR: [{ verificationEvidence: null }, { verificationEvidence: 'unreadable' }],
             ...(after ? { id: { gt: after } } : {}),
             changeset: { spaceId: space.id, ...scope },
@@ -3234,6 +3997,11 @@ export class WikiService {
     changeset: ChangesetRow,
     decision: WikiDecisionInput,
     literals: readonly string[],
+    /**
+     * The owner's press of a chat's card (`applyChatOps`, contract `reviewModes.chat`): accepted or edited as Review's
+     * are, but a kind only the owner writes — a principle — is the owner's own write, trust `owner`.
+     */
+    chat = false,
   ): Promise<boolean> {
     const op = changeset.ops.find((row) => row.id === decision.opId);
     if (!op) throw new NotFoundException('no such op in this changeset');
@@ -3295,6 +4063,15 @@ export class WikiService {
     // each key given replaces that key of the proposal, and each key left out carries it over.
     const proposed = (op.payload ?? {}) as Record<string, unknown>;
     const edited = (editing ? decision.edited : null) as WikiEntryChanges | null;
+    // A chat's press writes a kind only the owner writes as the owner's own (`reviewModes.chat`): a principle is `owner`.
+    let ownersKind = false;
+    if (chat) {
+      const kind = opName === 'add' || opName === 'supersede'
+        ? draftKind(proposed.entry)
+        : op.entryId ? ((await this.ownEntryById(tx, ownerId, op.entryId))?.kind as WikiKind | undefined) ?? null : null;
+      ownersKind = kind !== null && (KIND_SPECS[kind]?.ownerOnlyOps.includes(opName) ?? false);
+    }
+    const acceptedTrust: WikiTrust = ownersKind ? 'owner' : 'confirmed';
     if (editing) {
       const target = op.entryId ? await this.ownEntryById(tx, ownerId, op.entryId) : null;
       const kind = opName === 'add' || opName === 'supersede'
@@ -3315,7 +4092,7 @@ export class WikiService {
           draft: null,
           changes: null,
           payload: merged,
-          sources: await this.sourcesOfOp(tx, ownerId, changeset.sessionId, proposed),
+          sources: await this.sourcesOfOp(tx, ownerId, changeset.sessionId, proposed, op.id),
           tainted: op.tainted,
         }, ownerAuthor);
         const promoted = await this.applyOp(tx, ownerId, changeset.spaceId, {
@@ -3326,7 +4103,7 @@ export class WikiService {
           payload: proposed,
           sources: [],
           tainted: op.tainted,
-          promotedTrust: 'confirmed',
+          promotedTrust: acceptedTrust,
         }, ownerAuthor);
         await this.writeOpDecision(tx, ownerId, op.id, {
           decision: 'edited',
@@ -3359,9 +4136,11 @@ export class WikiService {
     const payload = editing
       ? { ...((proposed.changes ?? {}) as Record<string, unknown>), ...(edited as Record<string, unknown>) }
       : proposed;
-    const sources = await this.sourcesOfOp(tx, ownerId, changeset.sessionId, proposed);
+    const sources = await this.sourcesOfOp(tx, ownerId, changeset.sessionId, proposed, op.id);
     const draft = opName === 'add' || opName === 'supersede' ? preparedDraft((payload.entry ?? {}) as Record<string, unknown>) : null;
     const promote = opName === 'add' || opName === 'supersede';
+    // The lineage's revision 1 is the one going live: what it was written without, it holds before it does.
+    if (promote && entryId) await this.settledSources(tx, ownerId, entryId, sources);
     const written = await this.applyOp(tx, ownerId, changeset.spaceId, {
       // Accepting an add or a supersede is what makes its lineage live; everything else applies its own op.
       op: promote ? 'promote' : opName,
@@ -3371,10 +4150,11 @@ export class WikiService {
       payload,
       sources,
       tainted: op.tainted,
-      promotedTrust: 'confirmed',
+      promotedTrust: acceptedTrust,
       // An amend the owner accepted into an entry the machine wrote is theirs to vouch for now
-      // (`trust.onApply.acceptedAddSupersedeOrAmend`); into any other entry, it keeps the trust it found.
-      ...(opName === 'amend' && machineTarget ? { trustAfter: 'confirmed' as const } : {}),
+      // (`trust.onApply.acceptedAddSupersedeOrAmend`); into any other entry, it keeps the trust it found —
+      // but a principle a chat's press amended, which is the owner's own write.
+      ...(opName === 'amend' && (machineTarget || ownersKind) ? { trustAfter: acceptedTrust } : {}),
     }, editing ? ownerAuthor : { ...ownerAuthor, authorKind: 'agent', authorUserId: null, authorSessionId: changeset.sessionId, authorToolCallId: changeset.toolCallId });
     await this.writeOpDecision(tx, ownerId, op.id, {
       decision: editing ? 'edited' : 'accepted',
@@ -3444,7 +4224,7 @@ export class WikiService {
         draft: null,
         changes: null,
         payload,
-        sources: await this.sourcesOfOp(tx, ownerId, changeset.sessionId, proposed),
+        sources: await this.sourcesOfOp(tx, ownerId, changeset.sessionId, proposed, op.id),
         tainted: op.tainted,
         trustAfter: 'confirmed',
       }, owner);
@@ -3781,6 +4561,9 @@ export class WikiService {
           throw new WikiConflict(revisionConflict(0, current, target.currentRevision, instruction.payload));
         }
         await this.insertRevision(tx, ownerId, target.id, revision, { ...merged, kind: target.kind as WikiKind }, instruction.sources, author);
+        // The challenge this amend named is answered by the fact that the amend took effect, and closed
+        // before the flags are recomputed so `challenged` clears in this same write.
+        await this.closeAnsweredChallenge(tx, ownerId, target.id, author);
         await this.recomputeFlags(tx, ownerId, target.id);
         return { entryId: target.id, revision };
       }
@@ -3878,7 +4661,57 @@ export class WikiService {
         await this.recomputeFlags(tx, ownerId, instruction.entryId!);
         return { entryId: instruction.entryId!, revision: found.revision };
       }
+      case 'downgrade': {
+        // The close of a history backfill (`downgradeNoteEntries`): the trust alone, and no revision, since what the entry
+        // says has not changed. Only while it is what the judgement read: live, `auto`, at that revision.
+        const { revision } = instruction.payload as { revision: number };
+        const written = await tx.wikiEntry.updateMany({
+          where: { id: instruction.entryId!, ownerId, status: 'active', trust: 'auto', currentRevision: revision },
+          data: { trust: 'unreviewed' },
+        });
+        if (written.count !== 1) return { entryId: instruction.entryId!, revision: null };
+        await this.recomputeFlags(tx, ownerId, instruction.entryId!);
+        return { entryId: instruction.entryId!, revision };
+      }
     }
+  }
+
+  /**
+   * Close the challenge an amend answered, now that the amend has taken effect (contract
+   * `reviewModes.challenge`). This is the one place the three paths that apply an amend meet — the
+   * owner's decision, Tiered applying it as it records, Automatic applying it on its verdict — because
+   * all three end in `applyOp`.
+   *
+   * Only the op row the amend wrote is read, so the amend a challenge's own answer writes closes
+   * nothing here: its op row is the challenge, which `answerChallenge` answers itself. A challenge
+   * already decided, of another entry, or of an entry no longer active is left as it is, and nothing is
+   * refused: the amend stands either way.
+   */
+  private async closeAnsweredChallenge(tx: Tx, ownerId: string, entryId: string, author: WikiAuthor): Promise<void> {
+    if (!author.changesetOpId) return;
+    const op = await tx.wikiChangesetOp.findFirst({
+      where: { id: author.changesetOpId, ownerId },
+      select: { op: true, answersChallenge: true },
+    });
+    if (!op || op.op !== 'amend' || !op.answersChallenge) return;
+    const entry = await tx.wikiEntry.findFirst({ where: { id: entryId, ownerId }, select: { status: true } });
+    if (entry?.status !== 'active') return;
+    const challenge = await tx.wikiChangesetOp.findFirst({
+      where: { id: op.answersChallenge, ownerId, entryId, op: 'challenge' },
+      select: { changesetId: true },
+    });
+    if (!challenge) return;
+    const closed = await tx.wikiChangesetOp.updateMany({
+      where: { id: op.answersChallenge, ownerId, entryId, op: 'challenge', decision: 'pending' },
+      data: {
+        decision: 'edited',
+        answeredBy: author.authorKind === 'owner' ? 'owner' : 'agent',
+        decidedAt: new Date(),
+      },
+    });
+    // The challenge's own changeset is settled by the answer as any changeset's last decision settles it,
+    // even though the decision came from another changeset's amend.
+    if (closed.count === 1) await this.settleChangeset(tx, ownerId, challenge.changesetId);
   }
 
   /**
@@ -3996,15 +4829,22 @@ export class WikiService {
    * A quote is compared whitespace-normalized, so a line break the model wrapped is not a mismatch. A
    * record whose text this database does not hold — a turn of the calling session that has not been
    * stored yet, a commit the apiserver never sees — keeps its quote unverified, and the review card
-   * says so (§4.3).
+   * says so (§4.3). A quote in redacted form — as a card or an op keeps one once its redaction changed
+   * it, and as the press or the decision that settles it reads it back — is looked for in the record's
+   * text redacted the same way (`quoteHoldsRedacted`), and kept unverified: it is not the record's
+   * words verbatim. The literals that takes are read here when the caller has none to give.
    *
    * `path` is where the sources sit in the request, which is how a refusal names the one it is about.
+   * `pending` is a first sight that lets the calling session's own call not stored yet resolve pending,
+   * and its own call stored without its result yet too, for a quote that is not in what is stored of it;
+   * `settles` is the id of the row the op was first recorded as — its changeset op, or the card a press
+   * presses — when this resolves it again to settle it (contract `sourceInput.toolUseId`).
    */
   private async resolveSources(
     tx: Tx,
     principal: WikiPrincipal,
     sources: unknown[],
-    options: { required: boolean; path?: string },
+    options: { required: boolean; path?: string; literals?: readonly string[]; pending?: boolean; settles?: string },
   ): Promise<{ resolved: ResolvedSource[] }> {
     if (sources.length === 0) {
       if (options.required) {
@@ -4016,6 +4856,7 @@ export class WikiService {
       return { resolved: [] };
     }
     const resolved: ResolvedSource[] = [];
+    let literals = options.literals;
     for (const [index, raw] of sources.entries()) {
       const source = raw as {
         kind: WikiSourceKind;
@@ -4025,7 +4866,7 @@ export class WikiService {
         locator?: Record<string, unknown>;
         quote?: string;
       };
-      const found = await this.sourceText(tx, principal, source);
+      const found = await this.sourceText(tx, principal, source, { pending: options.pending, storedBefore: options.settles });
       if (found === null) {
         // Named by its path, and told what its kind's ref is (contract `sourceInput.refs`): citing it
         // the way its kind is cited is the one thing the proposer can do about it.
@@ -4040,18 +4881,30 @@ export class WikiService {
       }
       const quote = source.quote ?? null;
       let verified = false;
+      let pending = found.pending === true;
       if (quote !== null) {
         if (found.text === null) {
-          // Real, but its text is not this database's to read: the calling session's current turn may not
-          // be stored yet, and a commit's contents never are. The quote is kept and marked unverified.
+          // Real, but its text is not this database's to read: the calling session's current turn or call may
+          // not be stored yet, and a commit's contents never are. The quote is kept and marked unverified.
           verified = false;
-        } else if (!quoteHolds(found.text, quote)) {
-          return refuse(
-            'WIKI_QUOTE_NOT_FOUND',
-            `sources[${index}].quote is not in the record it cites: quote the record's own words, or leave the quote out`,
-          );
-        } else {
+        } else if (quoteHolds(found.text, quote)) {
           verified = true;
+        } else {
+          literals ??= await this.envLiterals(tx, principal.ownerId);
+          if (quoteHoldsRedacted(found.text, quote, literals)) {
+            // The record's words as the redactor leaves them, and not verbatim: kept unverified, as `prepareOp` keeps a
+            // quote its redaction changed.
+            verified = false;
+          } else if (found.resultPending) {
+            // The calling session's own call, stored without its result yet: the quote may be in the result, which the
+            // op's settle reads with the rest of the record. Unverified until then, as a call not stored yet is.
+            pending = true;
+          } else {
+            return refuse(
+              'WIKI_QUOTE_NOT_FOUND',
+              `sources[${index}].quote is not in the record it cites: quote the record's own words, or leave the quote out`,
+            );
+          }
         }
       }
       resolved.push({
@@ -4063,6 +4916,7 @@ export class WikiService {
         tainted: found.tainted,
         ownerWords: found.ownerWords,
         sessionId: found.sessionId,
+        ...(pending ? { pending: true } : {}),
       });
     }
     return { resolved };
@@ -4082,11 +4936,17 @@ export class WikiService {
    * Its `text` is the one text a record has: what a quote is checked against, what a verifier reads, and
    * what a dossier line's position counts in (contract `maintenance.dossier.spans`) — which is why it is
    * not private: whatever holds a position to its record reads the record through here.
+   *
+   * `resolving` is a submission's own reading of a tool call (`resolveSources`): at its first sight the calling
+   * session's own call not stored yet is `pending`, and its own call stored without its result yet is
+   * `resultPending`; when it settles an op another session's call counts only if it was stored before
+   * `storedBefore`. Every other reader leaves it out and reads as ever.
    */
   async sourceText(
     tx: Tx,
     principal: WikiPrincipal,
     source: { kind: WikiSourceKind; ref?: string; session?: 'self'; seq?: number },
+    resolving: { pending?: boolean; storedBefore?: string } = {},
   ): Promise<{
     ref: string;
     text: string | null;
@@ -4096,6 +4956,15 @@ export class WikiService {
     tainted: boolean;
     ownerWords: boolean;
     sessionId: string | null;
+    /** Where the record's words came from (`wikiEvidenceClass`); null for a calling session's turn or call not stored yet. */
+    evidenceClass: WikiEvidenceClass | null;
+    /** The calling session's own call not stored yet, kept by the tool_use_id it was cited by (`ResolvedSource.pending`). */
+    pending?: boolean;
+    /**
+     * The calling session's own call stored without its result yet, at a first sight while the engine is generating for
+     * it: `text` is its input alone, and a quote not in it may be in the result (`ResolvedSource.pending`).
+     */
+    resultPending?: boolean;
   } | null> {
     if (!(WIKI_SOURCE_KINDS as readonly string[]).includes(source.kind)) return null;
     const ownerScoped = { session: { ownerId: principal.ownerId } };
@@ -4103,8 +4972,14 @@ export class WikiService {
     // It never reaches a query as it came: every row below is keyed by a uuid column, and the database answers a
     // value that is not a uuid with an error (P2007), not with no row. A commit names a sha, and is read as written.
     const ref = source.ref === undefined ? null : rowIdOf(source.ref);
-    /** What tells the owner's own turn from anybody else's (`isOwnerTurn`). */
-    const turnAuthor = { kind: true, sendIntent: true, clientTurnId: true } as const;
+    /** What tells the owner's own turn from anybody else's (`isOwnerTurn`), and whose else it is (`turnEvidenceClass`). */
+    const turnAuthor = {
+      kind: true,
+      sendIntent: true,
+      clientTurnId: true,
+      senderSessionId: true,
+      session: { select: { taskId: true, parentSessionId: true } },
+    } as const;
     switch (source.kind) {
       case 'turn': {
         if (source.session === 'self') {
@@ -4121,6 +4996,7 @@ export class WikiService {
             tainted: false,
             ownerWords: turn ? isOwnerTurn(turn) : false,
             sessionId: principal.sessionId,
+            evidenceClass: turn ? turnEvidenceClass(turn) : null,
           };
         }
         if (!ref) return null;
@@ -4135,6 +5011,7 @@ export class WikiService {
           tainted: await this.sessionWasTainted(tx, turn.sessionId),
           ownerWords: isOwnerTurn(turn),
           sessionId: turn.sessionId,
+          evidenceClass: turnEvidenceClass(turn),
         };
       }
       case 'event': {
@@ -4153,11 +5030,25 @@ export class WikiService {
           tainted: await this.sessionWasTainted(tx, event.sessionId),
           ownerWords: false,
           sessionId: event.sessionId,
+          evidenceClass: wikiEvidenceClass({ kind: 'event', eventType: event.type, ...(await this.calledBy(tx, event)) }),
         };
       }
       case 'tool_call': {
-        const call = source.ref === undefined ? null : await this.citedToolCall(tx, principal, source.ref, ref);
-        if (!call) return null;
+        if (source.ref === undefined) return null;
+        const { call, uncarried, own } = await this.citedToolCall(tx, principal, source.ref, ref, resolving.storedBefore);
+        if (!call) {
+          // A tool_use_id no session of this owner's carries, cited by a session at a first sight while the engine is
+          // generating for it: its own call, which the runner has not delivered yet. Never a row's id, which only a stored
+          // row has, and never a session between turns, whose calls are all delivered. It cannot be told from a call no
+          // session made, nor from another account's — and must not be, across accounts — so the op's settle tells.
+          if (!resolving.pending || !principal.sessionId || ref !== null || !uncarried) return null;
+          if (!(await this.generatingFor(tx, principal))) return null;
+          return { ref: source.ref, text: null, tainted: false, ownerWords: false, sessionId: principal.sessionId, evidenceClass: null, pending: true };
+        }
+        // The calling session's own call, cited at a first sight while the engine is generating for it, before the runner
+        // has delivered its result: the tool_use came in one batch and its result comes in a later one. Never another
+        // session's call, nor a call named by its row id, and never a session between turns, whose results are all in.
+        const resultPending = resolving.pending === true && own && call.finishedAt === null && (await this.generatingFor(tx, principal));
         return {
           ref: call.id,
           // The call and its result together (`toolCallText`): a quote of the command is as much the
@@ -4166,6 +5057,8 @@ export class WikiService {
           tainted: false,
           ownerWords: false,
           sessionId: call.sessionId,
+          evidenceClass: wikiEvidenceClass({ kind: 'tool_call', toolName: call.name, command: callCommand(call.input) }),
+          ...(resultPending ? { resultPending: true } : {}),
         };
       }
       case 'task': {
@@ -4175,7 +5068,14 @@ export class WikiService {
           select: { id: true, title: true, description: true },
         });
         if (!task) return null;
-        return { ref: task.id, text: `${task.title}\n${task.description ?? ''}`, tainted: false, ownerWords: false, sessionId: null };
+        return {
+          ref: task.id,
+          text: `${task.title}\n${task.description ?? ''}`,
+          tainted: false,
+          ownerWords: false,
+          sessionId: null,
+          evidenceClass: wikiEvidenceClass({ kind: 'task' }),
+        };
       }
       case 'task_comment': {
         if (!ref) return null;
@@ -4184,7 +5084,7 @@ export class WikiService {
           select: { id: true, body: true },
         });
         if (!comment) return null;
-        return { ref: comment.id, text: comment.body, tainted: false, ownerWords: false, sessionId: null };
+        return { ref: comment.id, text: comment.body, tainted: false, ownerWords: false, sessionId: null, evidenceClass: wikiEvidenceClass({ kind: 'task_comment' }) };
       }
       case 'approval': {
         if (!ref) return null;
@@ -4199,6 +5099,7 @@ export class WikiService {
           tainted: await this.sessionWasTainted(tx, approval.sessionId),
           ownerWords: isOwnerAnswer(approval),
           sessionId: approval.sessionId,
+          evidenceClass: wikiEvidenceClass({ kind: 'approval', ownerWords: isOwnerAnswer(approval) }),
         };
       }
       case 'merge_receipt': {
@@ -4209,12 +5110,19 @@ export class WikiService {
           select: { id: true, result: true, sourceBranch: true, sourceSha: true, targetBranch: true, targetShaAfter: true, sessionId: true },
         });
         if (!receipt) return null;
-        return { ref: receipt.id, text: mergeReceiptText(receipt), tainted: false, ownerWords: false, sessionId: receipt.sessionId };
+        return {
+          ref: receipt.id,
+          text: mergeReceiptText(receipt),
+          tainted: false,
+          ownerWords: false,
+          sessionId: receipt.sessionId,
+          evidenceClass: wikiEvidenceClass({ kind: 'merge_receipt' }),
+        };
       }
       case 'owner_decision': {
         // A decision the owner recorded: a blocker the owner resolved with a note, what it asked and what
         // they answered, as a dossier line carries them. Not the owner's words for Tiered, whose
-        // `ownerWords` is a message, a steer or an answer and nothing else.
+        // `ownerWords` is a message, a steer or an answer and nothing else; its evidence class is theirs.
         if (!ref) return null;
         const blocker = await tx.projectBlocker.findFirst({
           where: { id: ref, project: { ownerId: principal.ownerId }, resolvedBy: 'USER', resolutionNote: { not: null } },
@@ -4227,6 +5135,7 @@ export class WikiService {
           tainted: false,
           ownerWords: false,
           sessionId: null,
+          evidenceClass: wikiEvidenceClass({ kind: 'owner_decision' }),
         };
       }
       case 'commit': {
@@ -4242,19 +5151,30 @@ export class WikiService {
           select: { id: true },
         });
         if (!receipt) return null;
-        return { ref: sha, text: null, tainted: false, ownerWords: false, sessionId: null };
+        return { ref: sha, text: null, tainted: false, ownerWords: false, sessionId: null, evidenceClass: wikiEvidenceClass({ kind: 'commit' }) };
       }
       case 'note': {
-        // A file `orbit wiki import` registered (contract `import.source`), among this owner's notes
-        // alone: its stored text — redacted before it was kept — and the file it came from. Agent-written
-        // second-hand content, never the owner's own words.
+        // A file `orbit wiki import` registered (contract `import.source`), or a session's `wiki_note`, among
+        // this owner's notes alone: its stored text — redacted before it was kept — and where it came from.
+        // Agent-written second-hand content, never the owner's own words. It belongs to no session for what
+        // "independent sessions" count, whichever one wrote it or its frontmatter names: only the taint reads that one.
         if (!ref) return null;
         const note = await tx.wikiNote.findFirst({
           where: { id: ref, ownerId: principal.ownerId },
-          select: { id: true, path: true, text: true },
+          select: { id: true, path: true, text: true, sessionId: true },
         });
         if (!note) return null;
-        return { ref: note.id, text: note.text, locator: { path: note.path }, tainted: false, ownerWords: false, sessionId: null };
+        return {
+          ref: note.id,
+          text: note.text,
+          locator: { path: note.path },
+          tainted: note.sessionId
+            ? await this.sessionWasTainted(tx, note.sessionId)
+            : await this.noteOriginWasTainted(tx, principal.ownerId, note.text),
+          ownerWords: false,
+          sessionId: null,
+          evidenceClass: wikiEvidenceClass({ kind: 'note' }),
+        };
       }
       default:
         return null;
@@ -4271,13 +5191,19 @@ export class WikiService {
    * The calling session's lookup is one probe of (session_id, tool_use_id). The owner-wide one walks the
    * owner's sessions through that same index, since none has tool_use_id first — 0.14 s over 5.5k
    * sessions on production on 10-06 — and is only reached for a call the calling session never made.
+   *
+   * `storedBefore`, when this settles an op, is the id of the row the op was first recorded as: another
+   * session's call counts only if it was stored before that — uuid(7), so the id order is the order the rows
+   * were written in — since what was cited pending then can only be the calling session's own call. `uncarried`
+   * says no session of this owner's carries the tool_use_id, as against two that do; `own`, that the calling
+   * session's own lookup found the call.
    */
-  private async citedToolCall(tx: Tx, principal: WikiPrincipal, ref: string, id: string | null) {
-    const select = { id: true, name: true, input: true, output: true, sessionId: true } as const;
+  private async citedToolCall(tx: Tx, principal: WikiPrincipal, ref: string, id: string | null, storedBefore?: string) {
+    const select = { id: true, name: true, input: true, output: true, sessionId: true, finishedAt: true } as const;
     const ownerScoped = { session: { ownerId: principal.ownerId } };
     if (id) {
       const call = await tx.toolCall.findFirst({ where: { id, ...ownerScoped }, select });
-      if (call) return call;
+      if (call) return { call, uncarried: false, own: false };
     }
     if (principal.sessionId) {
       const own = await tx.toolCall.findFirst({
@@ -4285,20 +5211,36 @@ export class WikiService {
         orderBy: { id: 'asc' },
         select,
       });
-      if (own) return own;
+      if (own) return { call: own, uncarried: false, own: true };
     }
+    const stored = storedBefore ? { id: { lt: storedBefore } } : {};
     const carriers = await tx.toolCall.groupBy({
       by: ['sessionId'],
-      where: { toolUseId: ref, ...ownerScoped },
+      where: { toolUseId: ref, ...ownerScoped, ...stored },
       orderBy: { sessionId: 'asc' },
       take: 2,
     });
-    if (carriers.length !== 1) return null;
-    return tx.toolCall.findFirst({
-      where: { sessionId: carriers[0].sessionId, toolUseId: ref },
+    if (carriers.length !== 1) return { call: null, uncarried: carriers.length === 0, own: false };
+    const call = await tx.toolCall.findFirst({
+      where: { sessionId: carriers[0].sessionId, toolUseId: ref, ...stored },
       orderBy: { id: 'asc' },
       select,
     });
+    return { call, uncarried: false, own: false };
+  }
+
+  /**
+   * Is the engine generating for the calling session now (common/session-generating.ts): a turn running, dispatched or
+   * one the runtime started itself? Only then can a call of its, or a call's result, still be on its way: a session
+   * between turns has had all of them delivered.
+   */
+  private async generatingFor(tx: Tx, principal: WikiPrincipal): Promise<boolean> {
+    if (!principal.sessionId) return false;
+    const generating = await tx.session.findFirst({
+      where: { id: principal.sessionId, ownerId: principal.ownerId, ...GENERATING_SESSION_FILTER },
+      select: { id: true },
+    });
+    return generating !== null;
   }
 
   /** Was this session reading the web? A tool call that fetched or searched is the mark (§4.1 step 9). */
@@ -4308,6 +5250,41 @@ export class WikiService {
       select: { id: true },
     });
     return call !== null;
+  }
+
+  /**
+   * Did the session a note came from read the web (contract `effectPolicy.taintedRule`)? The memory file says
+   * which: `originSessionId` in its frontmatter, the engine's id for it, which a session keeps in
+   * `runtime_session_id` — and more than one session can carry it, each a stretch of the same conversation.
+   * Looked up among this owner's alone. A note that names none it can find is not tainted: note-only ops are
+   * capped anyway (`second_hand`).
+   */
+  private async noteOriginWasTainted(tx: Tx, ownerId: string, noteText: string): Promise<boolean> {
+    const runtimeSessionId = noteOriginSessionId(noteText);
+    if (runtimeSessionId === null) return false;
+    const sessions = await tx.session.findMany({ where: { ownerId, runtimeSessionId }, select: { id: true } });
+    for (const session of sessions) {
+      if (await this.sessionWasTainted(tx, session.id)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The call a tool_use or a tool_result event is of, as its evidence class reads it: a tool_use says so
+   * itself, and a tool_result names its call, whose row holds the tool. Nothing for any other event, and
+   * for a result whose call was not recorded.
+   */
+  private async calledBy(tx: Tx, event: { type: string; payload: unknown; sessionId: string }): Promise<{ toolName: string | null; command: string | null }> {
+    const none = { toolName: null, command: null };
+    const named = eventCall(event.type, event.payload);
+    if (event.type === 'tool_use') return named;
+    if (event.type !== 'tool_result' || named.toolUseId === null) return none;
+    const call = await tx.toolCall.findFirst({
+      where: { sessionId: event.sessionId, toolUseId: named.toolUseId },
+      orderBy: { id: 'asc' },
+      select: { name: true, input: true },
+    });
+    return call ? { toolName: call.name, command: callCommand(call.input) } : none;
   }
 
   /**
@@ -4424,18 +5401,63 @@ export class WikiService {
     return revision ? this.sourcesOfRevision(tx, ownerId, revision.id) : [];
   }
 
-  /** The sources of an op being applied at decide time, resolved against the session that proposed it. */
+  /**
+   * An op's neighbours with the live entries whose current revision cites this note first (contract
+   * `maintenance.job.server.backfill`): by what they came from and not by their words, so a verdict may name one a trigram
+   * match would not have found. A verdict of duplicate then adds the op's first-hand sources to it, as anywhere.
+   */
+  private async withEntriesOfNote(tx: Tx, ownerId: string, spaceId: string, prepared: PreparedOp, noteId: string): Promise<WikiSimilar[]> {
+    const text = prepared.draft ? `${prepared.draft.title} ${prepared.draft.summary}`.trim() : '';
+    const rows = await tx.$queryRaw<NeighbourRow[]>`
+      SELECT e."id" AS "id", e."kind" AS "kind", e."title" AS "title", e."status" AS "status", e."trust" AS "trust",
+             similarity(wiki_entry_search_text(e."title", e."summary", e."aliases", e."fields"), ${text}::text)::float8 AS "score",
+             NULL AS "rejectedReason"
+        FROM "wiki_source" s
+        JOIN "wiki_entry_revision" r ON r."id" = s."revision_id"
+        JOIN "wiki_entry" e ON e."id" = r."entry_id" AND e."current_revision" = r."revision"
+       WHERE s."owner_id" = ${ownerId}::uuid AND s."kind" = 'note' AND s."ref" = ${noteId} AND s."state" = 'live'
+         AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active'
+       ORDER BY e."recorded_at", e."id"`;
+    const cited = new Set(rows.map((row) => row.id));
+    return [...similarOf(rows, new Map()), ...prepared.similar.filter((near) => !cited.has(near.id))];
+  }
+
+  /**
+   * The sources of an op being applied at decide time, resolved against the session that proposed it. This settles them
+   * (contract `sourceInput.toolUseId`): a source that resolved pending when the op was proposed resolves now or refuses
+   * the decision, and another session's call counts only if it was stored before the op's row (`opId`) — so what was
+   * pending then is the proposing session's own call or nothing.
+   */
   private async sourcesOfOp(
     tx: Tx,
     ownerId: string,
     sessionId: string | null,
     payload: Record<string, unknown>,
+    opId: string,
   ): Promise<ResolvedSource[]> {
     const raw = rawOpSources(payload);
     if (raw.length === 0) return [];
     const principal: WikiPrincipal = { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null };
-    const { resolved } = await this.resolveSources(tx, principal, raw, { required: false });
+    const { resolved } = await this.resolveSources(tx, principal, raw, { required: false, settles: opId });
     return resolved;
+  }
+
+  /**
+   * The sources an add's or a supersede's lineage was written without when it was proposed — each one that resolved
+   * pending (`ResolvedSource.pending`), stored nowhere until now — added to its revision 1 once the owner's acceptance
+   * has resolved them, as a reinforce adds its sources to a revision. `sources` is that acceptance's reading of every
+   * source of the op; what revision 1 holds already is left as it is.
+   */
+  private async settledSources(tx: Tx, ownerId: string, entryId: string, sources: readonly ResolvedSource[]): Promise<void> {
+    if (sources.length === 0) return;
+    const revision = await tx.wikiEntryRevision.findFirst({ where: { entryId, ownerId, revision: 1 }, select: { id: true } });
+    if (!revision) return;
+    const key = (source: { kind: string; ref: string; quote: string | null }) => JSON.stringify([source.kind, source.ref, source.quote]);
+    const held = new Set((await tx.wikiSource.findMany({
+      where: { revisionId: revision.id, ownerId },
+      select: { kind: true, ref: true, quote: true },
+    })).map(key));
+    await this.insertSources(tx, ownerId, revision.id, sources.filter((source) => !held.has(key(source))));
   }
 
   /**
@@ -4463,7 +5485,7 @@ export class WikiService {
   }
 
   private async ownEntryById(tx: Tx, ownerId: string, entryId: string): Promise<EntryRow | null> {
-    return tx.wikiEntry.findFirst({ where: { id: entryId, ownerId }, select: ENTRY_SELECT });
+    return tx.wikiEntry.findFirst({ where: { id: entryId, ownerId, space: { deletedAt: null } }, select: ENTRY_SELECT });
   }
 
   // ── Reads the two doors serve ─────────────────────────────────────────────────────────────────
@@ -4487,6 +5509,8 @@ export class WikiService {
       where: {
         id: entryId,
         ownerId,
+        // An entry of a wiki in Trash is the plain 404, as its wiki is (contract `space.trash`).
+        space: { deletedAt: null },
         ...(spaceId
           ? { spaceId, OR: [{ tainted: false }, { trust: { in: [...WIKI_VOUCHED_TRUST] } }, { status: { not: 'active' } }] }
           : {}),
@@ -4591,7 +5615,14 @@ export class WikiService {
    */
   async listReview(ownerId: string, spaceId?: string): Promise<Array<Record<string, unknown>>> {
     const rows = await this.prisma.wikiChangeset.findMany({
-      where: { ownerId, status: 'pending', ops: { some: { decision: 'pending' } }, ...(spaceId ? { spaceId } : {}) },
+      where: {
+        ownerId,
+        status: 'pending',
+        ops: { some: { decision: 'pending' } },
+        // A wiki in Trash waits for nobody (contract `space.trash`): named or not, its changesets are not listed.
+        space: { deletedAt: null },
+        ...(spaceId ? { spaceId } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
       select: CHANGESET_SELECT,
@@ -4783,14 +5814,16 @@ export class WikiService {
     const since = new Date(Date.now() - days * 86_400_000);
     const rows = await this.prisma.wikiExposure.findMany({
       where: { ownerId, at: { gte: since }, entry: { spaceId } },
-      select: { entryId: true, sessionId: true, channel: true },
+      select: { entryId: true, sessionId: true, channel: true, at: true },
     });
     const sessions = new Set<string>();
+    // A search writes one row per entry it returned, all with one `at` (`exposureRules.reads`): those rows
+    // are one search here, and each entry still counts it below.
+    const searches = new Set<string>();
     const byEntry = new Map<string, { total: number; pushed: number; searched: number; fetched: number }>();
-    let searches = 0;
     let gets = 0;
     for (const row of rows) {
-      if (row.channel === 'search') searches += 1;
+      if (row.channel === 'search') searches.add(`${row.sessionId}:${row.at.getTime()}`);
       if (row.channel === 'get') gets += 1;
       if (row.channel === 'push' && row.sessionId) sessions.add(row.sessionId);
       const entry = byEntry.get(row.entryId) ?? { total: 0, pushed: 0, searched: 0, fetched: 0 };
@@ -4809,7 +5842,7 @@ export class WikiService {
     return {
       days,
       sessionsPushed: sessions.size,
-      searches,
+      searches: searches.size,
       gets,
       entries: ranked.map(([entryId, counts]) => ({
         entryId,
@@ -4825,7 +5858,7 @@ export class WikiService {
 const OP_KEYS: Readonly<Record<WikiOp, readonly string[]>> = {
   add: ['op', 'entry', 'sources'],
   reinforce: ['op', 'entryId', 'sources'],
-  amend: ['op', 'entryId', 'baseRevision', 'changes', 'sources'],
+  amend: ['op', 'entryId', 'baseRevision', 'changes', 'sources', 'answersChallenge'],
   supersede: ['op', 'entryId', 'baseRevision', 'entry', 'sources'],
   retire: ['op', 'entryId', 'baseRevision', 'reason', 'sources'],
   challenge: ['op', 'entryId', 'reason', 'sources'],

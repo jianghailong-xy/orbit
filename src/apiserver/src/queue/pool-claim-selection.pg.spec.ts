@@ -158,7 +158,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
 
   /** The runner asking for work — which has to be `sessionId`. */
   async function claim(runnerId: string, sessionId: string): Promise<ClaimedSession> {
-    const claimed = await queue.claimSessionForRunner({ id: runnerId }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     return claimed;
@@ -242,7 +242,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
     const theirs = await queuedSession(db, stranger, pool.slug);
     // A slug naming nothing this owner has is not dispatched at all, not even on the Claude default: their
     // runner is handed nothing, and the session waits, saying why.
-    assert.equal(await queue.claimSessionForRunner({ id: stranger.runnerId }, 0, false, false), null);
+    assert.equal(await queue.claimSessionForRunner({ id: stranger.runnerId }), null);
     assert.deepEqual(await recorded(theirs), { poolMemberProviderId: null, poolSwitchNotice: null });
     assert.deepEqual(
       await db.session.findUniqueOrThrow({ where: { id: theirs }, select: { status: true, error: true } }),
@@ -292,7 +292,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
     // session on the Claude default, and the session waits, saying why.
     await db.providerPool.delete({ where: { id: pool.id } });
     await nextTurn(sessionId);
-    assert.equal(await queue.claimSessionForRunner({ id: me.runnerId }, 0, false, false), null);
+    assert.equal(await queue.claimSessionForRunner({ id: me.runnerId }), null);
     assert.deepEqual(
       await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true, error: true } }),
       { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR },

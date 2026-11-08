@@ -1,6 +1,6 @@
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus, type DeviceToken } from '@prisma/client';
@@ -14,12 +14,15 @@ import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
 import { settleAlert } from './settle-alert';
 import { FcmTransport } from './fcm-transport';
+import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
 import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
 const SYNC_DEBOUNCE_MS = 300; // coalesce a burst of resolutions into one silent badge sync
+/** How soon a reconcile looks again at a Feishu card another call was drawing (FeishuTransport.closeSettled). */
+const FEISHU_BUSY_RETRY_MS = 5_000;
 /**
  * Shortest gap between two agent-sent notifications about the same session. Every other push here
  * is edge-triggered by something that happens at most a few times per run; this one fires whenever
@@ -61,13 +64,35 @@ export interface AgentNotifyResult {
   delivered: boolean;
   /** Devices the configured transports accepted it for. Present only when delivered. */
   devices?: number;
+  /** The owner's Feishu app took it as a card (docs/feishu-bot-design.md §6.1). Present only when it did. */
+  feishu?: boolean;
   /** The message was longer than a notification carries and was cut. */
   truncated?: boolean;
   /** Why nothing was sent. Present only when not delivered, and written to be read by an agent. */
   reason?: string;
 }
 
-/** Shared reminder eligibility and reconciliation, with independent APNs and FCM transports. */
+/**
+ * What the Feishu card of an alert that is neither an approval, a settlement, an agent's message nor an owner item says
+ * its kind is (docs/feishu-bot-design.md §6.1, last row), by the push's `kind`.
+ */
+const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
+  'engine-signed-out': 'Engine signed out',
+  'claude-region-blocked': 'Claude is not available on this runner',
+  'confirmation-problems': 'Problems found after you confirmed',
+  'watch-matched': 'Watch matched',
+  'loop-missed': 'Wakeup loop missed',
+  'wakeup-dropped': 'Scheduled wakeup dropped',
+  'wiki-review-mode-manual': 'Wiki switched to Manual',
+  'wiki-review-mode-tiered': 'Wiki switched to Tiered',
+  'wiki-maintenance-failing': 'Wiki maintenance needs attention',
+};
+
+/**
+ * Shared reminder eligibility and reconciliation, with independent transports: APNs, FCM, and the account's own Feishu
+ * app (FeishuTransport, docs/feishu-bot-design.md §6.1). Every alert below decides once whether and when to ring, with
+ * the same claims for all three; a channel that fails never costs another one its delivery.
+ */
 @Injectable()
 export class PushService {
   private readonly log = new Logger(PushService.name);
@@ -82,10 +107,13 @@ export class PushService {
   // idempotent so a rare cross-replica double-send is harmless. See docs/cross-platform-badge-sync.md.
   private readonly badgeState = new Map<string, BadgeState>();
   private readonly syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Feishu cards started in the background and not settled yet (`background`). */
+  private readonly feishuInFlight = new Set<Promise<unknown>>();
 
   constructor(
     private readonly prisma: PrismaService,
     config: ConfigService,
+    @Optional() private readonly feishu?: FeishuTransport,
   ) {
     this.keyId = config.get<string>('APNS_KEY_ID');
     this.teamId = config.get<string>('APNS_TEAM_ID');
@@ -101,11 +129,57 @@ export class PushService {
     return Boolean(this.keyId && this.teamId && this.p8);
   }
 
+  /**
+   * Start a Feishu card without waiting for it. FeishuTransport never throws, and with a Feishu outage one card can take
+   * its three attempts and their waits (§6.3): a caller that awaits an alert — the watch delivery drain, a request — must
+   * not be held by that, nor see APNs/FCM wait on it. Only notifyAgentMessage, which reports whether Feishu took it, awaits.
+   */
+  private background(work: Promise<unknown> | null | false): void {
+    if (!work) return;
+    const tracked = work.catch(() => undefined).finally(() => this.feishuInFlight.delete(tracked));
+    this.feishuInFlight.add(tracked);
+  }
+
+  /** Resolves once every Feishu card started so far has been sent, updated or given up on (specs; a drain at shutdown). */
+  async feishuIdle(): Promise<void> {
+    while (this.feishuInFlight.size > 0) await Promise.allSettled([...this.feishuInFlight]);
+  }
+
+  /** APNs, FCM or Feishu can carry an alert (§6.1). Whether this account has a device or a bound app is `channels`'. */
   private get enabled(): boolean {
-    return this.apnsEnabled || this.fcm.enabled;
+    return this.apnsEnabled || this.fcm.enabled || Boolean(this.feishu);
+  }
+
+  /** The account's registered devices, and its Feishu app when alerts reach its owner there. */
+  private async channels(ownerId: string): Promise<{ tokens: DeviceToken[]; feishu: FeishuTarget | null }> {
+    const [tokens, feishu] = await Promise.all([this.targets(ownerId), this.feishu ? this.feishu.target(ownerId) : null]);
+    return { tokens, feishu };
+  }
+
+  /** The card of an alert in §6.1's last row: its kind in words, the push's title, and its body (FULL only). */
+  private feishuOther(
+    feishu: FeishuTarget | null,
+    input: { kind: string; title: string; body: string; collapseId?: string; sessionId?: string | null; projectId?: string | null; taskId?: string | null },
+  ): Promise<boolean> {
+    if (!feishu || !this.feishu) return Promise.resolve(false);
+    return this.feishu.post(feishu, {
+      collapseKey: input.collapseId ?? `${input.kind}-${randomUUID()}`,
+      kind: 'other',
+      sessionId: input.sessionId ?? null,
+      openUrl: orbitUrl(input),
+      render: async () => ({ kind: 'other', eventKind: FEISHU_EVENT_KINDS[input.kind] ?? 'Orbit alert', title: input.title, body: input.body }),
+    });
+  }
+
+  /** `feishuOther` with the title, body and kind an APNs payload built above already carries. */
+  private feishuOfPush(feishu: FeishuTarget | null, body: string): Promise<boolean> {
+    if (!feishu) return Promise.resolve(false);
+    const payload = JSON.parse(body) as { aps: { alert: { title: string; body: string } }; kind: string };
+    return this.feishuOther(feishu, { kind: payload.kind, title: payload.aps.alert.title, body: payload.aps.alert.body });
   }
 
   private async targets(ownerId: string): Promise<DeviceToken[]> {
+    if (!this.apnsEnabled && !this.fcm.enabled) return [];
     return this.withLiveSession(await this.prisma.deviceToken.findMany({ where: { userId: ownerId, OR: [
       ...(this.apnsEnabled ? [{ platform: 'ios', bundleId: this.bundleId,
         environment: { in: ['production', 'sandbox'] } }] : []),
@@ -157,8 +231,8 @@ export class PushService {
       // Completion can race this fire-and-forget path after the approval is created. Requiring the
       // target to remain in the authoritative set prevents a stale alert from being delivered.
       if (!ids.includes(sessionId)) return;
-      const tokens = await this.targets(session.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(session.ownerId);
+      if (tokens.length === 0 && !feishu) return;
       this.badgeState.set(session.ownerId, { badge: ids.length, sessions: new Set(ids) });
       // A turn asking permission for several tools at once creates an approval apiece, and each one
       // lands here. The badge counts sessions, so it hasn't moved, and the app coalesces them into a
@@ -166,7 +240,12 @@ export class PushService {
       // phone once per tool. Alert on the session's 0 → pending edge, which is the transition the
       // clients notify on too (SessionDelta.diff). Decided on the session row, not in this process's
       // memory: the approvals of one turn can reach different apiservers, and each used to ring once.
-      if (!(await this.claimApprovalAlert(sessionId, approvalId))) return;
+      if (!(await this.claimApprovalAlert(sessionId, approvalId))) {
+        // Feishu shows the stretch on one card, each approval with its own buttons (§6.2): one that did not open the
+        // stretch is added to the card the opening one sent, rather than sending a second.
+        if (feishu && this.feishu) this.background(this.feishu.joinApprovalStretch(feishu, sessionId, approvalId));
+        return;
+      }
       const badge = ids.length;
 
       const body = JSON.stringify({
@@ -180,6 +259,8 @@ export class PushService {
         sessionID: sessionId, // OrbitKit Notifications.keySession — routes the tap to this session
         kind: 'approval',
       });
+
+      this.background(feishu && this.feishu ? this.feishu.post(feishu, this.feishu.approvalCard(feishu, sessionId, approvalId)) : null);
 
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
@@ -243,14 +324,15 @@ export class PushService {
         select: { name: true, displayName: true, ownerId: true },
       });
       if (!runner) return;
-      const tokens = await this.targets(runner.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(runner.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = {
+        title: runner.displayName || runner.name || 'Orbit',
+        body: `${ENGINE_LABELS[engine]} signed out — sessions on this runner won't start until you sign in again.`,
+      };
       const body = JSON.stringify({
         aps: {
-          alert: {
-            title: runner.displayName || runner.name || 'Orbit',
-            body: `${ENGINE_LABELS[engine]} signed out — sessions on this runner won't start until you sign in again.`,
-          },
+          alert,
           sound: 'default',
           'thread-id': `runner-${runnerId}`,
         },
@@ -261,6 +343,8 @@ export class PushService {
         engine,
         kind: 'engine-signed-out',
       });
+
+      this.background(this.feishuOther(feishu, { kind: 'engine-signed-out', ...alert }));
 
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
@@ -286,14 +370,15 @@ export class PushService {
         select: { name: true, displayName: true, ownerId: true },
       });
       if (!runner) return;
-      const tokens = await this.targets(runner.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(runner.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = {
+        title: runner.displayName || runner.name || 'Orbit',
+        body: claudeRegionPushBody(regionMachineName(runner), region),
+      };
       const body = JSON.stringify({
         aps: {
-          alert: {
-            title: runner.displayName || runner.name || 'Orbit',
-            body: claudeRegionPushBody(regionMachineName(runner), region),
-          },
+          alert,
           sound: 'default',
           'thread-id': `runner-${runnerId}`,
         },
@@ -301,6 +386,8 @@ export class PushService {
         engine: AgentProvider.CLAUDE,
         kind: 'claude-region-blocked',
       });
+
+      this.background(this.feishuOther(feishu, { kind: 'claude-region-blocked', ...alert }));
 
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
@@ -352,8 +439,8 @@ export class PushService {
       if (!alert) return;
       const prefs = (session.owner?.preferences ?? {}) as { notifySessionFinished?: boolean };
       if (prefs.notifySessionFinished === false) return;
-      const tokens = await this.targets(session.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(session.ownerId);
+      if (tokens.length === 0 && !feishu) return;
 
       const body = JSON.stringify({
         aps: {
@@ -372,10 +459,39 @@ export class PushService {
       // Collapse on the session: the two triggers can both fire for one settlement (a runner
       // finalize the reaper also force-finalizes), and APNs replaces a same-id banner instead
       // of stacking a second one. Cheaper and more robust than remembering what we've sent.
+      this.background(feishu ? this.feishuSettled(feishu, sessionId, session.title, alert) : null);
       await this.deliver(tokens, body, 'alert', '10', `settled-${sessionId}`);
     } catch (err) {
       this.log.warn(`settle notify failed: ${(err as Error).message}`);
     }
+  }
+
+  /**
+   * A settlement's card (§6.1, §6.2): one per settlement, which the two triggers of one settlement (a runner finalize the
+   * reaper also force-finalizes, or a give-up after it) update rather than stack. A settlement is the session's latest
+   * turn, so a session settled again after another turn gets a card of its own.
+   */
+  private async feishuSettled(
+    feishu: FeishuTarget,
+    sessionId: string,
+    title: string | null,
+    alert: { kind: 'finished' | 'failed'; body: string },
+  ): Promise<boolean> {
+    if (!this.feishu) return false;
+    let seq = 0;
+    try {
+      seq = (await this.prisma.conversationTurn.findFirst({ where: { sessionId }, orderBy: { seq: 'desc' }, select: { seq: true } }))?.seq ?? 0;
+    } catch (err) {
+      this.log.warn(`feishu settle card failed: ${(err as Error).message}`);
+      return false;
+    }
+    return this.feishu.post(feishu, {
+      collapseKey: `settled-${sessionId}-${seq}`,
+      kind: alert.kind,
+      sessionId,
+      openUrl: orbitUrl({ sessionId }),
+      render: async () => ({ kind: alert.kind, sessionTitle: title ?? '', body: alert.body }),
+    });
   }
 
   /**
@@ -439,9 +555,13 @@ export class PushService {
       const wait = agentNotifyWait(rang, now);
       if (wait !== null) return { delivered: false, reason: `rate limited — try again in ${wait}s` };
 
-      const tokens = await this.targets(input.ownerId);
-      if (tokens.length === 0) {
-        return { delivered: false, reason: 'no devices are registered for this account' };
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) {
+        // Nothing to reach this account through. Without device push on this server that is the
+        // server's answer, not the account's: registering a device would change nothing.
+        return this.apnsEnabled || this.fcm.enabled
+          ? { delivered: false, reason: 'no devices are registered for this account' }
+          : { delivered: false, reason: 'push is not configured on this server' };
       }
 
       const body = JSON.stringify({
@@ -468,9 +588,21 @@ export class PushService {
       if (taken !== null) {
         return { delivered: false, reason: `rate limited — try again in ${agentNotifyWait(taken, now) ?? 1}s` };
       }
-      const devices = await this.deliver(tokens, body, 'alert', '10');
-      if (devices === 0) return { delivered: false, reason: 'no device accepted the notification' };
-      return { delivered: true, devices, ...(alert.truncated ? { truncated: true } : {}) };
+      const [devices, carded] = await Promise.all([
+        this.deliver(tokens, body, 'alert', '10'),
+        feishu && this.feishu
+          ? this.feishu.post(feishu, {
+            collapseKey: `agent-message-${randomUUID()}`,
+            kind: 'agent-message',
+            sessionId: input.sessionId ?? null,
+            openUrl: orbitUrl({ sessionId: input.sessionId }),
+            // The whole message: a card has room for more than a banner (FULL only, §6.4).
+            render: async () => ({ kind: 'agent-message', sessionTitle: title, message: input.message.trim() }),
+          })
+          : false,
+      ]);
+      if (devices === 0 && !carded) return { delivered: false, reason: 'no device accepted the notification' };
+      return { delivered: true, devices, ...(carded ? { feishu: true } : {}), ...(alert.truncated ? { truncated: true } : {}) };
     } catch (err) {
       const message = (err as Error).message;
       this.log.warn(`agent notify failed: ${message}`);
@@ -554,8 +686,8 @@ export class PushService {
         promotion: await this.promotionFor(item.promotionId),
       });
       if (!alert) return;
-      const tokens = await this.targets(item.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(item.ownerId);
+      if (tokens.length === 0 && !feishu) return;
 
       const body = JSON.stringify({
         aps: {
@@ -585,6 +717,17 @@ export class PushService {
       // Collapse on the item: an item can be pushed twice — handed to the owner and then escalated
       // again, or re-announced by a replica that raced — and APNs replaces the delivered banner
       // instead of stacking a second one about the same waiting thing.
+      this.background(feishu && this.feishu
+          ? this.feishu.post(feishu, {
+            // The same grain as the banner: an item announced again updates its card (§6.2).
+            collapseKey: `owner-item-${itemId}`,
+            kind: 'owner-item',
+            sessionId: item.project?.coordinatorSessionId ?? null,
+            openItemId: itemId,
+            openUrl: orbitUrl({ sessionId: item.project?.coordinatorSessionId, projectId: item.projectId }),
+            render: async () => ({ kind: 'owner-item', projectTitle: item.project?.title ?? null, alert }),
+          })
+          : null);
       await this.deliver(tokens, body, 'alert', '10', `owner-item-${itemId}`);
     } catch (err) {
       this.log.warn(`owner item notify failed: ${(err as Error).message}`);
@@ -633,14 +776,15 @@ export class PushService {
       });
       if (!record || record.kind !== 'PROBLEMS') return;
       const count = ((record.body ?? {}) as { problems?: unknown[] }).problems?.length ?? 0;
-      const tokens = await this.targets(record.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(record.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = {
+        title: record.task.title,
+        body: count === 1 ? '1 problem found after you confirmed' : `${count} problems found after you confirmed`,
+      };
       const body = JSON.stringify({
         aps: {
-          alert: {
-            title: record.task.title,
-            body: count === 1 ? '1 problem found after you confirmed' : `${count} problems found after you confirmed`,
-          },
+          alert,
           sound: 'default',
           'thread-id': `task-${record.taskId}`,
         },
@@ -649,6 +793,10 @@ export class PushService {
         taskID: record.taskId,
         recordID: recordId,
       });
+      this.background(this.feishuOther(feishu, {
+          kind: 'confirmation-problems', ...alert, collapseId: `confirmation-problems-${recordId}`,
+          sessionId: record.review.request.sessionId,
+        }));
       await this.deliver(tokens, body, 'alert', '10', `confirmation-problems-${recordId}`);
     } catch (err) {
       this.log.warn(`confirmation problems notify failed: ${(err as Error).message}`);
@@ -672,8 +820,8 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const tokens = await this.targets(input.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
       const body = JSON.stringify({
         aps: {
           alert: { title: 'Watch matched', body: input.reason },
@@ -684,6 +832,9 @@ export class PushService {
         generation: input.generation,
         kind: 'watch-matched',
       });
+      this.background(this.feishuOther(feishu, {
+          kind: 'watch-matched', title: 'Watch matched', body: input.reason, collapseId: `watch-${input.watchId}-${input.generation}`,
+        }));
       await this.deliver(tokens, body, 'alert', '10', `watch-${input.watchId}-${input.generation}`);
     } catch (err) {
       this.log.warn(`watch notify failed: ${(err as Error).message}`);
@@ -713,31 +864,30 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const tokens = await this.targets(input.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
       const { missed } = input;
       const because = WAKEUP_MISSED_REASONS[input.reason];
+      const alert = {
+        title: input.title || 'Orbit',
+        body: 'loopId' in missed
+          ? `Wakeup loop missed ${missed.ticks === 1 ? '1 tick' : `${missed.ticks} ticks`}: ${because}.`
+          : `Scheduled wakeup dropped: ${because}.`,
+      };
+      const collapseId = 'loopId' in missed ? `loop-${missed.loopId}-${missed.alertedAt.getTime()}` : `wakeup-${missed.wakeupId}`;
       const body = JSON.stringify({
         aps: {
-          alert: {
-            title: input.title || 'Orbit',
-            body: 'loopId' in missed
-              ? `Wakeup loop missed ${missed.ticks === 1 ? '1 tick' : `${missed.ticks} ticks`}: ${because}.`
-              : `Scheduled wakeup dropped: ${because}.`,
-          },
+          alert,
           sound: 'default',
           'thread-id': input.sessionId,
         },
         sessionID: input.sessionId, // OrbitKit Notifications.keySession — routes the tap to this session
         kind: 'loopId' in missed ? 'loop-missed' : 'wakeup-dropped',
       });
-      await this.deliver(
-        tokens,
-        body,
-        'alert',
-        '10',
-        'loopId' in missed ? `loop-${missed.loopId}-${missed.alertedAt.getTime()}` : `wakeup-${missed.wakeupId}`,
-      );
+      this.background(this.feishuOther(feishu, {
+          kind: 'loopId' in missed ? 'loop-missed' : 'wakeup-dropped', ...alert, collapseId, sessionId: input.sessionId,
+        }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
     } catch (err) {
       this.log.warn(`wakeup missed notify failed: ${(err as Error).message}`);
     }
@@ -761,8 +911,8 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const tokens = await this.targets(input.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -776,6 +926,7 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-review-mode-manual',
       });
+      this.background(this.feishuOfPush(feishu, body));
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki review-mode notify failed: ${(err as Error).message}`);
@@ -800,8 +951,8 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const tokens = await this.targets(input.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -815,6 +966,7 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-review-mode-tiered',
       });
+      this.background(this.feishuOfPush(feishu, body));
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki verification notify failed: ${(err as Error).message}`);
@@ -829,6 +981,34 @@ export class PushService {
    * made the cursor's count exactly the threshold calls here. No badge — nothing is waiting for a
    * reply. Best-effort like the others: the failure is recorded whether or not the phone rang.
    */
+  /**
+   * The owner's one alert that runs keep reading Claude sessions and find no memory write in them (contract
+   * `maintenance.health.notifyNoNotes`). The failing alert's kind and thread: it opens the same space.
+   */
+  async notifyWikiMemoryWritesQuiet(input: { ownerId: string; spaceId: string; title: string; runs: number }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: `Wiki maintenance saw no memory writes in ${input.runs} runs`,
+            body: `${input.title}: Claude sessions were read, but none wrote to its memory files. Claude may have changed how it saves them.`,
+          },
+          sound: 'default',
+          'thread-id': `wiki-${input.spaceId}`,
+        },
+        wikiSpaceID: input.spaceId,
+        kind: 'wiki-maintenance-failing',
+      });
+      this.background(this.feishuOfPush(feishu, body));
+      await this.deliver(tokens, body, 'alert', '10');
+    } catch (err) {
+      this.log.warn(`wiki memory writes notify failed: ${(err as Error).message}`);
+    }
+  }
+
   async notifyWikiMaintenanceFailing(input: {
     ownerId: string;
     spaceId: string;
@@ -838,8 +1018,8 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const tokens = await this.targets(input.ownerId);
-      if (tokens.length === 0) return;
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
       const said = (input.lastError ?? '').split('\n', 1)[0]!.trim();
       const body = JSON.stringify({
         aps: {
@@ -854,6 +1034,7 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-maintenance-failing',
       });
+      this.background(this.feishuOfPush(feishu, body));
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki maintenance notify failed: ${(err as Error).message}`);
@@ -901,6 +1082,7 @@ export class PushService {
    *  resolved, a session left RUNNING, a session ended — possibly on another device). Coalesce a
    *  burst into one silent sync. Called from RealtimeService.publish() on the event's origin replica. */
   scheduleBadgeSync(ownerId: string): void {
+    // The same reconcile closes the owner's Feishu cards that no longer hold (§6.2), so it runs with Feishu alone too.
     if (!this.enabled) return;
     clearTimeout(this.syncTimers.get(ownerId));
     this.syncTimers.set(
@@ -913,16 +1095,28 @@ export class PushService {
   }
 
   /** Recompute the owner's badge; if it moved or a session dropped out of "needs you", push a
-   *  silent badge update to their devices and name the sessions whose banners should be cleared. */
+   *  silent badge update to their devices and name the sessions whose banners should be cleared.
+   *  Then, from the same "needs you", close the owner's Feishu cards whose matter was settled
+   *  elsewhere (docs/feishu-bot-design.md §6.2) — whether or not the badge moved: an approval
+   *  answered beside another still pending leaves the count where it was. */
   private async reconcileBadge(ownerId: string): Promise<void> {
     try {
       const delta = badgeDiff(this.badgeState.get(ownerId), await this.needsYouSessions(ownerId));
       if (delta.badge === 0) this.badgeState.delete(ownerId);
       else this.badgeState.set(ownerId, { badge: delta.badge, sessions: delta.sessions });
+      if (this.feishu) this.background(this.closeFeishuCards(ownerId, delta.sessions));
       if (delta.changed) await this.syncBadge(ownerId, delta.badge, delta.clearSessions);
     } catch (err) {
       this.log.warn(`badge sync failed: ${(err as Error).message}`);
     }
+  }
+
+  /** The Feishu half of the reconcile. A card another call held is looked at again once that call can have let go. */
+  private async closeFeishuCards(ownerId: string, needsYou: ReadonlySet<string>): Promise<void> {
+    const target = this.feishu ? await this.feishu.target(ownerId) : null;
+    if (!target || !this.feishu) return;
+    const { busy } = await this.feishu.closeSettled(target, needsYou);
+    if (busy) setTimeout(() => this.scheduleBadgeSync(ownerId), FEISHU_BUSY_RETRY_MS).unref?.();
   }
 
   /** Silent (content-available) push: updates the icon badge with no banner/sound, and carries

@@ -3,7 +3,8 @@
  * owner's view, what is left out, and how the footnotes are numbered once it is. The owner's view here
  * carries a value in every field a visitor must never read — a commit, a record's id and its session,
  * task and project, the entry a quote came through, the model, a withdrawn sentence, a merge receipt's
- * and an owner decision's words — and the answer is searched for each. public-wiki.pg.spec.ts holds the
+ * and an owner decision's words, the version a rewrite kept and the title it was rewritten after — and the
+ * answer is searched for each. public-wiki.pg.spec.ts holds the
  * same over HTTP, against documents in a real database.
  */
 import assert from 'node:assert/strict';
@@ -29,6 +30,8 @@ const SECRETS = {
   receiptLabel: 'MERGED_CLEAN',
   decisionLabel: 'OWNER_DECISION_KIND',
   disposition: 'a disposition nobody reads',
+  version: '0199ffff-2222-7222-8333-444455556666',
+  rewrittenAfter: 'Secret merged session title',
 };
 
 function note(over: Partial<WikiDocFootnoteView> & Pick<WikiDocFootnoteView, 'n' | 'kind'>): WikiDocFootnoteView {
@@ -79,6 +82,12 @@ const section = {
   repoSha: SECRETS.commit,
   model: SECRETS.model,
   dispositions: [{ material: 'S1', kind: 'turn' as const, ref: SECRETS.record, action: 'drop' as const, into: null, reason: SECRETS.disposition }],
+  change: {
+    versionId: SECRETS.version,
+    reason: { kind: 'merge' as const, title: SECRETS.rewrittenAfter, sha: SECRETS.commit },
+    at: '2026-10-02T00:00:00.000Z',
+    changed: 1,
+  },
 };
 
 const VIEW: WikiDocView = {

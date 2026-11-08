@@ -5,6 +5,7 @@ import { AppstoreOutlined, PushpinOutlined, RightOutlined, SortAscendingOutlined
 import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty } from './WikiCards';
 import { WikiDocRow } from './WikiDocList';
+import { WikiStartCard } from './WikiStartCard';
 import { WikiDot, WikiOpChip, WikiTrustBadge } from './WikiMarks';
 import { Button } from './ui/Button';
 import { wikiArticlesQuery, wikiDocsQuery, wikiEntriesOfKindQuery } from '../lib/queries';
@@ -43,11 +44,11 @@ import {
   wikiBrowsePath,
   wikiDirectoryGroups,
   wikiIndexPath,
+  wikiPlainWords,
   type WikiDirectoryGroup,
 } from '../lib/wikiArticles';
 import {
   WIKI_DOC_NOT_WRITTEN_SHORT,
-  WIKI_NO_DOCUMENTS_NOTE,
   wikiDocPath,
   wikiHomeCategories,
   wikiHomeLine,
@@ -56,8 +57,7 @@ import {
   type WikiDocsDirectory,
   type WikiHomeCategory,
 } from '../lib/wikiDocs';
-import { WIKI_PLAN_SET_UP } from '../lib/wikiPlan';
-import { wikiSettingsPath } from '../lib/wikiReviewMode';
+import { wikiStartShown } from '../lib/wikiStart';
 
 /** Every principle: the most one read answers (the server's cap), far above any space's own rules. */
 const PRINCIPLES_READ = 200;
@@ -84,8 +84,10 @@ export const RECENT_DECISIONS = 4;
  * THE DOCUMENTS ARE THE CONFIRMED PLAN'S, in the plan page's own rows: a number, a title and the
  * document's lead, a blue dot on one written since the reader last looked, and what is not written yet
  * folded into one row a category, opened to its titles. Before a plan is confirmed the home lists the topic
- * articles as the directory does (`wikiReadsByDocs` false), a title a row. A space with neither says how
- * it comes to have some — maintenance, not set up yet — or, once it is, only that it has none yet.
+ * articles as the directory does (`wikiReadsByDocs` false), a title a row. While none of that can be read
+ * — nothing written, no article — the setup card stands above it and says how the wiki comes to have some
+ * (`WikiStartCard`, mock 41): the one thing on the home that speaks of how the wiki is kept, and only until
+ * there is something else to read.
  *
  * WHAT IS KNOWN IS DRAWN AT ONCE (design §12.3.6): the head is the spaces list the drawer has already
  * read; the content line and the documents are grey bars until their own read is in, and only the first
@@ -115,18 +117,18 @@ export function WikiHome({ space }: { space: WikiSpaceRow }) {
   );
   const categories = useMemo(() => (home.directory ? wikiHomeCategories(home.directory, seen) : []), [home.directory, seen]);
   const listed = home.directory !== null || home.topics > 0;
+  const start = !home.loading && wikiStartShown(home.directory?.docs.written ?? 0, home.topics);
 
   return (
     <div className="wk-home">
       {principles.length > 0 && <HomePrinciples principles={principles} spaceSlug={space.slug} seen={seen} />}
+      {start && <WikiStartCard space={space} />}
       {home.loading ? (
         <HomeSkeleton />
       ) : home.directory ? (
         categories.map((category) => <HomeCategory key={category.key} category={category} spaceSlug={space.slug} />)
-      ) : listed ? (
-        home.groups.map((group) => <HomeTopics key={group.key} group={group} spaceSlug={space.slug} />)
       ) : (
-        !space.settings?.maintenance?.enabled && <HomeNewSpace spaceSlug={space.slug} />
+        home.groups.map((group) => <HomeTopics key={group.key} group={group} spaceSlug={space.slug} />)
       )}
       {!home.loading && listed && (
         <div className="wk-home-more">
@@ -231,7 +233,7 @@ function HomeCategory({ category, spaceSlug }: { category: WikiHomeCategory; spa
           number={doc.number}
           title={doc.title}
           fresh={doc.fresh}
-          line={doc.lead ?? undefined}
+          line={doc.lead ? wikiPlainWords(doc.lead) : undefined}
           lead
         />
       ))}
@@ -270,16 +272,6 @@ function HomeTopics({ group, spaceSlug }: { group: WikiDirectoryGroup; spaceSlug
         <WikiDocRow key={topic.slug} className="topic" to={wikiArticlePath(spaceSlug, topic.slug)} title={topic.title} />
       ))}
     </section>
-  );
-}
-
-/** A new space (mock 31 ⑥): no document, no maintenance — one card, and the way to set it up. */
-function HomeNewSpace({ spaceSlug }: { spaceSlug: string }) {
-  return (
-    <div className="wk-home-new">
-      <p>{WIKI_NO_DOCUMENTS_NOTE}</p>
-      <Link to={wikiSettingsPath(spaceSlug)}>{WIKI_PLAN_SET_UP} ›</Link>
-    </div>
   );
 }
 

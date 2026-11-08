@@ -7,7 +7,7 @@
  *   1. with no confirmed plan, `requireConfirmedPlan` refuses — a draft is not enough;
  *   2. a revision is a new version, and a confirmed version does not change: its rows are the same
  *      bytes after every later draft, edit and confirmation;
- *   3. the gate stops a draft with a field outside the schema, a document count outside its target, a
+ *   3. the gate stops a draft with a field outside the schema, more documents than any plan has, a
  *      protected document changed, or a project or topic that does not exist — and says each one;
  *   4. a proposal changes nothing before the owner accepts it;
  *   5. another tenant's read is a 404, every one of them, and a confirmation that carries a session
@@ -33,6 +33,7 @@ import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
 import {
   toUuid,
+  uuidToBase62,
   WIKI_PLAN_ORIGINS,
   WIKI_PLAN_PROPOSAL_STATUSES,
   WIKI_PLAN_RULES,
@@ -423,6 +424,42 @@ async function checkValues(h: Harness, table: string, constraint: string): Promi
 
 // ── 1. the guard ────────────────────────────────────────────────────────────────────────────────
 
+test('one request makes a wiki from a workspace: its repository, maintenance on, and its first draft made (mock 41)', { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'owner');
+  await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const made = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', {
+    title: 'shop-cli',
+    repoUrl: 'git@github.com:acme/shop-cli.git',
+    // The web's own spelling of an id: what the form that makes a wiki sends.
+    maintenance: { enabled: true, workspaceId: uuidToBase62(ws), dailyRunLimit: 8, lookbackDays: 14 },
+  });
+  expectStatus(made, 201, 'the owner makes the wiki');
+  assert.equal(made.body.repoUrlNorm, 'github.com/acme/shop-cli', 'every spelling of a remote is one repository');
+  const spaceId = toUuid(made.body.id as string);
+  const settings = made.body.settings as { maintenance: { enabled: boolean; workspaceId: string; dailyRunLimit: number; lookbackDays: number } };
+  assert.equal(settings.maintenance.enabled, true, 'maintenance is on from the start');
+  assert.equal(toUuid(settings.maintenance.workspaceId), ws, 'on the workspace the owner picked');
+  assert.deepEqual([settings.maintenance.dailyRunLimit, settings.maintenance.lookbackDays], [8, 14], 'as often and as far back as the form said');
+  const drafts = await h.sql.query<{ state: string; trigger: string; job_id: string | null }>(
+    `SELECT "state", "trigger", "job_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft'`,
+    [spaceId],
+  );
+  assert.equal(drafts.rowCount, 1, 'one first draft');
+  assert.equal(drafts.rows[0]!.state, 'made', 'made at once: it has a workspace to read through, so it is not held');
+  assert.equal(drafts.rows[0]!.trigger, 'space_created', 'asked for by the wiki being made');
+  assert.ok(drafts.rows[0]!.job_id, 'as a wiki_job of the server');
+  const refused = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', {
+    title: 'nothing',
+    repoUrl: 'https://github.com/acme/other',
+    maintenance: { enabled: true, workspaceId: uuidToBase62('0196e400-0000-7000-8000-000000000001') },
+  });
+  expectStatus(refused, 404, 'a workspace that is not the owner\'s makes nothing');
+  const spaces = await h.sql.query(`SELECT 1 FROM "wiki_space" WHERE "owner_id" = $1`, [owner.id]);
+  assert.equal(spaces.rowCount, 1, 'and the refused request left no wiki behind');
+});
+
 test('with no confirmed plan requireConfirmedPlan refuses — a draft is not enough — and with one it names it', { skip }, async () => {
   const h = await boot();
   const s = await scene(h);
@@ -510,7 +547,7 @@ test('a revision is a new version, and a confirmed version is never changed', { 
   assert.equal(edited.body.version, 3);
   assert.equal(edited.body.origin, 'owner');
   assert.equal(edited.body.gate.checks.protected, 'skipped');
-  assert.equal(edited.body.repoCheck, null, 'no runner checked the owner\'s edit');
+  assert.equal(edited.body.repoCheck.sha, REPO.sha, 'an edit carries the check of the version it was made from');
   const section = edited.body.docs[4].sections[1];
   assert.deepEqual([section.key, section.title, section.length], ['s2', 'How it really runs', 900]);
   assert.equal(edited.body.docs[5].sections[1].title, 'How it runs', 'the edit changed another document');
@@ -585,10 +622,8 @@ test('the gate stops a field outside the schema, a count outside the target, and
   expectGate(sneakyAnswer, 'schema', 'plan.newFields[0].name', 'a new field that the schema already has');
   expectGate(sneakyAnswer, 'schema', 'plan.docs[0].extra.audienceLevel', 'a value in extra nobody declared');
 
-  // The document count: 20 to 35 unless the request names its own target.
-  expectGate(await draft(h, s, 1, planOf(19)), 'docCount', 'plan.docs', 'nineteen documents');
-  expectGate(await draft(h, s, 1, planOf(36)), 'docCount', 'plan.docs', 'thirty-six documents');
-  expectGate(await draft(h, s, 1, planOf(20), { target: { min: 25, max: 30 } }), 'docCount', 'plan.docs', 'twenty documents against a target of 25 to 30');
+  // The document count: a target is the job's to be held to and the owner's to overrule, and no plan passes the ceiling.
+  expectGate(await draft(h, s, 1, planOf(WIKI_PLAN_RULES.docsCeiling + 1)), 'docCount', 'plan.docs', 'more documents than any plan has');
   expectStatus(await draft(h, s, 1, planOf(4), { target: { min: 3, max: 5 } }), 200, 'four documents against a target of 3 to 5');
 
   // References: a project no one has, a title two projects share, a topic the space does not have, an
@@ -619,6 +654,57 @@ test('the gate stops a field outside the schema, a count outside the target, and
   const noRepo = await served(() => h.plans.submitServerDraft(s.drafter, { baseVersion: 3, plan: planOf(20) }));
   expectGate(noRepo, 'schema', 'repoCheck', 'a draft with no repository check');
   expectGate(await draft(h, s, 3, planOf(20), { repoCheck: { sha: 'main', checked: 1, missing: [] } }), 'schema', 'repoCheck.sha', 'a sha that is not one');
+});
+
+test('a draft outside its target stands: the report says its count, a change that leaves the count alone is fine, and one that takes it further out is refused', { skip }, async () => {
+  const h = await boot();
+  const s = await scene(h);
+  const stored = await draft(h, s, null, planOf(36));
+  expectStatus(stored, 200, 'thirty-six documents against a target of 20 to 35');
+  assert.deepEqual([stored.body.gate.docs, stored.body.gate.target, stored.body.gate.checks.docCount], [36, { min: 20, max: 35 }, 'passed']);
+  expectStatus(await confirm(h, s, 1), 200, 'the owner takes it as it is');
+  const knowledge = await entry(h, s.owner.id, s.spaceId);
+  const facts = [{ kind: 'entry', id: knowledge }];
+  const further = docOf(36, 37, { slug: 'one-more' });
+  expectGate(await propose(h, s, { reason: 'One more document.', change: { doc: further }, facts }), 'docCount', 'plan.docs', 'a proposal that takes it further out');
+  const same = await propose(h, s, { reason: 'The same document, told again.', change: { doc: docOf(5, 36, { title: 'Document five' }) }, facts });
+  expectStatus(same, 200, 'a proposal that leaves the count alone');
+  const accepted = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/plan-proposals/${same.body.id}/decide`, { action: 'accept' });
+  expectStatus(accepted, 200, 'accepted, and the count is as it stood');
+  assert.equal(accepted.body.draft.docs.length, 36);
+});
+
+test('what the job could not find stays with its reference through the owner\'s hand, and goes when the reference does', { skip }, async () => {
+  const h = await boot();
+  const s = await scene(h);
+  const gone = { kind: 'docSection', ref: 'docs/architecture.md § Execution model', at: 'plan.docs[4].sections[1].sources.docs[0].section' };
+  const note = { check: 'docCount', text: 'Search was left out: nothing was written for it.' };
+  const stored = await draft(h, s, null, planOf(20), { repoCheck: { sha: REPO.sha, checked: 80, missing: [gone] }, notes: [note] });
+  expectStatus(stored, 200, 'a draft that says what to look at');
+  assert.deepEqual(stored.body.gate.notes, [note]);
+  const edit = async (baseVersion: number, doc: Record<string, unknown>): Promise<Answer> => {
+    const answer = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/edits`, { baseVersion, docSlug: doc.slug, doc });
+    expectStatus(answer, 200, 'the owner edits a document');
+    return answer;
+  };
+
+  const other = await edit(1, docOf(9, 20, { title: 'Another document' }));
+  assert.deepEqual(other.body.repoCheck, { sha: REPO.sha, checked: 80, missing: [gone] }, 'an edit of another document leaves it where it is');
+  assert.deepEqual(other.body.gate.notes, [note], 'and what there is to look at goes on being said');
+
+  const fourth = docOf(4, 20);
+  const [overview, flow, pitfalls] = fourth.sections as Array<Record<string, unknown>>;
+  const moved = await edit(2, { ...fourth, sections: [flow, overview, pitfalls] });
+  assert.deepEqual(moved.body.repoCheck.missing, [{ ...gone, at: 'plan.docs[4].sections[0].sources.docs[0].section' }], 'it follows its section');
+
+  const removed = await edit(3, { ...fourth, sections: [overview, pitfalls] });
+  assert.deepEqual(removed.body.repoCheck.missing, [], 'the section went, and the reference with it');
+  assert.equal(removed.body.repoCheck.checked, 75, 'and it is no longer counted: its document and heading, its file and symbol, and its contract');
+  assert.equal(removed.body.gate.checks.protected, 'skipped');
+
+  expectGate(await draft(h, s, 4, planOf(20), { notes: 'look here' }), 'schema', 'notes', 'notes that are no list');
+  expectGate(await draft(h, s, 4, planOf(20), { notes: [{ check: 'nonsense', text: 'x' }] }), 'schema', 'notes[0]', 'a note of no check');
+  expectGate(await draft(h, s, 4, planOf(20), { notes: [{ check: 'schema', text: '' }] }), 'schema', 'notes[0].text', 'a note that says nothing');
 });
 
 test('the gate reads a closed-set value as what its wrapping holds, and names what it refuses as a JSON string', { skip }, async () => {

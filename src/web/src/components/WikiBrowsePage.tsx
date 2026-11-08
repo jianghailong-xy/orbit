@@ -20,6 +20,7 @@ import {
   wikiCategorySummary,
   wikiCount,
   wikiMoreArticles,
+  wikiPlainWords,
   type WikiBrowseTopic,
 } from '../lib/wikiArticles';
 import {
@@ -194,7 +195,7 @@ function BrowseDoc({ doc, spaceSlug }: { doc: WikiDocsDirectory['categories'][nu
           {shown.map((section) => (
             <Link key={section.key} to={wikiDocSectionPath(spaceSlug, doc.slug, section.key)} className={section.written ? undefined : 'todo'}>
               <span className="sn">{section.number}</span>
-              <span className="tt">{section.title}</span>
+              <span className="tt">{wikiPlainWords(section.title)}</span>
               <span className="dash" />
               <span className="n">{wikiSectionKindLabel(section.kind)}</span>
             </Link>

@@ -80,7 +80,7 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
   const handoffs = new ProjectHandoffService(prisma as never);
   const tasks = new TasksService(
     prisma as never,
-    {} as never,
+    { assertMayMoveRuns: async () => undefined } as never,
     { publishTaskChanged: () => undefined, publishForUser: () => undefined } as never,
     handoffs,
   );

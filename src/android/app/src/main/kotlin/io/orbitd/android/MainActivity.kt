@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -24,6 +25,9 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import io.orbitd.android.auth.AuthScreen
@@ -53,6 +57,7 @@ import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import io.orbitd.android.core.protocol.Wire
@@ -155,13 +160,15 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         return
     }
     if (navigation.account != accountKey) {
-        LoadingMessage("Opening Orbit…")
+        // The one frame between the sign-in being restored and the shell: the same bare spinner on either side of it.
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         return
     }
     // Saved UI keys must survive a process restart; request ownership still uses the live handle.
     key(accountKey) {
         val api = remember(signedIn.handle) { DirectoryApi(app.session, signedIn.handle) }
         val management = remember(signedIn.handle) { ManagementApi(app.session, signedIn.handle, app.processScope) }
+        val scopeList = remember(api) { SessionScopeList(api) }
         val data by rememberDirectoryData(app, signedIn.handle)
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)
@@ -225,6 +232,25 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 }
             }
         }
+        // iOS `resolveDefaultLanding`: the launch default gives way to the workspace used last, as soon as there is a list to pick from.
+        // One this phone saved is good enough to land on; the first read from the server decides again unless something has been
+        // opened over it since.
+        val lastWorkspace = remember(signedIn.handle) { LastWorkspace(app.session, signedIn.handle) }
+        var provisionalLanding by remember(signedIn.handle) { mutableStateOf<String?>(null) }
+        var deletedWorkspace by remember(signedIn.handle) { mutableStateOf<String?>(null) }
+        LaunchedEffect(lastWorkspace) { lastWorkspace.load() }
+        fun rootOf(shown: OrbitNavigation) = shown.frames.first().takeIf { it.destination == Destination.WORKSPACE }?.id
+        LaunchedEffect(lastWorkspace, rootOf(navigation)) { rootOf(navigation)?.let { lastWorkspace.save(it) } }
+        LaunchedEffect(lastWorkspace.loaded, data.ready, data.cached, workspaces, navigation.frames, navigation.pending, deletedWorkspace) {
+            if (!lastWorkspace.loaded || !data.ready) return@LaunchedEffect
+            val top = navigation.current
+            val opened = top.workspaceId ?: top.takeIf { it.destination == Destination.SESSION }?.let { session ->
+                data.sessions["open"].orEmpty().firstOrNull { ObjectId.same(it.id, session.id) }?.workspace
+            }
+            val before = navigation
+            navigation = before.landHome(workspaces.map { it.id }.filterNot { ObjectId.same(it, deletedWorkspace) }, lastWorkspace.id, opened, provisionalLanding)
+            if (!data.cached) provisionalLanding = null else if (navigation !== before) provisionalLanding = rootOf(navigation)
+        }
         // A merge's push (A11-9) names its project only: once the directory is read, its sessions page lands as the project's root
         // over the workspace the drawer's row would pick (iOS 6b4bef713 `openProjectMerge`).
         val arrival = navigation.pending?.takeIf { it.waitsForDirectory }
@@ -248,7 +274,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 ModalDrawerSheet(modifier = Modifier.onSizeChanged { sheetWidth = it.width }, drawerContainerColor = LocalOrbitColors.current.drawer,
                     drawerContentColor = MaterialTheme.colorScheme.onSurface) {
                     Column(Modifier.fillMaxHeight().widthIn(max = 360.dp).verticalScroll(rememberScrollState()).imePadding().padding(12.dp)) {
-                        val projects = rememberDrawerProjects(api, revision)
+                        val projects = rememberDrawerProjects(app, signedIn.handle, api)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("Orbit", style = MaterialTheme.typography.headlineMedium)
                             IconButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SEARCH, origin = Origin.DRAWER)) }) {
@@ -273,7 +299,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
                         SectionHeading("Workspaces")
-                        DirectoryStatus(data) { app.realtime.refreshDirectory() }
+                        DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
                         if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))
                         workspaces.forEach { workspace ->
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
@@ -301,8 +327,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         DrawerProjects(projects, ProjectAttention.coordinatorPulses(data.sessions["open"].orEmpty()), drawerLive,
                             navigation.section, root = { id -> projectRoot(id, data, route.workspaceId, Origin.DRAWER) }) { key, root -> select(key, root) }
                         Spacer(Modifier.height(24.dp))
-                        Button(onClick = { scope.launch { drawer.close() }; openNewSession(Origin.DRAWER) },
-                            enabled = data.fresh) { Text("New session") }
+                        Button(onClick = { scope.launch { drawer.close() }; openNewSession(Origin.DRAWER) }) { Text("New session") }
                         TextButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, origin = Origin.DRAWER)) }) {
                             Icon(painterResource(R.drawable.ic_settings), null); Spacer(Modifier.width(8.dp)); Text("Settings")
                         }
@@ -334,12 +359,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
                         }
                     }, actions = {
-                        if (route.destination == Destination.WORKSPACE) IconButton(onClick = {
-                            open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = route.id))
-                        }) { Icon(painterResource(R.drawable.ic_settings), "Workspace settings") }
                         PageBar.Actions(route, this)
                         if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
-                        IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
+                        // iOS: a session list is refreshed by pulling it.
+                        if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER)
+                            IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
                     })
             }) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
@@ -347,31 +371,30 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
-                                Destination.WORKSPACES -> WorkspaceHome(data, { w -> land(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) },
-                                    startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
-                                Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open, { app.realtime.refreshDirectory() },
-                                    revision, watches.summaries)
-                                Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, revision, ::open)
+                                Destination.WORKSPACES -> WorkspaceHome(data, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
+                                Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, signedIn.handle, ::open, { app.realtime.refreshDirectory() },
+                                    watches.summaries, scopeList)
+                                Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, ::open)
                                 Destination.LANDINGS -> route.id?.let { project ->
                                     ProjectLandingsWindow(app, signedIn.handle, route, api, project, route.recordId, ::open)
                                 }
                                 Destination.SEARCH -> SearchScreen(api, ::open)
-                                Destination.SESSION -> SessionDestination(app, signedIn.handle, route, api, data, ::open) {
+                                Destination.SESSION -> SessionDestination(app, signedIn.handle, route, api, data, ::open, scopeList::holds) {
                                     navigation = navigation.dropSession(route.id!!)
                                 }
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open) { key, root -> land(key, root) }
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
-                                Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
+                                Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, ::open) { navigation = navigation.back() }
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
                                 Destination.WIKI_RUN, Destination.WIKI_JOB, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION,
-                                Destination.WIKI_ACTIVITY ->
+                                Destination.WIKI_ACTIVITY, Destination.WIKI_TRASH ->
                                     WikiDestination(app, signedIn.handle, route, data, ::open) { change -> navigation = change(navigation) }
                                 Destination.WATCH -> WatchDestination(app, signedIn.handle, route,
                                     navigate = { change -> navigation = change(navigation) }, open = ::open)
                                 Destination.SETTINGS -> SettingsScreen(management, route, revision, ::open, { navigation = navigation.back() }, auth::logout,
                                     changed = { app.realtime.refreshDirectory() },
-                                    workspaceDeleted = { land("workspaces", OrbitRoute(Destination.WORKSPACES)) },
+                                    workspaceDeleted = { deletedWorkspace = route.workspaceId; land("workspaces", OrbitRoute(Destination.WORKSPACES)) },
                                     deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
                                     notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) })
                                 Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
@@ -409,7 +432,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
 }
 
 private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (route.destination) {
-    Destination.WORKSPACES -> "Workspaces"
+    Destination.WORKSPACES -> ""
     Destination.WORKSPACE -> data.workspaces.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Workspace"
     Destination.FOLDER -> data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
     Destination.SEARCH -> "Search sessions"
@@ -424,6 +447,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_REVIEW -> "Review"
     Destination.WIKI_ACTIVITY -> "Activity"
     Destination.WIKI_SETTINGS -> "Wiki settings"
+    Destination.WIKI_TRASH -> "Trash"
     Destination.WIKI_RUN -> "Maintenance"
     Destination.WIKI_JOB -> "Run"
     Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"
@@ -434,24 +458,31 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 
+/** What stands in for a workspace's list until the launch has landed on one (iOS `workspaceList`): a bare spinner while the list is
+ * coming, or why it can't, or that there is nothing to land on. With workspaces this page is gone a frame later. */
 @Composable
-private fun WorkspaceHome(data: DirectoryData, open: (DirectoryWorkspace) -> Unit, startSession: () -> Unit, refresh: () -> Unit) {
-    // A launcher's cold start lands here. Its rows are the workspaces, after the status item; "No workspaces" is not one.
-    val list = androidx.compose.foundation.lazy.rememberLazyListState()
-    ReportDirectoryDrawn(data, list) { it.index in 1..data.workspaces.size }
-    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), state = list) {
-        item { DirectoryStatus(data, refresh) }
-        if (data.ready && data.workspaces.isEmpty()) item {
-            Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(MachineSetupCopy.NO_WORKSPACES_YET, style = MaterialTheme.typography.titleMedium)
-                Text(MachineSetupCopy.NO_WORKSPACES_DETAIL, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = startSession) { Text(MachineSetupCopy.START_A_SESSION) }
+private fun WorkspaceHome(data: DirectoryData, startSession: () -> Unit, retry: () -> Unit) {
+    // Before the phone has said what network it has, having none yet means nothing.
+    var patient by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { delay(2_000); patient = false }
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        when {
+            data.ready && data.workspaces.isEmpty() -> {
+                // A launch that lands here has drawn all it is going to.
+                ReportDirectoryDrawn(data, rememberLazyListState()) { false }
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(MachineSetupCopy.NO_WORKSPACES_YET, style = MaterialTheme.typography.titleMedium)
+                    Text(MachineSetupCopy.NO_WORKSPACES_DETAIL, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = startSession) { Text(MachineSetupCopy.START_A_SESSION) }
+                }
             }
-        }
-        val workspaces = orderedWorkspaces(data.workspaces)
-        items(workspaces.size) { index ->
-            val w = workspaces[index]
-            TextButton(onClick = { open(w) }, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("workspace:${w.id}")) { Text(w.name) }
+            !data.ready && (data.error != null || (data.waitingForConnection && !patient)) ->
+                Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(SessionListCopy.WORKSPACES_FAILED, style = MaterialTheme.typography.titleMedium)
+                    Text(data.error ?: SessionListCopy.REQUEST_FAILED, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = retry) { Text(SessionListCopy.RETRY) }
+                }
+            else -> CircularProgressIndicator(Modifier.testTag("workspaces-loading"))
         }
     }
 }

@@ -199,6 +199,91 @@ and only a restore of that volume from a backup makes it retryable again (After 
 `docker volume rm` deletes a volume too, but it checks neither the labels nor the UID: the channel's removal cannot
 take another volume of the same name.
 
+## Session checkouts and the volume's limit
+
+Each session works in a checkout of its own on its runner's volume, and the runner reclaims checkouts before the
+channel stops it at the volume's limit ([A runner's volume is over its limit](#a-runners-volume-is-over-its-limit)).
+Inside the container, `statfs` reports this host's disk, which knows nothing of a volume's limit, so the runner works
+against the volume's **storage budget**:
+
+- **The measurement.** On each of its passes the manager reads the channel's view of the volume, its limit and the
+  size Docker last measured, and keeps it on the runner's mapping (`managed_runner.volume_measurement`) with the time
+  it first read those figures: the same figures read again keep their time. Every heartbeat answer relays it to the
+  runner as `storageBudget`, with the floor. The channel measures every `diskCheckSeconds`, 120 s by default.
+- **Free space** is the limit less the measured size, plus the checkouts the runner has removed since that time and
+  less the ones it has made since, which the measurement does not count yet. It is never more than this host's disk
+  has free.
+- **The floor** is the owner's **Keep Free** (the runner's page, Capacity) whenever one is set, higher or lower.
+  Otherwise it is a quarter of the volume's limit: 5 GiB of the default 20 GiB. The default is worked out for each
+  heartbeat answer and never stored, so the runner's page shows Keep Free only as its owner set it, and auto-run,
+  which holds ready tasks while a runner's disk is under its floor, applies only that.
+- **No measurement, no budget.** Until the manager has read a measurement of the volume, and for a volume with no
+  limit, the runner gets neither a budget nor the default floor: it judges this host's disk against the owner's Keep
+  Free alone, as runners did before budgets. So does every managed runner while managed runners are switched off
+  (`ORBIT_MANAGED_RUNNERS_ENABLED`): management is frozen then, and a measurement nothing renews would hide everything
+  written since.
+
+Below the floor, the sweep that runs every five minutes takes every finished session's checkout, then resting
+sessions' checkouts. Under the budget's floor a resting session's checkout may go however recently it was written,
+the oldest last write first, and a commit on the session's own branch counts as kept: the branch stays in the
+repository, and the checkout comes back from it at the session's next message. It still goes only when nothing in it
+would be lost: nothing of the session is at work, no process is in the checkout, its status is clean but for
+dependencies and build output, and no git operation is half done
+([the whole rule](runner-troubleshooting.md#d-the-disk-is-short-or-a-sessions-checkout-has-gone)). Before each new
+session checkout the runner estimates its size, that of the files its commit tracks, and when that would leave less
+than the floor free, it runs the sweep first, until the new checkout fits. A look that finds no resting checkout to
+take makes the schedule wait 7.5 minutes, or less once a newer measurement comes in, before it looks again.
+
+**What it cannot do.** A checkout is never refused, and the checkout of a session at work, or of one whose engine is
+still warm, is never taken. An engine stays warm for up to four hours after its turn. Up to Max Concurrent engines are
+at work or warm at once (on the runner's page; `runner.maxConcurrent` in `profile.json` starts it at 2), and a new
+session's checkout is made before its engine takes the place of the oldest warm one. So the volume has to hold:
+
+- the workspace: the repository's clone and its checkout;
+- Max Concurrent + 1 session checkouts;
+- what the sessions install and build in them.
+
+Below that size, a burst of sessions can pass the limit whatever the runner reclaims, and the channel stops the runner
+(`VOLUME_OVER_LIMIT`). A bigger volume is the answer then. Measured with the Orbit repository, whose session checkout
+is about 1.75 GiB (0.93 GiB with the paths it leaves out): an 8 GiB volume holding a 2.85 GiB workspace, with full
+checkouts and Max Concurrent 1, stayed under its limit, at 6.4 GiB at most. By the sum above, the default profile,
+20 GiB with Max Concurrent 2, holds a repository of that size: 2.85 + 3 × 1.75 GiB is about 8.1 GiB, before installs
+and builds.
+
+**Clones count at full size.** Where Docker's data root (`data-root` in `/etc/docker/daemon.json`) is on a filesystem
+that can clone files, such as XFS made with `reflink=1` or btrfs
+([the list](runner-troubleshooting.md#e-every-session-checkout-takes-as-much-disk-as-a-full-copy)), the runner clones
+each session checkout from the workspace's checkout, with no privilege, and the clones share their blocks on this
+host's disk. But the channel measures a volume with Docker's `GET /system/df`, which adds up the apparent size of
+every file and counts a hard-linked file once, so a cloned file counts as much as a copy. On an XFS-backed volume,
+four clones of a 512 MiB file took 512 MiB of disk and counted as 2048 MiB. So putting Docker's data root on XFS or
+btrfs saves this host's disk, not an account's limit, and the sizing above stands. On ext4, every checkout is written
+out in full. A repository's `.orbit/checkout-exclude` makes checkouts smaller on both counts
+([the format](runner-troubleshooting.md#f-a-sessions-checkout-lacks-some-paths)).
+
+**What the runner logs.** `docker logs mr-<runner uuid> 2>&1 | grep -E 'checkout|gc:'` shows how each checkout was
+made, what was reclaimed and why. At start the runner says whether its volume can clone; on a data root on ext4:
+
+```text
+checkouts: plain: probe failed (EOPNOTSUPP): the filesystem of /var/lib/orbit/home/.orbit/worktrees cannot clone files, so git writes out every session checkout
+```
+
+Then each new checkout logs `session <id> — checkout cloned: <n> files from <the workspace's checkout>` or
+`session <id> — checkout plain: <reason>: <detail>`. Under the budget, a lab runner with an 8 GiB volume and a 2 GiB
+floor logged:
+
+```text
+session <id> — its checkout, about 1.8 GiB, would leave 1.6 GiB free of the storage budget, under its 2.0 GiB floor: reclaiming checkouts first
+gc: reclaimed checkout <id> — resumable session, clean, its work on its branch, last written 1 minute ago, no process or job in it; under the storage budget's floor; its branch and base ref are kept
+session <id> — nothing more can be reclaimed, so its checkout is made 368.1 MiB short of the storage budget's floor
+session <id> — restored its checkout <path> (branch <branch>)
+```
+
+The last is the session's next message bringing its checkout back. A finished session's checkout goes with
+`gc: reclaimed checkout <id> — under the free-space floor`, and a look that found nothing to take logs
+`gc: no resumable checkout can go and the storage budget is still under its floor; not looking again until <time>,
+or sooner once a newer measurement of the volume comes in or the budget is back above its floor`.
+
 ## When something goes wrong
 
 ### A runner's volume is over its limit
@@ -217,6 +302,11 @@ the write rate times the interval. Measured:
 - a 256 MiB limit stopped at 346,105,301 bytes (task D2).
 
 Each check makes Docker walk every volume on the host, so a short interval costs disk reads on a busy host.
+
+The runner reclaims session checkouts before its volume gets there
+([Session checkouts and the volume's limit](#session-checkouts-and-the-volumes-limit)). One that reaches its limit
+all the same holds more than it can give back: the checkouts of sessions at work or with a warm engine, what they
+installed and built, and the rest of what the volume keeps.
 
 What the account sees: the channel's stop is a stop like any other, so the manager starts the runner again, and the
 channel refuses that container. The runner fails with `VOLUME_OVER_LIMIT` (its `detail`: `… holds … bytes, over its …-byte
@@ -686,6 +776,7 @@ firewall's log says what is wrong (`docker compose logs managed-runner-firewall`
 | Whether the channel removes data volumes | `channel.json` `allowVolumeRemoval` (`false` unless set) | `docker-channel` recreated |
 | A new volume's limit and storage share | `profile.json` `storage.capacity` | apiserver recreated; existing volumes keep theirs (use `volumeLimitOverrides`) |
 | One volume's limit | `channel.json` `volumeLimitOverrides` | `docker-channel` recreated |
+| The floor a runner reclaims session checkouts at | Its owner's **Keep Free** on the runner's page; with none, a quarter of the volume's limit | The runner's next heartbeat |
 | How often volumes are measured | `channel.json` `diskCheckSeconds` | `docker-channel` recreated |
 | How long a stop waits before SIGKILL | `channel.json` `stopGraceSeconds` | `docker-channel` recreated |
 | When an idle runner sleeps; retries and backoff | `profile.json` `lifecycle` | apiserver recreated |

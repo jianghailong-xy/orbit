@@ -1,0 +1,1094 @@
+{
+  "about": [
+    "The Wiki while it has nothing to read (design §12.3.1, mock 41), on the three clients: the setup card every",
+    "state of the plan draws, whether it is drawn, and the workspaces its two forms offer. `states` holds one card",
+    "for each state of `plan.states` in wiki-docs.fixture.json, read with `context`, with `directory` the docs",
+    "directory of that fixture once a version is confirmed. The web reads this file in `lib/wikiStart.test.ts`,",
+    "OrbitKit in `WikiStartParityTests`, Android in `WikiStartLogicTest`, and the server holds `repositories` to",
+    "its `normalizeRepoUrl` in `wiki-repository-name.spec.ts`. Dates are read in `timeZone`; «ago» against `now`.",
+    "`firstDrafts` and `writingOffline` are states `plan.states` does not reach: a draft with no version confirmed yet,",
+    "and documents whose writing waits for an offline runner."
+  ],
+  "timeZone": "Asia/Shanghai",
+  "now": "2026-09-29T08:00:00.000Z",
+  "context": {
+    "maintenance": true,
+    "readsFrom": "shop-cli @ SG · build-01"
+  },
+  "states": {
+    "none": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": "System model · about 1–2 hours",
+          "progress": null,
+          "action": {
+            "label": "Draft plan",
+            "to": "draft",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Confirm the plan",
+          "text": "No plan yet. A plan lays out this wiki’s documents; nothing is written until you confirm it."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Write the documents",
+          "text": "They appear here one by one."
+        }
+      ]
+    },
+    "noneQueued": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": false
+          },
+          "state": "run",
+          "title": "Confirm the plan",
+          "text": "Draft queued · starts after the Wiki maintenance run that’s going now."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Write the documents",
+          "text": "They appear here one by one."
+        }
+      ]
+    },
+    "noneDrafting": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": "Usually 1–2 hours. You can leave this page.",
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": false
+          },
+          "state": "run",
+          "title": "Confirm the plan",
+          "text": "Drafting the plan · attempt 1 of 3 · started 12m ago"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Write the documents",
+          "text": "They appear here one by one."
+        }
+      ]
+    },
+    "noneHeld": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Set up…",
+            "to": "setUp",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Connect the repository",
+          "text": "Pick the workspace Orbit reads this repository from."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Confirm the plan",
+          "text": "The System model drafts the documents this wiki should have. Nothing is written until you confirm it."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Write the documents",
+          "text": "They appear here one by one."
+        }
+      ]
+    },
+    "noneOffline": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "View runners",
+            "to": "runners",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Confirm the plan",
+          "text": "The maintenance runner is offline — the draft starts once it’s back."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Write the documents",
+          "text": "They appear here one by one."
+        }
+      ]
+    },
+    "inForce": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Write the documents",
+          "text": "No document is written yet."
+        }
+      ]
+    },
+    "changes": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Write the documents",
+          "text": "No document is written yet."
+        }
+      ]
+    },
+    "draftReady": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Write the documents",
+          "text": "No document is written yet."
+        }
+      ]
+    },
+    "draftFailed": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Write the documents",
+          "text": "No document is written yet."
+        }
+      ]
+    },
+    "writing": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": {
+            "done": 2,
+            "total": 5,
+            "now": "3.2 会话状态生命周期"
+          },
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": false
+          },
+          "state": "run",
+          "title": "Write the documents",
+          "text": "Writing documents · 2 of 5 written · started 40m ago"
+        }
+      ]
+    },
+    "writingQueued": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": false
+          },
+          "state": "run",
+          "title": "Write the documents",
+          "text": "Queued · starts after the Wiki maintenance run that’s going now"
+        }
+      ]
+    },
+    "writingHeld": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Set up…",
+            "to": "setUp",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Connect the repository",
+          "text": "Pick the workspace Orbit reads this repository from."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Write the documents",
+          "text": "They appear here one by one."
+        }
+      ]
+    },
+    "writingStopped": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Write the documents",
+          "text": "Writing documents didn’t finish · the run was cut off at 120 turns · Wiki maintenance writes what’s left on its next run"
+        }
+      ]
+    },
+    "noneFailed": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Confirm the plan",
+          "text": "The draft didn’t finish. The model’s catalogue couldn’t be read. Nothing was saved."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Write the documents",
+          "text": "They appear here one by one."
+        }
+      ]
+    },
+    "draftFailedOver": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Write the documents",
+          "text": "No document is written yet."
+        }
+      ]
+    },
+    "draftNoted": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Write the documents",
+          "text": "No document is written yet."
+        }
+      ]
+    },
+    "draftOutside": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Open plan",
+            "to": "plan",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Write the documents",
+          "text": "No document is written yet."
+        }
+      ]
+    }
+  },
+  "firstDrafts": {
+    "ready": {
+      "spec": {
+        "confirmed": null,
+        "draft": "v2",
+        "proposals": false,
+        "job": null,
+        "runnerOnline": true
+      },
+      "card": {
+        "title": "Set up this wiki",
+        "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+        "steps": [
+          {
+            "note": null,
+            "progress": null,
+            "action": null,
+            "state": "done",
+            "title": "Connect the repository",
+            "text": "Reads from shop-cli @ SG · build-01"
+          },
+          {
+            "note": "3 categories · 3 documents",
+            "progress": null,
+            "action": {
+              "label": "Open plan",
+              "to": "plan",
+              "primary": true
+            },
+            "state": "wait",
+            "title": "Confirm the plan",
+            "text": "Draft v2 passed the plan check and waits for you. Documents are written once you confirm it."
+          },
+          {
+            "note": null,
+            "progress": null,
+            "action": null,
+            "state": "todo",
+            "title": "Write the documents",
+            "text": "They appear here one by one."
+          }
+        ]
+      }
+    },
+    "toLook": {
+      "spec": {
+        "confirmed": null,
+        "draft": "v2Noted",
+        "proposals": false,
+        "job": null,
+        "runnerOnline": true
+      },
+      "card": {
+        "title": "Set up this wiki",
+        "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+        "steps": [
+          {
+            "note": null,
+            "progress": null,
+            "action": null,
+            "state": "done",
+            "title": "Connect the repository",
+            "text": "Reads from shop-cli @ SG · build-01"
+          },
+          {
+            "note": "3 categories · 3 documents",
+            "progress": null,
+            "action": {
+              "label": "Open plan",
+              "to": "plan",
+              "primary": true
+            },
+            "state": "wait",
+            "title": "Confirm the plan",
+            "text": "Draft v2 is ready for review, with 5 to look at. Documents are written once you confirm it."
+          },
+          {
+            "note": null,
+            "progress": null,
+            "action": null,
+            "state": "todo",
+            "title": "Write the documents",
+            "text": "They appear here one by one."
+          }
+        ]
+      }
+    },
+    "notStarted": {
+      "spec": {
+        "confirmed": null,
+        "draft": null,
+        "proposals": false,
+        "job": "notStarted",
+        "runnerOnline": true
+      },
+      "card": {
+        "title": "Set up this wiki",
+        "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+        "steps": [
+          {
+            "note": null,
+            "progress": null,
+            "action": null,
+            "state": "done",
+            "title": "Connect the repository",
+            "text": "Reads from shop-cli @ SG · build-01"
+          },
+          {
+            "note": "Usually 1–2 hours. You can leave this page.",
+            "progress": null,
+            "action": {
+              "label": "Open plan",
+              "to": "plan",
+              "primary": false
+            },
+            "state": "run",
+            "title": "Confirm the plan",
+            "text": "Drafting the plan · waiting for its run to start"
+          },
+          {
+            "note": null,
+            "progress": null,
+            "action": null,
+            "state": "todo",
+            "title": "Write the documents",
+            "text": "They appear here one by one."
+          }
+        ]
+      }
+    }
+  },
+  "writingOffline": {
+    "spec": {
+      "confirmed": "v1",
+      "draft": null,
+      "proposals": false,
+      "job": "writingQueued",
+      "runnerOnline": false
+    },
+    "card": {
+      "title": "Set up this wiki",
+      "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Connect the repository",
+          "text": "Reads from shop-cli @ SG · build-01"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "done",
+          "title": "Confirm the plan",
+          "text": "v1 confirmed Sep 28 · 5 documents"
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "View runners",
+            "to": "runners",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Write the documents",
+          "text": "The maintenance runner is offline — writing starts once it’s back."
+        }
+      ]
+    }
+  },
+  "maintenanceOff": {
+    "title": "Set up this wiki",
+    "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+    "steps": [
+      {
+        "note": null,
+        "progress": null,
+        "action": {
+          "label": "Set up…",
+          "to": "setUp",
+          "primary": true
+        },
+        "state": "wait",
+        "title": "Connect the repository",
+        "text": "Pick the workspace Orbit reads this repository from."
+      },
+      {
+        "note": null,
+        "progress": null,
+        "action": null,
+        "state": "todo",
+        "title": "Confirm the plan",
+        "text": "The System model drafts the documents this wiki should have. Nothing is written until you confirm it."
+      },
+      {
+        "note": null,
+        "progress": null,
+        "action": null,
+        "state": "todo",
+        "title": "Write the documents",
+        "text": "They appear here one by one."
+      }
+    ]
+  },
+  "readsFromUnknown": {
+    "title": "Set up this wiki",
+    "lead": "Documents for this codebase, written from its repository and sessions, for you and your agents.",
+    "steps": [
+      {
+        "note": null,
+        "progress": null,
+        "action": null,
+        "state": "done",
+        "title": "Connect the repository",
+        "text": "Connected"
+      },
+      {
+        "note": "Usually 1–2 hours. You can leave this page.",
+        "progress": null,
+        "action": {
+          "label": "Open plan",
+          "to": "plan",
+          "primary": false
+        },
+        "state": "run",
+        "title": "Confirm the plan",
+        "text": "Drafting the plan · attempt 1 of 3 · started 12m ago"
+      },
+      {
+        "note": null,
+        "progress": null,
+        "action": null,
+        "state": "todo",
+        "title": "Write the documents",
+        "text": "They appear here one by one."
+      }
+    ]
+  },
+  "first": {
+    "workspaces": {
+      "title": "Set up your first wiki",
+      "lead": "A wiki is documents for one codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": {
+            "label": "Create wiki…",
+            "to": "create",
+            "primary": true
+          },
+          "state": "wait",
+          "title": "Connect a repository",
+          "text": "Pick a workspace. Its repository is what this wiki will describe."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Confirm the plan",
+          "text": "The System model drafts the documents this wiki should have. Nothing is written until you confirm it."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Write the documents",
+          "text": "They appear here one by one."
+        }
+      ]
+    },
+    "noRepository": {
+      "title": "Set up your first wiki",
+      "lead": "A wiki is documents for one codebase, written from its repository and sessions, for you and your agents.",
+      "steps": [
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "wait",
+          "title": "Connect a repository",
+          "text": "None of your workspaces has a repository yet. Add one, then come back."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Confirm the plan",
+          "text": "The System model drafts the documents this wiki should have. Nothing is written until you confirm it."
+        },
+        {
+          "note": null,
+          "progress": null,
+          "action": null,
+          "state": "todo",
+          "title": "Write the documents",
+          "text": "They appear here one by one."
+        }
+      ]
+    }
+  },
+  "shown": [
+    {
+      "written": 0,
+      "topics": 0,
+      "shown": true
+    },
+    {
+      "written": 0,
+      "topics": 3,
+      "shown": false
+    },
+    {
+      "written": 1,
+      "topics": 0,
+      "shown": false
+    },
+    {
+      "written": 5,
+      "topics": 2,
+      "shown": false
+    }
+  ],
+  "repositories": [
+    {
+      "url": "https://github.com/acme/shop-cli",
+      "repository": "github.com/acme/shop-cli",
+      "title": "shop-cli"
+    },
+    {
+      "url": "https://github.com/acme/shop-cli.git",
+      "repository": "github.com/acme/shop-cli",
+      "title": "shop-cli"
+    },
+    {
+      "url": "https://github.com/acme/shop-cli/",
+      "repository": "github.com/acme/shop-cli",
+      "title": "shop-cli"
+    },
+    {
+      "url": "git@github.com:acme/shop-cli.git",
+      "repository": "github.com/acme/shop-cli",
+      "title": "shop-cli"
+    },
+    {
+      "url": "ssh://git@github.com/acme/shop-cli.git",
+      "repository": "github.com/acme/shop-cli",
+      "title": "shop-cli"
+    },
+    {
+      "url": "https://GitHub.com/acme/Shop-CLI",
+      "repository": "github.com/acme/Shop-CLI",
+      "title": "Shop-CLI"
+    },
+    {
+      "url": "https://user:token@gitlab.com/cross-border/ai/docs.git",
+      "repository": "gitlab.com/cross-border/ai/docs",
+      "title": "docs"
+    },
+    {
+      "url": "gitlab.com:cross-border/ai/docs",
+      "repository": "gitlab.com/cross-border/ai/docs",
+      "title": "docs"
+    },
+    {
+      "url": "  https://github.com/acme/shop-cli.git/  ",
+      "repository": "github.com/acme/shop-cli",
+      "title": "shop-cli"
+    },
+    {
+      "url": "/srv/git/shop-cli.git",
+      "repository": "/srv/git/shop-cli",
+      "title": "shop-cli"
+    },
+    {
+      "url": "",
+      "repository": null,
+      "title": null
+    },
+    {
+      "url": "   ",
+      "repository": null,
+      "title": null
+    }
+  ],
+  "workspaces": {
+    "choices": [
+      {
+        "id": "eu",
+        "label": "shop-cli @ EU · build-02",
+        "repository": "github.com/acme/shop-cli",
+        "repoUrl": "git@github.com:acme/shop-cli.git",
+        "online": false
+      },
+      {
+        "id": "us",
+        "label": "shop-cli @ US · build-01",
+        "repository": "github.com/acme/shop-cli",
+        "repoUrl": "https://github.com/acme/shop-cli",
+        "online": true
+      },
+      {
+        "id": "sg",
+        "label": "shop-cli @ SG · build-01",
+        "repository": "github.com/acme/shop-cli",
+        "repoUrl": "https://github.com/acme/shop-cli.git",
+        "online": true
+      },
+      {
+        "id": "st",
+        "label": "shop-cli @ staging · build-01",
+        "repository": "github.com/acme/shop-cli",
+        "repoUrl": "ssh://git@github.com/acme/shop-cli.git",
+        "online": true
+      },
+      {
+        "id": "ba",
+        "label": "billing-api · build-01",
+        "repository": "github.com/acme/billing-api",
+        "repoUrl": "https://github.com/acme/billing-api",
+        "online": true
+      },
+      {
+        "id": "no",
+        "label": "notes · build-01",
+        "repository": null,
+        "repoUrl": null,
+        "online": true
+      }
+    ],
+    "inOrder": [
+      "ba",
+      "no",
+      "sg",
+      "st",
+      "us",
+      "eu"
+    ],
+    "groups": [
+      {
+        "repository": "github.com/acme/billing-api",
+        "choices": [
+          "ba"
+        ]
+      },
+      {
+        "repository": "github.com/acme/shop-cli",
+        "choices": [
+          "sg",
+          "st",
+          "us",
+          "eu"
+        ]
+      }
+    ],
+    "defaults": [
+      {
+        "current": "eu",
+        "from": "sg",
+        "pick": "eu"
+      },
+      {
+        "current": null,
+        "from": "us",
+        "pick": "us"
+      },
+      {
+        "current": null,
+        "from": "eu",
+        "pick": "ba"
+      },
+      {
+        "current": null,
+        "from": null,
+        "pick": "ba"
+      },
+      {
+        "current": null,
+        "from": "gone",
+        "pick": "ba"
+      }
+    ],
+    "allOffline": "eu",
+    "none": null
+  }
+}

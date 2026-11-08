@@ -41,6 +41,7 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { hashPassword, sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -197,21 +198,6 @@ test('a machine with no workspace gets its first one from the conversation', {
         assert.equal((await ask(austin.runnerId, path)).status, 400, JSON.stringify(path).slice(0, 40));
       }
       assert.equal((await slotOf(austin.runnerId)).status, null, 'none of them wrote the slot');
-    });
-
-    await t2.test('asking wakes a runner parked in its wake poll: the question does not wait for its next tick', async () => {
-      const woken = await deviceRegister(`woken-${RUN}`);
-      assert.equal((await heartbeat(woken, 'dir-probe/v1')).status, 201);
-      const parked = api('GET', '/api/runner/wake', woken.token);
-      const asked = Date.now();
-      assert.equal((await ask(woken.runnerId, '~/code/app')).status, 201);
-      const wake = await parked;
-      assert.equal(wake.status, 200, wake.text);
-      assert.deepEqual(wake.json, { wake: true });
-      const took = Date.now() - asked;
-      assert.ok(took < 2_000, `the wake took ${took} ms`);
-      const beat = await heartbeat(woken, 'dir-probe/v1');
-      assert.equal(beat.json.dirProbeRequest?.path, '~/code/app', 'and the beat it brings hands the question over');
     });
 
     await t2.test('asked, pending; the next heartbeat hands it over once; answered, done', async () => {

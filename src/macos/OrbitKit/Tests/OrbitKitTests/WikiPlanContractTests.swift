@@ -71,7 +71,9 @@ final class WikiPlanContractTests: XCTestCase {
                                            {"key":"dev","title":"Development conventions","question":"","forAgents":true}],
            "newFields":[],"target":{"min":20,"max":35},
            "gate":{"checkedAt":"2026-09-29T00:00:00.000Z","checks":{"schema":"passed","docCount":"passed","protected":"passed","references":"passed"},
-                   "docs":20,"target":{"min":20,"max":35},"needsNewFields":[{"at":"section","name":"evidenceWeight","why":"merging","values":1}]},
+                   "docs":20,"target":{"min":20,"max":35},"needsNewFields":[{"at":"section","name":"evidenceWeight","why":"merging","values":1}],
+                   "notes":[{"check":"docCount","text":"Search ranking was left out: nothing was written for it."},
+                            {"check":"style","text":"A check a later server runs."}]},
            "repoCheck":{"sha":"0123456789abcdef0123456789abcdef01234567","checked":42,"missing":[{"kind":"symbol","ref":"claudeRuntime.setPhase","at":"docs[3].sections[1].code[0]"}]},
            "model":"qwen3.8-27b-fp8","confirmedAt":"2026-09-29T01:00:00.000Z","supersededAt":null,"createdAt":"2026-09-29T00:00:00.000Z",
            "docs":[{"id":"34WDoc1","position":0,"category":"product","slug":"session-runtime","title":"会话运行模型与长连接",
@@ -100,6 +102,9 @@ final class WikiPlanContractTests: XCTestCase {
         XCTAssertEqual(confirmed.categories?.last?.forAgents, true)
         XCTAssertEqual(confirmed.gate?.checks?["protected"], "passed")
         XCTAssertEqual(confirmed.gate?.needsNewFields?.first?.name, "evidenceWeight")
+        // A note under a check this build has not heard of reads as .unknown, and the plan still decodes.
+        XCTAssertEqual(confirmed.gate?.notes?.map(\.check), [.docCount, .unknown])
+        XCTAssertEqual(confirmed.gate?.notes?.first?.text, "Search ranking was left out: nothing was written for it.")
         XCTAssertEqual(confirmed.repoCheck?.missing?.first?.kind, "symbol")
         let doc = try XCTUnwrap(confirmed.docs?.first)
         XCTAssertEqual(doc.protected, true)
@@ -127,6 +132,20 @@ final class WikiPlanContractTests: XCTestCase {
         XCTAssertEqual(decoded.confirmed?.docs?.first?.sections?.first?.kind, .unknown)
     }
 
+    /// What a stored draft says to look at (contract `plan.gate`): `gate.notes`, left out when there is none, and
+    /// the references not found, whose kinds are the four the report says why for.
+    func testTheNotesAndTheKindsOfAReferenceAreTheContracts() throws {
+        let gate = try XCTUnwrap(try planSection()["gate"] as? [String: Any])
+        let notes = try XCTUnwrap(gate["notes"] as? String)
+        XCTAssertTrue(notes.contains("gate.notes, [{ check, text }]"), notes)
+        XCTAssertTrue(notes.contains("Left out when there is none"), notes)
+        let repo = try XCTUnwrap(gate["repo"] as? String)
+        XCTAssertTrue(repo.contains("kind one of file, docSection, symbol, contract"), repo)
+        XCTAssertEqual(Set(WikiPlanCopy.missWhy.keys), ["file", "docSection", "symbol", "contract"])
+        let none = #"{"checkedAt":"2026-09-29T00:00:00.000Z","docs":20}"#
+        XCTAssertNil(try JSONDecoder().decode(WikiPlanGateReport.self, from: Data(none.utf8)).notes)
+    }
+
     /// The plan's jobs (contract `plan.jobs`): their closed sets, and the owner's redraft route on the user door.
     func testTheJobsClosedSetsAndRoutesAreTheContracts() throws {
         let jobs = try XCTUnwrap(try planSection()["jobs"] as? [String: Any], "the contract's plan has no jobs")
@@ -145,7 +164,8 @@ final class WikiPlanContractTests: XCTestCase {
     }
 
     /// The job on the plan's read, as each card of the plan page draws it: queued, held with why, running on a
-    /// round, and failed with the gate's errors; a value a later server adds is `.unknown`. The read's `waitingFor`,
+    /// round, failed with why there is no draft, and from before 2026-11-02 with the gate's errors; a value a later
+    /// server adds is `.unknown`. The read's `waitingFor`,
     /// `taskId` and `provider` are the runner path's (contract `plan.jobs.read`): a job decodes whatever they hold.
     func testTheJobDecodes() throws {
         let running = #"""
@@ -175,6 +195,11 @@ final class WikiPlanContractTests: XCTestCase {
 
         let held = #"{"id":"34WJob","kind":"draft","state":"held","held":{"reason":"no_maintenance_workspace","at":"2026-09-29T00:41:00.000Z"}}"#
         XCTAssertEqual(try JSONDecoder().decode(WikiPlanJob.self, from: Data(held.utf8)).held?.reason, .noMaintenanceWorkspace)
+
+        let noDraft = #"{"id":"34WJob","kind":"revise","state":"failed","errors":[],"error":"The model’s catalogue couldn’t be read.","draft":null}"#
+        let stopped = try JSONDecoder().decode(WikiPlanJob.self, from: Data(noDraft.utf8))
+        XCTAssertEqual(stopped.error, "The model’s catalogue couldn’t be read.")
+        XCTAssertNil(stopped.draft)
 
         let failed = #"""
         {"created":false,"job":{"id":"34WJob","kind":"draft","state":"failed","attempt":3,"attemptsMax":3,

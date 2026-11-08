@@ -54,6 +54,12 @@ public enum Approvals {
     /// `isRunnerDelete` and `isWorkspaceDelete`; the card reads `DeleteApprovalPreview`.
     public static func isRunnerDelete(toolName: String) -> Bool { toolName == "orbit_runner_delete" }
     public static func isWorkspaceDelete(toolName: String) -> Bool { toolName == "orbit_agent_delete" }
+    /// A session's write of what decides a workspace's next session: its variables, folder, system
+    /// prompts, runner or worktree setting. The server writes only on a card a person answered, so a
+    /// standing rule could answer nothing. Web keys them off `isWorkspaceCreate` and `isWorkspaceUpdate`;
+    /// the card reads `WorkspaceWritePreview`.
+    public static func isWorkspaceCreate(toolName: String) -> Bool { toolName == "orbit_agent_create" }
+    public static func isWorkspaceUpdate(toolName: String) -> Bool { toolName == "orbit_agent_update" }
     /// Every ask Orbit raises for itself. What they share is how they are answered: a refusal is a
     /// conversation rather than a press (the composer is armed with the reason), and none of them
     /// can be waived with a standing rule — what is being asked for differs each time.
@@ -62,6 +68,7 @@ public enum Approvals {
             || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
             || isBlockerResolve(toolName: toolName) || isMergeCheckChange(toolName: toolName)
             || isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName)
+            || isWorkspaceCreate(toolName: toolName) || isWorkspaceUpdate(toolName: toolName)
     }
     /// A provider write — one of the owner's own providers created, changed or removed. Drawn and
     /// refused as a plain tool card (its input is the provider as it would be written, the key
@@ -179,6 +186,7 @@ public enum Approvals {
         if isDagChange(toolName: toolName) { return "Leaving the graph alone: " }
         if isBlockerResolve(toolName: toolName) { return "Leaving this open: " }
         if isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName) { return "Keeping it: " }
+        if isWorkspaceUpdate(toolName: toolName) { return "Leaving it as it is: " }
         return "Not creating: "
     }
 
@@ -254,63 +262,192 @@ public enum Approvals {
         var seen = Set<String>()
         var rules: [PermissionRule] = []
         for segment in segments {
-            if let prefix = bashPrefix(segment), seen.insert(prefix).inserted {
+            if let prefix = bashPrefix(segment), !isBashCommandKeyword(prefix), seen.insert(prefix).inserted {
                 rules.append(PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*"))
             }
         }
         return rules
     }
 
+    /// A heredoc whose operator has been read. Its delimiter is compared scalar by scalar, as a shell
+    /// compares bytes: `String` equality would also take canonically equivalent text for the same.
+    private struct Heredoc {
+        let delimiter: [Unicode.Scalar]
+        let stripTabs: Bool
+        let quoted: Bool
+    }
+
+    /// The heredoc whose `<<` or `<<-` is at `start`, and the index just past its word, or nil when no
+    /// word follows. The delimiter is the word with its quoting removed. A port of `readHeredoc` in
+    /// `@orbit/shared`.
+    private static func readHeredoc(_ chars: [Unicode.Scalar], at start: Int) -> (heredoc: Heredoc, end: Int)? {
+        var i = start + 2
+        let stripTabs = i < chars.count && chars[i] == "-"
+        if stripTabs { i += 1 }
+        while i < chars.count, chars[i] == " " || chars[i] == "\t" { i += 1 }
+        let wordStart = i
+        var delimiter: [Unicode.Scalar] = []
+        var quoted = false
+        while i < chars.count, !" \t\n;&|()<>".unicodeScalars.contains(chars[i]) {
+            let c = chars[i]
+            i += 1
+            if c == "'" || c == "\"" {
+                let end = chars[i...].firstIndex(of: c) ?? chars.count
+                delimiter += chars[i..<end]
+                i = end + 1
+                quoted = true
+            } else if c == "\\" {
+                if i < chars.count { delimiter.append(chars[i]) }
+                i += 1
+                quoted = true
+            } else {
+                delimiter.append(c)
+            }
+        }
+        return i == wordStart ? nil : (Heredoc(delimiter: delimiter, stripTabs: stripTabs, quoted: quoted), i)
+    }
+
+    /// Where the bodies of these heredocs end, reading from the line at `start`: just past the last
+    /// one's terminator, or at the end of the command when a terminator never comes. Unless the
+    /// delimiter is quoted, a backslash-newline joins two lines, and shells differ on whether what it
+    /// joins can terminate, so nothing past such a line is read. A port of `endOfHeredocBodies` in
+    /// `@orbit/shared`.
+    private static func endOfHeredocBodies(_ chars: [Unicode.Scalar], from start: Int, _ heredocs: [Heredoc]) -> Int {
+        var i = start
+        for heredoc in heredocs {
+            func terminates(_ text: ArraySlice<Unicode.Scalar>) -> Bool {
+                (heredoc.stripTabs ? text.drop { $0 == "\t" } : text).elementsEqual(heredoc.delimiter)
+            }
+            while true {
+                if i >= chars.count { return chars.count }
+                let lineStart = i
+                while i < chars.count, chars[i] != "\n" {
+                    i += !heredoc.quoted && chars[i] == "\\" ? 2 : 1
+                }
+                let line = chars[lineStart..<min(i, chars.count)]
+                i += 1
+                if terminates(line) { break }
+                var joined: [Unicode.Scalar] = []
+                for c in line {
+                    if c == "\n", joined.last == "\\" { joined.removeLast() } else { joined.append(c) }
+                }
+                if terminates(joined[...]) { return chars.count }
+            }
+        }
+        return i
+    }
+
     /// A shell line's top-level sub-commands, split at unquoted `;` `&&` `||` `|` and newlines.
     /// Quote- and backslash-aware, so an operator inside a quoted string stays literal (the `|` in
-    /// `grep "a\|b"`). Best-effort, not a full shell parser. A port of `bashSegments` in
-    /// `@orbit/shared`, walked by scalar like the web walks by code unit — a `\r\n` is one
-    /// `Character`, and the newline in it must still split.
+    /// `grep "a\|b"`): nothing escapes inside single quotes, a backslash escapes in double quotes and
+    /// outside them, a `#` where a word could start runs to the end of the line and is dropped, and so
+    /// is a heredoc's body, from the next newline to its terminator.
+    /// Best-effort, not a full shell parser. A port of `bashSegments` in `@orbit/shared`, walked by
+    /// scalar like the web walks by code unit — a `\r\n` is one `Character`, and the newline in it
+    /// must still split.
     public static func bashSegments(_ command: String) -> [String] {
         let chars = Array(command.unicodeScalars)
         var out: [String] = []
         var cur = String.UnicodeScalarView()
+        // The quote that is open: `'` and `"` as themselves, `$` for ANSI-C `$'…'`, which closes on `'`.
         var quote: Unicode.Scalar?
+        var atWordStart = true
+        var heredocs: [Heredoc] = []
+        var inArithmetic = false
         var i = 0
+        func endSegment() {
+            out.append(String(cur))
+            cur = String.UnicodeScalarView()
+            atWordStart = true
+            inArithmetic = false
+        }
         while i < chars.count {
             let c = chars[i]
-            if c == "\\", i + 1 < chars.count {
+            if quote == "'" {
                 cur.append(c)
-                cur.append(chars[i + 1])
-                i += 2
+                if c == "'" { quote = nil }
+                i += 1
                 continue
             }
             if let open = quote {
+                if c == "\\", i + 1 < chars.count {
+                    cur.append(c)
+                    cur.append(chars[i + 1])
+                    i += 2
+                    continue
+                }
                 cur.append(c)
-                if c == open { quote = nil }
+                if c == (open == "$" ? "'" : open) { quote = nil }
                 i += 1
+                continue
+            }
+            if c == "\\", i + 1 < chars.count {
+                cur.append(c)
+                cur.append(chars[i + 1])
+                // A line continuation is as if neither character were there, so the word state stays.
+                if chars[i + 1] != "\n" { atWordStart = false }
+                i += 2
                 continue
             }
             if c == "\"" || c == "'" {
                 quote = c
                 cur.append(c)
+                atWordStart = false
                 i += 1
                 continue
             }
+            if c == "$", i + 1 < chars.count, chars[i + 1] == "'" {
+                quote = "$"
+                cur.append(c)
+                cur.append(chars[i + 1])
+                atWordStart = false
+                i += 2
+                continue
+            }
+            if c == "#", atWordStart {
+                while i < chars.count, chars[i] != "\n" { i += 1 }
+                continue
+            }
+            if c == "<", i + 1 < chars.count, chars[i + 1] == "<", !inArithmetic {
+                if i + 2 < chars.count, chars[i + 2] == "<" {
+                    // A here-string: its text is the word after it, on this line.
+                    cur.append(contentsOf: chars[i...(i + 2)])
+                    atWordStart = true
+                    i += 3
+                    continue
+                }
+                if let (heredoc, end) = readHeredoc(chars, at: i) {
+                    heredocs.append(heredoc)
+                    cur.append(contentsOf: chars[i..<min(end, chars.count)])
+                    i = end
+                    continue
+                }
+            }
             if c == ";" || c == "\n" {
-                out.append(String(cur))
-                cur = String.UnicodeScalarView()
+                endSegment()
                 i += 1
+                if c == "\n", !heredocs.isEmpty {
+                    i = endOfHeredocBodies(chars, from: i, heredocs)
+                    heredocs = []
+                }
                 continue
             }
             if c == "&" || c == "|", i + 1 < chars.count, chars[i + 1] == c {
-                out.append(String(cur))
-                cur = String.UnicodeScalarView()
+                endSegment()
                 i += 2
                 continue
             }
             if c == "|" {
-                out.append(String(cur))
-                cur = String.UnicodeScalarView()
+                endSegment()
                 i += 1
                 continue
             }
+            // Between `$((` and `))` a `<<` is a shift. A bare `((` is arithmetic only in some shells,
+            // and a plain `sh` takes the `<<` in it for a heredoc.
+            if c == "(", i > 1, chars[i - 1] == "(", chars[i - 2] == "$" { inArithmetic = true }
+            if c == ")", i > 0, chars[i - 1] == ")" { inArithmetic = false }
             cur.append(c)
+            atWordStart = c == " " || c == "\t" || c == "&" || c == "(" || c == ")" || c == "<" || c == ">"
             i += 1
         }
         out.append(String(cur))
@@ -330,6 +467,12 @@ public enum Approvals {
         let prog = toks[i]
         if i + 1 < toks.count, isSubcommand(toks[i + 1]) { return "\(prog) \(toks[i + 1])" }
         return prog
+    }
+
+    /// A shell keyword that a command follows is no program, and a rule naming one would cover every
+    /// command after it. A port of `isBashCommandKeyword` in `@orbit/shared`.
+    public static func isBashCommandKeyword(_ prefix: String) -> Bool {
+        ["if", "then", "elif", "else", "while", "until", "do", "time", "coproc"].contains(prefix)
     }
 
     /// Whether one sub-command runs a shell with `-c`/`-lc`-style command execution. Codex wraps

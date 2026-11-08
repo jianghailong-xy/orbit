@@ -6,7 +6,7 @@ import { WikiActivityPage } from '../components/WikiActivityPage';
 import type { WikiArticleDirectory, WikiDocsDirectory } from '@orbit/shared';
 import type { WikiChangeset, WikiEntry, WikiSpaceWithUsage, WikiTimeline } from '../lib/wiki';
 import { WIKI_DISABLED_NOTE, WIKI_NO_ENTRIES, WIKI_NO_SPACES } from '../lib/wiki';
-import { WIKI_NO_DOCUMENTS, WIKI_NO_DOCUMENTS_NOTE } from '../lib/wikiDocs';
+import { WIKI_NO_DOCUMENTS } from '../lib/wikiDocs';
 import { WIKI_FROM_WORKSPACE_KEY, WIKI_LAST_SPACE_KEY, wikiWaiting } from '../lib/wikiSpace';
 import { WikiPage } from './WikiPage';
 
@@ -366,22 +366,14 @@ describe('the Wiki home', () => {
   });
 });
 
-describe('a new space, with no document and no maintenance (mock 31 ⑥)', () => {
+describe('a wiki with nothing to read (mock 41)', () => {
   const empty: WikiArticleDirectory = { spaceId: SPACE_ID, categories: [], uncategorized: [] };
 
-  it('says it has no documents yet, and draws one card: why, and the way to set maintenance up', () => {
+  it('says it has no documents yet, and lists nothing: the setup card is what the home draws (`WikiStartCard.test.tsx`)', () => {
     const html = paint('home', '/wiki/orbit', { docs: NO_DOCS, articles: empty, entries: ENTRIES.filter((row) => row.kind !== 'principle') });
     expect(html).toContain(`<div class="wk-home-state">${WIKI_NO_DOCUMENTS}</div>`);
-    expect(html).toMatch(new RegExp(`<div class="wk-home-new"><p>${WIKI_NO_DOCUMENTS_NOTE}</p><a href="/wiki/orbit/settings"[^>]*>Set up maintenance ›</a></div>`));
     expect(html).not.toContain('class="wk-home-more"');
     expect(html).not.toContain('wk-pl-cat');
-  });
-
-  it('draws no card once its maintenance is set up: only that it has none yet', () => {
-    const kept = { ...SPACE, pendingOps: 0, settings: { ...SPACE.settings, maintenance: { enabled: true } } };
-    const html = paint('home', '/wiki/orbit', { docs: NO_DOCS, articles: empty, spaces: [kept] });
-    expect(html).toContain(`<div class="wk-home-state">${WIKI_NO_DOCUMENTS}</div>`);
-    expect(html).not.toContain('wk-home-new');
   });
 });
 

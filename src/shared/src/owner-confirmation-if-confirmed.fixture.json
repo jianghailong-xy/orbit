@@ -204,6 +204,99 @@
       "rows": [
         { "kind": "BRANCH", "lead": "No record of this branch on main", "added": null, "detail": "orbit/notes-5e5e5e — confirming doesn’t merge it" }
       ]
+    },
+    {
+      "case": "the board's frame B: a branch with no changes lands nothing, and the row names it alone",
+      "ifConfirmed": {
+        "startsTasks": [
+          { "id": "dep-1", "title": "Verify the backfill against the source table", "starts": "NOW" }
+        ],
+        "startsAfterLanding": false,
+        "branch": { "name": "orbit/task-backfill-order-stats-1b5d7d", "linesAdded": 0, "linesRemoved": 0, "files": 0, "onMain": "NO" },
+        "landing": "NONE",
+        "endsSession": { "sessionId": "s1", "runningBgJobs": 0 },
+        "mainBranch": "develop"
+      },
+      "rows": [
+        { "kind": "START", "lead": "Starts 1 task waiting on this one", "added": null, "detail": "Verify the backfill against the source table" },
+        { "kind": "BRANCH", "lead": "No changes on this branch, so nothing lands", "added": null, "detail": "orbit/task-backfill-order-stats-1b5d7d" },
+        { "kind": "ENDS_SESSION", "lead": "Ends this session", "added": null, "detail": null }
+      ]
+    },
+    {
+      "case": "no changes, and no record of the branch on main: the same row",
+      "ifConfirmed": {
+        "branch": { "name": "orbit/no-record-2a2a2a", "linesAdded": 0, "linesRemoved": 0, "files": 0, "onMain": "UNKNOWN" },
+        "landing": "NONE"
+      },
+      "rows": [
+        { "kind": "BRANCH", "lead": "No changes on this branch, so nothing lands", "added": null, "detail": "orbit/no-record-2a2a2a" }
+      ]
+    },
+    {
+      "case": "no changes on a branch known to be on main: no branch row, as for any branch on main",
+      "ifConfirmed": {
+        "branch": { "name": "orbit/on-main-3b3b3b", "linesAdded": 0, "linesRemoved": 0, "files": 0, "onMain": "YES" },
+        "landing": "NONE"
+      },
+      "rows": []
+    },
+    {
+      "case": "nothing lands but the branch has a changed file: the row for work that stays off main",
+      "ifConfirmed": {
+        "branch": { "name": "orbit/renamed-4c4c4c", "linesAdded": 0, "linesRemoved": 0, "files": 1, "onMain": "NO" },
+        "landing": "NONE"
+      },
+      "rows": [
+        { "kind": "BRANCH", "lead": "Not on main yet", "added": null, "detail": "orbit/renamed-4c4c4c — confirming doesn’t merge it" }
+      ]
+    },
+    {
+      "case": "this branch reads no files but the line still lands work: the rows of a task with work to land",
+      "ifConfirmed": {
+        "startsTasks": [
+          { "id": "a", "title": "Draw the card on iOS", "starts": "NOW" }
+        ],
+        "startsAfterLanding": true,
+        "branch": { "name": "orbit/not-reported-5d5d5d", "linesAdded": 0, "linesRemoved": 0, "files": 0, "onMain": "NO" },
+        "landing": "LINE_THEN_OWNER"
+      },
+      "rows": [
+        { "kind": "START", "lead": "Starts 1 task once this lands", "added": null, "detail": "Draw the card on iOS" },
+        { "kind": "BRANCH", "lead": "Not on main yet", "added": null, "detail": "orbit/not-reported-5d5d5d — confirming doesn’t merge it" },
+        { "kind": "LANDING", "lead": "Goes onto the integration line; merging into main asks you again", "added": null, "detail": null }
+      ]
+    },
+    {
+      "case": "no files on the branch and Automatic still lands work: its rows",
+      "ifConfirmed": {
+        "branch": { "name": "orbit/automatic-6e6e6e", "linesAdded": 0, "linesRemoved": 0, "files": 0, "onMain": "UNKNOWN" },
+        "landing": "AUTO_MAIN"
+      },
+      "rows": [
+        { "kind": "BRANCH", "lead": "No record of this branch on main", "added": null, "detail": "orbit/automatic-6e6e6e" },
+        { "kind": "LANDING", "lead": "Lands on main by itself if the checks pass", "added": null, "detail": null }
+      ]
+    },
+    {
+      "case": "no files on the branch and the agent still pushes work: its rows",
+      "ifConfirmed": {
+        "branch": { "name": "orbit/pushed-7f7f7f", "linesAdded": 0, "linesRemoved": 0, "files": 0, "onMain": "NO" },
+        "landing": "AGENT_PUSHED"
+      },
+      "rows": [
+        { "kind": "BRANCH", "lead": "Not on main yet", "added": null, "detail": "orbit/pushed-7f7f7f — confirming doesn’t merge it" },
+        { "kind": "LANDING", "lead": "Pushed to main by the agent; Orbit records it once it sees the commit there", "added": null, "detail": null }
+      ]
+    },
+    {
+      "case": "no files on the branch and the landing could not be read: the branch row claims nothing about landing",
+      "ifConfirmed": {
+        "branch": { "name": "orbit/unread-8a8a8a", "linesAdded": 0, "linesRemoved": 0, "files": 0, "onMain": "NO" }
+      },
+      "rows": [
+        { "kind": "BRANCH", "lead": "Not on main yet", "added": null, "detail": "orbit/unread-8a8a8a" }
+      ]
     }
   ],
   "criteria": [

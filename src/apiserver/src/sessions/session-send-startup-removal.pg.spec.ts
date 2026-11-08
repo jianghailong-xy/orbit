@@ -30,6 +30,7 @@ import { RunnerOrchestrationAuthorizer } from '../runner-api/runner-orchestratio
 import { ServiceTokenAuthorizer } from '../runner-api/service-token.authorizer';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionAttemptService } from '../projects/session-attempt.service';
+import '../test-support/dequeue-under-lease';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const pgTest = (name: string, body: () => Promise<void>) =>

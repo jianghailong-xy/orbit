@@ -28,8 +28,27 @@ describe('the desktop Wiki', () => {
     expect(block).toContain('.wk-page--reading > .wk-layout > .wk-main > * { max-width: 880px; margin-inline: auto; }');
   });
 
+  it('reads a document or an article at a narrower measure than the other reading pages', () => {
+    expect(block).toContain('.wk-page--reading > .wk-layout > .wk-main > .wk-art-page { max-width: 760px; }');
+  });
+
   it('keeps the directory beside every page, scrolling on its own', () => {
     expect(block).toMatch(/\.wk-layout > \.wk-dir-col \{ position: sticky; top: 0; max-height: [^;]+; overflow-y: auto;/);
+  });
+});
+
+/**
+ * A document's words, which jsdom cannot lay out. A code block's <code> is not a sentence's: `.wk-art code` shrinks and
+ * tints it, so a block drew below the size of the words around it, with a second tint inside its own.
+ */
+describe('a document\u2019s words', () => {
+  it('draws a code block at its own size and tint', () => {
+    expect(css).toContain('.wk-dc-code code { padding: 0; background: none; font-size: inherit;');
+    expect(css.indexOf('.wk-dc-code code {')).toBeGreaterThan(css.indexOf('.wk-art code, .wk-fncard code'));
+  });
+
+  it('keeps a footnote marker on the line of the sentence it ends', () => {
+    expect(css).toContain(".wk-fn::before { content: '\\2060'; }");
   });
 });
 
@@ -45,7 +64,7 @@ describe('the home on a desktop', () => {
     expect(block).toMatch(/\.wk-home > \.wk-pl-cat \{ margin: 0; padding: [^;]+; border: 1px solid var\(--border-subtle\); border-radius: 10px;/);
     const two = container('wk-home (min-width: 1100px)');
     expect(two).toContain('.wk-home { grid-template-columns: repeat(2, minmax(0, 1fr)); }');
-    expect(two).toContain('.wk-home > .wk-home-pr, .wk-home > .wk-home-new { grid-column: 1 / -1; }');
+    expect(two).toContain('.wk-home > .wk-home-pr, .wk-home > .wk-start { grid-column: 1 / -1; }');
   });
 
   it('has no right rail and no Browse · A–Z line, which the directory has atop it', () => {

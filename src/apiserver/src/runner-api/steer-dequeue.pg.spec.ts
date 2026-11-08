@@ -10,6 +10,7 @@ import {
   SESSION_CURRENT_WORK_ROUTING_V1,
 } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
+import '../test-support/dequeue-under-lease';
 
 /**
  * What the inbox predicate actually selects, run as SQL against a real Postgres.
@@ -61,8 +62,14 @@ before(async () => {
   // before the split (providers/session-engine.ts) — which is what every case below sets.
   // `inbox_request_id` and `inbox_request_turn_id` are the link hand-out a resend is answered with
   // (migration 0448): read with the session lock, NULL on every case here, which polls as HTTPS does.
+  // `wiki_context` is the page and selection a wiki chat message carried (migration 0476): the claim
+  // returns it with the turn it hands out, NULL on every case here, as on every turn outside a chat.
+  // `external_sender_{source,id,name}` are who outside Orbit sent a turn (migration 0502, a Feishu group
+  // member): the claim and the resend read return source and name with the turn, NULL on every case here,
+  // as on every turn the owner or a session sent.
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
+    DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";
     DROP TABLE IF EXISTS steer_dequeue_test."session";
     CREATE TABLE steer_dequeue_test."session" (
       id uuid PRIMARY KEY,
@@ -79,6 +86,12 @@ before(async () => {
       status text NOT NULL,
       cancel_requested_at timestamptz
     );
+    CREATE TABLE steer_dequeue_test."inbox_lease_generation" (
+      generation uuid PRIMARY KEY,
+      session_id uuid NOT NULL,
+      lease_owner uuid,
+      retired_at timestamptz
+    );
     CREATE TABLE steer_dequeue_test."conversation_turn" (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       session_id uuid NOT NULL,
@@ -94,6 +107,10 @@ before(async () => {
       target_turn_id uuid,
       coordinator_context_key text,
       sender_session_id uuid,
+      wiki_context jsonb,
+      external_sender_source text,
+      external_sender_id text,
+      external_sender_name text,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
@@ -110,6 +127,7 @@ beforeEach(async () => {
   if (!PG_URL) return;
   await client.query(`
     TRUNCATE "conversation_turn";
+    TRUNCATE "inbox_lease_generation";
     DELETE FROM "session";
   `);
   await session(AgentProvider.CLAUDE);
@@ -139,6 +157,15 @@ function pgTx() {
         '',
       );
       return (await client.query(text, values as never[])).rows;
+    },
+    // test-support/dequeue-under-lease.ts gives the session a live lease generation through these.
+    $executeRaw: async (...args: unknown[]) => {
+      const { strings, values } = renderRawQuery(args);
+      const text = strings.reduce(
+        (sql, part, i) => sql + part + (i < values.length ? `$${i + 1}` : ''),
+        '',
+      );
+      return (await client.query(text, values as never[])).rowCount ?? 0;
     },
     // Everything past the predicate is stubbed: this file is about which row is chosen.
     runEvent: { findFirst: async () => null },

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
-import { EventEmitter } from 'events';
 import {
   AgentProvider,
   isAccountEngine,
@@ -110,6 +110,18 @@ import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 
+/** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
+const LOST_LOCK = Symbol('the claim lost the row lock');
+/**
+ * How long a claim goes on asking after it lost the row lock. It has no later round of its own, and the runner asks again
+ * only when something says to: its next HeartbeatAck, up to 30 s away. A row held longer is left to that HeartbeatAck.
+ * Between attempts the claim holds no connection and no claim lock, and each attempt is a whole transaction that reads
+ * the real state again, so a pause or another claim that came meanwhile is seen.
+ */
+const LOST_LOCK_RETRY_MS = 5_000;
+const LOST_LOCK_FIRST_WAIT_MS = 50;
+const LOST_LOCK_MAX_WAIT_MS = 1_000;
+
 /** The runner asking for work, as the claim route knows it. */
 export interface ClaimingRunner {
   id: string;
@@ -120,22 +132,20 @@ export interface ClaimingRunner {
   /**
    * The request id of a claim made over the runner link (runner-api/runner-link-call.ts). A claim sent
    * again under it is answered with the session the first one claimed, while that claim stands, and
-   * claims no other (trySessionClaim). Absent over HTTPS.
+   * claims no other (trySessionClaim).
    */
   claimRequestId?: string;
 }
 
 /**
- * Session claim queue backed by the `Session` table. A runner long-polls for the
- * PENDING sessions assigned to it; claims are atomic via `FOR UPDATE SKIP LOCKED`
+ * Session claim queue backed by the `Session` table. A runner asks for the PENDING
+ * sessions assigned to it once a hint says one waits; claims are atomic via `FOR UPDATE SKIP LOCKED`
  * and gated, server-side, on the runner's `maxConcurrent` active turns. Warm/cold
  * idle runtimes are retained independently and do not consume that limit.
  */
 @Injectable()
 export class QueueService {
   private readonly logger = new Logger(QueueService.name);
-
-  private readonly signal = new EventEmitter();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -150,56 +160,33 @@ export class QueueService {
     @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly managedGate?: ManagedRunnerGate,
     /** The runner link's hints (realtime/runner-hints.ts); absent in the specs that build this service by hand. */
     @Optional() private readonly hints?: RunnerHints,
-  ) {
-    this.signal.setMaxListeners(0);
-  }
+  ) {}
 
   /**
-   * After a session transitions to PENDING, or a slot it waits for frees up: wake this process's claim long polls, every
-   * one of them as before, and hint the runner the session is queued for over the runner link (one claim hint per
-   * runner named; null names none). Called after the commit, like every wake.
+   * After a session transitions to PENDING, or a slot it waits for frees up: hint the runner the session is queued for
+   * over the runner link (one claim hint per runner named; null names none). Called after the commit, like every wake.
    */
   notifySessionQueued(runners: string | readonly string[] | null): void {
-    this.signal.emit('queued');
     for (const runnerId of typeof runners === 'string' ? [runners] : runners ?? []) this.hints?.claim(runnerId);
-  }
-
-  private waitForSignal(timeoutMs: number, hungUp?: AbortSignal): Promise<void> {
-    return new Promise((resolve) => {
-      const done = (): void => {
-        clearTimeout(timer);
-        this.signal.off('queued', done);
-        hungUp?.removeEventListener('abort', done);
-        resolve();
-      };
-      const timer = setTimeout(done, timeoutMs);
-      this.signal.once('queued', done);
-      hungUp?.addEventListener('abort', done, { once: true });
-    });
   }
 
   /**
    * `hungUp` is the runner's connection closing. A claim committed after it moves the row
    * PENDING -> RUNNING for a process that is no longer listening: nobody takes it over, and nothing
-   * on this side ever puts it back. On 2026-10-03 the long poll a self-updating runner had left
-   * open claimed a task's session 4s after the runner re-executed, and it read "Starting" for 15
+   * on this side ever puts it back. On 2026-10-03 a claim a self-updating runner had left open
+   * claimed a task's session 4s after the runner re-executed, and it read "Starting" for 15
    * minutes — until an unrelated failed claim made the new process reconcile.
    */
-  async claimSessionForRunner(
-    runner: ClaimingRunner,
-    waitMs = 0,
-    supportsTerminalHandoff = false,
-    supportsSourcePin = false,
-    hungUp?: AbortSignal,
-  ): Promise<ClaimedSession | null> {
-    const deadline = Date.now() + waitMs;
+  async claimSessionForRunner(runner: ClaimingRunner, hungUp?: AbortSignal): Promise<ClaimedSession | null> {
+    const lockDeadline = Date.now() + LOST_LOCK_RETRY_MS;
+    let lockWait = LOST_LOCK_FIRST_WAIT_MS;
     for (;;) {
       if (hungUp?.aborted) return null;
-      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin, hungUp);
-      if (job) return job;
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) return null;
-      await this.waitForSignal(Math.min(remaining, 5000), hungUp);
+      const job = await this.trySessionClaim(runner, hungUp);
+      if (job !== LOST_LOCK) return job;
+      if (Date.now() >= lockDeadline) return null;
+      await delay(lockWait, undefined, { signal: hungUp }).catch(() => undefined);
+      lockWait = Math.min(lockWait * 2, LOST_LOCK_MAX_WAIT_MS);
     }
   }
 
@@ -368,10 +355,8 @@ export class QueueService {
 
   private async trySessionClaim(
     runner: ClaimingRunner,
-    supportsTerminalHandoff: boolean,
-    supportsSourcePin: boolean,
     hungUp?: AbortSignal,
-  ): Promise<ClaimedSession | null> {
+  ): Promise<ClaimedSession | typeof LOST_LOCK | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     const supportsAntigravity = runner.supportedProviders?.includes(AgentProvider.ANTIGRAVITY) ?? false;
     // A runner that declares dsh but whose engine report does not show the CLI ready
@@ -393,8 +378,8 @@ export class QueueService {
     // Uses FOR UPDATE NOWAIT: when a concurrent transaction (e.g. activateLeases) holds
     // a row lock on the candidate, Postgres immediately raises lock_not_available (55P03)
     // instead of silently skipping the row (SKIP LOCKED) or blocking. The catch clause
-    // returns null so the outer claimSessionForRunner loop waits on the signal and
-    // retries; this prevents lock storms from starving new sessions indefinitely.
+    // returns LOST_LOCK so the outer claimSessionForRunner loop retries; this prevents
+    // lock storms from starving new sessions indefinitely.
     try {
     // Retried whole. A claim is a compare-and-set on rows this closure locks and re-reads: an
     // attempt the server discarded claimed nothing, so a re-run competes from the real state. The
@@ -417,8 +402,8 @@ export class QueueService {
         // under a busy pool): the runner may have hung up during them.
         if (hungUp?.aborted) return [];
         // A managed runner is handed work only while the instance that asked is still the one the
-        // manager authorizes, and not draining (managed-runner-instance.ts). The guard answered when
-        // the long poll began; this answers at the claim itself. FOR SHARE: a fencing or generation
+        // manager authorizes, and not draining (managed-runner-instance.ts). The guard answered before
+        // the waits above; this answers at the claim itself. FOR SHARE: a fencing or generation
         // advance that committed first is seen here, and one that comes later waits for this claim.
         if (runner.managedInstance && !(await this.managedInstanceClaimable(tx, runner.managedInstance))) return [];
         // A link claim sent again under the request id of one that claimed — its answer lost, or a
@@ -628,27 +613,6 @@ export class QueueService {
             )
             -- A runner may only ever drive sessions owned by its own owner.
             AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runnerId})
-            -- A terminal revive uses a reserved predecessor owner until a runner
-            -- explicitly capable of local supervisor handoff claims it. Older
-            -- runners stay online but leave this row queued for an upgrade.
-            AND (
-              ${supportsTerminalHandoff}::boolean
-              OR substring(s."inbox_lease_owner"::text, 15, 1) IS DISTINCT FROM '5'
-            )
-            -- SR35. A session whose SOURCE was resolved carries a baseline the runner must PIN
-            -- before it may create a worktree; a runner that does not declare the source-pin/v1
-            -- capability would receive that snapshot, ignore the field it has never heard of, and
-            -- fork from the workDir's HEAD — the exact silent baseline this contract removes. So
-            -- the row is not offered at all, and it stays PENDING/SELECTED rather than becoming
-            -- REFUSED: upgrading a runner (or bringing a newer one online) makes it runnable,
-            -- which is not what a configuration error looks like.
-            --
-            -- UNBOUND is every Legacy session, which is every session that exists today, so this
-            -- predicate is invisible to every runner until a Project binds a codebase.
-            AND (
-              ${supportsSourcePin}::boolean
-              OR s."source_state" = 'UNBOUND'
-            )
             -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
             -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
             AND ${runnerActiveTurns(runnerId)}
@@ -709,8 +673,7 @@ export class QueueService {
         }
         return claimed;
       }, loggedRetry(this.logger, 'queue.trySessionClaim', {
-        // The claim is a long poll too (claimSessionForRunner's deadline), so it queues behind a
-        // busy pool rather than failing into the runner's immediate retry — see
+        // It queues behind a busy pool rather than failing into the runner's immediate retry — see
         // RUNNER_POLL_TRANSACTION_MAX_WAIT_MS in runner-api.controller.ts.
         transaction: { maxWait: RUNNER_POLL_TRANSACTION_MAX_WAIT_MS },
       }));
@@ -739,15 +702,15 @@ export class QueueService {
     } catch (err: any) {
       // pg error 55P03 = lock_not_available: FOR UPDATE NOWAIT cannot lock the
       // candidate row because a concurrent transaction (e.g. activateLeases in a
-      // reclaim storm) holds it. Return null so the outer claimSessionForRunner
-      // loop waits on the signal and retries instead of starving forever.
+      // reclaim storm) holds it. Say so, so the outer claimSessionForRunner loop
+      // retries instead of starving forever.
       if (
         err?.code === '55P03' ||
         err?.meta?.code === '55P03' ||
         String(err?.message ?? '').includes('55P03') ||
         String(err?.message ?? '').includes('lock_not_available')
       ) {
-        return null;
+        return LOST_LOCK;
       }
       throw err;
     }
@@ -907,7 +870,11 @@ export class QueueService {
     // empty message, and — before the seq below stopped being a constant — a claim that died on
     // @@unique([sessionId, seq]) for the seq the message had already taken, after committing the
     // session to RUNNING.
-    if (!session.importedAt && session.prompt !== '') {
+    //
+    // And a wiki chat lays no turn down here: its opening turn was filed with the session, under the
+    // owner's own UUID (SessionsService.writeChat), so its words are first-hand. A seed under
+    // `initial-` would hand the engine the same message twice.
+    if (!session.importedAt && session.prompt !== '' && !session.wikiChatSpaceId) {
       await withTransactionRetry(this.prisma, async (tx) => {
         await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
         const seedClientTurnId = `initial-${session.id}`;

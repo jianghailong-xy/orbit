@@ -98,6 +98,18 @@ class SessionLandingsCopyParityTest {
         assertEquals(listOf("Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older"), SessionProjectLandings.dayTitles)
     }
 
+    /** The window draws a day's rows in the Swift's groups (owner 2026-11-02, docs/mocks/landings-chat-bubbles): a row joins the group
+     *  of the one before it when both instants are known and it settled at most ten minutes after it. */
+    @Test fun theWindowGroupsADaysRowsAsTheSwiftGroupsThem() {
+        swiftSays("""public static let groupGap: TimeInterval = 10 * 60""",
+            """if let last = runs.last?.last, last.at.isFinite, row.at.isFinite, row.at - last.at <= groupGap {""")
+        assertEquals(10 * 60 * 1000L, SessionProjectLandings.groupGapMs)
+        fun row(key: String, at: Long) = LandingsWindowRow(key, key, "TASK", key, "Landed", LandingsWindowTone.OK, "", at)
+        val minute = 60_000L
+        assertEquals(listOf(listOf("a", "b"), listOf("c"), listOf("d"), listOf("e")), SessionProjectLandings.groups(listOf(row("a", 0),
+            row("b", 10 * minute), row("c", 21 * minute), row("d", Long.MIN_VALUE), row("e", 22 * minute))).map { group -> group.map { it.key } })
+    }
+
     /** The source label: where the work went, and what the platform is doing while it is open — the Swift's three compositions. */
     @Test fun theSourceLabelIsTheSwiftsComposition() {
         fun label(state: String, phase: String? = null, settledAs: String? = null, target: String? = "refs/heads/project/x") =

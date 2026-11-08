@@ -4,10 +4,12 @@ import type { SessionFolder } from '../api';
 import { COORDINATOR_LEAD_COPY, type SidebarProject } from './projectAttention';
 import { sessionTimeSections } from './sessionGrouping';
 import {
+  LANDINGS_GROUP_GAP_MS,
   landingTaskName,
   landingsCountLine,
   landingsRowSummary,
   landingsWindow,
+  landingsWindowGroups,
   listShowsProjects,
   SESSION_PROJECT_COPY,
   SESSION_PROJECT_COORDINATOR_COPY,
@@ -163,6 +165,127 @@ describe('sessionProjectListing', () => {
   });
 });
 
+/** Owner 2026-11-07 (docs/mocks/project-rows-by-workspace, option A): a project is a row only in the
+ *  workspace its coordinator runs in; elsewhere its members are that workspace's own rows, each marked
+ *  with the project. */
+describe('a project outside its coordinator’s workspace', () => {
+  const here = { workspace: { id: 'w1' } };
+  const there = { workspace: { id: 'w2' } };
+  const remote = (over: Partial<Row> = {}) => coordinator({ ...there, ...over });
+  const mark = { projectId: 'p1', title: 'Project one', status: 'OPEN', taskCounts: { done: 3, failed: 1, total: 8 }, runningCount: 2 };
+
+  it('gives the project no row and marks each member there, beside a project that does have one', () => {
+    const p2 = (role: SessionProjectMembership['role']) => ({ ...membership(role, 'p2'), projectTitle: 'Project two' });
+    const sessions = [
+      member('check', { ...here, lastTurnAt: ago(22) }),
+      row('cert', { ...here, lastTurnAt: ago(15) }),
+      member('deploy', { ...here, lastTurnAt: ago(41) }),
+      row('coordinator-2', { ...here, lastTurnAt: ago(30), projectMembership: p2('COORDINATOR') }),
+    ];
+    const out = listing(sessions, { workspaceId: 'w1', coordinators: [remote()] });
+    expect(out.projects.map((entry) => entry.projectId)).toEqual(['p2']);
+    expect(out.entries.map((entry) => [entry.id, entry.kind])).toEqual([
+      ['cert', 'session'], ['check', 'session'], ['p2', 'project'], ['deploy', 'session'],
+    ]);
+    const marks = Object.fromEntries(out.entries.map((entry) => [entry.id, entry.kind === 'session' ? entry.projectMark : 'row']));
+    expect(marks).toEqual({ cert: undefined, check: mark, deploy: mark, p2: 'row' });
+    expect(out.sessions.map((session) => session.id)).toEqual(['check', 'cert', 'deploy']);
+  });
+
+  it('marks members even when no other project has a row here', () => {
+    const out = listing([member('check', here), row('cert', here)], { workspaceId: 'w1', coordinators: [remote()] });
+    expect(out.projects).toEqual([]);
+    expect(out.entries).toEqual([
+      { ...member('check', here), kind: 'session', projectMark: mark },
+      { ...row('cert', here), kind: 'session' },
+    ]);
+  });
+
+  it('keeps the row where the coordinator runs, and wherever the list has no workspace to compare', () => {
+    const home = listing([coordinator(here), member('worker', here)], { workspaceId: 'w1' });
+    expect(home.projects.map((entry) => entry.members.map((session) => session.id))).toEqual([['coordinator', 'worker']]);
+    expect(home.entries.map((entry) => entry.kind)).toEqual(['project']);
+    // The coordinator's workspace also lists members that run elsewhere, in its row and nowhere else.
+    const remoteWorker = member('remote-worker', { ...there, line: { text: 'Waiting for your confirmation', tone: 'approval' } });
+    const named = listing([coordinator(here)], { workspaceId: 'w1', contentSessions: [coordinator(here), remoteWorker] });
+    expect(named.projects[0].line).toEqual({ text: 'Waiting for your confirmation · remote-worker', tone: 'approval' });
+    // No workspace to compare: the project's row, as before.
+    const unscoped = listing([member('worker', here)], { coordinators: [remote()] });
+    expect(unscoped.projects).toHaveLength(1);
+    expect(unscoped.projects[0].coordinator?.id).toBe('coordinator');
+  });
+
+  it('files a member there by its own folder, inside a folder’s page too', () => {
+    const folders = [folder('f1', 'Prod checks'), folder('f2', 'Release')];
+    const sessions = [
+      member('check', { ...here, folderId: 'f1', motion: 'spinner' }),
+      member('deploy', { ...here, line: { text: 'Waiting for your confirmation', tone: 'approval' } }),
+      row('ordinary', here),
+    ];
+    // The coordinator is filed in a folder of its own workspace, which is no folder here.
+    const opts = { workspaceId: 'w1', coordinators: [remote({ folderId: 'g1' })] };
+    const out = listing(sessions, opts, [project()], folders);
+    expect(out.folders.map((entry) => [entry.folder.id, entry.sessionCount, entry.needsYou, entry.running])).toEqual([
+      ['f1', 1, 0, true], ['f2', 0, 0, false],
+    ]);
+    expect(out.entries.map((entry) => entry.id)).toEqual(['deploy', 'ordinary']);
+    const inside = listing(sessions, { ...opts, folderId: 'f1' }, [project()], folders);
+    expect(inside.folders).toEqual([]);
+    expect(inside.entries).toEqual([{ ...sessions[0], kind: 'session', projectMark: mark }]);
+    // Where the coordinator runs, its folder still holds every member, whatever folder each is filed in.
+    const home = listing([coordinator({ ...here, folderId: 'f2' }), ...sessions], { workspaceId: 'w1' }, [project()], folders);
+    expect(home.folders.map((entry) => [entry.folder.id, entry.sessionCount])).toEqual([['f1', 0], ['f2', 3]]);
+    expect(home.entries.map((entry) => entry.id)).toEqual(['ordinary']);
+  });
+
+  it('puts a member there in Pinned by its own pin, and in its own time section', () => {
+    const pinned = member('pinned', { ...here, pinnedAt: ago(5), lastTurnAt: ago(10_000) });
+    const out = listing([pinned, member('older', { ...here, lastTurnAt: ago(1_440) }), row('ordinary', here)],
+      { workspaceId: 'w1', coordinators: [remote({ pinnedAt: null, lastTurnAt: ago(1) })] });
+    const sections = sessionTimeSections(out.entries, { now: new Date(NOW) });
+    expect(sections.map((section) => [section.title, section.sessions.map((entry) => entry.id)])).toEqual([
+      ['Pinned', ['pinned']], ['Today', ['ordinary']], ['Yesterday', ['older']],
+    ]);
+  });
+
+  it('follows the same rule in Completed, where a coordinator still open decides it', () => {
+    const t6 = member('t6', { ...here, lastTurnAt: ago(60) });
+    const elsewhere = listing([t6, row('ordinary', here)], { view: 'completed', workspaceId: 'w1', coordinators: [remote()] });
+    expect(elsewhere.projects).toEqual([]);
+    expect(elsewhere.entries).toEqual([
+      { ...t6, kind: 'session', projectMark: mark },
+      { ...row('ordinary', here), kind: 'session' },
+    ]);
+    const home = listing([t6], { view: 'completed', workspaceId: 'w1', coordinators: [coordinator(here)] });
+    expect(home.projects).toHaveLength(1);
+    expect(home.projects[0]).toMatchObject({ coordinator: { id: 'coordinator' }, members: [t6] });
+  });
+
+  it('keeps a project with no coordinator a row in each workspace it has members in', () => {
+    for (const [workspaceId, where] of [['w1', here], ['w2', there]] as const) {
+      const out = listing([member(`worker-${workspaceId}`, where), row('ordinary', where)], { workspaceId });
+      expect(out.projects).toHaveLength(1);
+      expect(out.projects[0]).toMatchObject({ coordinator: null, line: { text: 'No coordinator', tone: 'preview' }, target: { kind: 'project', id: 'p1' } });
+      expect(out.entries.every((entry) => entry.kind === 'project' || !entry.projectMark)).toBe(true);
+    }
+  });
+
+  it('marks a member of a project the sidebar does not list with the project’s status', () => {
+    const done = { ...membership('TASK'), projectStatus: 'DONE' as const };
+    const out = listing([member('check', { ...here, projectMembership: done })],
+      { workspaceId: 'w1', coordinators: [remote({ projectMembership: { ...done, role: 'COORDINATOR' } })] }, []);
+    expect(out.entries).toEqual([{ ...member('check', { ...here, projectMembership: done }), kind: 'session',
+      projectMark: { projectId: 'p1', title: 'Project one', status: 'DONE', taskCounts: undefined, runningCount: 0 } }]);
+  });
+
+  it('leaves Trash, tags and search flat and unmarked', () => {
+    for (const opts of [{ view: 'trash' as const }, { byTag: true }, { searching: true }]) {
+      const out = listing([member('check', here)], { ...opts, workspaceId: 'w1', coordinators: [remote()] });
+      expect(out.entries).toEqual([{ ...member('check', here), kind: 'session' }]);
+    }
+  });
+});
+
 describe('project second line and target', () => {
   const waiting = (text: string): SessionProjectLine => ({ text, tone: 'approval' });
 
@@ -293,6 +416,7 @@ describe('session project copy', () => {
   it('keeps the progress and navigation words in the cross-client contract', () => {
     expect(SESSION_PROJECT_COPY.progress(3, 8)).toBe('3/8');
     expect(SESSION_PROJECT_COPY.progressHint(9, 2)).toBe('9 sessions · 2 running');
+    expect(SESSION_PROJECT_COPY.markHint('Project one')).toBe('Part of Project one · open its sessions');
     expect(SESSION_PROJECT_COPY.pageSubtitle(9)).toBe('Project · 9 sessions');
     expect(SESSION_PROJECT_COPY.pageProgress(3, 8, 2)).toBe('3/8 done · 2 running');
     expect([SESSION_PROJECT_COPY.openSession, SESSION_PROJECT_COPY.openCoordinator, SESSION_PROJECT_COPY.sessions, SESSION_PROJECT_COPY.openProject, SESSION_PROJECT_COPY.pin, SESSION_PROJECT_COPY.unpin, SESSION_PROJECT_COPY.move]).toEqual(['Open Session', 'Open Coordinator', 'Sessions', 'Open Project', 'Pin', 'Unpin', 'Move…']);
@@ -353,6 +477,43 @@ describe('the Landings window and its row', () => {
     expect(window.days[0].rows[0]).toMatchObject({ title: 'Month-old fix', detail: 'Cancelled', tone: 'quiet' });
     // Nothing is in hand.
     expect(window.now).toEqual([]);
+  });
+
+  /** Settled landings Orbit reported close together read as one group of messages, one avatar
+   *  (owner 2026-11-02, docs/mocks/landings-chat-bubbles): each within ten minutes of the one before
+   *  it, in the same day — a task's landing and the merge into main that carried it. */
+  it('groups a day’s rows that came within ten minutes of the one before', () => {
+    const window = landingsWindow([
+      landing('T1', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(26, 22, 11) }),
+      landing('round', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: local(26, 22, 13) },
+        { title: 'Merge project/p1 → main · #1' }),
+      landing('T2', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(26, 23, 7) }),
+      landing('T4', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(26, 23, 17) }),
+      landing('T6', { state: 'SETTLED', settledAs: 'NOTHING_TO_LAND', settledAt: local(26, 23, 28) }),
+      landing('T5', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(26, 23, 55) }),
+      landing('T3', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(27, 0, 1) }),
+    ], [], { now: NOON });
+    expect(window.days.map((day) => day.title)).toEqual(['Yesterday', 'Today']);
+    // Ten minutes exactly still joins (T2 → T4); eleven starts a group (T4 → T6); six minutes across
+    // midnight are two days, so two groups (T5 → T3).
+    const keys = (rows: Parameters<typeof landingsWindowGroups>[0]) =>
+      landingsWindowGroups(rows).map((group) => group.map((row) => row.key));
+    expect(keys(window.days[0].rows)).toEqual([['T1', 'round'], ['T2', 'T4'], ['T6'], ['T5']]);
+    expect(keys(window.days[1].rows)).toEqual([['T3']]);
+    expect(LANDINGS_GROUP_GAP_MS).toBe(600_000);
+  });
+
+  /** A row whose instant is unknown has no neighbour to be close to: it stands alone. */
+  it('makes a row with no instant a group of its own', () => {
+    const row = (key: string, at: number, time: string) => ({
+      key, sessionId: key, subject: 'TASK' as const, title: key, detail: 'Landed', tone: 'ok' as const, time, at,
+      promotion: null,
+    });
+    const unknown = (key: string) => row(key, Number.NEGATIVE_INFINITY, '');
+    const known = row('c', Date.parse(local(1, 8)), '08:00');
+    expect(landingsWindowGroups([unknown('a'), unknown('b'), known]).map((group) => group.map((each) => each.key)))
+      .toEqual([['a'], ['b'], ['c']]);
+    expect(landingsWindowGroups([])).toEqual([]);
   });
 
   it('puts what is in hand under Now, in the order it started', () => {

@@ -33,18 +33,13 @@ const SLOW_REQUEST_MS = 500;
 /**
  * Routes that are supposed to hold, and are therefore not timed at all.
  *
- *  - The runner door's four long polls sit on a 25 s deadline waiting for work
- *    (common/transaction-retry.ts's poll budget): the session claim, the per-session inbox, the
- *    wake poll, and the approval a live turn blocks on. Each is "slow" by construction, so a line
- *    about one would say nothing; what would be worth knowing is one that never ended, and that is
- *    a runner-side question.
+ *  - The approval `orbit mcp`'s permission tool blocks on sits on a 25 s deadline waiting for a
+ *    person. It is "slow" by construction, so a line about one would say nothing; what would be
+ *    worth knowing is one that never ended, and that is a runner-side question.
  *  - The two SSE streams stay open for as long as what they stream — a transcript, a user's
  *    control-plane events.
  */
 const HELD_ROUTES = new Set([
-  '/api/runner/sessions/claim',
-  '/api/runner/wake',
-  '/api/runner/sessions/:id/inbox',
   '/api/runner/sessions/:id/approvals/:approvalId',
   '/api/events',
   '/api/sessions/:id/events',

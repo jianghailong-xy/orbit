@@ -16,8 +16,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
@@ -56,17 +58,18 @@ import kotlinx.serialization.json.JsonObject
  * `Destination.SESSION`'s two renderers, chosen by the DETAIL's `sessionKind` (LS6): a landing opens its project's Landings window
  * (the project the detail's `landing.projectId` names), focused on that landing — scrolled to, opened and outlined — and never the
  * reader: no composer, no session menu and no `sessions/:id/events` subscription. A conversation gets the reader as it always did. A
- * session the directory does not list is asked for once (a landing link reaches its subject before the session row exists, and a
- * flat list never carries a landing), so the answer is the server's, never a guess from an id. When that one read fails, an id an
+ * session the directory does not list, nor the Completed or Trash list the reader came from ([listedElsewhere]), is asked for once
+ * (a landing link reaches its subject before the session row exists, and a flat list never carries a landing), so the answer is the
+ * server's, never a guess from an id. When that one read fails, an id an
  * integration read named as a landing job's ([LandingJobSnapshots]) still opens that job's project's window, whose card draws the job
  * frozen; any other id gets the reader. Every way into a landing — Open landing ›, the coordinator's cards, the task page's Landing
  * section, the source session's chip, an orbit-session link — comes through here.
  */
 @Composable
 fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
-    open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
+    open: (OrbitRoute) -> Unit, listedElsewhere: (String) -> Boolean = { false }, leave: () -> Unit = {}) {
     val id = route.id ?: return
-    val listed = remember(data.sessions, id) { data.sessions.values.any { rows -> rows.any { ObjectId.same(it.id, id) } } }
+    val listed = remember(data.sessions, id) { data.sessions.values.any { rows -> rows.any { ObjectId.same(it.id, id) } } || listedElsewhere(id) }
     var kind by remember(id) { mutableStateOf<SessionKind?>(if (listed) SessionKind.Conversation else null) }
     LaunchedEffect(id, listed) {
         if (listed) { kind = SessionKind.Conversation; return@LaunchedEffect }
@@ -230,8 +233,7 @@ private fun LandingCardHead(taskName: String?, expanded: Boolean, head: @Composa
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             head()
             taskName?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, Modifier.testTag("landing:task-name"), style = MaterialTheme.typography.bodyMedium, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
+                Text(it, Modifier.testTag("landing:task-name"), style = MaterialTheme.typography.bodyMedium)
             }
         }
         if (expanded) Box(Modifier.padding(top = 8.dp)) { LandingUpArrow() }
@@ -487,14 +489,18 @@ private fun LandingLogBlock(selectors: LandingLogSelectors, onLog: suspend (Land
     LandingLogBody(page, failed, loading) { cursor -> scope.launch { load(cursor) } }
 }
 
-/** The check running now: its last few printed lines, polled with the page while it runs. */
+/** The check running now: its last few printed lines, polled with the page while it runs — no event announces them (§2.9 LS6) — and
+ * only while the Activity is started. */
 @Composable
 private fun LandingLiveCheck(selectors: LandingLogSelectors, title: String, onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
     var text by remember(selectors) { mutableStateOf("") }
-    LaunchedEffect(selectors) {
-        while (isActive) {
-            onLog(selectors, null)?.let { page -> text = LandingSessionModel.tail(page.entries.joinToString("") { it.text }) }
-            delay(4_000)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(selectors, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                onLog(selectors, null)?.let { page -> text = LandingSessionModel.tail(page.entries.joinToString("") { it.text }) }
+                delay(4_000)
+            }
         }
     }
     Column(Modifier.padding(start = 24.dp).testTag("landing:live-check"), verticalArrangement = Arrangement.spacedBy(4.dp)) {

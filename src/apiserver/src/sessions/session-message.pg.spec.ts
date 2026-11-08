@@ -95,6 +95,8 @@ import {
 } from './session-message';
 import { SessionsService } from './sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
+import '../test-support/daemon-routes-over-http';
+import { sessionLease } from '../test-support/dequeue-under-lease';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -352,7 +354,7 @@ test('one session’s message to another is signed, delivered as such, and bound
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
       await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
     });
-    const delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
+    const delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
     assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
     return delivered;
   }
@@ -361,7 +363,7 @@ test('one session’s message to another is signed, delivered as such, and bound
   async function claimToMessage(sessionId: string): Promise<Answer> {
     let delivered = await claimAndPoll(sessionId);
     for (let i = 0; i < 2 && delivered.json.kind !== 'message'; i++) {
-      delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
+      delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
       assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
     }
     assert.equal(delivered.json.kind, 'message', `the inbox never handed out the message: ${delivered.text}`);
@@ -454,7 +456,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     const delivered = await claimAndPoll(recipient);
     const content = String(delivered.json.content ?? '');
     const block = sessionMessageBlock({
-      id: worker, title: 'Worker: criterion "3" <draft>', taskId: task.id, workspace: { name: 'orbit-worker' },
+      id: worker, title: 'Worker: criterion "3" <draft>', taskId: task.id, workspace: { name: 'orbit-worker' }, mode: 'auto', engine: null,
     });
     assert.equal(content, `${words}\n\n${block}`, `the engine was handed something else:\n${content}`);
     assert.ok(block.includes(`from-session="${uuidToBase62(worker)}"`) && block.includes(`task="${uuidToBase62(task.id)}"`));
@@ -469,7 +471,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     assert.deepEqual(stored.sessionMessage, {
       fromSessionId: worker,
       fromTitle: 'Worker: criterion "3" <draft>',
-      fromAgentName: 'orbit-worker',
+      fromAgentName: 'orbit-worker', fromMode: 'auto',
       fromTaskId: task.id,
     });
   });
@@ -483,7 +485,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     assert.ok(!/ task="/.test(content), `a task was named for a sender that runs none:\n${content}`);
     const stored = await echo(recipient, 1, delivered.json.turnId, { text: content });
     assert.deepEqual(stored.sessionMessage, {
-      fromSessionId: worker, fromTitle: 'Worker: free-standing', fromAgentName: 'orbit-worker',
+      fromSessionId: worker, fromTitle: 'Worker: free-standing', fromAgentName: 'orbit-worker', fromMode: 'auto',
     });
 
     // The owner's message beside it: no block, no card — and one the runner claims for it is dropped.
@@ -655,20 +657,20 @@ test('one session’s message to another is signed, delivered as such, and bound
     const [waiting] = (await sessions.listQueuedTurns(ownerId, recipient, 'active'))
       .filter((row) => row.turnId === resent.id);
     assert.deepEqual(waiting?.sessionMessage, {
-      fromSessionId: worker, fromTitle: 'Worker: asks for a review', fromAgentName: 'orbit-worker', fromTaskId: task.id,
+      fromSessionId: worker, fromTitle: 'Worker: asks for a review', fromAgentName: 'orbit-worker', fromMode: 'auto', fromTaskId: task.id,
     });
 
     // The engine reads it as the worker's message again: the words, then the block.
     const redelivered = await claimAndPoll(recipient);
     const content = String(redelivered.json.content ?? '');
     const block = sessionMessageBlock({
-      id: worker, title: 'Worker: asks for a review', taskId: task.id, workspace: { name: 'orbit-worker' },
+      id: worker, title: 'Worker: asks for a review', taskId: task.id, workspace: { name: 'orbit-worker' }, mode: 'auto', engine: null,
     });
     assert.equal(content, `${words}\n\n${block}`, `the engine was handed something else:\n${content}`);
     const stored = await echo(recipient, 2, redelivered.json.turnId, { text: content });
     assert.equal(stored.controlPlaneNote, `\n\n${block}`, 'the block was not recorded as the control plane’s note');
     assert.deepEqual(stored.sessionMessage, {
-      fromSessionId: worker, fromTitle: 'Worker: asks for a review', fromAgentName: 'orbit-worker', fromTaskId: task.id,
+      fromSessionId: worker, fromTitle: 'Worker: asks for a review', fromAgentName: 'orbit-worker', fromMode: 'auto', fromTaskId: task.id,
     });
   });
 
@@ -747,7 +749,7 @@ test('one session’s message to another is signed, delivered as such, and bound
       },
     });
     const card = {
-      fromSessionId: worker, fromTitle: 'Worker: queued behind the owner', fromAgentName: 'orbit-worker',
+      fromSessionId: worker, fromTitle: 'Worker: queued behind the owner', fromAgentName: 'orbit-worker', fromMode: 'auto',
       requestId: uuidToBase62(request.id),
     };
 
@@ -788,19 +790,19 @@ test('one session’s message to another is signed, delivered as such, and bound
     const [waiting] = await sessions.listQueuedTurns(ownerId, recipient, 'active');
     assert.equal(waiting?.turnId, answer.turnId);
     assert.deepEqual(waiting?.sessionMessage, {
-      fromSessionId: worker, fromTitle: 'Worker: changes course', fromAgentName: 'orbit-worker',
+      fromSessionId: worker, fromTitle: 'Worker: changes course', fromAgentName: 'orbit-worker', fromMode: 'auto',
     });
 
     const delivered = await claimToMessage(recipient);
     const content = String(delivered.json.content ?? '');
     const block = sessionMessageBlock({
-      id: worker, title: 'Worker: changes course', taskId: null, workspace: { name: 'orbit-worker' },
+      id: worker, title: 'Worker: changes course', taskId: null, workspace: { name: 'orbit-worker' }, mode: 'auto', engine: null,
     });
     assert.equal(content, `${words}\n\n${block}`, `the engine was handed something else:\n${content}`);
     const stored = await echo(recipient, 1, delivered.json.turnId, { text: content });
     assert.equal(stored.controlPlaneNote, `\n\n${block}`);
     assert.deepEqual(stored.sessionMessage, {
-      fromSessionId: worker, fromTitle: 'Worker: changes course', fromAgentName: 'orbit-worker',
+      fromSessionId: worker, fromTitle: 'Worker: changes course', fromAgentName: 'orbit-worker', fromMode: 'auto',
     });
   });
 
@@ -944,7 +946,7 @@ test('one session’s message to another is signed, delivered as such, and bound
       const offered = await door.retryMessage(user, recipient);
       assert.equal(offered.text, words);
       assert.deepEqual(offered.sessionMessage, {
-        fromSessionId: worker, fromTitle: 'Worker: asks for a decision', fromAgentName: 'orbit-worker',
+        fromSessionId: worker, fromTitle: 'Worker: asks for a decision', fromAgentName: 'orbit-worker', fromMode: 'auto',
         requestId: request.requestId,
       });
 

@@ -1112,7 +1112,7 @@ func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, r
 			feedText = note
 		}
 	}
-	feedText = kimiPromptText(job.Agent, orbitCLIExecutable(), feedText, job.insideRecordedWork(), job.watchesOn())
+	feedText = kimiPromptText(job.instructionAgent(), orbitCLIExecutable(), feedText, job.insideRecordedWork(), job.watchesOn())
 	if feedText != "" || len(blocks) == 0 {
 		blocks = append(blocks, map[string]interface{}{"type": "text", "text": feedText})
 	}

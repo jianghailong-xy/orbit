@@ -65,11 +65,11 @@ public struct SessionLine: Equatable, Sendable {
             if let n = s.runningSubagentCount, n > 0 {
                 return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
             }
-            // The agent hasn't answered yet: show the message you sent (server-kept from the moment
+            // The agent hasn't answered yet: show the message it was sent (server-kept from the moment
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
             // would read as if this one had already been answered. Content, not status — the
             // spinner already conveys "working" — so it takes the muted preview tone.
-            if let u = s.lastUserText, !u.isEmpty { return sentLine(u) }
+            if let u = s.lastUserText, !u.isEmpty { return orbitLine(u, s.lastUserFromOrbit) ?? externalLine(u, s.lastUserFromExternal) ?? sentLine(u, from: s.lastUserFrom) }
             if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
             return SessionLine(text: "Running…", tone: .running)
         }
@@ -97,7 +97,7 @@ public struct SessionLine: Equatable, Sendable {
         // reply landed — outranks the previous turn's reply: it's the newer of the two, and it's
         // what the session is left waiting on. The server only keeps it while it stands
         // unanswered, so a non-empty value here always means exactly that.
-        if let u = s.lastUserText, !u.isEmpty { return sentLine(u) }
+        if let u = s.lastUserText, !u.isEmpty { return orbitLine(u, s.lastUserFromOrbit) ?? externalLine(u, s.lastUserFromExternal) ?? sentLine(u, from: s.lastUserFrom) }
         // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
         // the server wrote about the session, not the raw last reply flattened down to one line. Only
         // here — below every live line above — so a working session still says what it is doing (web
@@ -116,32 +116,80 @@ public struct SessionLine: Equatable, Sendable {
         return SessionLine(text: SessionHeader.statusWord(for: s), tone: .preview)
     }
 
-    /// The line for a message of YOURS the agent hasn't answered yet. Prefixed, because the preview
-    /// line is otherwise the agent's voice: unmarked, a message you sent and a reply to it read
-    /// exactly alike, and "has it answered me yet?" is the one question the list has to answer
-    /// while a turn is running. Same flattening as a reply — a sent message may be markdown too.
-    static func sentLine(_ text: String) -> SessionLine {
-        SessionLine(text: "You: \(plainPreview(text))", tone: .preview)
+    /// The line for a message the agent hasn't answered yet, marked with who sent it (`sender`).
+    /// Prefixed, because the preview line is otherwise the agent's voice: unmarked, a message and a
+    /// reply to it read exactly alike, and "has it answered me yet?" is the one question the list has
+    /// to answer while a turn is running. Same flattening as a reply — a sent message may be markdown
+    /// too. Web parity: `sentLine` in WorkspaceView.tsx.
+    static func sentLine(_ text: String, from: SessionMessageFrom?) -> SessionLine {
+        SessionLine(text: "\(sender(from)): \(plainPreview(text))", tone: .preview)
     }
 
-    /// Flatten an assistant reply into a single prose line: drop code blocks and the common
-    /// markdown markers, then collapse all whitespace. (Length is left to the view's truncation.)
+    /// The line for a message somebody outside Orbit sent — a member of a connected Feishu group
+    /// (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2) — or nil for anybody else's: named the way
+    /// the conversation names them over their words, `From Feishu · <name>: …`, never "You". One message
+    /// has one sender; the web asks it inside `sentBy`, before another session's title.
+    static func externalLine(_ text: String, _ from: ExternalMessageFrom?) -> SessionLine? {
+        guard let from else { return nil }
+        return SessionLine(text: "\(ExternalSender.label(from)): \(plainPreview(text))", tone: .preview)
+    }
+
+    /// The owner, as the sender of their own message (web `SENT_BY_YOU`).
+    static let you = "You"
+
+    /// Who sent the message a row previews. "You" only for the owner's own words — and for every
+    /// message from an older control plane, which names no sender. A message another Orbit session
+    /// sent names that session (`lastUserFrom`) as the conversation's card names it: its title, or
+    /// what an untitled one is called (`SessionMessageCard.untitled`; docs/session-list-projects-design.md
+    /// §3.5, owner 2026-11-07). A coordinator's unanswered message is usually a task's report, which
+    /// "You:" put in the owner's mouth. Web parity: `sentBy`.
+    static func sender(_ from: SessionMessageFrom?) -> String {
+        guard let from else { return you }
+        let title = from.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? SessionMessageCard.untitled : title
+    }
+
+    /// Orbit, as the sender of its own messages (web `SENT_BY_ORBIT`).
+    static let orbit = "Orbit"
+
+    /// The line for a message Orbit wrote itself (`lastUserFromOrbit`; docs/session-list-projects-design.md
+    /// §3.5, owner 2026-11-07), or nil for anybody else's: Orbit says it, never "You", which put "You: From
+    /// Orbit · project …" on a coordinator's row while it read the notification. A notification the
+    /// conversation draws as a line says that line's own sentence (`CoordinatorDeliveryCard.sentence`);
+    /// any other says its first line, flattened like a preview — the rest is written for the agent. Web
+    /// parity: `orbitLine` in WorkspaceView.tsx.
+    static func orbitLine(_ text: String, _ mark: OrbitMessageFrom?) -> SessionLine? {
+        guard let mark else { return nil }
+        let said = mark.coordinatorDelivery.map(CoordinatorDeliveryCard.sentence)
+            ?? plainPreview(text.components(separatedBy: "\n").first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? "")
+        return SessionLine(text: "\(orbit): \(said)", tone: .preview)
+    }
+
+    /// Flatten an assistant reply into a single prose line: drop code blocks and the markdown
+    /// marks, then collapse all whitespace. (Length is left to the view's truncation.)
+    ///
+    /// The same rules as the web `plainPreview`. Only what Markdown would draw as a mark goes, so
+    /// the line says what the bubble says: the `_` and `*` of `tea_user_*_cnch`, the `~` of
+    /// `~/.orbit`, the `--` of `--force` and the `#` of `#123` are words someone wrote.
     ///
     /// A link keeps only its text and an image only its alt, so `[name](orbit-task:…)` reads as
-    /// `name` — the same rules as the web `plainPreview`. Both match a code span first and put it
-    /// back as it was, which leaves the brackets inside `code` alone; the inline-code rule after
-    /// them unwraps it. Images go first so a linked image, `[![alt](src)](url)`, still comes down
-    /// to its alt.
+    /// `name`. Images go first so a linked image, `[![alt](src)](url)`, still comes down to its
+    /// alt. Inline code is held out of every rule and put back at the end, which leaves the
+    /// brackets and marks inside `code` alone.
     static func plainPreview(_ md: String) -> String {
-        var s = md
-        s = s.replacingOccurrences(of: "```[\\s\\S]*?```", with: " ", options: .regularExpression) // fenced code
-        s = s.replacingOccurrences(of: "(`[^`]+`)|!\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1$2",
+        var s = md.replacingOccurrences(of: "```[\\s\\S]*?```", with: " ", options: .regularExpression) // fenced code
+        var code = MarkdownMarks.HeldCode()
+        s = code.hold(MarkdownMarks.inlineCode, in: s)                                              // inline code, held out
+        s = s.replacingOccurrences(of: "!\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1",
                                    options: .regularExpression)                                     // images -> alt
-        s = s.replacingOccurrences(of: "(`[^`]+`)|\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1$2",
+        s = s.replacingOccurrences(of: "\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1",
                                    options: .regularExpression)                                     // links -> link text
-        s = s.replacingOccurrences(of: "`([^`]+)`", with: "$1", options: .regularExpression)        // inline code
-        s = s.replacingOccurrences(of: "(?m)^[#>\\-*\\s]+", with: "", options: .regularExpression)   // line-start markers
-        s = s.replacingOccurrences(of: "[*_~]", with: "", options: .regularExpression)               // emphasis
+        s = s.replacingOccurrences(of: "(?m)^[ \\t]*([-*_])[ \\t]*(?:\\1[ \\t]*){2,}$", with: "",
+                                   options: .regularExpression)                                     // thematic breaks
+        s = s.replacingOccurrences(of: "(?m)^(?:[ \\t]*(?:>|(?:#{1,6}|[-*])(?=[ \\t]|$)))+", with: "",
+                                   options: .regularExpression)                                     // line-start markers
+        s = MarkdownMarks.withoutEmphasis(s)
+        s = code.putBack(s)                                                                         // inline code, back without its ticks
         s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }

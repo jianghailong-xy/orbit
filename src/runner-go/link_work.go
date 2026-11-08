@@ -17,8 +17,8 @@ import (
 	"orbit/linkpb"
 )
 
-// The work connection (docs/runner-link-design.md §5.4, §7, decisions D10 and D15): the one connection the daemon's
-// work goes over in link mode, opened by linkClient (link_client.go) over TLS through whatever proxy HTTPS_PROXY names.
+// The work connection (docs/runner-link-design.md §5.4, §7, decision D10): the one connection the daemon's work goes
+// over, opened by linkClient (link_client.go) over TLS through whatever proxy HTTPS_PROXY names.
 //
 // Identity. The process's identity is the daemon transport's leaseOwner, which its link tokens and every Hello name,
 // and which no reconnect changes: leases belong to the process, so a dropped connection costs none of them. Each
@@ -26,11 +26,16 @@ import (
 // log names both. A process holds one connection at a time: its newest, as the gateway counts it.
 //
 // Its life. It connects with exponential backoff and full jitter, 1s to 60s, never sooner than a refusal's Retry-After
-// or a Close's retry_after_ms (linkRetryWait). Its Hello says where each session stands (Hello.sessions: the last event
-// seq sent, the turn being executed), so the gateway resumes them. A token is renewed before it expires, a Drain is
-// followed after its delay, both make before break: the next connection is opened and welcomed first, and the
-// gateway closes the old one. A TokenRefresh renews the token in place, a Redirect sends the next connection to
-// another cell, and every Close code is read as the protocol says.
+// or a Close's retry_after_ms (linkRetryWait). The backoff starts over only once a connection has carried a heartbeat
+// the control plane reconciled: until then each connection that ends, or cannot be had, is followed by a longer wait,
+// so a runner whose connections keep ending without the link working end to end does not reconnect in a tight loop,
+// and a fleet does not stampede POST /api/runner/link-token. A connection is taken for dead when its pings say its
+// transport is (pinger), never because the control plane is slow to answer what it carries (link_heartbeat.go). Its
+// Hello says where each session stands (Hello.sessions: the last event seq sent, the turn being executed), so the
+// gateway resumes them. A token is renewed before it expires, a Drain is followed after its delay, both make before
+// break: the next connection is opened and welcomed first, and the gateway closes the old one. A TokenRefresh renews
+// the token in place, a Redirect sends the next connection to another cell, and every Close code is read as the
+// protocol says.
 //
 // Calls. Each Rpc is sent on the newest connection and waits for its RpcResult. When the connection ends first, or
 // the gateway answers that no backend did and the call may be sent again (BACKEND_CUT_OFF, BACKEND_TIMEOUT,
@@ -38,17 +43,24 @@ import (
 // is newest then, for as long as the call's own deadline lasts.
 
 const (
-	// The work connection pings this often and gives up on a ping after this long, which ends the connection: what a
-	// silently dead connection costs before the runner notices it.
+	// The work connection pings this often and gives up on a ping after this long, which ends the connection when
+	// nothing else came from the gateway meanwhile either: a dead transport (half open, a frozen gateway, a cut
+	// network) is noticed within linkWorkPingEvery + linkWorkPingTimeout, 40s.
 	linkWorkPingEvery   = 20 * time.Second
 	linkWorkPingTimeout = 20 * time.Second
+	// linkBeatStuckAfter is how long a heartbeat may go unanswered on a connection that answers its pings before the
+	// connection is ended. A slow control plane is not that: the gateway answers every beat it forwards within its
+	// own bound on the call (LINK_RPC_TIMEOUT, 60s by default), saying it got no answer when it got none. A beat
+	// unanswered three times as long is one this connection's gateway is not forwarding.
+	linkBeatStuckAfter = 3 * time.Minute
+	// A heartbeat answered after linkBeatSlow is logged, one line every linkBeatSlowLogEvery at most.
+	linkBeatSlow         = 10 * time.Second
+	linkBeatSlowLogEvery = time.Minute
 	// linkRPCBackoffMax caps the wait before a call is sent again after a failure that said it may be: the gateway's
 	// own retries across backends have already taken their 5s.
 	linkRPCBackoffMax = 2 * time.Second
-	// linkUnreachableFallback is how long the link may stay unreachable before the work goes back to HTTPS, when only a
-	// gateway's MODE_LINK put it there and the control plane never refused HTTPS: a gateway that said MODE_LINK and
-	// then went away must not leave the runner working over nothing. Once HTTPS is refused, nothing sends it back.
-	linkUnreachableFallback = 5 * time.Minute
+	// linkLogQuiet is how long a connection failure that repeats goes unlogged.
+	linkLogQuiet = 10 * time.Minute
 )
 
 var (
@@ -56,6 +68,8 @@ var (
 	errLinkNotConnected = errors.New("the runner link is not connected")
 	// errLinkConnEnded is a connection that ended before it answered: the call goes again on the next one.
 	errLinkConnEnded = errors.New("the runner link connection ended before it answered")
+	// errLinkClosed is a call made once the link has closed: the runner is stopping.
+	errLinkClosed = errors.New("the runner link is closed: the runner is stopping")
 )
 
 // linkWork keeps the work connection of one link mode.
@@ -64,8 +78,11 @@ type linkWork struct {
 	client *linkClient
 	log    func(...any)
 	now    func() time.Time
-	// How often it pings and how long a ping may wait. Tests shorten them.
-	pingEvery, pingTimeout time.Duration
+	// How often it pings, how long a ping may wait, and how long a beat may go unanswered on a connection that
+	// answers pings (linkBeatStuckAfter). Tests shorten them.
+	pingEvery, pingTimeout, beatStuckAfter time.Duration
+	// beatSeq numbers the beats of this process (Heartbeat.beat_id).
+	beatSeq atomic.Uint64
 
 	mu      sync.Mutex
 	cur     *linkWorkConn
@@ -73,36 +90,39 @@ type linkWork struct {
 	cancel  context.CancelFunc // nil while the work is stopped
 	done    chan struct{}      // closed when the last loop started has ended
 	lastErr error              // why the last connection could not be had, for the calls waiting on one
-	attempt int                // failed connection attempts since the work started or a connection was welcomed
-	// flaps counts the starts in a row that met a Welcome saying MODE_HTTP: the link was asked for and the gateway
-	// would not carry it, which, repeated, opens and closes connections as fast as the two answers arrive.
-	flaps  int
-	calls  map[string]*linkCall
-	events chan linkWorkEvent
+	// attempt counts the connections that could not be had or ended since the work started or a connection carried a
+	// heartbeat the control plane reconciled: what the wait before the next connection grows with.
+	attempt int
+	calls   map[string]*linkCall
+	events  chan linkWorkEvent
 
 	loggedErr   string
 	loggedErrAt time.Time
-	// lostAt is when the work last had a connection and lost it, zero while it has one; stoppedAt, when the work last
-	// stopped, which a time on HTTPS follows.
-	lostAt    time.Time
-	stoppedAt time.Time
-	// runnerStopping is set once the runner has begun to stop (linkMode.stopping): a time without a connection then
-	// sends the work back to HTTPS at once, not after linkUnreachableFallback.
-	runnerStopping bool
+	// lostAt is when the work last had a connection and lost it, zero while it has one.
+	lostAt time.Time
+	// slowBeats counts the beats answered after linkBeatSlow since slowLoggedAt, when the last of them was logged.
+	slowBeats    int
+	slowLoggedAt time.Time
 }
 
 // linkWorkConn is the work's state of one of its connections.
 type linkWorkConn struct {
 	*linkConn
+	work  *linkWork
 	ready chan struct{} // closed once linkConn is set: frames read before that wait for it
 
-	beatMu  sync.Mutex
-	acks    chan *linkpb.HeartbeatAck // the next HeartbeatAck, for the beat waiting on it
-	beating bool                      // a beat was sent and its HeartbeatAck has not come
+	beatMu sync.Mutex
+	acks   chan *linkpb.HeartbeatAck // the next HeartbeatAck, for the beat waiting on it
+	// pending is the beat sent on the connection whose HeartbeatAck has not come, nil for none: a connection carries
+	// one beat at a time (link_heartbeat.go). Guarded by beatMu.
+	pending *linkBeat
 	// facts holds, by kind, the digest of each heartbeat part the gateway was last sent whole on this connection: it
 	// keeps them per connection, so they go by digest alone until it asks for one (want_facts).
 	facts map[string]string
 
+	// heard is when a frame was last read from the gateway, in Unix nanoseconds: with the pongs, what says the
+	// connection's transport still carries (pinger).
+	heard      atomic.Int64
 	pingFailed atomic.Pointer[string]
 	retired    atomic.Pointer[string] // why the runner itself ended the connection
 }
@@ -123,7 +143,8 @@ type linkWorkEvent struct {
 func newLinkWork(m *linkMode, client *linkClient, log func(...any)) *linkWork {
 	return &linkWork{
 		m: m, client: client, log: log, now: time.Now, pingEvery: linkWorkPingEvery, pingTimeout: linkWorkPingTimeout,
-		changed: make(chan struct{}), calls: map[string]*linkCall{}, events: make(chan linkWorkEvent, 16),
+		beatStuckAfter: linkBeatStuckAfter,
+		changed:        make(chan struct{}), calls: map[string]*linkCall{}, events: make(chan linkWorkEvent, 16),
 	}
 }
 
@@ -165,21 +186,6 @@ func (w *linkWork) stop() {
 	w.notifyLocked()
 }
 
-// stopping marks the runner stopping, and reports whether the work is running without a connection now.
-func (w *linkWork) stopping() bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.runnerStopping = true
-	return w.cancel != nil && (w.cur == nil || w.cur.ended())
-}
-
-// stoppingWithoutConn reports whether the runner is stopping while the work has no connection.
-func (w *linkWork) stoppingWithoutConn() bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.runnerStopping && w.cur == nil
-}
-
 // wait waits for the last loop to end, at most d.
 func (w *linkWork) wait(d time.Duration) {
 	w.mu.Lock()
@@ -199,8 +205,8 @@ func (w *linkWork) notifyLocked() {
 	w.changed = make(chan struct{})
 }
 
-// waitConn is the connection a call goes out on now: the newest, once one is welcomed. It waits for one while the
-// link is in use, and says errLinkModeHTTP once it is not.
+// waitConn is the connection a call goes out on now: the newest, once one is welcomed. It waits for one until ctx ends,
+// and says errLinkClosed once the link has closed.
 func (w *linkWork) waitConn(ctx context.Context) (*linkWorkConn, error) {
 	for {
 		w.mu.Lock()
@@ -210,7 +216,7 @@ func (w *linkWork) waitConn(ctx context.Context) (*linkWorkConn, error) {
 			return cur, nil
 		}
 		if !running {
-			return nil, errLinkModeHTTP
+			return nil, errLinkClosed
 		}
 		select {
 		case <-changed:
@@ -241,11 +247,6 @@ func (w *linkWork) loop(ctx context.Context) {
 	var retryAt, renewAt, drainAt time.Time
 	w.mu.Lock()
 	w.attempt = 0
-	if w.flaps > 0 && w.now().Sub(w.stoppedAt) < linkBackoffMax {
-		// Started again soon after a Welcome sent the work back to HTTPS: not at once, or two disagreeing answers would
-		// have the connection opened and closed as fast as they arrive.
-		retryAt = w.now().Add(linkBackoff(w.flaps - 1))
-	}
 	w.mu.Unlock()
 	for ctx.Err() == nil {
 		cur := w.current()
@@ -262,7 +263,8 @@ func (w *linkWork) loop(ctx context.Context) {
 				continue
 			}
 			if !w.adopt(conn, nil, "") {
-				continue // the work stops: a Welcome said MODE_HTTP
+				retryAt = w.now().Add(w.failed(errLinkGatewayModeHTTP))
+				continue
 			}
 			renewAt, drainAt = conn.token.renewAt(), time.Time{}
 			continue
@@ -278,9 +280,6 @@ func (w *linkWork) loop(ctx context.Context) {
 			}
 			w.setCurrent(cur, nil)
 			retryAt, drainAt = w.now().Add(wait), time.Time{}
-			if w.stoppingWithoutConn() {
-				w.m.linkUnusable("the runner is stopping and lost its runner link connection")
-			}
 		case ev := <-w.events:
 			if ev.conn != cur {
 				continue // from a connection replaced since
@@ -327,6 +326,7 @@ func (w *linkWork) loop(ctx context.Context) {
 				continue
 			}
 			if !w.adopt(conn, cur, why) {
+				renewAt = w.now().Add(w.failed(errLinkGatewayModeHTTP)) // cur carries the work meanwhile
 				continue
 			}
 			renewAt, drainAt = conn.token.renewAt(), time.Time{}
@@ -376,9 +376,10 @@ func (w *linkWork) setCurrent(prev, next *linkWorkConn) {
 
 // dial opens one connection, with a goroutine pinging it.
 func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
-	conn := &linkWorkConn{ready: make(chan struct{}), acks: make(chan *linkpb.HeartbeatAck, 1), facts: map[string]string{}}
+	conn := &linkWorkConn{work: w, ready: make(chan struct{}), acks: make(chan *linkpb.HeartbeatAck, 1), facts: map[string]string{}}
 	lc, err := w.client.connect(ctx, func(_ *linkConn, f *linkpb.Frame) {
 		<-conn.ready
+		conn.heard.Store(time.Now().UnixNano())
 		w.onFrame(conn, f)
 	})
 	if err != nil {
@@ -391,24 +392,25 @@ func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
 	return conn, nil
 }
 
-// adopt makes conn, just welcomed, the connection calls go out on, in place of old (nil after a time without one). A
-// Welcome saying MODE_HTTP is not adopted: the control plane has sent the work back to HTTPS, and the work stops.
+// adopt makes conn, just welcomed, the connection calls go out on, in place of old (nil after a time without one). It
+// reports false for a Welcome saying MODE_HTTP: the gateway forwards nothing for such a connection, so it is closed, and
+// the next one opens after a wait, as after any connection that could not be had.
 func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 	welcome := conn.welcome
-	w.m.observe(welcome.GetMode(), "the Welcome of "+conn.id)
 	if welcome.GetMode() == linkpb.Mode_MODE_HTTP {
 		reason := "the Welcome said MODE_HTTP"
 		conn.retired.Store(&reason)
 		conn.close(websocket.StatusNormalClosure, reason)
-		w.mu.Lock()
-		w.flaps++
-		w.lastErr = errors.New("the gateway's Welcome said MODE_HTTP")
-		w.mu.Unlock()
 		return false
 	}
+	// Taken before the connection carries anything: a beat can go out on it the moment it is current, and has to find
+	// the release check the Welcome owes it (linkMode.afterHeartbeat).
+	w.m.assignRelease(welcome.GetRelease())
 	w.mu.Lock()
 	w.cur = conn
-	w.attempt, w.flaps, w.lastErr, w.loggedErr = 0, 0, nil, ""
+	// The backoff is not reset here but once the connection has carried a reconciled heartbeat (reconciled): a
+	// connection that ends before that is followed by a longer wait than the last.
+	w.lastErr, w.loggedErr = nil, ""
 	lostAt := w.lostAt
 	w.lostAt = time.Time{}
 	w.notifyLocked()
@@ -422,7 +424,6 @@ func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 	// sessions' event streams send everything they hold again on this connection, from how far the Welcome says each
 	// is stored (link_events.go).
 	w.m.gates.state(welcome.GetHints())
-	w.m.assignRelease(welcome.GetRelease())
 	w.m.events.welcomed(conn, welcome)
 	w.m.gates.markAll()
 	for _, s := range welcome.GetSessions() {
@@ -455,15 +456,11 @@ func (w *linkWork) failed(err error) time.Duration {
 	now := w.now()
 	// A next connection that cannot be had while the current one still carries the work (a renewal, a drain) leaves
 	// the runner with a link: only a time with none counts as one without it.
-	var lostFor time.Duration
-	if w.cur == nil {
-		if w.lostAt.IsZero() {
-			w.lostAt = now
-		}
-		lostFor = now.Sub(w.lostAt)
+	if w.cur == nil && w.lostAt.IsZero() {
+		w.lostAt = now
 	}
 	msg := err.Error()
-	quiet := msg == w.loggedErr && now.Sub(w.loggedErrAt) < linkShadowLogQuiet
+	quiet := msg == w.loggedErr && now.Sub(w.loggedErrAt) < linkLogQuiet
 	if !quiet {
 		w.loggedErr, w.loggedErrAt = msg, now
 	}
@@ -474,11 +471,6 @@ func (w *linkWork) failed(err error) time.Duration {
 	}
 	if !quiet {
 		w.log(fmt.Sprintf("runner link: cannot connect (%s); next try in %s", msg, wait.Round(time.Millisecond)))
-	}
-	if lostFor >= linkUnreachableFallback {
-		w.m.linkUnusable(fmt.Sprintf("the runner link has been unreachable for %s", lostFor.Round(time.Second)))
-	} else if w.stoppingWithoutConn() {
-		w.m.linkUnusable("the runner is stopping and cannot connect to the runner link")
 	}
 	return wait
 }
@@ -522,12 +514,10 @@ func (w *linkWork) lost(conn *linkWorkConn) time.Duration {
 	return wait
 }
 
-// upgradeRequired takes a gateway that speaks no protocol version this binary does: the runner checks its release now,
-// and works over HTTPS meanwhile, unless the control plane has refused that too.
+// upgradeRequired takes a gateway that speaks no protocol version this binary does: the runner checks its release now.
 func (w *linkWork) upgradeRequired() {
 	w.m.selfUpdateOwed.Store(true)
 	w.m.gates.markWake()
-	w.m.linkUnusable("the gateway speaks no link protocol version this binary does")
 }
 
 // finish closes every connection the loop opened, once it stops.
@@ -535,19 +525,21 @@ func (w *linkWork) finish() {
 	w.mu.Lock()
 	cur := w.cur
 	w.cur = nil
-	// What follows is a time on HTTPS, not one without a link: the next start counts afresh.
-	w.lostAt, w.loggedErr, w.stoppedAt = time.Time{}, "", w.now()
+	w.lostAt, w.loggedErr = time.Time{}, ""
 	w.notifyLocked()
 	w.mu.Unlock()
 	if cur != nil {
-		reason := "the runner link is no longer in use"
+		reason := "the runner is stopping"
 		cur.retired.Store(&reason)
-		cur.close(websocket.StatusGoingAway, "link mode off")
+		cur.close(websocket.StatusGoingAway, reason)
 		w.log("runner link: connection " + cur.id + " closed")
 	}
 }
 
-// pinger pings conn until it ends. A ping unanswered within pingTimeout ends the connection.
+// pinger pings conn until it ends, and ends it once its transport is dead: a ping has had no pong within pingTimeout,
+// and nothing else was read from the gateway since it was sent either. The gateway answers pings itself, whatever its
+// backends do, so how long the control plane takes to answer a heartbeat or a call has no part in it. The WebSocket
+// library gives up on a pong without ending the connection, so this ends it.
 func (w *linkWork) pinger(conn *linkWorkConn) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -562,14 +554,53 @@ func (w *linkWork) pinger(conn *linkWorkConn) {
 			return
 		case <-tick.C:
 		}
-		if _, err := conn.ping(w.pingTimeout); err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				why := "no answer to a ping within " + w.pingTimeout.String()
-				conn.pingFailed.Store(&why)
-			}
-			return
+		sent := time.Now()
+		_, err := conn.ping(w.pingTimeout)
+		// A ping that could not even be written in time (another write holds the connection) proves nothing yet, and a
+		// connection that ended is the read loop's to report.
+		if err == nil || !errors.Is(err, context.DeadlineExceeded) || time.Since(sent) < w.pingTimeout || conn.heardSince(sent) {
+			continue
 		}
+		why := "no answer to a ping within " + w.pingTimeout.String() + ", and nothing else read from the gateway since"
+		conn.pingFailed.Store(&why)
+		_ = conn.ws.CloseNow()
+		return
 	}
+}
+
+// heardSince reports whether a frame was read from the gateway at or after t.
+func (c *linkWorkConn) heardSince(t time.Time) bool {
+	return c.heard.Load() >= t.UnixNano()
+}
+
+// reconciled takes a heartbeat the control plane reconciled on conn: the link works end to end, so the reconnect
+// backoff starts over.
+func (w *linkWork) reconciled(conn *linkWorkConn) {
+	w.mu.Lock()
+	if w.cur == conn {
+		w.attempt = 0
+	}
+	w.mu.Unlock()
+}
+
+// slowBeat takes a beat answered took after it was sent on conn: one answered after linkBeatSlow is logged, one line
+// every linkBeatSlowLogEvery at most, which counts the slow answers since the last.
+func (w *linkWork) slowBeat(conn *linkWorkConn, id uint64, took time.Duration) {
+	if took < linkBeatSlow {
+		return
+	}
+	w.mu.Lock()
+	w.slowBeats++
+	now := w.now()
+	if now.Sub(w.slowLoggedAt) < linkBeatSlowLogEvery {
+		w.mu.Unlock()
+		return
+	}
+	n := w.slowBeats
+	w.slowBeats, w.slowLoggedAt = 0, now
+	w.mu.Unlock()
+	w.log(fmt.Sprintf("runner link: heartbeat %d was answered %s after it was sent, on connection %s, which carries on (%d answer(s) over %s since the last such line)",
+		id, took.Round(time.Millisecond), conn.id, n, linkBeatSlow))
 }
 
 // onFrame takes a frame the gateway sent on conn, on its reading goroutine.
@@ -587,7 +618,6 @@ func (w *linkWork) onFrame(conn *linkWorkConn, f *linkpb.Frame) {
 		}
 	case *linkpb.Frame_HeartbeatAck:
 		ack := body.HeartbeatAck
-		w.m.observe(ack.GetMode(), "a HeartbeatAck on "+conn.id)
 		w.m.gates.state(ack.GetHints())
 		w.m.events.hintState(ack.GetHints())
 		if len(ack.GetReconcileJson()) > 0 || ack.GetRelease() != nil {
@@ -656,8 +686,9 @@ func linkFrameKind(ev linkWorkEvent) string {
 }
 
 // rpc sends rpc and returns the route's answer. It sends it again, under the same request_id, whenever no answer came:
-// the connection ended first, or the gateway said no backend answered and the call may be sent again. It returns
-// errLinkModeHTTP when the control plane sent the work back to HTTPS before the call was answered.
+// the connection ended first, or the gateway said no backend answered and the call may be sent again, or that it
+// forwards nothing because its server's RUNNER_LINK_REQUIRED is off (LINK_MODE_HTTP, an older server's: nothing else
+// would carry the call).
 func (w *linkWork) rpc(ctx context.Context, rpc *linkpb.Rpc) (*linkpb.TunnelResponse, error) {
 	call := &linkCall{result: make(chan *linkpb.RpcResult, 1)}
 	id := rpc.GetRequestId()
@@ -704,11 +735,7 @@ func (w *linkWork) rpc(ctx context.Context, rpc *linkpb.Rpc) (*linkpb.TunnelResp
 			return t, nil
 		}
 		f := res.GetFailure()
-		if f.GetCode() == "LINK_MODE_HTTP" {
-			w.m.observe(linkpb.Mode_MODE_HTTP, "connection "+conn.id+" refusing a call for MODE_HTTP")
-			return nil, errLinkModeHTTP
-		}
-		if !f.GetRetryable() {
+		if !f.GetRetryable() && f.GetCode() != "LINK_MODE_HTTP" {
 			return nil, linkFailureAnswer(rpc, f)
 		}
 		wait := max(time.Duration(f.GetRetryAfterMs())*time.Millisecond, linkRPCBackoff(attempt))

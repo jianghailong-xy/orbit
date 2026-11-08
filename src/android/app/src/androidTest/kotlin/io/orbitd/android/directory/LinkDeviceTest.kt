@@ -151,11 +151,11 @@ class LinkDeviceTest {
                     back()
                     compose.onNodeWithContentDescription("Session actions").assertDoesNotExist()
                     outage.set(true)
-                    compose.onNodeWithContentDescription("Refresh directory").performClick()
+                    app.realtime.refreshDirectory()
                     compose.waitUntil(15_000) { app.realtime.state.value.directoryError?.reason == FailureReason.NETWORK }
                     assertFalse(app.realtime.state.value.directoryFresh)
                     outage.set(false)
-                    compose.onNodeWithContentDescription("Refresh directory").performClick()
+                    app.realtime.refreshDirectory()
                     compose.waitUntil(10_000) { app.realtime.state.value.directoryFresh }
                     compose.onNodeWithContentDescription("Open navigation").assertIsDisplayed()
                     File(evidence, "requests.txt").writeText(requests.joinToString("\n") { (token, path) -> "${if (token?.endsWith("-2") == true) "B" else "A"} $path" })

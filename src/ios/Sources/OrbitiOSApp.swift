@@ -45,9 +45,9 @@ struct OrbitiOSApp: App {
                 // A `Text` link naming an Orbit object opens here — a table cell, say; transcript
                 // prose is a UITextView whose delegate does the same. The model decides, because a
                 // project's destination comes from a read (its coordinator session) rather than from
-                // the URL alone; every other URL keeps the system action.
+                // the URL alone; every other URL keeps the system action if it may leave the app.
                 .environment(\.openURL, OpenURLAction { url in
-                    model.openOrbitLink(url) ? .handled : .systemAction
+                    model.openOrbitLink(url) ? .handled : .leaving(url)
                 })
                 // Both sides of this are keyed to `.background` — a REAL trip out of the foreground —
                 // and never to `.inactive`, which on iOS is the transient state for a notification

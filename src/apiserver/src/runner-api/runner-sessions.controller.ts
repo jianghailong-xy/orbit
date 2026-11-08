@@ -199,20 +199,20 @@ export class RunnerSessionsController {
 
   /**
    * `orbit session import`'s door: create a session by importing a Claude transcript that lives
-   * on THIS runner's disk. Headless-only by design — an agent already runs inside a workspace and
-   * has its own transcript continuity, so the only caller is a person's shell (or a bridge on a
-   * minted credential), which is also the only caller the machine credential's extra verb should
-   * reach.
+   * on THIS runner's disk. A person's shell asks with the machine's credential, a bridge with a
+   * minted one, and an agent asked to bring a terminal's conversation into Orbit as its session —
+   * through the orchestration gate, as create from a session does.
    *
-   * The machine's runner credential may import into any workspace it can resolve; a service token
-   * needs the session:create scope, and — that scope is only mintable pinned — may import into
-   * exactly its pinned workspace, resolved from the transcript's cwd or given explicitly.
+   * The machine's runner credential, and a session, may import into any workspace on this machine;
+   * a service token needs the session:create scope, and — that scope is only mintable pinned — may
+   * import into exactly its pinned workspace, resolved from the transcript's cwd or given explicitly.
    */
   @Post('sessions/import')
   async importSession(
     @CurrentRunner() runner: Runner,
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     // Inline type, as with create: `workspaceId` is exactly what a model copies out of an Orbit URL.
     @Body(PublicIdPipe.forFields('workspaceId'))
     dto: {
@@ -224,9 +224,8 @@ export class RunnerSessionsController {
     },
   ) {
     if (!isHeadlessCaller(callingSessionId)) {
-      throw new ForbiddenException(
-        'session import is a headless operation; run `orbit session import` from a shell',
-      );
+      this.assertNoServiceToken(grant);
+      await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     }
     let workspaceId = dto.workspaceId;
     if (grant) {
@@ -368,6 +367,9 @@ export class RunnerSessionsController {
     const provided = dto.clientTurnId?.trim();
     assertClientTurnIdNotReserved(provided);
     const clientTurnId = provided || randomUUID();
+    // Who may write to this session at all (session-reach.ts), before anything is revived or charged. A
+    // headless credential has no mode to compare, so it is not asked.
+    if (senderSessionId) await this.sessions.assertMayReach(runner.ownerId, senderSessionId, id, 'message', provided);
     // Deliberately NO explicit `intent`: this endpoint sends the same unqualified message every
     // other client sends, and the server decides from the live turn whether it joins the turn now
     // running or queues as the next one. Naming CURRENT_WORK here made the verb useless against
@@ -482,6 +484,9 @@ export class RunnerSessionsController {
     const provided = dto?.clientTurnId?.trim();
     assertClientTurnIdNotReserved(provided);
     const clientTurnId = provided || randomUUID();
+    // With a message or without, one door and one rule (session-reach.ts): stopping a session's turn is as
+    // much what a narrower session may not do as writing it the next one.
+    await this.sessions.assertMayReach(runner.ownerId, senderSessionId, id, followUp ? 'interruptWithMessage' : 'interrupt');
     return this.sessions.interrupt(
       runner.ownerId,
       id,
@@ -514,7 +519,8 @@ export class RunnerSessionsController {
     @Body() dto: { targetBranch?: string; waitSeconds?: number },
   ) {
     this.assertNoServiceToken(grant);
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'merge');
     // A Merge pressed from a session (§10.6 O-R3): recorded with the operation, so a landing it makes
     // on a PLATFORM project's main is put in front of the owner.
     return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds, { requestedBy: 'AGENT' });
@@ -571,7 +577,8 @@ export class RunnerSessionsController {
     @Param('id', PublicIdPipe) id: string,
   ) {
     this.assertNoServiceToken(grant);
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'end');
     // TH2/AU2: a live attempt's ending is the worker's to write. Another agent ending it here
     // would settle the session with no outcome and no checkpoint, and "what actually failed" would
     // stop having an answer for every generation after this one.
@@ -592,7 +599,8 @@ export class RunnerSessionsController {
     @Param('id', PublicIdPipe) id: string,
   ) {
     this.assertNoServiceToken(grant);
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'complete');
     // The single most expensive action in the incident: a coordinator that disliked a run and
     // completed it. That is not a close — it is a result with no ending written over one that had
     // one, and the session lands as CANCELLED with nothing left to learn from.
@@ -612,7 +620,8 @@ export class RunnerSessionsController {
     @Param('id', PublicIdPipe) id: string,
   ) {
     this.assertNoServiceToken(grant);
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'delete');
     await this.attempts.assertMayEndSession(
       runner.ownerId,
       id,

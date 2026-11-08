@@ -15,8 +15,18 @@ import { useOverlayChild } from './Overlay';
 import './ImagePreview.css';
 
 export interface ImagePreviewItem {
-  src: string;
+  /** Absent while its bytes are still being read: the viewer waits on an empty frame. */
+  src?: string;
   alt?: string;
+}
+
+/** A button in the pill under the picture. */
+export interface ImagePreviewAction {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
 }
 
 export interface ImagePreviewProps {
@@ -31,6 +41,12 @@ export interface ImagePreviewProps {
   group?: boolean;
   /** Where the opening zoom grows from, in viewport pixels: the centre of the thumbnail that was pressed. */
   origin?: { x: number; y: number } | null;
+  /** How a group states its position, given the shown picture's number and the total. `n / total` by default. */
+  position?: (shown: number, total: number) => string;
+  /** What the picture is, under the position. It gets a line of its own, and the picture moves up to leave it room. */
+  caption?: ReactNode;
+  /** More buttons, after the zoom buttons. */
+  actions?: readonly ImagePreviewAction[];
 }
 
 // ── zoom, drag and pinch ──────────────────────────────────────────────────────────────────────────
@@ -149,7 +165,7 @@ function useImageTransform(image: RefObject<HTMLImageElement | null>) {
  * when dragged, and pinches and moves by touch; ←/→ page a group. Esc, the close button or a press on the mask
  * closes it, and focus goes back where it was.
  */
-export function ImagePreview({ open, onClose, items, current = 0, onCurrentChange, group = false, origin }: ImagePreviewProps) {
+export function ImagePreview({ open, onClose, items, current = 0, onCurrentChange, group = false, origin, position, caption, actions: moreActions = [] }: ImagePreviewProps) {
   const layer = useOverlayChild(open, onClose);
   const image = useRef<HTMLImageElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -215,9 +231,8 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     };
   });
 
-  // ←/→ page a group wherever focus is — on the window, as the replaced preview listened, so a key still pages when
-  // the button that had focus was disabled at an end and focus fell back to the page. Ahead of the popup, which keeps
-  // arrow keys from bubbling out of it.
+  // ←/→ page a group wherever focus is in the viewer — on the window, as the replaced preview listened, and ahead of
+  // the popup, which keeps arrow keys from bubbling out of it.
   useEffect(() => {
     if (!open || !switches) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -301,13 +316,14 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     [open, layer.zIndex],
   );
 
-  const actions: { key: string; label: string; icon: ReactNode; onClick: () => void; disabled?: boolean }[] = [
+  const actions: ImagePreviewAction[] = [
     { key: 'flipY', label: 'Flip vertically', icon: <SwapOutlined rotate={90} aria-hidden />, onClick: () => update({ flipY: !transform.flipY }) },
     { key: 'flipX', label: 'Flip horizontally', icon: <SwapOutlined aria-hidden />, onClick: () => update({ flipX: !transform.flipX }) },
     { key: 'rotateLeft', label: 'Rotate left', icon: <RotateLeftOutlined aria-hidden />, onClick: () => update({ rotate: transform.rotate - 90 }) },
     { key: 'rotateRight', label: 'Rotate right', icon: <RotateRightOutlined aria-hidden />, onClick: () => update({ rotate: transform.rotate + 90 }) },
     { key: 'zoomOut', label: 'Zoom out', icon: <ZoomOutOutlined aria-hidden />, onClick: () => zoom(1 / (1 + SCALE_STEP)), disabled: transform.scale <= MIN_SCALE },
     { key: 'zoomIn', label: 'Zoom in', icon: <ZoomInOutlined aria-hidden />, onClick: () => zoom(1 + SCALE_STEP), disabled: transform.scale === MAX_SCALE },
+    ...moreActions,
   ];
   const { x, y, scale, rotate, flipX, flipY } = transform;
 
@@ -321,7 +337,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
       <BaseDialog.Portal container={typeof document === 'undefined' ? undefined : layer.getContainer()}>
         <BaseDialog.Popup
           ref={setPopup}
-          className={`orbit-image-preview${moving ? ' orbit-image-preview-moving' : ''}`}
+          className={`orbit-image-preview${moving ? ' orbit-image-preview-moving' : ''}${caption != null ? ' orbit-image-preview-captioned' : ''}`}
           style={{ zIndex: layer.zIndex + 80 }}
           aria-label={item?.alt || 'Image preview'}
           // Focus starts on the close button, as it did in the replaced preview; Base UI would move it a frame later.
@@ -356,13 +372,16 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
           <button ref={closeButton} type="button" className="orbit-image-preview-close" aria-label="Close" onClick={onClose}>
             <CloseOutlined aria-hidden />
           </button>
+          {/* A button that can't act is greyed with aria-disabled, never disabled: a disabled button drops the focus it
+              holds onto the page behind the viewer, whose keys then act under it (↑/↓ switched the session). This one
+              keeps focus, so keys and Tab stay in the viewer and Esc hands focus back; a press on it does nothing. */}
           {switches && (
             <>
               <button
                 type="button"
                 className="orbit-image-preview-switch orbit-image-preview-switch-prev"
                 aria-label="Previous image"
-                disabled={current === 0}
+                aria-disabled={current === 0 || undefined}
                 onClick={() => go(-1)}
               >
                 <LeftOutlined aria-hidden />
@@ -371,7 +390,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
                 type="button"
                 className="orbit-image-preview-switch orbit-image-preview-switch-next"
                 aria-label="Next image"
-                disabled={current === count - 1}
+                aria-disabled={current === count - 1 || undefined}
                 onClick={() => go(1)}
               >
                 <RightOutlined aria-hidden />
@@ -381,9 +400,10 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
           <div className="orbit-image-preview-footer">
             {group && (
               <div className="orbit-image-preview-progress">
-                <bdi>{`${current + 1} / ${count}`}</bdi>
+                <bdi>{position ? position(current + 1, count) : `${current + 1} / ${count}`}</bdi>
               </div>
             )}
+            {caption != null && <div className="orbit-image-preview-caption">{caption}</div>}
             <div className="orbit-image-preview-actions">
               {actions.map((action) => (
                 <button
@@ -391,8 +411,8 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
                   type="button"
                   className="orbit-image-preview-action"
                   aria-label={action.label}
-                  disabled={action.disabled}
-                  onClick={action.onClick}
+                  aria-disabled={action.disabled || undefined}
+                  onClick={action.disabled ? undefined : action.onClick}
                 >
                   {action.icon}
                 </button>

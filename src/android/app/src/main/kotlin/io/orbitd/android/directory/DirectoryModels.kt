@@ -1,5 +1,7 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.core.cards.CoordinatorDelivery
+import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.core.protocol.SessionCapabilities
 import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
@@ -7,15 +9,17 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
-/** [position] is null until the workspace is first dragged into place (schema.prisma Workspace.position Int?). */
+/** [position] is null until the workspace is first dragged into place (schema.prisma Workspace.position Int?). [repoUrl] is the
+ * remote the workspace records, null with none and from a server that does not send it: what makes a wiki of it (mock 41). */
 @Serializable
 data class DirectoryWorkspace(val id: String, val name: String, val runnerId: String? = null,
-    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null)
+    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null)
 @Serializable
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
     val displayName: String? = null, val lastHeartbeatAt: String? = null)
@@ -36,9 +40,23 @@ data class DirectorySession(
     val agent: WorkspaceRef? = null, val agentId: String? = null, val workspaceId: String? = null,
     val folderId: String? = null, val pinnedAt: String? = null,
     val createdAt: String? = null, val lastTurnAt: String? = null,
+    /** When the turn now running began, which a working row counts from; null with none running and from an older server. */
+    val currentTurnStartedAt: String? = null,
     val pendingApprovals: Int = 0, val runningBgJobCount: Int = 0,
     val confirmationUnderReview: JsonObject? = null,
     val lastAssistantText: String? = null, val lastUserText: String? = null,
+    /** Who sent [lastUserText], when another Orbit session did: the row names that session instead of saying "You"
+     *  ([SessionLine.sender]). Null for the owner's own words, and from an older server, which does not send it. */
+    val lastUserFrom: SessionMessageFrom? = null,
+    /** That [lastUserText] is Orbit's own message (a coordinator's notification, a watch's wake, the owner's answer handed on…), with
+     *  the notification card its line is written from: the row says "Orbit: …" ([SessionLine.orbitLine], read by [OrbitMessageFrom.of]).
+     *  Null for anybody else's words, and from an older server. Kept as the JSON it came as, so a shape this build cannot read is no
+     *  mark rather than a list that fails to decode. */
+    val lastUserFromOrbit: JsonElement? = null,
+    /** Who sent [lastUserText] when somebody outside Orbit did — a connected Feishu group's member (docs/feishu-bot-design.md §8.2):
+     *  the row says `From Feishu · <name>` instead of "You" ([SessionLine.externalLine], read by [ExternalSender.parse]). Null for anybody
+     *  else, and from an older server. Kept as the JSON it came as, so a source this build does not know is no sender. */
+    val lastUserFromExternal: JsonElement? = null,
     /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
      *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
      *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
@@ -61,13 +79,22 @@ data class DirectorySession(
     val isLanding get() = sessionKind == "LANDING"
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
-    val stateLabel get() = when {
-        pendingApprovals > 0 -> "Needs you · $pendingApprovals"
-        // Its report is with its reviewer (A08-1; OrbitKit `underReviewLine`): drawn, not counted, and who has it.
-        confirmationUnderReview != null -> "Under review · ${(confirmationUnderReview["reviewerTitle"] as? JsonPrimitive)?.contentOrNull?.trim()
-            ?.ifEmpty { null } ?: "Reviewer"}"
-        runState == "RUNNING" || status == "RUNNING" -> "Running"
-        else -> (runState ?: status).lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)
+}
+/** Who sent the message a session row previews, when another Orbit session did (`@orbit/shared` and OrbitKit `SessionMessageFrom`,
+ * design §3.5): the sending session and its title as they stood when the message was written. Both slots optional, so a value read
+ * only in part still says that someone other than the owner sent it. */
+@Serializable
+data class SessionMessageFrom(val sessionId: String? = null, val title: String? = null)
+/** That the message a session row previews is Orbit's own: a turn the control plane wrote itself (`@orbit/shared` and OrbitKit
+ * `OrbitMessageFrom`, design §3.5, owner 2026-11-07). [coordinatorDelivery] is the card the conversation draws a coordinator's
+ * notification as, read by the conversation's own rule ([CoordinatorDeliveryLine.parse]): the row says that line's sentence. Null for
+ * every other message of Orbit's — and for a card this build cannot read — whose row says its first line. */
+data class OrbitMessageFrom(val coordinatorDelivery: CoordinatorDelivery? = null) {
+    companion object {
+        /** A row's `lastUserFromOrbit`, read as OrbitKit reads it: an object is Orbit's mark, anything else none. */
+        fun of(value: JsonElement?): OrbitMessageFrom? = (value as? JsonObject)?.let { mark ->
+            OrbitMessageFrom((mark["coordinatorDelivery"] as? JsonObject)?.let { CoordinatorDeliveryLine.parse(it) })
+        }
     }
 }
 /** What a LANDING session row says about its subject (`SessionLandingSummary`, contract §2.9 LS6): the subject it represents and where

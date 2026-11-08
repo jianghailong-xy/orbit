@@ -14,12 +14,14 @@
     "prisma:deploy": "prisma migrate deploy",
     "ops:task-signoff-migration": "node dist/tasks/task-signoff-migration.cli.js",
     "ops:task-judgment-repair": "node dist/tasks/task-judgment-repair.cli.js",
+    "ops:wiki-backfill": "node dist/wiki/wiki-backfill.cli.js",
     "test": "tsc -p tsconfig.test.json && SPECS=$(ls build/*/*.spec.js | grep -v '\\.pg\\.spec\\.js$') && node --test $SPECS"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
   },
   "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.76.0",
     "@nats-io/transport-node": "3.4.0",
     "@nestjs/common": "^12.1.0",
     "@nestjs/config": "^12.0.1",

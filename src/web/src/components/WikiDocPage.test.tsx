@@ -248,6 +248,66 @@ describe("a document's page", () => {
     expect(text('.supby', entries)).toEqual(['Rejected by you · its sentence in §3 is withdrawn']);
   });
 
+  it('reads a title, a heading and a sentence as words, not as the marks the writer left in them', async () => {
+    const doc = structuredClone(SHARED.docs.doc.read);
+    const section = doc.sections[0];
+    const sentence = section.blocks[0].sentences[0];
+    section.title = '必填参数:`--app_id` 与 `--date`';
+    section.blocks = [
+      {
+        kind: 'paragraph',
+        text: null,
+        sentences: [
+          { ...sentence, text: '最小形态是 `python tea-cli.py --app_id 123`,缺一不可。', notes: [1] },
+          { ...sentence, text: 'The two go together.', notes: [] },
+          { ...sentence, text: 'Then the next one.', notes: [] },
+        ],
+      },
+      { kind: 'heading', text: '`--date` 的格式', sentences: [] },
+    ];
+    drawn = doc;
+    await open('/wiki/orbit/d/session-runtime');
+    await vi.waitFor(() => expect(page()?.querySelector('.wk-dc-sec h2 code')).toBeTruthy());
+    const shown = page().querySelector(`[data-section="${section.key}"]`)!;
+    expect(shown.querySelector('h2')!.textContent).toBe(`${section.number}必填参数：--app_id 与 --date`);
+    expect(text('h2 code', shown)).toEqual(['--app_id', '--date']);
+    expect(text('h3 code', shown)).toEqual(['--date']);
+    const paragraph = shown.querySelector('p')!;
+    // A full-width stop and its footnote run straight on; a Latin stop keeps its space.
+    expect(paragraph.textContent).toBe('最小形态是 python tea-cli.py --app_id 123，缺一不可。[1]The two go together. Then the next one. ');
+  });
+
+  it("keeps each short word of a sentence's code whole, and adds nothing a reader would copy", async () => {
+    const doc = structuredClone(SHARED.docs.doc.read);
+    const long = `src/${'a-b/'.repeat(10)}c.ts`;
+    const block = doc.sections[0].blocks[0];
+    block.sentences = [{ ...block.sentences[0], text: `Run \`python tea-cli.py --app_id 123\` beside \`${long}\`.`, notes: [] }];
+    drawn = doc;
+    await open('/wiki/orbit/d/session-runtime');
+    await vi.waitFor(() => expect(page()?.querySelector('.wk-dc-sec p code')).toBeTruthy());
+    const [command, path] = [...page().querySelectorAll('.wk-dc-sec p code')];
+    expect(command.textContent).toBe('python tea-cli.py --app_id 123');
+    expect(text('.code-word', command)).toEqual(['python', 'tea-cli.py', '--app_id', '123']);
+    // A word no phone's line would hold is left to wrap.
+    expect(path.textContent).toBe(long);
+    expect(path.querySelector('.code-word')).toBeNull();
+  });
+
+  it('lets a line end before code, except after what opens a bracket or a quote', async () => {
+    const doc = structuredClone(SHARED.docs.doc.read);
+    const block = doc.sections[0].blocks[0];
+    block.sentences = [{ ...block.sentences[0], text: '参数、`--force`、（`--hour`）和“`--date`”', notes: [] }];
+    drawn = doc;
+    await open('/wiki/orbit/d/session-runtime');
+    await vi.waitFor(() => expect(page()?.querySelector('.wk-dc-sec p code')).toBeTruthy());
+    const paragraph = page().querySelector('.wk-dc-sec p')!;
+    const before = [...paragraph.querySelectorAll('code')].map((code) => (code.previousSibling as Element).className ?? 'words');
+    expect(before).toEqual(['code-break', 'words', 'words']);
+    // Drawn by the stylesheet: nothing a reader copies, and no <wbr>, which Safari answers by drawing the code's first word twice.
+    expect(paragraph.textContent).toBe('参数、--force、（--hour）和“--date” ');
+    expect(paragraph.querySelector('wbr')).toBeNull();
+  });
+
   it("draws a section's diagram where it stands among the section's blocks (docs.diagram)", async () => {
     const source = 'flowchart LR\n  n1["Turn stored"]\n  n2["Delivered"]\n  n1 --> n2';
     mermaid.render.mockResolvedValue({ svg: '<svg data-drawn="yes"></svg>' });

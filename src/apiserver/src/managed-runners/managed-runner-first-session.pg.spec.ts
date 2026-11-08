@@ -79,6 +79,7 @@ import {
   MANAGED_RUNNER_RUNTIME,
   type ManagedRunnerRuntime,
 } from './managed-runner-runtime';
+import '../test-support/daemon-routes-over-http';
 
 declare global {
   interface BigInt { toJSON(): string; }

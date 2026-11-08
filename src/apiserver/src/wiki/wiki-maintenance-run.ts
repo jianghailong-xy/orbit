@@ -3,6 +3,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDes
 import { Prisma } from '@prisma/client';
 import {
   RunEventType,
+  WIKI_BACKFILL,
   WIKI_CURSOR_OUTCOMES,
   WIKI_MAINTENANCE_CATCH_UP,
   WIKI_MAINTENANCE_FAILURE_KINDS,
@@ -38,7 +39,10 @@ import {
   pageOf,
   PAGE_FACT_SCAN,
   spaceScope,
+  WIKI_RUNS_OF_FACTS,
+  wikiSessionsOfSpace,
   type FactPosition,
+  type WikiBackfillSession,
   type WikiMaintenance,
 } from './wiki-maintenance';
 import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
@@ -85,6 +89,11 @@ import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
  * aside, and no fact is required of the ask. A space still due has its next round made then, right behind the
  * articles job and before the run lets the space go, and the claim takes the round first (wiki-worker/wiki-jobs.ts,
  * THE ORDER); a space no longer due makes nothing, and the articles job runs at the next pass.
+ *
+ * A BACKFILL IS A RUN NO FACT MADE (contract `maintenance.job.server.backfill`, docs/wiki-memory-claims-design.md §5): somebody
+ * named its sessions, from a shell (`wiki-backfill.cli.ts`), and the space's own reading of its facts has no part of it. It holds
+ * the space as any run does, one at a time; and it touches nothing a run's facts are read by: not the cursor, not the day's
+ * count, not the streak, and it owes no articles. As it ends it asks for the space's next round, so the two take turns.
  */
 
 // ── The trigger ─────────────────────────────────────────────────────────────────────────────────
@@ -180,7 +189,7 @@ export async function considerWikiMaintenance(
     why,
   });
   const space = await prisma.wikiSpace.findFirst({
-    where: { id: spaceId, ownerId },
+    where: { id: spaceId, ownerId, deletedAt: null },
     select: { id: true, settings: true },
   });
   if (!space) return no('off');
@@ -295,7 +304,8 @@ class MaintenanceJobWriter {
       this.prisma,
       async (tx) => {
         const [space] = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`;
+          SELECT "id" FROM "wiki_space"
+           WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid AND "deleted_at" IS NULL FOR NO KEY UPDATE`;
         if (!space) return { why: 'off' } as const;
         if (await unfinishedMaintainJob(tx, ownerId, spaceId, input.endingJobId)) return { why: 'unfinished' } as const;
         if ((await wikiMaintenanceRunsToday(tx, ownerId, spaceId, now)).remaining <= 0) return { why: 'daily_limit_reached' } as const;
@@ -341,6 +351,94 @@ class MaintenanceJobWriter {
       loggedRetry(this.logger, 'wiki.maintenanceJob'),
     );
   }
+
+  /**
+   * A backfill's job and run row, under the same lock and the same one-at-a-time as `makeJob`; null when a run of the space
+   * has not ended. Its run has no `due`, which is how every read of a space's runs tells it from one its facts made
+   * (`WIKI_RUNS_OF_FACTS`), and no position to reach. The day's count and the cursor row are not read or written.
+   */
+  async makeBackfillJob(input: {
+    ownerId: string;
+    spaceId: string;
+    reason: string;
+    sessions: readonly WikiBackfillSession[];
+  }): Promise<{ made: true; jobId: string; runId: string; ownerId: string } | null> {
+    const { ownerId, spaceId, reason, sessions } = input;
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const [space] = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "wiki_space"
+           WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid AND "deleted_at" IS NULL FOR NO KEY UPDATE`;
+        if (!space || await unfinishedMaintainJob(tx, ownerId, spaceId)) return null;
+        const runId = randomUUID();
+        const jobId = randomUUID();
+        await tx.wikiMaintenanceRun.create({
+          data: { id: runId, spaceId, ownerId, jobId, due: null, backlog: 0, pendingSessions: 0, localEndpoint: false },
+          select: { id: true },
+        });
+        await tx.wikiJob.create({
+          data: {
+            id: jobId,
+            ownerId,
+            spaceId,
+            kind: 'maintain',
+            input: { runId, backfill: { reason, sessions: sessions.map(({ sessionId, noteIds }) => ({ sessionId, noteIds })) } },
+            priority: WIKI_MAINTAIN_JOB.priority,
+            state: 'queued',
+          },
+          select: { id: true },
+        });
+        return { made: true as const, jobId, runId, ownerId };
+      },
+      loggedRetry(this.logger, 'wiki.backfillJob'),
+    );
+  }
+}
+
+/** What a backfill is asked for: which space, why, and which sessions. */
+export interface WikiBackfillRequest {
+  spaceId: string;
+  reason: string;
+  sessions: readonly WikiBackfillSession[];
+}
+
+/** The `maintain` job a backfill made and its run row, or why none was. */
+export type WikiBackfillAnswer = { made: true; jobId: string; runId: string; ownerId: string } | { made: false; why: string };
+
+/**
+ * Make one backfill job, or say why not (contract `maintenance.job.server.backfill`). No route reaches this: the one caller is
+ * the operator's shell in the deployment's own container (`wiki-backfill.cli.ts`), which is why nothing here reads a login.
+ * Every session must be one the space's runs may read and every note one of the space's, or nothing is made: a list that is
+ * wrong is better said at once than found out from a run's report.
+ */
+export async function requestWikiBackfill(prisma: PrismaService, request: WikiBackfillRequest): Promise<WikiBackfillAnswer> {
+  const no = (why: string): WikiBackfillAnswer => ({ made: false, why });
+  const reason = request.reason.trim();
+  if (reason === '') return no('a reason is required: why these sessions are read again');
+  if ([...reason].length > WIKI_BACKFILL.reasonMaxChars) return no(`a reason is at most ${WIKI_BACKFILL.reasonMaxChars} characters`);
+  const ids = request.sessions.map((session) => session.sessionId);
+  if (ids.length === 0) return no('name at least one session');
+  if (ids.length > WIKI_BACKFILL.sessionsMax) return no(`one backfill names at most ${WIKI_BACKFILL.sessionsMax} sessions, and this names ${ids.length}`);
+  if (new Set(ids).size !== ids.length) return no('a session is named twice');
+  const space = await prisma.wikiSpace.findFirst({ where: { id: request.spaceId, deletedAt: null }, select: { id: true, ownerId: true, settings: true } });
+  if (!space) return no('no such wiki space');
+  const { ownerId } = space;
+  const settings = wikiMaintenanceSettings((space.settings as Record<string, unknown> | null)?.maintenance);
+  if (!settings.enabled || !settings.workspaceId) return no('this space\'s maintenance is off');
+  // What a backfill is for happens at a verdict: a duplicate gives an old entry its new sources, and a note's op with no
+  // first-hand source is capped. Only Automatic has verdicts.
+  if (wikiSpaceSettings(space.settings).reviewMode !== 'automatic') return no('only an Automatic space can be backfilled: its verdicts are what a backfill relies on');
+  const readable = await wikiSessionsOfSpace(prisma, await spaceScope(prisma, ownerId, space.id), ids);
+  const unreadable = ids.filter((id) => !readable.has(id));
+  if (unreadable.length > 0) return no(`not a session of this space that has come to rest: ${unreadable.join(', ')}`);
+  const noteIds = request.sessions.flatMap((session) => session.noteIds);
+  const notes = noteIds.length === 0 ? [] : await prisma.wikiNote.findMany({ where: { ownerId, spaceId: space.id, id: { in: noteIds } }, select: { id: true } });
+  const found = new Set(notes.map((note) => note.id));
+  const unknown = noteIds.filter((id) => !found.has(id));
+  if (unknown.length > 0) return no(`not a note of this space: ${unknown.join(', ')}`);
+  const made = await new MaintenanceJobWriter(prisma).makeBackfillJob({ ownerId, spaceId: space.id, reason, sessions: request.sessions });
+  return made ?? no('a maintenance run of this space has not ended: one run of a space at a time, so ask again when it has');
 }
 
 /** The space's cursor row, made the first time a fact asks about the space. */
@@ -425,14 +523,15 @@ export async function wikiMaintenanceRunsToday(
   spaceId: string,
   now: Date = new Date(),
 ): Promise<{ limit: number; used: number; remaining: number; since: string }> {
-  const space = await db.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { settings: true } });
+  const space = await db.wikiSpace.findFirst({ where: { id: spaceId, ownerId, deletedAt: null }, select: { settings: true } });
   if (!space) throw new NotFoundException('no such wiki space');
   const stored = space.settings !== null && typeof space.settings === 'object' && !Array.isArray(space.settings)
     ? (space.settings as Record<string, unknown>).maintenance
     : undefined;
   const settings = wikiMaintenanceSettings(stored);
   const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const runs = { ownerId, spaceId, jobId: { not: null }, createdAt: { gte: since } };
+  // A backfill's run has no `due`: no fact made it, and the day is what a space's facts may spend (WIKI_RUNS_OF_FACTS).
+  const runs = { ownerId, spaceId, jobId: { not: null }, due: { not: null }, createdAt: { gte: since } };
   const used = (await db.wikiMaintenanceRun.count({ where: runs }))
     - (await db.wikiMaintenanceRun.count({ where: { ...runs, ...WIKI_RUNS_NOT_COUNTED } }));
   return {
@@ -467,7 +566,7 @@ export async function wikiMaintenanceCatchUpOf(
 ): Promise<WikiMaintenanceCatchUpRead> {
   if (!wikiMaintenanceBehind(oldestPendingAt, now)) return { behind: false, failures: 0, state: null };
   const ended = await db.wikiMaintenanceRun.findMany({
-    where: { ownerId, spaceId, outcome: { not: null } },
+    where: { ownerId, spaceId, outcome: { not: null }, ...WIKI_RUNS_OF_FACTS },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: WIKI_MAINTENANCE_CATCH_UP.pauseAfterFailures,
     select: { outcome: true },
@@ -573,7 +672,7 @@ export class WikiMaintenanceTrigger implements OnModuleInit, OnModuleDestroy {
   async evaluate(ownerId: string, hint: WikiMaintenanceHint, now: Date = new Date()): Promise<WikiMaintenanceTriggerOutcome[]> {
     if (!wikiOnFor(currentWikiRollout(), ownerId)) return [];
     const spaces = await this.prisma.wikiSpace.findMany({
-      where: { ownerId, settings: { path: ['maintenance', 'enabled'], equals: true } },
+      where: { ownerId, deletedAt: null, settings: { path: ['maintenance', 'enabled'], equals: true } },
       select: { id: true },
       orderBy: { id: 'asc' },
     });
@@ -641,6 +740,7 @@ export async function finishWikiMaintenanceJob(
       report,
       opsRefused: refused,
     }, now);
+    await maintenance.noteNoNotes(ownerId, spaceId);
     const articles = await queueWikiArticlesAfterRun(prisma, {
       ownerId,
       spaceId,
@@ -663,6 +763,25 @@ export async function finishWikiMaintenanceJob(
     }, now);
     throw error;
   }
+}
+
+/**
+ * A backfill ends (contract `maintenance.job.server.backfill`): how, and what it did, is kept on its run row. No cursor to
+ * move, no streak to count, no articles owed: those are a run its facts made. Then it asks for the space's next round, however
+ * it went: the facts that found it unfinished are still after the cursor, and a space still due has its round made now, ahead
+ * of the next backfill, which is refused until that has ended. That is what makes the two take turns.
+ */
+export async function finishWikiBackfillJob(
+  prisma: PrismaService,
+  ownerId: string,
+  spaceId: string,
+  jobId: string,
+  input: WikiMaintenanceFinishInput,
+  now: Date = new Date(),
+): Promise<void> {
+  const { outcome, report, failureKind, refused } = checkedFinish(input);
+  await noteWikiMaintenanceJobEnd(prisma, ownerId, spaceId, jobId, { outcome, error: input.error ?? null, failureKind, report, opsRefused: refused }, now);
+  await askForNextWikiMaintenanceRound(prisma, ownerId, spaceId, jobId, now);
 }
 
 const runEndLog = new Logger('WikiMaintenanceTrigger');

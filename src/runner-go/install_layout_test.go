@@ -146,7 +146,7 @@ func (l legacyInstall) assertAlicesBin(t *testing.T) {
 func recordInstallCommands(t *testing.T, err error) *[]string {
 	t.Helper()
 	var seen []string
-	prevRun, prevQuiet := run, runQuiet
+	prevRun, prevQuiet, prevCapture := run, runQuiet, runCapture
 	run = func(name string, args ...string) error {
 		seen = append(seen, strings.TrimSpace(name+" "+strings.Join(args, " ")))
 		return err
@@ -154,7 +154,11 @@ func recordInstallCommands(t *testing.T, err error) *[]string {
 	runQuiet = func(name string, args ...string) {
 		seen = append(seen, strings.TrimSpace(name+" "+strings.Join(args, " ")))
 	}
-	t.Cleanup(func() { run, runQuiet = prevRun, prevQuiet })
+	runCapture = func(name string, args ...string) (string, error) {
+		seen = append(seen, strings.TrimSpace(name+" "+strings.Join(args, " ")))
+		return "", err
+	}
+	t.Cleanup(func() { run, runQuiet, runCapture = prevRun, prevQuiet, prevCapture })
 	return &seen
 }
 
@@ -253,7 +257,7 @@ func TestUserBinLaunchdPlistRunsTheResolvedPath(t *testing.T) {
 	}
 
 	plist := renderLaunchdPlist(exe, "/Users/alice/.orbit", launchdLabel, "/Users/alice", "/usr/bin:/bin",
-		"/Users/alice/.orbit/runner.log", []envVar{{"https_proxy", "http://proxy:3128"}})
+		"/Users/alice/.orbit/runner.log", false, []envVar{{"https_proxy", "http://proxy:3128"}})
 	if got := plistProgram(plist); got != real {
 		t.Fatalf("ProgramArguments runs %q, want %q:\n%s", got, real, plist)
 	}
@@ -410,7 +414,7 @@ func TestUserBinUpgradeMigratesALegacyLaunchAgent(t *testing.T) {
 	plistPath := launchAgentPath(l.home)
 	render := func(exe string) string {
 		return renderLaunchdPlist(exe, filepath.Join(l.home, ".orbit"), launchdLabel, l.home,
-			"/usr/local/bin:/usr/bin:/bin", filepath.Join(l.home, ".orbit", "runner.log"), nil)
+			"/usr/local/bin:/usr/bin:/bin", filepath.Join(l.home, ".orbit", "runner.log"), false, nil)
 	}
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
 		t.Fatal(err)
@@ -436,7 +440,34 @@ func TestUserBinUpgradeMigratesALegacyLaunchAgent(t *testing.T) {
 
 	restart()
 	domain := "gui/" + l.alice.Uid
-	assertCommands(t, *calls, "launchctl bootout "+domain+" "+plistPath, "launchctl bootstrap "+domain+" "+plistPath)
+	assertCommands(t, *calls,
+		"launchctl bootout "+domain+"/"+launchdLabel,
+		"launchctl enable "+domain+"/"+launchdLabel,
+		"launchctl bootstrap "+domain+" "+plistPath,
+	)
+}
+
+// Root restarts the agent with no shell of the account's to ask where it belongs: its plist says, so
+// a Background agent comes back in its own domain.
+func TestUserBinUpgradeRestartsABackgroundAgentInItsOwnDomain(t *testing.T) {
+	home := t.TempDir()
+	plistPath := launchAgentPath(home)
+	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plist := renderLaunchdPlist("/o/bin/orbit", "/o", launchdLabel, home, "/usr/bin", "/o/runner.log", true, nil)
+	if err := os.WriteFile(plistPath, []byte(plist), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	calls := recordInstallCommands(t, nil)
+
+	restartServices([]serviceDef{{path: plistPath, user: "austin", launchd: true}}, "502")
+
+	assertCommands(t, *calls,
+		"launchctl bootout user/502/"+launchdLabel,
+		"launchctl enable user/502/"+launchdLabel,
+		"launchctl bootstrap user/502 "+plistPath,
+	)
 }
 
 // A runner that runs as root can replace its binary where it is, so its install stays as it is.

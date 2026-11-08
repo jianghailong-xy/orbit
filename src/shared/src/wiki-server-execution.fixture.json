@@ -111,21 +111,21 @@
     "redraftNotes": [
       {
         "from": null,
-        "says": "The System model drafts it again with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
+        "says": "The System model drafts it again with what you write here."
       },
       {
         "from": {
           "version": 1,
           "inForce": true
         },
-        "says": "The System model drafts it again from v1, the plan in force, with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
+        "says": "The System model drafts it again from v1, the plan in force, with what you write here."
       },
       {
         "from": {
           "version": 2,
           "inForce": false
         },
-        "says": "The System model drafts it again from draft v2, with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
+        "says": "The System model drafts it again from draft v2, with what you write here."
       }
     ]
   },
@@ -140,7 +140,8 @@
       "plan_revise": "Plan revision",
       "docs_build": "Documents",
       "maintain": "Maintenance",
-      "smoke": "Model check"
+      "smoke": "Model check",
+      "docs_follow": "Rewrite"
     },
     "callsTitle": "Calls",
     "columns": [

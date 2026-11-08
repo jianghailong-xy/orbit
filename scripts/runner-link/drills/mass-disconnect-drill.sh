@@ -5,10 +5,9 @@
 # `runner offline` while they are out of reach, and once they are back every session goes on by itself: the turn it was
 # running ends, with what its engine wrote during the outage stored, and its next message is answered.
 #
-#   mass-disconnect-drill.sh prepare    The stack in the cut-over state, built from this checkout:
-#                                       RUNNER_LINK_REQUIRED on, so a runner's daemon calls go over the link alone and
-#                                       HTTPS refuses them. ORBIT_MASS_DISCONNECT_RUNNERS runners and the suite's
-#                                       scripted claude, built from this checkout, each runner with a configuration
+#   mass-disconnect-drill.sh prepare    The stack, built from this checkout, where a runner's daemon calls go over the
+#                                       link alone and HTTPS refuses them. ORBIT_MASS_DISCONNECT_RUNNERS runners and the
+#                                       suite's scripted claude, built from this checkout, each runner with a configuration
 #                                       directory and a systemd unit of its own, started across one heartbeat interval
 #                                       so that their beats are spread as a fleet's are; each one working over the link.
 #   mass-disconnect-drill.sh gateway    Every runner's session runs a turn held open. The link gateway node is killed
@@ -29,7 +28,7 @@
 # Settings, besides the staging stack's own (staging-lib.sh, staging-up.sh):
 #   ORBIT_MASS_DISCONNECT_RUNNERS      runners                                                      10
 #   ORBIT_MASS_DISCONNECT_CUT          runners the partition cuts off, a fifth of them or more       2
-#   ORBIT_MASS_DISCONNECT_SECONDS      how long each outage lasts                                   180
+#   ORBIT_MASS_DISCONNECT_SECONDS      how long each outage lasts                                   420
 #   ORBIT_MASS_DISCONNECT_SWEEP_AFTER  the partition: how many seconds after the first runner cut off crosses the
 #                                      reaper's offline line its next sweep is to fall, under 30; the runners cut off
 #                                      and the moment are chosen for it (README.md). Unset, the partition cuts off
@@ -53,7 +52,7 @@ set -euo pipefail
 # shellcheck source=../staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../staging-lib.sh"
 
-helper="$here/drills/rollback-drill.mjs"
+helper="$here/drills/drill-api.mjs"
 out="$state/client/mass-disconnect"
 drill="$state/mass-disconnect"
 timeline="$out/timeline.txt"
@@ -62,7 +61,7 @@ sessions_table="$out/sessions.tsv"
 gateway="$project-link-gateway"
 count="${ORBIT_MASS_DISCONNECT_RUNNERS:-10}"
 cut="${ORBIT_MASS_DISCONNECT_CUT:-2}"
-outage="${ORBIT_MASS_DISCONNECT_SECONDS:-180}"
+outage="${ORBIT_MASS_DISCONNECT_SECONDS:-420}"
 sweep_after="${ORBIT_MASS_DISCONNECT_SWEEP_AFTER:-}"
 gateways="${ORBIT_MASS_DISCONNECT_GATEWAYS:-1}"
 handshake_rate="${ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE:-200}"
@@ -71,11 +70,12 @@ node_late="${ORBIT_MASS_DISCONNECT_NODE_LATE:-1}"
 # The second link gateway node, with ORBIT_MASS_DISCONNECT_GATEWAYS=2 (staging.gateways.compose.yml).
 gateway_b="$project-link-gateway-b"
 # The reaper's own numbers (src/apiserver/src/realtime/reaper.service.ts, src/apiserver/src/runners/runner-presence.ts):
-# silent for longer than offline_after, a runner reads as offline; a sweep every sweep_every; nothing reaped as offline
+# silent for longer than offline_after, a runner reads as offline to the reaper (five minutes; the runner list still
+# calls it offline at 90 s); a sweep every sweep_every; nothing reaped as offline
 # for startup_grace after the apiserver starts; the mass silence counts the runners that missed a beat (silent for
 # longer than silent_after) among those heard from within window of that line. And the runner's heartbeat interval
 # (src/runner-go/runloop.go).
-offline_after=90 silent_after=45 sweep_every=30 startup_grace=180 window=600 heartbeat=30
+offline_after=300 silent_after=45 sweep_every=30 startup_grace=180 window=600 heartbeat=30
 [[ "$count" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_MASS_DISCONNECT_RUNNERS must be a positive whole number, not $count"
 [[ "$cut" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_MASS_DISCONNECT_CUT must be a positive whole number, not $cut"
 [[ "$outage" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_MASS_DISCONNECT_SECONDS must be a positive whole number, not $outage"
@@ -84,7 +84,7 @@ offline_after=90 silent_after=45 sweep_every=30 startup_grace=180 window=600 hea
   die "ORBIT_MASS_DISCONNECT_SWEEP_AFTER must be a number of seconds above 0 and under $sweep_every, not $sweep_after"
 [ "$cut" -lt "$count" ] || die "ORBIT_MASS_DISCONNECT_CUT ($cut) must leave some of the $count runners connected"
 [ $((cut * 5)) -ge "$count" ] || die "ORBIT_MASS_DISCONNECT_CUT ($cut) must be a fifth of the $count runners or more"
-# A runner that beat just before the cut is past the offline line 90 s into it, and the sweep after that comes within
+# A runner that beat just before the cut is past the reap line 300 s into it, and the sweep after that comes within
 # 30 s: two sweeps more than that, and every runner cut off is past the line for at least one whole sweep interval.
 [ "$outage" -ge $((offline_after + 2 * sweep_every)) ] ||
   die "ORBIT_MASS_DISCONNECT_SECONDS ($outage) must be $((offline_after + 2 * sweep_every)) or more: every runner cut off has to be past the reaper's offline line for a sweep"
@@ -427,9 +427,10 @@ sample() {
 }
 
 # --- The reaper's sweeps against the crossings. -----------------------------------------------------------------------
-# A runner beats every 30 s from when it started and is past the offline line 90 s after its last beat; the reaper
-# sweeps every 30 s on a timer. As both keep time with the same period, where a sweep falls against a runner's crossing
-# is where it falls in the interval against the runner's beats: the same in every outage, whenever the cut comes.
+# A runner beats every 30 s from when it started and is past the offline line offline_after after its last beat; the
+# reaper sweeps every 30 s on a timer. As both keep time with the same period, where a sweep falls against a runner's
+# crossing is where it falls in the interval against the runner's beats: the same in every outage, whenever the cut
+# comes.
 #
 # aim_cut RUN: for ORBIT_MASS_DISCONNECT_SWEEP_AFTER, the runners the partition cuts off, and the moment, chosen so that
 # the reaper's first sweep after the first of them crosses the line falls that many seconds after the crossing. The
@@ -533,7 +534,6 @@ outage() {
   statuses=() silence_max=()
   : > "$out/$run-samples.tsv"
   since_at="$(now)"
-  [ "$(json "$(api switch get)" required)" = true ] || fail "$run: RUNNER_LINK_REQUIRED is off: run prepare"
   for i in $(runners); do
     wait_presence "$i" 60 || fail "$run: runner r$i's presence does not say LINK"
   done
@@ -812,19 +812,17 @@ outage() {
 
 # --- Phases. ----------------------------------------------------------------------------------------------------------
 prepare() {
-  local i name token answer spacing
+  local i name token spacing
   rm -f "$timeline" "$outages" "$sessions_table"
-  say "prepare: the stack $project in the cut-over state, built from $(git -C "$repo" rev-parse --short HEAD); $count runners; $gateways link gateway node(s)$([ "$gateways" = 1 ] || echo ", the second letting $handshake_burst handshakes through at once and $handshake_rate a second after")"
+  say "prepare: the stack $project, built from $(git -C "$repo" rev-parse --short HEAD); $count runners; $gateways link gateway node(s)$([ "$gateways" = 1 ] || echo ", the second letting $handshake_burst handshakes through at once and $handshake_rate a second after")"
   stop_runners
   reconnect
-  ORBIT_LINK_STAGING_MODE=http ORBIT_LINK_STAGING_BACKENDS=1 ORBIT_LINK_STAGING_GATEWAYS="$gateways" \
+  ORBIT_LINK_STAGING_BACKENDS=1 ORBIT_LINK_STAGING_GATEWAYS="$gateways" \
     ORBIT_LINK_STAGING_HANDSHAKE_RATE_B="$handshake_rate" ORBIT_LINK_STAGING_HANDSHAKE_BURST_B="$handshake_burst" \
     "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
     fail "staging-up.sh (see $out/prepare-staging-up.log)"
   stack_settings
-  answer="$(api switch on)" || fail "switching RUNNER_LINK_REQUIRED on"
-  [ "$(json "$answer" required)" = true ] || fail "RUNNER_LINK_REQUIRED is not on: $answer"
-  say "stack $project up at $origin, its link gateway following the switch: RUNNER_LINK_REQUIRED $answer"
+  say "stack $project up at $origin"
 
   # The runners and their engine: this checkout's runner, and the test suite's scripted claude, one binary each for all.
   rm -rf "$drill"
@@ -862,9 +860,9 @@ EOF
     [ "$i" = "$count" ] || sleep "$spacing"
   done
   for i in $(runners); do
-    wait_log "$i" 'runner link mode: on' 0 180
+    wait_log "$i" 'carries the work of process' 0 180
     wait_presence "$i" 180 || fail "runner r$i's presence does not say LINK within 180 s"
-    say "runner r$i: $(grep -m 1 -- 'runner link mode: on' "$(runner_log "$i")" | sed -E 's/.*(runner link mode: on — [^;]*);.*/\1/'); presence $(presence "$i")"
+    say "runner r$i: $(grep -m 1 -- 'carries the work of process' "$(runner_log "$i")" | sed -E 's/^.*(runner link: )/\1/'); presence $(presence "$i")"
   done
   for i in $(runners); do
     api workspace "${rid[$i]}" "$(rdir "$i")/work" "$name-r$i" > "$(rdir "$i")/workspace.json" ||

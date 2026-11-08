@@ -96,36 +96,8 @@ test('release-leases row-locks ownership and expires only the matching engine ge
   assert.deepEqual(rawValues(h.updateCalls[1]), [SESSION_ID, GENERATION]);
   assert.match(rawSQL(h.updateCalls[1]), /kind IN \('message', 'shell'\)/);
   assert.match(rawSQL(h.updateCalls[1]), /status = 'IN_FLIGHT'/);
-  assert.match(
-    rawSQL(h.updateCalls[1]),
-    /"lease_generation" IS NOT DISTINCT FROM \?::uuid/,
-  );
+  assert.match(rawSQL(h.updateCalls[1]), /"lease_generation" = \?::uuid/);
   assert.match(rawSQL(h.updateCalls[1]), /now\(\) - interval '1 second'/);
-});
-
-test('legacy release keeps the NULL session generation so a replacement legacy engine can poll', async () => {
-  const h = makeController(RUNNER_ID, null, null);
-
-  await h.controller.releaseLeases({ id: RUNNER_ID }, SESSION_ID);
-
-  assert.equal(h.updateCalls.length, 1);
-  assert.doesNotMatch(rawSQL(h.updateCalls[0]), /UPDATE "session"/);
-  assert.doesNotMatch(rawSQL(h.updateCalls[0]), /INSERT INTO "inbox_lease_generation"/);
-  assert.deepEqual(rawValues(h.updateCalls[0]), [SESSION_ID, null]);
-  assert.match(
-    rawSQL(h.updateCalls[0]),
-    /"lease_generation" IS NOT DISTINCT FROM \?::uuid/,
-  );
-});
-
-test('a delayed legacy release cannot clear a generation-aware current consumer', async () => {
-  const h = makeController(RUNNER_ID, GENERATION);
-
-  await h.controller.releaseLeases({ id: RUNNER_ID }, SESSION_ID);
-
-  assert.equal(h.updateCalls.length, 1);
-  assert.match(rawSQL(h.updateCalls[0]), /UPDATE "conversation_turn"/);
-  assert.deepEqual(rawValues(h.updateCalls[0]), [SESSION_ID, null]);
 });
 
 test('release-leases does not mutate or notify when the runner does not own the session', async () => {
@@ -173,4 +145,12 @@ test('release-leases rejects a malformed lease owner before opening a transactio
   );
 
   assert.deepEqual(h.calls, []);
+});
+
+test('release-leases refuses a call that names no generation or no owner, before it opens a transaction', async () => {
+  for (const dto of [undefined, { leaseOwner: LEASE_OWNER }, { leaseGeneration: GENERATION }]) {
+    const h = makeController();
+    await assert.rejects(h.controller.releaseLeases({ id: RUNNER_ID }, SESSION_ID, dto), BadRequestException);
+    assert.deepEqual(h.calls, []);
+  }
 });

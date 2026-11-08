@@ -203,6 +203,10 @@ type fakeStep struct {
 	// own, and it is the counter the control plane reads to tell "the engine stopped" from "the
 	// engine ran". A pointer because 0 is a value here and not an absence.
 	NumTurns *int `json:"numTurns,omitempty"`
+	// CostUsd and ModelUsage are a result frame's `total_cost_usd` and `modelUsage`: the running
+	// totals of the process, as the real CLI reports them. Omitted leaves both keys out.
+	CostUsd    *float64               `json:"costUsd,omitempty"`
+	ModelUsage map[string]interface{} `json:"modelUsage,omitempty"`
 }
 
 type fakeSpawn struct {
@@ -511,10 +515,17 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 		if s.NumTurns != nil {
 			numTurns = *s.NumTurns
 		}
-		return marshalFrame(map[string]interface{}{
+		frame := map[string]interface{}{
 			"type": "result", "subtype": subtype, "is_error": s.IsError,
 			"num_turns": numTurns, "result": s.Text, "session_id": sessionID,
-		}), nil
+		}
+		if s.CostUsd != nil {
+			frame["total_cost_usd"] = *s.CostUsd
+		}
+		if s.ModelUsage != nil {
+			frame["modelUsage"] = s.ModelUsage
+		}
+		return marshalFrame(frame), nil
 	case "prompt_suggestion":
 		// What --prompt-suggestions writes after a turn's result: the CLI's guess at the next
 		// user message, in Text.

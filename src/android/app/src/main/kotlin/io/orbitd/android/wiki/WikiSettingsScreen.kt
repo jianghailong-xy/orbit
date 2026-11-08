@@ -16,6 +16,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -30,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.LoadingMessage
+import io.orbitd.android.directory.StatusMessage
+import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.toast.OrbitToasts
@@ -39,7 +42,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
 // Wiki settings (iOS `WikiSettingsView.swift`; criterion 8, mock 20): which review mode the space runs in, whether
-// Automatic sends spot checks, and the space's Wiki maintenance run — pushed from the Wiki home's gear. The app's own
+// Automatic sends spot checks, the space's Wiki maintenance run, and moving the wiki to Trash (docs/mocks/wiki-trash) —
+// pushed from the Wiki home's gear. The app's own
 // settings form: inset-grouped sections, a header and a footer each. The sections are `WikiModeLogic.SettingsSection`
 // in its order, which is the web page's; the modes are `WikiModeLogic.modes`; every word is `WikiModeCopy`'s.
 
@@ -47,9 +51,15 @@ import kotlinx.serialization.json.*
 internal class WikiSettingsActions(
     val setMode: (String) -> Unit = {},
     val setSpotChecks: (Boolean) -> Unit = {},
+    /** A workspace, and whether it is to be in the wiki: a row's switch, and Add workspace's menu. */
+    val setWorkspace: (String, Boolean) -> Unit = { _, _ -> },
     /** Set up… when maintenance is off, Edit… when it is on: the same sheet. */
     val setUp: () -> Unit = {},
     val turnOff: () -> Unit = {},
+    /** Move to Trash…, which asks first. */
+    val moveToTrash: () -> Unit = {},
+    /** The Trash row: Trash's own page. */
+    val openTrash: () -> Unit = {},
 )
 
 /** The settings page, drawn from the space as the server kept it: the workspace is where the repository is read from,
@@ -57,10 +67,13 @@ internal class WikiSettingsActions(
  * workspace. [server]: the deployment's System model while the server executes the account's wiki (mock 35 ①②, P9),
  * drawn read-only with its state, and one sentence says where the wiki's material goes; null while the read does not
  * say so (still loading, or a control plane from before it), which draws neither.
+ * [workspaces]: who is in the wiki and who can be added (mock 38); null until it has been read. [trashed]: how many wikis
+ * Trash holds — its row, under Move to Trash…, is drawn while it holds one.
  * Every control is off while a write is in flight ([busy]). */
 @Composable
 internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabel: (String) -> String? = { null },
-    server: WikiSystemModelStatus? = null, busy: Boolean = false, actions: WikiSettingsActions = WikiSettingsActions()) {
+    server: WikiSystemModelStatus? = null, busy: Boolean = false, actions: WikiSettingsActions = WikiSettingsActions(),
+    workspaces: WikiSpaceWorkspaces? = null, trashed: Int = 0) {
     val mode = WikiModeLogic.mode(space.settings)
     val maintenance = space.settings?.maintenance ?: WikiMaintenanceSettings.default
     PageBar.Bind(route, WikiModeCopy.settingsTitle)
@@ -104,6 +117,31 @@ internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabe
                             color = WikiPalette.secondary)
                     }
                 }
+                WikiModeLogic.SettingsSection.WORKSPACES -> {
+                    item(key = "workspaces-header") { WikiPlanSectionHead(section.title) }
+                    if (workspaces != null) item(key = "workspaces") {
+                        WikiCard(Modifier.testTag("wiki-settings-workspaces")) {
+                            if (workspaces.workspaces.isEmpty()) Text(WikiModeCopy.workspacesEmpty,
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("wiki-settings-workspaces-empty"),
+                                style = WikiType.prose, color = WikiPalette.secondary)
+                            workspaces.workspaces.forEachIndexed { index, row ->
+                                if (index > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
+                                SettingsWorkspaceRow(row, busy) { inWiki -> actions.setWorkspace(row.id, inWiki) }
+                            }
+                            if (workspaces.addable.isNotEmpty()) {
+                                HorizontalDivider(Modifier.padding(start = 16.dp))
+                                SettingsAddWorkspaceRow(workspaces.addable, busy) { id -> actions.setWorkspace(id, true) }
+                            }
+                        }
+                    }
+                    item(key = "workspaces-footer") {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            WikiPlanFootnoteText(WikiModeCopy.workspacesLead, "wiki-settings-workspaces-lead")
+                            WikiPlanFootnoteText(if (space.repoUrlNorm == null) WikiModeCopy.workspacesJoinNoRepository else WikiModeCopy.workspacesJoin,
+                                "wiki-settings-workspaces-join")
+                        }
+                    }
+                }
                 WikiModeLogic.SettingsSection.MAINTENANCE -> {
                     item(key = "maintenance-header") { WikiPlanSectionHead(section.title) }
                     item(key = "maintenance") {
@@ -137,6 +175,28 @@ internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabe
                             SettingsButtonRow(WikiModeCopy.maintenanceEdit + "…", "wiki-settings-edit", busy, onClick = actions.setUp)
                             HorizontalDivider(Modifier.padding(start = 16.dp))
                             SettingsButtonRow(WikiModeCopy.turnOff, "wiki-settings-turn-off", busy, destructive = true, onClick = actions.turnOff)
+                        }
+                    }
+                }
+                WikiModeLogic.SettingsSection.TRASH -> {
+                    item(key = "trash-header") { WikiPlanSectionHead(section.title) }
+                    item(key = "trash") {
+                        WikiCard(Modifier.testTag("wiki-settings-move-to-trash")) {
+                            SettingsButtonRow(WikiModeCopy.trashOpen, "wiki-settings-move-to-trash-open", busy, destructive = true, onClick = actions.moveToTrash)
+                        }
+                    }
+                    item(key = "trash-footer") { WikiPlanFootnote(WikiModeCopy.trashNote) }
+                    // The way to Trash while it holds a wiki: a card of its own under the note, as Edit… and Turn off stand
+                    // under Maintenance's, with no heading of its own, so the page's sections stay the web's.
+                    if (trashed > 0) item(key = "trash-row") {
+                        WikiCard {
+                            WikiRowButton("wiki-settings-trash", onClick = actions.openTrash) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(WikiModeCopy.trash, Modifier.weight(1f), style = WikiType.prose)
+                                    Text(WikiModeCopy.trashRowCount(trashed), style = WikiType.prose, color = WikiPalette.secondary)
+                                    Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp), tint = WikiPalette.secondary)
+                                }
+                            }
                         }
                     }
                 }
@@ -189,6 +249,42 @@ private fun SettingsButtonRow(title: String, tag: String, busy: Boolean, destruc
     }
 }
 
+/** One workspace: its name over its machine, and the switch that says whether it is in the wiki. One left out stays on
+ * the list, greyed, and says it will not come back by itself. */
+@Composable
+private fun SettingsWorkspaceRow(row: WikiSpaceWorkspaceRow, busy: Boolean, change: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().toggleable(row.inWiki, enabled = !busy, role = Role.Switch, onValueChange = change)
+        .padding(horizontal = 16.dp, vertical = 10.dp).testTag("wiki-settings-workspace-row:${row.id}"), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(row.name, style = WikiType.prose, color = if (row.inWiki) MaterialTheme.colorScheme.onSurface else WikiPalette.secondary)
+            row.runner?.let { Text(it, style = WikiType.label, color = WikiPalette.secondary) }
+            if (!row.inWiki) Text(WikiModeCopy.workspaceLeftOut, style = WikiType.label, color = WikiPalette.secondary)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = row.inWiki, onCheckedChange = null, enabled = !busy)
+    }
+}
+
+/** The workspaces with no repository, in a menu: a press adds the one picked, at once. */
+@Composable
+private fun SettingsAddWorkspaceRow(addable: List<WikiSpaceWorkspaceRow>, busy: Boolean, add: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth()) {
+        SettingsButtonRow(WikiModeCopy.addWorkspace, "wiki-settings-add-workspace", busy) { expanded = true }
+        DropdownMenu(expanded, { expanded = false }) {
+            Text(WikiModeCopy.addWorkspaceGroup, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = WikiType.label, color = WikiPalette.secondary)
+            addable.forEach { row ->
+                DropdownMenuItem(text = {
+                    Column {
+                        Text(row.name)
+                        row.runner?.let { Text(it, style = WikiType.label, color = WikiPalette.secondary) }
+                    }
+                }, onClick = { expanded = false; add(row.id) }, modifier = Modifier.testTag("wiki-settings-add-workspace:${row.id}"))
+            }
+        }
+    }
+}
+
 @Composable
 private fun SettingsFallbackBanner(text: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).background(WikiPalette.amberWash, RoundedCornerShape(10.dp))
@@ -200,8 +296,9 @@ private fun SettingsFallbackBanner(text: String) {
 
 // MARK: - Set up maintenance
 
-/** One choice in a Set up picker: a workspace, and the words it is listed by. */
-internal data class WikiPickerOption(val id: String, val label: String)
+/** One choice in a Set up picker: a workspace, the words it is listed by, whether its runner is offline — listed last and said
+ * so — and the heading it is listed under in the form that makes a wiki: its repository. */
+internal data class WikiPickerOption(val id: String, val label: String, val offline: Boolean = false, val group: String? = null)
 
 /** What Set up / Edit writes: where the repository is read from, how many runs a day, and how far back the first one
  * reads — a pick, and the days `Last … days` reads. No provider: the deployment sets the System model (P11). */
@@ -212,42 +309,47 @@ private val choiceSaver = listSaver<WikiMaintenanceChoice, Any?>(
     save = { listOf(it.workspaceId, it.dailyRunLimit, it.lookback.name, it.lookbackDays) },
     restore = { WikiMaintenanceChoice(it[0] as String?, it[1] as Int, WikiModeLogic.LookbackChoice.valueOf(it[2] as String), it[3] as Int) })
 
-/** Set up maintenance (mock 20 ②, mock 35 ②): the workspace the repository is read from, the daily limit and the
- * look-back — then Turn on (or Save for one already on). A sheet form: Cancel on the left, the answer on the right.
- * [submit] is the write; true when it landed and the sheet can close. While the server executes the account's wiki
- * ([server]) the System model is shown, read-only, and the form ends on where the wiki's material goes. */
+/** The form Set up maintenance and Create wiki share (mock 20 ②, mock 35 ②, mock 41): the workspace the repository is read
+ * from, the daily limit and the look-back — then [submitLabel]. A sheet form: Cancel on the left, the answer on the right.
+ * [workspaceDefault] is the workspace it stands on until one is picked, worked out anew each time so that reads landing after
+ * it opened still pick for the reader; [workspaceNote] says what is under the workspace, by the one it stands on. [submit] is
+ * the write; true when it landed and the sheet can close; a [refusal] stays in the sheet, under its bar, where it is in view
+ * however far the form is scrolled. While the server executes the account's wiki ([server]) the System model is shown,
+ * read-only, and the form ends on where the wiki's material goes. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun WikiMaintenanceForm(workspaces: List<WikiPickerOption>, initial: WikiMaintenanceChoice,
-    enabled: Boolean, server: WikiSystemModelStatus? = null, busy: Boolean = false, close: () -> Unit,
-    submit: suspend (WikiMaintenanceChoice) -> Boolean) {
+internal fun WikiMaintenanceForm(title: String, note: String, submitLabel: String, workspaces: List<WikiPickerOption>, workspaceDefault: String?,
+    workspaceNote: (String?) -> String, initial: WikiMaintenanceChoice, server: WikiSystemModelStatus?, busy: Boolean, refusal: String? = null,
+    close: () -> Unit, submit: suspend (WikiMaintenanceChoice) -> Boolean) {
     var choice by rememberSaveable(stateSaver = choiceSaver) { mutableStateOf(initial) }
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val picked = choice.workspaceId ?: workspaceDefault
     WikiSheet(saving, close, Modifier.testTag("wiki-settings-form")) {
-        SheetBar(WikiModeCopy.setUpTitle, WikiModeCopy.cancel, if (enabled) WikiModeCopy.save else WikiModeCopy.turnOn,
-            confirmEnabled = !saving && !busy && choice.workspaceId != null, confirmTag = "wiki-settings-form-submit", cancel = close,
-            cancelEnabled = !saving) {
+        SheetBar(title, WikiModeCopy.cancel, submitLabel, confirmEnabled = !saving && !busy && picked != null, confirmTag = "wiki-settings-form-submit",
+            cancel = close, cancelEnabled = !saving) {
             saving = true
-            val chosen = choice
+            val chosen = choice.copy(workspaceId = picked)
             scope.launch { val landed = submit(chosen); saving = false; if (landed) close() }
         }
+        refusal?.let { PlanRefusedLines(listOf(it), "wiki-settings-form-refused") }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            WikiPlanFootnoteText(WikiModeCopy.maintenanceNoteServer, "wiki-settings-form-note")
+            WikiPlanFootnoteText(note, "wiki-settings-form-note")
             WikiPlanSectionHead(WikiModeCopy.repoFrom)
             WikiCard {
-                val picked = choice.workspaceId
                 val label = if (picked == null) WikiModeCopy.noWorkspace else workspaces.firstOrNull { sameWikiId(it.id, picked) }?.label ?: picked
                 SettingsPickerRow(WikiModeCopy.repoFrom, label, "wiki-settings-workspace") { done ->
                     if (picked == null) SettingsPickerItem(WikiModeCopy.noWorkspace, true, "wiki-settings-workspace:none") { done() }
-                    workspaces.forEach { option ->
-                        SettingsPickerItem(option.label, picked != null && sameWikiId(option.id, picked), "wiki-settings-workspace:${option.id}") {
+                    workspaces.forEachIndexed { index, option ->
+                        if (option.group != null && option.group != workspaces.getOrNull(index - 1)?.group)
+                            Text(option.group, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = WikiType.label, color = WikiPalette.secondary)
+                        SettingsPickerItem(option.label, picked != null && sameWikiId(option.id, picked), "wiki-settings-workspace:${option.id}", option.offline) {
                             done(); choice = choice.copy(workspaceId = option.id)
                         }
                     }
                 }
             }
-            WikiPlanFootnote(WikiModeCopy.repoFromNote)
+            WikiPlanFootnoteText(workspaceNote(picked), "wiki-settings-workspace-note")
             if (server != null) {
                 // Set by the deployment: shown, never picked, and nothing here writes the provider.
                 WikiPlanSectionHead(WikiModeCopy.model)
@@ -298,9 +400,11 @@ private fun SettingsPickerRow(label: String, value: String, tag: String, menu: @
 }
 
 @Composable
-private fun SettingsPickerItem(text: String, picked: Boolean, tag: String, onClick: () -> Unit) {
-    DropdownMenuItem(text = { Text(text) }, onClick = onClick, modifier = Modifier.semantics { selected = picked }.testTag(tag),
-        leadingIcon = { if (picked) Icon(painterResource(R.drawable.ic_check), null) else Spacer(Modifier.size(24.dp)) })
+private fun SettingsPickerItem(text: String, picked: Boolean, tag: String, offline: Boolean = false, onClick: () -> Unit) {
+    DropdownMenuItem(text = { Text(text, color = if (offline) WikiPalette.secondary else Color.Unspecified) }, onClick = onClick,
+        modifier = Modifier.semantics { selected = picked }.testTag(tag),
+        leadingIcon = { if (picked) Icon(painterResource(R.drawable.ic_check), null) else Spacer(Modifier.size(24.dp)) },
+        trailingIcon = if (offline) ({ Text(WikiStartCopy.workspaceOffline, style = WikiType.label, color = WikiPalette.secondary) }) else null)
 }
 
 /** iOS's `Stepper`: what it says, and − and + within its range. */
@@ -334,6 +438,12 @@ internal fun wikiMaintenanceUpdate(choice: WikiMaintenanceChoice) = buildJsonObj
     }
 }
 
+/** Create wiki (`POST /api/wiki/spaces`): its name, its repository, and its maintenance from the start, as Set up writes it. */
+internal fun wikiSpaceCreate(title: String, repoUrl: String, choice: WikiMaintenanceChoice) = buildJsonObject {
+    put("title", title); put("repoUrl", repoUrl)
+    wikiMaintenanceUpdate(choice).forEach { (key, value) -> put(key, value) }
+}
+
 // MARK: - where the form's choices come from
 
 /** The account's workspaces and runners, read when the page opens: iOS lists them from the app's agents model
@@ -346,19 +456,91 @@ internal suspend fun wikiMaintenanceReads(client: WikiClient) = coroutineScope {
     WikiMaintenanceReads(workspaces.await(), runners.await())
 }
 
-/** A workspace the form can run maintenance in: its name, and the option it is listed as. */
-internal data class WikiWorkspaceRow(val name: String?, val option: WikiPickerOption)
+/** The owner's workspaces as the two forms offer them (`useWikiWorkspaceChoices`): the name and the runner it lives on — by
+ * the runner's display name when it has one, as iOS's `runnerNames` — its repository, and whether that runner is known to be
+ * offline. Until the reads come back, or when they fail, the directory this client holds. */
+internal fun wikiWorkspaceRows(reads: WikiMaintenanceReads, data: DirectoryData): List<WikiWorkspaceChoice> {
+    class Machine(val id: String, val name: String, val online: Boolean)
+    class Workspace(val id: String, val name: String?, val runner: String?, val repoUrl: String?)
+    val machines = reads.runners?.filterIsInstance<JsonObject>()?.mapNotNull { runner ->
+        runner["id"].text()?.let { id -> Machine(id, runner["displayName"].text() ?: runner["name"].text() ?: id, runner["online"].bool() == true) }
+    } ?: data.runners.map { Machine(it.id, it.name, it.online == true) }
+    val rows = reads.workspaces?.filterIsInstance<JsonObject>()?.mapNotNull { workspace ->
+        workspace["id"].text()?.let { Workspace(it, workspace["name"].text(), workspace["runnerId"].text(), workspace["repoUrl"].text()) }
+    } ?: data.workspaces.map { Workspace(it.id, it.name, it.runnerId, it.repoUrl) }
+    return rows.map { row ->
+        val machine = row.runner?.let { id -> machines.firstOrNull { sameWikiId(it.id, id) } }
+        WikiWorkspaceChoice(row.id, WikiModeLogic.workspaceLabel(row.name, machine?.name), WikiStartLogic.repositoryName(row.repoUrl), row.repoUrl, machine?.online ?: true)
+    }
+}
 
-/** The owner's workspaces as the picker lists them: the name, and the runner it lives on — by the runner's display name
- * when it has one, as iOS's `runnerNames`. Until the reads come back, or when they fail, the directory this client holds. */
-internal fun wikiWorkspaceRows(reads: WikiMaintenanceReads, data: DirectoryData): List<WikiWorkspaceRow> {
-    val names: Map<String, String> = reads.runners?.filterIsInstance<JsonObject>()?.mapNotNull { runner ->
-        runner["id"].text()?.let { id -> id to (runner["displayName"].text() ?: runner["name"].text() ?: id) }
-    }?.toMap() ?: data.runners.associate { it.id to it.name }
-    val rows: List<Triple<String, String?, String?>> = reads.workspaces?.filterIsInstance<JsonObject>()?.mapNotNull { workspace ->
-        workspace["id"].text()?.let { Triple(it, workspace["name"].text(), workspace["runnerId"].text()) }
-    } ?: data.workspaces.map { Triple(it.id, it.name, it.runnerId) }
-    return rows.map { (id, name, runner) -> WikiWorkspaceRow(name, WikiPickerOption(id, WikiModeLogic.workspaceLabel(name, runner?.let(names::get)))) }
+/** The workspaces, and whether their first read is still out. */
+internal data class WikiWorkspaceChoices(val choices: List<WikiWorkspaceChoice>, val loading: Boolean)
+
+/** The workspaces the two forms offer, read as the caller comes on screen; the directory stands in until they are. */
+@Composable
+internal fun rememberWikiWorkspaceChoices(store: WikiStore, data: DirectoryData): WikiWorkspaceChoices {
+    var reads by remember(store) { mutableStateOf<WikiMaintenanceReads?>(null) }
+    LaunchedEffect(store) { reads = wikiMaintenanceReads(store.client) }
+    return WikiWorkspaceChoices(wikiWorkspaceRows(reads ?: WikiMaintenanceReads(), data), reads?.workspaces == null)
+}
+
+/** Set up maintenance over the store, from Wiki settings' Maintenance and from the home's first step alike, where the reader
+ * is (the web's `WikiSetUpDialog`). It offers this wiki's own workspaces and stands on one for the reader
+ * ([WikiStartLogic.setUpChoices], [WikiStartLogic.workspaceDefault]), so that one press is enough. */
+@Composable
+internal fun WikiSetUpSheet(store: WikiStore, space: WikiSpace, data: DirectoryData, close: () -> Unit) {
+    val state by store.state.collectAsState()
+    val choices = rememberWikiWorkspaceChoices(store, data).choices
+    var members by remember { mutableStateOf<WikiSpaceWorkspaces?>(null) }
+    var notice by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(store, space.id) { members = optional { store.client.spaceWorkspaces(space.id) } }
+    LaunchedEffect(store) { store.loadSystemModel() }
+    val maintenance = space.settings?.maintenance ?: WikiMaintenanceSettings.default
+    val offered = WikiStartLogic.setUpChoices(choices, members?.workspaces.orEmpty(), maintenance.workspaceId)
+    val current = choices.firstOrNull { sameWikiId(it.id, maintenance.workspaceId) }?.id ?: maintenance.workspaceId
+    WikiMaintenanceForm(WikiModeCopy.setUpTitle, WikiModeCopy.maintenanceNoteServer, if (maintenance.enabled) WikiModeCopy.save else WikiModeCopy.turnOn,
+        offered.map { it.option() }, WikiStartLogic.workspaceDefault(offered, current, state.fromWorkspaceId), { WikiModeCopy.repoFromNote },
+        WikiMaintenanceChoice(null, maintenance.dailyRunLimit, WikiModeLogic.lookbackChoice(maintenance.lookbackDays),
+            WikiModeLogic.lookbackDaysOffered(maintenance.lookbackDays)),
+        state.systemModel?.takeIf { state.serverExecutes }, state.busy, close = close) { choice ->
+        val answer = store.updateSpace(space, wikiMaintenanceUpdate(choice))
+        if (answer != null) notice = answer else OrbitToasts.show(WikiCopy.settingsSaved)
+        answer == null
+    }
+    WikiRefusalAlert(WikiCopy.settingsSaveFailed, notice) { notice = null }
+}
+
+/** Create wiki (the web's `WikiCreateDialog`, mock 41): the same form, its workspaces under their repositories. Choosing the
+ * workspace chooses the repository, so there is no second field; a workspace on no repository has nothing to describe and is
+ * not offered. The server makes the space, turns maintenance on and asks for the plan's first draft in the one request, which
+ * is what the home then shows. */
+@Composable
+internal fun WikiCreateSheet(store: WikiStore, data: DirectoryData, close: () -> Unit) {
+    val state by store.state.collectAsState()
+    val choices = rememberWikiWorkspaceChoices(store, data).choices
+    var refusal by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(store) { store.loadSystemModel() }
+    val groups = WikiStartLogic.repositoryGroups(choices)
+    val offered = groups.flatMap { it.choices }
+    val maintenance = WikiMaintenanceSettings.default
+    fun workspace(id: String?) = offered.firstOrNull { sameWikiId(it.id, id) }
+    WikiMaintenanceForm(WikiStartCopy.create, WikiStartCopy.createNote, WikiStartCopy.createSubmit,
+        groups.flatMap { group -> group.choices.map { it.option(group.repository) } },
+        WikiStartLogic.workspaceDefault(offered, null, state.fromWorkspaceId),
+        { id -> workspace(id)?.repository?.let(WikiStartCopy::createRepositoryNote) ?: WikiModeCopy.repoFromNote },
+        WikiMaintenanceChoice(null, maintenance.dailyRunLimit, WikiModeLogic.lookbackChoice(maintenance.lookbackDays),
+            WikiModeLogic.lookbackDaysOffered(maintenance.lookbackDays)),
+        state.systemModel?.takeIf { state.serverExecutes }, state.busy, refusal, close) { choice ->
+        val picked = workspace(choice.workspaceId)
+        val repository = picked?.repository
+        val repoUrl = picked?.repoUrl
+        if (repository == null || repoUrl == null) false else {
+            val title = WikiStartLogic.repositoryTitle(repository)
+            refusal = store.createSpace(title, wikiSpaceCreate(title, repoUrl, choice))
+            refusal == null
+        }
+    }
 }
 
 /** The screen: the space on the Wiki home, its settings page, and the Set up sheet (iOS `WikiSettingsView`). */
@@ -368,39 +550,137 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
     val scope = rememberCoroutineScope()
     var settingUp by rememberSaveable { mutableStateOf(false) }
     var notice by rememberSaveable { mutableStateOf<String?>(null) }
-    var reads by remember { mutableStateOf(WikiMaintenanceReads()) }
+    var members by remember { mutableStateOf<WikiSpaceWorkspaces?>(null) }
+    var confirmingTrash by rememberSaveable { mutableStateOf(false) }
+    var trashRefusal by rememberSaveable { mutableStateOf<String?>(null) }
+    /** What Move to Trash's question counts, read with the page; null until then, or when the read fails. */
+    var trashEntries by remember { mutableStateOf<Int?>(null) }
+    suspend fun readMembers(id: String) { optional { store.client.spaceWorkspaces(id) }?.let { members = it } }
+    LaunchedEffect(store, state.currentSpace?.id) { state.currentSpace?.let { readMembers(it.id) } }
+    LaunchedEffect(store, state.currentSpace?.id) { trashEntries = state.currentSpace?.let { optional { store.client.health(it.id).entries } } }
     LaunchedEffect(store) { store.loadSpaces() }
     LaunchedEffect(store) { store.loadSystemModel() }
-    LaunchedEffect(store) { reads = wikiMaintenanceReads(store.client) }
+    LaunchedEffect(store) { store.loadTrash() }
+    val choices = rememberWikiWorkspaceChoices(store, data).choices
     val space = state.currentSpace
     if (space == null) {
         PageBar.Bind(route, WikiModeCopy.settingsTitle)
         Box(Modifier.fillMaxSize().testTag("wiki-settings-loading"), contentAlignment = Alignment.Center) { LoadingMessage("Loading…") }
         return
     }
-    val workspaceRows = wikiWorkspaceRows(reads, data)
-    val workspaces = workspaceRows.map { it.option }
     fun finish(answer: String?) { if (answer != null) notice = answer else OrbitToasts.show(WikiCopy.settingsSaved) }
     val server = state.systemModel?.takeIf { state.serverExecutes }
-    WikiSettingsPage(route, space, workspaceLabel = { id -> workspaces.firstOrNull { sameWikiId(it.id, id) }?.label }, server = server, busy = state.busy,
+    WikiSettingsPage(route, space, workspaceLabel = { id -> choices.firstOrNull { sameWikiId(it.id, id) }?.label }, server = server, busy = state.busy,
         actions = WikiSettingsActions(
             setMode = { mode -> scope.launch { finish(store.updateSpace(space, wikiReviewModeUpdate(mode))) } },
             setSpotChecks = { on -> scope.launch { finish(store.updateSpace(space, wikiSpotChecksUpdate(on))) } },
+            setWorkspace = { id, inWiki -> scope.launch {
+                val answer = store.setWorkspace(space, id, inWiki)
+                readMembers(space.id)
+                finish(answer)
+            } },
             setUp = { settingUp = true },
-            turnOff = { scope.launch { finish(store.updateSpace(space, wikiMaintenanceOff())) } }))
-    if (settingUp) {
-        val current = space.settings?.maintenance ?: WikiMaintenanceSettings.default
-        // A space names a codebase, and so does a workspace's name more often than not: the one called what the space
-        // is called is the one first offered.
-        val named = workspaceRows.firstOrNull { it.name == space.slug }?.option?.id
-        WikiMaintenanceForm(workspaces,
-            WikiMaintenanceChoice(current.workspaceId ?: named, current.dailyRunLimit,
-                WikiModeLogic.lookbackChoice(current.lookbackDays), WikiModeLogic.lookbackDaysOffered(current.lookbackDays)),
-            current.enabled, server, state.busy, close = { settingUp = false }) { choice ->
-            val answer = store.updateSpace(space, wikiMaintenanceUpdate(choice))
-            finish(answer)
-            answer == null
+            turnOff = { scope.launch { finish(store.updateSpace(space, wikiMaintenanceOff())) } },
+            moveToTrash = { confirmingTrash = true },
+            openTrash = { nav.open(OrbitRoute(Destination.WIKI_TRASH)) }),
+        workspaces = members, trashed = state.trash.size)
+    if (settingUp) WikiSetUpSheet(store, space, data, close = { settingUp = false })
+    WikiRefusalAlert(WikiCopy.settingsSaveFailed, notice) { notice = null }
+    if (confirmingTrash) {
+        val name = WikiSpaceLogic.names(state.spaces)[space.id] ?: space.title ?: space.slug
+        AlertDialog(onDismissRequest = { confirmingTrash = false }, modifier = Modifier.testTag("wiki-move-to-trash-dialog"),
+            title = { Text(WikiModeCopy.trashQuestion(name)) },
+            text = { Text(WikiModeCopy.trashMessage(trashEntries, space.docs?.written ?: 0, space.repoUrlNorm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingTrash = false
+                    scope.launch {
+                        // The page goes as soon as the wiki does, back to the one the Wiki opens now, or to its empty state.
+                        trashRefusal = store.moveToTrash(space) {
+                            nav.back()
+                            OrbitToasts.show(WikiModeCopy.movedToTrash(name))
+                        }
+                    }
+                }, modifier = Modifier.testTag("wiki-move-to-trash-confirm")) { Text(WikiModeCopy.trashConfirm, color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingTrash = false }, modifier = Modifier.testTag("wiki-move-to-trash-cancel")) { Text(WikiModeCopy.cancel) }
+            })
+    }
+    WikiRefusalAlert(WikiModeCopy.trashFailed, trashRefusal) { trashRefusal = null }
+}
+
+// MARK: - Trash
+
+/** Trash (docs/mocks/wiki-trash ②, the web's Trash dialog), pushed from Wiki settings' Trash row, the space picker and the
+ * first-wiki card: how long Trash keeps a wiki, then each wiki in it, the newest move first, with Restore and Delete
+ * permanently… under it. Delete permanently asks first, as the sessions' Trash does; a write the server refuses says why in
+ * an alert, in the server's own words — a restore while a newer wiki holds the repository among them. */
+@Composable
+internal fun WikiTrashScreen(store: WikiStore, route: OrbitRoute) {
+    val state by store.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    /** The wiki Delete permanently is asking about, by id. */
+    var purging by rememberSaveable { mutableStateOf<String?>(null) }
+    var restoreRefusal by rememberSaveable { mutableStateOf<String?>(null) }
+    var purgeRefusal by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(store) { store.loadTrash() }
+    PageBar.Bind(route, WikiModeCopy.trash)
+    LazyColumn(Modifier.fillMaxSize().testTag("wiki-trash-page"), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
+        item(key = "lead") { WikiPlanFootnoteText(WikiModeCopy.trashLead, "wiki-trash-lead") }
+        item(key = "rows") {
+            when (presentation(state.trashState, state.trash.isEmpty())) {
+                LoadPresentation.LOADING -> LoadingMessage("Loading…")
+                LoadPresentation.FAILED -> StatusMessage("Trash couldn't be loaded", "Check the connection, then try again.") { scope.launch { store.loadTrash() } }
+                LoadPresentation.EMPTY -> WikiCard(Modifier.testTag("wiki-trash-empty")) {
+                    Text(WikiModeCopy.trashEmpty, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), style = WikiType.prose,
+                        color = WikiPalette.secondary)
+                }
+                LoadPresentation.CONTENT, LoadPresentation.CONTENT_WITH_ERROR -> WikiCard(Modifier.testTag("wiki-trash-rows")) {
+                    state.trash.forEachIndexed { index, row ->
+                        if (index > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
+                        TrashRow(row, state.busy, restore = {
+                            scope.launch {
+                                val refusal = store.restore(row)
+                                if (refusal != null) restoreRefusal = refusal else OrbitToasts.show(WikiModeCopy.restored(row.name))
+                            }
+                        }, purge = { purging = row.id })
+                    }
+                }
+            }
         }
     }
-    WikiRefusalAlert(WikiCopy.settingsSaveFailed, notice) { notice = null }
+    state.trash.firstOrNull { it.id == purging }?.let { row ->
+        AlertDialog(onDismissRequest = { purging = null }, modifier = Modifier.testTag("wiki-trash-purge-dialog"),
+            title = { Text(WikiModeCopy.purgeQuestion) },
+            text = { Text(WikiModeCopy.purgeBody(row.entries)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    purging = null
+                    scope.launch { purgeRefusal = store.purge(row) }
+                }, modifier = Modifier.testTag("wiki-trash-purge-confirm")) { Text(WikiModeCopy.purgeConfirm, color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { purging = null }, modifier = Modifier.testTag("wiki-trash-purge-cancel")) { Text(WikiModeCopy.cancel) }
+            })
+    }
+    WikiRefusalAlert(WikiModeCopy.restoreFailed, restoreRefusal) { restoreRefusal = null }
+    WikiRefusalAlert(WikiModeCopy.purgeFailed, purgeRefusal) { purgeRefusal = null }
+}
+
+/** One wiki in Trash: its name over when it was moved, what it holds and when it is deleted for good — one stop to
+ * TalkBack — then Restore and Delete permanently…, each a stop of its own. */
+@Composable
+private fun TrashRow(row: WikiTrashRow, busy: Boolean, restore: () -> Unit, purge: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp).semantics(mergeDescendants = true) {}
+        .testTag("wiki-trash-row:${row.id}"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(row.name, style = WikiType.prose)
+        Text(WikiModeCopy.trashRowLine(row.deletedAt, row.purgeAt, row.entries), style = WikiType.subtext, color = WikiPalette.secondary)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = restore, enabled = !busy, modifier = Modifier.testTag("wiki-trash-restore:${row.id}")) { Text(WikiModeCopy.restore) }
+            TextButton(onClick = purge, enabled = !busy, modifier = Modifier.testTag("wiki-trash-delete:${row.id}")) {
+                Text(WikiModeCopy.deletePermanently, color = MaterialTheme.colorScheme.error.copy(alpha = if (busy) 0.38f else 1f))
+            }
+        }
+    }
 }

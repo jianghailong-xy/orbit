@@ -161,27 +161,28 @@ internal object WikiLogic {
     sealed interface HomeDocuments {
         /** The first read is out: grey bars in the rows' shape (mock 31 ⑦). */
         data object Loading : HomeDocuments
-        /** The confirmed plan's documents, a category a group (mock 30 ③). */
-        data class Categories(val categories: List<WikiDocLogic.HomeCategory>) : HomeDocuments
+        /** The confirmed plan's documents, a category a group (mock 30 ③), under the setup card until the first is written. */
+        data class Categories(val categories: List<WikiDocLogic.HomeCategory>, override val start: Boolean = false) : HomeDocuments
         /** Before a plan is confirmed: the topic articles, as the directory groups them, a title a row. */
         data class Topics(val groups: List<WikiArticleLogic.DirectoryGroup>) : HomeDocuments
-        /** Neither, and maintenance not set up: the one card that says how a space comes to have documents (mock 31 ⑥). */
-        data object NewSpace : HomeDocuments
-        /** Neither, with maintenance set up: nothing, the line under the head saying `No documents yet`. */
-        data object NothingListed : HomeDocuments
+        /** Neither: the setup card alone, which says how the wiki comes to have something to read (mock 41). */
+        data object Start : HomeDocuments { override val start get() = true }
+        /** Whether the setup card stands first in the band: while the home has nothing to read (mock 41). */
+        val start: Boolean get() = false
         /** Whether the home ends on Browse by category · A–Z index: once its first read is in, with something listed. */
         val listed: Boolean get() = this is Categories || this is Topics
     }
 
-    /** The home's documents: the confirmed plan's, by category; before one, the topic articles; else a new space's card, or
-     * nothing once maintenance is set up. [loading] is the first read alone — a read the page already has stays drawn
-     * while it is read again. */
-    fun homeDocuments(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Boolean, maintenance: Boolean, seen: Double?): HomeDocuments {
+    /** The home's documents: the confirmed plan's, by category; before one, the topic articles; while there is nothing to
+     * read, the setup card — above the categories at the plan's third step. No topic is counted against the card once the
+     * home reads by the plan: it lists none then (`useWikiHomeContent`). [loading] is the first read alone — a read the page
+     * already has stays drawn while it is read again. */
+    fun homeDocuments(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Boolean, seen: Double?): HomeDocuments {
         if (loading) return HomeDocuments.Loading
-        if (docs != null && WikiDocLogic.readsByDocs(docs)) return HomeDocuments.Categories(WikiDocLogic.homeCategories(docs, seen))
+        if (docs != null && WikiDocLogic.readsByDocs(docs))
+            return HomeDocuments.Categories(WikiDocLogic.homeCategories(docs, seen), WikiStartLogic.shown(docs.docs?.written ?: 0, 0))
         val groups = articles?.let(WikiArticleLogic::directoryGroups).orEmpty()
-        if (groups.any { it.topics.isNotEmpty() }) return HomeDocuments.Topics(groups)
-        return if (maintenance) HomeDocuments.NothingListed else HomeDocuments.NewSpace
+        return if (groups.any { it.topics.isNotEmpty() }) HomeDocuments.Topics(groups) else HomeDocuments.Start
     }
 
     /** The line under the home's head (`WikiHomeState`): what [WikiDocLogic.homeLine] says of the reads the documents band
@@ -374,8 +375,9 @@ internal object WikiLogic {
     }
     fun oldestProposal(cards: List<ReviewCard>): String? = cards.mapNotNull { card ->
         card.changeset.createdAt?.let { at -> RelativeTime.parse(at)?.let { at to it } } }.minByOrNull { it.second }?.first
+    /** A challenge's Keep (`reconfirm`) says the button's word, so a press meant as Retire reads as what it did. */
     fun decidedToast(op: String?, action: String): String = when (action) {
-        "edit" -> WikiCopy.decidedEdited; "reconfirm" -> WikiCopy.decidedReconfirmed; "amend" -> WikiCopy.decidedAmended
+        "edit" -> WikiCopy.decidedEdited; "reconfirm" -> WikiCopy.decidedKept; "amend" -> WikiCopy.decidedAmended
         "retire" -> WikiCopy.retired
         "reject" -> if (op == "retire") WikiCopy.decidedKept else WikiCopy.rejected
         else -> if (op == "retire") WikiCopy.retired else WikiCopy.decidedAccepted
@@ -416,6 +418,9 @@ internal object WikiLogic {
     fun anchorInput(anchor: JsonElement): JsonElement =
         if (anchor is JsonObject) JsonObject(anchor.filterKeys { it in anchorInputKeys }) else anchor
     fun cardKind(card: ReviewCard, entry: WikiEntry?): String? = card.op.payload["entry"]["kind"].text() ?: entry?.kind
+    /** Whether a challenge's entry takes an Amend: a decision is superseded, never rewritten (contract
+     * `kinds.decision.amendable`), and the server refuses its amend WIKI_SCHEMA. */
+    fun amendable(card: ReviewCard, entry: WikiEntry?): Boolean = cardKind(card, entry) != "decision"
     fun cardChip(op: String?): String = if (op == "supersede") WikiCopy.opLabel("amend") else WikiCopy.opLabel(op)
     fun proposedBy(changeset: WikiChangeset): String {
         if (changeset.sessionId != null) {
@@ -476,7 +481,7 @@ internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiS
 
 internal object WikiModeLogic {
     /** The settings page's sections, top to bottom — the web's order (`WIKI_SETTINGS_SECTIONS`). */
-    enum class SettingsSection(val title: String) { REVIEW_MODE(WikiModeCopy.reviewMode), MAINTENANCE(WikiModeCopy.maintenance) }
+    enum class SettingsSection(val title: String) { REVIEW_MODE(WikiModeCopy.reviewMode), WORKSPACES(WikiModeCopy.workspaces), MAINTENANCE(WikiModeCopy.maintenance), TRASH(WikiModeCopy.trashTitle) }
     val modes = listOf("manual", "tiered", "automatic")
     const val defaultMode = "tiered"
     fun mode(settings: WikiSpaceSettings?): String = settings?.reviewMode?.takeIf { it in modes } ?: "manual"
@@ -496,6 +501,11 @@ internal object WikiModeLogic {
     fun monthDay(iso: String, zone: ZoneId = ZoneId.systemDefault()): String? {
         val at = RelativeTime.parse(iso)?.atZone(zone) ?: return null
         return "${months[at.monthValue - 1]} ${at.dayOfMonth}"
+    }
+    /** A day with its year, as Trash dates its rows: `Nov 7, 2026`. */
+    fun monthDayYear(iso: String, zone: ZoneId = ZoneId.systemDefault()): String? {
+        val at = RelativeTime.parse(iso)?.atZone(zone) ?: return null
+        return "${months[at.monthValue - 1]} ${at.dayOfMonth}, ${at.year}"
     }
     fun runWhen(iso: String, zone: ZoneId = ZoneId.systemDefault()): String {
         val at = RelativeTime.parse(iso)?.atZone(zone) ?: return ""
@@ -520,11 +530,11 @@ internal object WikiModeLogic {
         return Banner(WikiTone.MUTED, WikiCopy.trustLabel("unreviewed"), WikiModeCopy.bannerUnreviewed)
     }
     fun whereUsedNote(status: String?, trust: String?) = if (status == "active" && trust == "unreviewed") WikiModeCopy.notSentUnreviewed else null
-    fun checkedLine(verdict: String?, model: String?, tainted: Boolean, who: String?, `when`: String?): String {
+    fun checkedLine(verdict: String?, model: String?, tainted: Boolean, who: String?, `when`: String?, evidence: String? = null): String {
         val parts = mutableListOf<String>()
         if (verdict != null && model != null) {
             parts += "Checked by $model: ${WikiModeCopy.verdictWord(verdict)}"
-            if (tainted) parts += WikiModeCopy.cappedAtUnreviewed
+            if (tainted || evidenceCaps(evidence)) parts += WikiModeCopy.cappedAtUnreviewed
         }
         if (who != null) parts += `when`?.let { "$who, $it" } ?: who
         return parts.joinToString(" · ")
@@ -555,13 +565,15 @@ internal object WikiModeLogic {
         return RunSummary(run.counts.applied, run.counts.auto, run.counts.unreviewed, run.counts.rejectedByCheck, run.counts.toReview,
             added, amended, reinforced, run.revertible, run.revert?.adds ?: 0, run.revert?.amends ?: 0)
     }
+    /** A verdict that what it could read held at Unreviewed, whatever it said (the web's `wikiEvidenceCaps`). */
+    private fun evidenceCaps(evidence: String?) = evidence == "second_hand" || evidence == "unreadable"
     private fun runRow(op: WikiChangesetOp, entries: Map<String, WikiEntry>): RunRow {
         val entryId = if (op.op == "add" || op.op == "supersede") op.resultEntryId ?: op.entryId else op.entryId
         val entry = entryId?.let { entries[wikiKey(it)] }
         val draft = op.payload["entry"] ?: op.payload["changes"]
         val verdictTrust = when (op.verification?.verdict) { "supported" -> "auto"; "partial" -> "unreviewed"; else -> null }
         val trust = if (entry != null) (if (entry.status == "active") entry.trust else null)
-            else if (op.tainted == true && verdictTrust != null) "unreviewed" else verdictTrust
+            else if ((op.tainted == true || evidenceCaps(op.verification?.evidence)) && verdictTrust != null) "unreviewed" else verdictTrust
         return RunRow(op, entryId, entry?.title ?: draft["title"].text() ?: "—", entry?.summary ?: draft["summary"].text() ?: "", trust)
     }
     fun runCounts(summary: RunSummary): List<String> = buildList {

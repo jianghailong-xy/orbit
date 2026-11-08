@@ -536,6 +536,15 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       },
     });
 
+    // A run of the subject is a run of another task, and a verifier is not another run's to write.
+    assert.match(
+      await message(() =>
+        tasks.update(w.ownerId, check.id, { verdict: TaskVerdict.PASS }, devRun.id),
+      ),
+      /a run may not make a task a verifier or change any field of a task that is one/,
+    );
+    // Coordinating the project takes it past that door, and independence still stops it here.
+    await db.project.update({ where: { id: w.projectId }, data: { coordinatorSessionId: devRun.id } });
     assert.match(
       await message(() =>
         tasks.update(w.ownerId, check.id, { verdict: TaskVerdict.PASS }, devRun.id),

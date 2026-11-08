@@ -13,6 +13,9 @@ const source = readFileSync(path.join(repo, 'docker-compose.yml'), 'utf8');
 // NATS's configuration, which the suite pins beside Compose (case (q)); a counterexample may replace it instead.
 const NATS_CONF = 'src/link-gateway/nats.conf';
 const natsConf = readFileSync(path.join(repo, NATS_CONF), 'utf8');
+// The backup sidecar's script, one round of which the suite runs (case (r)); a counterexample may replace it instead.
+const BACKUP_SCRIPT = 'scripts/pg-backup.sh';
+const backupScript = readFileSync(path.join(repo, BACKUP_SCRIPT), 'utf8');
 
 function replace(before, after) {
   assert.ok(source.includes(before), `counterexample target missing: ${before}`);
@@ -23,6 +26,12 @@ function replace(before, after) {
 function replaceConf(before, after) {
   assert.ok(natsConf.includes(before), `counterexample target missing in ${NATS_CONF}: ${before}`);
   return { compose: source, conf: natsConf.replace(before, after) };
+}
+
+/** A counterexample in the sidecar's script: Compose as it is, the script changed. */
+function replaceScript(before, after) {
+  assert.ok(backupScript.includes(before), `counterexample target missing in ${BACKUP_SCRIPT}: ${before}`);
+  return { script: backupScript.replace(before, () => after) };
 }
 
 const cases = [
@@ -47,6 +56,8 @@ const cases = [
     ['lock_timeout=30s', 'lock_timeout=0'],
     ['idle_in_transaction_session_timeout=300s', 'idle_in_transaction_session_timeout=0'],
     ['jit=off', 'jit=on'],
+    ['shared_buffers=4GB', 'shared_buffers=128MB'],
+    ['effective_cache_size=12GB', 'effective_cache_size=4GB'],
     ['      - wal_compression=on', '      - wal_compression=on\n      - -c\n      - shared_buffers=1GB'],
   ].map(([before, after]) => [`postgres change: ${before}`, 'the postgres service definition',
     replace(before, after)]),
@@ -192,6 +203,43 @@ const cases = [
     replace('    command: ["--config", "/etc/orbit-nats/nats.conf"]\n', '    command: ["--config", "/etc/orbit-nats/nats.conf", "-V"]\n')],
   ['NATS on another listener', "the runner link's NATS configuration is exactly the one task B4 added",
     replaceConf('port: 4222\n', 'port: 4222\nwebsocket { port: 8080, no_tls: true }\n')],
+  // Orbit Files' off-host copy of 2026-11-02 (task T10): the sidecar may read the files directory and nothing more, and
+  // its copy stays out of the archive mirror's --delete, keeps every byte, and costs the rest of the loop nothing.
+  ['a writable files directory in pgbackup', 'nothing beyond the approved configuration was added',
+    replace('./data/files:/var/lib/orbit/files:ro', './data/files:/var/lib/orbit/files')],
+  ['the files directory given to another service', "./data/files is the apiserver's to write and pgbackup's to read",
+    replace('  web:\n', '  web:\n    volumes:\n      - ./data/files:/srv/files:ro\n')],
+  ['all of ./data given to pgbackup', "./data/files is the apiserver's to write and pgbackup's to read",
+    replace('./data/files:/var/lib/orbit/files:ro', './data:/var/lib/orbit/files:ro')],
+  ['a files copy under the archive target', 'the sidecar copies the files after the archive, beside its target',
+    replaceScript('FILES_SYNC_TARGET="${SYNC_TARGET%/}-files"', 'FILES_SYNC_TARGET="${SYNC_TARGET%/}/files"')],
+  ['a files copy with --delete', 'the sidecar copies the files after the archive, beside its target',
+    replaceScript("rsync -a --timeout=600 --itemize-changes --exclude '/tmp/'", "rsync -a --delete --timeout=600 --itemize-changes --exclude '/tmp/'")],
+  ['a files copy that carries tmp/', 'the sidecar copies the files after the archive, beside its target',
+    replaceScript(" --exclude '/tmp/' \\\n", ' \\\n')],
+  ['the files copied before the archive', 'the sidecar copies the files after the archive, beside its target',
+    replaceScript('    sync_archive || true\n    sync_files || true\n', '    sync_files || true\n    sync_archive || true\n')],
+  ['a files copy that ends the loop when it fails', 'a failed off-host copy is logged',
+    replaceScript('    sync_files || true\n', '    sync_files\n')],
+  ['an archive failure that skips the files copy', 'a failed off-host copy is logged',
+    replaceScript('    sync_archive || true\n    sync_files || true\n', '    sync_archive && sync_files || true\n')],
+  ['a files copy attempted with nothing to copy', 'a files directory with nothing but tmp/ has nothing to copy',
+    replaceScript('  if [ -d "$FILES_DIR" ] && [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; then\n    return 0\n  fi\n', '')],
+  ['a missing files directory taken for an empty one', 'a files directory that is not there is still tried',
+    replaceScript('if [ -d "$FILES_DIR" ] && [ -z', 'if [ -z')],
+  // Orbit Files' quota and grace period of 2026-11-03 (task T9): pgbackup's two retention values with pgbackup's own
+  // defaults, so that the grace period and the backups read one number, and no other line beside them.
+  ['the grace period reading another default than pgbackup', 'nothing beyond the approved configuration was added',
+    replace('      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"\n      # Optional: managed runners', '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-1}"\n      # Optional: managed runners')],
+  ['a quota set for every deployment', 'nothing beyond the approved configuration was added',
+    replace('ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"', 'ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-1073741824}"')],
+  // The mirror's --delete on an empty or wrong mount, which would clear the only off-host copy.
+  ['a mirror of an archive with no base backup', 'the mirror refuses an archive that cannot be the real one',
+    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then', 'if [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then')],
+  ['a mirror of an archive with no WAL', 'the mirror refuses an archive that cannot be the real one',
+    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then', 'if [ -z "$(list_backups)" ]; then')],
+  ['a base backup cut short that stays', 'a base backup cut short by a stopped container does not outlive it',
+    replaceScript('rm -rf "$BASE_DIR"/.staging-*\n', '')],
 ];
 
 test('the topology checks accept the control and reject deployment counterexamples', async (t) => {
@@ -204,13 +252,15 @@ test('the topology checks accept the control and reject deployment counterexampl
     copyFileSync(path.join(repo, 'test/compose-topology.test.mjs'),
       path.join(fixture, 'test/compose-topology.test.mjs'));
     mkdirSync(path.join(fixture, path.dirname(NATS_CONF)), { recursive: true });
+    mkdirSync(path.join(fixture, path.dirname(BACKUP_SCRIPT)));
     // A child suite must start its own runner rather than inherit node:test's recursion marker.
     const env = { ...process.env };
     delete env.NODE_TEST_CONTEXT;
     const run = (variant) => {
-      const { compose, conf } = typeof variant === 'string' ? { compose: variant, conf: natsConf } : variant;
+      const { compose = source, conf = natsConf, script = backupScript } = typeof variant === 'string' ? { compose: variant } : variant;
       writeFileSync(path.join(fixture, 'docker-compose.yml'), compose);
       writeFileSync(path.join(fixture, NATS_CONF), conf);
+      writeFileSync(path.join(fixture, BACKUP_SCRIPT), script);
       const result = spawnSync(process.execPath,
         ['--test', '--test-reporter=tap', 'test/compose-topology.test.mjs'],
         { cwd: fixture, encoding: 'utf8', env });

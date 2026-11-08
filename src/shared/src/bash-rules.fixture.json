@@ -109,6 +109,401 @@
       "name": "newlines separate sub-commands",
       "command": "git status\nnpm test",
       "rules": ["git status", "npm test"]
+    },
+    {
+      "name": "a backslash inside single quotes closes nothing early and hides nothing after it",
+      "command": "ls '\\'; git status #'",
+      "rules": ["ls", "git status"]
+    },
+    {
+      "name": "an ordinary backslash inside single quotes stays one sub-command",
+      "command": "grep -rn 'a\\|b' src",
+      "rules": ["grep"]
+    },
+    {
+      "name": "a quote inside single quotes, the shell's own way, stays one sub-command",
+      "command": "echo 'it'\\''s; fine'",
+      "rules": ["echo"]
+    },
+    {
+      "name": "ANSI-C quoting, where a backslash does escape",
+      "command": "printf $'it\\'s; fine'; git status",
+      "rules": ["printf", "git status"]
+    },
+    {
+      "name": "a comment ends at its newline, and what follows is a sub-command",
+      "command": "ls #'\ngit status #'",
+      "rules": ["ls", "git status"]
+    },
+    {
+      "name": "an apostrophe in a comment opens no quote",
+      "command": "git add -A # don't push\ngit status",
+      "rules": ["git add", "git status"]
+    },
+    {
+      "name": "a separator in a comment splits nothing",
+      "command": "git status # then; git push",
+      "rules": ["git status"]
+    },
+    {
+      "name": "a line that is only a comment remembers nothing",
+      "command": "# look first\ngit status",
+      "rules": ["git status"]
+    },
+    {
+      "name": "a # inside a word is not a comment",
+      "command": "ls a#b; git status",
+      "rules": ["ls", "git status"]
+    },
+    {
+      "name": "a quoted # is not a comment",
+      "command": "grep \"#\" notes.txt; git status",
+      "rules": ["grep", "git status"]
+    },
+    {
+      "name": "a line continuation does not start a word",
+      "command": "ls\\\n#b; git status",
+      "rules": ["git status"]
+    },
+    {
+      "name": "a comment after a line continuation is still a comment",
+      "command": "ls \\\n#'\ngit status #'",
+      "rules": ["ls", "git status"]
+    },
+    {
+      "name": "a shell keyword alone is never remembered: it names no program",
+      "command": "for f in a b\ndo\n  ./run.sh\ndone",
+      "rules": ["for f", "./run.sh", "done"]
+    },
+    {
+      "name": "a keyword ahead of something that is no clean word is never remembered either",
+      "command": "if ./check.sh; then ./run.sh; fi",
+      "rules": ["fi"]
+    },
+    {
+      "name": "a keyword ahead of a program word names that program",
+      "command": "for f in a; do echo x; done",
+      "rules": ["for f", "do echo", "done"]
+    },
+    {
+      "name": "a single-quoted heredoc's body is not a sub-command",
+      "command": "cat > notes.txt <<'EOF'\ngit status\nnpm test\nEOF",
+      "rules": ["cat"]
+    },
+    {
+      "name": "an unquoted heredoc's body is not a sub-command",
+      "command": "cat > notes.txt <<EOF\ngit status\nnpm test\nEOF",
+      "rules": ["cat"]
+    },
+    {
+      "name": "a double-quoted delimiter",
+      "command": "cat <<\"EOF\"\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a backslash-quoted delimiter",
+      "command": "cat <<\\EOF\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a partly quoted delimiter is the word with its quotes removed",
+      "command": "cat <<E\"O\"F\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a quoted delimiter can hold a space",
+      "command": "cat <<'END OF'\ngit status\nEND OF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a space between the operator and its word",
+      "command": "cat << EOF\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "no space ahead of the operator",
+      "command": "cat<<EOF\ngit status\nEOF\nls",
+      "rules": ["ls"]
+    },
+    {
+      "name": "a file descriptor ahead of the operator",
+      "command": "cat 3<<EOF\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "what follows the terminator is a sub-command again",
+      "command": "cat <<'EOF'\nnpm test\nEOF\ngit status",
+      "rules": ["cat", "git status"]
+    },
+    {
+      "name": "<<- lets tabs indent the terminator",
+      "command": "cat <<-EOF\n\tgit status\n\t\tEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "<<- with its word set apart",
+      "command": "cat <<- 'EOF'\n\tgit status\n\tEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "<<- takes tabs off the terminator, not spaces",
+      "command": "cat <<-EOF\n  EOF\ngit status\n\tEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "plain << lets nothing indent the terminator",
+      "command": "cat <<EOF\n\tEOF\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "more than one heredoc on a line: their bodies follow in order",
+      "command": "cat <<ONE <<TWO\ngit status\nONE\nnpm test\nTWO\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "heredocs of two sub-commands on one line",
+      "command": "cat <<ONE; wc -l <<TWO\ngit status\nONE\nnpm test\nTWO\nls",
+      "rules": ["cat", "wc", "ls"]
+    },
+    {
+      "name": "a second terminator is only body until the first body has ended",
+      "command": "cat <<ONE <<TWO\nTWO\nONE\ngit status\nTWO\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "one heredoc after another",
+      "command": "cat <<ONE\ngit status\nONE\nwc -l <<TWO\nnpm test\nTWO\nls",
+      "rules": ["cat", "wc", "ls"]
+    },
+    {
+      "name": "a heredoc into a pipe",
+      "command": "cat <<EOF | grep -v x\ngit status\nEOF\nls",
+      "rules": ["cat", "grep", "ls"]
+    },
+    {
+      "name": "a sub-command behind the word stays on its line",
+      "command": "cat <<EOF && ls\ngit status\nEOF",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a separator right behind the word",
+      "command": "cat <<EOF;ls\ngit status\nEOF",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a comment behind the word",
+      "command": "cat <<EOF # note\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a # inside the word is part of it",
+      "command": "cat <<EOF#x\ngit status\nEOF#x\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a line continuation does not start the body",
+      "command": "cat <<EOF \\\n  -n\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a quoted newline does not start the body",
+      "command": "cat <<EOF \"a\nb\"\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "an apostrophe in a body opens no quote",
+      "command": "cat <<'EOF'\nit's here\nEOF\ngit status",
+      "rules": ["cat", "git status"]
+    },
+    {
+      "name": "a double quote in an unquoted heredoc's body opens no quote",
+      "command": "cat <<EOF\nsay \"hi\nEOF\ngit status",
+      "rules": ["cat", "git status"]
+    },
+    {
+      "name": "a separator in a body splits nothing",
+      "command": "cat <<'EOF'\nnotes; git status && npm test\nEOF",
+      "rules": ["cat"]
+    },
+    {
+      "name": "a shell wrapper in a body is only text",
+      "command": "cat > run.sh <<'EOF'\nbash -c 'ls'\nEOF",
+      "rules": ["cat"]
+    },
+    {
+      "name": "a terminator is a whole line and nothing else",
+      "command": "cat <<EOF\nEOF \n EOF\nEOF x\nxEOF\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a terminator is compared exactly, not by what it looks like",
+      "command": "cat <<'\u00e9'\ne\u0301\ngit status\n\u00e9\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a body with no terminator runs to the end of the command",
+      "command": "cat <<EOF\ngit status\nnpm test",
+      "rules": ["cat"]
+    },
+    {
+      "name": "an empty body is only its terminator",
+      "command": "cat <<EOF\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a backslash-newline joins two body lines, so the second cannot terminate",
+      "command": "cat <<EOF\ngit status\\\nEOF\nnpm test\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "an escaped backslash at the end of a body line joins nothing",
+      "command": "cat <<EOF\nnotes\\\\\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "nothing past a terminator a backslash joins is read: shells differ on it",
+      "command": "cat <<EOF\nEOF\\\n\ngit status\nEOF\nls",
+      "rules": ["cat"]
+    },
+    {
+      "name": "the same when <<- takes the tabs off what a backslash joined",
+      "command": "cat <<-EOF\n\\\n\t\tEOF\ngit status\nEOF\nls",
+      "rules": ["cat"]
+    },
+    {
+      "name": "under a quoted delimiter a backslash joins nothing",
+      "command": "cat <<'EOF'\ngit status\\\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a backslash in the delimiter quotes it too",
+      "command": "cat <<\\EOF\ngit status\\\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "a heredoc inside an unquoted substitution",
+      "command": "NOTES=$(cat <<EOF\ngit status\nEOF\n)\nls",
+      "rules": ["ls"]
+    },
+    {
+      "name": "a heredoc inside a double-quoted substitution stays one argument",
+      "command": "git commit -m \"$(cat <<'EOF'\nfix one thing\n\ngit status\nEOF\n)\"",
+      "rules": ["git commit"]
+    },
+    {
+      "name": "a here-string is not a heredoc: the next line is a sub-command",
+      "command": "cat <<<EOF\ngit status\nEOF\nls",
+      "rules": ["cat", "git status", "EOF", "ls"]
+    },
+    {
+      "name": "a # right behind a here-string's operator starts a comment",
+      "command": "cat <<<#x; ls\ngit status",
+      "rules": ["cat", "git status"]
+    },
+    {
+      "name": "a quoted here-string is not a heredoc either",
+      "command": "grep -c x <<< \"a b\"\ngit status",
+      "rules": ["grep", "git status"]
+    },
+    {
+      "name": "a here-string beside a heredoc",
+      "command": "cat <<<notes <<EOF\ngit status\nEOF\nls",
+      "rules": ["cat", "ls"]
+    },
+    {
+      "name": "ordinary lines around a single < stay sub-commands",
+      "command": "wc -l < /dev/null\ngit status",
+      "rules": ["wc", "git status"]
+    },
+    {
+      "name": "a quoted << is only text",
+      "command": "echo \"<<EOF\"\ngit status\necho '<<EOF'\nls",
+      "rules": ["echo", "git status", "ls"]
+    },
+    {
+      "name": "an escaped < starts no heredoc",
+      "command": "echo \\<<EOF\ngit status",
+      "rules": ["echo", "git status"]
+    },
+    {
+      "name": "a << in a comment is only a comment",
+      "command": "ls # <<EOF\ngit status",
+      "rules": ["ls", "git status"]
+    },
+    {
+      "name": "a shift inside $(( )) is not a heredoc",
+      "command": "echo $((1 << 2))\ngit status",
+      "rules": ["echo", "git status"]
+    },
+    {
+      "name": "a << inside a bare (( counts as a heredoc: a plain sh has no such arithmetic",
+      "command": "((x = 1 << 2))\ngit status",
+      "rules": []
+    },
+    {
+      "name": "a parenthesis inside an arithmetic does not close it",
+      "command": "echo $(( (1) << 2 ))\ngit status",
+      "rules": ["echo", "git status"]
+    },
+    {
+      "name": "a quoted (( hides no heredoc",
+      "command": "echo \"((\" <<EOF\ngit status\nEOF\nls",
+      "rules": ["echo", "ls"]
+    },
+    {
+      "name": "a $(( that turns out to be two subshells hides no heredoc after it",
+      "command": "echo $((ls) && (pwd) )\ncat <<EOF\ngit status\nEOF\nls",
+      "rules": ["echo", "cat", "ls"]
+    },
+    {
+      "name": "an arithmetic that has closed hides no heredoc",
+      "command": "echo $((1 + 1)) <<EOF\ngit status\nEOF\nls",
+      "rules": ["echo", "ls"]
+    },
+    {
+      "name": "an operator with no word on its line is no heredoc",
+      "command": "cat <<\ngit status",
+      "rules": ["cat", "git status"]
+    },
+    {
+      "name": "an operator with a separator for a word is no heredoc",
+      "command": "cat <<;git status",
+      "rules": ["cat", "git status"]
+    },
+    {
+      "name": "a command that stops at the operator",
+      "command": "cat <<",
+      "rules": ["cat"]
+    },
+    {
+      "name": "a command that stops at <<-",
+      "command": "cat <<-",
+      "rules": ["cat"]
+    },
+    {
+      "name": "a command that stops at the word",
+      "command": "cat <<EOF",
+      "rules": ["cat"]
+    },
+    {
+      "name": "a command that stops at the newline after the word",
+      "command": "cat <<EOF\n",
+      "rules": ["cat"]
+    },
+    {
+      "name": "a command that stops at a backslash in the word",
+      "command": "cat <<\\",
+      "rules": ["cat"]
+    },
+    {
+      "name": "a command that stops at a backslash in a body",
+      "command": "cat <<EOF\ngit status\\",
+      "rules": ["cat"]
+    },
+    {
+      "name": "an open quote in the word runs to the end of the command",
+      "command": "cat <<'EOF\ngit status",
+      "rules": ["cat"]
     }
   ]
 }

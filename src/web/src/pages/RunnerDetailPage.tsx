@@ -49,6 +49,8 @@ import {
   workspaceSessionCountsQuery,
 } from '../lib/queries';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
+import { useRefreshSessionLists } from '../lib/useControlPlane';
+import { AbandonedCheckouts } from '../components/AbandonedCheckouts';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
 import { AccountSelect, offersAccount } from '../components/AccountSelect';
 import { AUTO_COMPACT_VARIABLE, AutoCompactSelect, withAutoCompact } from '../components/AutoCompactSelect';
@@ -160,6 +162,7 @@ interface Workspace {
   /** Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here is created
    *  on the routed model and effort; off (the default), routing is only recorded in shadow. */
   modelRouting?: boolean;
+  modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** The other engines smart selection may move this Agent's task runs to (§6). Empty = none: a run
    *  stays on this Agent's own engine. */
   modelRoutingProviders?: string[];
@@ -249,6 +252,7 @@ export function RunnerDetailPage() {
   const [confirm, confirmation] = useConfirm();
   const message = useToast();
   const qc = useQueryClient();
+  const refreshSessionLists = useRefreshSessionLists();
 
   const runners = useQuery({
     queryKey: ['runners'],
@@ -399,6 +403,7 @@ export function RunnerDetailPage() {
   const [fRepoUrl, setFRepoUrl] = useState('');
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
   const [fModelRouting, setFModelRouting] = useState(false);
+  const [fOptimizeFor, setFOptimizeFor] = useState<NonNullable<Workspace['modelRoutingOptimizeFor']>>('cost');
   const [fRoutingEngines, setFRoutingEngines] = useState<string[]>([]);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
   // null = Default, the runner's own Codex account.
@@ -430,6 +435,7 @@ export function RunnerDetailPage() {
         repoUrl: fRepoUrl.trim() || undefined,
         enableWorktree: fEnableWorktree,
         modelRouting: fModelRouting,
+        modelRoutingOptimizeFor: fOptimizeFor,
         modelRoutingProviders: fRoutingEngines,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
@@ -459,7 +465,7 @@ export function RunnerDetailPage() {
                 ? 'Importing 1 conversation — it appears as it lands.'
                 : `Importing ${res.imported} conversations — they appear as they land.`,
             );
-            void qc.invalidateQueries({ queryKey: ['sessions'] });
+            refreshSessionLists();
           })
           .catch((e: Error) =>
             message.error(
@@ -613,7 +619,7 @@ export function RunnerDetailPage() {
         res.removed === 1 ? '1 imported conversation removed.' : `${res.removed} imported conversations removed.`,
       );
       void qc.invalidateQueries({ queryKey: ['imported-sessions', editing?.id] });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error) => message.error("Couldn't remove the imported conversations", e.message),
   });
@@ -628,6 +634,7 @@ export function RunnerDetailPage() {
     setFRepoUrl(a?.repoUrl ?? '');
     setFEnableWorktree(a?.enableWorktree ?? false);
     setFModelRouting(a?.modelRouting ?? false);
+    setFOptimizeFor(a?.modelRoutingOptimizeFor ?? 'cost');
     setFRoutingEngines(a?.modelRoutingProviders ?? []);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setFCodexAccount(a?.codexAccount ?? null);
@@ -861,6 +868,27 @@ export function RunnerDetailPage() {
             setDirty(true);
           }}
         >
+          <div className="rd-form-field">
+            <div className="rd-form-label">Optimize For</div>
+            <Select
+              aria-label="Optimize For"
+              value={fOptimizeFor}
+              options={[
+                { value: 'cost', label: 'Cost' },
+                { value: 'balance', label: 'Balance' },
+                { value: 'intelligence', label: 'Intelligence' },
+              ]}
+              onValueChange={(value) => {
+                if (value === null) return;
+                setFOptimizeFor(value);
+                setDirty(true);
+              }}
+            />
+            <div className="rd-path-hint">
+              For tasks without a suggested tier: Cost uses the inferred tier, Balance starts at M,
+              and Intelligence starts at L. Applies to future runs; pinned models always win.
+            </div>
+          </div>
           <RoutingEngines
             own={formRun.engine}
             value={fRoutingEngines}
@@ -1583,6 +1611,13 @@ export function RunnerDetailPage() {
               <div className="rd-hint">{runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}</div>
             )}
           </section>
+
+          {/* What worktree GC may never remove: finished sessions' checkouts that still hold
+              uncommitted work. Renders nothing while there are none. */}
+          <AbandonedCheckouts
+            runnerId={runner.id}
+            canDiscard={runner.capabilities?.includes('abandoned-checkout-v1') === true}
+          />
 
           <section className="rd-section rd-workspaces">
             <div className="rd-section-head">

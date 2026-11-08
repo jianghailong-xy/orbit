@@ -65,7 +65,12 @@ final class ApprovalRememberParityTests: XCTestCase {
                          "the card from 2026-10-02",
                          "a wrapper anywhere in a compound line refuses the whole line",
                          "every sub-command of a compound line, not just the leading cd",
-                         "a quoted separator does not split a sub-command"] {
+                         "a quoted separator does not split a sub-command",
+                         "a single-quoted heredoc's body is not a sub-command",
+                         "an unquoted heredoc's body is not a sub-command",
+                         "<<- lets tabs indent the terminator",
+                         "more than one heredoc on a line",
+                         "a here-string is not a heredoc"] {
             XCTAssertTrue(names.contains { $0.hasPrefix(required) },
                           "the fixture no longer covers \"\(required)\": \(names)")
         }

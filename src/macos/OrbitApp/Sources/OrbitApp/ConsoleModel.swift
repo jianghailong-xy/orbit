@@ -423,6 +423,9 @@ final class ConsoleModel {
     @ObservationIgnored weak var machineSetup: MachineSetupModel?
     /// Draft only: fired with the freshly created session so the caller can open its live console.
     var onSessionCreated: ((Session) -> Void)?
+    /// Set while a wiki chat's panel draws this console's composer (board 43): what its messages carry beside the
+    /// words, and — on a new chat's draft — the door its first message makes the chat through.
+    @ObservationIgnored var wikiChat: WikiChatComposing?
     private(set) var state = TranscriptState()
     /// Bumped once per published `state` snapshot. Views that only need "the transcript changed"
     /// (auto-scroll, sticky-header recompute) observe this O(1) counter instead of an
@@ -1317,7 +1320,7 @@ final class ConsoleModel {
     /// with the turns running here instead of waiting for a reconnect.
     private var runnerPollTask: Task<Void, Never>?
     /// The evidence read's re-read every 20 s while a version can wait for this conversation's
-    /// coordinator, or does (`EvidenceDecisions.rereadsQueue`) — web's 20 s `refetchInterval` on the
+    /// coordinator — web's 20 s `refetchInterval` on the
     /// same read. Nothing on this session's row moves when a version is queued for it, handed to it
     /// or decided by it, so nothing else here would re-read it.
     private var evidencePollTask: Task<Void, Never>?
@@ -1334,14 +1337,14 @@ final class ConsoleModel {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
                 guard let self, !Task.isCancelled else { return }
                 await self.refreshRunner()
+                await self.loadContextIfUnread()
             }
         }
         evidencePollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 20_000_000_000)
                 guard let self, !Task.isCancelled else { return }
-                if EvidenceDecisions.rereadsQueue(self.evidenceDecisions, coordinates: self.projectID != nil,
-                                                  pause: self.coordinatorPause) {
+                if self.projectID != nil {
                     await self.refreshEvidenceDecisions()
                 }
             }
@@ -1457,6 +1460,9 @@ final class ConsoleModel {
                 // without this, a failed read would stay failed until the console was opened again,
                 // and a quota read before the phone slept would stay that old.
                 Task { [weak self] in await self?.refreshRunner() }
+                // And the row, if the one read of it this console opened with never came back: it is
+                // what names the project and the task, and so what any of the reads above are for.
+                Task { [weak self] in await self?.loadContextIfUnread() }
             }
             isReconnect = true
             // Close a large gap over compressed REST pages BEFORE the stream opens — see
@@ -1711,8 +1717,7 @@ final class ConsoleModel {
             // and a bar left hanging over it is an offer to answer nothing. A read that has not come
             // back leaves the standing `unread` — "this device cannot say" rather than "there is
             // nothing to answer" — so a reason somebody is mid-sentence over is not thrown away by
-            // one failed poll. Nor is one typed against a version that waits for the coordinator:
-            // it was opened with Decide it myself, and is still the reader's to send back.
+            // one failed poll.
             let standing = evidenceStanding(row.taskId, row.evidenceRevision)
             if !EvidenceDecisions.holdsReply(standing) { replyContext = nil }
         case .planChange, .ownerItem:
@@ -2007,9 +2012,10 @@ final class ConsoleModel {
     /// runner builds an image-only user turn for it (no text block). That holds for a draft too:
     /// POST /sessions takes attachments alone as the opening message. A question reply keeps the
     /// text-is-required rule, since its deny+message channel carries text only. `send` also
-    /// excludes a bare `!`, which is a shell no-op rather than a message.
+    /// excludes a bare `!`, which is a shell no-op rather than a message. A new wiki chat opens with
+    /// the owner's words, so its files never go alone (contract `chat.create`).
     private var canSendAttachmentsAlone: Bool {
-        replyContext == nil && !pendingAttachments.isEmpty
+        replyContext == nil && !pendingAttachments.isEmpty && wikiChat?.create == nil
     }
 
     /// Whether to show a "working" row at the transcript tail: the agent owes a response it hasn't
@@ -2127,7 +2133,11 @@ final class ConsoleModel {
     /// resumable session's pills seed its next resume, and without it the Mode pill would stick
     /// at the hardcoded `.default` instead of the mode the session actually uses.
     private func loadContext() async {
+        guard !loadingContext else { return }
+        loadingContext = true
+        defer { loadingContext = false }
         guard let s = try? await api.session(sessionID) else { return }
+        contextLoaded = true
         adoptServerSnapshot(s)
         agentName = s.agent?.name
         // Adopt the owning agent's id too (a console opened by session id may have been created
@@ -2136,7 +2146,12 @@ final class ConsoleModel {
         // The project this conversation coordinates, if any. It is what decides whether the
         // standing questions that project puts to its owner are asked here at all — an ordinary
         // session has no project and makes none of those reads.
+        let projectMoved = projectID != s.projectId
         projectID = s.projectId
+        // The queue's first read can already be back: the list row's count kicks it, before anything
+        // here knew the project, so it dropped that project's rows and the read below is throttled
+        // for having just been made. The queue it left is drawn now, with no request of its own.
+        if projectMoved, let evidenceDecisions { adoptEvidenceQueue(evidenceDecisions) }
         if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }
         // A conversation that coordinates nothing can still hold an evidence card: a task it
         // dispatched outside any project is settled here, and the owner's card for it is drawn
@@ -2242,6 +2257,14 @@ final class ConsoleModel {
         }
     }
 
+    /// `loadContext`, once more, when its first read of the row did not come back. That read is the only
+    /// one that names the project and the task, so until it does this console draws no project card and
+    /// asks no owner confirmation. Asked on a reconnect and on the minute, which is all that moves here
+    /// when the stream never dropped.
+    private func loadContextIfUnread() async {
+        if !contextLoaded { await loadContext() }
+    }
+
     /// List seeds and the later detail read resolve the same settings. A model-less session keeps
     /// using the cached Runtime default while the runner refresh is in flight.
     private func adoptSessionConfiguration(_ session: Session) {
@@ -2283,9 +2306,6 @@ final class ConsoleModel {
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
         if CursorRuntime.conversationStarted(session) { conversationStarted = true }
-        // Why a version waiting for this conversation is waiting: its own run state, error and armed
-        // retry, which only this row carries.
-        coordinatorPause = EvidenceDecisions.coordinatorPause(session)
         sessionSourceState = session.sourceState
         sessionSourceRefusalCode = session.sourceRefusalCode
         sessionSourceRefusalDetail = session.sourceRefusalDetail
@@ -2766,10 +2786,15 @@ final class ConsoleModel {
     /// way out, nor take the draft they are part-way through typing with it — nor the attachments
     /// they have staged (a retry carries its own message's files; see `carried` below).
     func send(authoritative: RunStatus? = nil, overrideText: String? = nil,
-              overrideAttachments: [TurnAttachment]? = nil, queueForNextTurn: Bool = false) async {
+              overrideAttachments: [TurnAttachment]? = nil, queueForNextTurn: Bool = false,
+              wikiContext: WikiChatContext? = nil, accepted onAccepted: (@MainActor () -> Void)? = nil) async {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
         let fromComposer = overrideText == nil
+        // A wiki chat's composer: the page and the selection its attachment row shows go beside the words, and leave
+        // the row once the server took them. A sentence handed in (a card's own) carries neither.
+        let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)
+        let onAccepted = onAccepted ?? (fromComposer ? wikiChat?.accepted : nil)
         // A chip is staged the moment an image is picked, while its bytes are still going up (see
         // `attach`). Sending in that window would leave the image behind for good: only chips that
         // already carry a `remoteID` ride along, and the staged list is cleared below either way.
@@ -2945,9 +2970,11 @@ final class ConsoleModel {
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds,
-                                              queueForNextTurn: queueForNextTurn)
+                                              queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)
             // An earlier send's "Couldn't send" is not true any more.
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
+            // A wiki chat's attachments went with it: its panel lets them go (`WikiChatModel.sent`).
+            onAccepted?()
             managedWorkSent()
             if resuming {
                 // The session is revived (back to PENDING/RUNNING); drop the stale terminal
@@ -3230,7 +3257,8 @@ final class ConsoleModel {
     /// request carries a `clientTurnId` the server is idempotent on: a retry either queues the
     /// message or is handed back the turn a lost attempt already queued, never a second one.
     private func postTurn(resuming: Bool, clientTurnId: String, text: String, shell: Bool,
-                          attachmentIds: [String], queueForNextTurn: Bool = false) async throws -> TurnAccepted {
+                          attachmentIds: [String], queueForNextTurn: Bool = false,
+                          wikiContext: WikiChatContext? = nil) async throws -> TurnAccepted {
         // Built once, for the same reason the endpoint is chosen once: every attempt must send the
         // identical request, and the pills it reads stay editable while a retry waits.
         let resumeRequest = ResumeRequest(clientTurnId: clientTurnId, content: text,
@@ -3249,10 +3277,12 @@ final class ConsoleModel {
                                           account: pendingResumeProvider != nil ? pendingResumeAccount : nil,
                                           // Only ever the answer to the question that asked about
                                           // stopping this exact run, and only for this one send.
-                                          stopSessionId: confirmedStopSessionID)
+                                          stopSessionId: confirmedStopSessionID,
+                                          // A wiki chat's page and selection, which revive it too.
+                                          wikiContext: wikiContext)
         let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
                                                  shell: shell, attachmentIds: attachmentIds,
-                                                 queueForNextTurn: queueForNextTurn)
+                                                 queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)
         // A run that is letting go frees the task within a couple of seconds, so this waits it out
         // rather than handing the reader a refusal about a situation that is already resolving.
         // The identical request goes back out — same `clientTurnId` — so the server either queues
@@ -3343,6 +3373,22 @@ final class ConsoleModel {
     /// opens the live console; the pills already carry the agent's seeded config.
     private func createDraftSession() async {
         guard let agent = draftAgent else { return }
+        // A new wiki chat: its first message makes the chat through the wiki's door (contract `chat.create`), with
+        // the files staged here and what the toolbar shows. Words go first: files ride with them, never alone.
+        if let create = wikiChat?.create {
+            guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            sending = true
+            defer { sending = false }
+            let made = await create(WikiChatLogic.FirstMessage(
+                words: composerText, attachmentIds: pendingAttachments.compactMap(\.remoteID),
+                model: providerCapabilitiesResolved ? modelID : nil, permissionMode: permissionMode.rawValue,
+                effort: effort.rawValue, fastMode: fastMode))
+            guard made else { return }
+            composerText = ""
+            pendingAttachments = []
+            if permissionModeWasEdited { rememberDefaultPermissionMode(permissionMode.rawValue) }
+            return
+        }
         let (text, shell) = ComposerLogic.parseShell(composerText)
         if shell, executesDsh {
             statusMessage = Self.dshShellRefusal
@@ -4118,15 +4164,11 @@ final class ConsoleModel {
     /// the same reason. A card is drawn only for the rows `EvidenceDecisions.cardRows` keeps: this
     /// project's, and ones the door would take an answer to from here.
     private(set) var evidenceDecisions: EvidenceDecisionQueue?
-    /// Where this conversation stands as the coordinator its project's queued evidence waits for —
-    /// paused, or back — read off its own row each time the row is adopted (`adoptServerSnapshot`):
-    /// the line every waiting version carries (`EvidenceDecisions.pauseLine`). Paused for a reason
-    /// nobody knows until a row arrives.
-    private(set) var coordinatorPause: CoordinatorPause = .paused(window: nil, retryAt: nil)
-    /// The evidence versions this conversation has drawn as a card the reader could press — asked
-    /// here in `pending`, or opened with Decide it myself — by card id. A card for any other version
-    /// is let go of once the read stops listing it (`EvidenceDecisions.letsGo`): it only ever waited
-    /// for the coordinator, and nobody was asked it.
+    /// What each version of evidence drawn here cites, by `task#revision` (`evidenceFileRead`).
+    private var evidenceFileReads: [String: EvidenceFileRead] = [:]
+    /// The files with a press of their pin on its way.
+    private(set) var pinningEvidenceFiles: Set<String> = []
+    /// Versions that have been questions in this conversation, by card id.
     private var engagedEvidence: Set<String> = []
     /// Whether the account owner has confirmed the standard set as it stands.
     private(set) var acceptanceConfirmation: StandardSetConfirmationStanding?
@@ -4220,6 +4262,10 @@ final class ConsoleModel {
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
     /// drawn in the run's own session and nowhere else.
     private(set) var taskID: String?
+    /// Whether `loadContext` has read the row that says what `projectID` and `taskID` are. Without it
+    /// those two being nil says nothing about the conversation (`loadContextIfUnread`).
+    private var contextLoaded = false
+    private var loadingContext = false
     /// What that task is waiting on from its owner, as `GET /tasks/:id/owner-confirmation` publishes
     /// it, or nil while the read has not come back. Nil is NOT "nothing is waiting" — it is
     /// `unread`, which shows a delivered card with dead buttons rather than one that quietly claims
@@ -4249,6 +4295,10 @@ final class ConsoleModel {
     /// publishing a question once it is answered, and keeps at most its verdict, so this is the
     /// one copy of what was asked — kept as long as this console is.
     private(set) var answeredDecisions: [String: AnsweredDecision] = [:]
+    /// The coordinator's questions answered HERE, by item id. A question's record reads the same
+    /// whoever answered it, and the review sheet has to tell them apart: its own press leaves it a
+    /// moment later, and an answer from another end does not.
+    private(set) var questionsAnsweredHere: Set<String> = []
     /// The version of the standard set a press HERE confirmed — the one version the confirmation
     /// card's entry in `closedCards` is about (`reopenConfirmationForANewVersion`).
     private var confirmedHereDigest: String?
@@ -4259,6 +4309,8 @@ final class ConsoleModel {
     private var lastRulerRead = Date.distantPast
     /// The evidence read's own pair: it runs in every conversation, not only a coordinator's.
     private var loadingEvidence = false
+    /// A forced read was asked for while another was on its way (`refreshEvidenceDecisions`).
+    private var evidenceReadOwed = false
     private var lastEvidenceRead = Date.distantPast
     /// Web's card re-reads on a 20s timer. This one re-reads on the events that can change the
     /// answer — context load, reconnect, the card appearing, a press — with this as the floor
@@ -5169,47 +5221,50 @@ final class ConsoleModel {
     /// dispatched outside any project has its owner card in that session, or in the task's run once
     /// that one is in Trash, and the read names which (`EvidenceDecisionRow.ownerCard`). Asked with
     /// the ruler's reads (`refreshRulerQuestions`), and on its own where those are not made.
+    ///
+    /// A forced read is asked for because something just moved, and the read on its way may have been
+    /// answered before it did. So it is owed rather than dropped: nothing else re-reads until the next
+    /// event, and there may not be one.
     func refreshEvidenceDecisions(force: Bool = false) async {
-        guard !isDraft, !loadingEvidence else { return }
+        guard !isDraft else { return }
+        if loadingEvidence {
+            if force { evidenceReadOwed = true }
+            return
+        }
         if !force, Date().timeIntervalSince(lastEvidenceRead) < Self.rulerReadThrottle { return }
         loadingEvidence = true
         defer { loadingEvidence = false }
-        // Scoped to THIS session: every row says whether the door would take an answer from here.
-        if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
-            evidenceDecisions = queue
-            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
-                let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
-                                                                       evidenceRevision: row.evidenceRevision)
-                engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
-                deliver(kind)
+        repeat {
+            evidenceReadOwed = false
+            // Scoped to THIS session: every row says whether the door would take an answer from here.
+            if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
+                evidenceDecisions = queue
+                adoptEvidenceQueue(queue)
+                lastEvidenceRead = Date()
             }
-            // The versions this conversation's coordinator holds or is owed, in the slot today's
-            // card goes in and the same kind of card: one per version, which the card draws as one
-            // line once it is handed over, folded while it waits, and as the question it is if it
-            // becomes the reader's (`EvidenceDecisions.standing`), keeping its place throughout.
-            for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
-                deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
-            }
-            for row in EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: projectID,
-                                                              sessionId: sessionID) {
-                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
-            }
-            decisionCards.removeAll { card in
-                guard case .evidenceDecision(let taskID, let evidenceRevision) = card.kind else { return false }
-                return EvidenceDecisions.letsGo(evidenceStanding(taskID, evidenceRevision),
-                                                engaged: engagedEvidence.contains(card.id))
-            }
-            adoptEvidenceReceipts(queue)
-            lastEvidenceRead = Date()
-        }
+        } while evidenceReadOwed && !Task.isCancelled
     }
 
-    /// Decide it myself: the reader opened a version that waits for the coordinator, to decide it
-    /// here. Remembered, so a card the reader has opened stays to say what became of its version
-    /// rather than vanishing from under them (`EvidenceDecisions.letsGo`).
-    func openedEvidence(_ taskID: String, _ evidenceRevision: String) {
-        engagedEvidence.insert(DeliveredDecisionCard(
-            kind: .evidenceDecision(taskID: taskID, evidenceRevision: evidenceRevision)).id)
+    /// Draw what a read of the queue lists for this conversation. Which rows those are depends on
+    /// the project as well, which arrives by a read of its own in either order, so `loadContext`
+    /// asks for this again when the project lands.
+    private func adoptEvidenceQueue(_ queue: EvidenceDecisionQueue) {
+        for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
+            let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
+                                                                   evidenceRevision: row.evidenceRevision)
+            engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
+            deliver(kind)
+        }
+        // Delivery receipts share the evidence card's address.
+        for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
+            deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
+        }
+        decisionCards.removeAll { card in
+            guard case .evidenceDecision(let taskID, let evidenceRevision) = card.kind else { return false }
+            return EvidenceDecisions.letsGo(evidenceStanding(taskID, evidenceRevision),
+                                            engaged: engagedEvidence.contains(card.id))
+        }
+        adoptEvidenceReceipts(queue)
     }
 
     /// Answer one revision of a task's evidence at the decision door, FROM this session and with
@@ -5235,6 +5290,69 @@ final class ConsoleModel {
             statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
+    }
+
+    /// Where this console's read of what one version of evidence cites stands: the card and the page it
+    /// opens read one list, and a List re-creates a card's row as it scrolls.
+    func evidenceFileRead(taskID: String, revision: String) -> EvidenceFileRead {
+        evidenceFileReads["\(taskID)#\(revision)"] ?? EvidenceFileRead()
+    }
+
+    /// The list's first page, once it is read, and otherwise another go. A card with no FILE citation
+    /// never reaches here (`EvidenceFiles.citesFiles`).
+    func readEvidenceFiles(taskID: String, revision: String) async {
+        let key = "\(taskID)#\(revision)"
+        let read = evidenceFileRead(taskID: taskID, revision: revision)
+        guard read.list == nil, !read.reading else { return }
+        evidenceFileReads[key] = EvidenceFileRead(unread: read.unread, reading: true)
+        do {
+            let page = try await api.evidenceFiles(taskID: taskID, revision: revision)
+            evidenceFileReads[key] = EvidenceFileRead(list: EvidenceFileList(page))
+        } catch {
+            evidenceFileReads[key] = EvidenceFileRead(unread: true)
+        }
+    }
+
+    /// The list's next page, on the press that asks for it: nothing is cut, and what was read stays.
+    func readMoreEvidenceFiles(taskID: String, revision: String) async {
+        let key = "\(taskID)#\(revision)"
+        let read = evidenceFileRead(taskID: taskID, revision: revision)
+        guard let list = read.list, let offset = list.nextOffset, !read.reading else { return }
+        evidenceFileReads[key] = EvidenceFileRead(list: list, reading: true)
+        do {
+            let page = try await api.evidenceFiles(taskID: taskID, revision: revision, offset: offset)
+            // The list as it stands now: a pin pressed while the page was on its way stays.
+            let current = evidenceFileRead(taskID: taskID, revision: revision).list ?? list
+            evidenceFileReads[key] = EvidenceFileRead(list: current.appending(page))
+        } catch {
+            let current = evidenceFileRead(taskID: taskID, revision: revision).list ?? list
+            evidenceFileReads[key] = EvidenceFileRead(list: current, unread: true)
+        }
+    }
+
+    /// Press a file's pin, either way. A file can be cited by several versions of its task, so the answer
+    /// goes into every list read of that task. Told its bytes have gone since the list was read, the file
+    /// stops offering a pin. False when the press did not go through, which the caller says out loud.
+    func pressEvidenceFilePin(taskID: String, file: EvidenceFile) async -> Bool {
+        guard !pinningEvidenceFiles.contains(file.id) else { return true }
+        pinningEvidenceFiles.insert(file.id)
+        defer { pinningEvidenceFiles.remove(file.id) }
+        do {
+            let answer = try await api.setAttachmentPinned(file.id, pinned: !EvidenceFiles.isPinned(file))
+            changeEvidenceFile(taskID: taskID, file.id) { $0.withPin(answer) }
+            await attachments.cameBack(file.id)
+            return true
+        } catch {
+            if ExpiredAttachment(error) != nil { changeEvidenceFile(taskID: taskID, file.id) { $0.notPinnable() } }
+            return false
+        }
+    }
+
+    private func changeEvidenceFile(taskID: String, _ id: String, _ change: (EvidenceFile) -> EvidenceFile) {
+        for (key, read) in evidenceFileReads where key.hasPrefix("\(taskID)#") {
+            guard let list = read.list else { continue }
+            evidenceFileReads[key] = EvidenceFileRead(list: list.updating(id, change), unread: read.unread, reading: read.reading)
+        }
     }
 
     /// Confirm the standard set as it stands. The digest is what makes this a confirmation of the
@@ -5446,6 +5564,7 @@ final class ConsoleModel {
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
+            questionsAnsweredHere.insert(row.itemId)
             adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
                                                                   request: request, receipt: receipt))
             await refreshRulerQuestions(force: true)
@@ -5824,4 +5943,14 @@ private func composerThumbnail(from data: Data, maxDimension: CGFloat = 96) -> D
     let renderer = UIGraphicsImageRenderer(size: target)
     return renderer.pngData { _ in source.draw(in: CGRect(origin: .zero, size: target)) }
     #endif
+}
+
+/// What a wiki chat's panel hands the console whose composer it draws (board 43): the page and the selection its
+/// attachment row shows, frozen as a message goes; what to do once the server took them; and, on a new chat's draft,
+/// the create its first message goes through instead of a session's.
+struct WikiChatComposing {
+    let context: @MainActor () -> WikiChatContext?
+    let accepted: @MainActor () -> Void
+    /// True once the chat is made; false when it was refused, which the panel says.
+    var create: (@MainActor (WikiChatLogic.FirstMessage) async -> Bool)?
 }

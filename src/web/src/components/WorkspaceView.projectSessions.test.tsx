@@ -13,7 +13,7 @@ import { projectSessionsQuery } from '../lib/queries';
 // call api() within api.ts, so stub them separately from the query factories' api export.
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
-  return { ...actual, api: vi.fn(), getToken: () => 'token', getSessionEventPage: vi.fn(), getSession: vi.fn(), pinSession: vi.fn(), unpinSession: vi.fn(), getSessionMoveTargets: vi.fn(), moveSession: vi.fn(), completeSession: vi.fn(), restoreSession: vi.fn() };
+  return { ...actual, api: vi.fn(), getToken: () => 'token', getSessionEventPage: vi.fn(), getSession: vi.fn(), pinSession: vi.fn(), unpinSession: vi.fn(), getSessionMoveTargets: vi.fn(), moveSession: vi.fn(), completeSession: vi.fn(), completeProjectSessions: vi.fn(), restoreSession: vi.fn() };
 });
 vi.mock('../lib/transcriptStore', () => ({
   loadTranscript: async () => null,
@@ -270,6 +270,11 @@ beforeEach(() => {
     rows = rows.map((session) => session.id === id ? { ...session, lifecycleState: 'COMPLETED' } : session);
     return {};
   });
+  vi.mocked(apiModule.completeProjectSessions).mockReset().mockImplementation(async (projectId) => {
+    const moved = rows.filter((session) => session.projectMembership?.projectId === projectId && session.lifecycleState === 'OPEN');
+    rows = rows.map((session) => moved.includes(session) ? { ...session, lifecycleState: 'COMPLETED' } : session);
+    return { completed: moved.length };
+  });
   vi.mocked(apiModule.restoreSession).mockReset().mockImplementation(async (id) => {
     rows = rows.map((session) => session.id === id ? { ...session, lifecycleState: 'OPEN' } : session);
     return {};
@@ -485,6 +490,26 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     }
     await click(menuItem('Sessions'), 'Sessions');
     await until(() => expect(location).toContain(`?project=${PROJECT_ID}`));
+  });
+
+  it.each(['DONE', 'CANCELLED'] as const)('leads a %s project\'s menu with Complete, which moves its sessions to Completed', async (status) => {
+    const finished = { ...membership('COORDINATOR'), projectStatus: status };
+    rows = [LOOSE, { ...COORDINATOR, projectMembership: finished }, { ...TASK, projectMembership: { ...finished, role: 'TASK' } }];
+    projects = [project({ status })];
+    await mount();
+    await hoverProjectMenu();
+    expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Complete', 'Open Session', 'Sessions', 'Open Project', 'Pin', 'Move…']);
+    const menus = [...document.querySelectorAll('[role="menu"]')].filter(onOpenMenu);
+    expect(menus[0].children[1]?.getAttribute('role')).toBe('separator');
+    expect(menus[0].querySelectorAll('[role="separator"]')).toHaveLength(2);
+    await click(menuItem('Complete'), 'Complete');
+    await until(() => expect(apiModule.completeProjectSessions).toHaveBeenCalledWith(PROJECT_ID));
+    expect(apiModule.completeSession).not.toHaveBeenCalled();
+    await until(() => expect(projectRows()).toHaveLength(0));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await hoverProjectMenu();
+    expect(menuItem('Complete')).toBeUndefined();
   });
 
   it('pins and moves the coordinator from the project menu', async () => {
@@ -1062,9 +1087,11 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
     })).toBe(false);
   });
 
+  // In the coordinator's workspace, the one place its project has a row (owner 11-07): the member waiting
+  // in another workspace is read through the project.
   it('only supplements projects in the current list that lack a coordinator or waiting member', async () => {
-    rows = [LOOSE, TASK];
-    remoteRows = [{ ...COORDINATOR, workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } }, remote(828, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
+    rows = [LOOSE, COORDINATOR, TASK];
+    remoteRows = [remote(828, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
     await mount();
     await until(() => expect(preview()?.textContent).toContain('Remote waiting question'));
     expect(projectQueryCalls().length).toBeGreaterThan(0);
@@ -1090,8 +1117,8 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
 
   it.each(['entry', 'page'])('keeps the %s query stable on unrelated events and debounces project-member updates', async (surface) => {
     withControlPlane = true;
-    rows = [LOOSE, TASK];
-    remoteRows = [{ ...COORDINATOR, workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } }, remote(829, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
+    rows = [LOOSE, COORDINATOR, TASK];
+    remoteRows = [remote(829, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
     await mount();
     await until(() => expect(preview()?.textContent).toContain('Remote waiting question'));
     if (surface === 'page') await openSessions();
@@ -1104,15 +1131,16 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
       type: 'session.updated', sessionId,
       data: { id: sessionId, projectMembership: { projectId, role: 'TASK' } },
     }) });
+    // Past the stream's coalescing window (a second) each time.
     await act(async () => {
       publish(pid(830), LOOSE.id);
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
     });
     await settle();
     expect(projectQueryCalls()).toHaveLength(countBefore);
     await act(async () => {
       for (let i = 0; i < 5; i += 1) publish(PROJECT_ID, TASK.id);
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
     });
     await settle();
     expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 2 : 1));
@@ -1408,7 +1436,7 @@ describe('the project sessions page — the Landings row', () => {
     await until(() => expect(entry()?.className).toContain('is-outlined'));
     expect(entry()!.className).toContain('is-open');
     expect(entry()!.querySelector('.landings-window-row')?.getAttribute('aria-expanded')).toBe('true');
-    expect(entry()!.querySelector('.session-project-merge-row-title')?.textContent).toBe('landed long ago');
+    expect(entry()!.querySelector('.landings-window-row-text')?.textContent).toBe('landed long ago');
     // No conversation is drawn for it: no header, no composer.
     expect(mounted().querySelector('.workspace-header')).toBeNull();
     expect(mounted().querySelector('textarea')).toBeNull();

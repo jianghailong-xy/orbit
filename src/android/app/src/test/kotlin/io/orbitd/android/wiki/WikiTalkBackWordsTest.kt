@@ -65,6 +65,16 @@ class WikiTalkBackWordsTest {
         assertTrue("$where: presses TalkBack reads twice: $twice", twice.isEmpty())
     }
 
+    /** The setup card (mock 41): a step's mark is its number or nothing, its heading has words, and its button says them once. */
+    @Test fun theSetupCardReadsItsWords() {
+        listOf("none", "noneDrafting", "writing", "writingStopped").forEach { state ->
+            show { WikiStartSteps(WikiStartFixture.card(state), busy = false) {} }
+            assertTalkBackReadsWords("the setup card, $state")
+        }
+        show { WikiStartSteps(WikiStartLogic.firstCard(true), busy = false) {} }
+        assertTalkBackReadsWords("the first wiki's card")
+    }
+
     /** The home and Activity: the space picker, the bar's Activity with its number, its Share with the space's live link, and
      * the review banner say each of their words once (TalkBack read the banner twice, and the space's slug as a state and
      * again as its text). */

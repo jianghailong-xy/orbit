@@ -261,9 +261,10 @@ public struct OwnerConfirmationBranch: Codable, Equatable, Sendable {
     }
 }
 
-/// How the task's work reaches main once it is DONE: not at all, onto the project's integration
-/// line with main asking the owner again, onto main by itself once the check is clean, or pushed
-/// there by the agent itself in an `AGENT_PUSH` project (§10.5 O-L2). `NONE` is `landsNothing` here
+/// How the task's work reaches main once it is DONE: not at all (which includes a branch with no
+/// changes, §10.5 O-L8), onto the project's integration line with main asking the owner again, onto
+/// main by itself once the check is clean, or pushed there by the agent itself in an `AGENT_PUSH`
+/// project (§10.5 O-L2). `NONE` is `landsNothing` here
 /// so that it can never be read as an optional's `.none`.
 public enum OwnerConfirmationLanding: String, Codable, Equatable, Sendable {
     case landsNothing = "NONE"
@@ -630,6 +631,8 @@ public enum OwnerConfirmations {
     public static let notOnMain = "Not on main yet"
     public static let noRecordOnMain = "No record of this branch on main"
     public static let doesNotMerge = "confirming doesn’t merge it"
+    /// The branch row when the branch has no changes and the read says nothing lands (§10.5 O-L8).
+    public static let noChanges = "No changes on this branch, so nothing lands"
     public static let lineThenOwner =
         "Goes onto the integration line; merging into main asks you again"
     public static let autoMain = "Lands on main by itself if the checks pass"
@@ -882,9 +885,11 @@ public enum OwnerConfirmations {
     public static func plainText(_ markdown: String?) -> String {
         guard var text = markdown, !text.isEmpty else { return "" }
         text = text.replacingOccurrences(of: "\\r\\n?", with: "\n", options: [.regularExpression])
-        // Fence lines only: the code between them is text a reader still recognises.
-        text = text.replacingOccurrences(of: "(?m)^[ \\t]*(?:`{3,}|~{3,}).*$", with: "",
-                                         options: [.regularExpression])
+        // Fence lines go. The code between them is text a reader still recognises, so it is held,
+        // as inline code is, out of every rule below.
+        var code = MarkdownMarks.HeldCode()
+        text = code.hold(MarkdownMarks.fencedCode, in: text)
+        text = code.hold(MarkdownMarks.inlineCode, in: text)
         // Thematic breaks, before the list rule below would read `- - -` as a bullet.
         text = text.replacingOccurrences(
             of: "(?m)^[ \\t]*(?:(?:\\*[ \\t]*){3,}|(?:-[ \\t]*){3,}|(?:_[ \\t]*){3,})$", with: "",
@@ -912,22 +917,8 @@ public enum OwnerConfirmations {
                                          options: [.regularExpression])
         text = text.replacingOccurrences(of: "<((?:https?|mailto):[^>\\s]+)>", with: "$1",
                                          options: [.regularExpression])
-        // Inline code, where the closing run must be as long as the opening one.
-        text = text.replacingOccurrences(of: "(`+)([^`]*?)\\1", with: "$2",
-                                         options: [.regularExpression])
-        // Asterisk emphasis, longest run first so `***x***` does not leave a stray mark — and only
-        // when the content has no space at either end, which keeps `2 * 3 * 4` a multiplication.
-        text = text.replacingOccurrences(of: "(\\*{1,3})(\\S(?:[^*]*\\S)?)\\1", with: "$2",
-                                         options: [.regularExpression])
-        text = text.replacingOccurrences(of: "~~(\\S(?:[^~]*\\S)?)~~", with: "$1",
-                                         options: [.regularExpression])
-        // Underscore emphasis ONLY where it is not inside a word: `file_path` and `snake_case` are
-        // identifiers. \p{L}\p{N} rather than \w because the boundary has to hold for CJK too.
-        text = text.replacingOccurrences(
-            of: "(^|[^\\p{L}\\p{N}_])(_{1,2})(\\S(?:[^_]*\\S)?)\\2(?![\\p{L}\\p{N}_])",
-            with: "$1$3", options: [.regularExpression])
-        // Whatever backticks are left are an unpaired mark, never punctuation somebody meant.
-        text = text.replacingOccurrences(of: "`", with: "")
+        text = MarkdownMarks.withoutEmphasis(text)
+        text = code.putBack(text)
         // Trailing whitespace goes, and so does a stack of blank lines — most of them the rows a
         // fence or a thematic break used to take up.
         text = text.replacingOccurrences(of: "(?m)[ \\t]+$", with: "", options: [.regularExpression])
@@ -998,6 +989,10 @@ public enum OwnerConfirmations {
     /// The branch row says confirming does not merge it only where the landing is read and is not
     /// Automatic's — there the DONE does lead to main, as the landing row says. An AGENT_PUSH
     /// project's DONE merges nothing either: its agent pushes, which is what its landing row says.
+    ///
+    /// A branch with no changes where nothing lands has nothing to merge, so its row says that
+    /// instead (§10.5 O-L8). `files` alone cannot say it: a line that still lands other work sends 0
+    /// for this branch too.
     public static func ifConfirmedRows(_ ifConfirmed: OwnerConfirmationIfConfirmed?)
         -> [IfConfirmedRow] {
         guard let ifConfirmed else { return [] }
@@ -1014,14 +1009,18 @@ public enum OwnerConfirmations {
         let landing = ifConfirmed.landing
         let main = RunSettings.mainBranchName(ifConfirmed.mainBranch)
         if let branch = ifConfirmed.branch, branch.onMain != .yes {
-            let unmerged = branch.onMain == .no
-            let staysOff = landing == .landsNothing || landing == .lineThenOwner || landing == .agentPushed
-            rows.append(IfConfirmedRow(
-                kind: .branch,
-                lead: unmerged ? notOn(main) : noRecordOn(main),
-                added: unmerged && branch.linesAdded > 0
-                    ? "+\(OrbitLinkCopy.number(branch.linesAdded))" : nil,
-                detail: staysOff ? "\(branch.name) — \(doesNotMerge)" : branch.name))
+            if landing == .landsNothing && branch.files == 0 {
+                rows.append(IfConfirmedRow(kind: .branch, lead: noChanges, detail: branch.name))
+            } else {
+                let unmerged = branch.onMain == .no
+                let staysOff = landing == .landsNothing || landing == .lineThenOwner || landing == .agentPushed
+                rows.append(IfConfirmedRow(
+                    kind: .branch,
+                    lead: unmerged ? notOn(main) : noRecordOn(main),
+                    added: unmerged && branch.linesAdded > 0
+                        ? "+\(OrbitLinkCopy.number(branch.linesAdded))" : nil,
+                    detail: staysOff ? "\(branch.name) — \(doesNotMerge)" : branch.name))
+            }
         }
         if landing == .lineThenOwner {
             rows.append(IfConfirmedRow(kind: .landing, lead: lineThenOwner(main)))

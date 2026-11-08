@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { HttpException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   WIKI_ANCHOR_RULES,
+  WIKI_BACKFILL,
   WIKI_DOCS_BUILD_JOB,
   WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
@@ -9,6 +11,8 @@ import {
   WIKI_REVIEW_RULES,
   wikiMaintenanceRunSessions,
   type WikiDossier,
+  type WikiDossierNotes,
+  type WikiMaintenanceClaimsReport,
   type WikiPlanTopic,
   type WikiRepoOpKind,
   type WikiReviewMode,
@@ -20,14 +24,14 @@ import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition 
 import { wikiDocsAffected } from '../wiki/wiki-docs-affected';
 import type { WikiDocs } from '../wiki/wiki-docs';
 import { ownerEnvLiterals } from '../wiki/wiki-dossier';
-import { encodeCursorToken, type WikiMaintenance } from '../wiki/wiki-maintenance';
-import { finishWikiMaintenanceJob } from '../wiki/wiki-maintenance-run';
+import { encodeCursorToken, type WikiBackfillSession, type WikiMaintenance } from '../wiki/wiki-maintenance';
+import { finishWikiBackfillJob, finishWikiMaintenanceJob } from '../wiki/wiki-maintenance-run';
 import { stripNul } from '../runner-api/strip-nul';
 import type { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, type WikiPrincipal, type WikiService } from '../wiki/wiki.service';
 import { isWikiJobCancellation, WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
 import { readWikiJobCarry, wikiJobCarryWriter } from './wiki-jobs';
-import { wikiJobModelCalls } from './wiki-model-queue';
+import { wikiJobModelCalls, wikiModelRequestsAsked, type WikiModelRequestCall } from './wiki-model-queue';
 import {
   buildWikiMaintainOps,
   mergeWikiMaintainBuilt,
@@ -37,12 +41,15 @@ import {
   wikiMaintainOffTopic,
   wikiMaintainOutcomeAt,
   wikiMaintainParallel,
+  wikiMaintainCheckClaims,
   wikiMaintainPrompt,
   wikiMaintainRemaining,
   wikiMaintainRetrySuffix,
   wikiMaintainTopicOrder,
   wikiMaintainTopicsOf,
+  WIKI_MAINTAIN_CLAIMS_SYSTEM_PROMPT,
   WIKI_MAINTAIN_SYSTEM_PROMPT,
+  type WikiMaintainClaimsRun,
   type WikiMaintainBatch,
   type WikiMaintainOp,
   type WikiMaintainRepoGate,
@@ -104,7 +111,8 @@ import { verifyWikiOps } from './wiki-verify-job';
  * reads where the run starts and the space's snapshot of origin/main (one `wiki_repo_op`), reads the
  * dossiers since the cursor up to the position the run expects, asks the model about each one — one request
  * per dossier through the queue, four in flight at most — checks every entry against its dossier and the
- * snapshot, asks once more with the reasons the first answer was refused, proposes the ones that hold up by
+ * snapshot, asks once more with the reasons the first answer was refused, checks in a pass of its own what the
+ * sessions' agents wrote to their memory (`checkClaimsAll`), proposes the ones that hold up by
  * topic in batches of thirty with a dry run first and the run's circuit breaker holding back what does not
  * fit, moves the cursor past the sessions whose ops it recorded, verifies its own ops twice and then adopts
  * what ended sessions left waiting, re-checks the anchors through the runner, and writes again only the
@@ -122,10 +130,20 @@ import { verifyWikiOps } from './wiki-verify-job';
  * through its finish (`finishWikiMaintenanceJob`), which counts it, so three in a row tell the owner, and the job
  * fails as content.
  * Every call is a breakpoint: the pair `(step, unit)` is a request's identity, so a replayed job reuses the
- * answers it already has.
+ * answers it already has — and asks what it asked, from the case file kept with each question, however the session
+ * went on since (`maintenance.job.server.replay`).
  *
  * WHAT IT DOES NOT DO. It asks no provider: the System model's address and key live in this process, and
  * nothing about a space's pinned provider is read. It makes no task and starts no session.
+ *
+ * A BACKFILL READS THE SESSIONS IT WAS GIVEN (contract `maintenance.job.server.backfill`, docs/wiki-memory-claims-design.md
+ * §5). A job whose input names sessions reads no page of the cursor's: it checks what those sessions' agents wrote, from their
+ * writes or from the imported notes named for them, in the pass above, and nothing else is asked of the model: these sessions'
+ * extraction is the ordinary run's, which has read most of them already, and asking again is mostly new entries on an agent's
+ * word. The self-check, the breaker, the proposals, the verdicts and the anchors are the ones above. It moves no cursor, writes
+ * no document, owes no articles and records no dossier, whose hash says what the extraction has read (`WikiMaintenance.namedDossiers`).
+ * It carries no pipeline either: with no cursor behind it, a replay reads the same sessions again and meets its own requests
+ * and its own changesets, each under the identity the first attempt made it with.
  *
  * THE REPORT IS THE WHOLE RUN'S (contract `jobs.carry`). A replay — after a stop handed the job back, or a failure of the
  * platform — runs every step again, and finds done what the attempt before it finished: the dossiers behind the cursor
@@ -174,6 +192,11 @@ export interface WikiMaintainReport {
   unchanged: number;
   offTopic: number;
   entries: { extracted: number; kept: number; dropped: number; foreign: number; principles: number };
+  /**
+   * The pass that only checks the agent's notes (contract `maintenance.job.report`), apart from `entries`, which stays the
+   * extraction's. Its ops go through the same steps as the extraction's, and count in `ops` with them.
+   */
+  claims: WikiMaintenanceClaimsReport;
   ops: {
     proposed: number;
     recorded: number;
@@ -200,6 +223,8 @@ export interface WikiMaintainReport {
   tokens: { input: number; output: number; calls: number };
   seconds: number;
   cursorAdvanced?: boolean;
+  /** A backfill's own part (contract `maintenance.job.server.backfill`). */
+  backfill?: { reason: string; unread: string[]; heldBack: string[] };
 }
 
 /** What the documents step reports (contract `maintenance.job.docs.report`). */
@@ -230,6 +255,8 @@ export interface WikiMaintainDocsReport {
 
 /** The pipeline up to the cursor's advance: what the attempts whose advance was written read, took and recorded. */
 type WikiMaintainPipelineCarry = Pick<WikiMaintainReport, 'sessions' | 'dossiers' | 'unchanged' | 'offTopic' | 'entries' | 'ops'> & {
+  /** Absent from what an attempt from before the pass was wired in carried. */
+  claims?: WikiMaintenanceClaimsReport;
   refused: string[];
   advanced: boolean;
 };
@@ -307,6 +334,25 @@ interface WikiMaintainComparedSection {
   paths: string[];
 }
 
+/**
+ * A question an earlier attempt of the job asked about a session (`askedBefore`): the call, the case file it was made from,
+ * and the call of the session's retry unit, if that attempt made one.
+ */
+interface WikiMaintainAsked {
+  call: WikiModelRequestCall;
+  material: Record<string, unknown>;
+  retry: WikiModelRequestCall | null;
+}
+
+/**
+ * What the extraction's question about a session keeps of its case file (contract `modelQueue.material`): the dossier as it
+ * was handed out, but its notes, which the notes pass's question keeps.
+ */
+function extractionMaterial(dossier: WikiDossier): Record<string, unknown> {
+  const { unchanged: _unchanged, notes: _notes, ...file } = dossier;
+  return file;
+}
+
 /** Why a run ends before it succeeded: the step, and what went wrong there. */
 class WikiMaintainStop extends Error {
   constructor(readonly step: string, readonly cause: Error, readonly kind: 'infra' | 'content') {
@@ -318,7 +364,7 @@ class WikiMaintainStop extends Error {
 /** Run one `maintain` job: its run row, the whole pipeline, and what its end leaves. */
 export async function runWikiMaintainJob(context: WikiJobContext, deps: WikiMaintainJobDeps): Promise<Record<string, unknown>> {
   const runId = readRunId(context.job.input);
-  return new WikiMaintainRun(context, deps, runId).execute();
+  return new WikiMaintainRun(context, deps, runId, readBackfill(context.job.input)).execute();
 }
 
 /** The job's input as its row holds it: the run it executes (`maintenance.job.server`). */
@@ -328,6 +374,34 @@ function readRunId(input: Record<string, unknown>): string {
     throw new WikiJobContentError('the job names no maintenance run to execute (input.runId)');
   }
   return id;
+}
+
+/** What a backfill's job names (contract `maintenance.job.server.backfill`). */
+interface WikiMaintainBackfill {
+  reason: string;
+  sessions: WikiBackfillSession[];
+}
+
+/**
+ * The job's input as its row holds it: the sessions a backfill names, or null for a run its facts made. A job that names
+ * them wrongly is refused rather than read as the other kind: a run that went on to read the cursor's pages would move it.
+ */
+function readBackfill(input: Record<string, unknown>): WikiMaintainBackfill | null {
+  if (input?.backfill === undefined) return null;
+  const refused = (): never => {
+    throw new WikiJobContentError('the job names a backfill it does not say the sessions or the reason of (input.backfill)');
+  };
+  const { reason, sessions } = (input.backfill ?? {}) as { reason?: unknown; sessions?: unknown };
+  if (typeof reason !== 'string' || reason.trim() === '') return refused();
+  if (!Array.isArray(sessions) || sessions.length === 0 || sessions.length > WIKI_BACKFILL.sessionsMax) return refused();
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+  const read = (sessions as Array<{ sessionId?: unknown; noteIds?: unknown } | null>).map((one) => {
+    const { sessionId, noteIds } = one ?? {};
+    if (typeof sessionId !== 'string' || !uuid.test(sessionId)) return refused();
+    if (!Array.isArray(noteIds) || !noteIds.every((id) => typeof id === 'string' && uuid.test(id))) return refused();
+    return { sessionId, noteIds: noteIds as string[] };
+  });
+  return { reason, sessions: read };
 }
 
 /**
@@ -342,6 +416,10 @@ class WikiMaintainRun {
     unchanged: 0,
     offTopic: 0,
     entries: { extracted: 0, kept: 0, dropped: 0, foreign: 0, principles: 0 },
+    claims: {
+      claudeSessions: 0, seen: 0, notes: 0, skipped: 0, overCap: 0, heldOut: 0, shown: 0, narrowed: 0, contradicted: 0, absent: 0, notDurable: 0,
+      unanswered: 0, entries: 0, duplicates: 0,
+    },
     ops: { proposed: 0, recorded: 0, refused: 0, selfCheckDropped: 0, heldBack: 0, heldBackByBreaker: 0, applied: 0, waiting: 0 },
     tokens: { input: 0, output: 0, calls: 0 },
     seconds: 0,
@@ -374,7 +452,11 @@ class WikiMaintainRun {
     private readonly jobContext: WikiJobContext,
     private readonly deps: WikiMaintainJobDeps,
     private readonly runId: string,
-  ) {}
+    /** The sessions this run was given, or null when it reads the cursor's pages. */
+    private readonly backfill: WikiMaintainBackfill | null = null,
+  ) {
+    if (backfill) this.report.backfill = { reason: backfill.reason, unread: [], heldBack: [] };
+  }
 
   /** The whole run: whatever ends it, the server hears how it ended — unless it is the platform's failure. */
   async execute(): Promise<Record<string, unknown>> {
@@ -433,21 +515,30 @@ class WikiMaintainRun {
     // without any U+0000 (contract `jobs.serverWrites`).
     const report = await this.wholeReport();
     const refused = [...(this.earlier.pipeline?.refused ?? []), ...this.refused];
-    const answer = await finishWikiMaintenanceJob(this.deps.prisma, this.deps.maintenance, job.ownerId, job.spaceId, job.id, {
-      to: stop === null ? this.cursor : null,
-      outcome: stop === null ? 'succeeded' : 'failed',
+    const end = {
+      outcome: stop === null ? ('succeeded' as const) : ('failed' as const),
       error: stop === null ? null : stripNul(cutRunes(stop.message, 2000)),
       failureKind: stop === null ? null : stop.kind,
       report: stripNul(report as unknown as Record<string, unknown>),
-    });
+    };
+    let position = this.position;
+    let advanced = false;
+    if (this.backfill) {
+      await finishWikiBackfillJob(this.deps.prisma, job.ownerId, job.spaceId, job.id, end);
+      if (stop === null) this.jobContext.log('every step succeeded: the backfill leaves the cursor where it was');
+    } else {
+      const answer = await finishWikiMaintenanceJob(this.deps.prisma, this.deps.maintenance, job.ownerId, job.spaceId, job.id, { ...end, to: stop === null ? this.cursor : null });
+      position = answer.state.position ?? this.position;
+      advanced = answer.advanced || this.advanced || this.earlier.pipeline?.advanced === true;
+      if (stop === null) this.jobContext.log(`every step succeeded: the cursor is at ${answer.state.position ?? '(unmoved)'}`);
+    }
     if (stop === null) {
-      this.jobContext.log(`every step succeeded: the cursor is at ${answer.state.position ?? '(unmoved)'}`);
       return {
         kind: 'maintain',
         runId: this.runId,
         outcome: 'succeeded',
-        advanced: answer.advanced || this.advanced || this.earlier.pipeline?.advanced === true,
-        cursor: answer.state.position ?? this.position,
+        advanced,
+        cursor: position,
         refused,
         report,
       };
@@ -479,9 +570,23 @@ class WikiMaintainRun {
       report.unchanged += pipeline.unchanged;
       report.offTopic += pipeline.offTopic;
       report.entries = addCounts(report.entries, pipeline.entries);
+      if (pipeline.claims) report.claims = addCounts(report.claims, pipeline.claims);
       report.ops = addCounts(report.ops, pipeline.ops);
       report.cursorAdvanced = true;
     }
+    // Off the rows, so that a verdict any attempt recorded is counted once, an adopted op's among them.
+    report.claims = {
+      ...report.claims,
+      duplicates: await this.deps.prisma.wikiChangesetOp.count({
+        where: {
+          ownerId: job.ownerId,
+          promptedBy: { not: Prisma.AnyNull },
+          verificationVerdict: 'duplicate',
+          verifiedAt: { gte: this.runStarted },
+          changeset: { spaceId: job.spaceId },
+        },
+      }),
+    };
     const verdicts = this.earlier.verification;
     if (verdicts) {
       const now = report.verification ?? { verified: 0, failed: 0, waitingForNextRun: 0 };
@@ -542,7 +647,7 @@ class WikiMaintainRun {
   private pipelineCarry(): WikiMaintainPipelineCarry {
     const now: WikiMaintainPipelineCarry = {
       sessions: this.report.sessions, dossiers: this.report.dossiers, unchanged: this.report.unchanged, offTopic: this.report.offTopic,
-      entries: { ...this.report.entries }, ops: { ...this.report.ops }, refused: [...this.refused], advanced: this.advanced,
+      entries: { ...this.report.entries }, claims: { ...this.report.claims }, ops: { ...this.report.ops }, refused: [...this.refused], advanced: this.advanced,
     };
     const before = this.earlier.pipeline;
     if (!before) return now;
@@ -552,6 +657,7 @@ class WikiMaintainRun {
       unchanged: before.unchanged + now.unchanged,
       offTopic: before.offTopic + now.offTopic,
       entries: addCounts(before.entries, now.entries),
+      claims: before.claims ? addCounts(before.claims, now.claims!) : now.claims,
       ops: addCounts(before.ops, now.ops),
       refused: [...before.refused, ...now.refused],
       advanced: before.advanced || now.advanced,
@@ -597,24 +703,34 @@ class WikiMaintainRun {
       step = 'dossiers';
       const dossiers = await this.dossiers();
       let ops: WikiMaintainOp[] = [];
+      let noted: WikiMaintainOp[] = [];
       if (dossiers.length > 0) {
-        step = 'extract';
-        ops = await this.extractAll(dossiers);
+        if (!this.backfill) {
+          step = 'extract';
+          ops = await this.extractAll(dossiers);
+        }
+        step = 'claims';
+        noted = await this.checkClaimsAll(dossiers);
       }
       step = 'self-check';
-      let batches = await this.selfCheck(ops);
+      // The extraction's batches first: recorded after them, an op of the notes has what they wrote among its neighbours.
+      let batches = [...await this.selfCheck(ops), ...await this.selfCheck(noted)];
       step = 'breaker';
       batches = this.breaker(batches);
       step = 'propose';
       await this.propose(batches);
-      step = 'advance';
-      await this.advance();
+      if (!this.backfill) {
+        step = 'advance';
+        await this.advance();
+      }
       step = 'verify';
       await this.verify();
       step = 'anchors';
       await this.anchors();
-      step = 'docs';
-      await this.docs();
+      if (!this.backfill) {
+        step = 'docs';
+        await this.docs();
+      }
       return null;
     } catch (error) {
       if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
@@ -629,10 +745,10 @@ class WikiMaintainRun {
     const { prisma } = this.deps;
     const { job } = this.jobContext;
     const space = await prisma.wikiSpace.findFirst({
-      where: { id: job.spaceId, ownerId: job.ownerId },
+      where: { id: job.spaceId, ownerId: job.ownerId, deletedAt: null },
       select: { id: true, title: true, repoUrlNorm: true, rootCommitSha: true, settings: true },
     });
-    if (!space) throw new WikiJobContentError('the space this run maintains is gone');
+    if (!space) throw new WikiJobContentError('the space this run maintains is gone, or in Trash');
     const settings = space.settings as Record<string, unknown> | null;
     const maintenance = (settings?.maintenance ?? {}) as { workspaceId?: string | null };
     const reviewMode = ((settings?.reviewMode as WikiReviewMode | undefined) ?? 'tiered');
@@ -740,8 +856,15 @@ class WikiMaintainRun {
    * handed out on — the rule the breaker already goes by (§19.4 step 6). Nothing is lost by keeping only it: a
    * page hands out facts past the settle grace alone, so every fact of this run's window was committed before
    * the first read of the session, and the dossier is built from the records as they stand when it is read.
+   *
+   * A REPLAY READS THE PAGES AGAIN, AND ASKS WHAT WAS ASKED (2026-11-06, the orbit space's runs of that morning). A job
+   * whose lease ran out, or that a stop handed back, reads its pages again, and a session still going on has records the
+   * earlier attempt did not read. A session that attempt asked about is asked the same question all the same, and its
+   * answer read against the case file that question was made from (`askedBefore`): what the replay read of it on top is
+   * the next run's, as a record that arrives after a single attempt's read is.
    */
   private async dossiers(): Promise<WikiDossier[]> {
+    if (this.backfill) return this.namedDossiers(this.backfill);
     /** What this run reads of each session — its newest page's copy, and the page that copy came from. */
     const read = new Map<string, { dossier: WikiDossier; page: number }>();
     let after = '';
@@ -782,6 +905,22 @@ class WikiMaintainRun {
     return out;
   }
 
+  /**
+   * The sessions a backfill names. Each is a page of its own to the breaker, which keeps them in the order named while what
+   * their ops would change fits: there is no cursor to stop, so what it holds back is reported by name.
+   */
+  private async namedDossiers(backfill: WikiMaintainBackfill): Promise<WikiDossier[]> {
+    const { job } = this.jobContext;
+    const { dossiers, unread } = await this.deps.maintenance.namedDossiers(job.ownerId, job.spaceId, backfill.sessions);
+    backfill.sessions.forEach(({ sessionId }, page) => this.pageOf.set(sessionId, page));
+    this.report.backfill!.unread = unread;
+    this.report.sessions = backfill.sessions.length;
+    this.report.dossiers = dossiers.length;
+    this.jobContext.log(`read ${dossiers.length} of the ${backfill.sessions.length} session(s) this backfill names`
+      + (unread.length > 0 ? `: ${unread.join(', ')} could not be read` : ''));
+    return dossiers;
+  }
+
   /** One page of the space's dossiers, through the server's own reader (the one the runner door served before P11). */
   private async dossiersUntil(after: string, until: string, limit: number): Promise<Awaited<ReturnType<WikiMaintenance['dossierPage']>>> {
     const { job } = this.jobContext;
@@ -790,6 +929,7 @@ class WikiMaintainRun {
         after: after === '' ? null : after,
         until: until === '' ? null : until,
         limit,
+        claims: true,
       });
     } catch (error) {
       if (error instanceof WikiRefusalError || error instanceof NotFoundException) {
@@ -835,11 +975,27 @@ class WikiMaintainRun {
     return ops;
   }
 
-  /** One dossier: the model's answer, checked, and — when some of it did not hold up — asked for once more. */
-  private async extract(dossier: WikiDossier): Promise<WikiMaintainOp[]> {
+  /**
+   * One dossier: the model's answer, checked, and — when some of it did not hold up — asked for once more. A replay asks what
+   * an earlier attempt of the job asked about the session, and reads the answer against the case file that was asked from
+   * ({@link askedBefore}), which the space's record of the session then names: `unchanged` holds the next read to the file
+   * the extraction read, not to the newer one the replay's page read recorded.
+   */
+  private async extract(read: WikiDossier): Promise<WikiMaintainOp[]> {
+    const step = WIKI_MAINTAIN_JOB.steps.extract;
+    const before = await this.askedBefore(step, read.sessionId);
+    const dossier: WikiDossier = before ? { ...(before.material as unknown as WikiDossier), unchanged: false } : read;
+    if (before && dossier.hash !== read.hash) {
+      const { job } = this.jobContext;
+      await this.deps.maintenance.recordAsked(job.ownerId, job.spaceId, dossier);
+    }
     const lines = wikiMaintainLines(dossier);
-    const prompt = wikiMaintainPrompt(this.context, this.snapshot?.about ?? '', dossier.text);
-    const answer = await this.ask(WIKI_MAINTAIN_JOB.steps.extract, dossier.sessionId, WIKI_MAINTAIN_SYSTEM_PROMPT, prompt, WIKI_MAINTAIN_JOB.extractMaxTokens);
+    const call = before?.call ?? {
+      system: WIKI_MAINTAIN_SYSTEM_PROMPT,
+      prompt: wikiMaintainPrompt(this.context, this.snapshot?.about ?? '', dossier.text),
+      maxTokens: WIKI_MAINTAIN_JOB.extractMaxTokens,
+    };
+    const answer = await this.ask(step, dossier.sessionId, call.system, call.prompt, call.maxTokens, extractionMaterial(dossier));
     if (wikiMaintainOffTopic(answer.text)) {
       this.report.offTopic += 1;
       this.jobContext.log(`  ${JSON.stringify(cutRunes(dossier.title, 60))}: not about this repository — nothing taken from it`);
@@ -850,15 +1006,9 @@ class WikiMaintainRun {
     const built = buildWikiMaintainOps(parsedEntries ?? [], dossier, lines, repo, this.context.topics);
     const problems = parsedEntries === null ? ['the answer was not a JSON array of entries'] : built.problems;
     if (parsedEntries === null || built.problems.length > 0) {
-      const retry = wikiMaintainRetrySuffix(answer.text, parsedEntries !== null, built);
+      const retry = before?.retry ?? { ...call, prompt: call.prompt + wikiMaintainRetrySuffix(answer.text, parsedEntries !== null, built) };
       try {
-        const again = await this.ask(
-          WIKI_MAINTAIN_JOB.steps.extract,
-          `${dossier.sessionId}#retry`,
-          WIKI_MAINTAIN_SYSTEM_PROMPT,
-          prompt + retry,
-          WIKI_MAINTAIN_JOB.extractMaxTokens,
-        );
+        const again = await this.ask(step, `${dossier.sessionId}#retry`, retry.system, retry.prompt, retry.maxTokens);
         const second = parseWikiImportAnswer(again.text);
         if (second !== null) mergeWikiMaintainBuilt(built, buildWikiMaintainOps(second, dossier, lines, repo, this.context.topics));
       } catch (error) {
@@ -876,12 +1026,134 @@ class WikiMaintainRun {
   }
 
   /**
-   * One model call through the queue. Its request is what the report's tokens count (`wikiJobModelCalls`): every call of
-   * the run once, whichever attempt and whichever step made it.
+   * The pass that only checks the agent's notes, over the sessions whose file carries any and whose extraction this run
+   * did (`maintenance.job.server.claims`). A session held out has no such file. The report says what the writes came to
+   * over all the run's dossiers, whichever of them made a file. A replay checks a session's notes as an earlier attempt of
+   * the job asked about them, from the notes that question was made from ({@link askedBefore}), and counts those.
    */
-  private async ask(step: string, unit: string, system: string, prompt: string, maxTokens: number): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
-    const settled = await this.jobContext.ask(step, unit, { system, prompt, maxTokens });
+  private async checkClaimsAll(dossiers: readonly WikiDossier[]): Promise<WikiMaintainOp[]> {
+    const { claims } = this.report;
+    const asked = new Map<string, { notes: WikiDossierNotes; before: WikiMaintainAsked | null }>();
+    for (const { sessionId, notes } of dossiers) {
+      if (!notes?.file) continue;
+      const before = await this.askedBefore(WIKI_MAINTAIN_JOB.steps.claims, sessionId);
+      asked.set(sessionId, { notes: before ? (before.material as unknown as WikiDossierNotes) : notes, before });
+    }
+    for (const dossier of dossiers) {
+      const notes = asked.get(dossier.sessionId)?.notes ?? dossier.notes;
+      if (!notes) continue;
+      if (notes.claude) claims.claudeSessions += 1;
+      claims.seen += notes.seen;
+      claims.notes += notes.notes;
+      claims.skipped += notes.skipped;
+      claims.overCap += notes.overCap;
+      claims.heldOut += notes.heldOut;
+    }
+    const files = dossiers.filter((dossier) => asked.has(dossier.sessionId));
+    const results = new Array<WikiMaintainOp[]>(files.length).fill([]);
+    const failure = await wikiMaintainParallel(files.length, WIKI_MAINTENANCE_JOB.extractConcurrency, async (i) => {
+      results[i] = await this.checkClaims(files[i], asked.get(files[i].sessionId)!);
+    });
+    if (failure !== null) throw failure;
+    const seen = new Set<string>();
+    const ops = results.flat().filter((op) => {
+      const key = op.title.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (files.length > 0) {
+      this.jobContext.log(`checked the agent's notes of ${files.length} session(s): ${ops.length} entr(ies) from ${claims.shown} shown and `
+        + `${claims.narrowed} narrowed, of ${claims.seen} write(s) to memory files and ${claims.notes} wiki note(s)`);
+    }
+    return ops;
+  }
+
+  /**
+   * One session's notes, checked. An answer the model cannot give leaves them unanswered and costs the run nothing: this
+   * pass adds to what the extraction took, and the extraction's ops do not wait on it. What the platform owes is the
+   * platform's failure, as anywhere else.
+   */
+  private async checkClaims(
+    dossier: WikiDossier,
+    { notes, before }: { notes: WikiDossierNotes; before: WikiMaintainAsked | null },
+  ): Promise<WikiMaintainOp[]> {
+    const { file, lines } = notes;
+    const refs = lines.map((line) => line.ref);
+    const { claims } = this.report;
+    const { sessionId } = dossier;
+    const ask = async (prompt: string, again: boolean): Promise<string | null> => {
+      const unit = again ? `${sessionId}#retry` : sessionId;
+      // A replay asks the questions an earlier attempt asked; a retry that attempt did not get to is this one's own.
+      const call = (again ? before?.retry : before?.call)
+        ?? { system: WIKI_MAINTAIN_CLAIMS_SYSTEM_PROMPT, prompt, maxTokens: WIKI_MAINTAIN_JOB.extractMaxTokens };
+      try {
+        const material = again ? undefined : (notes as unknown as Record<string, unknown>);
+        return (await this.ask(WIKI_MAINTAIN_JOB.steps.claims, unit, call.system, call.prompt, call.maxTokens, material)).text;
+      } catch (error) {
+        if (again && error instanceof WikiJobContentError) return null;
+        throw error;
+      }
+    };
+    let run: WikiMaintainClaimsRun;
+    try {
+      run = await wikiMaintainCheckClaims({
+        dossier: { text: file!.text, sources: file!.sources, sessionId },
+        refs,
+        context: this.context,
+        about: this.snapshot?.about ?? '',
+        repo: this.snapshot?.anchors ?? null,
+        ask,
+      });
+    } catch (error) {
+      if (!(error instanceof WikiJobContentError)) throw error;
+      claims.unanswered += refs.length;
+      this.jobContext.log(`  ${JSON.stringify(cutRunes(dossier.title, 60))}: its notes were not checked — ${error.message}`);
+      return [];
+    }
+    for (const { outcome } of run.notes.values()) {
+      const counted = outcome === 'not_durable' ? 'notDurable' : outcome;
+      claims[counted] += 1;
+    }
+    if (run.offTopic) {
+      this.jobContext.log(`  ${JSON.stringify(cutRunes(dossier.title, 60))}: not about this repository — none of its notes taken`);
+    }
+    const byRef = new Map(lines.map(({ ref, ...by }) => [ref, by]));
+    return run.ops.map((op) => ({ ...op, promptedBy: byRef.get(op.note!) }));
+  }
+
+  /**
+   * One model call through the queue. Its request is what the report's tokens count (`wikiJobModelCalls`): every call of
+   * the run once, whichever attempt and whichever step made it. `material` is the case file the call is made from, kept with
+   * the request for a replay ({@link askedBefore}).
+   */
+  private async ask(
+    step: string,
+    unit: string,
+    system: string,
+    prompt: string,
+    maxTokens: number,
+    material?: Record<string, unknown>,
+  ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
+    const settled = await this.jobContext.ask(step, unit, { system, prompt, maxTokens }, material);
     return { text: settled.answer ?? '', inputTokens: settled.inputTokens ?? 0, outputTokens: settled.outputTokens ?? 0 };
+  }
+
+  /**
+   * What an earlier attempt of this job asked about one session under `step` (contract `maintenance.job.server.replay`): the
+   * call of the session's own unit with the case file it was made from, and the call of its retry unit, if that attempt
+   * made one — or null, when no attempt asked from a case file it kept (`modelQueue.material`). A replay asks these, not
+   * questions of its own: the session may have records the earlier attempt did not read, and a question built from them is
+   * another one under the same unit, which the queue refuses as asked before with a different call (2026-11-06, the orbit
+   * space's two runs of that morning). The answer is read against the file the call was made from, so the ops are the ones
+   * the earlier attempt would have proposed, and a batch it recorded meets its own idempotency key.
+   */
+  private async askedBefore(step: string, sessionId: string): Promise<WikiMaintainAsked | null> {
+    const retry = `${sessionId}#retry`;
+    const asked = await wikiModelRequestsAsked(this.deps.prisma, { jobId: this.jobContext.job.id, step, units: [sessionId, retry] });
+    const own = asked.get(sessionId);
+    if (!own?.material) return null;
+    return { call: own.call, material: own.material, retry: asked.get(retry)?.call ?? null };
   }
 
   // ── The self-check, the breaker and the proposals ──────────────────────────────────────────────
@@ -962,9 +1234,17 @@ class WikiMaintainRun {
   private breaker(batches: WikiMaintainBatch[]): WikiMaintainBatch[] {
     const { remaining, bounded } = wikiMaintainRemaining(this.breakerRead, this.context);
     if (!bounded) return batches;
-    const held = wikiMaintainBreakerHold(batches, this.pageOf, Math.max(this.pages.length, 1), remaining);
+    const named = this.backfill?.sessions ?? null;
+    const held = wikiMaintainBreakerHold(batches, this.pageOf, named ? named.length : Math.max(this.pages.length, 1), remaining);
     if (held.stop === null) return batches;
     this.report.ops.heldBackByBreaker += held.heldBack;
+    if (named) {
+      const proposing = new Set(batches.flatMap((batch) => batch.ops.map((op) => op.session)));
+      this.report.backfill!.heldBack = named.slice(held.stop).map((session) => session.sessionId).filter((id) => proposing.has(id));
+      this.jobContext.log(`the breaker held back ${held.heldBack} op(s), past the ${remaining} entr(ies) the run may still change: name `
+        + `${this.report.backfill!.heldBack.join(', ')} again in another backfill`);
+      return held.batches;
+    }
     this.cursor = this.pages[held.stop].from;
     this.jobContext.log(`the breaker held back ${held.heldBack} op(s) from page ${held.stop + 1} on, past the ${remaining} entr(ies) the run may `
       + 'still change: the cursor stops where that page starts, and the next run reads its dossiers again');
@@ -978,6 +1258,7 @@ class WikiMaintainRun {
       this.report.ops.proposed += batch.ops.length;
       batch.ops.forEach((op, i) => {
         const outcome = wikiMaintainOutcomeAt(answer.ops, i);
+        if (op.promptedBy && (outcome.status === 'applied' || outcome.status === 'pending')) this.report.claims.entries += 1;
         switch (outcome.status) {
           case 'applied':
             this.report.ops.recorded += 1;
@@ -1007,14 +1288,18 @@ class WikiMaintainRun {
     const list = ops.map((op) => op.body);
     const sessions = new Set(ops.map((op) => op.session));
     const about = topic !== '' ? topic : 'no topic';
-    const rationale = cutRunes(`Wiki maintenance run: ${ops.length} entr(ies) on ${about}, extracted by `
-      + `${this.deps.model !== '' ? this.deps.model : 'the System model'} from ${sessions.size} session(s) since the space's cursor.`, 2000);
+    const who = this.deps.model !== '' ? this.deps.model : 'the System model';
+    const rationale = cutRunes(this.backfill
+      ? `Wiki maintenance backfill: ${ops.length} entr(ies) on ${about}, checked by ${who} against the notes of ${sessions.size} session(s). Why: ${this.backfill.reason}`
+      : `Wiki maintenance run: ${ops.length} entr(ies) on ${about}, extracted by ${who} from ${sessions.size} session(s) since the space's cursor.`, 2000);
     const body: Record<string, unknown> = { ops: list, rationale };
     if (dryRun) body.dryRun = true;
     else body.idempotencyKey = `wiki-maintain-${sha256Hex(`${this.runId}\u0000${JSON.stringify(list)}`).slice(0, 32)}`;
     // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
     // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
-    const answer = await this.deps.wiki.submitChangeset(wikiMaintainJobPrincipal(job.ownerId, job.id), job.spaceId, stripNul(body));
+    const answer = await this.deps.wiki.submitChangeset(wikiMaintainJobPrincipal(job.ownerId, job.id), job.spaceId, stripNul(body), {
+      promptedBy: ops.map((op) => op.promptedBy ?? null),
+    });
     if (!Array.isArray(answer.ops)) {
       // A request refused whole: the answer carries no op outcomes, and the run stops on it as the runner's did.
       const code = typeof answer.code === 'string' ? answer.code : 'WIKI_SCHEMA';
@@ -1077,21 +1362,31 @@ class WikiMaintainRun {
   private async verifyOwn(): Promise<void> {
     const result = { verified: 0, failed: 0, waitingForNextRun: 0 };
     this.report.verification = result;
-    let refused: Map<string, string> | null = null;
-    for (let pass = 0; pass < 2; pass += 1) {
-      const summary = await verifyWikiOps(this.jobContext, this.deps.wiki, this.deps.model, {
-        sessionId: null,
-        jobId: this.jobContext.job.id,
-        refused,
-        recorded: () => this.verdictRecorded(false),
-      });
-      result.verified += summary.verified;
-      result.failed = summary.failed;
-      if (summary.failed === 0 || summary.stopped !== null) break;
-      refused = new Map();
-      for (const failure of summary.failures) {
-        if (failure.refused !== '') refused.set(failure.opId, failure.refused);
+    // The extraction's ops first and whole: only then is what they wrote live, for a note's op read after them to be a
+    // duplicate of (`maintenance.job.server.claims`). The list says what an entry is when the list is read.
+    for (const promptedBy of [false, true]) {
+      let refused: Map<string, string> | null = null;
+      let failed = 0;
+      let stopped = false;
+      for (let pass = 0; pass < 2; pass += 1) {
+        const summary = await verifyWikiOps(this.jobContext, this.deps.wiki, this.deps.model, {
+          sessionId: null,
+          jobId: this.jobContext.job.id,
+          promptedBy,
+          refused,
+          recorded: () => this.verdictRecorded(false),
+        });
+        result.verified += summary.verified;
+        failed = summary.failed;
+        stopped = summary.stopped !== null;
+        if (summary.failed === 0 || stopped) break;
+        refused = new Map();
+        for (const failure of summary.failures) {
+          if (failure.refused !== '') refused.set(failure.opId, failure.refused);
+        }
       }
+      result.failed += failed;
+      if (stopped) break;
     }
     if (result.failed > 0) {
       result.waitingForNextRun += result.failed;
@@ -1607,7 +1902,11 @@ class WikiMaintainRun {
     try {
       // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
       // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
-      const answer = await this.deps.docs.write(this.jobPrincipal(), job.spaceId, slug, stripNul(request) as unknown as Record<string, unknown>);
+      // Every section it writes over is kept as it stood, as replaced by this maintenance run (docs.versions).
+      const answer = await this.deps.docs.write(this.jobPrincipal(), job.spaceId, slug, stripNul(request) as unknown as Record<string, unknown>, {
+        reason: 'maintenance',
+        jobId: job.id,
+      });
       return { status: answer.status, sections: answer.sections, counts: answer.counts };
     } catch (error) {
       if (error instanceof WikiRefusalError) throw new WikiDocsWriteRefused(refusalText(job.spaceId, error));
@@ -1911,7 +2210,7 @@ function stripQuotes(body: Record<string, unknown>): void {
 }
 
 /** The paths a plan section's sources name: files, and directories. */
-function sectionPaths(section: { sources?: { docs?: Array<{ path: string }> | null; code?: Array<{ path: string }> | null; contracts?: Array<{ path: string }> | null } }): string[] {
+export function sectionPaths(section: { sources?: { docs?: Array<{ path: string }> | null; code?: Array<{ path: string }> | null; contracts?: Array<{ path: string }> | null } }): string[] {
   const out: string[] = [];
   for (const source of section.sources?.docs ?? []) out.push(wikiDocCleanPath(source.path));
   for (const source of section.sources?.code ?? []) out.push(wikiDocCleanPath(source.path));
@@ -1920,7 +2219,7 @@ function sectionPaths(section: { sources?: { docs?: Array<{ path: string }> | nu
 }
 
 /** A settled `diff` operation's answer: what `git diff --name-status -M` named, and the documents it added or renamed into place. */
-function diffAnswerOf(settled: WikiRepoOpWait): { files: Array<{ status: string; path: string; from: string | null }>; docs: string[] } {
+export function diffAnswerOf(settled: WikiRepoOpWait): { files: Array<{ status: string; path: string; from: string | null }>; docs: string[] } {
   const answer = (settled.result?.diff ?? {}) as { files?: Array<{ status?: string; path?: string; from?: string }>; docs?: string[] };
   return {
     files: (answer.files ?? []).map((file) => ({ status: String(file.status ?? ''), path: String(file.path ?? ''), from: file.from ?? null })),
@@ -1929,7 +2228,7 @@ function diffAnswerOf(settled: WikiRepoOpWait): { files: Array<{ status: string;
 }
 
 /** Whether a changed path is one the section names: the file itself, or a file under a directory it names. */
-function pathNamed(changed: string, named: readonly string[]): boolean {
+export function pathNamed(changed: string, named: readonly string[]): boolean {
   for (const path of named) {
     if (path === '') continue;
     if (changed === path || changed.startsWith(`${path.replace(/\/+$/u, '')}/`)) return true;
@@ -1942,7 +2241,7 @@ function pathNamed(changed: string, named: readonly string[]): boolean {
  * --name-status -M`: a rename under its old path (R, `to` its new one) and its new path once more, as added (A); a
  * copy's new path as added; any other change under its path, by its status's first letter.
  */
-function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from: string | null }>): Map<string, { status: string; to: string }> {
+export function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from: string | null }>): Map<string, { status: string; to: string }> {
   const changes = new Map<string, { status: string; to: string }>();
   for (const file of files) {
     const status = file.status.slice(0, 1);
@@ -1965,7 +2264,7 @@ function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from:
  * one is read there too. The files whose sizes the head does not carry are marked with one byte, which is what
  * lets a read of them answer at all (their content is still whatever git holds).
  */
-function baseTreeOf(
+export function baseTreeOf(
   headFiles: readonly string[],
   headSizes: ReadonlyMap<string, number>,
   files: ReadonlyArray<{ status: string; path: string; from: string | null }>,
@@ -1995,7 +2294,7 @@ function baseTreeOf(
 }
 
 /** Whether two readings of a section's repository material say the same thing. */
-function samePieces(a: readonly WikiDocPiece[], b: readonly WikiDocPiece[]): boolean {
+export function samePieces(a: readonly WikiDocPiece[], b: readonly WikiDocPiece[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((piece, i) => piece.kind === b[i].kind && piece.path === b[i].path && piece.section === b[i].section
     && piece.symbol === b[i].symbol && piece.text === b[i].text);

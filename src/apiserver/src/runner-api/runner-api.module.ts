@@ -6,6 +6,7 @@ import { TaskListsModule } from '../task-lists/task-lists.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { RunnerFilesController } from './runner-files.controller';
 import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from './runner-task-completion-evidence.controller';
@@ -24,8 +25,8 @@ import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
 import { RunnerLinkEventsController, RunnerLinkGatewayCallGuard } from './runner-link-events.controller';
-import { RunnerLinkModeController, RunnerLinkRequiredController } from './runner-link-required.controller';
-import { RunnerLinkRequiredInterceptor, RunnerLinkSwitch } from './runner-link-required';
+import { RunnerLinkModeController } from './runner-link-required.controller';
+import { RunnerLinkRequiredInterceptor } from './runner-link-required';
 import { RunnerReleaseFeed } from './runner-release-feed';
 import { RUNNER_LINK, runnerLinkFrom } from './runner-link-token';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
@@ -100,6 +101,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerDeleteController,
     RunnerProvidersController,
     RunnerNotifyController,
+    // What `file_list`, `file_fetch` and a folder's `file_upload` call (runner-files.controller.ts).
+    RunnerFilesController,
     RunnerProjectsController,
     RunnerWatchesController,
     // Which runner release each runner is to run (runner-release.ts).
@@ -111,9 +114,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerLinkWelcomeController,
     // The link gateway's merged call: several sessions' event batches in one transaction (link-events.ts).
     RunnerLinkEventsController,
-    // RUNNER_LINK_REQUIRED, the cut-over switch: switched by an administrator, read by the link gateway
-    // (runner-link-required.ts).
-    RunnerLinkRequiredController,
+    // What the link gateway tells runners (runner-link-required.controller.ts).
     RunnerLinkModeController,
   ],
   providers: [
@@ -122,10 +123,9 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerLinkGatewayGuard,
     RunnerLinkGatewayCallGuard,
     RunnerWriteProtocolInterceptor,
-    // The cut-over switch and RunnerApiController's interceptor that answers it (runner-link-required.ts).
-    // AdminRoleGuard depends only on the global PrismaService; UsersModule does not export it.
-    RunnerLinkSwitch,
+    // RunnerApiController's refusal of an HTTPS call (runner-link-required.ts).
     RunnerLinkRequiredInterceptor,
+    // AdminRoleGuard depends only on the global PrismaService; UsersModule does not export it.
     AdminRoleGuard,
     {
       provide: RUNNER_LINK,

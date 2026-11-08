@@ -18,6 +18,7 @@ import {
   projectSettledUnmergedFact,
   projectTasksSettledFact,
   taskDispatchRefusedFact,
+  taskRunStoppedFact,
 } from './coordinator-wake';
 import {
   criteriaDecisionReplyIntentOf,
@@ -77,6 +78,9 @@ test('each fact the coordinator is told is the card its line is drawn from', () 
       projectId: PROJECT, blockerId: randomUUID(), taskId: TASK,
       detail: { taskTitle: 'Blocked me', blockerKind: 'SCOPE', requiredAction: 'Rule on it.' },
     }), card({ kind: 'PROJECT_BLOCKER_RAISED', task: { id: TASK, title: 'Blocked me' } })],
+    ['a run that stopped', taskRunStoppedFact({
+      projectId: PROJECT, taskId: TASK, taskTitle: 'Stopped me', sessionId: randomUUID(), stopKey: 'turn', lastWords: 'Stuck.',
+    }), card({ kind: 'TASK_RUN_STOPPED', task: { id: TASK, title: 'Stopped me' } })],
     ['work not on main', criterionUnlandedFact(PROJECT, 'k'.repeat(16), [
       { taskId: TASK, status: 'DONE' }, { taskId: randomUUID(), status: 'DONE' }, { taskId: randomUUID(), status: 'DONE' },
     ], 'ON_INTEGRATION_LINE')!, card({ kind: 'CRITERION_UNLANDED', count: 3 })],
@@ -157,6 +161,38 @@ test('a project whose criteria all landed is read in the reading its words were 
   }
   assert.equal(acceptanceLandedReadingOf(null), 'ASKED');
   assert.equal(acceptanceLandedReadingOf('words written before any of this'), 'ASKED');
+});
+
+test('a project the owner reopened is told as held back and never as recorded DONE', () => {
+  const reopenedAt = new Date('2026-11-03T06:06:00.000Z');
+  const words = buildCoordinatorDeliveryMessage(LANDED_ONE, 'Runner link v1', readingOf(true, true), { reopenedAt });
+  assert.equal(acceptanceLandedReadingOf(words), 'HELD');
+  assert.deepEqual(coordinatorDeliveryCardOf(wakeOf(LANDED_ONE), words), card({ kind: 'ACCEPTANCE_LANDED_HELD', count: 1 }));
+  assert.match(words, /the account owner reopened it, so it stays open/u);
+  assert.ok(words.includes(reopenedAt.toISOString()), 'when they pressed it');
+  assert.match(words, /project_request_done/u, 'and how to ask them to close it');
+  assert.doesNotMatch(words, /recorded as DONE/iu);
+
+  // No press standing is the reading it has always been.
+  for (const none of [null, undefined]) {
+    const recorded = buildCoordinatorDeliveryMessage(LANDED_ONE, 'Runner link v1', readingOf(true, true), { reopenedAt: none });
+    assert.equal(acceptanceLandedReadingOf(recorded), 'DONE');
+  }
+  // Where the facts do not prove it, what holds it back is still the facts, and each reading keeps its
+  // own head. A note says the press stands, because each goes on to say what would make the server say DONE.
+  const held = buildCoordinatorDeliveryMessage(LANDED_ONE, 'Runner link v1', readingOf(true, false), { reopenedAt });
+  assert.equal(acceptanceLandedReadingOf(held), 'HELD');
+  assert.match(held, /has not been projected DONE/u);
+  const asked = buildCoordinatorDeliveryMessage(LANDED_ONE, 'Runner link v1', readingOf(false, true), { reopenedAt });
+  assert.equal(acceptanceLandedReadingOf(asked), 'ASKED');
+  for (const words of [held, asked]) {
+    assert.match(words, /The account owner also reopened this project at 2026-11-03T06:06:00\.000Z/u);
+    assert.match(words, /A confirmation alone does not end that/u);
+    assert.match(words, /project_request_done/u);
+  }
+  // And with no press there is no note.
+  const plain = buildCoordinatorDeliveryMessage(LANDED_ONE, 'Runner link v1', readingOf(false, true));
+  assert.doesNotMatch(plain, /also reopened this project/u);
 });
 
 test('the proposal a criteria reply answers is read back off its words, and nothing else is', () => {

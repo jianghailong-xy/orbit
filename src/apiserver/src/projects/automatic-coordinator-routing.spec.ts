@@ -117,6 +117,7 @@ test('a delivery review asks the coordinator to decide, names every door, and sa
     'src/apiserver/src/projects/project-owner-done.pg.spec.ts', 'Accept the scope', 'open_item_resolve',
     'Send it back', 'task_reopen', 'Supersede it', 'supersedesTaskId', 'Rerun the landing', 'integration_retry',
     'once you take it up it stays yours', 'do not put it to the account owner as one', 'Automatic',
+    'are still only the account owner’s to decide',
   ]) {
     assert.ok(message.includes(want), `the review message does not say ${JSON.stringify(want)}`);
   }
@@ -170,6 +171,7 @@ test('an argued exemption is the coordinator’s review: it quotes the reason, o
     'Send it back', 'task_reopen', 'Supersede it', 'supersedesTaskId', 'the evidence it was judged on',
     'or its work lands', 'do not put it to the account owner as one',
     'that would be changing the acceptance criteria',
+    'File that change with project_update, and the account owner answers it on a card',
   ]) {
     assert.ok(message.includes(want), `the exemption review does not say ${JSON.stringify(want)}`);
   }

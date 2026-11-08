@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.startNewSession
 import android.content.*
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -397,7 +398,6 @@ class ComposerDeviceTest {
         compose.onNodeWithText("Password").performTextReplacement("a07-fixture-password")
         compose.pressSignIn()
         compose.waitUntil(15000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
-        compose.onNodeWithTag("workspace:$workspace").performClick()
         awaitText("Composer conversation")
         compose.onNodeWithText("Composer conversation").performClick()
         compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && model.state.value.loaded }
@@ -406,7 +406,7 @@ class ComposerDeviceTest {
     @Test fun newSessionUsesWorkspaceDraftAndNavigatesAfterCreation() = journey("new-session") {
         login()
         compose.onNodeWithContentDescription("Back").performClick()
-        awaitText("New session");compose.onAllNodesWithText("New session")[0].performClick()
+        compose.startNewSession()
         compose.onNodeWithTag("composer-input").performTextInput("新会话的首条消息")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("composer-input").assertTextContains("新会话的首条消息")
@@ -478,7 +478,7 @@ class ComposerDeviceTest {
 
     @Test fun draftAccountUsageAndProviderSwitchMatchAutomaticCreate() = journey("draft-account") {
         login(); compose.onNodeWithContentDescription("Back").performClick()
-        awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
+        compose.startNewSession()
         compose.onNodeWithTag("composer-input").performTextInput("账户草稿")
         // The Provider section lists the draft's engine's accounts alone (A07-10 on the provider/engine split): Codex's first, the
         // workspace's engine; Claude Code's once the Engine list moves the draft there. Rows below its heading only: the Effort
@@ -589,7 +589,7 @@ class ComposerDeviceTest {
         capture("a07c-session-model-menu")
         compose.onNodeWithText("Close").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
-        awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
+        compose.startNewSession()
         fun engineList(): List<String> {
             compose.onNodeWithTag("new-session-engine").performClick()
             compose.waitUntil(15000) { compose.onAllNodesWithTag("engine:claude").fetchSemanticsNodes().isNotEmpty() }
@@ -642,7 +642,7 @@ class ComposerDeviceTest {
             "providers":[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"],
               "models":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro"}]}]}""")
         compose.onNodeWithContentDescription("Back").performClick()
-        awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
+        compose.startNewSession()
         fun engineList() {
             compose.onNodeWithTag("new-session-engine").performClick()
             compose.waitUntil(15000) { compose.onAllNodesWithTag("engine:dsh").fetchSemanticsNodes().isNotEmpty() }

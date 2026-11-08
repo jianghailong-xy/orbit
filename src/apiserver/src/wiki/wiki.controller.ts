@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Optional, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -11,6 +11,7 @@ import {
   WikiEntryRejectDto,
   WikiProposeDto,
 } from './dto';
+import { WikiChatDrafts } from './wiki-chat-drafts';
 import { flagParam, listParam, WikiRetrieval } from './wiki-retrieval';
 import { WikiRolloutGuard } from './wiki-rollout';
 import { answerFor, WikiService, type WikiPrincipal } from './wiki.service';
@@ -40,6 +41,9 @@ export class WikiController {
   constructor(
     private readonly wiki: WikiService,
     private readonly retrieval: WikiRetrieval,
+    // The wiki chat's cards (contract `chat.drafts`): the spaces list's `chatWaiting`, and the revert route's one path to
+    // a chat Apply's Undo. Optional, so the specs that stand this controller up with the wiki's two services still do.
+    @Optional() private readonly drafts?: WikiChatDrafts,
   ) {}
 
   /**
@@ -89,8 +93,12 @@ export class WikiController {
   /** The owner's spaces, each with the pending count the sidebar shows. */
   @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces')
-  listSpaces(@CurrentUser() user: AuthUser) {
-    return this.wiki.listSpaces(user.userId);
+  async listSpaces(@CurrentUser() user: AuthUser) {
+    const spaces = await this.wiki.listSpaces(user.userId);
+    if (!this.drafts) return spaces;
+    // What the chats add to the Wiki's waiting count (contract `space.list.chatWaiting`): applied cards whose rewrite waits.
+    const waiting = await this.drafts.chatWaitingOf(user.userId, spaces.map((space) => String(space.id)));
+    return spaces.map((space) => ({ ...space, chatWaiting: waiting.get(String(space.id)) ?? 0 }));
   }
 
   /** A space the owner creates outright: a codebase, or a wiki with no repository behind it. */
@@ -138,12 +146,84 @@ export class WikiController {
     return this.wiki.updateSpace(user.userId, id, dto, actingSession(request.headers), user.credential);
   }
 
-  /** Bind a workspace this space's sessions read and propose through (§2.1's manual binding). */
-  @PatScope('wiki:write', { workspaceConfinable: false })
+  /**
+   * Move this space to Trash (contract `space.trash`): it leaves every list and door at once, and what it holds is kept
+   * for 365 days. The owner's alone, as who is in a space is: a session header is refused WIKI_OWNER_CHANNEL_ONLY and a
+   * personal access token at the guard. So are the restore, the permanent delete and the Trash's list below.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Delete('spaces/:id')
+  moveSpaceToTrash(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.moveSpaceToTrash(user.userId, id, actingSession(request.headers));
+  }
+
+  /** Bring this space back from Trash (contract `space.trash.restore`). Answers the space, as GET /spaces/:id does. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post('spaces/:id/restore')
+  @HttpCode(HttpStatus.OK)
+  restoreSpace(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.restoreSpace(user.userId, id, actingSession(request.headers));
+  }
+
+  /** Delete this space in Trash for good (contract `space.trash.purge`): at once from Trash, in the background from the database. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Delete('spaces/:id/purge')
+  purgeSpace(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.purgeSpace(user.userId, id, actingSession(request.headers));
+  }
+
+  /** The owner's wikis in Trash, the newest move first (contract `space.trash.list`). */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Get('trash')
+  listTrash(@CurrentUser() user: AuthUser) {
+    return this.wiki.listTrash(user.userId);
+  }
+
+  /** Who is in this space and who can be added: the Workspaces card of Wiki settings (contract `space.workspaces`). */
+  @PatScope('wiki:read', { workspaceConfinable: false })
+  @Get('spaces/:id/workspaces')
+  spaceWorkspaces(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.wiki.spaceWorkspaces(user.userId, id);
+  }
+
+  /**
+   * Bring a workspace into this space, or back into it. The owner's to say, as a review mode is: who is in a space is
+   * who reads its entries, so a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token at the guard.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post('spaces/:id/workspaces')
   @HttpCode(HttpStatus.OK)
-  bindWorkspace(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: BindWikiWorkspaceDto) {
-    return this.wiki.bindWorkspace(user.userId, id, dto.workspaceId);
+  bindWorkspace(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: BindWikiWorkspaceDto,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.bindWorkspace(user.userId, id, dto.workspaceId, actingSession(request.headers));
+  }
+
+  /** Leave a workspace out of this space: the owner's to say, as bringing one in is. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Delete('spaces/:id/workspaces/:workspaceId')
+  leaveWorkspaceOut(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('workspaceId', PublicIdPipe) workspaceId: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.leaveWorkspaceOut(user.userId, id, workspaceId, actingSession(request.headers));
   }
 
   @PatScope('wiki:read', { workspaceConfinable: false })
@@ -288,12 +368,19 @@ export class WikiController {
   @PatForbidden('OWNER_INTERACTIVE')
   @Post('changesets/:id/revert')
   @HttpCode(HttpStatus.OK)
-  revert(
+  async revert(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
-    return this.wiki.revertChangeset(user.userId, user.userId, id, actingSession(request.headers));
+    // A chat Apply's changeset is taken back by the card's Undo, which restores its sections too (contract
+    // `reviewModes.chat.revert`: one path). Every other changeset is reverted as ever.
+    const acting = actingSession(request.headers);
+    if (!acting && this.drafts) {
+      const undone = await this.drafts.undoForChangeset(user.userId, user.userId, id, acting);
+      if (undone) return undone;
+    }
+    return this.wiki.revertChangeset(user.userId, user.userId, id, acting);
   }
 
   /**

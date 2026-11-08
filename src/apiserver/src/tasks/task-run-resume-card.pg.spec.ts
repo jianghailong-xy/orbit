@@ -50,6 +50,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import type { TurnCards } from '../sessions/turn-cards';
 import { taskRunResumeTurnId } from './task-run-identity';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -68,6 +69,7 @@ const CARD_FIELDS: Record<keyof TurnCards, true> = {
   confirmationReturn: true,
   sessionMessage: true,
   sessionReplies: true,
+  externalSender: true,
 };
 const FIELDS = Object.keys(CARD_FIELDS) as Array<keyof TurnCards>;
 

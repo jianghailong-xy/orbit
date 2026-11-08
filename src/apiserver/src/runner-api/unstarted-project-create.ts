@@ -1,6 +1,7 @@
 import { ProjectStatus } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
 
+import { isWiderThanStarter, resolvePermissionMode } from '../common/permission-mode';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -12,7 +13,9 @@ import type { PrismaService } from '../prisma/prisma.service';
  * And since 2026-10-08, in a project whose Automatic is on: Automatic is the owner's standing answer
  * that the coordinator decides for them, and what work the project needs next is one of those
  * decisions. A card per create stopped the coordinator's turn on a question the owner had already
- * answered. A pause does not change it: a pause holds what starts, not what is filed.
+ * answered. A pause does not change it: a pause holds what starts, not what is filed. That answer
+ * covers a coordinator that may start what the account's default starts: what it files runs in that
+ * default, so one whose stored mode is narrower is asked, and a person decides.
  *
  * Decided here, at the one door every create card is filed through (`askBeforeCreate` /
  * `askBeforeBatch` in runner-go, from the MCP tools and the CLI alike), so the runner's requests stay
@@ -22,9 +25,9 @@ import type { PrismaService } from '../prisma/prisma.service';
  * All three facts, or it is asked as before:
  *   - the card is a task create — `orbit_task_create` or `orbit_task_batch`;
  *   - every item NAMES the same project, and that project is OPEN and either not started or
- *     Automatic. An item that names no project is asked even from a coordinator: which project an
- *     unnamed create lands in is the write's own derivation (`project-scope-admission.ts`), and this
- *     door does not re-run it;
+ *     Automatic with a coordinator no narrower than the account's default. An item that names no
+ *     project is asked even from a coordinator: which project an unnamed create lands in is the
+ *     write's own derivation (`project-scope-admission.ts`), and this door does not re-run it;
  *   - the session asking is that project's coordinator.
  *
  * Returns the message the approval is recorded with, naming which rule answered; null when the card
@@ -47,11 +50,23 @@ export async function coordinatorCreateAllowedBy(
         coordinatorSessionId: session.id,
         status: ProjectStatus.OPEN,
       },
-      select: { startedAt: true, coordinatorEnabled: true },
+      select: {
+        startedAt: true,
+        coordinatorEnabled: true,
+        coordinatorSession: { select: { permissionMode: true, engine: true } },
+        owner: { select: { preferences: true } },
+      },
     });
     if (!project) return null;
     if (project.startedAt === null) return START_CARD_REVIEWS_MESSAGE;
-    return project.coordinatorEnabled ? AUTOMATIC_COORDINATOR_DECIDES_MESSAGE : null;
+    if (!project.coordinatorEnabled) return null;
+    const starter = {
+      mode: resolvePermissionMode(project.coordinatorSession?.permissionMode, project.owner),
+      engine: project.coordinatorSession?.engine ?? null,
+    };
+    return isWiderThanStarter(starter, resolvePermissionMode(null, project.owner), null)
+      ? null
+      : AUTOMATIC_COORDINATOR_DECIDES_MESSAGE;
   } catch {
     return null;
   }

@@ -280,6 +280,15 @@ describe('a project’s Landings window opens its console', () => {
     expect(addressBar()).toBe(`/projects/${LONE_PROJECT}/landings`);
     await vi.waitFor(() => expect(consoleShows()).toBe('HPC|no managed state'));
   });
+
+  it('with no console at all on an account with no runner, and still draws the window', async () => {
+    server = { capabilities: missing, runners: [], workspaces: [] };
+    await visit(`/projects/${LONE_PROJECT}/landings`);
+    expect(addressBar()).toBe(`/projects/${LONE_PROJECT}/landings`);
+    await vi.waitFor(() =>
+      expect(container.querySelector('.landings-window')?.getAttribute('data-project')).toBe(LONE_PROJECT));
+    expect(consoleShows()).toBeNull();
+  });
 });
 
 describe('with the capability switched on', () => {

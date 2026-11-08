@@ -41,9 +41,10 @@ const (
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
 // to this long for in-flight turns to finish + ack before exiting. Idle sessions detach
-// immediately; only a mid-turn session consumes any of this budget. Keep systemd's
-// TimeoutStopSec comfortably above it (see service.go) so we exit before any SIGKILL.
-const shutdownDrainTimeout = 100 * time.Second
+// immediately; only a mid-turn session consumes any of this budget. The service manager's
+// stop limit stays above the whole stop (shutdown_drain.go, THE BUDGETS) so we exit before
+// any SIGKILL.
+var shutdownDrainTimeout = hostStopBudget.drain
 
 type runLoopStopReason uint8
 
@@ -478,10 +479,17 @@ const worktreeGCInterval = 5 * time.Minute
 // sweep would delete the checkouts it is about to reattach to. A reclaim that set sessions aside
 // is the same hazard — those rows have no local supervisor either — so the deferred retry is
 // what arms it.
+//
+// That schedule is the first half's, and it does not change. The second half (gcResumableCheckouts) runs on it
+// too, except while resumableWaitUntil is ahead (sweepResumable). That is in memory on purpose: a restart looks
+// at once.
 type worktreeSweeper struct {
-	interval time.Duration
-	armed    bool
-	nextAt   time.Time
+	interval           time.Duration
+	armed              bool
+	nextAt             time.Time
+	resumableWaitUntil time.Time
+	// When the storage budget was measured that the look starting the wait was judged on; zero without a budget.
+	resumableWaitMeasured time.Time
 }
 
 // due reports whether a sweep should run now, advancing the schedule when it says yes. An unarmed
@@ -493,6 +501,54 @@ func (s *worktreeSweeper) due(now time.Time) bool {
 	}
 	s.nextAt = now.Add(s.interval)
 	return true
+}
+
+// sweepResumable runs the second half of a sweep, unless a look that found nothing is still waiting out its
+// resumableSweepWait, which a disk back above its floor ends early. A reading that failed says nothing about
+// the disk, so it leaves the wait as it is. This decides when anybody looks and never what may go.
+//
+// A look that found nothing under a storage budget's floor waits resumableBudgetSweepWait instead. Any wait also ends
+// early on a reading under a budget's floor that was judged on a newer measurement of the budget than the look was, if
+// the look had one at all: the volume's usage has moved since, which nothing else tells the schedule.
+//
+// forCheckout is a sweep making room for a session checkout about to be made under a storage budget (makeRoom). It
+// does not wait: that checkout is the change the wait assumes has not happened, and the look stays within the sweep's
+// own budget (resumableSweepBudget). A look of its that finds nothing starts a wait as any other does.
+func (s *worktreeSweeper) sweepResumable(t *Transport, pool *sessionPool, pressure worktreeGCPressure, forCheckout bool) {
+	if !forCheckout && pool.clock.Now().Before(s.resumableWaitUntil) {
+		pressure = pressure.again()
+		if !pressure.measured || pressure.belowFloor() && !pressure.measuredAfter(s.resumableWaitMeasured) {
+			return
+		}
+		s.resumableWaitUntil = time.Time{}
+	}
+	foundNothing, last := gcResumableCheckouts(t, pool, pressure)
+	if !foundNothing {
+		return
+	}
+	if last.underBudgetFloor() {
+		s.resumableWaitUntil = pool.clock.Now().Add(resumableBudgetSweepWait)
+		s.resumableWaitMeasured, _ = last.budget.measuredAt()
+		logln(fmt.Sprintf("gc: no resumable checkout can go and the storage budget is still under its floor; not looking again until %s, or sooner once a newer measurement of the volume comes in or the budget is back above its floor",
+			s.resumableWaitUntil.UTC().Format(time.RFC3339)))
+		return
+	}
+	s.resumableWaitUntil, s.resumableWaitMeasured = pool.clock.Now().Add(resumableSweepWait), time.Time{}
+	logln(fmt.Sprintf("gc: no resumable checkout can go and the disk is still under its floor; not looking again until %s, or sooner once the disk is back above its floor",
+		s.resumableWaitUntil.UTC().Format(time.RFC3339)))
+}
+
+// makeRoom runs a sweep off the schedule for a session checkout about to be made under a storage budget
+// (checkoutRoom): both halves as the schedule runs them, on a reading that counts that checkout as made already, so
+// that it stops once the checkout fits above the floor, and without waiting out a look that found nothing
+// (sweepResumable). The schedule does not move. Not armed, it runs nothing, as the schedule does not: until a reclaim
+// has answered, a checkout about to be re-attached reads as an orphan.
+func (s *worktreeSweeper) makeRoom(t *Transport, pool *sessionPool, pressure worktreeGCPressure) {
+	if !s.armed {
+		return
+	}
+	gcWorktrees(t, pool.ids(), pressure)
+	s.sweepResumable(t, pool, pressure, true)
 }
 
 // reclaimMissingSessions repairs both startup state and an ambiguous claim
@@ -698,6 +754,9 @@ func manualWorktreeCommandAllowed(operationID, leaseOwner, processOwner string) 
 // checked out.
 func settleSessionCheckout(job *ClaimedSession, execDir string) {
 	if job.WT != nil {
+		if checkoutAbsent(job.WT.Path) {
+			return // a session at rest: its next claim does this (restoreAbsentCheckout)
+		}
 		uncommitParkCheckpoint(job.WT)
 	}
 	syncManagedVolume("the session's checkout", execDir)
@@ -754,22 +813,28 @@ func heartbeatCommit(
 	advertised heartbeatSupervisorSnapshot,
 	commit func(CommitCommand) commitOutcome,
 ) commitOutcome {
+	// What the person pressed, so every message about it reads as that: a discard's refusal or
+	// receipt must not say "commit" (abandoned_checkout.go).
+	operation := "commit"
+	if req.Discard {
+		operation = "discard"
+	}
 	release, receipt, admitted := pool.beginManualWorktreeOperation(
 		req.SessionID,
 		advertised.supervisor,
 		advertised.permitGeneration,
 		false,
-		"commit",
+		operation,
 	)
 	if !admitted {
-		logln("not committing", req.SessionID+":", receipt)
+		logln("not "+operation+"ing", req.SessionID+":", receipt)
 		return commitOutcome{Status: "error", Message: receipt}
 	}
 	if receipt != "" {
-		logln("committing", req.SessionID+":", receipt)
+		logln(operation+"ing", req.SessionID+":", receipt)
 	}
 	res := commit(req)
-	syncManagedVolume("a commit")
+	syncManagedVolume("a " + operation)
 	release()
 	res.Message = appendWorktreeReceipt(res.Message, receipt)
 	return res
@@ -936,11 +1001,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
 	// copies a crash or a kill left behind go before any session starts again.
 	pruneAntigravityTokenCopies()
-	// The runner link (link_mode.go): t's daemon calls move to it when the control plane asks, and until
-	// then the shadow (link_shadow.go) mirrors the heartbeats and event batches t delivers over HTTPS on a
-	// connection of its own, which the work never waits on. Started before anything sends on t, whose
-	// requests it watches.
-	stopLink := startLink(cfg, t)
+	// The runner link (link_mode.go), which carries t's daemon calls. Started before anything sends on t.
+	stopLink := startLink(t)
 	defer stopLink()
 
 	// This machine's free-space floor (Runner.minFreeDiskMb), kept in sync the same way and for
@@ -950,15 +1012,22 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Zero is "no floor", which is what both a machine with none configured and a control plane
 	// too old to send one mean, and what the sweep reads as "no disk-pressure gate".
 	var diskFloorMb atomic.Int64
+	// The storage budget a managed runner's checkouts are held to (StorageBudget), kept in sync the
+	// same way and stored beside the floor, with the checkouts the sweep has removed since it was
+	// measured (checkoutStorage). No budget is the floor's rule as it was.
+	var storage checkoutStorage
+	// Whether session checkouts here are cloned from their workspace's checkout or written out by git: the worktrees
+	// root's filesystem is probed at start, so that the log says which before the first checkout is made. A checkout
+	// made later probes again only on a filesystem not probed yet (clone_checkout.go).
+	_, _ = clonableFilesystem(worktreesDir())
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
-	// Once the runner stops, a runner link with no connection is not waited for: the sessions' last events go over
-	// HTTPS while the control plane still takes it (linkMode.stopping).
-	if t.link != nil {
-		stopLinkStopping := context.AfterFunc(loopCtx, t.link.stopping)
-		defer stopLinkStopping()
-	}
+	// The other half of what a finished session's checkout can hold: one that still has
+	// uncommitted work is never reclaimed, so the control plane is told which ones those are
+	// (abandoned_checkout.go). Its own goroutine and its own clock — it reads every checkout,
+	// and the claim loop is not where a minute of `git status` belongs.
+	go runAbandonedCheckoutScans(loopCtx, t, pool)
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	monitorCtx, stopMonitor := context.WithCancel(context.Background())
@@ -1228,6 +1297,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// that was collected there (see ensureEngine).
 	configureEngineInstall(cfg.AutoInstallEngines, doctorProxyVars(cfg.ServerURL))
 
+	// Orbit's own ripgrep, last on every engine's PATH, under the same consent (managed_rg.go).
+	go keepManagedRg(loopCtx, cfg.AutoInstallEngines, doctorProxyVars(cfg.ServerURL))
+
 	// Which engine CLIs this machine has, and whether they're signed in — the Providers page's
 	// "On your runners" section. Probed in the background: it spawns a couple of processes per
 	// engine, so the heartbeat only ever reads the last completed snapshot.
@@ -1415,6 +1487,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				floorMb = int64(*resp.MinFreeDiskMb)
 			}
 			diskFloorMb.Store(floorMb)
+			// The storage budget is replaced the same way: an answer without one means there is none.
+			storage.budget.Store(resp.StorageBudget)
 			// Process ownership loss first. A terminal row can appear in both lists;
 			// marking its exact advertised epoch detaching before a durable cancel
 			// makes that overlap take the no-finalize path.
@@ -1629,7 +1703,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					res, cached := commitOutcomes[key]
 					mergeMu.Unlock()
 					if !cached {
-						res = heartbeatCommit(pool, req, advertised, commitWorktree)
+						work := commitWorktree
+						if req.Discard {
+							// The same relay, the same fence and the same result: only what it does
+							// to the checkout differs (abandoned_checkout.go).
+							work = discardWorktree
+						}
+						res = heartbeatCommit(pool, req, advertised, work)
 						if req.OperationID != "" {
 							mergeMu.Lock()
 							for old := range commitOutcomes {
@@ -1900,6 +1980,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 		}
 		if initiallyActive {
+			// A cold supervisor may stand on a checkout that is not on disk (setupSupervisorCheckout, or
+			// the sweep took it since): it comes back before the supervisor wakes in it.
+			restoreAbsentCheckout(pool, job)
 			if _, ok := pool.activatePrepared(job, stageCredential); ok {
 				return // warm reuse, or wake a cold supervisor for transparent resume
 			}
@@ -1928,7 +2011,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// The branch this session merges into, so branchMergedInto's "already merged" check
 		// judges the target the Merge button names rather than main (see mergeTargetBySession).
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
-		execDir := setupWorktree(job, sessionExecDir(job.WorkDir))
+		execDir := pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
 		settleSessionCheckout(job, execDir)
 		jobCtx, cancel := context.WithCancel(context.Background())
 		s, added := pool.register(job, cancel, initiallyActive)
@@ -2035,13 +2118,21 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// This is now the FIRST sweep rather than the only one: the claim loop below repeats it on
 	// worktreeGCInterval, sharing this same gate through the sweeper's `armed` flag.
 	worktreeGC := worktreeSweeper{interval: worktreeGCInterval, armed: reclaimed && !reclaimSkipped}
+	// From here on, a session checkout made under a storage budget is counted on it until the channel measures it, and
+	// makes room for itself first, with this sweeper, when it would take the budget under its floor (checkoutRoom).
+	sessionCheckoutRoom.Store(&checkoutRoom{storage: &storage,
+		measure: func() worktreeGCPressure { return measureWorktreePressure(diskFloorMb.Load(), &storage) },
+		sweep:   func(pressure worktreeGCPressure) { worktreeGC.makeRoom(t, pool, pressure) }})
+	defer sessionCheckoutRoom.Store(nil)
 	// The same answer says which sessions' adopted jobs no supervisor is coming for.
 	if worktreeGC.armed {
 		pool.endUnclaimedHostlessJobs()
 	}
 	if worktreeGC.due(time.Now()) {
 		liveSet := pool.ids()
-		gcWorktrees(t, liveSet, measureWorktreePressure(diskFloorMb.Load()))
+		pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
+		gcWorktrees(t, liveSet, pressure)
+		worktreeGC.sweepResumable(t, pool, pressure, false)
 		gcUploads(liveSet)
 	}
 
@@ -2119,7 +2210,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// out is exactly when its disk gets tight. It costs one round trip plus a directory
 		// listing when nothing is due, and the claim long-poll guarantees a lap every 35 seconds.
 		if worktreeGC.due(time.Now()) {
-			gcWorktrees(t, pool.ids(), measureWorktreePressure(diskFloorMb.Load()))
+			pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
+			gcWorktrees(t, pool.ids(), pressure)
+			worktreeGC.sweepResumable(t, pool, pressure, false)
 		}
 		// Saturation, counted against everything this machine is doing rather than
 		// against turn permits alone: a parked session whose runner-hosted build is
@@ -2250,8 +2343,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// in-flight turn would get the very session we're trying to preserve marked FAILED.
 	// Cover provider drain, both release backstops, the final event flush, and a racing
 	// terminal finalization — and the heartbeat's own operations, which keep it beating too
-	// until they are done or stopped (shutdownSequence). systemd's stop timeout and a managed
-	// Pod's termination grace both remain above this whole envelope.
+	// until they are done or stopped (shutdownSequence). The service manager's stop limit
+	// remains above this whole envelope (THE BUDGETS, shutdown_drain.go).
 	drainStart := time.Now()
 	drainDeadline := drainStart.Add(shutdownSupervisorTimeout)
 	// A landing being handed back is sent until the deadline and no longer: past it, the lease
@@ -2305,6 +2398,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// sessions handed on for one is ended now, as a runner stop ends every job it hosts.
 		endHandedOn()
 	}
+	logln(fmt.Sprintf("stop finished after %s: %d session supervisor(s) and %d heartbeat operation(s) left behind",
+		time.Since(drainStart).Round(100*time.Millisecond), left.sessions, left.operations))
 	return restart, endHandedOn
 }
 
@@ -2324,12 +2419,14 @@ func uploadLegacyArtifact(ctx context.Context, t *Transport, req ArtifactCommand
 		return out
 	}
 	clean := filepath.Clean(req.Path)
-	if !pathWithinRoots(clean, artifactRequestRoots(req.SessionID)) {
+	file, _, err := newLocalFileScope(artifactRequestRoots(req.SessionID)).open(clean)
+	if err != nil {
 		out.Status = "missing"
 		out.Message = "artifact is outside the session's own directories or missing"
 		return out
 	}
-	id, err := t.uploadSessionAttachment(ctx, req.SessionID, clean, attachmentMime(clean))
+	defer file.Close()
+	id, err := t.uploadSessionAttachmentFile(ctx, req.SessionID, file, attachmentMimeOf(file, clean), filepath.Base(clean))
 	if err != nil {
 		out.Status = "error"
 		out.Message = err.Error()

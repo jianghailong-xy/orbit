@@ -154,10 +154,14 @@ public struct UserBubble: Equatable, Sendable, Codable {
     public var note: String?
     /// What delivery appended, as the one entry the view draws in the bubble under the person's
     /// words — named for its kind, and opening to the text the model read. Nil when the event
-    /// carried no note, so nothing is drawn as Orbit's own.
+    /// carried no note, so nothing is drawn as Orbit's own. Nil too when the note names nothing: a
+    /// wiki chat's first message sent with neither page nor selection carries only the chat's words
+    /// to its agent, which the person did not attach, so no line is drawn (web parity: `UserBubble`,
+    /// C15).
     public var attached: (kind: String, text: String)? {
         guard let note else { return nil }
-        return (describeNote(note), note)
+        let kind = describeNote(note)
+        return kind.isEmpty ? nil : (kind, note)
     }
     /// An exception item's delivery, when the control plane recorded the item's own fields beside
     /// this turn's echo (`openItemDelivery`, see `OpenItemDelivery.parse`). This turn is nobody's
@@ -194,6 +198,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// reader's: the console draws "From [that session]" instead of the owner's bubble. Nil for every
     /// turn the owner typed, and for every message stored before the payload existed.
     public var sessionMessage: SessionMessage?
+    /// Somebody outside Orbit sent it — a connected Feishu group's member — as the control plane
+    /// recorded beside the echo (`externalSender`, see `ExternalSender.parse`): still a bubble, headed
+    /// `From Feishu · <name>` so it does not read as the owner's own. Nil for every other turn.
+    public var externalSender: ExternalMessageFrom?
     /// The outcomes of this session's own requests the turn handed back, when the control plane
     /// recorded them beside the echo (`sessionReplies`, see `SessionReply.parse`). Nobody typed them:
     /// the console draws a reply card per outcome. Nil for every other turn.
@@ -247,6 +255,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 ownerAnswer: OwnerAnswer? = nil, coordinatorDelivery: CoordinatorDelivery? = nil,
                 taskStart: TaskStart? = nil,
                 startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
+                externalSender: ExternalMessageFrom? = nil,
                 sessionReplies: [SessionReply]? = nil,
                 authoredByOrbit: Bool = false,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
@@ -272,6 +281,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.taskStart = taskStart
         self.startedCard = startedCard
         self.sessionMessage = sessionMessage
+        self.externalSender = externalSender
         self.sessionReplies = sessionReplies
         self.authoredByOrbit = authoredByOrbit
         self.reviewRequest = reviewRequest
@@ -287,7 +297,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
         case note, steer, delivery, itemCard, ownerAnswer, coordinatorDelivery, taskStart, startedCard
-        case sessionMessage, sessionReplies
+        case sessionMessage, externalSender, sessionReplies
         case authoredByOrbit, reviewRequest, reviewReturn, withdrawable, shell
         case receipt, deliveryCode, deliveryReason
     }
@@ -319,6 +329,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         startedCard = try? c.decodeIfPresent(ProjectStarted.self, forKey: .startedCard)
         // And for who sent a message: a snapshot from before it existed keeps the bubble.
         sessionMessage = try? c.decodeIfPresent(SessionMessage.self, forKey: .sessionMessage)
+        externalSender = try? c.decodeIfPresent(ExternalMessageFrom.self, forKey: .externalSender)
         // And for the outcomes a turn handed back: a snapshot from before they existed keeps its reading.
         sessionReplies = try? c.decodeIfPresent([SessionReply].self, forKey: .sessionReplies)
         authoredByOrbit = (try? c.decodeIfPresent(Bool.self, forKey: .authoredByOrbit)) ?? false

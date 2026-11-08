@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>41 wiki home setup</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/root.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/reset.css">
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Card.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Floating.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Overlay.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Select.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/NumberInput.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="phone-mock.css">
+<link rel="stylesheet" href="wiki-p2.css">
+<link rel="stylesheet" href="wiki-p3.css">
+<script>addEventListener('load', () => { for (const f of window.__afterLoad || []) f(); });</script>
+<style>
+/* Board 41: the Wiki's home while it has nothing to read. Web is drawn with the shipped CSS and class names;
+   wk-start-* are the classes the implementation would add. iOS is drawn as boards 31 and 35 draw it. */
+.pb-sheet.p2.b41 { width: 2360px; }
+.b41 .pb-lede { max-width: 1780px; }
+.p2.b41 .pb-grid.g-a { grid-template-columns: 1440px 402px minmax(0, 1fr); column-gap: 32px; }
+.p2.b41 .pb-grid.g-b { grid-template-columns: 880px 443px 402px minmax(0, 1fr); column-gap: 28px; }
+.p2.b41 .pb-grid.g-c { grid-template-columns: minmax(0, 1fr); }
+.b41 .pb-grid + .pb-grid { margin-top: 8px; }
+.b41 .pb-note p { margin-bottom: 10px; }
+.note-n { position: static !important; display: inline-flex !important; vertical-align: -3px; margin-right: 6px !important; box-shadow: none !important; }
+.m-n.bad, .pb-mark.bad > .m-n { background: #E5484D; color: #fff; }
+.pb-mark.bad { outline-color: #E5484D; }
+.b41 .b-cap { margin: 0 0 7px; font-size: 12.5px; color: var(--text-3); font-family: "Noto Sans CJK SC", sans-serif; }
+.b41 .b-cap b { color: var(--text-1); font-weight: 600; }
+.b41 .b-stack > * + * { margin-top: 18px; }
+.b41 .b-stack > .b-cap + * { margin-top: 0; }
+
+/* The desktop frames, as board 33 draws them. */
+.pb-web.dk { border-radius: 10px; }
+.pb-web.dk .app-shell { height: auto; min-height: var(--app-vh); align-items: stretch; }
+.pb-web.dk .app-nav { height: auto; width: 300px; }
+.pb-web.dk .app-main { height: auto; overflow: visible; }
+.pb-web.dk .app-view--doc { overflow: visible; }
+.pb-web.dk .tp-item .ic { font-size: 16px; }
+.dk .wk-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 15px; border-radius: 6px; border: 1px solid var(--border);
+              background: var(--bg-raised); color: var(--text-1); font-size: 14px; white-space: nowrap; box-sizing: border-box; }
+.dk .wk-btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 2px 0 rgba(5, 145, 255, .1); }
+.dk .wk-btn .ic { font-size: 13px; }
+.dk .wk-btn.act { position: relative; }
+.dk .wk-btn.act .tp-rail-badge { top: -8px; right: -8px; box-shadow: 0 0 0 2px var(--bg-base); }
+.dk-space { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--fill-muted); font-size: 13px; color: var(--text-2); }
+.dk-meta { margin-top: 6px; font-size: 13px; color: var(--text-2); }
+.dk .wk-search { margin-top: 12px; }
+.b41 .tp-workspace-runner { color: var(--text-3); }
+
+/* What the implementation adds: one card, three steps, at most one primary button. */
+.wk-start { container: wk-start / inline-size; grid-column: 1 / -1; box-sizing: border-box; margin: 0; padding: 14px 18px 18px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-raised); }
+.wk-start-h b { display: block; font-size: 15px; line-height: 22px; font-weight: 650; color: var(--text-1); }
+.wk-start-h span { display: block; margin-top: 1px; font-size: 13px; line-height: 20px; color: var(--text-2); }
+.wk-start-steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin: 14px 0 0; padding: 0; list-style: none; }
+.wk-start-head { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.wk-start-no { flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 22px; height: 22px; border: 1px solid var(--border); border-radius: 50%;
+               background: var(--bg-raised); color: var(--text-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wk-start-no .ic { font-size: 11px; }
+.wk-start-t { font-size: 13.5px; line-height: 20px; font-weight: 600; color: var(--text-1); }
+.wk-start-body { margin: 3px 0 0 30px; }
+.wk-start-d { font-size: 13px; line-height: 20px; color: var(--text-2); }
+.wk-start-note { margin-top: 2px; font-size: 12px; line-height: 18px; color: var(--text-3); }
+.wk-start-act { margin-top: 10px; }
+.b41 .wk-start-step { position: relative; }
+.b41 .b-stepmark { position: absolute; top: 2px; right: 0; margin: 0; }
+.wk-start-step.is-todo .wk-start-t { font-weight: 500; color: var(--text-3); }
+.wk-start-step.is-todo .wk-start-d { color: var(--text-3); }
+.wk-start-step.is-wait .wk-start-no { border-color: var(--warning-solid); background: var(--warning-solid); color: #fff; }
+.wk-start-step.is-run .wk-start-no { border-color: var(--brand); background: var(--brand); color: #fff; }
+.wk-start-step.is-done .wk-start-no { border-color: var(--success-border); background: var(--success-bg); color: var(--success); }
+.wk-start-step.is-done .wk-start-t { font-weight: 500; color: var(--text-2); }
+.wk-start-step.is-done .wk-start-d { color: var(--text-3); }
+.wk-start .wk-pl-prog { padding: 8px 0 0; }
+@container wk-start (min-width: 720px) {
+  .wk-start-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; }
+  .wk-start-t { flex: none; }
+  .wk-start-step:not(:last-child) .wk-start-head::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
+}
+.b41 .wk-layout.home .wk-main .wk-home > .wk-start { margin: 0; }
+.b41 .b-homepart.wk-home { gap: 12px; }
+
+/* The dialog, drawn in place instead of over a backdrop. */
+.b41 .b-dialog { width: 520px; flex: none; }
+.b41 .b-dialog .orbit-overlay { width: 520px; box-shadow: 0 0 0 1px var(--border-subtle), 0 12px 34px rgba(0, 0, 0, .10); }
+.b41 .b-dialog .orbit-select { width: 100%; }
+.b41 .orbit-overlay-close { position: absolute; top: 18px; right: 20px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); }
+.b41 .b-field { position: relative; }
+.b41 .b-popup { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; }
+.b41 .b-popup .orbit-select-popup { display: block; }
+.b41 .orbit-select-option { display: flex; align-items: center; }
+.b41 .orbit-select-option .off { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.b41 .orbit-select-option[data-selected] { background: var(--brand-tint); font-weight: 600; }
+.b41 .orbit-select-option.dim { color: var(--text-3); }
+.b41 .orbit-number-input { display: inline-flex; align-items: center; }
+.b41 .b-row { display: flex; align-items: flex-start; gap: 28px; }
+
+/* iOS pieces this board adds. */
+.io-start-h { padding: 14px 33px 2px; font-size: 20px; line-height: 25px; font-weight: 700; letter-spacing: -.3px; color: #000; }
+.io-start-s { padding: 1px 33px 9px; font-size: 13px; line-height: 18px; color: #8A8A8D; }
+.io-start { padding: 3px 0; }
+.io-sr { position: relative; display: flex; gap: 11px; padding: 11px 16px 12px; }
+.io-sr + .io-sr::before { content: ""; position: absolute; top: 0; left: 51px; right: 16px; height: .5px; background: #E3E3E6; }
+.io-sr .no { flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 24px; height: 24px; margin-top: 1px; border: 1px solid #D1D1D6; border-radius: 50%; color: #8A8A8D; font: 600 13px/1 Inter, sans-serif; background: #fff; }
+.io-sr .no .sf, .io-sr .no .ic { font-size: 12px; stroke-width: 3; }
+.io-sr .tx { flex: 1; min-width: 0; }
+.io-sr .t { font-size: 17px; line-height: 22px; letter-spacing: -.2px; font-weight: 600; color: #000; }
+.io-sr .d { margin-top: 2px; font-size: 15px; line-height: 20px; color: #3C3C43; }
+.io-sr .n { margin-top: 2px; font-size: 13px; line-height: 18px; color: #8A8A8D; }
+.io-sr .btn { display: inline-flex; align-items: center; height: 34px; margin-top: 9px; padding: 0 15px; border-radius: 17px; font-size: 15px; font-weight: 600; background: rgba(118, 118, 128, .12); color: #2E6AFF; }
+.io-sr .btn.primary { background: #2E6AFF; color: #fff; }
+.io-sr.is-todo .t { font-weight: 400; color: #8A8A8D; }
+.io-sr.is-todo .d { color: #8A8A8D; }
+.io-sr.is-done .t { font-weight: 400; color: #3C3C43; }
+.io-sr.is-done .d { color: #8A8A8D; }
+.io-sr.is-done .no { border-color: #BDE5C8; background: #E8F6EC; color: #248A3D; }
+.io-sr.is-wait .no { border-color: #FF8C27; background: #FF8C27; color: #fff; }
+.io-sr.is-run .no { border-color: #2E6AFF; background: #2E6AFF; color: #fff; }
+.io-sr .pbar { height: 4px; margin-top: 9px; border-radius: 2px; background: #E5E5EA; overflow: hidden; }
+.io-sr .pbar i { display: block; height: 100%; background: #2E6AFF; }
+.io-name { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 15px; flex: none; background: rgba(118, 118, 128, .08); font-size: 15px; color: #6C6C70; }
+.io-sheetbtn { width: auto !important; padding: 0 16px; font-size: 17px; }
+.io-sheetbtn.go { font-weight: 600; background: #2E6AFF !important; color: #fff; }
+
+/* The tables. */
+.b41 table.rt { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.55; background: #fff; border-radius: 10px; overflow: hidden; }
+.b41 table.rt th, .b41 table.rt td { padding: 8px 11px; border-bottom: 1px solid #e8eaee; text-align: left; vertical-align: top; }
+.b41 table.rt tr:last-child td { border-bottom: 0; }
+.b41 table.rt th { background: #f3f4f6; font-weight: 600; color: #33373f; white-space: nowrap; }
+.b41 table.rt td:first-child { color: #33373f; font-weight: 600; white-space: nowrap; }
+.b41 table.rt code { font: 11.5px/1.4 "DejaVu Sans Mono", monospace; background: #eef0f3; border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+.b41 table.rt .en { font-family: Inter, "Noto Sans CJK SC", sans-serif; }
+.b41 table.rt .pb-tag { margin: 0 0 0 4px; }
+.b41 table.rt .blank { color: #C8322F; font-weight: 600; }
+.b41 table.rt .ok { color: #1a7f37; font-weight: 600; }
+.b41 table.rt .dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; }
+.b41 table.rt .dot.wait { background: var(--warning-solid); }
+.b41 table.rt .dot.run { background: var(--brand); }
+.b41 table.rt.path td { font-weight: 400; white-space: normal; }
+.b41 table.rt.path td:first-child { font-weight: 600; white-space: nowrap; background: #f8f9fa; }
+.b41 table.rt.path th:first-child { width: 88px; }
+.b41 .b-rules { display: grid; grid-template-columns: minmax(0, 1fr) 690px; gap: 24px; align-items: start; }
+.b41 .b-rulecap { margin: 0 0 7px; font-size: 13px; font-weight: 700; color: var(--text-1); }
+.b41 .b-list { margin: 0; padding: 0 0 0 18px; font-size: 13px; line-height: 1.7; color: #33373f; }
+.b41 .b-list li { margin-bottom: 5px; }
+.b41 .b-list .en { font-family: Inter, "Noto Sans CJK SC", sans-serif; }
+</style>
+</head>
+<body class="m">
+<script src="phone-mock-antd.js"></script>
+<script src="phone-mock.js"></script>
+<script src="wiki-p2-icons.js"></script>
+<script src="wiki-p3-icons.js"></script>
+<script src="wiki-desktop-icons.js"></script>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="sf-history" viewBox="0 0 24 24"><path d="M4.6 12.4a7.6 7.6 0 1 0 2.3-5.6"/><path d="M4.4 5.2v3.9h3.9"/><path d="M12 8.2v4.1l2.8 1.7"/></symbol></svg>
+
+<div class="m-sheet pb-sheet p2 b41">
+<h1 class="m-h1 zh">41 · 还没有内容的 Wiki：首页带人走完设置（web ｜ iOS ｜ 说明）</h1>
+<p class="pb-lede zh">首页今天只照顾到一种空状态：维护没配。配好之后主区一片空白，plan 在起草还是在等你确认都看不到；连一个 wiki 都没有时，只有一句话，没有入口。这张图把所有「还没有能读的东西」的状态收成同一张三步卡：<b>连接仓库、确认 plan、写文档</b>。一次只有一步在动，最多一个主按钮，第一篇文档写完卡就消失。web 用线上 CSS 和真实 class 手绘，<code>wk-start-*</code> 是将来实现要加的 class；iOS 照图 31、35 的画法。示例数据是虚构的，结构照 owner 的截图：一个仓库、五个按区域分的 workspace，这里让 EU 在另一台离线的 runner 上。</p>
+<div class="pb-legend zh"><span class="pb-tag sys">iOS 系统</span>系统控件与习惯 <span class="pb-tag con">Orbit 一致性</span>沿用现成组件 / 用词 <span class="pb-tag new">新词</span>新增的界面文案 <span class="pb-tag ask">要你拍板</span>影响现有决定 <span class="pb-tag later">另议</span>不在这次范围</div>
+
+<div class="pb-grid g-c">
+  <div class="pb-band zh"><span class="pb-bn">1</span>整条路 <small>· 从没有 wiki 到能读，用户只需要动手两次</small></div>
+  <table class="rt path zh">
+    <tr><th></th><th>没有 wiki</th><th>① 没连仓库</th><th>② 排队 / 起草中</th><th>② 等你确认</th><th>③ 写文档，一篇还没写完</th><th>第一篇写完之后</th></tr>
+    <tr><td>谁在动</td><td>你</td><td>你</td><td>System model</td><td>你</td><td>System model</td><td>System model</td></tr>
+    <tr><td>多久</td><td>一分钟</td><td>一分钟</td><td>1–2 小时（界面文案）</td><td>看你</td><td>cbai 34 篇跑了 1 小时 29 分</td><td>—</td></tr>
+    <tr><td>今天的首页</td><td>一句话，没有按钮</td><td>一张卡，跳到设置页第三张卡，再点 <span class="en">Set up…</span></td><td class="blank">空白</td><td class="blank">空白，只有 Activity 上的琥珀数字</td><td>类目，全是 <span class="en">Not written yet</span>，看不出在写</td><td>文档 + <span class="en">+N not written yet</span></td></tr>
+    <tr><td>提议的首页</td><td class="ok">三步卡，第 1 步，<span class="en">Create wiki…</span></td><td class="ok">三步卡，第 1 步，<span class="en">Set up…</span> 原地打开</td><td class="ok">三步卡，第 2 步，写明要多久</td><td class="ok">三步卡，第 2 步，<span class="en">Open plan</span></td><td class="ok">三步卡，第 3 步，进度条，下面是类目</td><td>卡消失，和今天一样</td></tr>
+  </table>
+</div>
+
+<div class="pb-grid g-a">
+  <div class="pb-band zh"><span class="pb-bn">2</span>首页：今天和提议 <small>· 1440 宽。同一个时刻：维护已开，plan 正在起草</small></div>
+  <div class="b-stack">
+    <div class="b-cap"><b>今天</b> · /wiki/github-com-acme-shop-cli，就是截图里的样子</div>
+    <div data-frame="today"></div>
+    <div class="b-cap" style="margin-top:18px"><b>提议</b> · 同一个时刻</div>
+    <div data-frame="drafting"></div>
+  </div>
+  <div class="b-stack">
+    <div class="b-cap"><b>iOS</b> · 同一个时刻</div>
+    <div data-ios-home="drafting" data-mark="4"></div>
+  </div>
+  <div class="pb-note zh">
+    <p><span class="m-n note-n bad">1</span><b>今天的空白是这一步的问题，不是入口的问题。</b>进首页是对的：用户迟早回到这里，文档写好也在这里出现。缺的是主区该说的话。</p>
+    <p><span class="m-n note-n">2</span><b>一张卡，放在文档的位置。</b>有原则时在原则组下面，横跨整个主区。主区 ≥720px 三列，更窄竖排，同一份 DOM。再宽也是三列，不拉出第四种布局。<span class="pb-tag con">Orbit 一致性</span>边框、圆角、字号照首页的类目卡。</p>
+    <p><span class="m-n note-n">3</span><b>一次只有一步在动。</b>颜色沿用全站的约定：琥珀是等你，蓝色是系统在做，绿勾是做完了，灰色是还没到。做完的一步留一行结果，还没到的一步说它将做什么。</p>
+    <p><span class="m-n note-n">4</span><b>原生端同一张卡竖排。</b>放在搜索框下面，一组分组卡片，节头是卡的标题。macOS 和 iOS 共用这段。Android 同样结构，用 <code>WikiPlanSectionHead</code> 和 <code>WikiCard</code>。今天三端的这个分支都是空的（web 无内容、iOS <code>.nothing</code>、Android <code>NothingListed</code>）。</p>
+    <p><span class="pb-tag ask">要你拍板</span><b>这张卡是 10-06「首页只放内容」的例外。</b>理由：只在没有内容时出现，和现有的新 space 卡性质相同，有内容之后管理信息仍然只在 Activity。</p>
+    <p><span class="pb-tag con">Orbit 一致性</span>页头、目录栏、搜索一字不动。</p>
+  </div>
+</div>
+
+<div class="pb-grid g-b">
+  <div class="pb-band zh"><span class="pb-bn">3</span>卡的四个样子 <small>· 主线上的状态。其余状态只换句子和按钮，全部在 ⑤ 的表里</small></div>
+  <div class="b-stack" data-cards></div>
+  <div class="b-stack">
+    <div class="b-cap"><b>web 手机</b> · 第 1 步</div>
+    <div data-phone></div>
+  </div>
+  <div class="b-stack">
+    <div class="b-cap"><b>iOS</b> · 第 2 步，等你确认</div>
+    <div data-ios-home="ready" data-mark="6"></div>
+  </div>
+  <div class="pb-note zh">
+    <p><span class="m-n note-n">5</span><b><span class="en">Set up…</span> 原地打开弹窗，不再跳设置页。</b>就是今天 Settings 里那个 <span class="en">Set up maintenance</span> 弹窗。提交后回到首页，卡已经到第 2 步。<span class="pb-tag con">Orbit 一致性</span></p>
+    <p><b>弹窗里只改一处：下拉框只列这个仓库的 workspace，并默认选好：</b>你刚才所在的那个，否则第一台在线的。这样一次点击就够。今天默认值按名字猜，<span class="en">shop-cli @ SG</span> 这种名字猜不中，要在所有 workspace 里自己找。图 38 把「下拉框收窄」留作另议，这张图需要它，这次收掉。</p>
+    <p><span class="m-n note-n">6</span><b>确认放在 plan 页，不放在卡上。</b>确认之前得先看 plan 写了什么，所以卡上只有 <span class="en">Open plan</span>。这时侧栏 Wiki、Activity、Plan 三处的琥珀数字都是 1，点开首页终于能看到原因。</p>
+    <p><span class="m-n note-n">7</span><b>写文档时卡在类目上面。</b>进度条和 Activity、plan 页是同一份数。第一篇写完卡就走，之后进度看状态行 <span class="en">34 documents · 5 written</span>。</p>
+    <p><span class="pb-tag new">新词</span><span class="en">Set up this wiki · Documents for this codebase, written from its repository and sessions, for you and your agents. · Connect the repository · Pick the workspace Orbit reads this repository from. · Confirm the plan · The System model drafts the documents this wiki should have. Nothing is written until you confirm it. · Write the documents · They appear here one by one. · Reads from … · Usually 1–2 hours. You can leave this page.</span></p>
+    <p><span class="pb-tag con">Orbit 一致性</span>其余句子和按钮都是 Activity 的 Plan 卡和 plan 页现成的（<code>wikiPlanCard</code>、<code>wikiPlanJobCard</code>）。</p>
+  </div>
+</div>
+
+<div class="pb-grid g-a">
+  <div class="pb-band zh"><span class="pb-bn">4</span>还没有任何 wiki <small>· 同一张卡的第 1 步，只是按钮会先把 wiki 建出来</small></div>
+  <div class="b-stack">
+    <div class="b-cap"><b>web 桌面</b> · /wiki，账号里还没有 space</div>
+    <div data-frame="none"></div>
+    <div class="b-row" style="margin-top:18px">
+      <div>
+        <div class="b-cap"><b>点 Create wiki… 之后</b> · 下拉框打开</div>
+        <div class="b-dialog" data-dialog></div>
+      </div>
+      <div>
+        <div class="b-cap"><b>iOS sheet</b> · 照图 35 的 Set up maintenance</div>
+        <div data-ios-sheet></div>
+      </div>
+    </div>
+  </div>
+  <div class="b-stack">
+    <div class="b-cap"><b>iOS</b> · 没有 space</div>
+    <div data-ios-home="none" data-mark="8"></div>
+  </div>
+  <div class="pb-note zh">
+    <p><span class="m-n note-n">8</span><b>没有 wiki 时用同一张卡。</b>今天这里只有一句 <span class="en">No wiki space yet. A space is a codebase, and the first one is made when a session proposes into it.</span>，用户什么都做不了，而且 agent 调一次 wiki 搜索其实就会建。卡上不写 space，用户看到的词一直是 wiki。</p>
+    <p><span class="m-n note-n">9</span><b><span class="en">Create wiki…</span> 就是上面那个表单</b>，多一件事：下拉框列出所有有仓库的 workspace，按仓库分组。选中 workspace 就同时选了仓库，不多加一个字段。离线的排在组内最后，标 <span class="en">offline</span>。没有仓库的不列。</p>
+    <p><b>提交走现成的 <code>POST /wiki/spaces</code></b>（title、repoUrl、maintenance），服务端不用改：它建 space、开维护，并立刻起草第一版 plan。成功后进 <code>/wiki/:space</code>，卡已经在第 2 步。</p>
+    <p><span class="pb-tag ask">要你拍板</span><b>建 wiki 就等于开维护。</b>没有「只建不开」：那种 wiki 什么也不会发生，只会回到第 1 步。开维护会开始用 System model，表单里的隐私说明和今天一样在提交之前就看得到。</p>
+    <p><span class="pb-tag new">新词</span><span class="en">Set up your first wiki · A wiki is documents for one codebase, written from its repository and sessions, for you and your agents. · Connect a repository · Pick a workspace. Its repository is what this wiki will describe. · Create wiki… · Create wiki · A wiki describes one repository and stays up to date from its sessions, tasks and receipts. · This wiki will describe … · offline · None of your workspaces has a repository yet. Add one, then come back.</span></p>
+    <p><span class="pb-tag sys">iOS 系统</span>sheet 表单，左 Cancel、右 Create。</p>
+  </div>
+</div>
+
+<div class="pb-grid g-c">
+  <div class="pb-band zh"><span class="pb-bn">5</span>规则 <small>· 每种状态说什么、按钮去哪里，以及卡什么时候出现和消失</small></div>
+  <div>
+    <div class="b-rulecap zh">每种状态（<code>wikiPlanLook</code> 已经算好，首页只是多读一次）</div>
+    <table class="rt zh">
+      <tr><th>状态</th><th>怎么判断</th><th>当前步</th><th>句子</th><th>按钮</th><th>按下去</th></tr>
+      <tr><td>没有 wiki</td><td><code>GET /wiki/spaces</code> 是空列表</td><td><span class="dot wait"></span>1</td><td class="en">Pick a workspace. Its repository is what this wiki will describe.</td><td class="en">Create wiki…</td><td>原地弹窗，建好进首页</td></tr>
+      <tr><td>没有可选的 workspace</td><td>同上，且没有一个 workspace 有仓库</td><td><span class="dot wait"></span>1</td><td class="en">None of your workspaces has a repository yet. Add one, then come back.</td><td>无</td><td>—</td></tr>
+      <tr><td>没连仓库</td><td>held <code>no_maintenance_workspace</code>，或没有 job 也没开维护</td><td><span class="dot wait"></span>1</td><td class="en">Pick the workspace Orbit reads this repository from.</td><td class="en">Set up…</td><td>原地弹窗</td></tr>
+      <tr><td>没有 plan job</td><td><code>noPlan</code>，维护已开。今天这种情况没有任何提示，是死路</td><td><span class="dot wait"></span>2</td><td class="en">No plan yet. A plan lays out this wiki’s documents; nothing is written until you confirm it. · System model · about 1–2 hours</td><td class="en">Draft plan</td><td>原地开始起草，卡变成起草中</td></tr>
+      <tr><td>排队</td><td><code>queued</code></td><td><span class="dot run"></span>2</td><td class="en">Draft queued · starts after the Wiki maintenance run that’s going now.</td><td class="en">Open plan（次按钮）</td><td>plan 页</td></tr>
+      <tr><td>起草中</td><td><code>drafting</code></td><td><span class="dot run"></span>2</td><td class="en">Drafting the plan · attempt 1 of 3 · started 12m ago · Usually 1–2 hours. You can leave this page.</td><td class="en">Open plan（次按钮）</td><td>plan 页</td></tr>
+      <tr><td>等你确认</td><td><code>draftReady</code></td><td><span class="dot wait"></span>2</td><td class="en">Draft v1 passed the plan check and waits for you. Documents are written once you confirm it. · 8 categories · 34 documents（有要看的东西时：Draft v1 is ready for review, with 3 to look at. …）</td><td class="en">Open plan</td><td>plan 页，在那里 <span class="en">Confirm plan</span></td></tr>
+      <tr><td>起草失败</td><td><code>draftFailed</code>：任务没有留下草稿</td><td><span class="dot wait"></span>2</td><td class="en">The draft didn’t finish. … Nothing was saved.</td><td class="en">Open plan</td><td>plan 页，在那里重新起草</td></tr>
+      <tr><td>runner 离线</td><td>held，runner 离线</td><td><span class="dot wait"></span>2 或 3</td><td class="en">The maintenance runner is offline — the draft starts once it’s back.</td><td class="en">View runners</td><td>Infrastructure</td></tr>
+      <tr><td>写文档中</td><td><code>writing</code>，<code>docs.written</code> 为 0</td><td><span class="dot run"></span>3</td><td class="en">Writing documents · 0 of 34 written · started 3m ago · Writing now: 1.1 …</td><td class="en">Open plan（次按钮）</td><td>plan 页</td></tr>
+      <tr><td>写作中断</td><td>plan 已确认，build 失败，<code>docs.written</code> 为 0。cbai 就卡在这里好几天</td><td><span class="dot wait"></span>3</td><td class="en">Writing documents didn’t finish · …</td><td class="en">Open plan</td><td>plan 页，在那里 <span class="en">Update documents</span></td></tr>
+    </table>
+  </div>
+  <div class="b-rules zh" style="margin-top:16px">
+    <div>
+      <div class="b-rulecap">卡什么时候在</div>
+      <ul class="b-list">
+        <li><b>在：</b>还没有能读的东西，即 <code>docs.written</code> 为 0，而且没有主题文章。有原则时卡在原则组下面。</li>
+        <li><b>走：</b>第一篇文档写完，或者出现了主题文章。这些状态回到 Activity，和今天一样。卡不存任何状态，每次按读到的内容判断。</li>
+        <li><b>分享页</b>（<code>SharedWikiPage</code>）没有这张卡，读者不是 owner。</li>
+        <li><b>颜色</b>全用现成 token，暗色模式跟着走，不加新色。</li>
+      </ul>
+    </div>
+    <div>
+      <div class="b-rulecap">不在这次范围 <span class="pb-tag later">另议</span></div>
+      <ul class="b-list">
+        <li>草稿好了今天没有推送，只有琥珀数字。要等 1–2 小时的事，也许值得推一条；新增推送类型要过 Android 的未知类型问题。</li>
+        <li>已经有 wiki 时再建第二个：今天靠 session 第一次调 wiki 工具自动建，选择器里不加入口。</li>
+        <li>runner 离线时自动换 workspace（图 38 留下的另一半）。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ── The card, from data, so web and iOS say the same words ─────────────────────────────────────
+const SUB = 'Documents for this codebase, written from its repository and sessions, for you and your agents.';
+const TODO2 = { state: 'todo', t: 'Confirm the plan', d: 'The System model drafts the documents this wiki should have. Nothing is written until you confirm it.' };
+const TODO3 = { state: 'todo', t: 'Write the documents', d: 'They appear here one by one.' };
+const DONE1 = { state: 'done', t: 'Connect the repository', d: 'Reads from shop-cli @ SG · build\u201101' };
+const CARDS = {
+  connect: { title: 'Set up this wiki', sub: SUB, steps: [
+    { state: 'wait', t: 'Connect the repository', d: 'Pick the workspace Orbit reads this repository from.', btn: { label: 'Set up…', primary: true } }, TODO2, TODO3] },
+  drafting: { title: 'Set up this wiki', sub: SUB, steps: [DONE1,
+    { state: 'run', t: 'Confirm the plan', d: 'Drafting the plan · attempt 1 of 3 · started 12m ago', note: 'Usually 1–2 hours. You can leave this page.', btn: { label: 'Open plan' } }, TODO3] },
+  ready: { title: 'Set up this wiki', sub: SUB, steps: [DONE1,
+    { state: 'wait', t: 'Confirm the plan', d: 'Draft v1 passed the plan check and waits for you. Documents are written once you confirm it.', note: '8 categories · 34 documents', btn: { label: 'Open plan', primary: true } }, TODO3] },
+  writing: { title: 'Set up this wiki', sub: SUB, steps: [DONE1,
+    { state: 'done', t: 'Confirm the plan', d: 'v1 confirmed Nov 2 · 34 documents' },
+    { state: 'run', t: 'Write the documents', d: 'Writing documents · 0 of 34 written · started 3m ago', bar: 2, next: 'Writing now: <b>1.1 Product overview</b>', btn: { label: 'Open plan' } }] },
+  none: { title: 'Set up your first wiki', sub: 'A wiki is documents for one codebase, written from its repository and sessions, for you and your agents.', steps: [
+    { state: 'wait', t: 'Connect a repository', d: 'Pick a workspace. Its repository is what this wiki will describe.', btn: { label: 'Create wiki…', primary: true } }, TODO2, TODO3] },
+};
+
+const ic = (name, cls = '') => `<svg class="ic ${cls}"><use href="#i-${name}"/></svg>`;
+const sf = (name, cls = '') => `<svg class="sf ${cls}"><use href="#sf-${name}"/></svg>`;
+
+function webStep(step, index) {
+  const no = step.state === 'done' ? ic('check') : index + 1;
+  const button = step.btn ? `<div class="wk-start-act"><button type="button" class="orbit-button ${step.btn.primary ? 'orbit-button-primary' : 'orbit-button-default'} orbit-button-middle"><span>${step.btn.label}</span></button></div>` : '';
+  const bar = step.bar !== undefined ? `<div class="wk-pl-prog"><div class="bar"><i style="width:${step.bar}%"></i></div>${step.next ? `<div class="next">${step.next}</div>` : ''}</div>` : '';
+  return `<li class="wk-start-step is-${step.state}">${step.mark ? `<span class="m-n b-stepmark">${step.mark}</span>` : ''}<div class="wk-start-head"><span class="wk-start-no">${no}</span><span class="wk-start-t">${step.t}</span></div><div class="wk-start-body"><div class="wk-start-d">${step.d}</div>${bar}${step.note ? `<div class="wk-start-note">${step.note}</div>` : ''}${button}</div></li>`;
+}
+const webCard = (card, extra = '') => `<section class="wk-start ${extra}"><div class="wk-start-h"><b>${card.title}</b><span>${card.sub}</span></div><ol class="wk-start-steps">${card.steps.map(webStep).join('')}</ol></section>`;
+const marked = (html, n, style = '') => `<div class="pb-mark" style="border-radius:12px;${style}"><span class="m-n">${n}</span>${html}</div>`;
+
+// ── The desktop page ───────────────────────────────────────────────────────────────────────────
+const LOGO = '<svg width="22" height="22" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="og-nav" x1="14" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse"><stop stop-color="#5b8bff"/><stop offset="1" stop-color="#3370ff"/></linearGradient></defs><g transform="rotate(-26 32 32)"><ellipse cx="32" cy="32" rx="28" ry="12.5" stroke="url(#og-nav)" stroke-width="3.4" opacity="0.6"/><circle cx="56" cy="25.6" r="5.4" fill="url(#og-nav)"/></g><rect x="19" y="20" width="26" height="24" rx="6" fill="url(#og-nav)"/><path d="M25 27.5 L30 32 L25 36.5" stroke="#fff" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/><line x1="33" y1="35.8" x2="39.5" y2="35.8" stroke="#fff" stroke-width="2.9" stroke-linecap="round"/></svg>';
+const WS = ['SG', 'US', 'EU', 'JP', 'staging'];
+const nav = (wiki) => `<aside class="app-nav"><div class="tp-brand"><span class="tp-brand-logo">${LOGO}</span><span class="tp-brand-name">Orbit</span></div><div class="tp-scroll"><div class="tp-section">
+  <div class="tp-item"><span class="tp-ico">${ic('project')}</span><span class="tp-label">Projects</span></div>
+  <div class="tp-item"><span class="tp-ico">${ic('check-square')}</span><span class="tp-label">Tasks</span></div>
+  <div class="tp-item active"><span class="tp-ico">${ic('book')}</span><span class="tp-label">Wiki</span>${wiki ? `<span class="tp-count needs-you">${wiki}</span>` : ''}</div></div>
+  <div class="tp-divider"></div>
+  <div class="tp-group"><div class="tp-group-head"><span class="tp-group-name">Workspaces</span></div>${WS.map((w) => `<div class="tp-item"><span class="tp-ico tp-workspace-icon">${ic('folder')}</span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">shop-cli @ ${w}</span><span class="tp-workspace-separator" aria-hidden="true"> · </span><span class="tp-workspace-runner">${w === 'EU' ? 'build-02' : 'build-01'}</span></span></div>`).join('')}</div></div></aside>`;
+const toc = '<div class="wk-dir-col"><nav class="wk-toc"><div class="wk-toc-item active"><span class="tp-ico">' + ic('home') + '</span><span class="lb">Home</span></div><div class="wk-toc-item"><span class="tp-ico">' + ic('appstore') + '</span><span class="lb">Browse by category</span></div><div class="wk-toc-item"><span class="tp-ico">' + ic('sort-ascending') + '</span><span class="lb">A–Z index</span></div><div class="wk-toc-item plan"><span class="tp-ico">' + ic('profile') + '</span><span class="lb">Plan</span></div><div class="wk-toc-sep"></div></nav></div>';
+const head = (badge) => `<div class="wk-title-row"><h1 class="page-title">Wiki</h1><span class="dk-space">shop-cli</span><div class="wk-actions"><span class="wk-btn act">${ic('history')}Activity${badge ? `<span class="tp-rail-badge needs-you">${badge}</span>` : ''}</span><span class="wk-btn">${ic('setting')}Settings</span><span class="wk-btn">${ic('global')}Share</span><span class="wk-btn primary">${ic('plus')}New entry</span></div></div>`;
+const search = `<div class="wk-search" role="search"><span class="wk-search-open">${ic('search')}<span class="grow">Search the wiki</span><kbd class="wk-kbd">⌘K</kbd></span></div>`;
+const page = (height, wiki, body) => `<div class="pb-web dk" style="width:1440px;height:${height}px;--app-vh:${height}px"><div class="app-shell">${nav(wiki)}<main class="app-main"><div class="app-view app-view--doc"><div class="wk-page">${body}</div></div></main></div></div>`;
+const home = (meta, main) => `${head(0)}<div class="dk-meta">${meta}</div>${search}<div class="wk-layout home">${toc}<div class="wk-main"><div class="wk-home">${main}</div></div></div>`;
+
+const FRAMES = {
+  today: () => page(420, 0, home('No documents yet', '<div class="pb-mark bad" style="grid-column:1/-1;height:206px;border-radius:12px"><span class="m-n bad">1</span></div>')),
+  drafting: () => page(420, 0, home('No documents yet', marked(webCard({ ...CARDS.drafting, steps: CARDS.drafting.steps.map((step, i) => (i === 1 ? { ...step, mark: 3 } : step)) }), 2, 'grid-column:1/-1'))),
+  none: () => page(420, 0, `<div class="wk-title-row"><h1 class="page-title">Wiki</h1></div><div class="wk-body" style="margin-top:18px">${marked(webCard(CARDS.none), 8)}</div>`),
+};
+document.querySelectorAll('[data-frame]').forEach((node) => { node.outerHTML = FRAMES[node.dataset.frame](); });
+
+// ── The card's looks, at the main column's width at 1440 ───────────────────────────────────────
+const CAT = (no, title, count) => `<section class="wk-pl-cat"><div class="wk-pl-cat-h"><span class="no">${no}</span><b>${title}</b></div><div class="wk-pl-doc phone more"><span class="no"></span><span class="main"><span class="q">${count} documents · Not written yet</span></span>${ic('right', 'chev')}</div></section>`;
+document.querySelector('[data-cards]').innerHTML = [
+  ['第 1 步 · 等你', '刚有 space，维护没配。琥珀，主按钮', marked(webCard(CARDS.connect), 5)],
+  ['第 2 步 · 系统在做', '起草中。蓝色，<b style="font-weight:400">Open plan</b> 是次按钮', webCard(CARDS.drafting)],
+  ['第 2 步 · 等你', '草稿过了检查。琥珀，主按钮', marked(webCard(CARDS.ready), 6)],
+  ['第 3 步 · 系统在做', 'plan 已确认，一篇还没写完', marked(`<div class="wk-home b-homepart">${webCard(CARDS.writing)}${CAT(1, 'Product overview', 4)}${CAT(2, 'Getting started', 3)}</div>`, 7)],
+].map(([what, how, html]) => `<div><div class="b-cap"><b>${what}</b> · ${how}</div>${html}</div>`).join('');
+
+// ── Web phone: the same card, in its one-column shape ──────────────────────────────────────────
+document.querySelector('[data-phone]').outerHTML = `<div class="pb-web" style="height:560px"><div class="wp-topbar"><span class="wp-toggle">${ic('menu-fold')}</span><span class="wp-topname">Orbit</span></div><div class="wp-page">
+<div class="wp-titlerow"><h1 class="page-title">Wiki</h1><span class="wp-plabel">shop-cli</span><span class="wp-btn i40 ghost">${ic('unordered-list')}</span><span class="wp-btn i40 ghost wp-act">${ic('history')}<span class="bdg">1</span></span><span class="wp-btn i40 ghost">${ic('setting')}</span><span class="wp-btn primary i40">${ic('plus')}</span></div>
+<div class="wp-meta">No documents yet</div>
+<div class="wp-input">${ic('search')}Search the wiki</div>
+<div style="margin-top:16px">${webCard(CARDS.connect)}</div>
+</div></div>`;
+
+// ── iOS ────────────────────────────────────────────────────────────────────────────────────────
+function iosStep(step, index) {
+  const no = step.state === 'done' ? ic('check') : index + 1;
+  const bar = step.bar !== undefined ? `<div class="pbar"><i style="width:${step.bar}%"></i></div>` : '';
+  const button = step.btn ? `<span class="btn ${step.btn.primary ? 'primary' : ''}">${step.btn.label.replace('…', '…')}</span>` : '';
+  return `<div class="io-sr is-${step.state}"><span class="no">${no}</span><div class="tx"><div class="t">${step.t}</div><div class="d">${step.d}</div>${bar}${step.note ? `<div class="n">${step.note}</div>` : ''}${button}</div></div>`;
+}
+const iosCard = (card) => `<div class="io-start-h">${card.title}</div><div class="io-start-s">${card.sub}</div><div class="io-card io-start">${card.steps.map(iosStep).join('')}</div>`;
+const iosNav = (badge, plain) => `<div class="io-nav"><span class="io-glass l">${sf('menu')}</span>${plain ? '' : `<span class="io-glass cap r"><span class="slot">${sf('list')}</span><span class="slot act">${sf('history')}${badge ? `<span class="bdg">${badge}</span>` : ''}</span><span class="slot">${sf('gear')}</span></span>`}</div>`;
+document.querySelectorAll('[data-ios-home]').forEach((node) => {
+  const look = node.dataset.iosHome;
+  const none = look === 'none';
+  const badge = look === 'ready' ? 1 : 0;
+  const body = none
+    ? `<div class="io-lt"><h1>Wiki</h1></div>`
+    : `<div class="io-lt"><h1>Wiki</h1><span class="io-name">shop-cli</span></div><div class="io-subt">No documents yet</div><div class="io-search">${sf('search')}Search the wiki</div>`;
+  const card = `<div style="position:relative">${node.dataset.mark ? `<span class="m-n" style="position:absolute;right:20px;top:14px;z-index:2">${node.dataset.mark}</span>` : ''}${iosCard(CARDS[look])}</div>`;
+  node.outerHTML = `<div class="pb-ios top grouped" style="height:${none ? 596 : 668}px"><div data-ios="status"></div>${iosNav(badge, none)}${body}${card}</div>`;
+});
+
+// ── The Create wiki dialog, and its sheet ──────────────────────────────────────────────────────
+const option = (label, attrs = '', tail = '', cls = '') => `<div class="orbit-select-option ${cls}" ${attrs}><span class="orbit-select-option-label">${label}</span>${tail}</div>`;
+document.querySelector('[data-dialog]').innerHTML = `<div class="orbit-overlay orbit-dialog wk-setup-dialog">
+  <div class="orbit-overlay-header"><h2 class="orbit-overlay-title">Create wiki</h2></div>
+  <span class="orbit-overlay-close">${ic('close')}</span>
+  <p class="wk-modal-note">A wiki describes one repository and stays up to date from its sessions, tasks and receipts. Runs on the server with this deployment’s System model.</p>
+  <div class="wk-setup">
+    <label class="wk-setup-k">Reads the repository from</label>
+    <div class="b-field"><span class="orbit-select" data-open><span class="orbit-select-trigger"><span class="orbit-choice-value">shop-cli @ SG · build-01</span>${ic('down', 'orbit-choice-arrow')}</span></span><div class="b-popup"><div class="pb-mark" style="border-radius:8px"><span class="m-n">9</span><div class="orbit-select-popup"><div class="orbit-select-list">
+    <div class="orbit-select-group-label">github.com/acme/billing-api</div>
+    ${option('billing-api · build-01')}
+    <div class="orbit-select-group-label">github.com/acme/shop-cli</div>
+    ${option('shop-cli @ JP · build-01')}${option('shop-cli @ SG · build-01', 'data-selected')}${option('shop-cli @ staging · build-01')}${option('shop-cli @ US · build-01')}${option('shop-cli @ EU · build-02', '', '<span class="off">offline</span>', 'dim')}
+  </div></div></div></div></div>
+    <div class="wk-setup-d">This wiki will describe github.com/acme/shop-cli. The server reads the repository through this workspace’s runner.</div>
+    <span class="wk-setup-k">Model</span>
+    <div class="wk-setup-model"><span class="wk-model-line">System model<span class="dim"> · qwen3.8-27b-fp8</span><span class="wk-model-state up"><span class="wk-dot"></span>Up</span></span></div>
+    <div class="wk-setup-d">Set by this deployment, the same for every space.</div>
+    <label class="wk-setup-k">Daily limit</label>
+    <div class="wk-setup-limit"><span class="orbit-select" style="width:72px;flex:none"><span class="orbit-select-trigger"><span class="orbit-choice-value">8</span></span></span><span>runs a day</span></div>
+    <div class="wk-setup-d">A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes.</div>
+    <label class="wk-setup-k">Look back</label>
+    <span class="orbit-select"><span class="orbit-select-trigger"><span class="orbit-choice-value">Last 14 days</span>${ic('down', 'orbit-choice-arrow')}</span></span>
+    <div class="wk-setup-d">How far back maintenance starts reading when you turn it on. Changing it later never moves maintenance back.</div>
+  </div>
+  <div class="wk-privacy">${ic('info-circle', 'ic')}<span>The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model.</span></div>
+  <div class="orbit-overlay-footer"><button type="button" class="orbit-button orbit-button-default orbit-button-middle"><span>Cancel</span></button><button type="button" class="orbit-button orbit-button-primary orbit-button-middle"><span>Create wiki</span></button></div>
+</div>`;
+
+document.querySelector('[data-ios-sheet]').outerHTML = `<div class="pb-ios top grouped" style="height:666px;overflow:hidden"><div data-ios="status"></div>
+  <div class="io-nav"><span class="io-glass l io-sheetbtn">Cancel</span><div class="io-navtitle"><b>Create wiki</b></div><span class="io-glass r io-sheetbtn go">Create</span></div>
+  <div class="io-set-f" style="padding-top:8px">A wiki describes one repository and stays up to date from its sessions, tasks and receipts. Runs on the server with this deployment’s System model.</div>
+  <div class="io-set-h">Reads the repository from</div><div class="io-card"><div class="io-lrow"><span class="lb">shop-cli @ SG</span><span class="v">build-01</span>${sf('chev-ud', 'chev')}</div></div>
+  <div class="io-set-f">This wiki will describe github.com/acme/shop-cli. The server reads the repository through this workspace’s runner.</div>
+  <div class="io-set-h">Model</div><div class="io-card"><div class="io-lrow"><span class="lb">System model</span><span class="v">qwen3.8-27b-fp8</span></div></div>
+  <div class="io-set-h">Daily limit</div><div class="io-card"><div class="io-lrow"><span class="lb">8 runs a day</span><span class="io-stepper"><span>${sf('minus')}</span><span>${sf('plus')}</span></span></div></div>
+</div>`;
+</script>
+</body>
+</html>

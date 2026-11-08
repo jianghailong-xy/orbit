@@ -70,6 +70,7 @@ import {
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_REVIEW_TURN_KEY_PREFIX,
 } from './watch-turn-key';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -87,6 +88,7 @@ const CARD_FIELDS: Record<keyof TurnCards, true> = {
   confirmationReturn: true,
   sessionMessage: true,
   sessionReplies: true,
+  externalSender: true,
 };
 const FIELDS = Object.keys(CARD_FIELDS) as Array<keyof TurnCards>;
 
@@ -460,6 +462,17 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
     await ask(worker, recipient, 'merge now, or wait for review?');
     const sent = await prisma.conversationTurn.findFirstOrThrow({ where: { sessionId: recipient, senderSessionId: worker } });
     await assertSameCards('sessionMessage', recipient, sent.id, { ahead, listedWhileHanded: true });
+  });
+
+  // ── externalSender ────────────────────────────────────────────────────────────────────────────
+
+  await t.test('a Feishu group member\'s message (externalSender)', async () => {
+    const recipient = await session('a group\'s conversation with a queue');
+    const ahead = await ownerSays(recipient, 'the owner goes first');
+    const sent = (await sessions.createTurn(ownerId, recipient, { clientTurnId: randomUUID(), content: 'please fix the flaky test' }, {
+      externalSender: { source: 'FEISHU', id: 'ou_parity_member', name: 'Lin Mei' },
+    })).turnId;
+    await assertSameCards('externalSender', recipient, sent, { ahead, listedWhileHanded: true });
   });
 
   // ── sessionReplies ────────────────────────────────────────────────────────────────────────────

@@ -51,6 +51,8 @@ function doors() {
       return { ok: true as const };
     },
     assertHostedByRunner: async () => undefined,
+    // The rule on who may reach whom is sessions/session-reach.pg.spec.ts's, not this spec's.
+    assertMayReach: async () => ({ narrower: false }),
   };
   const autoRetry = {
     resendRetryMessage: async (_ownerId: string, _id: string) => ({ turnId: 'turn-4', seq: 4 }),

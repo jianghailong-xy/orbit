@@ -423,6 +423,7 @@ struct AgentPanes: View {
         let folderListing = grouping.folderListing
         let timeSections = grouping.timeSections
         let projectRows = grouping.projectRows
+        let projectMarks = grouping.projectListing.marks
         #endif
         List(selection: listSelection) {
             #if os(iOS)
@@ -478,9 +479,10 @@ struct AgentPanes: View {
                             // Only the list's own first row drops the hairline above it: with
                             // folder rows on top, the first "Today" row is not that row.
                             if session.id == section.sessions.first?.id, folderListing.folders.isEmpty {
-                                listRow(session, projects: projectRows).listRowSeparator(.hidden, edges: .top)
+                                listRow(session, projects: projectRows, marks: projectMarks)
+                                    .listRowSeparator(.hidden, edges: .top)
                             } else {
-                                listRow(session, projects: projectRows)
+                                listRow(session, projects: projectRows, marks: projectMarks)
                             }
                         }
                     } else if section.title == "Pinned" {
@@ -490,14 +492,14 @@ struct AgentPanes: View {
                         // the sidebar list style.
                         Section {
                             if !pinnedCollapsed {
-                                ForEach(section.sessions) { listRow($0, projects: projectRows) }
+                                ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                             }
                         } header: {
                             sectionHeaderBand { pinnedSectionHeader(section.title) }
                         }
                     } else {
                         Section {
-                            ForEach(section.sessions) { listRow($0, projects: projectRows) }
+                            ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                         } header: {
                             sectionHeaderBand { Text(section.title).textCase(nil) }
                         }
@@ -593,15 +595,18 @@ struct AgentPanes: View {
         // the identical payload on an independent timer. That duplicate mattered most exactly when
         // the list was busiest: with several sessions running, the two cadences interleaved into a
         // near-continuous stream of whole-list decodes and list diffs.
+        //
+        // Completed / Trash read the whole account's list, so their poll follows the control stream
+        // (`ViewPoll`): a row joining or moving in them is read a second later, otherwise once a
+        // minute while the stream is live; every 4 s while it is down; never while the app cannot be
+        // seen (docs/list-freshness-design.md §4 R6).
         .task(id: "\(agent.id)|\(view.rawValue)") {
             await agents.loadSessions(agentID: agent.id, view: view, reset: true)
             #if os(iOS)
             await app.projects?.load()
             #endif
             guard view != .open else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-                if Task.isCancelled { break }
+            await ViewPoll.run(app, every: 4, hints: { app.lifecycleHints }) {
                 await agents.loadSessions(agentID: agent.id, view: view)
             }
         }
@@ -904,6 +909,7 @@ struct AgentPanes: View {
                                       folders: inputs.workspaceFolders,
                                       projects: inputs.projects, view: inputs.view,
                                       byTag: inputs.byTag, searching: inputs.searching,
+                                      workspaceID: inputs.workspaceID,
                                       runnerOffline: inputs.runnerOffline,
                                       coordinators: coordinators,
                                       contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions,
@@ -926,7 +932,7 @@ struct AgentPanes: View {
             }
         }
         return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(address) })
-        .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
+        .sessionProjectRowActions(row, view: view, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
     }
@@ -1019,20 +1025,26 @@ struct AgentPanes: View {
     /// destination value on the compact stack. There is no third state for "highlighted but not
     /// openable" to live in: the highlight IS the pushed console in both shapes, so a tap always
     /// either selects a row that isn't the page showing or pushes the one that is.
-    @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow]) -> some View {
+    @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],
+                                      marks: [String: SessionProjectMark]) -> some View {
         if let project = projects[s.id] {
             projectRow(project)
         } else {
-            sessionRow(s)
+            sessionRow(s, mark: marks[s.id])
         }
     }
 
-    @ViewBuilder private func sessionRow(_ s: Session) -> some View {
-        let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
+    /// `mark`: the project of a member whose project has no row in this workspace (owner 2026-11-07,
+    /// option A) — drawn on the row, and the long press's Sessions opens that project's sessions.
+    @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark? = nil) -> some View {
+        let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open, projectMark: mark)
+        let onSessions: (() -> Void)? = mark.map { mark in
+            { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: agent.id, view: view)) }
+        }
         switch rowNavigation {
         case .selection:
             row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
-                                  onMove: { movingSession = s })
+                                  onMove: { movingSession = s }, onSessions: onSessions)
                 .tag(s.id)
         case .push:
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
@@ -1049,7 +1061,7 @@ struct AgentPanes: View {
             // does not pass them up from its label — which is where this wrapper used to leave them,
             // and why a swipe or a long press on a compact session row did nothing.
             .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
-                               onMove: { movingSession = s })
+                               onMove: { movingSession = s }, onSessions: onSessions)
         }
     }
 
@@ -1597,6 +1609,9 @@ struct AgentSessionRow: View {
     var deleted: Bool = false
     /// True in Open, where pinning applies. Completed/Trash rows never show the bar.
     var showsPin: Bool = false
+    /// The project this row belongs to where the list has no row for that project (owner 2026-11-07,
+    /// option A): its progress leads the second line, as it leads a project row's.
+    var projectMark: SessionProjectMark? = nil
     private var isPinned: Bool { showsPin && session.pinnedAt != nil }
     @Environment(AppModel.self) private var app
     /// The live watches that will resume this session: what a parked row says it's doing instead.
@@ -1683,6 +1698,7 @@ struct AgentSessionRow: View {
                 }
             }
             HStack(spacing: 7) {
+                if let projectMark { SessionProjectMarkChip(mark: projectMark) }
                 SessionCoordinatorBadge(session: session)
                 Text(line.text)
                     .font(.orbitListSubtitle)
@@ -1711,6 +1727,7 @@ struct AgentSessionRow: View {
                 }
             }
             HStack(spacing: 7) {
+                if let projectMark { SessionProjectMarkChip(mark: projectMark) }
                 SessionCoordinatorBadge(session: session)
                 Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }

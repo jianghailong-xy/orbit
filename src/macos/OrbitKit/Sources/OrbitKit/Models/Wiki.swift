@@ -378,6 +378,78 @@ public struct WikiMaintenanceHeld: Codable, Equatable, Sendable {
 /// One owner's wiki for one codebase. `GET /wiki/spaces` answers these with `pendingOps` — the
 /// proposals waiting in it, which the drawer's amber number sums — and what the contract's
 /// `space.list` adds beside it; `GET /wiki/spaces/:id` with `usage` when asked for it.
+/// One row of Wiki settings' Workspaces section, or of what Add workspace offers (contract `space.workspaces`).
+public struct WikiSpaceWorkspaceRow: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+    /// The machine it is on, as the app names it; nil for a workspace no runner holds.
+    public let runner: String?
+    public let inWiki: Bool
+
+    public init(id: String, name: String, runner: String?, inWiki: Bool) {
+        self.id = id
+        self.name = name
+        self.runner = runner
+        self.inWiki = inWiki
+    }
+}
+
+/// `GET /wiki/spaces/:id/workspaces`: who is in the wiki, and who can be added to it.
+public struct WikiSpaceWorkspaces: Codable, Equatable, Sendable {
+    public let workspaces: [WikiSpaceWorkspaceRow]
+    public let addable: [WikiSpaceWorkspaceRow]
+
+    public init(workspaces: [WikiSpaceWorkspaceRow], addable: [WikiSpaceWorkspaceRow]) {
+        self.workspaces = workspaces
+        self.addable = addable
+    }
+}
+
+/// What `POST /wiki/spaces/:id/workspaces` carries.
+public struct WikiWorkspaceAddRequest: Encodable, Sendable {
+    public let workspaceId: String
+
+    public init(workspaceId: String) {
+        self.workspaceId = workspaceId
+    }
+}
+
+/// What `DELETE /wiki/spaces/:id` answers (contract `space.trash`): the wiki is in Trash from `deletedAt`, and is
+/// deleted for good at `purgeAt` (ISO 8601), 365 days on.
+public struct WikiTrashMove: Codable, Equatable, Sendable {
+    public let spaceId: String
+    public let deletedAt: String
+    public let purgeAt: String
+}
+
+/// One wiki in Trash, as `GET /wiki/trash` lists it (contract `space.trash.list`): the slug and the repository it had,
+/// which a restore gives back, when it was moved and when it is deleted for good (ISO 8601), and its active entries.
+public struct WikiTrashRow: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let slug: String
+    public let title: String
+    public let repoUrlNorm: String?
+    public let deletedAt: String
+    public let purgeAt: String
+    public let entries: Int
+
+    public init(id: String, slug: String, title: String, repoUrlNorm: String? = nil, deletedAt: String, purgeAt: String,
+                entries: Int) {
+        self.id = id
+        self.slug = slug
+        self.title = title
+        self.repoUrlNorm = repoUrlNorm
+        self.deletedAt = deletedAt
+        self.purgeAt = purgeAt
+        self.entries = entries
+    }
+}
+
+/// `GET /wiki/trash`: the owner's wikis in Trash, the newest move first.
+public struct WikiTrash: Codable, Equatable, Sendable {
+    public let spaces: [WikiTrashRow]
+}
+
 public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let slug: String
@@ -396,6 +468,9 @@ public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
     /// Only on the list read, and nil from a server older than it: the things of the space's plan that
     /// wait on the owner, counted as `WikiPlanLogic.pending` counts them.
     public let planWaiting: Int?
+    /// Only on the list read, and nil from a server older than it: the space's applied chat cards whose rewrite
+    /// waits on the owner, one each (contract `space.list.chatWaiting`) — the chat's part of W.
+    public let chatWaiting: Int?
     /// Only on the list read, and nil from a server older than it: the workspaces bound to the space, in
     /// the order they were bound.
     public let workspaceIds: [String]?
@@ -407,7 +482,7 @@ public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
                 rootCommitSha: String? = nil, settings: WikiSpaceSettings? = nil,
                 createdAt: String? = nil, updatedAt: String? = nil, pendingOps: Int? = nil,
                 usage: WikiUsage? = nil, planWaiting: Int? = nil, workspaceIds: [String]? = nil,
-                docs: WikiDocsDirectory.Counts? = nil) {
+                docs: WikiDocsDirectory.Counts? = nil, chatWaiting: Int? = nil) {
         self.id = id
         self.slug = slug
         self.title = title
@@ -419,6 +494,7 @@ public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
         self.pendingOps = pendingOps
         self.usage = usage
         self.planWaiting = planWaiting
+        self.chatWaiting = chatWaiting
         self.workspaceIds = workspaceIds
         self.docs = docs
     }
@@ -633,10 +709,12 @@ public enum WikiVerificationVerdict: String, Codable, Sendable, CaseIterable {
 }
 
 /// What the verifier could read of an op's sources when its verdict was recorded (contract
-/// `reviewModes.verification.evidence`): with none of them readable, the verdict applied nothing
-/// past Unreviewed.
+/// `reviewModes.verification.evidence`): with none of them readable, or only a note, the verdict
+/// applied nothing past Unreviewed.
 public enum WikiVerificationEvidence: String, Codable, Sendable, CaseIterable {
-    case readable, unreadable
+    case readable
+    case secondHand = "second_hand"
+    case unreadable
     case unknown
 
     public init(from decoder: Decoder) throws {
@@ -912,6 +990,13 @@ public struct WikiSearchHit: Codable, Equatable, Sendable, Identifiable {
     /// `keyword` / `path` (and `semantic`, phase 2), kept as the words they are.
     public let match: [String]?
     public let topics: [String]?
+    /// How old the entry is (contract `agentSurface.toolSpecs.wiki_search.age`), as the server spells
+    /// each time: when it was recorded, when its current revision was written, and the commit and time
+    /// its anchors were last checked at. Nil from a server that predates them, and for a check not made yet.
+    public let recordedAt: String?
+    public let changedAt: String?
+    public let anchorCheckedRef: String?
+    public let anchorCheckedAt: String?
 }
 
 // MARK: - writes
@@ -992,6 +1077,19 @@ public struct WikiMaintenanceUpdate: Encodable, Equatable, Sendable {
         self.workspaceId = workspaceId
         self.dailyRunLimit = dailyRunLimit
         self.lookbackDays = lookbackDays
+    }
+}
+
+/// What makes a wiki (`POST /wiki/spaces`): its name, its repository, and its maintenance from the start.
+public struct WikiSpaceCreate: Encodable, Equatable, Sendable {
+    public let title: String
+    public let repoUrl: String
+    public let maintenance: WikiMaintenanceUpdate
+
+    public init(title: String, repoUrl: String, maintenance: WikiMaintenanceUpdate) {
+        self.title = title
+        self.repoUrl = repoUrl
+        self.maintenance = maintenance
     }
 }
 

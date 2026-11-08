@@ -17,6 +17,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
+import io.orbitd.android.cards.ExpiredAttachmentFace
+import io.orbitd.android.core.cards.EvidenceFiles
+import io.orbitd.android.text.ExpiredRead
 import io.orbitd.android.text.MarkdownText
 import java.text.NumberFormat
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -86,6 +89,28 @@ fun clearAttachmentHandoffs(context: Context) {
     root.deleteRecursively()
 }
 
+/** [action]: `Intent.ACTION_SEND`, `Intent.ACTION_VIEW` or "copy": the bytes reach another app or the clipboard only as one of these
+ * private handoff files. */
+internal suspend fun handOffFile(context: Context, name: String, mime: String, data: ByteArray, action: String) {
+    val file = withContext(Dispatchers.IO) {
+        val directory = File(context.cacheDir, "handoff/${UUID.randomUUID()}").apply { check(mkdirs()) }
+        File(directory, name.substringAfterLast('/').substringAfterLast('\\').ifBlank { "attachment" }).apply { writeBytes(data) }
+    }
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.attachments", file)
+    val clip = ClipData.newUri(context.contentResolver, name, uri)
+    if (action == "copy") {
+        context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+    } else {
+        val intent = Intent(action).apply {
+            if (action == Intent.ACTION_SEND) { type = mime; putExtra(Intent.EXTRA_STREAM, uri) }
+            else setDataAndType(uri, mime)
+            clipData = clip
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, if (action == Intent.ACTION_SEND) "Share file" else "Open file"))
+    }
+}
+
 /** [open]: where a link inside a previewed Markdown file goes. */
 @Composable
 fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray, closeLabel: String = "Close attachment",
@@ -105,6 +130,11 @@ private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> B
     var notice by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
+    // Told its bytes have gone, nothing here can be tried again or handed on: what is left of it is the placeholder.
+    var expired by remember { mutableStateOf<ExpiredRead?>(null) }
+    fun failedRead(failure: Exception, words: String) {
+        if (EvidenceFiles.isExpiredRead(failure)) expired = ExpiredRead(EvidenceFiles.expiredAtOf(failure)) else error = words
+    }
     val image by produceState<android.graphics.Bitmap?>(null, retry) {
         if (mime.startsWith("image/")) {
             try {
@@ -113,7 +143,7 @@ private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> B
                     decodeAttachmentImage({ data.inputStream() }, maxDimension = 2560)
                 }
             } catch (cancel: CancellationException) { throw cancel }
-            catch (_: Exception) { error = "Couldn't load image. Retry or open the file." }
+            catch (failure: Exception) { failedRead(failure, "Couldn't load image. Retry or open the file.") }
         }
     }
     // A07-1: a file that is text opens in the reader right here (iOS b8d661967) — an empty one too; anything else keeps the
@@ -124,7 +154,7 @@ private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> B
                 val data = bytes()
                 value = withContext(Dispatchers.Default) { TextFilePreview.of(data, name) }
             } catch (cancel: CancellationException) { throw cancel }
-            catch (_: Exception) { error = "Couldn't open that file. Retry or open it in another app." }
+            catch (failure: Exception) { failedRead(failure, "Couldn't open that file. Retry or open it in another app.") }
         }
     }
     fun run(success: String? = null, action: suspend (ByteArray) -> Unit) {
@@ -142,25 +172,7 @@ private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> B
             context.contentResolver.openOutputStream(uri)?.use { it.write(data) } ?: error("Unavailable destination")
         } }
     }
-    suspend fun handoff(data: ByteArray, action: String) {
-        val file = withContext(Dispatchers.IO) {
-            val directory = File(context.cacheDir, "handoff/${UUID.randomUUID()}").apply { check(mkdirs()) }
-            File(directory, name.substringAfterLast('/').substringAfterLast('\\').ifBlank { "attachment" }).apply { writeBytes(data) }
-        }
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.attachments", file)
-        val clip = ClipData.newUri(context.contentResolver, name, uri)
-        if (action == "copy") {
-            context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
-        } else {
-            val intent = Intent(action).apply {
-                if (action == Intent.ACTION_SEND) { type = mime; putExtra(Intent.EXTRA_STREAM, uri) }
-                else setDataAndType(uri, mime)
-                clipData = clip
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(intent, if (action == Intent.ACTION_SEND) "Share file" else "Open file"))
-        }
-    }
+    suspend fun handoff(data: ByteArray, action: String) = handOffFile(context, name, mime, data, action)
     suspend fun saveImage(data: ByteArray) = withContext(Dispatchers.IO) {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(data, 0, data.size, options)
@@ -185,6 +197,10 @@ private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> B
     Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column(Modifier.padding(12.dp)) {
         TextButton(onClick = close) { Text(closeLabel) }
         Text(name, style = MaterialTheme.typography.titleMedium)
+        expired?.let { gone ->
+            ExpiredAttachmentFace(gone.at, Modifier.padding(top = 12.dp).size(120.dp, 90.dp).testTag("attachment-expired"))
+            return@Column
+        }
         notice?.let { Text(it) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = { error = null; retry++ }) { Text("Retry") } }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())

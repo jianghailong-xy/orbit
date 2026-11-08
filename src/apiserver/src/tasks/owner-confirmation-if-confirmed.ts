@@ -21,6 +21,7 @@ import { doneTaskLandingWork } from '../projects/project-integration-job';
 import { automaticAuthorizationRefusal } from '../projects/project-promotion';
 import { changedFileCount, mergeTargetOf } from '../sessions/session-move';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
+import { readTaskCommitEvidence } from './task-codeless';
 import type { DependentRelease } from './tasks.service';
 
 /**
@@ -29,8 +30,9 @@ import type { DependentRelease } from './tasks.service';
  *
  * Each item is read from the rule that will act on it rather than restated here: the tasks it starts
  * are the completion edge's own answer (`TasksService.dependentRelease`), the landing is what
- * `enqueueForDoneTask` would queue on the line `defaultStartLine` names, and the Automatic merge into
- * main is M-T11's project half (`automaticAuthorizationRefusal`). A card that said anything else
+ * `enqueueForDoneTask` would queue on the line `defaultStartLine` names (a branch with no changes
+ * aside, `readLanding`), and the Automatic merge into main is M-T11's project half
+ * (`automaticAuthorizationRefusal`). A card that said anything else
  * would be the 2026-10-02 card again: confirmed, and a second later a dependent started on a branch
  * nobody had told the owner about.
  *
@@ -128,13 +130,20 @@ export function confirmationLanding(input: {
  * then on §2.5 J9 holds a code task's dependents until a receipt puts its work on the line or on
  * main — `prerequisiteLanded`'s last clause, which a receipt already on record answers now. An
  * AGENT_PUSH project's too: its receipt is the observation's (O-R1).
+ *
+ * A branch with no changes has no work to land, and the card says so (§10.5 O-L8). That is only what
+ * the card says: `doneTaskLandingWork` is the queue's own read and does not change, so the DONE still
+ * asks the line once and the dependents still wait for that answer (J9).
  */
 async function readLanding(
   db: Prisma.TransactionClient,
-  { ownerId, taskId }: { ownerId: string; taskId: string },
+  { ownerId, taskId, sessionId }: { ownerId: string; taskId: string; sessionId: string },
 ): Promise<{ landing: OwnerConfirmationLanding; startsAfterLanding: boolean }> {
   const handed = await doneTaskLandingWork(db, ownerId, taskId);
   if (!handed.work) return { landing: 'NONE', startsAfterLanding: false };
+  if (await waitingBranchHasNoChanges(db, { ownerId, taskId, sessionId })) {
+    return { landing: 'NONE', startsAfterLanding: false };
+  }
   const { line } = await defaultStartLine(db, ownerId, handed.projectId);
   const project = await db.project.findFirst({
     where: { id: handed.projectId, ownerId },
@@ -156,6 +165,22 @@ async function readLanding(
     landing: confirmationLanding({ deliveryMode: codebase?.deliveryMode, automatic }),
     startsAfterLanding: taskLanding(receipts, landingBranchesFor(codebase)) === 'NOT_KNOWN',
   };
+}
+
+/**
+ * Whether the runner measured the waiting run's branch empty, and nothing says the task has commits
+ * of its own. A `changed_files` of null is a runner that has not reported yet, which measures nothing.
+ */
+async function waitingBranchHasNoChanges(
+  db: Prisma.TransactionClient,
+  { ownerId, taskId, sessionId }: { ownerId: string; taskId: string; sessionId: string },
+): Promise<boolean> {
+  const waiting = await db.session.findFirst({
+    where: { id: sessionId, ownerId },
+    select: { changedFiles: true },
+  });
+  if (!Array.isArray(waiting?.changedFiles) || waiting.changedFiles.length > 0) return false;
+  return (await readTaskCommitEvidence(db, taskId)).length === 0;
 }
 
 /** The waiting run's branch, or null when it worked on none. */

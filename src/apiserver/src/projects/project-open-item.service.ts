@@ -64,12 +64,14 @@ import {
   openItemActions,
   openItemChat,
   openItemRequiredAction,
+  outdatedRunnerOf,
   primaryAction,
   openItemFacts,
   type LandedFix,
   landingLineOf,
   openItemMessage,
   openItemOwed,
+  openItemVisible,
   openItemTurnId,
   openItemsNoLongerOwed,
   ownerAnswerMessage,
@@ -2956,7 +2958,17 @@ export class ProjectOpenItemService {
                    WHERE s."task_id" = t."id"
                      AND s."starts_task_work"
                      AND s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
-                     AND s."id" IS DISTINCT FROM i."session_id"))`);
+                     AND (s."id" IS DISTINCT FROM i."session_id"
+                          -- The failing attempt itself is not "in flight" merely because the turn
+                          -- that wrote FAILED is still running; a message written to it afterwards
+                          -- is. That turn resumes the same session (auto-retry, a coordinator
+                          -- continuing the work, the failure card's Retry), and without this the
+                          -- item never closes and escalates to the owner instead.
+                          OR EXISTS (
+                            SELECT 1 FROM "conversation_turn" resumed_turn
+                             WHERE resumed_turn."session_id" = s."id"
+                               AND resumed_turn."kind" = 'message'
+                               AND resumed_turn."created_at" > (i."waiting_since" AT TIME ZONE 'UTC')))))`);
       await this.prisma.$executeRaw(Prisma.sql`
         UPDATE "project_open_item" i
            SET "state" = 'RESOLVED',
@@ -3110,7 +3122,13 @@ export class ProjectOpenItemService {
       },
     });
     const settled = await openItemsNoLongerOwed(this.prisma, open.map((row) => row.id));
-    const rows = open.filter((row) => !settled.has(row.id));
+    const hidden = open.some((row) => row.assignee === 'COORDINATOR')
+      ? new Set((await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT item."id" FROM "project_open_item" item
+           WHERE item."project_id" = ${projectId}::uuid AND item."state" = 'OPEN'
+             AND NOT ${openItemVisible('item')}`)).map((row) => row.id))
+      : new Set<string>();
+    const rows = open.filter((row) => !settled.has(row.id) && !hidden.has(row.id));
     const keys = rows.flatMap((row) => row.deliveries);
     // §4.7 H5: what the coordinator closed in the last day — handled, or superseded by the item its
     // failed rerun opened — so the card a conversation drew for it is seen to end rather than vanish.
@@ -3331,7 +3349,8 @@ export class ProjectOpenItemService {
         itemId: row.id,
         kind: row.kind as OpenItemKind,
         title: row.title,
-        detailLine: detailLine(row.kind, row.payload),
+        // §10.5 O-L8's line asks for something, and nothing is asked of a settled item.
+        detailLine: outdatedRunnerOf(row.payload) ? '' : detailLine(row.kind, row.payload),
         question: null,
         startRequest: null,
         doneRequest: null,
@@ -3828,6 +3847,11 @@ function detailLine(kind: string, payload: unknown): string {
   if (kind === DELIVERY_REVIEW_KIND) return deliveryReviewDetailLine(payload);
   if (kind === LANDING_UNOBSERVED_KIND) return landingUnobservedDetailLine(payload);
   if (kind === LANDED_WITHOUT_CONFIRMATION_KIND) return landedWithoutConfirmationDetailLine(payload);
+  // §10.5 O-L8: what the error code alone would have a reader conclude about the task is not so.
+  const outdatedRunner = outdatedRunnerOf(payload);
+  if (kind === 'INTEGRATION_ERROR' && outdatedRunner) {
+    return `Runner ${outdatedRunner} is out of date: update it, then run this check again.`;
+  }
   if (kind !== 'TASK_FAILED') return '';
   const failure = (payload ?? {}) as {
     how?: string;

@@ -418,6 +418,11 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   const failureClass = failureClassForOpenItem(input);
   const actor = ownerOrCoordinator(row);
   const main = row.mainBranch ?? 'main';
+  // §10.5 O-L8: a TASK_BRANCH candidate's failure is about that task's branch, and a MAIN line has no
+  // other. Only the owner's cell can ask the coordinator, so the coordinator's own next door is the fix.
+  const taskBranch = taskBranchSourceOf(row.payload);
+  const subject = taskBranch ? 'This task’s branch' : 'The project branch';
+  const orFix = taskBranch && row.assignee !== 'OWNER' ? 'file a fix task' : 'ask the coordinator to fix it';
 
   // This is the copy approved in the project effect and is intentionally byte-for-byte stable:
   // the three clients render this field, they do not translate it. Its main is the project's main
@@ -425,7 +430,7 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   if (row.assignee === 'OWNER' && row.kind === 'INTEGRATION_CHECK_FAILED'
       && (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION')
       && failureClass !== 'CONFLICT') {
-    return `Nothing on the project branch reaches ${main} until this check passes — re-run it or ask the coordinator to fix it.`;
+    return `Nothing on ${taskBranch ? 'this task’s branch' : 'the project branch'} reaches ${main} until this check passes — re-run it or ask the coordinator to fix it.`;
   }
 
   if (row.kind === 'COORDINATOR_QUESTION') {
@@ -472,12 +477,18 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   }
   if (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION') {
     if (failureClass === 'CONFLICT') {
+      if (taskBranch) {
+        return `This task’s branch cannot reach ${main} until this conflict is repaired — file a task that puts its work on ${main}`
+          + `${row.assignee === 'OWNER' ? ', or ask the coordinator to do it' : ''}.`;
+      }
       return `The project branch cannot reach ${main} until this promotion conflict is repaired — create a sync task or ask the coordinator to fix it.`;
     }
     if (failureClass === 'CHECK_TIMED_OUT') {
-      return `The project branch cannot reach ${main} until this check finishes — re-run it with a reason or ask the coordinator to fix it.`;
+      return `${subject} cannot reach ${main} until this check finishes — re-run it with a reason or ${orFix}.`;
     }
-    return `The project branch cannot reach ${main} until this integration is repaired — re-run it or ask the coordinator to fix it.`;
+    const outdatedRunner = outdatedRunnerOf(row.payload);
+    if (outdatedRunner) return `Update runner ${outdatedRunner}, then run this check again.`;
+    return `${subject} cannot reach ${main} until this integration is repaired — re-run it or ${orFix}.`;
   }
   if (failureClass === 'CONFLICT') {
     return 'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch or ask the coordinator to do it.';
@@ -822,6 +833,29 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
   'INTEGRATION_ERROR',
 ];
 
+/** The current assignment starts its window only when its ITEM turn reaches the engine.
+ * waiting_since moves on "Ask the coordinator again", so an older delivery cannot start it. */
+export function openItemDeliveredAt(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return Prisma.sql`(
+    SELECT min(turn."delivered_at")
+      FROM "project_open_item_delivery" delivery
+      JOIN "conversation_turn" turn
+        ON turn."session_id" = delivery."session_id"
+       AND turn."client_turn_id" = delivery."client_turn_id"
+     WHERE delivery."item_id" = ${item}."id"
+       AND delivery."purpose" = 'ITEM'
+       AND turn."kind" = 'message'
+       AND turn."delivered_at" >= ${item}."waiting_since"
+  )`;
+}
+
+/** Owner-facing lists omit coordinator items still waiting in the conversation's queue. */
+export function openItemVisible(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return Prisma.sql`(${item}."assignee" <> 'COORDINATOR' OR ${openItemDeliveredAt(alias)} IS NOT NULL)`;
+}
+
 /**
  * Whether an OPEN item is still owed — whether what it is about can still be put right by whoever it
  * is in front of — as SQL over the `project_open_item` row aliased `alias`. The one definition every
@@ -853,10 +887,14 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
  *    edges for a handled item; until one commits, M-T11 and the readers that use this predicate
  *    still count the OPEN item, including an owner-held item under H4;
  *  - a task's failure, while the task still stands where the failure left it: not DONE, not
- *    cancelled, not replaced, and no attempt at it in flight. That is the exact complement of the
- *    four facts `resolveByFact`'s first statement answers a failure with — `TASK_DONE`,
- *    `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED` — read off the same rows, so a failure whose task
- *    moved on is owed by nobody and an edge that missed it leaves nothing in front of anybody;
+ *    cancelled, not replaced, and no attempt at it in flight. An attempt is in flight when a live
+ *    work session holds the task other than the one the failure came from, or when that same
+ *    session was resumed after the item opened — a new message turn on it is a new run at the
+ *    task, which is what an auto-retry, a coordinator continuing the conversation and the failed
+ *    session card's Retry all are. That is the exact complement of the four facts `resolveByFact`'s first
+ *    statement answers a failure with — `TASK_DONE`, `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED` —
+ *    read off the same rows, so a failure whose task moved on is owed by nobody and an edge that
+ *    missed it leaves nothing in front of anybody;
  *  - a `LANDING_UNOBSERVED` (§10.7), while its task is still DONE, not replaced, not declared
  *    codeless and still NOT_KNOWN (§1.4, `taskLandingSql`): the complement of the endings
  *    `resolveByFact` and the landing edge write — `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED`,
@@ -922,7 +960,12 @@ export function openItemOwed(alias: string): Prisma.Sql {
               WHERE owed_session."task_id" = owed_task."id"
                 AND owed_session."starts_task_work"
                 AND owed_session."status" IN (${liveSessions})
-                AND owed_session."id" IS DISTINCT FROM ${item}."session_id"))
+                AND (owed_session."id" IS DISTINCT FROM ${item}."session_id"
+                     OR EXISTS (
+                       SELECT 1 FROM "conversation_turn" resumed_turn
+                        WHERE resumed_turn."session_id" = owed_session."id"
+                          AND resumed_turn."kind" = 'message'
+                          AND resumed_turn."created_at" > (${item}."waiting_since" AT TIME ZONE 'UTC')))))
       ELSE true
     END)`;
 }
@@ -2047,6 +2090,31 @@ interface IntegrationItemPayload {
   /** The round inside the claim that failed, from 1, as the v2 reports named it (§2.2 J-T4). Its own
    *  top-level field, not read by the delivery text. */
   round?: number | null;
+  /**
+   * §10.5 O-L8: the runner whose check of a task's branch answered SOURCE_BRANCH_MISSING without
+   * declaring integration-observe/v1, by the name its owner knows it by. The delivery text DOES read
+   * this one, and the replay stays byte for byte (G6): an item is written once, and one opened before
+   * this field has none.
+   */
+  outdatedRunner?: string;
+  /**
+   * §10.5 O-L8: the source of the candidate this item is about, written only when it is one task's
+   * branch. The delivery text reads this one too, and the replay stays byte for byte (G6): a project
+   * branch's payload never has it, and neither has one opened before this field.
+   */
+  sourceKind?: string;
+}
+
+/** §10.5 O-L8: whether an item's payload says its candidate is one task's branch. */
+function taskBranchSourceOf(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  return (payload as { sourceKind?: unknown }).sourceKind === 'TASK_BRANCH';
+}
+
+/** §10.5 O-L8: the out-of-date runner an item's payload names, or null for every other item. */
+export function outdatedRunnerOf(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  return filled((payload as { outdatedRunner?: unknown }).outdatedRunner);
 }
 
 /**
@@ -2153,8 +2221,15 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
     ];
   }
   const detail = payload.errorDetail == null ? null : JSON.stringify(payload.errorDetail);
+  const outdatedRunner = outdatedRunnerOf(payload);
   return [
     `The integration job ended with an error: ${payload.errorCode ?? 'no error code recorded'}.`,
+    // §10.5 O-L8: the code alone reads as "this task has nothing to land", which it does not say.
+    ...(outdatedRunner
+      ? [`Runner ${outdatedRunner} does not declare integration-observe/v1, so it looked for this task's branch on the remote by name. `
+        + 'That says nothing about whether the task has work to land. '
+        + 'Update the runner, then run integration_retry on this candidate.']
+      : []),
     ...(detail ? [`Error detail: ${clip(detail)}`] : []),
   ];
 }
@@ -2313,6 +2388,19 @@ function mainSyncNextStep(
 }
 
 /**
+ * What a TASK_BRANCH candidate's failure says about a task filed to answer it (§10.5 O-L8). A MAIN line
+ * has no branch for that task to change: its branch is its own candidate (M-F2), and a merge into main
+ * from a MAIN line always asks (`automaticAuthorizationRefusal`). Nothing about it reaches this
+ * candidate, which only a merge recorded for this same branch retires (M-T13), or this item, which
+ * `rearmItemFixedBy` does not deliver again because a candidate's item is not a task landing's.
+ */
+function fixOfATaskBranch(doors: Pick<OpenItemDoorMessageNames, 'resolveMcp'>): string {
+  return 'When that task is DONE its branch becomes a candidate of its own, with its own check and its own card for the account owner. '
+    + 'Its landing leaves this candidate and this item as they are and does not bring this item back to you: '
+    + `once this task’s work is on the project’s main branch, close this item with ${doors.resolveMcp}.`;
+}
+
+/**
  * The next step a blocked candidate's failure leaves its coordinator (§4.7 H1) — the item a promotion's
  * check or landing opens, which names no task.
  *
@@ -2321,6 +2409,9 @@ function mainSyncNextStep(
  * `integration_retry` with the candidate's id. What that door brings back is the QUESTION — a
  * candidate that passed its checks — and never the answer: the merge stays the account owner's card,
  * or the Automatic setting's own rule over a clean result, exactly as it was before the red.
+ *
+ * That is a PROJECT_BRANCH candidate. A TASK_BRANCH one, on a MAIN line, is said differently once its
+ * payload names that source (§10.5 O-L8): no project branch can change there, and its merge always asks.
  */
 function promotionNextStep(
   projectId: string,
@@ -2329,17 +2420,28 @@ function promotionNextStep(
   payload: IntegrationItemPayload,
   doors: OpenItemDoorMessageNames,
 ): string {
-  const about = 'No task stands behind this item: it comes from the job of a promotion (merging the project branch into main), and such a job does no work for any single '
-    + 'task.\n';
+  const taskBranch = taskBranchSourceOf(payload);
+  const about = taskBranch
+    ? 'A task stands behind this item, the one its title names: the job that failed was checking or landing that task’s branch, on its way to the project’s main branch. '
+      + 'The failure does not change the task’s status.\n'
+    : 'No task stands behind this item: it comes from the job of a promotion (merging the project branch into main), and such a job does no work for any single '
+      + 'task.\n';
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
     // The re-check is not named here: a conflict's cell holds no such door, and the sync task below
     // is the one that answers it.
     return about + lines(
-      'Only a project branch that changed can resolve a conflict: rerunning the check as it stands would conflict again. '
-        + `File a sync task with ${doors.taskCreateMcp} that starts from the project branch tip and merges the upstream tip into its source branch, resolving the conflict and committing it; `
-        + `attach it to this item with fixesOpenItemId: ${itemId}. `
-        + 'Once that task lands, the platform opens a new candidate for the new branch tip and checks it again, '
-        + 'and closes this candidate and this item with it.',
+      // A task's branch lands by a rebase (M6), so the project branch's recipe would fail here: a
+      // resolution in a merge commit is dropped by the replay, which then meets the same conflict.
+      taskBranch
+        ? 'Rerunning the check as it stands would conflict again, and more commits on this task’s branch do not change this candidate: it is one commit of that branch, replayed onto the tip of the project’s main branch. '
+          + `What answers this conflict is a new task: file one with ${doors.taskCreateMcp} that puts this task’s work on that tip, resolving the conflict in ordinary commits, and attach it to this item with fixesOpenItemId: ${itemId}. `
+          + 'Do not resolve it in a merge commit: a task’s branch lands by a rebase, which drops merge commits and meets the same conflict again. '
+          + fixOfATaskBranch(doors)
+        : 'Only a project branch that changed can resolve a conflict: rerunning the check as it stands would conflict again. '
+          + `File a sync task with ${doors.taskCreateMcp} that starts from the project branch tip and merges the upstream tip into its source branch, resolving the conflict and committing it; `
+          + `attach it to this item with fixesOpenItemId: ${itemId}. `
+          + 'Once that task lands, the platform opens a new candidate for the new branch tip and checks it again, '
+          + 'and closes this candidate and this item with it.',
       askOwnerFirst(projectId, itemId, doors),
     );
   }
@@ -2347,14 +2449,19 @@ function promotionNextStep(
   const retry = ` (projectId: ${projectId}, promotionId: ${candidate}, reason: why this time will be different)`;
   const rerun = doors.retryMcp == null ? null
     : `If it is not the work’s problem — the merge check’s baseline was repaired since, the check timed out (go test hitting its default 10-minute limit, for example), the integration machinery failed — rerun this candidate’s check once with ${doors.retryMcp}`
-      + `${retry}. Once the check passes, the merge is still confirmed by the account owner on the card, or done automatically by the Automatic `
-      + 'setting under its usual rule: this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.';
+      + `${retry}. Once the check passes, the merge is still confirmed by the account owner on the card, `
+      + (taskBranch ? 'whatever the Automatic setting says' : 'or done automatically by the Automatic setting under its usual rule')
+      + ': this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.';
   const tradeOff = doors.askOwnerMcp == null ? null
     : `If the merge-check command or its time limit has to change, or there is another trade-off only the account owner can decide, ask with ${doors.askOwnerMcp}`
       + ', giving at least two options, with the reason in the recommended one.';
   return about + lines(
-    'First work out whose red it is. If it is a code problem on the project branch, file a fix task with ' + `${doors.taskCreateMcp}`
-      + ` and attach it to this item with fixesOpenItemId: ${itemId}; once it lands, the platform opens a new candidate.`,
+    taskBranch
+      ? `First work out whose red it is. If it is a code problem on this task’s branch, file a fix task with ${doors.taskCreateMcp} and attach it to this item with fixesOpenItemId: ${itemId}. `
+        + 'A fix does not change this candidate: it runs on a branch of its own, so it has to carry this task’s work with it. '
+        + fixOfATaskBranch(doors)
+      : 'First work out whose red it is. If it is a code problem on the project branch, file a fix task with ' + `${doors.taskCreateMcp}`
+        + ` and attach it to this item with fixesOpenItemId: ${itemId}; once it lands, the platform opens a new candidate.`,
     rerun,
     tradeOff,
     askOwnerFirst(projectId, itemId, doors),
@@ -2652,7 +2759,9 @@ function openItemBody(item: OpenItemMessageSource): string {
           + `the platform then delivers this item again, for you to check and then close or requeue. `
           + composed(handling('requeue its landing', 'it lands'), `You do not need to report back. ${handClose}`) + '\n'
         : `${promotionNextStep(projectId, item.promotionId ?? null, uuidToBase62(item.id), payload, doorNames)}\n`
-          + 'When this candidate is superseded by a new landing, declined or merged, the platform closes this item itself. '
+          + (taskBranchSourceOf(payload)
+            ? 'When this candidate is merged or declined, or a merge of this task’s branch onto the project’s main branch is recorded, the platform closes this item itself. '
+            : 'When this candidate is superseded by a new landing, declined or merged, the platform closes this item itself. ')
           + composed(handling('rerun the check', 'the check passes'), `You do not need to report back. ${handClose}`) + '\n')
       + `\n${notice}`;
   }
@@ -2867,10 +2976,10 @@ function deliveryReviewMessage(
     + `${answers.map((line) => `- ${line}`).join('\n')}\n`
     + `When the task is sent back, cancelled or superseded${exemption ? ', or its work lands' : ''}, the platform closes this item itself; once you take it up it stays yours, `
     + 'and the platform does not hand it to the account owner because time ran out.\n'
-    + 'This is not a question about the acceptance criteria, so do not put it to the account owner as one: changing the acceptance criteria and confirming the set of criteria are still only the account owner’s to do, '
+    + 'This is not a question about the acceptance criteria, so do not put it to the account owner as one: changing the acceptance criteria and confirming the set of criteria are still only the account owner’s to decide, '
     + 'and a criterion that changed after the work started is the account owner’s blocker.'
     + (exemption
-      ? ' If the reason in fact argues that the acceptance criterion this task serves should not apply or should say something else, do not accept it: that would be changing the acceptance criteria.'
+      ? ' If the reason in fact argues that the acceptance criterion this task serves should not apply or should say something else, do not accept it: that would be changing the acceptance criteria. File that change with project_update, and the account owner answers it on a card.'
       : '')
     + '\n\n'
     + notice;

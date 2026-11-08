@@ -84,10 +84,17 @@ public enum WikiSpaceLogic {
 
     // MARK: what waits on the owner
 
-    /// What waits on the owner in one space (`wikiWaitingIn`): its proposals in Review and the things its
-    /// plan waits on them for. A count an older server did not send adds nothing.
+    /// What waits on the owner in one space (`wikiWaitingIn`): its proposals in Review, the things its plan
+    /// waits on them for, and its chat cards whose rewrite waits (contract `space.list.chatWaiting`, which W counts
+    /// on web and iOS — this client opens each from Activity's banner). A count an older server did not send adds
+    /// nothing.
     public static func waitingIn(_ space: WikiSpace) -> Int {
-        max(0, space.pendingOps ?? 0) + max(0, space.planWaiting ?? 0)
+        max(0, space.pendingOps ?? 0) + max(0, space.planWaiting ?? 0) + max(0, space.chatWaiting ?? 0)
+    }
+
+    /// The chat's part of W across every space (`wikiChatWaiting` summed): Activity's chat banner counts it.
+    public static func chatWaiting(_ spaces: [WikiSpace]) -> Int {
+        spaces.reduce(0) { $0 + max(0, $1.chatWaiting ?? 0) }
     }
 
     /// What waits on the owner across every space (`wikiWaiting`, §12.3.3): the drawer's Wiki row — the

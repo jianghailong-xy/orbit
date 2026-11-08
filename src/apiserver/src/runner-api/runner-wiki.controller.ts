@@ -1,11 +1,27 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Logger,
+  Optional,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { JUDGMENT_DISPATCH_ORIGIN } from '../projects/coordinator-authority';
 import { toUuid } from '@orbit/shared';
 import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiProposeDto } from '../wiki/dto';
-import { registerWikiNote, wikiImportPrincipal, WikiNoteDto } from '../wiki/wiki-import';
+import { WikiChatDrafts } from '../wiki/wiki-chat-drafts';
+import { registerWikiNote, wikiImportPrincipal, WikiNoteDto, WikiSessionNoteDto, writeSessionNote } from '../wiki/wiki-import';
 import { createWikiImportJob, readWikiImportJob, wikiImportExecutor, WikiImportJobDto } from '../wiki/wiki-import-jobs';
 import { flagParam, listParam, WikiRetrieval } from '../wiki/wiki-retrieval';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
@@ -44,10 +60,16 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 @UseGuards(RunnerAuthGuard, WikiRolloutGuard)
 @Controller('runner/wiki')
 export class RunnerWikiController {
+  private readonly logger = new Logger(RunnerWikiController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly wiki: WikiService,
     private readonly retrieval: WikiRetrieval,
+    // A wiki chat's cards (contract `agentSurface.chat`): what a chat's wiki_propose, wiki_note corrects and wiki_draft
+    // make. Optional, so the specs that stand this door up with the wiki's two services still do; a chat's call there is
+    // refused rather than filed as a proposal.
+    @Optional() private readonly drafts?: WikiChatDrafts,
   ) {}
 
   /**
@@ -82,7 +104,7 @@ export class RunnerWikiController {
     }
     await this.assertNotExcluded(sessionId);
     const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
-    return this.retrieval.search({
+    const answer = await this.retrieval.search({
       ownerId: runner.ownerId,
       sessionId,
       spaceId,
@@ -94,6 +116,8 @@ export class RunnerWikiController {
       limit: limit === undefined ? undefined : Number(limit),
       semantic: flagParam(semantic),
     });
+    await this.recordExposure(runner.ownerId, sessionId, 'search', answer.hits.map((hit) => hit.id));
+    return answer;
   }
 
   /**
@@ -119,7 +143,108 @@ export class RunnerWikiController {
       sessionId,
       toolCallId: null,
     };
+    // A wiki chat's proposal is a card the owner may press (contract `agentSurface.chat.propose`): nothing is filed.
+    const chat = await this.chatOf(runner.ownerId, sessionId, spaceId);
+    if (chat) {
+      const answer = await this.chatDrafts().proposeInChat({ ...principal, sessionId: sessionId! }, chat.spaceId, dto);
+      return answer.status === 'draft' ? answer : answerFor(answer);
+    }
     return answerFor(await this.wiki.submitChangeset(principal, spaceId, dto));
+  }
+
+  /**
+   * `wiki_draft` (contract `agentSurface.chat.draft`): a card that rewrites sections from main, for the owner of a wiki
+   * chat to press. A chat's alone: any other session is refused WIKI_SESSION_EXCLUDED, and so is a session that verifies,
+   * forems or judges work, as on every route here. Nothing is accepted, confirmed or written but the card.
+   */
+  @Post('drafts')
+  @HttpCode(HttpStatus.OK)
+  async draft(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Body(PublicIdPipe.forFields('replaces')) body: unknown,
+  ) {
+    // The pipe hands a blank id through as it came; refused here, it never reaches a uuid column as "".
+    const replaces = (body as { replaces?: unknown } | null)?.replaces;
+    if (typeof replaces === 'string' && replaces.trim() === '') {
+      throw new WikiRefusalError({
+        code: 'WIKI_SCHEMA',
+        message: 'replaces names an open card of this chat, or is left out',
+        errors: [{ path: 'replaces', message: 'is blank' }],
+      });
+    }
+    const sessionId = await this.callingSession(runner, callingSessionId);
+    if (!sessionId) {
+      throw new BadRequestException(
+        'missing session context: a card is drafted in the wiki chat it is for, so this door needs X-Orbit-Session-Id',
+      );
+    }
+    await this.assertNotExcluded(sessionId);
+    const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
+    const chat = await this.chatOf(runner.ownerId, sessionId, spaceId);
+    if (!chat) {
+      throw new WikiRefusalError({
+        code: 'WIKI_SESSION_EXCLUDED',
+        message: 'wiki_draft works only in a wiki chat, where the owner presses each card: this session is no wiki chat. A change to '
+          + 'what the wiki knows is wiki_propose; a document is rewritten from main by the server on its own.',
+      });
+    }
+    return this.chatDrafts().draftInChat(
+      { origin: 'agent', ownerId: runner.ownerId, userId: null, sessionId, toolCallId: null },
+      chat.spaceId,
+      body,
+    );
+  }
+
+  /**
+   * The space a calling session is a wiki chat of (contract `chat.binding.is`), or null for a session that is no chat. A
+   * chat writes its cards into its own space, which its workspace must still be in: the read boundary is a chat's too.
+   */
+  private async chatOf(ownerId: string, sessionId: string | null, spaceId: string): Promise<{ spaceId: string } | null> {
+    if (!sessionId) return null;
+    const session = await this.prisma.session.findFirst({ where: { id: sessionId, ownerId }, select: { wikiChatSpaceId: true } });
+    if (!session?.wikiChatSpaceId) return null;
+    if (session.wikiChatSpaceId !== spaceId) {
+      throw new WikiRefusalError({
+        code: 'WIKI_SPACE_UNBOUND',
+        message: "This chat's workspace is no longer in the wiki space the chat belongs to, so nothing can be drafted for it: "
+          + 'the owner chooses where the space\'s chats run again in Wiki settings.',
+      });
+    }
+    return { spaceId: session.wikiChatSpaceId };
+  }
+
+  private chatDrafts(): WikiChatDrafts {
+    if (!this.drafts) throw new Error('a wiki chat called the runner door, and this server was built without its cards (WikiChatDrafts)');
+    return this.drafts;
+  }
+
+  /**
+   * `wiki_note` (contract `agentSurface.note`): what this session wants the wiki to know, kept as a claim for the next
+   * maintenance run to read against the session's own records. So it needs a session, whose records those are; a session
+   * that verifies, forems or judges work is refused as it is everywhere on this door. `corrects` also flags an entry, at once.
+   */
+  @Post('notes')
+  @HttpCode(HttpStatus.OK)
+  async note(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Body() dto: WikiSessionNoteDto,
+  ) {
+    const sessionId = await this.callingSession(runner, callingSessionId);
+    if (!sessionId) {
+      throw new BadRequestException(
+        'missing session context: a note is read against the records of the session that wrote it, so this door needs X-Orbit-Session-Id',
+      );
+    }
+    await this.assertNotExcluded(sessionId);
+    const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
+    const principal = { origin: 'agent' as const, ownerId: runner.ownerId, userId: null, sessionId, toolCallId: null };
+    // In a wiki chat, `corrects` drafts its challenge as a card (contract `agentSurface.chat.note`); the note is kept as anywhere.
+    const chat = dto.corrects ? await this.chatOf(runner.ownerId, sessionId, spaceId) : null;
+    return writeSessionNote(this.prisma, this.wiki, principal, spaceId, dto, chat
+      ? { correct: (input) => this.chatDrafts().correctInChat(principal, chat.spaceId, input) }
+      : undefined);
   }
 
   /**
@@ -199,7 +324,7 @@ export class RunnerWikiController {
         + 'and this orbit wiki import predates that — it would read the note with the session\'s own model. Nothing was '
         + 'registered or read: upgrade the runner, then run the import again.');
     }
-    const { text: _text, ...registered } = await registerWikiNote(this.prisma, this.wiki, runner.ownerId, id, dto);
+    const { text: _text, sessionId: _sessionId, ...registered } = await registerWikiNote(this.prisma, this.wiki, runner.ownerId, id, dto);
     return registered;
   }
 
@@ -271,12 +396,36 @@ export class RunnerWikiController {
     // Resolving the space FIRST is the read boundary: a session whose workspace is bound to no space
     // is told how to bind it rather than shown another codebase's entries.
     const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
-    return this.wiki.getEntry(
+    const entry = await this.wiki.getEntry(
       runner.ownerId,
       id,
       { sources: include !== 'none', history: include === 'all', exposure: false },
       spaceId,
     );
+    await this.recordExposure(runner.ownerId, sessionId, 'get', [id]);
+    return entry;
+  }
+
+  /**
+   * What this session was just given (contract `exposureRules`): one row per entry, naming the revision
+   * the entry is at, and all under one `at`, which is how the usage read tells one search from several.
+   * The read has its answer by now, and the record of it is worth less than the answer, so nothing that
+   * goes wrong here reaches the caller: it is logged and the answer goes out.
+   */
+  private async recordExposure(ownerId: string, sessionId: string, channel: 'search' | 'get', entryIds: string[]): Promise<void> {
+    if (entryIds.length === 0) return;
+    try {
+      const entries = await this.prisma.wikiEntry.findMany({
+        where: { ownerId, id: { in: entryIds } },
+        select: { id: true, currentRevision: true },
+      });
+      const at = new Date();
+      await this.prisma.wikiExposure.createMany({
+        data: entries.map((entry) => ({ ownerId, entryId: entry.id, revision: entry.currentRevision, sessionId, channel, at })),
+      });
+    } catch (error) {
+      this.logger.warn(`wiki ${channel} exposure not recorded for session ${sessionId}: ${(error as Error)?.message}`);
+    }
   }
 
   /**

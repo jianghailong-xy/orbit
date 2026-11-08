@@ -41,6 +41,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { hashChatTicket } from '../feishu/feishu-chat-route.service';
 import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import { PAT_FORBIDDEN_REASONS, type PatForbiddenReason } from './pat-scope.decorator';
 import { PAT_SCOPES, PatService } from './pat.service';
@@ -150,6 +151,26 @@ test('the owner channel refuses a personal access token door by door and field b
     ok(await api('POST', '/sessions', login, { prompt: 'knocked on', workspaceId }), 'creating a session').json.id,
   );
 
+  // A Feishu app of the account's (switched off, so nothing connects it) with a group waiting on a live ticket, and two
+  // groups connected: the three group doors (docs/feishu-bot-design.md §8.1) stood up for real.
+  const feishuAppId = `cli_owner_channel_${RUN}`;
+  await db.feishuApp.create({
+    data: { ownerId: userId, platform: 'FEISHU', appId: feishuAppId, appSecretEnc: 'owner:channel:not-a-secret', enabled: false, ownerOpenId: 'ou_owner' },
+  });
+  const chatTicket = `owner-channel-ticket-${RUN}`;
+  const pendingChat = await db.feishuChatRoute.create({
+    data: {
+      ownerId: userId, appId: feishuAppId, chatId: `oc_pending_${RUN}`,
+      ticketHash: hashChatTicket(chatTicket), ticketOpenId: 'ou_owner', ticketEventId: `ev-${RUN}`, ticketExpiresAt: new Date(Date.now() + 30 * 60_000),
+    },
+  });
+  const connectedChat = async (chat: string) => (await db.feishuChatRoute.create({
+    data: { ownerId: userId, appId: feishuAppId, chatId: `oc_${chat}_${RUN}`, workspaceId, permissionMode: 'default', enabled: true, confirmedAt: new Date() },
+  })).id;
+  const chatToChange = await connectedChat('to-change');
+  const chatToRemove = await connectedChat('to-remove');
+  const chatRow = (id: string) => db.feishuChatRoute.findUnique({ where: { id } });
+
   // ── (1) the owner channel, door by door ────────────────────────────────────────────────────
 
   const doors: Door[] = [
@@ -216,6 +237,12 @@ test('the owner channel refuses a personal access token door by door and field b
       path: `/projects/${toPause}/resume`,
       login: 201,
       observe: async () => (await projectRow(toPause)).pausedAt,
+    },
+    // The project is OPEN, so a login is answered by the door's own refusal: PROJECT_STILL_OPEN.
+    {
+      route: 'POST /projects/:id/sessions/complete',
+      path: `/projects/${anyProject}/sessions/complete`,
+      login: 409,
     },
     {
       route: 'POST /projects/:id/done-requests/:itemId/decline',
@@ -289,6 +316,26 @@ test('the owner channel refuses a personal access token door by door and field b
     },
     { route: 'POST /wiki/changesets/:id/revert', path: `/wiki/changesets/${nobody()}/revert`, login: 404 },
     { route: 'POST /wiki/spaces/:id/verifications/reopen', path: `/wiki/spaces/${spaceId}/verifications/reopen`, login: 200 },
+    {
+      route: 'POST /wiki/spaces/:id/workspaces',
+      path: `/wiki/spaces/${spaceId}/workspaces`,
+      body: { workspaceId },
+      login: 200,
+      observe: () => db.wikiSpaceWorkspace.count({ where: { workspaceId, spaceId, leftOutAt: null } }),
+    },
+    {
+      route: 'DELETE /wiki/spaces/:id/workspaces/:workspaceId',
+      path: `/wiki/spaces/${spaceId}/workspaces/${workspaceId}`,
+      login: 200,
+      observe: () => db.wikiSpaceWorkspace.count({ where: { workspaceId, spaceId, leftOutAt: null } }),
+    },
+    // A space nobody has: a login that got past the door would move the wiki the cases around it read to Trash.
+    { route: 'DELETE /wiki/spaces/:id', path: `/wiki/spaces/${nobody()}`, login: 404 },
+    // The Trash (contract `space.trash`): a restore of the wiki in use answers it as it is; a permanent delete of a wiki
+    // nobody has is the 404; the Trash's list is the owner's too.
+    { route: 'POST /wiki/spaces/:id/restore', path: `/wiki/spaces/${spaceId}/restore`, login: 200 },
+    { route: 'DELETE /wiki/spaces/:id/purge', path: `/wiki/spaces/${nobody()}/purge`, login: 404 },
+    { route: 'GET /wiki/trash', path: '/wiki/trash', login: 200 },
     { route: 'GET /wiki/changesets/:id', path: `/wiki/changesets/${nobody()}`, login: 404 },
     { route: 'GET /wiki/spaces/:id/plan', path: `/wiki/spaces/${spaceId}/plan`, login: 200 },
     { route: 'GET /wiki/spaces/:id/plan/versions', path: `/wiki/spaces/${spaceId}/plan/versions`, login: 200 },
@@ -299,6 +346,39 @@ test('the owner channel refuses a personal access token door by door and field b
     // The space has no version 1 (its read above is a 404): the door answers a login 404, no such version of the plan.
     { route: 'POST /wiki/spaces/:id/plan/versions/:version/build', path: `/wiki/spaces/${spaceId}/plan/versions/1/build`, body: {}, login: 404 },
     { route: 'POST /wiki/plan-proposals/:id/decide', path: `/wiki/plan-proposals/${nobody()}/decide`, body: { action: 'reject' }, login: 404 },
+    // A version that names nothing: the login is answered the door's 404 for another owner's version, or none.
+    { route: 'POST /wiki/doc-versions/:id/restore', path: `/wiki/doc-versions/${nobody()}/restore`, login: 404 },
+    // A chat that says nothing is not made: the door answers a login 400, content is the owner's first message.
+    { route: 'POST /wiki/spaces/:id/chats', path: `/wiki/spaces/${spaceId}/chats`, body: {}, login: 400 },
+    // A card that names nothing: the login is answered the door's 404 for another owner's card, or none — an Edit with no
+    // ops is refused for its shape first, before any card is read.
+    { route: 'POST /wiki/chat-drafts/:id/apply', path: `/wiki/chat-drafts/${nobody()}/apply`, login: 404 },
+    { route: 'POST /wiki/chat-drafts/:id/edit', path: `/wiki/chat-drafts/${nobody()}/edit`, body: {}, login: 400 },
+    { route: 'POST /wiki/chat-drafts/:id/discard', path: `/wiki/chat-drafts/${nobody()}/discard`, login: 404 },
+    { route: 'POST /wiki/chat-drafts/:id/undo', path: `/wiki/chat-drafts/${nobody()}/undo`, login: 404 },
+    { route: 'POST /wiki/chat-drafts/:id/retry', path: `/wiki/chat-drafts/${nobody()}/retry`, login: 404 },
+    { route: 'POST /wiki/chat-drafts/:id/seen', path: `/wiki/chat-drafts/${nobody()}/seen`, login: 404 },
+    // Connecting a Feishu group with a live ticket, changing a connected one, removing one.
+    {
+      route: 'POST /integrations/feishu/chats/confirm',
+      path: '/integrations/feishu/chats/confirm',
+      body: { ticket: chatTicket, workspaceId, permissionMode: 'acceptEdits', allowedOpenIds: ['ou_member'], maxConcurrentSessions: 3, sessionsPerDay: 7 },
+      login: 201,
+      observe: async () => (await chatRow(pendingChat.id))?.confirmedAt ?? null,
+    },
+    {
+      route: 'PATCH /integrations/feishu/chats/:id',
+      path: `/integrations/feishu/chats/${chatToChange}`,
+      body: { maxConcurrentSessions: 5 },
+      login: 200,
+      observe: async () => (await chatRow(chatToChange))?.maxConcurrentSessions,
+    },
+    {
+      route: 'DELETE /integrations/feishu/chats/:id',
+      path: `/integrations/feishu/chats/${chatToRemove}`,
+      login: 200,
+      observe: async () => (await chatRow(chatToRemove)) !== null,
+    },
   ];
 
   await t.test('every door in OWNER_INTERACTIVE_ROUTES has a case below, on a path that door answers, and nothing else has one', () => {

@@ -90,6 +90,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { ProjectsService } from './projects.service';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -447,7 +448,7 @@ async function signalsFor(stack: Stack, w: World) {
 
 // ── the runner's own doors, for the cases whose order of events IS the claim ───────────────────────
 
-/** The turn a runner is handed next on a session, as its long-poll asks for it. */
+/** The turn a runner is handed next on a session, as its fetch asks for it. */
 function dequeue(stack: Stack, sessionId: string, runnerId: string) {
   return (stack.api as unknown as {
     dequeueTurn: (

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -105,6 +106,63 @@ func TestCodexSpawnArgsTurnAccountPluginsOff(t *testing.T) {
 			t.Errorf("%s args do not carry %q as a -c value: %v", name, codexPluginsOffConfig, args)
 		}
 	}
+}
+
+// Both spawn paths have Codex put its bundled tools back on PATH after a login profile has run, the
+// only setting that keeps `rg` in every command shell while commands stay login shells — see
+// codexLoginShellPackagePathConfig — and only for a codex that knows it, since an older one reports the
+// unknown key as errors. Neither turns login shells off, which would answer `login: true` with an error
+// and drop what the login profile sets up.
+func TestCodexSpawnArgsKeepBundledToolsInTheLoginShell(t *testing.T) {
+	previous := codexKeepsToolsInLoginShell
+	t.Cleanup(func() { codexKeepsToolsInLoginShell = previous })
+	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5"}}
+	for _, knows := range []bool{true, false} {
+		codexKeepsToolsInLoginShell = func() bool { return knows }
+		for name, args := range map[string][]string{
+			"exec":       codexExecCommandArgs(job, "/repo", "/tmp/uploads", nil, "/usr/local/bin/orbit"),
+			"app-server": codexAppServerCommandArgs(job, "/tmp/codex-state", "/usr/local/bin/orbit"),
+		} {
+			if got := containsArgs(args, []string{"-c", "features.login_shell_package_path=true"}); got != knows {
+				t.Errorf("codex knows the feature: %v; %s args turn login_shell_package_path on: %v: %v", knows, name, got, args)
+			}
+			for _, arg := range args {
+				if strings.Contains(arg, "allow_login_shell") {
+					t.Errorf("%s args change allow_login_shell (%q): %v", name, arg, args)
+				}
+			}
+		}
+	}
+}
+
+// The installed Codex knows the feature that override names, has it on with the override, and its own manifest
+// says so to codexKeepsToolsInLoginShell. Codex takes an unknown feature key with no more than an error line, so a
+// release that renamed or dropped it would put rg out of reach again with nothing else failing.
+func TestTheInstalledCodexKnowsLoginShellPackagePath(t *testing.T) {
+	exe, err := exec.LookPath("codex")
+	if err != nil {
+		t.Skip("no codex on PATH; this check needs the real engine")
+	}
+	env, _ := isolatedCodexProbeEnv(t)
+	cmd := exec.Command(exe, "-c", codexLoginShellPackagePathConfig, "features", "list")
+	cmd.Env = env
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("codex features list: %v", err)
+	}
+	pkg, ok := installedCodexPackage(exe)
+	for _, line := range strings.Split(string(out), "\n") {
+		if fields := strings.Fields(line); len(fields) > 0 && fields[0] == codexLoginShellPackagePathFeature {
+			if fields[len(fields)-1] != "true" {
+				t.Fatalf("with Orbit's override on, codex lists %q", line)
+			}
+			if ok && pkg.pathDir != "" && !pkg.keepsToolsInLoginShell() {
+				t.Fatalf("codex %s knows %s, but its manifest reads as one that does not: %+v", pkg.version, codexLoginShellPackagePathFeature, pkg)
+			}
+			return
+		}
+	}
+	t.Fatalf("the installed codex does not know %s:\n%s", codexLoginShellPackagePathFeature, out)
 }
 
 func TestCodexAppServerThreadParams(t *testing.T) {
@@ -1095,7 +1153,7 @@ func TestRewriteLocalMarkdownImagesUploadsAllowedImage(t *testing.T) {
 		context.Background(),
 		"preview ![mock]("+path+" \"full\")",
 		[]string{dir},
-		func(ctx context.Context, path, mimeType string) (string, error) {
+		func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 			uploadedPath = path
 			uploadedMime = mimeType
 			return "att-1", nil
@@ -1123,7 +1181,7 @@ func TestRewriteLocalMarkdownImagesUploadsAllowedFileLink(t *testing.T) {
 		context.Background(),
 		"files: [SVG source]("+path+")",
 		[]string{dir},
-		func(ctx context.Context, path, mimeType string) (string, error) {
+		func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 			uploadedPath = path
 			uploadedMime = mimeType
 			return "att-1", nil
@@ -1171,7 +1229,7 @@ func TestRewriteLocalMarkdownImagesUploadsGeneratedImage(t *testing.T) {
 		context.Background(),
 		"[download PNG]("+path+")",
 		roots,
-		func(ctx context.Context, path, mimeType string) (string, error) { return "att-1", nil },
+		func(ctx context.Context, file *os.File, path, mimeType string) (string, error) { return "att-1", nil },
 	)
 	if got != `[download PNG](orbit-attachment:att-1 "exec-1.png")` {
 		t.Fatalf("rewritten = %q", got)
@@ -1211,7 +1269,7 @@ func TestHandleCodexItemImageGenerationThroughRealRewrite(t *testing.T) {
 			uploaded := 0
 			rewrite := func(text string) string {
 				return rewriteLocalMarkdownImagesWithUploader(context.Background(), text, roots,
-					func(ctx context.Context, path, mimeType string) (string, error) {
+					func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 						uploaded++
 						if mimeType != "image/png" {
 							t.Fatalf("mime = %q, want image/png", mimeType)
@@ -1358,7 +1416,7 @@ func TestRewriteLocalMarkdownImagesSkipsOutsideRoot(t *testing.T) {
 	}
 	called := false
 	text := "preview ![mock](" + outside + ")"
-	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{dir}, func(ctx context.Context, path, mimeType string) (string, error) {
+	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{dir}, func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 		called = true
 		return "att-1", nil
 	})
@@ -1378,7 +1436,7 @@ func TestRewriteLocalMarkdownImagesSkipsOutsideRootFileLink(t *testing.T) {
 	}
 	called := false
 	text := "files: [SVG](" + outside + ")"
-	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{dir}, func(ctx context.Context, path, mimeType string) (string, error) {
+	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{dir}, func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 		called = true
 		return "att-1", nil
 	})

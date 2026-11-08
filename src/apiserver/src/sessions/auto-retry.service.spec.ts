@@ -288,6 +288,12 @@ function makeService(
       // The card's read (`retryMessage`): the session, owner-scoped.
       findFirst: async (args: { where: { id: string; ownerId: string } }) =>
         rows.find((r) => r.id === args.where.id && r.ownerId === args.where.ownerId) ?? null,
+      // Whether the message re-sent is Orbit's (`wroteByOrbit`): a fixture's session opened by a person
+      // unless it says the platform wrote its prompt.
+      findUnique: async (args: { where: { id: string } }) => {
+        const row = rows.find((r) => r.id === args.where.id);
+        return row ? { promptByOrbit: false, ...row } : null;
+      },
     },
     runEvent: {
       // Honour `where.type` and `take`: what stranded these sessions was reading a fixed

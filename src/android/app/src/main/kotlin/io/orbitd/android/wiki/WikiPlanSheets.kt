@@ -48,17 +48,19 @@ internal val wikiPlanSectionKinds = listOf("overview", "concepts", "flow", "inte
 
 // MARK: - Redraft…
 
-/** Redraft the plan (mock 22 ⑧): what to change, in the owner's words — empty is a fresh draft — and the protected
- * documents a redraft keeps as they are. [redraft] sends it; true once the server took it. */
+/** Redraft the plan (mock 22 ⑧): what to change, in the owner's words, which a version stored needs — a fresh draft over
+ * one is Start over…'s — and the protected documents a redraft keeps as they are. It opens holding the words of the run
+ * that failed. [redraft] sends it; true once the server took it. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun WikiPlanRedraftSheet(note: String, protectedDocs: List<String>, busy: Boolean = false, close: () -> Unit,
+internal fun WikiPlanRedraftSheet(state: WikiPlanState, note: String, protectedDocs: List<String>, busy: Boolean = false, close: () -> Unit,
     redraft: suspend (String) -> Boolean) {
-    var words by rememberSaveable { mutableStateOf("") }
+    var words by rememberSaveable { mutableStateOf(WikiPlanLogic.redraftWords(state)) }
     var sending by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     WikiSheet(sending, close, Modifier.testTag("wiki-plan-redraft-sheet")) {
-        SheetBar(WikiPlanCopy.redraftTitle, WikiPlanCopy.cancel, WikiPlanCopy.redraftGo, confirmEnabled = !sending && !busy,
+        SheetBar(WikiPlanCopy.redraftTitle, WikiPlanCopy.cancel, WikiPlanCopy.redraftGo,
+            confirmEnabled = !sending && !busy && WikiPlanLogic.redraftReady(state, words),
             confirmTag = "wiki-plan-redraft-go", cancel = close, cancelEnabled = !sending) {
             sending = true
             scope.launch { val done = redraft(words); sending = false; if (done) close() }
@@ -280,7 +282,7 @@ private fun PlanNumberField(text: String, tag: String, change: (String) -> Unit)
 
 /** What the server said when it refused a save: the gate's errors (the first eight), or why not. */
 @Composable
-private fun PlanRefusedLines(lines: List<String>, tag: String) {
+internal fun PlanRefusedLines(lines: List<String>, tag: String) {
     WikiCard(Modifier.padding(top = 8.dp).testTag(tag)) {
         lines.take(8).forEach { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), style = WikiType.label, color = MaterialTheme.colorScheme.error) }
     }

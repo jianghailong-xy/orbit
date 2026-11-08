@@ -193,7 +193,7 @@ final class WikiContractTests: XCTestCase {
         XCTAssertNil(op.verification?.evidence, "a verdict recorded before the server kept the mark")
     }
 
-    /// Revision 4: a verdict says what its verifier could read, in the contract's two words, and the
+    /// Revision 4: a verdict says what its verifier could read, in the contract's words, and the
     /// owner's Confirm and the reopening are routes of the owner's door.
     func testTheEvidenceMarkAndTheOwnersNewRoutesAreTheContracts() throws {
         let c = try contract()
@@ -205,6 +205,8 @@ final class WikiContractTests: XCTestCase {
         let capped = #"{"id":"op","decision":"auto_applied","verification":{"verdict":"unsupported","reason":"No record could be read.","model":"qwen3.8-27b-fp8","at":"2026-09-28T01:00:00.000Z","duplicateOf":null,"evidence":"unreadable"}}"#
         let op = try JSONDecoder().decode(WikiChangesetOp.self, from: Data(capped.utf8))
         XCTAssertEqual(op.verification?.evidence, .unreadable)
+        let secondHand = #"{"verdict":"supported","evidence":"second_hand"}"#
+        XCTAssertEqual(try JSONDecoder().decode(WikiOpVerification.self, from: Data(secondHand.utf8)).evidence, .secondHand)
         let later = #"{"verdict":"supported","evidence":"partly"}"#
         XCTAssertEqual(try JSONDecoder().decode(WikiOpVerification.self, from: Data(later.utf8)).evidence, .unknown)
         let user = try object(try object(try object(c["agentSurface"], "agentSurface")["doors"], "agentSurface.doors")["user"],
@@ -309,6 +311,53 @@ final class WikiContractTests: XCTestCase {
                       "GET /api/wiki/search", "GET /api/wiki/changesets/:id"] {
             XCTAssertTrue(routes.contains(route), "\(route) is not a route the user door declares: \(routes.sorted())")
         }
+    }
+
+    // MARK: the search hit
+
+    /// A search hit is the contract's (`agentSurface.toolSpecs.wiki_search.hit`): what this model reads is
+    /// what the contract lists — `topics` aside, which the client asks for by name — and how old the entry
+    /// is (`age`) decodes as the server writes it, and as nothing where a server sent none.
+    func testASearchHitIsTheContractsAndSaysHowOldItIs() throws {
+        let specs = try object(try object(contract()["agentSurface"], "agentSurface")["toolSpecs"], "agentSurface.toolSpecs")
+        let search = try object(specs["wiki_search"], "agentSurface.toolSpecs.wiki_search")
+        let fields = try strings(search["hit"], "agentSurface.toolSpecs.wiki_search.hit")
+        let age = Set(try object(search["age"], "agentSurface.toolSpecs.wiki_search.age").keys).subtracting(["why"])
+        XCTAssertEqual(age, ["recordedAt", "changedAt", "anchorCheckedRef", "anchorCheckedAt"])
+        XCTAssertTrue(age.isSubset(of: Set(fields)), "every age field is a field of the hit: \(fields)")
+
+        // A hit carrying every field the contract lists; one it adds later is sent too, as a word.
+        let sample: [String: Any] = [
+            "id": "34ZU0nYtV7HX2KXcUhZX0", "kind": "pitfall", "title": "A pitfall", "summary": "What bites.",
+            "trust": "auto", "anchorState": "verified", "match": ["keyword", "path"], "score": 0.026944,
+            "recordedAt": "2026-10-03T11:39:54.768Z", "changedAt": "2026-10-05T08:00:12.001Z",
+            "anchorCheckedRef": "7de4f86bcf1c01d2fcff6d154a039e5c54961df8", "anchorCheckedAt": "2026-10-10T06:46:16.532Z",
+        ]
+        let wire = Dictionary(uniqueKeysWithValues: fields.map { ($0, sample[$0] ?? "\($0) as a word") })
+        let hit = try JSONDecoder().decode(WikiSearchHit.self, from: JSONSerialization.data(withJSONObject: wire))
+        XCTAssertEqual(hit.recordedAt, "2026-10-03T11:39:54.768Z")
+        XCTAssertEqual(hit.changedAt, "2026-10-05T08:00:12.001Z")
+        XCTAssertEqual(hit.anchorCheckedRef, "7de4f86bcf1c01d2fcff6d154a039e5c54961df8")
+        XCTAssertEqual(hit.anchorCheckedAt, "2026-10-10T06:46:16.532Z")
+        XCTAssertEqual(hit.anchorState, .verified)
+        let read = Set(Mirror(reflecting: hit).children.compactMap(\.label))
+        XCTAssertTrue(read.subtracting(["topics"]).isSubset(of: Set(fields)),
+                      "the model reads \(read.sorted()), and the contract's hit is \(fields)")
+        XCTAssertTrue(age.isSubset(of: read), "the model reads how old the entry is: \(read.sorted())")
+
+        // A check not made yet, and a server that predates the fields: nothing fails to decode, nothing is made up.
+        let unchecked = try JSONDecoder().decode(WikiSearchHit.self, from: Data(
+            #"{"id":"e1","anchorState":"unchecked","recordedAt":"2026-11-05T00:51:02.000Z","changedAt":"2026-11-05T07:14:40.250Z","anchorCheckedRef":null,"anchorCheckedAt":null}"#.utf8))
+        XCTAssertEqual(unchecked.recordedAt, "2026-11-05T00:51:02.000Z")
+        XCTAssertNil(unchecked.anchorCheckedRef)
+        XCTAssertNil(unchecked.anchorCheckedAt)
+        let older = try JSONDecoder().decode(WikiSearchHit.self, from: Data(
+            #"{"id":"e1","kind":"pitfall","title":"t","summary":"s","trust":"auto","anchorState":"verified","match":["keyword"],"score":0.016393}"#.utf8))
+        XCTAssertEqual(older.kind, .pitfall)
+        XCTAssertNil(older.recordedAt)
+        XCTAssertNil(older.changedAt)
+        XCTAssertNil(older.anchorCheckedRef)
+        XCTAssertNil(older.anchorCheckedAt)
     }
 
     // MARK: maintenance

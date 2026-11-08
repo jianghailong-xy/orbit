@@ -19,6 +19,8 @@ struct WikiActivityActions {
     var openSession: (String) -> Void = { _ in }
     /// A server run's page: its row on the Runs band, or View run for a run the server's job made.
     var openJob: (String) -> Void = { _ in }
+    /// The chat's banner: the chat holding the first card whose rewrite waits (wiki-chat contract `chat.waiting`).
+    var openChat: () -> Void = {}
 }
 
 /// Activity's page: the status line; the banners — every space's proposals, the space's plan, the plans of
@@ -35,6 +37,8 @@ struct WikiActivityPage: View {
     var jobs: [WikiJob]? = nil
     var now: Date = Date()
     var actions = WikiActivityActions()
+    /// W's chat part, as one amber line (`WikiChatLogic.waitingBanner`): nil while no rewrite waits on the owner.
+    @Environment(\.wikiChatBanner) private var chatBanner
 
     var body: some View {
         List {
@@ -74,6 +78,12 @@ struct WikiActivityPage: View {
         case .reviewBanner, .planBanners, .otherPlanBanners:
             ForEach(banners.filter { $0.band == band }) { banner in
                 WikiActivityBannerRow(banner: banner) { actions.openBanner(banner) }
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+            }
+            // The chat's rewrites that wait on the owner: one line, after the proposals', W's banners still adding up to W.
+            if band == .reviewBanner, let chatBanner {
+                WikiActivityBannerRow(text: chatBanner, amber: true) { actions.openChat() }
                     .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)
             }
@@ -173,7 +183,7 @@ struct WikiActivityPage: View {
                         actions.openSession(session)
                     }
                 default:
-                    return .systemAction
+                    return .leaving(url)
                 }
                 return .handled
             })
@@ -184,16 +194,27 @@ struct WikiActivityPage: View {
 /// owner, the blue for what the plan is doing; the words in the label colour and a chevron, the whole bar
 /// one press.
 private struct WikiActivityBannerRow: View {
-    let banner: WikiSpaceLogic.ActivityBanner
+    let text: String
+    let amber: Bool
     let action: () -> Void
+
+    init(banner: WikiSpaceLogic.ActivityBanner, action: @escaping () -> Void) {
+        self.init(text: banner.text, amber: banner.tone == .amber, action: action)
+    }
+
+    init(text: String, amber: Bool, action: @escaping () -> Void) {
+        self.text = text
+        self.amber = amber
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 9) {
                 Circle()
-                    .fill(banner.tone == .amber ? Color.orange : Color.blue)
+                    .fill(amber ? Color.orange : Color.blue)
                     .frame(width: 7, height: 7)
-                Text(banner.text)
+                Text(text)
                     .font(.orbitControl)
                     .foregroundStyle(Color.primary)
                     .lineLimit(1)
@@ -205,11 +226,11 @@ private struct WikiActivityBannerRow: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(banner.tone == .amber ? AnyShapeStyle(wikiAmberWash) : AnyShapeStyle(Color.blue.opacity(0.10)))
+            .background(amber ? AnyShapeStyle(wikiAmberWash) : AnyShapeStyle(Color.blue.opacity(0.10)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(banner.text)
+        .accessibilityLabel(text)
     }
 }
 
@@ -229,6 +250,7 @@ struct WikiActivityView: View {
                     WikiActivityPage(content: content, spaceName: name(of: space, in: wiki),
                                      banners: banners(wiki, space: space, now: context.date),
                                      seen: seen, jobs: wiki.currentJobs, now: context.date, actions: actions(wiki))
+                        .environment(\.wikiChatBanner, WikiChatLogic.waitingBanner(WikiSpaceLogic.chatWaiting(wiki.spaces)))
                 } else {
                     WikiHomePlaceholder(wiki: wiki, state: wiki.activityState) { await wiki.loadActivity() }
                 }
@@ -245,7 +267,7 @@ struct WikiActivityView: View {
                 await wiki.loadJobs()
                 // A run on its way is read again every few seconds, as the web card reads it.
                 while !Task.isCancelled, wiki.jobsUnderWay {
-                    try? await Task.sleep(for: .seconds(5))
+                    await VisibilityGate.app.pause(5)   // a run under way, and the app seen
                     await wiki.loadJobs()
                 }
             }
@@ -284,7 +306,21 @@ struct WikiActivityView: View {
             openBanner: { banner in open(banner.to, wiki) },
             openSettings: { model.push(.wikiSettings) },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            openJob: { id in model.push(.wikiJob(jobID: id)) })
+            openJob: { id in model.push(.wikiJob(jobID: id)) },
+            openChat: { openChat(wiki) })
+    }
+
+    /// The chat banner's way: the space on screen when a rewrite of its waits, else the first space where one does —
+    /// made the one on screen — and its chat holding something that needs the owner (`WikiChatLogic.toOpen`).
+    private func openChat(_ wiki: WikiModel) {
+        guard let chat = model.wikiChat else { return }
+        let waits: (WikiSpace) -> Bool = { ($0.chatWaiting ?? 0) > 0 }
+        guard let space = wiki.currentSpace.flatMap({ waits($0) ? $0 : nil }) ?? wiki.spaces.first(where: waits) else { return }
+        if wiki.currentSpace?.id != space.id { wiki.selectedSlug = space.slug }
+        Task {
+            await chat.load(spaceID: space.id)
+            chat.openFromButton(spaceID: space.id)
+        }
     }
 
     /// A banner's way: Review over every space; or a space's plan, or its settings — another space's first

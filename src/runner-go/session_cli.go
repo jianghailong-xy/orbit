@@ -115,7 +115,12 @@ Options:
                            runs on the engine it always ran on — a key on its protocol's own CLI
   --permission-mode MODE   How much the session may do unattended: %s.
                            Defaults to the owner's account setting; the ask-me modes park
-                           the session on an approval card until a human answers
+                           the session on an approval card until a human answers. dontAsk
+                           never asks but refuses anything not already approved, commands
+                           and background jobs included: for unattended work that has to
+                           run commands, use auto. Inside a session it can never be wider
+                           than that session's own mode: a wider mode is refused, and a
+                           wider default gives way to its mode
   --wait[=BOOL]            Wait until the first turn settles. Inside a session the wait is first
                            recorded as a watch that wakes this session when the turn settles: if
                            the wait runs out or the server stops answering, the output carries
@@ -244,22 +249,31 @@ conversation in the transcript UI and search, and whose first message resumes th
 the original context intact.
 
 Options:
-  --workspace ID           Workspace to import into; defaults to the workspace containing the
-                           transcript's recorded cwd
+  --workspace ID           Workspace to import into; defaults to the workspace on this machine
+                           containing the transcript's recorded cwd. When several do, the import
+                           is refused with their ids, and this picks one
   --json
 
-Import is headless-only — it runs from a shell, not inside a session. Without a service token
-the machine's runner credential imports into any workspace it can resolve; with one, the token
-needs the session:create scope and may import only into its pinned workspace.
+The transcript itself is never written. When the imported session would resume that very file
+(a workspace with no worktree, in the directory the conversation was recorded in), it forks
+under a Claude session id of its own, so a terminal still holding the original never shares a
+file with Orbit.
+
+Inside a session the import runs as that session and needs orchestration, like session create.
+Outside one, the machine's runner credential imports into any workspace on this machine; with a
+service token, the token needs the session:create scope and may import only into its pinned
+workspace.
 `,
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--wait[=true|false]", "--json"}, Mutates: true},
-	// The one session verb a session cannot run: cliSessionImport refuses inside one, and the
-	// transcript it imports is on this machine's disk. A running agent is the reader that never
-	// gets it — the headless door below is where this command is advertised.
-	{Tool: "session_import", Argv: []string{"orbit", "session", "import"}, Usage: "orbit session import CLAUDE_SESSION_ID [--workspace ID] [--json]", Arguments: []string{"[claude-session-id] (required)", "--workspace <id>", "--json"}, Mutates: true, HeadlessOnly: true},
+	// No MCP tool stands behind this one, so its description is its own: the transcript it imports
+	// is on this machine's disk, which the CLI here reads, and an agent asked to bring a terminal's
+	// conversation into Orbit runs it as itself. The headless door below describes it for the
+	// credential that door answers for.
+	{Tool: "session_import", Argv: []string{"orbit", "session", "import"}, Usage: "orbit session import CLAUDE_SESSION_ID [--workspace ID] [--json]", Arguments: []string{"[claude-session-id] (required)", "--workspace <id>", "--json"}, Mutates: true,
+		Description: "Import a Claude Code transcript from this machine's ~/.claude/projects as an Orbit session on this runner, whose first message resumes the conversation. The workspace defaults to the one on this machine containing the transcript's recorded cwd; when several do, the import is refused with their ids and --workspace picks one."},
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
@@ -419,7 +433,7 @@ var headlessActionDescription = map[string]string{
 	"get":    "Get one session's status, numTurns, lastTurnAt and latest output — enough for a headless poller to tell whether a long-lived session finished its turn. Limited to sessions this runner hosts.",
 	"send":   "Send a message to a session this runner hosts. The server decides where it lands and reports it in \"placement\": into the turn already running, or as that session's next turn. It neither spawns nor ends a session.",
 	"create": "Start a session for the agent this service token is pinned to, on this runner. Requires a minted token with the session:create scope; the runner credential alone cannot spawn.",
-	"import": "Import a local Claude Code transcript as an Orbit session on this runner. The machine's runner credential may import into any workspace it can resolve; a service token needs the session:create scope and is confined to its pinned workspace.",
+	"import": "Import a local Claude Code transcript as an Orbit session on this runner. The machine's runner credential may import into any workspace on this machine; a service token needs the session:create scope and is confined to its pinned workspace.",
 }
 
 // runnerCredentialActions are what the machine's own credential allows a headless caller: observe
@@ -682,14 +696,12 @@ const importWaitTimeout = 5 * time.Minute
 // turn a local Claude Code transcript into an Orbit session the transcript UI can read and
 // search, and whose first message resumes the engine with the original context.
 //
-// Headless-only by design: the transcript lives on this machine, so the import runs on this
-// runner, and an agent inside a session already has its own transcript continuity. The local
-// transcript is located and verified BEFORE anything is created, so a typo or a dead
-// conversation refuses here and never leaves a half-created session behind.
+// The transcript lives on this machine, so the import runs on this runner, whoever asks: a shell
+// with the machine's credential or a service token, or an agent asked to bring a conversation
+// into Orbit, as its session (the orchestration gate, as for create). The local transcript is
+// located and verified BEFORE anything is created, so a typo or a dead conversation refuses here
+// and never leaves a half-created session behind.
 func cliSessionImport(args []string, out io.Writer, ctx cliOrchestrationContext) error {
-	if ctx.sessionID != "" {
-		return fmt.Errorf("session import is a headless operation; run `orbit session import` from a shell")
-	}
 	claudeID, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit session import")
 	workspace := fs.String("workspace", "", "target workspace id")
@@ -742,12 +754,17 @@ func cliSessionImport(args []string, out io.Writer, ctx cliOrchestrationContext)
 	if flagWasSet(fs, "workspace") {
 		body["workspaceId"] = *workspace
 	}
-	raw, err := t.importSession(body)
+	raw, err := t.importSession(ctx.sessionID, ctx.token, body)
 	if err != nil {
 		return fmt.Errorf("import session: %w", err)
 	}
 	var handle struct {
 		ID string `json:"id"`
+		// Which workspace the import landed in, named in the answer so a wrong pick is seen
+		// at once, even when the wait below gives up.
+		Workspace struct {
+			Name string `json:"name"`
+		} `json:"workspace"`
 	}
 	if json.Unmarshal(raw, &handle) != nil || handle.ID == "" {
 		return writeCLIRawJSON(out, raw, *jsonOut)
@@ -785,7 +802,11 @@ func cliSessionImport(args []string, out io.Writer, ctx cliOrchestrationContext)
 			}
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out waiting for the import to finish; check `orbit session get %s`", handle.ID)
+			in := ""
+			if handle.Workspace.Name != "" {
+				in = fmt.Sprintf(" into workspace %q", handle.Workspace.Name)
+			}
+			return fmt.Errorf("timed out waiting for the import%s to finish; check `orbit session get %s`", in, handle.ID)
 		}
 		time.Sleep(sessionWaitInterval)
 	}

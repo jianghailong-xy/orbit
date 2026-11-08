@@ -6,7 +6,9 @@ import { uuidToBase62 } from '@orbit/shared';
 import {
   ORCHESTRATOR_WORKSPACE_CREATE_FIELDS,
   RunnerAgentsController,
+  sanitizeWorkspaceWrite,
 } from './runner-agents.controller';
+import { workspaceWriteDigest } from './runner-workspace-approval';
 
 // A runner whose calling session passes the shared orchestration authorizer, so every case below
 // exercises the field whitelist rather than the gate.
@@ -88,6 +90,7 @@ function makeController() {
       seen.listOwner = ownerId;
       return [rawWorkspace];
     },
+    get: async () => rawWorkspace,
     create: async (_ownerId: string, dto: Record<string, unknown>) => {
       seen.create = dto;
       return mergeDefined(dto);
@@ -116,7 +119,35 @@ function makeController() {
       seen.published = [sessionId, workspaceId, affectsTaskRows];
     },
   } as never;
-  return { controller: new RunnerAgentsController(workspaces, orchestration, realtime), seen };
+  // What this file holds is the whitelist, so every write below finds the owner's yes to exactly it.
+  // runner-workspace-write.pg.spec.ts holds the card.
+  const cards: Array<{ id: string; input: Record<string, string> }> = [];
+  const prisma = {
+    approval: { findMany: async () => cards, updateMany: async () => ({ count: 1 }) },
+  } as never;
+  const answered = (workspaceId: string | null, body: unknown) => {
+    try {
+      cards.push({
+        id: 'c1',
+        input: { writeSalt: 's', writeDigest: workspaceWriteDigest('s', workspaceId, sanitizeWorkspaceWrite(body)) },
+      });
+    } catch {
+      // A body the whitelist refuses has no write to say yes to: the controller refuses it too.
+    }
+  };
+  const routes = new RunnerAgentsController(workspaces, orchestration, realtime, prisma);
+  const controller = {
+    listWorkspaces: routes.listWorkspaces.bind(routes),
+    createWorkspace(runner: never, sessionId: string, token: string, body: unknown) {
+      answered(null, body);
+      return routes.createWorkspace(runner, sessionId, token, body);
+    },
+    updateWorkspace(runner: never, sessionId: string, token: string, id: string, body: unknown) {
+      answered(id, body);
+      return routes.updateWorkspace(runner, sessionId, token, id, body);
+    },
+  };
+  return { controller, seen };
 }
 
 test('list forwards the session credential to the orchestration authorizer', async () => {
@@ -435,7 +466,7 @@ test('an explicit null runnerId stays the typed 400 it already was', async () =>
   for (const [label, call] of [
     [
       'create',
-      (c: RunnerAgentsController) =>
+      (c: ReturnType<typeof makeController>['controller']) =>
         c.createWorkspace(
           RUNNER,
           's1',
@@ -445,7 +476,7 @@ test('an explicit null runnerId stays the typed 400 it already was', async () =>
     ],
     [
       'update',
-      (c: RunnerAgentsController) =>
+      (c: ReturnType<typeof makeController>['controller']) =>
         c.updateWorkspace(
           RUNNER,
           's1',

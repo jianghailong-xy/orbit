@@ -192,11 +192,6 @@ final class ComposerHandoffWiringTests: XCTestCase {
                       "the confirmation branch must clear on `isOpen`, which keeps `unread` armed")
         XCTAssertFalse(reconcile.contains("standing.answerable"),
                        "clearing on `answerable` would disarm the composer on a failed read")
-        // The evidence card's armed reply is under the same rule, read off the version's own
-        // standing: a version that has left the read was answered elsewhere or displaced by a newer
-        // one, and that is what the row being gone from the queue means. `holdsReply` is `isOpen`
-        // plus the one standing that is not open and still takes a reason from here: a version
-        // waiting for the coordinator, which its owner opened with Decide it myself.
         XCTAssertTrue(reconcile.contains("case .evidenceDecision(let row):"),
                       "a version's armed reply is reconciled like the confirmation's")
         XCTAssertTrue(reconcile.contains("EvidenceDecisions.holdsReply(standing)"),

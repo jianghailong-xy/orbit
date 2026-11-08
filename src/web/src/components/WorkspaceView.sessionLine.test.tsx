@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { sessionLine, statusLabel } from './WorkspaceView';
+import { COORDINATOR_DELIVERY_KINDS, type CoordinatorDeliveryCard } from '@orbit/shared';
+import { coordinatorDeliverySentence } from '../lib/coordinatorDelivery';
+import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
+import { SENT_BY_ORBIT, SENT_BY_YOU, sessionLine, statusLabel } from './WorkspaceView';
 
 /**
  * The session row's second line. Kept in step with the native port
@@ -245,6 +248,10 @@ describe('sessionLine', () => {
         true,
       ),
     ).toEqual({ text: 'You: 设置按钮的底色很奇怪，请帮我 review', tone: 'preview' });
+    // The row says what the bubble says, marks that are not Markdown's included.
+    expect(
+      sessionLine({ status: 'RUNNING', lastUserText: '把其他的 tea_user_profile_build_*_cnch 也修复了' }, true),
+    ).toEqual({ text: 'You: 把其他的 tea_user_profile_build_*_cnch 也修复了', tone: 'preview' });
   });
 
   /**
@@ -268,6 +275,176 @@ describe('sessionLine', () => {
       text: 'Ended',
       tone: 'preview',
     });
+  });
+});
+
+/**
+ * Whose message the line previews (docs/session-list-projects-design.md §3.5, owner 2026-11-07). The
+ * server keeps one unanswered message per session whoever sent it, so a coordinator's row read "You:"
+ * over a task's report. Another Orbit session's message (`lastUserFrom`) is named for that session,
+ * as the conversation's card names it; "You" is only ever the owner's own words. Kept in step with
+ * OrbitKit's `SessionLineSenderTests` and Android's `SessionLineTest`.
+ */
+describe('sessionLine names who sent the message it previews', () => {
+  const report = 'Done: **the package builds**';
+  const from = { sessionId: 'session-1', title: 'Build the package' };
+
+  it('names another session by its title, while the turn runs and after it stopped', () => {
+    expect(sessionLine({ status: 'RUNNING', lastAssistantText: 'previous reply', lastUserText: report, lastUserFrom: from }, true))
+      .toEqual({ text: 'Build the package: Done: the package builds', tone: 'preview' });
+    expect(sessionLine({ status: 'INTERRUPTED', lastAssistantText: 'previous reply', lastUserText: report, lastUserFrom: from }, true))
+      .toEqual({ text: 'Build the package: Done: the package builds', tone: 'preview' });
+    // Trash says it the same way.
+    expect(sessionLine({ status: 'FAILED', lastUserText: report, lastUserFrom: from }, false))
+      .toEqual({ text: 'Build the package: Done: the package builds', tone: 'preview' });
+  });
+
+  it('says You for the owner’s own message, and for an older server that names no sender', () => {
+    expect(SENT_BY_YOU).toBe('You');
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'ship it', lastUserFrom: null }, true))
+      .toEqual({ text: 'You: ship it', tone: 'preview' });
+    expect(sessionLine({ status: 'INTERRUPTED', lastUserText: 'ship it', lastUserFrom: null }, true))
+      .toEqual({ text: 'You: ship it', tone: 'preview' });
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'ship it' }, true))
+      .toEqual({ text: 'You: ship it', tone: 'preview' });
+    expect(sessionLine({ status: 'INTERRUPTED', lastUserText: 'ship it' }, true))
+      .toEqual({ text: 'You: ship it', tone: 'preview' });
+  });
+
+  it('calls a sender with no title what the conversation’s card calls it, never You', () => {
+    expect(SESSION_MESSAGE_UNTITLED).toBe('Untitled session');
+    for (const title of ['', '   ', '\n\t ']) {
+      expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: { sessionId: 'session-1', title } }, true))
+        .toEqual({ text: 'Untitled session: ship it', tone: 'preview' });
+    }
+    // A title is named as written, without the spaces around it.
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: { sessionId: 'session-1', title: '  Build the package ' } }, true).text)
+      .toBe('Build the package: ship it');
+  });
+
+  // A Feishu group member's message (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2): named as the
+  // conversation heads their bubble, `From Feishu · <name>`, never You.
+  it('names a Feishu group member as From Feishu · <name>, while the turn runs and after it stopped', () => {
+    const outsider = { source: 'FEISHU', name: 'Lin Mei' };
+    expect(sessionLine({ status: 'RUNNING', lastAssistantText: 'previous reply', lastUserText: 'fix the **flaky** test', lastUserFromExternal: outsider }, true))
+      .toEqual({ text: 'From Feishu · Lin Mei: fix the flaky test', tone: 'preview' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'fix the flaky test', lastUserFrom: null, lastUserFromExternal: outsider }, true))
+      .toEqual({ text: 'From Feishu · Lin Mei: fix the flaky test', tone: 'preview' });
+    expect(sessionLine({ status: 'FAILED', lastUserText: 'fix the flaky test', lastUserFromExternal: outsider }, false))
+      .toEqual({ text: 'From Feishu · Lin Mei: fix the flaky test', tone: 'preview' });
+    // Feishu would not say the name.
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'fix it', lastUserFromExternal: { source: 'FEISHU', name: null } }, true))
+      .toEqual({ text: 'From Feishu: fix it', tone: 'preview' });
+    // Cleared with the text (null), or a source this client does not know: the owner's own, as before.
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'fix it', lastUserFromExternal: null }, true))
+      .toEqual({ text: 'You: fix it', tone: 'preview' });
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'fix it', lastUserFromExternal: { source: 'SLACK', name: 'Lin Mei' } }, true))
+      .toEqual({ text: 'You: fix it', tone: 'preview' });
+  });
+
+  it('changes nothing above the message, and a sender with no message makes no line', () => {
+    expect(sessionLine({ status: 'RUNNING', lastToolUse: 'Bash', lastUserText: report, lastUserFrom: from }, true))
+      .toEqual({ text: 'Running Bash…', tone: 'running' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', pendingApprovals: 1, lastUserText: report, lastUserFrom: from }, true))
+      .toEqual({ text: 'Waiting for approval', tone: 'approval' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastAssistantText: 'On it.', lastUserFrom: from }, true))
+      .toEqual({ text: 'On it.', tone: 'preview' });
+  });
+});
+
+/**
+ * A message Orbit wrote itself (`lastUserFromOrbit`, docs/session-list-projects-design.md §3.5, owner
+ * 2026-11-07): the row says Orbit, never "You". A coordinator's notification says the sentence its line
+ * in the conversation says (`coordinatorDeliverySentence`); any other message of Orbit's says its first
+ * line. Kept in step with OrbitKit's `SessionLineOrbitTests` and Android's `SessionLineOrbitTest`.
+ */
+describe('sessionLine says Orbit for the message Orbit wrote', () => {
+  const evidence: CoordinatorDeliveryCard = {
+    kind: 'EVIDENCE_SUBMITTED',
+    task: { id: 'task-1', title: 'Write Orbit on the row' },
+    revision: 2,
+    count: null,
+    deliveredAt: '2026-11-07T07:30:00.000Z',
+    toCoordinator: true,
+  };
+  const notification = 'From Orbit · project “Rows” has a revision of completion evidence for you to decide\n\nTask “Write Orbit on the row” …';
+  const wake = 'Orbit Watch w-1 matched at generation 2: **CI** finished\n\nThis turn was queued by the watch, not typed by a person.';
+
+  it('says a notification’s own sentence, while the turn runs, after it stopped and in Trash', () => {
+    expect(SENT_BY_ORBIT).toBe('Orbit');
+    const told = { lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery: evidence } };
+    const line = { text: 'Orbit: Evidence revision 2 submitted: Write Orbit on the row', tone: 'preview' };
+    expect(sessionLine({ status: 'RUNNING', lastAssistantText: 'previous reply', ...told }, true)).toEqual(line);
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastAssistantText: 'previous reply', ...told }, true)).toEqual(line);
+    expect(sessionLine({ status: 'INTERRUPTED', ...told }, true)).toEqual(line);
+    expect(sessionLine({ status: 'FAILED', ...told }, false)).toEqual(line);
+  });
+
+  it('says every kind of notification as its line in the conversation says it', () => {
+    const cards: CoordinatorDeliveryCard[] = COORDINATOR_DELIVERY_KINDS.map((kind) => ({
+      kind,
+      task: { id: 'task-1', title: 'Build the package' },
+      revision: 3,
+      count: 2,
+      deliveredAt: '2026-11-07T07:30:00.000Z',
+      toCoordinator: kind !== 'CRITERIA_REJECTED',
+    }));
+    for (const card of cards) {
+      expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery: card } }, true))
+        .toEqual({ text: `Orbit: ${coordinatorDeliverySentence(card)}`, tone: 'preview' });
+    }
+    // Spelled out for three of them, so a sentence that changed is read here as well as in the conversation.
+    const said = (card: Partial<CoordinatorDeliveryCard>) => sessionLine({
+      status: 'AWAITING_INPUT', lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery: { ...evidence, ...card } },
+    }, true).text;
+    expect(said({ kind: 'CRITERION_UNLANDED', task: null, revision: null, count: 2 })).toBe('Orbit: Work not on main yet: 2 tasks');
+    expect(said({ kind: 'ACCEPTANCE_LANDED_DONE', task: null, revision: null, count: 1 })).toBe('Orbit: The only criterion landed, recorded Done');
+    expect(said({ kind: 'CRITERIA_APPROVED', task: null, revision: null })).toBe('Orbit: Criteria proposal approved');
+  });
+
+  it('says the first line of any other message of Orbit’s, flattened like a preview', () => {
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: wake, lastUserFromOrbit: { coordinatorDelivery: null } }, true))
+      .toEqual({ text: 'Orbit: Orbit Watch w-1 matched at generation 2: CI finished', tone: 'preview' });
+    // Blank lines before it are not its first line.
+    expect(sessionLine({ status: 'RUNNING', lastUserText: '\n  \nStart the task “Write Orbit on the row”.\n\nTask details:', lastUserFromOrbit: { coordinatorDelivery: null } }, true).text)
+      .toBe('Orbit: Start the task “Write Orbit on the row”.');
+    // A card this build cannot read is no card: the message's first line, and still Orbit's.
+    for (const coordinatorDelivery of [{ kind: 'A_KIND_FROM_A_LATER_SERVER', deliveredAt: '2026-11-07T07:30:00.000Z' }, { ...evidence, revision: null }, 'evidence']) {
+      expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery } }, true).text)
+        .toBe('Orbit: From Orbit · project “Rows” has a revision of completion evidence for you to decide');
+    }
+  });
+
+  it('says You only for the owner’s words, and names another session, as before', () => {
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: null, lastUserFromOrbit: null }, true).text)
+      .toBe('You: ship it');
+    // An older server sends no mark at all: every message reads as it did.
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: notification }, true).text)
+      .toBe('You: From Orbit · project “Rows” has a revision of completion evidence for you to decide Task “Write Orbit on the row” …');
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: { sessionId: 'session-1', title: 'Build the package' }, lastUserFromOrbit: null }, true).text)
+      .toBe('Build the package: ship it');
+    // A mark that is not an object is none.
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFromOrbit: 'Orbit' }, true).text).toBe('You: ship it');
+  });
+
+  // The four senders one row can name, each as the server writes it (at most one of the three marks set):
+  // another session, Orbit, a Feishu group member (docs/feishu-bot-design.md §8.2), and the owner.
+  it('names each of the four senders, as the server marks them', () => {
+    const row = (marks: Record<string, unknown>) =>
+      sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: null, lastUserFromOrbit: null, lastUserFromExternal: null, ...marks }, true).text;
+    expect(row({ lastUserFrom: { sessionId: 'session-1', title: 'Build the package' } })).toBe('Build the package: ship it');
+    expect(row({ lastUserFromOrbit: { coordinatorDelivery: null } })).toBe('Orbit: ship it');
+    expect(row({ lastUserFromExternal: { source: 'FEISHU', name: 'Lin Mei' } })).toBe('From Feishu · Lin Mei: ship it');
+    expect(row({})).toBe('You: ship it');
+  });
+
+  it('changes nothing above the message, and a mark with no message makes no line', () => {
+    const told = { lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery: evidence } };
+    expect(sessionLine({ status: 'RUNNING', lastToolUse: 'Bash', ...told }, true)).toEqual({ text: 'Running Bash…', tone: 'running' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', pendingApprovals: 1, ...told }, true))
+      .toEqual({ text: 'Waiting for approval', tone: 'approval' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastAssistantText: 'On it.', lastUserFromOrbit: { coordinatorDelivery: evidence } }, true))
+      .toEqual({ text: 'On it.', tone: 'preview' });
   });
 });
 

@@ -68,15 +68,6 @@ type RunnerConfig struct {
 	// itself, the first time a session needs one. `orbit register` turns it on unless
 	// --no-auto-install-engines is passed; absent in an older config reads as "no".
 	AutoInstallEngines bool `json:"autoInstallEngines,omitempty"`
-	// LinkShadow is whether this runner mirrors the heartbeats and event batches it delivers
-	// over HTTPS to the runner link gateway, during the link's shadow period (link_shadow.go).
-	// Absent reads as on; false turns it off, as ORBIT_LINK_SHADOW=0 does.
-	LinkShadow *bool `json:"linkShadow,omitempty"`
-	// LinkMode is whether this runner's daemon work may move to the runner link when the control plane
-	// asks for it (link_mode.go). Absent, it follows the control plane: HTTPS until an UPGRADE_REQUIRED,
-	// or a Welcome or HeartbeatAck saying MODE_LINK, moves it. "off" keeps it on HTTPS, as
-	// ORBIT_LINK_MODE=off does.
-	LinkMode string `json:"linkMode,omitempty"`
 }
 
 // machineHome is where the runner stores its config + run scratch. One runner per
@@ -209,6 +200,33 @@ func hardenConfigStorage() error {
 	}
 	if err := f.Chmod(configFilePerm); err != nil {
 		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// checkConfigStorage says why a credential could not be saved in machineHome now, creating the directory
+// as saveConfig would. Registering saves only what the control plane has already issued, so a home this
+// account cannot write, a root-owned one from an earlier `sudo` for one, is worth finding out first: found
+// afterwards, it leaves a runner on the server whose token is gone.
+func checkConfigStorage() error {
+	if err := os.MkdirAll(machineHome(), machineHomePerm); err != nil {
+		return err
+	}
+	if err := hardenMachineHomeDir(); err != nil {
+		return err
+	}
+	probe, err := os.CreateTemp(machineHome(), ".config-check-")
+	if err != nil {
+		return err
+	}
+	_ = probe.Close()
+	_ = os.Remove(probe.Name())
+	f, err := os.OpenFile(configPath(), os.O_WRONLY, 0)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
 	return f.Close()

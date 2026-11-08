@@ -487,6 +487,24 @@ describe('the task pin: an engine, then a credential it runs (board 6)', { timeo
 });
 
 describe('what each run was routed to, and why', { timeout: 60_000 }, () => {
+  it.each([true, false])('shows decision source tags in Why (applied: %s)', async (applied) => {
+    const reasons = [
+      '[rule] Tier S: bounded executable work with immediate acceptance feedback',
+      '[default] Tier M: Balance minimum for a task without a suggestion',
+      '[coordinator] Tier M: suggested by the coordinator',
+      '[escalate] Tier L: one above run 1 (M) after acceptance failure',
+      '[not-routed] Model pinned on the task',
+      'Engine claude: this agent\'s own engine',
+    ];
+    await mount(detail({ sessions: [run(RUN_1, { route: route({ applied, reasons }) })] }));
+    await click(row(RUN_1).querySelector(applied ? '.tdp-route-tag' : '.tdp-route-would'), 'run Why');
+    const explanation = why(RUN_1)!;
+    expect([...explanation.querySelectorAll('.tdp-route-source')].map((el) => el.textContent)).toEqual([
+      '[rule]', '[default]', '[coordinator]', '[escalate]', '[not-routed]',
+    ]);
+    expect(whyText(explanation).reasons).toEqual(reasons);
+  });
+
   const escalated = route({
     level: 'L',
     model: 'claude-opus-5-5',

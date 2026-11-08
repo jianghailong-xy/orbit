@@ -47,7 +47,8 @@ describe('the session route opens a landing in its project’s Landings window',
 
   it('gives the window its own address, which a phone shows in the conversation’s place', () => {
     const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
-    expect(app).toContain('<Route path="projects/:id/landings" />');
+    // `element={null}` because the console's layout draws it; see the layout route in App.tsx.
+    expect(app).toContain('<Route path="projects/:id/landings" element={null} />');
     expect(showsConversation('/projects/p1/landings')).toBe(true);
     expect(showsConversation('/projects/p1')).toBe(false);
     // Nothing is composed under the window.
@@ -56,9 +57,12 @@ describe('the session route opens a landing in its project’s Landings window',
 
   it('opens no transcript stream and reads no event page for a landing', () => {
     // LS1/LS6: a LANDING session never writes run_event and sends no session events; subscribing
-    // would be a stream that can only ever say nothing.
-    expect(SOURCE).toContain('if (!selectedId || landingSession)');
-    expect(SOURCE).toContain('[selectedId, landingSession]');
+    // would be a stream that can only ever say nothing. The view hands the flag to the stream it
+    // opens (lib/useSessionStream), which opens nothing for a landing and re-runs when it changes.
+    expect(SOURCE).toMatch(/useSessionStream\(\{[^}]*\blandingSession,/);
+    const stream = readFileSync(new URL('../lib/useSessionStream.ts', import.meta.url), 'utf8');
+    expect(stream).toContain('if (!selectedId || landingSession)');
+    expect(stream).toContain('[selectedId, landingSession]');
   });
 
   it('lets the window own its landings’ polling', () => {

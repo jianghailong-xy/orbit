@@ -1045,6 +1045,7 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 	if s.job != nil {
 		job.WT = s.job.WT
 		job.IsolationStatus = s.job.IsolationStatus
+		job.CheckoutCreation = s.job.CheckoutCreation
 		job.SourceRefusal = s.job.SourceRefusal
 	}
 	s.job = job

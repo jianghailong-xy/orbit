@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -12,14 +13,36 @@ import (
 	"strings"
 )
 
-type artifactUploader func(ctx context.Context, path, mimeType string) (string, error)
+// artifactUploader sends a file already opened and judged (localFileScope.open). path is what the reply called it, for
+// its name; nothing reads it again.
+type artifactUploader func(ctx context.Context, file *os.File, path, mimeType string) (string, error)
 
 var markdownAttachmentRE = regexp.MustCompile(`(!?)\[([^\]]*)\]\((<?[^)\s]+>?)(\s+(?:"[^"]*"|'[^']*'))?\)`)
 
 func rewriteLocalMarkdownImages(ctx context.Context, t *Transport, sessionID, text string, roots []string) string {
-	return rewriteLocalMarkdownImagesWithUploader(ctx, text, roots, func(ctx context.Context, path, mimeType string) (string, error) {
-		return t.uploadSessionAttachment(ctx, sessionID, path, mimeType)
+	return rewriteLocalMarkdownImagesWithUploader(ctx, text, roots, func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
+		return t.uploadSessionAttachmentFile(ctx, sessionID, file, mimeType, filepath.Base(path))
 	})
+}
+
+// replyFileScope is what a reply may link, from the roots asked for and those of them that exist. The first one asked
+// for, where its relative links start, is the session's working directory, and the second is its uploads directory. Named
+// under Orbit's directory, the working directory counts only when it is in this session's own checkout or uploads: a
+// workspace's workDir can name any path, and what else is there is the machine's or another session's. Anywhere else it
+// is the owner's project directory, which goes as any other root. When it is gone no other root takes its place: they
+// stay what they are, held to their names.
+func replyFileScope(asked, existing []string) localFileScope {
+	workDir := existing[0]
+	if workDir != absPath(asked[0]) {
+		return newLocalFileScope(existing)
+	}
+	if !pathInsideAny(workDir, absPath(machineHome()), realPath(machineHome())) {
+		return newLocalFileScope(existing[1:], workDir)
+	}
+	if len(asked) < 2 || !namedInSessionsOwnDirectory(workDir, asked[1]) {
+		return newLocalFileScope(existing[1:])
+	}
+	return newLocalFileScope(existing)
 }
 
 func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, roots []string, upload artifactUploader) string {
@@ -30,6 +53,7 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 	if len(cleanRoots) == 0 {
 		return text
 	}
+	scope := replyFileScope(roots, cleanRoots)
 	uploaded := map[string]string{}
 	return markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
 		parts := markdownAttachmentRE.FindStringSubmatch(match)
@@ -41,18 +65,23 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 			return match
 		}
 		path := localMarkdownImagePath(raw, cleanRoots[0])
-		if path == "" || !pathWithinRoots(path, cleanRoots) {
+		if path == "" {
 			return match
 		}
+		file, _, err := scope.open(path)
+		if err != nil {
+			return match
+		}
+		defer file.Close()
 		isImage := parts[1] == "!"
-		mimeType := attachmentMime(path)
+		mimeType := attachmentMimeOf(file, path)
 		if isImage && !strings.HasPrefix(mimeType, "image/") {
 			return match
 		}
 		id := uploaded[path]
 		if id == "" {
 			var err error
-			id, err = upload(ctx, path, mimeType)
+			id, err = upload(ctx, file, path, mimeType)
 			if err != nil {
 				logln("assistant attachment upload failed for", path+":", err)
 				return match
@@ -70,11 +99,17 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 // CODEX_HOME/generated_images, outside both the worktree and the session's uploads dir. A reply
 // linking one of those files would otherwise carry a path only the runner can read (every client
 // renders it as an unreachable file), so it counts as an upload root. Empty when the home can't be
-// resolved; cleanExistingRoots drops that, and any root that doesn't exist yet.
+// resolved, or is named in a session's checkout or uploads, where a root would stand for that whole
+// directory (sessionRoot); cleanExistingRoots drops that, and any root that doesn't exist yet.
 func codexGeneratedImagesDir(env []string, cwd string) string {
 	home, err := effectiveCodexHome(env, cwd)
 	if err != nil {
 		return ""
+	}
+	for _, orbit := range []string{absPath(machineHome()), realPath(machineHome())} {
+		if pathInsideAny(home, filepath.Join(orbit, "worktrees"), filepath.Join(orbit, "uploads")) {
+			return ""
+		}
 	}
 	return filepath.Join(home, "generated_images")
 }
@@ -88,18 +123,19 @@ func stageCodexGeneratedImage(path, generatedRoot, uploadRoot string) string {
 	if path == "" || generatedRoot == "" || uploadRoot == "" {
 		return ""
 	}
-	if !pathWithinRoots(path, []string{generatedRoot}) || !strings.HasPrefix(attachmentMime(path), "image/") {
-		return ""
-	}
-	if err := os.MkdirAll(uploadRoot, 0o755); err != nil {
-		return ""
-	}
-	destination := filepath.Join(uploadRoot, filepath.Base(path))
-	data, err := os.ReadFile(path)
+	file, _, err := newLocalFileScope([]string{generatedRoot}).open(path)
 	if err != nil {
 		return ""
 	}
-	if err := os.WriteFile(destination, data, 0o644); err != nil {
+	defer file.Close()
+	if !strings.HasPrefix(attachmentMimeOf(file, path), "image/") {
+		return ""
+	}
+	destination, err := saveLocalFile(filepath.Dir(uploadRoot), []string{filepath.Base(uploadRoot)}, filepath.Base(path), func(w io.Writer) error {
+		_, err := io.Copy(w, file)
+		return err
+	})
+	if err != nil {
 		return ""
 	}
 	return destination
@@ -150,35 +186,14 @@ func cleanExistingRoots(roots []string) []string {
 	return out
 }
 
-func pathWithinRoots(path string, roots []string) bool {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		abs = filepath.Clean(path)
-	}
-	st, err := os.Stat(abs)
-	if err != nil || st.IsDir() {
-		return false
-	}
-	for _, root := range roots {
-		rel, err := filepath.Rel(root, abs)
-		if err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
-			return true
-		}
-	}
-	return false
-}
-
-func attachmentMime(path string) string {
-	if typ := mime.TypeByExtension(strings.ToLower(filepath.Ext(path))); typ != "" {
+// attachmentMimeOf says what an opened file is: by its name, or by sniffing the handle, which moves no offset. A sniff
+// never opens by path, which may mean something else by now.
+func attachmentMimeOf(file *os.File, name string) string {
+	if typ := mime.TypeByExtension(strings.ToLower(filepath.Ext(name))); typ != "" {
 		return typ
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "application/octet-stream"
-	}
-	defer f.Close()
 	buf := make([]byte, 512)
-	n, _ := f.Read(buf)
+	n, _ := file.ReadAt(buf, 0)
 	if n == 0 {
 		return "application/octet-stream"
 	}

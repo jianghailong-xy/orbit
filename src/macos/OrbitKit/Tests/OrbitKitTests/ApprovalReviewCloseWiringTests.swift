@@ -14,7 +14,8 @@ import XCTest
 /// left open on it). The fixes are the two facts the console keeps — the press's own phase
 /// (`approvalAnswers`) and the cards answered HERE (`closedCards`) — and the sheet's branches that
 /// read them before its fallback, and draw the card as its record (the owner's boards of
-/// 2026-10-15: the sheet stays, the card turns into what was answered).
+/// 2026-10-15: the card turns into what was answered). The sheet then leaves a moment later (the
+/// owner's call of 2026-11-02).
 final class ApprovalReviewCloseWiringTests: XCTestCase {
 
     private struct SourceMissing: Error, CustomStringConvertible {
@@ -124,8 +125,8 @@ final class ApprovalReviewCloseWiringTests: XCTestCase {
                           + "opinion that can disagree with it")
     }
 
-    /// No receipt page stands between the press and the record: the sheet stays, and the card's
-    /// buttons give way to who answered and when.
+    /// No receipt page stands between the press and the record: the card's buttons give way to who
+    /// answered and when.
     func testTheRecordTakesTheButtonsPlaceAndNoReceiptPageIsLeft() throws {
         let sheet = code(try source(Self.sheet))
         XCTAssertFalse(sheet.contains("ReviewReceipt"), "the full-page receipt is back")
@@ -142,5 +143,52 @@ final class ApprovalReviewCloseWiringTests: XCTestCase {
         let cards = code(try source("Views/ApprovalCards.swift"))
         XCTAssertTrue(cards.contains("if record == nil { Text(StartProject.explanation(criteria.count))"),
                       "the start's record still says what starting would commit the project to")
+    }
+
+    /// The record confirms the press, and then the sheet gets out of the way — on a timer the view
+    /// owns, so closing the sheet by hand cannot leave a dismiss behind to close the next one.
+    func testTheSheetLeavesOnItsOwnAMomentAfterThePressIsRecorded() throws {
+        let sheet = code(try source(Self.sheet))
+        let presented = try slice(sheet, from: "struct ApprovalReviewSheet: View {",
+                                  to: "extension ConsoleModel.AnsweredApproval")
+        let leaves = try slice(presented, from: ".task(id: answeredHere) {", to: "dismiss() }")
+        XCTAssertTrue(leaves.contains("guard answeredHere else { return }"),
+                      "the sheet leaves only once a press here is recorded, not when it opens")
+        XCTAssertTrue(leaves.contains("try? await Task.sleep(for: .seconds(2))"),
+                      "the record is up long enough to see what was ticked")
+        XCTAssertTrue(leaves.contains("if !Task.isCancelled { dismiss() }"),
+                      "a sheet closed by hand cancels the timer: the sleep's cancellation is what a "
+                          + "bare dismiss would run straight past")
+    }
+
+    /// Only the reader's own press leaves the sheet. A request that went away underneath them stays
+    /// to say so, and a record opened from the conversation stays to be read.
+    func testOnlyAPressMadeHereTakesTheSheetAway() throws {
+        let sheet = code(try source(Self.sheet))
+        let here = try slice(sheet, from: "private var answeredHere: Bool {", to: "var body: some View {")
+        XCTAssertTrue(here.contains("if case .sent = console.approvalAnswers[id] { return true }"),
+                      "an approval counts only once the door has it: a refusal has to find the "
+                          + "reader still here, with the card back")
+        XCTAssertTrue(here.contains("return console.answeredHere(card)"),
+                      "a decision card counts through the fact the sheet draws its record from, so "
+                          + "one reopened for a new version does not leave under the reader")
+        XCTAssertTrue(here.contains("if case .coordinatorQuestion(let itemID) = card.kind { return console.questionsAnsweredHere.contains(itemID) }"),
+                      "a coordinator's question counts only when it was answered here: its record "
+                          + "reads the same when another end answered")
+        XCTAssertFalse(here.contains("coordinatorQuestionRecord"),
+                       "a record opened from the conversation is there to be read")
+
+        let console = code(try source(Self.console))
+        let press = try slice(console, from: "func answerQuestion(_ row: ProjectOpenItemRow,",
+                              to: "func returnEscalatedItem(")
+        let door = try XCTUnwrap(press.range(of: "try await api.answerOpenItem("),
+                                 "the door that takes the answer")
+        let mark = try XCTUnwrap(press.range(of: "questionsAnsweredHere.insert(row.itemId)"),
+                                 "a press no longer says the question was answered here")
+        XCTAssertTrue(door.upperBound <= mark.lowerBound,
+                      "marked after the door took it: a refusal leaves the question standing")
+        XCTAssertEqual(console.components(separatedBy: "questionsAnsweredHere.insert(").count, 2,
+                       "the press is the one thing that writes this: a read must not, or an answer "
+                           + "from another end would close the reader's sheet")
     }
 }

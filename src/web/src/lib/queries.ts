@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import type {
   EventSearchResponse,
   LinkPreviewRef,
@@ -42,11 +42,13 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
+import type { EvidenceFileCitation, EvidenceFilePage } from './evidenceFiles';
 import type {
   WikiArticleDirectory,
   WikiArticleIndex,
   WikiArticleView,
   WikiChangesetView,
+  WikiDocChanges,
   WikiDocView,
   WikiDocsDirectory,
   WikiDocsIndex,
@@ -56,7 +58,9 @@ import type {
   WikiJobsRead,
   WikiSearchRow,
   WikiSpaceHealth,
+  WikiSpaceWorkspaces,
   WikiSystemModelRead,
+  WikiTrash,
 } from '@orbit/shared';
 import type {
   WikiChangeset,
@@ -69,6 +73,7 @@ import type {
   WikiTopicView,
 } from './wiki';
 import { isWikiDisabled } from './wiki';
+import { getWikiChatDraft, getWikiChatDrafts, getWikiChats, getWikiDocVersions } from './wikiChat';
 import {
   activeTasksPath,
   labelSummaryPath,
@@ -78,6 +83,8 @@ import {
   type TaskCounts,
 } from './taskPages';
 import { mergeWatches } from './watches';
+import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
+import { readOpenList, type OpenListAnswer } from './openListDelta';
 
 export type { ConfiguredProvider };
 
@@ -226,6 +233,24 @@ export const meQuery = () =>
     queryFn: () => api<Me>('/users/me'),
   });
 
+/** What `GET /attachments/usage` answers: what the account keeps, where most of it is, and each week's arrivals. */
+export interface StorageUsage {
+  totalBytes: number;
+  fileCount: number;
+  /** Set on an instance that limits what one account keeps. */
+  quotaBytes: number | null;
+  projects: { projectId: string; title: string; bytes: number; fileCount: number }[];
+  tasks: { taskId: string; title: string; bytes: number; fileCount: number }[];
+  /** Oldest first, ending with this week; `weekStart` is that week's Monday, YYYY-MM-DD. */
+  weeks: { weekStart: string; bytes: number }[];
+}
+
+export const storageUsageQuery = () =>
+  queryOptions({
+    queryKey: ['attachments', 'usage'] as const,
+    queryFn: () => api<StorageUsage>('/attachments/usage'),
+  });
+
 /** The account's profile photo as a data URL, by the version `me` names — a new photo is a new
  *  key, and nothing is fetched while there is none. */
 export const avatarQuery = (version: string | null | undefined) =>
@@ -265,16 +290,23 @@ async function fetchSessions(
   tagId: string | null,
   limit: number | null,
 ): Promise<SessionListItem[]> {
-  const path = (requestedView: string | null): string => {
+  const path = (requestedView: string | null, since?: string): string => {
     const qs = new URLSearchParams();
     if (runnerId) qs.set('runnerId', runnerId);
     if (workspaceId) qs.set('workspaceId', workspaceId);
     if (requestedView) qs.set('view', requestedView);
     if (tagId) qs.set('tagId', tagId);
     if (limit) qs.set('limit', String(limit));
+    if (since !== undefined) qs.set('since', since);
     const suffix = qs.toString();
     return `/sessions${suffix ? `?${suffix}` : ''}`;
   };
+  // A whole Open list is read as a delta against the copy this scope last read (lib/openListDelta).
+  // A page is not: the delta read answers the whole scope and has no page size.
+  if (view === 'open' && !limit) {
+    return readOpenList(JSON.stringify([runnerId, workspaceId, tagId]), (since) =>
+      api<OpenListAnswer<SessionListItem>>(path(view, since)));
+  }
   const rows = await api<SessionListItem[]>(path(view));
   if (!view || view === 'open') return rows;
   const expected = view === 'completed' ? 'COMPLETED' : 'TRASH';
@@ -304,6 +336,10 @@ export const sessionsQuery = (
   return queryOptions({
     queryKey: ['sessions', runnerId, workspaceId, view, tagId, limit] as const,
     queryFn: () => fetchSessions(runnerId, workspaceId, view, tagId, limit),
+    // The stream marks a list stale the moment an event touches it, so while it is live what was
+    // just read is still good to show: the console mounting on the list the splash read moments ago
+    // (BootGate) reads it once, not twice (docs/list-freshness-design.md W5).
+    staleTime: streamStaleTime,
   });
 };
 
@@ -313,17 +349,25 @@ export const PROJECT_SESSION_REFRESH_MS = 60_000;
 
 /**
  * At most this many project reads are out at once, per tab. A workspace list reads every project it
- * shows (useSessionProjectData), each on an interval of its own, and the intervals all start in the
- * same render, so the reads fall due together: forty-odd at once on a large account, on a page load,
- * every PROJECT_SESSION_REFRESH_MS after it, and every 4 s while the stream is down (which is also
- * what meets a restarting server). Each read is cheap. Forty at once are a queue on the server's
- * connection pool that every other request then waits in: when one tab was reloaded on 2026-10-25 at
- * 01:01Z, 52 of the 59 project reads it made that minute took 0.5 s or more.
+ * shows (useSessionProjectData), and the reads fall due together: forty-odd at once on a large
+ * account, on a page load, when the stream reopens, and on each step of the outage backoff while it
+ * is down (which is also what meets a restarting server). Each read is cheap. Forty at once are a
+ * queue on the server's connection pool that every other request then waits in: when one tab was
+ * reloaded on 2026-10-25 at 01:01Z, 52 of the 59 project reads it made that minute took 0.5 s or more.
  */
 const PROJECT_READS_AT_ONCE = 4;
 let projectReadsOut = 0;
 const projectReadsWaiting: Array<() => void> = [];
-async function projectRead<T>(read: () => Promise<T>): Promise<T> {
+/**
+ * `priority` is for the reads the person is waiting on — a project page's own session lists
+ * (`projectSessionsQuery` with `priority: true`, at most two per page). They do not join the queue:
+ * the queue can hold every project the workspace list shows — forty-odd on a large account — and a
+ * project opened while it drains would otherwise ask for its own rows only after all of them, a
+ * wait of seconds (up to a minute while the stream is down and the reads fall due every 4 s). Two
+ * extra reads beside the four are not the queue this exists to prevent; being behind forty is.
+ */
+async function projectRead<T>(read: () => Promise<T>, priority = false): Promise<T> {
+  if (priority) return read();
   // A finished read hands its place straight to the next one waiting, so the count never dips
   // between them and lets a newcomer in ahead of the queue.
   if (projectReadsOut < PROJECT_READS_AT_ONCE) projectReadsOut += 1;
@@ -349,13 +393,15 @@ export const projectSessionsQuery = (opts: {
   projectId: string;
   view: SessionListView;
   includeLanding?: boolean;
+  /** The project page (or its Landings window) is waiting on this read — see projectRead. */
+  priority?: boolean;
 }) =>
   queryOptions({
     queryKey: ['project-sessions', opts.projectId, opts.view, opts.includeLanding === true] as const,
     queryFn: () => {
       const qs = new URLSearchParams({ projectId: opts.projectId, view: opts.view });
       if (opts.includeLanding) qs.set('includeLanding', '1');
-      return projectRead(() => api<SessionListItem[]>(`/sessions?${qs}`));
+      return projectRead(() => api<SessionListItem[]>(`/sessions?${qs}`), opts.priority === true);
     },
     staleTime: 15_000,
   });
@@ -527,7 +573,8 @@ export const activeTasksQuery = (listId?: string, projectId?: string) =>
   queryOptions({
     queryKey: ['tasks', 'active', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
     queryFn: () => api<ActiveTasks>(activeTasksPath(listId, projectId)),
-    refetchInterval: 5_000,
+    // `task.*` events refresh it; this is the safety read (listBudget).
+    refetchInterval: streamPoll(5_000),
   });
 
 /**
@@ -606,14 +653,17 @@ export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter]
  * (one `['projects']` invalidation reaches every entry), while the page's own Open entry is no
  * longer dragged onto this cadence — it keeps its `PROJECTS_REFRESH_MS`.
  *
- * Polled as a fallback for missed control events, alongside project changes and the debounced
- * refresh when a member session moves.
+ * Refreshed by project changes and, debounced, when a member session moves; polled only as the
+ * safety read for a missed event (listBudget).
  */
 export const openProjectsQuery = () =>
   queryOptions({
     queryKey: ['projects', 'sidebar'] as const,
     queryFn: () => api<SidebarProject[]>('/projects/sidebar'),
-    refetchInterval: 15_000,
+    refetchInterval: streamPoll(15_000),
+    // The splash reads it to decide the Open list's shape (BootGate); the rail mounting a moment
+    // later shows that read instead of making another.
+    staleTime: streamStaleTime,
   });
 
 /** The project document also supplies title and task counts when a finished project is
@@ -652,7 +702,8 @@ export const projectCoordinatorStatusQuery = (projectId: string) =>
     queryKey: ['project', projectId, 'coordinator', 'status'] as const,
     queryFn: () =>
       api<CoordinatorStatus>(`/projects/${encodeURIComponent(projectId)}/coordinator/status`),
-    refetchInterval: 15_000,
+    // Project and member-session events refresh it (useControlPlane); this is the safety read.
+    refetchInterval: streamPoll(15_000),
   });
 
 /** One entry of the blocking-root leaderboard: an unfinished task and how much unfinished work
@@ -746,9 +797,11 @@ export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
       api<ProjectReadyToRun>(
         `/projects/${encodeURIComponent(projectId)}/panorama/ready?limit=${limit}`,
       ),
+    // Task, project and member-session events refresh it (useControlPlane); this is the safety read,
+    // and the outage backoff while the stream is down, no faster than its old cadence.
     refetchInterval: (query) => {
       const data = query.state.data;
-      return (data?.queuedCount ?? 0) + (data?.runningCount ?? 0) > 0 ? 5_000 : 15_000;
+      return streamPoll((data?.queuedCount ?? 0) + (data?.runningCount ?? 0) > 0 ? 5_000 : 15_000)(query);
     },
   });
 
@@ -769,7 +822,7 @@ export const projectDependencyGraphQuery = (projectId: string) =>
       api<ProjectDependencyGraphResponse>(
         `/projects/${encodeURIComponent(projectId)}/dependency-graph`,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: streamPoll(30_000),
   });
 
 // ── Unit L7: the attribution boundary, and the two writes that cross it ───────────────────────
@@ -826,6 +879,8 @@ export interface TaskEvidenceRevision {
   revision: string;
   /** The envelope as it was submitted: `claim`, `gaps` and the rest. */
   evidence?: Record<string, unknown>;
+  /** What each cited row reads as now. The server says it of a revision that cites a file, and of no other. */
+  citations?: EvidenceFileCitation[] | null;
 }
 
 /**
@@ -838,6 +893,23 @@ export const taskEvidenceQuery = (taskId: string) =>
   queryOptions({
     queryKey: ['task-evidence', taskId] as const,
     queryFn: () => api<TaskEvidenceRevision[]>(`/tasks/${encodeURIComponent(taskId)}/evidence`),
+  });
+
+/**
+ * The files one version of evidence cites, a page at a time: read from rows, so a file reads the same
+ * after it has expired. A card draws the first page, and only the page it opens asks for more.
+ */
+export const evidenceFilesKey = (taskId: string) => ['task-evidence', taskId, 'files'] as const;
+
+export const evidenceFilesQuery = (taskId: string, revision: string) =>
+  infiniteQueryOptions({
+    queryKey: [...evidenceFilesKey(taskId), revision] as const,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      api<EvidenceFilePage>(
+        `/tasks/${encodeURIComponent(taskId)}/evidence/${encodeURIComponent(revision)}/files${pageParam > 0 ? `?offset=${pageParam}` : ''}`,
+      ),
+    getNextPageParam: (page) => page.nextOffset,
   });
 
 /**
@@ -950,7 +1022,9 @@ export const projectIntegrationQuery = (projectId: string) =>
     queryKey: ['project', projectId, 'integration'] as const,
     queryFn: () =>
       api<ProjectIntegrationView>(`/projects/${encodeURIComponent(projectId)}/integration`),
-    refetchInterval: 30_000,
+    // A landing or a merge in flight announces nothing on the stream (LANDING sessions publish no
+    // event), so the line keeps its cadence while one is; otherwise it follows the stream.
+    refetchInterval: pollWhileInFlight(30_000, (query) => integrationInFlight(query.state.data)),
   });
 
 /** The selectors one page of a landing's check output is read by (contract §2.2 J-T4, §2.9 LS2). */
@@ -1116,6 +1190,13 @@ export const wikiSpaceQuery = (spaceId: string | null) =>
     enabled: spaceId !== null,
   });
 
+/** Who is in a wiki and who can be added to it: Wiki settings' Workspaces card (contract `space.workspaces`). */
+export const wikiSpaceWorkspacesQuery = (spaceId: string) =>
+  queryOptions({
+    queryKey: ['wiki', 'space-workspaces', spaceId] as const,
+    queryFn: () => api<WikiSpaceWorkspaces>(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces`),
+  });
+
 /**
  * A space's health (`GET /api/wiki/spaces/:id/health`, contract `maintenance.health`): every active entry
  * it holds, and where its maintenance run stands — what the status line under the title says.
@@ -1123,6 +1204,24 @@ export const wikiSpaceQuery = (spaceId: string | null) =>
  * Every Wiki view wears the line and the server counts the backlog afresh for each read, so moving from
  * view to view reuses a read for half a minute; a wiki write (`wiki.changed`) re-reads it at once.
  */
+/**
+ * The owner's wikis in Trash (contract `space.trash.list`), newest move first: the sidebar's Trash row, the line under
+ * Wiki settings' last card and the first-wiki card's. Under the `wiki` root, so `wiki.changed` refreshes it with the rest.
+ */
+export const wikiTrashQuery = () =>
+  queryOptions({
+    queryKey: ['wiki', 'trash'] as const,
+    queryFn: async (): Promise<WikiTrash | null> => {
+      try {
+        return await api<WikiTrash>('/wiki/trash');
+      } catch (error) {
+        if (isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    staleTime: 30_000,
+  });
+
 export const wikiHealthQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'health'] as const,
@@ -1290,15 +1389,16 @@ export const wikiEntryQuery = (entryId: string | null) =>
  * `SessionSearchHit` would fail on the whole answer), and every session hit's click goes to
  * `/sessions/:id`, which is not where an entry lives.
  *
- * `include=space,topics,anchor` because this caller OPENS what it finds: an entry's page is
- * `/wiki/<space>/e/<id>`, a space AND an id (`WikiSearchRowAdditions`).
+ * `include=space,topics` because this caller OPENS what it finds: an entry's page is
+ * `/wiki/<space>/e/<id>`, a space AND an id (`WikiSearchRowAdditions`). The last anchor check its row
+ * marks comes on every hit.
  */
 export const wikiSearchQuery = (q: string) =>
   queryOptions({
     queryKey: ['wiki', 'search', q] as const,
     queryFn: () =>
       api<{ q: string; semantic: boolean; hits: WikiSearchRow[] }>(
-        `/wiki/search?q=${encodeURIComponent(q)}&include=space,topics,anchor`,
+        `/wiki/search?q=${encodeURIComponent(q)}&include=space,topics`,
       ),
     // The same minute the session search keeps: a result set is a snapshot of a corpus that moves
     // when somebody writes, and one palette session is not a reason to re-read it per keystroke.
@@ -1350,6 +1450,74 @@ export const wikiDocQuery = (spaceId: string | null, slug: string | null) =>
       }
     },
     enabled: spaceId !== null && slug !== null,
+  });
+
+/**
+ * A space's chats (contract `chat.list`): the round button's three counts, the workspace they run in, the ones
+ * that qualify, and the panel's history. `null` from a server with no chats yet, which leaves the button at rest.
+ * A wiki write re-reads it (`wiki.changed`); while something is working it is read again besides, because a
+ * chat's turn ending is a session's event, which says nothing to this key.
+ */
+export const wikiChatsQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'chats', spaceId] as const,
+    queryFn: () => getWikiChats(spaceId!),
+    enabled: spaceId !== null,
+    staleTime: 15_000,
+    refetchInterval: (query) => (query.state.data?.fab.working ? 10_000 : false),
+  });
+
+/**
+ * One card of a wiki chat (contract `chat.drafts.read`), drawn from the draftId its drafting call answered: its state is
+ * the server's, never read off the conversation. A wiki write re-reads it (`wiki.changed` names the space when a card is
+ * made, pressed, or its rewrite moves); while its rewrite is under way it is read again besides.
+ */
+export const wikiChatDraftQuery = (draftId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'chat-draft', draftId] as const,
+    queryFn: () => getWikiChatDraft(draftId!),
+    enabled: draftId !== null,
+    staleTime: 5_000,
+    refetchInterval: (query) => {
+      const result = query.state.data?.state === 'applied' ? query.state.data.rewrite?.result : undefined;
+      return result === 'rewriting' || result === 'waiting' ? 15_000 : false;
+    },
+  });
+
+/** Every card of one chat, oldest first: what the page beside the panel marks (Draft would rewrite this section). */
+export const wikiChatDraftsQuery = (chatId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'chat-drafts', chatId] as const,
+    queryFn: () => getWikiChatDrafts(chatId!),
+    enabled: chatId !== null,
+    staleTime: 15_000,
+  });
+
+/** A section's kept versions, newest first, each compared with what replaced it (contract `docs.versions.reads.versions`). */
+export const wikiDocVersionsQuery = (spaceId: string | null, slug: string | null, key: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'doc-versions', slug, key] as const,
+    queryFn: () => getWikiDocVersions(spaceId!, slug!, key!),
+    enabled: spaceId !== null && slug !== null && key !== null,
+    staleTime: 30_000,
+  });
+
+/**
+ * Activity's Docs rows (contract `docs.versions.reads.changes`): the space's sections written again, and the follow jobs
+ * that left sections for maintenance, newest first. `null` from a server older than the versions, which has none to say.
+ */
+export const wikiDocChangesQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'doc-changes'] as const,
+    queryFn: async (): Promise<WikiDocChanges | null> => {
+      try {
+        return await api<WikiDocChanges>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/doc-changes`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null,
   });
 
 /** Every document of the plan and every section title no other document shares, A to Z (contract `docs.reads.index`). */

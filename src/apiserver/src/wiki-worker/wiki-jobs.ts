@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { WIKI_JOB, type WikiJobFailureKind } from '@orbit/shared';
+import { WIKI_DOCS_FOLLOW, WIKI_JOB, WIKI_PLAN_NO_DRAFT, type WikiJobFailureKind } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
 import { stripNul } from '../runner-api/strip-nul';
@@ -11,12 +11,19 @@ import { cutRunes } from './wiki-import-extract';
  *
  * THE CLAIM
  * A claim moves due queued jobs to running under a fresh lease generation, in one statement that skips what
- * another claim holds (`FOR UPDATE SKIP LOCKED`), at most one job per space
- * (`wiki_job_space_running_key` is the same rule in the database, for two schedulers that read the table at
- * once) and only kinds this build runs. The statement reads its candidates once, whatever the plan, so the
- * room the worker gives it is a bound (wiki-claim-reads-once.pg.spec.ts). Every write that settles the job
- * afterwards is a compare-and-set on that generation, so a worker whose lease ran out and was taken over
- * settles nothing: the takeover's generation is not its own.
+ * another claim holds (`FOR UPDATE SKIP LOCKED`), at most one job per space and only kinds this build runs. The
+ * statement reads its candidates once, whatever the plan, so the room the worker gives it is a bound
+ * (wiki-claim-reads-once.pg.spec.ts). Every write that settles the job afterwards is a compare-and-set on that
+ * generation, so a worker whose lease ran out and was taken over settles nothing: the takeover's generation is
+ * not its own.
+ *
+ * ONE JOB A SPACE, AND THE FOLLOW JOB'S EXCEPTION (contract `jobs.onePerSpace`, the owner's decision of 2026-11-06,
+ * docs/wiki-chat-design.md §8.5). A `docs_follow` job runs beside a job of its space that writes no document —
+ * articles, verify, import, smoke — and waits for one that does: maintain, docs_build, plan_draft, plan_revise and
+ * another docs_follow. Every other pair waits as before (`wikiJobsMayOverlap`). So a claim takes a space's next due
+ * job in its own order that no running job of the space excludes, and the database holds the same rule for two
+ * schedulers that read at once with two partial unique indexes (migration 0477): `wiki_job_space_running_other_key`
+ * over every kind but the follow job, and `wiki_job_space_running_writer_key` over the five that write documents.
  *
  * THE ORDER
  * A space runs its jobs in its own order: the highest priority first, then the longest-waiting — with one exception,
@@ -94,7 +101,7 @@ export function wikiJobQueueSql(input: {
   const kinds = input.kinds as string[];
   const owners = input.owners as string[] | null;
   return Prisma.sql`
-    SELECT q."id", q."space_id", q."priority", q."created_at",
+    SELECT q."id", q."space_id", q."kind", q."priority", q."created_at",
            -- An articles job never claimed waits while its round has not ended: the first maintain job of its space
            -- made after it, of a kind this build runs and no lower a priority, short of the retry limit.
            (q."kind" = 'articles' AND q."started_at" IS NULL AND EXISTS (
@@ -124,26 +131,46 @@ export function wikiJobQueueSql(input: {
 }
 
 /**
- * Claim up to `limit` due queued jobs, each under a new lease generation: each free space's next job in its own order
- * (THE ORDER above), the spaces taken by their places in the line — the owner's first and then the longest-waiting. A
- * space whose job is already running is skipped; a job another claim is holding is passed over rather than waited for.
- * Two claims of one space's last two jobs can read "no running job" at the same time — that is what the partial unique
- * index refuses, and the loser is answered with an empty claim rather than an error: its pass has simply taken nothing.
+ * Whether a running job of the job `q`'s space keeps it from running now (contract `jobs.onePerSpace`): any running
+ * job does, but a follow job beside one that writes no document, and one of those beside a follow job
+ * (`wikiJobsMayOverlap`). A running row whose lease ran out is the sweep's, and holds nothing here.
+ */
+function wikiJobHeldSql(q: Prisma.Sql): Prisma.Sql {
+  const follow = WIKI_DOCS_FOLLOW.kind;
+  const alongside = [...WIKI_DOCS_FOLLOW.alongside] as string[];
+  return Prisma.sql`EXISTS (
+    SELECT 1 FROM "wiki_job" r
+    WHERE r."space_id" = ${q}."space_id" AND r."state" = 'running' AND r."lease_deadline_at" > now()
+      AND NOT ((${q}."kind" = ${follow} AND r."kind" = ANY(${alongside}::text[]))
+            OR (r."kind" = ${follow} AND ${q}."kind" = ANY(${alongside}::text[]))))`;
+}
+
+/**
+ * Claim up to `limit` due queued jobs, each under a new lease generation: each space's next job in its own order
+ * (THE ORDER above) that no running job of the space excludes (ONE JOB A SPACE above), the spaces taken by their
+ * places in the line — the owner's first and then the longest-waiting. A space whose running job excludes every job it
+ * has queued is skipped; a job another claim is holding is passed over rather than waited for. Two claims of one
+ * space's last two jobs can read "no running job" at the same time — that is what the partial unique indexes refuse,
+ * and the loser is answered with an empty claim rather than an error: its pass has simply taken nothing.
  */
 export async function claimWikiJobs(prisma: PrismaService, input: ClaimWikiJobsInput): Promise<ClaimedWikiJob[]> {
   const lease = input.leaseMs ?? WIKI_JOB.leaseSeconds * 1000;
   try {
     return await prisma.$queryRaw<ClaimedWikiJob[]>`
       WITH "queue" AS (${wikiJobQueueSql({ kinds: input.kinds, owners: input.owners, dueOnly: true })}),
+      "held" AS (
+        SELECT q.*, ${wikiJobHeldSql(Prisma.sql`q`)} AS "held" FROM "queue" q
+      ),
       "line" AS (
-        SELECT q."id", q."waits",
-               -- The job's turn in its space: priority, then first come, a job that waits for its round after the rest.
-               row_number() OVER (PARTITION BY q."space_id" ORDER BY q."waits", q."priority" DESC, q."created_at", q."id") AS "turn",
+        SELECT q."id", q."waits", q."held",
+               -- The job's turn in its space: priority, then first come, a job that waits for its round or that a running job
+               -- of its space excludes after the rest.
+               row_number() OVER (PARTITION BY q."space_id" ORDER BY (q."waits" OR q."held"), q."priority" DESC, q."created_at", q."id") AS "turn",
                -- The space's place in the line: its first job by priority and first come, whichever of its jobs takes it.
                first_value(q."priority") OVER "head" AS "placePriority",
                first_value(q."created_at") OVER "head" AS "placeAt",
                first_value(q."id") OVER "head" AS "placeId"
-        FROM "queue" q
+        FROM "held" q
         WINDOW "head" AS (PARTITION BY q."space_id" ORDER BY q."priority" DESC, q."created_at", q."id")
       ),
       -- A WITH and not a subquery of the UPDATE's FROM: a plan with j outside would run a subquery once for each row
@@ -152,18 +179,15 @@ export async function claimWikiJobs(prisma: PrismaService, input: ClaimWikiJobsI
         SELECT c."id" FROM "wiki_job" c
         JOIN "line" l ON l."id" = c."id"
         -- The space's next job, and only it: two schedulers therefore pick the same row and one of them skips it,
-        -- rather than each taking a different job of one space and meeting the partial unique index. A space whose
-        -- next job waits for its round takes nothing until the round is due.
-        WHERE l."turn" = 1 AND NOT l."waits"
+        -- rather than each taking a different job of one space and meeting a partial unique index. A space whose
+        -- next job waits for its round, or is excluded by the job running there, takes nothing until it may run.
+        WHERE l."turn" = 1 AND NOT l."waits" AND NOT l."held"
           -- Read again on the row the lock takes: a job another claim took meanwhile is no longer due.
           AND c."state" = 'queued'
           AND (c."next_attempt_at" IS NULL OR c."next_attempt_at" <= now())
           AND c."attempts" < ${WIKI_JOB.maxAttempts}
-          -- No running job of this space: the space is free.
-          AND NOT EXISTS (
-            SELECT 1 FROM "wiki_job" r
-            WHERE r."space_id" = c."space_id" AND r."state" = 'running' AND r."lease_deadline_at" > now()
-          )
+          -- No running job of this space excludes it: the space is free for it.
+          AND NOT ${wikiJobHeldSql(Prisma.sql`c`)}
         ORDER BY l."placePriority" DESC, l."placeAt" ASC, l."placeId" ASC
         LIMIT ${input.limit}
         FOR UPDATE OF c SKIP LOCKED
@@ -180,8 +204,8 @@ export async function claimWikiJobs(prisma: PrismaService, input: ClaimWikiJobsI
       RETURNING j."id", j."owner_id" AS "ownerId", j."space_id" AS "spaceId", j."kind", j."input",
                 j."priority", j."attempts", j."lease_generation" AS "leaseGeneration"`;
   } catch (error) {
-    // The per-space partial unique index refused the claim: another worker took this space's running job
-    // between this statement's predicate and its write. The claim is one statement, so the refusal rolls
+    // A per-space partial unique index refused the claim: another worker took a job of this space that excludes
+    // this one between this statement's predicate and its write. The claim is one statement, so the refusal rolls
     // all of it back — this pass took nothing, and the rows it wanted are still due on its next one.
     if ((error as { code?: string }).code === '23505') return [];
     throw error;
@@ -510,7 +534,8 @@ export async function settleWikiJobRows(tx: Prisma.TransactionClient, job: Ended
   if ((job.kind === 'plan_draft' || job.kind === 'plan_revise' || job.kind === 'docs_build') && typeof input.planJobId === 'string') {
     await tx.wikiPlanJob.updateMany({
       where: { id: input.planJobId, state: 'made' },
-      data: { state: 'ended', outcome: 'failed', endedAt: now, error: reason },
+      // A draft's end is the owner's to read (contract `plan.jobs.noDraft`): the attempts stay on the job's own row.
+      data: { state: 'ended', outcome: 'failed', endedAt: now, error: job.kind === 'docs_build' ? reason : WIKI_PLAN_NO_DRAFT.unreachable },
     });
   }
 }

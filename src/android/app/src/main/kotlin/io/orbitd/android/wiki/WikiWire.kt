@@ -73,6 +73,27 @@ data class WikiUsageEntry(val entryId: String, val title: String? = null, val to
 data class WikiUsage(val days: Int? = null, val sessionsPushed: Int? = null, val searches: Int? = null, val gets: Int? = null,
     val entries: List<WikiUsageEntry>? = null)
 
+/** One row of Wiki settings' Workspaces section, or of what Add workspace offers (contract `space.workspaces`). */
+@Serializable
+data class WikiSpaceWorkspaceRow(val id: String, val name: String, val runner: String? = null, val inWiki: Boolean = false)
+
+/** `GET /wiki/spaces/:id/workspaces`: who is in the wiki, and who can be added to it. */
+@Serializable
+data class WikiSpaceWorkspaces(val workspaces: List<WikiSpaceWorkspaceRow> = emptyList(), val addable: List<WikiSpaceWorkspaceRow> = emptyList())
+
+/** One wiki in Trash (contract `space.trash.list`): the name and repository it had, which a restore gives back, when it
+ * was moved and when it is deleted for good, and its active entries. */
+@Serializable
+data class WikiTrashRow(val id: String, val slug: String = "", val title: String? = null, val repoUrlNorm: String? = null,
+    val deletedAt: String? = null, val purgeAt: String? = null, val entries: Int = 0) {
+    /** What its row calls it, and so does what a restore says. */
+    val name: String get() = title?.takeIf { it.isNotBlank() } ?: slug
+}
+
+/** `GET /wiki/trash`: the owner's wikis in Trash, the newest move first. */
+@Serializable
+data class WikiTrash(val spaces: List<WikiTrashRow> = emptyList())
+
 @Serializable
 data class WikiSpace(
     val id: String, val slug: String, val title: String? = null, val repoUrlNorm: String? = null, val rootCommitSha: String? = null,
@@ -202,9 +223,13 @@ data class WikiTimelineItem(
 @Serializable
 data class WikiTimeline(val items: List<WikiTimelineItem>? = null)
 
+/** One entry a search found. The last four say how old it is (contract `agentSurface.toolSpecs.wiki_search.age`), as
+ * the server spells each time; null from a server that predates them, and for a check not made yet. */
 @Serializable
 data class WikiSearchHit(val id: String, val kind: String? = null, val title: String? = null, val summary: String? = null,
-    val trust: String? = null, val anchorState: String? = null, val match: List<String>? = null, val topics: List<String>? = null)
+    val trust: String? = null, val anchorState: String? = null, val match: List<String>? = null, val topics: List<String>? = null,
+    val recordedAt: String? = null, val changedAt: String? = null, val anchorCheckedRef: String? = null,
+    val anchorCheckedAt: String? = null)
 
 @Serializable
 data class WikiSearchResponse(val q: String? = null, val hits: List<WikiSearchHit>? = null)

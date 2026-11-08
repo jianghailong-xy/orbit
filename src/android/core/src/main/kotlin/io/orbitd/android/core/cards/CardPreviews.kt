@@ -174,14 +174,15 @@ object CardPreviews {
         return text.trim()
     }
 
-    // The record (the owner's boards record-1…8): once this window's own press is recorded the review stays open, its card read-only
-    // as it was asked, and where its buttons were, who did what and when. It lives only while the review is open.
+    // The record (the owner's boards record-1…8): once this window's own press is recorded the review draws it, its card read-only
+    // as it was asked, and where its buttons were, who did what and when. It lives only while the review is open, and the review
+    // leaves on its own about 2 s after it (`CardReviewSheet`, the owner's call of 2026-11-02).
 
     enum class Phase { CARD, SENDING, RECORDED, CLOSED }
 
     private val allows = setOf(CardVerb.ALLOW, CardVerb.REMEMBER, CardVerb.ANSWER, CardVerb.APPROVE_PLAN, CardVerb.CREATE_TASK,
         CardVerb.CREATE_AND_START, CardVerb.CREATE_PROJECT, CardVerb.CREATE_BATCH, CardVerb.CHANGE_DAG, CardVerb.RESOLVE_BLOCKER,
-        CardVerb.DELETE_IT)
+        CardVerb.DELETE_IT, CardVerb.SAVE_CHANGES, CardVerb.CREATE_WORKSPACE)
     private val denies = setOf(CardVerb.DENY, CardVerb.KEEP_PLANNING, CardVerb.CHAT)
 
     /**

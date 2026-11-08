@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="10" failures="3" errors="0" time="0.018224968">
+    <testsuite name="src/broken-setup.test.mjs" timestamp="2026-11-02T07:43:15.479Z" hostname="workstation" tests="3" failures="1" errors="0" skipped="2" time="0.002362152">
+        <testcase classname="src/broken-setup.test.mjs" name="needs a database &gt; reads a row" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/broken-setup.test.mjs" name="needs a database &gt; writes a row" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/broken-setup.test.mjs" name="needs a database" time="0.00183229">
+            <failure message="connect ECONNREFUSED 127.0.0.1:5432" type="Error">
+Error: connect ECONNREFUSED 127.0.0.1:5432
+ ❯ src/broken-setup.test.mjs:4:27
+            </failure>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/does-not-load.test.mjs" timestamp="2026-11-02T07:43:15.489Z" hostname="workstation" tests="1" failures="1" errors="0" skipped="0" time="0">
+        <testcase classname="src/does-not-load.test.mjs" name="src/does-not-load.test.mjs" time="0">
+            <failure message="Cannot find module &apos;./no-such-module.mjs&apos; imported from /mnt/data/tmp/t5/vt/src/does-not-load.test.mjs" type="Error">
+Error: Cannot find module &apos;./no-such-module.mjs&apos; imported from /mnt/data/tmp/t5/vt/src/does-not-load.test.mjs
+ ❯ src/does-not-load.test.mjs:1:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: &apos;ERR_MODULE_NOT_FOUND&apos; }
+            </failure>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/usage.test.mjs" timestamp="2026-11-02T07:43:15.490Z" hostname="workstation" tests="6" failures="1" errors="0" skipped="2" time="0.015862816">
+        <testcase classname="src/usage.test.mjs" name="formatting sizes &gt; keeps bytes under a kilobyte" time="0.000780346">
+        </testcase>
+        <testcase classname="src/usage.test.mjs" name="formatting sizes &gt; rounds to one decimal" time="0.000099476">
+        </testcase>
+        <testcase classname="src/usage.test.mjs" name="formatting sizes &gt; uses &quot;MB&quot; &amp; &lt;no&gt; space for sizes &gt; 1 MiB" time="0.012884614">
+            <failure message="expected &apos;5120.0 KB&apos; to be &apos;5.0 MB&apos; // Object.is equality" type="AssertionError">
+AssertionError: expected &apos;5120.0 KB&apos; to be &apos;5.0 MB&apos; // Object.is equality
+
+Expected: &quot;5.0 MB&quot;
+Received: &quot;5120.0 KB&quot;
+
+ ❯ src/usage.test.mjs:8:85
+            </failure>
+        </testcase>
+        <testcase classname="src/usage.test.mjs" name="formatting sizes &gt; groups thousands the way 中文 locales do" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/usage.test.mjs" name="formatting sizes &gt; renders GiB" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/usage.test.mjs" name="formatting sizes &gt; nested &gt; reads the label 文件 · 大小" time="0.000593719">
+        </testcase>
+    </testsuite>
+</testsuites>

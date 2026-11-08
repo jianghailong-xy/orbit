@@ -67,6 +67,28 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
             body = buildJsonObject { putJsonArray("ops") { add(op) }; put("rationale", rationale); put("idempotencyKey", idempotencyKey) }))
     /** `PATCH /wiki/spaces/:id`: a key left out is left as it is. */
     suspend fun updateSpace(id: String, update: JsonObject): JsonElement = json(spacePath(id), method = HttpMethod.PATCH, body = update)
+    /** `POST /wiki/spaces`, the owner's: the wiki, with maintenance on and its plan's first draft asked for in the one request.
+     * Its answer is the space. */
+    suspend fun createSpace(request: JsonObject): WikiSpace = Wire.json.decodeFromJsonElement(WikiSpace.serializer(),
+        json(listOf("wiki", "spaces"), method = HttpMethod.POST, body = request))
+    suspend fun spaceWorkspaces(id: String): WikiSpaceWorkspaces = get(spacePath(id, "workspaces"), WikiSpaceWorkspaces.serializer())
+    /** Bring a workspace into the wiki, or back into it. Refused to every session. */
+    suspend fun addWorkspace(spaceId: String, workspaceId: String) {
+        raw(spacePath(spaceId, "workspaces"), method = HttpMethod.POST, body = buildJsonObject { put("workspaceId", workspaceId) })
+    }
+    /** Leave a workspace out of the wiki. Refused to every session. */
+    suspend fun leaveWorkspaceOut(spaceId: String, workspaceId: String) {
+        raw(spacePath(spaceId, "workspaces", workspaceId), method = HttpMethod.DELETE)
+    }
+    /** Move a wiki to Trash, where what it holds is kept 365 days (contract `space.trash`). Refused to every session, as
+     * the three below are. */
+    suspend fun moveToTrash(id: String) { raw(spacePath(id), method = HttpMethod.DELETE) }
+    /** Bring a wiki back from Trash; refused, with what to do, while a newer wiki holds its repository. */
+    suspend fun restoreSpace(id: String) { raw(spacePath(id, "restore"), method = HttpMethod.POST) }
+    /** Delete a wiki in Trash for good: it leaves Trash at once, and the server deletes what it holds in the background. */
+    suspend fun purgeSpace(id: String) { raw(spacePath(id, "purge"), method = HttpMethod.DELETE) }
+    /** `GET /wiki/trash`: the owner's wikis in Trash, the newest move first. */
+    suspend fun trash(): WikiTrash = get(listOf("wiki", "trash"), WikiTrash.serializer())
     suspend fun confirmEntry(id: String) { raw(listOf("wiki", "entries", id, "confirm"), method = HttpMethod.POST) }
     suspend fun rejectEntry(id: String, reason: String) {
         raw(listOf("wiki", "entries", id, "reject"), method = HttpMethod.POST, body = buildJsonObject { put("reason", reason) })

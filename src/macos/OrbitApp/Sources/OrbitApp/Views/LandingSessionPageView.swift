@@ -17,7 +17,7 @@ import OrbitKit
 struct LandingStatusCardView: View {
     let sessionID: String
     let landing: SessionLandingView?
-    /// The task's name (a round's own title): the one line the window adds under the head.
+    /// The task's name (a round's own title), whole: what the window adds under the head.
     let title: String?
     let now: Date
     /// When this device last got an answer, and whether that read failed.
@@ -47,7 +47,6 @@ struct LandingStatusCardView: View {
         if let title, !title.isEmpty {
             Text(title)
                 .font(.orbitLabel)
-                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -538,7 +537,9 @@ private struct LandingLiveCheckView: View {
         }
         .task {
             while !Task.isCancelled {
-                if let api, let page = try? await api.landingLog(sessionID: sessionID, selectors) {
+                // The live tail of a running step: read every 4 s while the app can be seen
+                // (docs/list-freshness-design.md §4 R3), as no event carries it.
+                if app.appVisible, let api, let page = try? await api.landingLog(sessionID: sessionID, selectors) {
                     text = tail(page.entries.map(\.text).joined())
                 }
                 do { try await Task.sleep(nanoseconds: 4_000_000_000) } catch { return }

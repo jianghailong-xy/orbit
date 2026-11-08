@@ -264,32 +264,28 @@ function realtimeWithHints() {
   return { realtime, hints, bus, notified, marked, table, deliver };
 }
 
-test('notifyInbox still wakes the parked inbox poll and the other replicas, and hints the session\'s runner', async () => {
+test('notifyInbox hints the session\'s runner, and tells no other replica', async () => {
   const { realtime, hints, bus, notified } = realtimeWithHints();
-  const parked = realtime.waitForInbox(SESSION_ON_A, 5_000);
   realtime.notifyInbox(SESSION_ON_A);
-  await parked;
   await settle();
-  assert.deepEqual(notified.map(([channel]) => channel), ['orbit_inbox']);
+  assert.deepEqual(notified, []);
   assert.deepEqual(bus.sent, [[`rnr.${RUNNER_A}`, `{"hint":{"inbox":{"sessionId":"${SESSION_ON_A}"}}}`]]);
   await hints.onModuleDestroy();
 });
 
-test('notifyRunnerWake still wakes the parked wake poll and the other replicas, and hints that runner', async () => {
+test('notifyRunnerWake hints that runner, and tells no other replica', async () => {
   const { realtime, hints, bus, notified, marked } = realtimeWithHints();
-  const parked = realtime.waitForRunnerWake(RUNNER_B, 5_000);
   realtime.notifyRunnerWake(RUNNER_B);
-  assert.equal(await parked, true);
   await settle();
-  assert.deepEqual(notified.map(([channel]) => channel), ['orbit_runner_wake']);
-  // Over the link the runner's change count moves first (markRunnerChanged), and then it is hinted.
+  assert.deepEqual(notified, []);
+  // The runner's change count moves first (markRunnerChanged), and then it is hinted.
   assert.deepEqual(marked, [{ runners: [RUNNER_B], hintsBefore: 0 }]);
   assert.deepEqual(bus.sent, [[`rnr.${RUNNER_B}`, '{"hint":{"commands":{}}}']]);
   await hints.onModuleDestroy();
 });
 
 test('a wake committed inside a transaction is hinted when its NOTIFY arrives; one another replica emitted is not hinted twice', async () => {
-  const { realtime, hints, bus, marked, deliver } = realtimeWithHints();
+  const { hints, bus, marked, deliver } = realtimeWithHints();
   deliver('orbit_runner_wake', { r: RUNNER_A, c: true });
   deliver('orbit_runner_wake', { i: 'another-replica', r: RUNNER_B });
   deliver('orbit_inbox', { i: 'another-replica', r: SESSION_ON_B });
@@ -297,8 +293,6 @@ test('a wake committed inside a transaction is hinted when its NOTIFY arrives; o
   assert.deepEqual(bus.sent, [[`rnr.${RUNNER_A}`, '{"hint":{"commands":{}}}']],
     'the replica that emitted a wake or an inbox notice hinted it already');
   assert.deepEqual(marked, [{ runners: [RUNNER_A], hintsBefore: 0 }], 'and marked it changed, before the hint');
-  // The NOTIFY bridge still does what it did: B's wake is held for its next poll.
-  assert.equal(await realtime.waitForRunnerWake(RUNNER_B, 5_000), true);
   await hints.onModuleDestroy();
 });
 
@@ -314,30 +308,18 @@ test('a moved session is forgotten with its owner, so its next inbox hint goes t
   await hints.onModuleDestroy();
 });
 
-test('a queued session still wakes every claim poll of this process once, and hints only the runner it is queued for', async () => {
+test('a queued session hints only the runner it is queued for', async () => {
   const bus = fakeBus();
   const { hints } = hintsOver(bus);
   const queue = new QueueService({} as never, {} as never, undefined, undefined, hints);
-  const signal = (queue as unknown as { signal: import('node:events').EventEmitter }).signal;
-  let emitted = 0;
-  signal.on('queued', () => { emitted += 1; });
-  const waitForSignal = (ms: number) =>
-    (queue as unknown as { waitForSignal(ms: number): Promise<void> }).waitForSignal(ms);
 
-  // A claim long poll of runner B parks too: the in-process signal wakes it as before (it re-reads the
-  // queue and finds nothing of its own), while only runner A is hinted over the link.
-  const parkedForB = waitForSignal(5_000);
   queue.notifySessionQueued(RUNNER_A);
-  await parkedForB;
-  assert.equal(emitted, 1);
   assert.deepEqual(bus.sent, [[`rnr.${RUNNER_A}`, '{"hint":{"claim":{}}}']]);
 
   queue.notifySessionQueued(null);
-  assert.equal(emitted, 2, 'a session with no runner still wakes the polls');
   assert.equal(bus.sent.length, 1, 'and hints nobody');
 
   queue.notifySessionQueued([RUNNER_A, RUNNER_B]);
-  assert.equal(emitted, 3, 'several runners, one wake of the polls');
   assert.deepEqual(bus.sent.slice(1).map(([subject]) => subject), [`rnr.${RUNNER_A}`, `rnr.${RUNNER_B}`]);
   await hints.onModuleDestroy();
 });
@@ -392,6 +374,8 @@ function decisions(options: { landed?: boolean } = {}) {
     },
     $executeRawUnsafe: async () => 0,
   };
+  // decideApproval runs its write in a retried transaction: this fake has no other client to hand it.
+  (prisma as { $transaction?: unknown }).$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma);
   const realtime = new RealtimeService(prisma as never, { scheduleBadgeSync: () => undefined } as never, hints);
   return { sessions: new SessionsService(prisma as never, {} as never, realtime), realtime, hints, bus, order };
 }

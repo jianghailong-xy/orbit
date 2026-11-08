@@ -10,17 +10,25 @@ import {
   type WikiTrust,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { broaden, normalizeSearchQuery, stripEmphasis, type NormalizedSearchQuery } from '../sessions/search-query';
+import {
+  broaden,
+  CONTENT_MIN_CHARS,
+  escapeLike,
+  normalizeSearchQuery,
+  stripEmphasis,
+  type NormalizedSearchQuery,
+} from '../sessions/search-query';
 
 /**
  * Orbit Wiki's retrieval (design §6, contract `searchMatches`).
  *
  * THREE LEGS, TWO OF THEM REAL TODAY, FUSED BY RANK. The keyword leg is pg_trgm over the very
  * expression migration 0307 built `wiki_entry_search_trgm` on, normalized and broadened exactly as
- * session search is; the path leg is a prefix match against an entry's anchor paths and its
- * pitfall trigger paths; the semantic leg (design §6.3) is phase 2 and off. The legs' ranked lists
- * are fused with reciprocal rank fusion (k=60) and the answer is entries — never a page, never a
- * slice.
+ * session search is, with a last pass of its own when no entry holds every word (`anyWordLeg`); the
+ * path leg is a prefix match against an entry's anchor paths and its pitfall trigger paths, ranked
+ * exact file first and weighted by how many entries share what it matched (`pathLeg`); the semantic
+ * leg (design §6.3) is phase 2 and off. The legs' ranked lists are fused with reciprocal rank fusion
+ * (k=60) and the answer is entries — never a page, never a slice.
  *
  * WHAT IS RETURNED IS AN ENTRY. `match` says which legs found it and `score` how strongly they
  * agreed; the rest is the entry's own public shape, small enough to render a ⌘K row or hand a
@@ -43,11 +51,11 @@ import { broaden, normalizeSearchQuery, stripEmphasis, type NormalizedSearchQuer
  * reading another's unaccepted claims.
  *
  * WHAT IS NOT HERE: the semantic leg (§6.3, phase 2 — the parameter is accepted and the answer
- * says `semantic: false`, which is the whole of the placeholder), the `search` exposure row
- * (`exposureChannels` — a write, and T6 owns the first reader of exposures), and the aggregation
- * into `stats.searchHits`/`gets`, which is what the usage tiebreak reads: a column 0307 gives an
- * entry and no phase-1 writer fills yet, so the tiebreak is in place and every entry is level on it
- * today.
+ * says `semantic: false`, which is the whole of the placeholder), the `search` exposure row (a
+ * write, and it is the runner door's: a person's search is not an exposure, `exposureRules.people`),
+ * and the aggregation into `stats.searchHits`/`gets`, which is what the usage tiebreak reads: a
+ * column 0307 gives an entry and no phase-1 writer fills yet, so the tiebreak is in place and every
+ * entry is level on it today.
  */
 
 /** Reciprocal rank fusion's constant (design §6.1): a leg's first hit is worth 1/(RRF_K + 1). */
@@ -78,8 +86,8 @@ export interface WikiSearchRequest {
   paths?: readonly string[];
   limit?: number;
   /** Which of the fields a hit does not carry by default the caller asked for — the API's own
-   *  `?include=` convention. `space`, `topics` and `anchor` are the three names
-   *  (`WikiSearchRowAdditions`); anything else is not a field and is ignored. */
+   *  `?include=` convention. `space` and `topics` are the two names (`WikiSearchRowAdditions`);
+   *  anything else is not a field and is ignored, `anchor` included now that every hit carries it. */
   include?: readonly string[];
   /** Phase 2's leg. Accepted, reported, and off (see the module header). */
   semantic?: boolean;
@@ -99,6 +107,21 @@ export interface RankedHit {
   id: string;
   score: number;
   match: WikiSearchMatch[];
+}
+
+/** One entry the path leg found, and what its match is worth in the fusion (`pathWeight`). */
+export interface PathHit {
+  id: string;
+  weight: number;
+}
+
+/** The path leg's row: an entry, whether its best match was exact, and what `pathSpecificity` reads. */
+interface PathRow {
+  id: string;
+  exact: boolean;
+  covered: number;
+  span: number;
+  entries: number;
 }
 
 // ── Query shape (pure) ──────────────────────────────────────────────────────────────────────────
@@ -129,6 +152,36 @@ export function pathQueries(q: string | undefined, paths: readonly string[] | un
   return looksLikePath(q ?? '') ? [normalizePath(q!)].filter((path) => path.length > 0) : [];
 }
 
+/** A word of exactly two CJK characters, which is an ordinary word in those languages. */
+const CJK_PAIR = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]{2}$/u;
+
+/**
+ * Whether a word takes part in the last pass: it clears session search's floor, or it is a CJK pair.
+ *
+ * The floor is there to keep a word with no trigram away from a table too large to read row by row, and
+ * here it would also cost a Chinese query most of its words, leaving one generic word to answer for it
+ * (`会话 curl` asking only about curl). wiki_entry is small enough to pay for them, and the replay holds that
+ * to a number (docs/wiki-memory-claims-design.md §6.3). `to` and `5m` stay out: they say nothing about an entry.
+ */
+function usableInLastPass(word: string): boolean {
+  return [...word].length >= CONTENT_MIN_CHARS || CJK_PAIR.test(word);
+}
+
+/**
+ * The last pass's question (contract `searchMatches.keyword`): the groups of patterns of which any one found
+ * is enough, or null when there is no such question to ask. A group keeps the readings that take part, and goes
+ * when none does.
+ *
+ * At least two groups, because one is not a question about the query at all: it finds every entry that holds
+ * a generic word, and in the replay those answers were on topic 6 times in 21 against 26 in 39 with two or more.
+ */
+export function anyWordPatterns(norm: NormalizedSearchQuery): string[][] | null {
+  const groups = norm.terms
+    .map((term) => term.filter(usableInLastPass).map((word) => `%${escapeLike(word)}%`))
+    .filter((group) => group.length > 0);
+  return groups.length >= 2 ? groups : null;
+}
+
 // ── Fusion and ordering (pure) ──────────────────────────────────────────────────────────────────
 
 /**
@@ -136,21 +189,55 @@ export function pathQueries(q: string | undefined, paths: readonly string[] | un
  * entry found by two legs is worth both — which is the point of fusing by rank rather than by any
  * leg's own score, since a trigram ratio and a path prefix have no common scale.
  *
+ * A leg may weigh its hits: `weights[i]` scales the i-th hit's term, and a hit without one counts
+ * whole. Only the path leg does (`pathWeight`), so a search with no paths is fused exactly as an
+ * unweighted RRF would fuse it.
+ *
  * `match` carries the legs that found it, in the order the legs are handed over (keyword first,
  * then path), which is the contract's own order in `searchMatches`.
  */
-export function rrfFuse(legs: ReadonlyArray<{ match: WikiSearchMatch; ids: readonly string[] }>): RankedHit[] {
+export function rrfFuse(
+  legs: ReadonlyArray<{ match: WikiSearchMatch; ids: readonly string[]; weights?: readonly number[] }>,
+): RankedHit[] {
   const score = new Map<string, number>();
   const match = new Map<string, WikiSearchMatch[]>();
   for (const leg of legs) {
     leg.ids.forEach((id, index) => {
-      score.set(id, (score.get(id) ?? 0) + 1 / (RRF_K + index + 1));
+      score.set(id, (score.get(id) ?? 0) + (leg.weights?.[index] ?? 1) / (RRF_K + index + 1));
       const found = match.get(id) ?? [];
       if (!found.includes(leg.match)) found.push(leg.match);
       match.set(id, found);
     });
   }
   return [...score].map(([id, value]) => ({ id, score: value, match: match.get(id)! }));
+}
+
+/**
+ * How specific a path match is, from 0 to 1: an IDF over the entries it covers.
+ *
+ * `covered` is how many entries name a path in the region the match is about — the asked file
+ * itself for an exact match, the asked directory for an entry under it, the entry's own directory
+ * for an asked path under that — and `span` how many paths the entry names itself. A file only one
+ * entry names is 1; a file thirty entries name, or a directory hundreds of entries live under, or an
+ * entry anchored on a dozen files, says much less about why the caller asked, which is what the
+ * review of 2026-11-06 found the path leg's noise to be. `entries` is how many entries in reach name
+ * any path at all, the corpus the frequency is read against.
+ */
+export function pathSpecificity(covered: number, span: number, entries: number): number {
+  const corpus = Math.log(Math.max(entries, 1) + 1);
+  const value = Math.log((Math.max(entries, 1) + 1) / Math.max(covered * span, 1)) / corpus;
+  return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * What a path match is worth in the fusion, as a share of a keyword hit at the same rank: an exact
+ * match (the asked file is the entry's anchor or trigger path) between 3/4 and all of it, a match
+ * by directory prefix between 1/2 and 3/4, by its specificity within each band. So an exact match
+ * always counts for more than a prefix one, a file only one entry names still ties the keyword leg's
+ * first hit, and a hub file's or a wide directory's entries land below what the words found.
+ */
+export function pathWeight(exact: boolean, specificity: number): number {
+  return exact ? 0.75 + 0.25 * specificity : 0.5 + 0.25 * specificity;
 }
 
 /** Trust, strongest first (design §6.1's first tiebreak). `external` is last: it is Web-derived. */
@@ -284,7 +371,12 @@ function visibilitySql(request: WikiSearchRequest): Prisma.Sql {
 /** Everything that decides which entries a request may see, in one parenthesized predicate. */
 function hardFilterSql(request: WikiSearchRequest): Prisma.Sql {
   const parts: Prisma.Sql[] = [Prisma.sql`e."owner_id" = ${request.ownerId}::uuid`, visibilitySql(request)];
+  // One space is one its caller found in use; every space is every one of the owner's not in Trash (contract `space.trash`).
   if (request.spaceId) parts.push(Prisma.sql`e."space_id" = ${request.spaceId}::uuid`);
+  else {
+    parts.push(Prisma.sql`e."space_id" IN (
+      SELECT s."id" FROM "wiki_space" s WHERE s."owner_id" = ${request.ownerId}::uuid AND s."deleted_at" IS NULL)`);
+  }
   if (request.kinds?.length) parts.push(Prisma.sql`e."kind" = ANY(${textArray(request.kinds)})`);
   if (request.topic) parts.push(Prisma.sql`e."topics" @> ARRAY[${request.topic}]::text[]`);
   if (request.trust?.length) parts.push(Prisma.sql`e."trust" = ANY(${textArray(request.trust)})`);
@@ -316,12 +408,18 @@ export class WikiRetrieval {
     // `broaden` for why that is a second query rather than a second predicate. The path leg needs
     // nothing from it, so it runs either way.
     const widened = norm && keyword.length === 0 ? broaden(norm) : null;
-    const keywords = keyword.length === 0 && widened ? await this.keywordLeg(where, widened) : keyword;
+    const everyWord = keyword.length === 0 && widened ? await this.keywordLeg(where, widened) : keyword;
+    // No entry holds every word either: which holds the most of them. Measured over the multi-word
+    // searches agents really made, two thirds found nothing, because a question names more words than
+    // the entry that answers it (docs/wiki-memory-claims-design.md §6.3). Only here, and only in this
+    // file: session search's palette has no use for a row that mentions one word of three.
+    const anyWord = norm && everyWord.length === 0 ? anyWordPatterns(norm) : null;
+    const keywords = anyWord ? await this.anyWordLeg(where, norm!, anyWord) : everyWord;
     const byPath = paths.length > 0 ? await this.pathLeg(where, paths) : [];
 
     const fused = rrfFuse([
       { match: 'keyword', ids: keywords },
-      { match: 'path', ids: byPath },
+      { match: 'path', ids: byPath.map((hit) => hit.id), weights: byPath.map((hit) => hit.weight) },
     ]);
     const hits = await this.rank(request.ownerId, fused, take, request.include ?? []);
     return { q: norm?.raw ?? '', semantic: false, hits };
@@ -350,6 +448,66 @@ export class WikiRetrieval {
   }
 
   /**
+   * The keyword leg's last pass: the entries holding any of the words, those holding the most first,
+   * and pg_trgm's similarity to the whole query among those holding as many.
+   *
+   * Always over the indexed expression, and each entry's text is built once and lowered once. ILIKE is
+   * `lower()` of both sides and then LIKE (like.c, in a multibyte database), so counting the groups an
+   * entry holds as LIKEs on its lowered text counts exactly what ILIKE on its text would. Asked word by
+   * word, the same count cost a call of `wiki_entry_search_text` and a lowering of the whole text per
+   * word and per entry, which was most of what this pass cost on production (task 34t7MlnhUVsNSIh1X5tvK).
+   * Each subquery ends in `OFFSET 0`, which is what keeps the planner from folding a computed column back
+   * into every expression that reads it.
+   *
+   * Which entries hold a word is the trigram index's to answer when every word has a trigram: one
+   * `ILIKE ANY`, which the index answers element by element for rare words and a scan evaluates with
+   * one call per entry for common ones. A CJK pair has no trigram, so a query holding one reads every
+   * entry it may see either way, and the cheapest read is then the one without that condition.
+   *
+   * `word_similarity` costs the most of anything asked of an entry (a quarter of a millisecond on
+   * production), so only the entries that can still reach the cap are asked it: those holding at least
+   * as many groups as the cap's last one. Every entry holding fewer comes after at least LEG_CAP that
+   * hold more, so the answer and its order are the ones asking every entry gave.
+   */
+  private async anyWordLeg(where: Prisma.Sql, norm: NormalizedSearchQuery, groups: string[][]): Promise<string[]> {
+    const holds = (group: string[]): Prisma.Sql =>
+      Prisma.sql`(${Prisma.join(group.map((pattern) => Prisma.sql`t."lowered" LIKE lower(${pattern})`), ' OR ')})`;
+    // The words that take part below the floor are the CJK pairs, and a pair has no trigram.
+    const pairTakesPart = norm.terms.some((term) =>
+      term.some((word) => usableInLastPass(word) && [...word].length < CONTENT_MIN_CHARS),
+    );
+    const narrowed = pairTakesPart ? Prisma.empty : Prisma.sql` AND ${SEARCH_TEXT} ILIKE ANY (${textArray(groups.flat())})`;
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      WITH found AS MATERIALIZED (
+        SELECT h."id", h."held"
+          FROM (
+            SELECT t."id", (${Prisma.join(groups.map((group) => Prisma.sql`${holds(group)}::int`), ' + ')}) AS "held"
+              FROM (
+                SELECT e."id" AS "id", lower(${SEARCH_TEXT}) AS "lowered"
+                  FROM "wiki_entry" e
+                 WHERE ${where}${narrowed}
+                OFFSET 0
+              ) t
+            OFFSET 0
+          ) h
+         WHERE h."held" > 0
+      ),
+      cut AS (SELECT "held" FROM found ORDER BY "held" DESC LIMIT 1 OFFSET ${LEG_CAP - 1}::int)
+      SELECT r."id" AS "id"
+        FROM (
+          SELECT f."id", f."held", ${SEARCH_TEXT} AS "text"
+            FROM found f
+            JOIN "wiki_entry" e ON e."id" = f."id"
+           WHERE f."held" >= COALESCE((SELECT "held" FROM cut), 0)
+          OFFSET 0
+        ) r
+       ORDER BY r."held" DESC, word_similarity(${norm.raw}, r."text") DESC, r."id"
+       LIMIT ${LEG_CAP}::int
+    `);
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * One pass of the path leg: every entry whose anchor paths or pitfall trigger paths are
    * prefix-related to one of the paths asked about.
    *
@@ -361,21 +519,34 @@ export class WikiRetrieval {
    *  - the entry's last segment starts with the query: the one relation with no direction to it,
    *    and the reason a file can be named out loud without its directory.
    *
-   * Deepest match first, because the deeper path is the more specific statement: an entry anchored
-   * to the very file being worked on comes before one anchored to the directory above it. The
-   * comparison happens in SQL, literally (`starts_with`, and `split_part` for the last segment)
-   * rather than through a pattern, so a path carrying `%` or `_` matches itself and not the world.
+   * Those decide which entries the leg finds, and nothing below changes that. The comparison happens
+   * in SQL, literally (`starts_with`, and `split_part` for the last segment) rather than through a
+   * pattern, so a path carrying `%` or `_` matches itself and not the world.
+   *
+   * THE ORDER is what the review of 2026-11-06 found wrong: ranked by the length of the entry's own
+   * path, an entry anchored on a big file or a whole directory came back for anything near it, and
+   * one file's many entries filled the answer to a search that named five. So each match, both paths
+   * read without a trailing `/`, is first one of these, best first (`rel`):
+   *
+   *  0. exact — the entry names the asked file itself, or, for a bare name, a file of that name;
+   *  1. the entry's path is under the asked directory;
+   *  2. it starts with the asked string at no `/`: `pages/Wiki` naming `pages/WikiPage.tsx`;
+   *  3. the asked path is under the entry's directory;
+   *  4. the asked path starts with the entry's at no `/`: `wiki` beside `wiki-worker/`, kept for
+   *     the recall above and last for it.
+   *
+   * and then as specific as the entries in its region allow (`pathSpecificity`): `covered` counts the
+   * entries naming that file for an exact match, those under the asked path for 1 and 2, and those
+   * under the entry's own path for 3 and 4. The leg lists every exact match before any other, and
+   * within each of the two it takes the asked paths in turn — each one's best, then each one's next —
+   * the more specific first within a turn. The weight each hit takes into the fusion is
+   * `pathWeight`'s.
    */
-  private async pathLeg(where: Prisma.Sql, paths: readonly string[]): Promise<string[]> {
-    const relation = Prisma.join(
-      paths.map(
-        (path) => Prisma.sql`(starts_with(p."path", ${path})
-          OR starts_with(${path}, p."path")
-          OR starts_with(split_part(p."path", '/', -1), ${path}))`,
-      ),
-      ' OR ',
-    );
-    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+  private async pathLeg(where: Prisma.Sql, paths: readonly string[]): Promise<PathHit[]> {
+    const relation = Prisma.sql`(starts_with(p."path", a."q")
+          OR starts_with(a."q", p."path")
+          OR starts_with(split_part(p."path", '/', -1), a."q"))`;
+    const rows = await this.prisma.$queryRaw<PathRow[]>(Prisma.sql`
       WITH entry_path AS (
         SELECT e."id" AS "id", a."value"->>'path' AS "path"
           FROM "wiki_entry" e, jsonb_array_elements(e."anchors") AS a("value")
@@ -394,15 +565,80 @@ export class WikiRetrieval {
                       THEN e."fields" #> '{trigger,paths}' ELSE '[]'::jsonb END
                ) AS t("value")
          WHERE ${where}
+      ),
+      ep AS MATERIALIZED (
+        SELECT "id", "path", rtrim("path", '/') AS "np" FROM entry_path
+      ),
+      asked AS (
+        SELECT a."q", rtrim(a."q", '/') AS "nq", a."qi"
+          FROM unnest(${textArray(paths)}) WITH ORDINALITY AS a("q", "qi")
+      ),
+      hit AS (
+        SELECT p."id", p."np", a."nq", a."qi",
+               CASE
+                 WHEN p."np" = a."nq" THEN 0
+                 WHEN strpos(a."nq", '/') = 0 AND split_part(p."np", '/', -1) = a."nq" THEN 0
+                 WHEN starts_with(p."np", a."nq" || '/') THEN 1
+                 WHEN starts_with(p."np", a."nq") THEN 2
+                 WHEN strpos(a."nq", '/') = 0 AND starts_with(split_part(p."np", '/', -1), a."nq") THEN 2
+                 WHEN starts_with(a."nq", p."np" || '/') THEN 3
+                 ELSE 4
+               END AS "rel"
+          FROM ep p JOIN asked a ON ${relation}
+      ),
+      -- The region a prefix match is about, whose entries are counted below; an exact match, or a
+      -- bare name's, is about the one path and counts the entries naming it.
+      measured AS (
+        SELECT h.*,
+               CASE WHEN h."rel" IN (1, 2) AND starts_with(h."np", h."nq") THEN h."nq"
+                    WHEN h."rel" IN (3, 4) THEN h."np" END AS "region"
+          FROM hit h
+      ),
+      under AS (
+        SELECT r."region", count(DISTINCT p."id")::int AS "n"
+          FROM (SELECT DISTINCT "region" FROM measured WHERE "region" IS NOT NULL) r
+          JOIN ep p ON starts_with(p."np", r."region")
+         GROUP BY r."region"
+      ),
+      named AS (
+        SELECT "np", count(DISTINCT "id")::int AS "n" FROM ep WHERE "np" IN (SELECT "np" FROM hit) GROUP BY "np"
+      ),
+      span AS (
+        SELECT "id", count(DISTINCT "np")::int AS "m" FROM ep WHERE "id" IN (SELECT "id" FROM hit) GROUP BY "id"
+      ),
+      scored AS (
+        SELECT m."id", m."qi", m."rel", COALESCE(u."n", n."n") AS "covered", s."m" AS "span"
+          FROM measured m
+          JOIN named n ON n."np" = m."np"
+          JOIN span s ON s."id" = m."id"
+          LEFT JOIN under u ON u."region" = m."region"
+      ),
+      -- Each entry's best match to each asked path, then its turn among that path's entries.
+      best AS (
+        SELECT DISTINCT ON ("id", "qi") "id", "qi", "rel", "covered", "span"
+          FROM scored
+         ORDER BY "id", "qi", "rel", "covered"::bigint * "span"
+      ),
+      turned AS (
+        SELECT "id", "rel" > 0 AS "prefix", "covered", "span",
+               row_number() OVER (PARTITION BY "qi", "rel" > 0 ORDER BY "rel", "covered"::bigint * "span", "id") AS "turn"
+          FROM best
+      ),
+      chosen AS (
+        SELECT DISTINCT ON ("id") "id", "prefix", "turn", "covered", "span"
+          FROM turned
+         ORDER BY "id", "prefix", "turn", "covered"::bigint * "span"
       )
-      SELECT id
-        FROM entry_path p
-       WHERE ${relation}
-       GROUP BY id
-       ORDER BY max(length(p."path")) DESC, id
+      SELECT c."id", NOT c."prefix" AS "exact", c."covered", c."span",
+             (SELECT count(DISTINCT "id")::int FROM ep) AS "entries"
+        FROM chosen c
+       ORDER BY c."prefix", c."turn", c."covered"::bigint * c."span", c."id"
        LIMIT ${LEG_CAP}::int
     `);
-    return rows.map((row) => row.id);
+    return rows.map((row) => ({
+      id: row.id,
+      weight: pathWeight(row.exact, pathSpecificity(row.covered, row.span, row.entries)),
+    }));
   }
 
   /**
@@ -430,11 +666,14 @@ export class WikiRetrieval {
         trust: true,
         anchorState: true,
         stats: true,
-        // Three columns of a row this query is already reading. What the caller ASKED for decides
+        // How old the entry is, which every hit says (contract `agentSurface.toolSpecs.wiki_search.age`).
+        recordedAt: true,
+        anchorCheckedRef: true,
+        anchorCheckedAt: true,
+        // Two columns of a row this query is already reading. What the caller ASKED for decides
         // what comes back, not what is read: the projection below is where `include` bites, so a
         // column nothing asked for cannot reach an agent's tool output by being selected here.
         topics: true,
-        anchorCheckedRef: true,
         space: { select: { slug: true } },
       },
     });
@@ -456,10 +695,12 @@ export class WikiRetrieval {
             stats: entry.stats,
             changedAt: changedTimes.get(entry.id) ?? null,
             // Carried through the ranking, not read off it: `compareRanked` orders by score, trust,
-            // anchor state, usage and the changed time, and none of these three is a term in it.
+            // anchor state, usage and the changed time, and none of these five is a term in it.
+            recordedAt: entry.recordedAt,
+            anchorCheckedRef: entry.anchorCheckedRef,
+            anchorCheckedAt: entry.anchorCheckedAt,
             spaceSlug: entry.space.slug,
             topics: entry.topics,
-            anchorCheckedRef: entry.anchorCheckedRef,
           },
         ];
       })
@@ -476,11 +717,15 @@ export class WikiRetrieval {
         // A fused score is a sum of at most two terms of about 1/61: rounded so two runs of the
         // same search answer with the same number rather than with float noise.
         score: Number(hit.score.toFixed(6)),
-        // Each of the three only when it was named, so a hit answered without `include` is exactly
-        // the contract's list of fields — which `wiki-search.pg.spec.ts` pins key by key.
+        // How old the entry is, for the reader to judge (contract `age`); a time is ISO 8601 in UTC.
+        recordedAt: hit.recordedAt.toISOString(),
+        changedAt: hit.changedAt?.toISOString() ?? null,
+        anchorCheckedRef: hit.anchorCheckedRef,
+        anchorCheckedAt: hit.anchorCheckedAt?.toISOString() ?? null,
+        // Each of the two only when it was named, so a hit answered without `include` is exactly
+        // the contract's list of fields (`hit`) — which `wiki-search.pg.spec.ts` pins key by key.
         ...(include.includes('space') ? { spaceSlug: hit.spaceSlug } : {}),
         ...(include.includes('topics') ? { topics: hit.topics } : {}),
-        ...(include.includes('anchor') ? { anchorCheckedRef: hit.anchorCheckedRef } : {}),
       }));
   }
 

@@ -1,5 +1,16 @@
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkGfm from 'remark-gfm';
 import { describe, expect, it } from 'vitest';
 import { plainPreview } from './plainPreview';
+
+// The words a bubble draws, from the parser and GFM plugin behind the transcript's `MD`: the cases
+// below take their answer from it, so none of them can pin what a row merely happens to do.
+const INLINE_PARENTS = new Set(['paragraph', 'heading', 'emphasis', 'strong', 'delete', 'link']);
+const words = (node: any): string =>
+  node.value ?? (node.children ?? []).map(words).join(INLINE_PARENTS.has(node.type) ? '' : ' ');
+const drawn = (md: string): string =>
+  words(unified().use(remarkParse).use(remarkGfm).parse(md)).replace(/\s+/g, ' ').trim();
 
 // The same inputs as OrbitKit's SessionLinePlainPreviewTests, so both lists read a reply alike.
 describe('plainPreview', () => {
@@ -48,5 +59,55 @@ describe('plainPreview', () => {
     expect(plainPreview('## Heading\n> quoted\n- **bold** and _em_ item')).toBe('Heading quoted bold and em item');
     expect(plainPreview('- [x] done, [y] (not a link)')).toBe('[x] done, [y] (not a link)');
     expect(plainPreview('run `npm test`\n\n  twice')).toBe('run npm test twice');
+  });
+
+  it.each([
+    // The message whose row read `teauserprofilebuildcnch` under a bubble that said this.
+    ['把其他的 tea_user_profile_build_*_cnch 也修复了', '把其他的 tea_user_profile_build_*_cnch 也修复了'],
+    ['file_path and snake_case_name', 'file_path and snake_case_name'],
+    ['看_重点_吧', '看_重点_吧'],
+    ['~/.orbit/bin takes ~30 minutes', '~/.orbit/bin takes ~30 minutes'],
+    ['2 * 3 * 4', '2 * 3 * 4'],
+    ['foo* and bar*', 'foo* and bar*'],
+    ['** BUILD SUCCEEDED **', '** BUILD SUCCEEDED **'],
+    ['*.ts files', '*.ts files'],
+    ['*_cnch too', '*_cnch too'],
+    ['--force is needed', '--force is needed'],
+    ['-1 is wrong', '-1 is wrong'],
+    ['#123 is broken', '#123 is broken'],
+    ['_private and __dunder', '_private and __dunder'],
+  ])('keeps what is not a mark: %s', (md, row) => {
+    expect(plainPreview(md)).toBe(row);
+    expect(drawn(md)).toBe(row);
+  });
+
+  it.each([
+    ['**bold**, *italic* and ***both***', 'bold, italic and both'],
+    ['_em_, __strong__ and ___both___', 'em, strong and both'],
+    ['~~gone~~ stays', 'gone stays'],
+    ['这是**重点**内容', '这是重点内容'],
+    ['**a *b* c** and *d **e** f*', 'a b c and d e f'],
+    ['**a*b**', 'a*b'],
+    ['_foo_bar_', 'foo_bar'],
+    // Two globs in one message: Markdown reads their marks as emphasis, and the bubble draws it so.
+    ['把 tea_*_cnch 和 foo_*_bar 都修了', '把 tea_cnch 和 foo_bar 都修了'],
+    ['**run `npm test` now**', 'run npm test now'],
+    ['above\n\n---\n***\n___\n- - -\n\nbelow', 'above below'],
+    ['> - ## nested\n* item', 'nested item'],
+  ])('drops a real mark: %s', (md, row) => {
+    expect(plainPreview(md)).toBe(row);
+    expect(drawn(md)).toBe(row);
+  });
+
+  it.each([
+    ['`a*b*c` and `_x_` and `~~y~~`', 'a*b*c and _x_ and ~~y~~'],
+    ['(v1-beta.*), and no `android-v*` tags', '(v1-beta.*), and no android-v* tags'],
+    ['`- x` and `#1` start this', '- x and #1 start this'],
+    ['see `tea_*_cnch` and `foo_*_bar`', 'see tea_*_cnch and foo_*_bar'],
+    ['``a_b_c`` and ``d`e`` and `f`', 'a_b_c and d`e and f'],
+    ['one `` tick pair stays', 'one `` tick pair stays'],
+  ])('leaves every mark inside code alone: %s', (md, row) => {
+    expect(plainPreview(md)).toBe(row);
+    expect(drawn(md)).toBe(row);
   });
 });

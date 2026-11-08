@@ -11,6 +11,7 @@ final class SessionProjectGroupingTests: XCTestCase {
 
     private func session(_ id: String, role: SessionProjectMembership.Role? = .task,
                          projectID: String = "p1", projectStatus: ProjectStatus = .open,
+                         workspace: String? = "w1", workspaceRef: SessionAgentRef? = nil,
                          title: String? = nil, folder: String? = nil,
                          state: SessionRunState = .awaitingInput, approvals: Int = 0,
                          waitingKind: SessionWaitingKind? = nil, since: [String] = [],
@@ -20,7 +21,7 @@ final class SessionProjectGroupingTests: XCTestCase {
                          reply: String? = "Last reply", userText: String? = nil,
                          tool: String? = nil, review: ConfirmationUnderReview? = nil) -> Session {
         Session(id: id, title: title ?? id, status: .awaitingInput, runState: state,
-                agentId: "w1", assignedRunnerId: nil, pendingApprovals: approvals,
+                agentId: workspace, assignedRunnerId: nil, pendingApprovals: approvals,
                 waitingKind: waitingKind,
                 ownerItems: since.enumerated().map { index, at in
                     SessionOwnerItem(itemId: "\(id)-\(index)", kind: .coordinatorQuestion,
@@ -31,6 +32,7 @@ final class SessionProjectGroupingTests: XCTestCase {
                 projectTitle: role == .coordinator ? "Project one" : nil,
                 lastAssistantText: reply, lastToolUse: tool, lastUserText: userText,
                 runningBgCount: bg, runningBgJobCount: jobs, runningSubagentCount: subagents,
+                agent: workspaceRef,
                 pinnedAt: pinnedAt, createdAt: createdAt, lastTurnAt: lastTurnAt,
                 folderId: folder, confirmationUnderReview: review,
                 projectMembership: role.map {
@@ -58,13 +60,31 @@ final class SessionProjectGroupingTests: XCTestCase {
     private func listing(_ sessions: [Session], view: SessionView = .open, byTag: Bool = false,
                          searching: Bool = false, folderID: String? = nil, offline: Bool = false,
                          projects: [ProjectSummary]? = nil, folders: [SessionFolder] = [],
+                         workspace: String? = nil,
                          coordinators: [Session] = [], content: [Session]? = nil,
                          watching: [String: WatchSessionSummary] = [:],
                          line: ((Session) -> SessionLine)? = nil) -> SessionProjectListing {
         SessionProjectGrouping.listing(sessions, folders: folders, projects: projects ?? [project()],
                                        view: view, byTag: byTag, searching: searching, folderID: folderID,
+                                       workspaceID: workspace,
                                        runnerOffline: offline, now: now, coordinators: coordinators,
                                        contentSessions: content, watching: watching, line: line)
+    }
+
+    /// Design §4.3 (owner 2026-11-07): a DONE or CANCELLED project's row leads its menu with Complete,
+    /// in Open only; an OPEN project's row has no completion.
+    func testOnlyAFinishedProjectInOpenOffersComplete() {
+        for status in ProjectStatus.allCases {
+            let members = [session("coordinator", role: .coordinator, projectStatus: status),
+                           session("worker", projectStatus: status)]
+            for view in [SessionView.open, .completed] {
+                let row = listing(members, view: view, projects: []).projects.first
+                XCTAssertEqual(row?.status, status)
+                XCTAssertEqual(row?.offersComplete(in: view),
+                               view == .open && (status == .done || status == .cancelled),
+                               "\(status) in \(view)")
+            }
+        }
     }
 
     func testAllMembershipRolesMergeInOpenAndCompleted() {
@@ -371,5 +391,165 @@ final class SessionProjectGroupingTests: XCTestCase {
         XCTAssertEqual(filed.folders.first?.status, .idle)
         let worker = session("worker", state: .running)
         XCTAssertEqual(listing([coord, worker], watching: watches).projects.first?.indicator, .running)
+    }
+
+    // MARK: A project outside its coordinator's workspace (owner 2026-11-07, option A)
+    //
+    // A project is a row only in the workspace its coordinator runs in; elsewhere its members are that
+    // workspace's own rows, each marked with the project (docs/mocks/project-rows-by-workspace). Web:
+    // sessionProjects.test.ts › "a project outside its coordinator’s workspace".
+
+    private var mark: SessionProjectMark {
+        SessionProjectMark(projectId: "p1", title: "Project summary", status: .open,
+                           taskCounts: ProjectSidebarTaskCounts(done: 3, failed: 1, total: 8), runningCount: 2)
+    }
+
+    /// The coordinator, running in another workspace than the list's own (`w1`).
+    private func remote(folder: String? = nil, lastTurnAt: String? = "2026-10-04T09:40:00Z") -> Session {
+        session("coordinator", role: .coordinator, workspace: "w2", folder: folder, lastTurnAt: lastTurnAt)
+    }
+
+    func testAProjectWhoseCoordinatorRunsElsewhereHasNoRowAndItsMembersHereAreMarked() {
+        let sessions = [session("check", lastTurnAt: ago(22)), session("cert", role: nil, lastTurnAt: ago(15)),
+                        session("deploy", lastTurnAt: ago(41)),
+                        session("coordinator-2", role: .coordinator, projectID: "p2", lastTurnAt: ago(30))]
+        let out = listing(sessions, workspace: "w1", coordinators: [remote()])
+        XCTAssertEqual(out.projects.map(\.projectId), ["p2"], "a project whose coordinator runs here keeps its row")
+        XCTAssertEqual(out.entries.map(\.id), ["cert", "check", "p2", "deploy"])
+        XCTAssertEqual(out.marks, ["check": mark, "deploy": mark])
+        XCTAssertEqual(out.sessions.map(\.id), ["check", "cert", "deploy"])
+    }
+
+    func testMembersAreMarkedWhenNoProjectHasARowHere() {
+        let check = session("check"), cert = session("cert", role: nil)
+        let out = listing([check, cert], workspace: "w1", coordinators: [remote()])
+        XCTAssertTrue(out.projects.isEmpty)
+        XCTAssertEqual(out.entries, [.session(check), .session(cert)])
+        XCTAssertEqual(out.marks, ["check": mark])
+    }
+
+    func testTheRowStaysWhereTheCoordinatorRunsAndWhereTheListNamesNoWorkspace() {
+        let home = listing([coordinator(), session("worker")], workspace: "w1")
+        XCTAssertEqual(home.projects.map { $0.members.map(\.id) }, [["coordinator", "worker"]])
+        XCTAssertEqual(home.entries.map(\.id), ["p1"])
+        XCTAssertTrue(home.marks.isEmpty)
+        // The coordinator's workspace still words its row from members that run elsewhere.
+        let remoteWorker = session("remote-worker", workspace: "w2", title: "Quota retry", approvals: 1,
+                                   waitingKind: .ownerConfirmation, since: [ago(30)])
+        let named = listing([coordinator()], workspace: "w1", content: [coordinator(), remoteWorker])
+        XCTAssertEqual(named.projects.first?.line,
+                       SessionLine(text: "Waiting for your confirmation · Quota retry", tone: .approval))
+        // No workspace to compare: the project's row, as before.
+        let unscoped = listing([session("worker")], coordinators: [remote()])
+        XCTAssertEqual(unscoped.projects.first?.coordinator?.id, "coordinator")
+        XCTAssertTrue(unscoped.marks.isEmpty)
+    }
+
+    /// The workspace the coordinator runs in is grouped exactly as before: the same rows, folders and
+    /// entries as a list that names no workspace.
+    func testTheCoordinatorsOwnWorkspaceIsUnchanged() {
+        let folders = [folder("f1", "Release"), folder("f2", "Tasks")]
+        let sessions = [coordinator(folder: "f1"), session("worker", folder: "f2", state: .running),
+                        session("waiting", approvals: 1), session("ordinary", role: nil)]
+        for view in [SessionView.open, .completed] {
+            for folderID in [nil, "f1", "f2"] {
+                XCTAssertEqual(listing(sessions, view: view, folderID: folderID, folders: folders, workspace: "w1"),
+                               listing(sessions, view: view, folderID: folderID, folders: folders))
+            }
+        }
+    }
+
+    func testAMemberThereIsFiledByItsOwnFolderInsideAFoldersPageToo() {
+        let folders = [folder("f1", "Prod checks"), folder("f2", "Release")]
+        let sessions = [session("check", folder: "f1", state: .running), session("deploy", approvals: 1),
+                        session("ordinary", role: nil)]
+        // The coordinator is filed in a folder of its own workspace, which is no folder here.
+        let coordinators = [remote(folder: "g1")]
+        let out = listing(sessions, folders: folders, workspace: "w1", coordinators: coordinators)
+        XCTAssertEqual(out.folders.map(\.id), ["f1", "f2"])
+        XCTAssertEqual(out.folders.map(\.sessionCount), [1, 0])
+        XCTAssertEqual(out.folders.map(\.status), [.running, .idle])
+        XCTAssertEqual(out.entries.map(\.id), ["deploy", "ordinary"])
+        XCTAssertEqual(out.marks, ["deploy": mark])
+        let inside = listing(sessions, folderID: "f1", folders: folders, workspace: "w1", coordinators: coordinators)
+        XCTAssertTrue(inside.folders.isEmpty)
+        XCTAssertEqual(inside.entries, [.session(sessions[0])])
+        XCTAssertEqual(inside.marks, ["check": mark])
+        // Where the coordinator runs, its folder still holds every member, whatever folder each is filed in.
+        let home = listing([coordinator(folder: "f2")] + sessions, folders: folders, workspace: "w1")
+        XCTAssertEqual(home.folders.map(\.sessionCount), [0, 3])
+        XCTAssertEqual(home.entries.map(\.id), ["ordinary"])
+        XCTAssertTrue(home.marks.isEmpty)
+    }
+
+    func testAMemberThereIsPinnedByItsOwnPinAndInItsOwnTimeSection() {
+        let pinned = session("pinned", pinnedAt: ago(5), lastTurnAt: ago(10_000))
+        let out = listing([pinned, session("older", lastTurnAt: ago(1_440)), session("ordinary", role: nil, lastTurnAt: ago(1))],
+                          workspace: "w1", coordinators: [remote(lastTurnAt: ago(1))])
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let sections = SessionTimeGrouping.sections(out.sessions, pinnedFirst: true, now: now, calendar: utc)
+        XCTAssertEqual(sections.map(\.title), ["Pinned", "Today", "Yesterday"])
+        XCTAssertEqual(sections.map { $0.sessions.map(\.id) }, [["pinned"], ["ordinary"], ["older"]])
+        XCTAssertEqual(Set(out.marks.keys), ["pinned", "older"])
+    }
+
+    func testCompletedFollowsTheSameRuleDecidedByACoordinatorStillOpen() {
+        let t6 = session("t6", lastTurnAt: ago(60))
+        let ordinary = session("ordinary", role: nil)
+        let elsewhere = listing([t6, ordinary], view: .completed, workspace: "w1", coordinators: [remote()])
+        XCTAssertTrue(elsewhere.projects.isEmpty)
+        XCTAssertEqual(elsewhere.entries, [.session(t6), .session(ordinary)])
+        XCTAssertEqual(elsewhere.marks, ["t6": mark])
+        let home = listing([t6], view: .completed, workspace: "w1", coordinators: [coordinator()])
+        XCTAssertEqual(home.projects.first?.coordinator?.id, "coordinator")
+        XCTAssertEqual(home.projects.first?.members, [t6])
+        XCTAssertTrue(home.marks.isEmpty)
+    }
+
+    func testAProjectWithNoCoordinatorIsARowInEachWorkspaceItHasMembersIn() {
+        for workspace in ["w1", "w2"] {
+            let out = listing([session("worker-\(workspace)", workspace: workspace),
+                               session("ordinary", role: nil, workspace: workspace)], workspace: workspace)
+            XCTAssertEqual(out.projects.count, 1)
+            XCTAssertNil(out.projects.first?.coordinator)
+            XCTAssertEqual(out.projects.first?.line, SessionLine(text: "No coordinator", tone: .preview))
+            XCTAssertEqual(out.projects.first?.target, .project("p1"))
+            XCTAssertTrue(out.marks.isEmpty)
+        }
+    }
+
+    func testAMemberOfAProjectTheSidebarDoesNotListIsMarkedWithItsStatus() {
+        let check = session("check", projectStatus: .done)
+        let out = listing([check], projects: [], workspace: "w1",
+                          coordinators: [session("coordinator", role: .coordinator, projectStatus: .done, workspace: "w2")])
+        XCTAssertEqual(out.entries, [.session(check)])
+        XCTAssertEqual(out.marks, ["check": SessionProjectMark(projectId: "p1", title: "Project one", status: .done,
+                                                               taskCounts: nil, runningCount: 0)])
+    }
+
+    func testTrashTagsAndSearchLeaveMembersThereFlatAndUnmarked() {
+        let check = session("check")
+        for (view, byTag, searching) in [(SessionView.trash, false, false), (.open, true, false), (.open, false, true)] {
+            let out = listing([check], view: view, byTag: byTag, searching: searching, workspace: "w1",
+                              coordinators: [remote()])
+            XCTAssertEqual(out.entries, [.session(check)])
+            XCTAssertTrue(out.marks.isEmpty)
+        }
+    }
+
+    /// Where the coordinator runs is read as the list reads a session's workspace
+    /// (`SessionFilter.forAgent`): the nested workspace first, then `agentId`. A coordinator whose
+    /// workspace nobody can tell keeps the project's row, as a list that names no workspace does.
+    func testTheCoordinatorsWorkspaceIsReadAsTheListReadsIt() {
+        let nested = session("coordinator", role: .coordinator, workspace: nil,
+                             workspaceRef: SessionAgentRef(id: "w2", name: "orbit-develop", provider: nil,
+                                                           model: nil, effort: nil))
+        XCTAssertEqual(SessionFilter.forAgent([nested], agentID: "w2"), [nested])
+        XCTAssertEqual(listing([session("check")], workspace: "w1", coordinators: [nested]).marks, ["check": mark])
+        let nowhere = session("coordinator", role: .coordinator, workspace: nil)
+        let out = listing([session("check")], workspace: "w1", coordinators: [nowhere])
+        XCTAssertEqual(out.projects.first?.coordinator?.id, "coordinator")
+        XCTAssertTrue(out.marks.isEmpty)
     }
 }

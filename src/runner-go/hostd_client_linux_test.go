@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"io"
 	"net"
 	"os"
 	"os/user"
@@ -10,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The whole point of the broker path, end to end: `orbit register` and `orbit
@@ -20,10 +20,12 @@ func TestRegisterAndUnregisterGoThroughTheBrokerWithoutRoot(t *testing.T) {
 	commands := recordCommands(t)
 	unit := unitForUid(uint32(os.Getuid()))
 
+	var svc *runnerService
 	out := captureServiceOutput(t, func() {
-		err := setupServiceLinux(path, nil, func() error {
+		var err error
+		svc, err = setupServiceLinux(path, nil, func() (*runnerService, error) {
 			t.Error("the sudo path ran even though the broker enabled the runner")
-			return nil
+			return nil, nil
 		})
 		if err != nil {
 			t.Errorf("register: %v", err)
@@ -32,6 +34,16 @@ func TestRegisterAndUnregisterGoThroughTheBrokerWithoutRoot(t *testing.T) {
 	if got := *asked; len(got) != 1 || got[0] != "enable" {
 		t.Fatalf("broker was asked %v, want exactly [enable]", got)
 	}
+	// The service register waits on is the unit the broker says it started.
+	if svc == nil || svc.unit != unit || svc.how != "runs at boot" {
+		t.Fatalf("register's service step returned %+v, want unit %s that runs at boot", svc, unit)
+	}
+	// Started is said once the control plane has heard from the runner (startService), not
+	// when the broker answers.
+	if strings.Contains(out, "Background service started") {
+		t.Errorf("register said the service started before anything heard from it:\n%s", out)
+	}
+	out = captureServiceOutput(t, func() { printServiceStarted(svc.how) })
 	user := "this account"
 	if u, err := registeringUser(); err == nil {
 		user = u.Username
@@ -70,7 +82,7 @@ func TestNoBrokerFallsBackToSudoSilently(t *testing.T) {
 
 	installed := false
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(absent, nil, func() error { installed = true; return nil }); err != nil {
+		if _, err := setupServiceLinux(absent, nil, func() (*runnerService, error) { installed = true; return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -103,7 +115,7 @@ func TestABrokerThatRefusesSaysWhyAndStillFallsBack(t *testing.T) {
 
 	installed := false
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(path, nil, func() error { installed = true; return nil }); err != nil {
+		if _, err := setupServiceLinux(path, nil, func() (*runnerService, error) { installed = true; return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -139,7 +151,7 @@ func TestADeadSocketSaysWhyAndFallsBack(t *testing.T) {
 
 	installed := false
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(path, nil, func() error { installed = true; return nil }); err != nil {
+		if _, err := setupServiceLinux(path, nil, func() (*runnerService, error) { installed = true; return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -151,13 +163,14 @@ func TestADeadSocketSaysWhyAndFallsBack(t *testing.T) {
 	}
 }
 
-// A broker that takes the connection and then goes quiet is the wedged-hostd case, and
-// the one registration must survive: the exchange times out, the user is told which
-// socket went silent, and the sudo path finishes the job. This runs the product chain —
-// setupServiceLinux → registerViaHostd → hostdDo → hostdCall — so that deleting
-// hostdCall's deadline, or falling through to an error instead of the legacy closure,
-// fails here rather than passing on a test's private copy of the behaviour.
-func TestASilentBrokerTimesOutAndStillFallsBack(t *testing.T) {
+// A broker that takes the connection and then goes quiet may be draining an older runner,
+// and is never gone around: the sudo path would install a unit beside the instance it is
+// about to start. Register and unregister wait for it, say so, and after hostdAnswerWait
+// stop with the reason, with no sudo fallback. This runs the product chain —
+// setupServiceLinux → registerViaHostd → hostdDo → hostdCall — so that dropping hostdCall's
+// deadline, or falling through to the legacy closure, fails here rather than passing on a
+// test's private copy of the behaviour.
+func TestASilentBrokerIsWaitedForAndNeverRoutedToSudo(t *testing.T) {
 	silent := make(chan struct{})
 	defer close(silent)
 	path := serveRawHostd(t, func(conn net.Conn) {
@@ -166,38 +179,153 @@ func TestASilentBrokerTimesOutAndStillFallsBack(t *testing.T) {
 	shortenHostdTimeout(t)
 	commands := recordCommands(t)
 
-	installed := make(chan struct{}, 1)
+	errs := make(chan error, 1)
 	out := captureServiceOutput(t, func() {
 		mustGiveUp(t, "register", func() {
-			if err := setupServiceLinux(path, nil, func() error { installed <- struct{}{}; return nil }); err != nil {
-				t.Error(err)
+			_, err := setupServiceLinux(path, nil, func() (*runnerService, error) {
+				t.Error("the sudo path ran while the broker may still be carrying out the enable")
+				return nil, nil
+			})
+			if err != nil {
+				printServiceFailure(os.Stderr, err)
 			}
+			errs <- err
 		})
 	})
-	if len(installed) == 0 {
-		t.Error("a broker that never answers must still leave the runner installed the old way")
+	var refused *hostdRegisterRefusal
+	if err := <-errs; !errors.As(err, &refused) || refused.code != hostdNoAnswer {
+		t.Fatalf("register's service step returned %v, want the %q stop", err, hostdNoAnswer)
 	}
-	if !strings.Contains(out, path) || !strings.Contains(out, "falling back to the sudo path") {
-		t.Errorf("register output does not say which broker went silent; got:\n%s", out)
+	for _, want := range []string{`Waiting for the machine broker to finish "enable"`, path, "has not answered within", "stops here rather than go around it"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("register output must say %q; got:\n%s", want, out)
+		}
+	}
+	for _, never := range []string{"sudo", "falling back", "Start it in the foreground"} {
+		if strings.Contains(out, never) {
+			t.Errorf("register output says %q; got:\n%s", never, out)
+		}
 	}
 
-	removed := make(chan struct{}, 1)
 	out = captureServiceOutput(t, func() {
 		mustGiveUp(t, "unregister", func() {
-			uninstallServiceLinux(path, func() { removed <- struct{}{} })
+			uninstallServiceLinux(path, func() { t.Error("the sudo removal ran while the broker may still be carrying out the disable") })
 		})
 	})
-	if len(removed) == 0 {
-		t.Error("a broker that never answers must still fall back to the sudo removal")
+	if !strings.Contains(out, `Waiting for the machine broker to finish "disable"`) || !strings.Contains(out, "has not answered within") {
+		t.Errorf("unregister output does not say it waited and why it stopped; got:\n%s", out)
 	}
-	if !strings.Contains(out, "falling back to the sudo path") {
-		t.Errorf("unregister output does not say why it fell back; got:\n%s", out)
+	if strings.Contains(out, "sudo") {
+		t.Errorf("unregister output mentions sudo; got:\n%s", out)
 	}
-
-	// Falling back is the legacy closure's job, not something the client does behind it:
-	// the client itself still ran nothing.
 	if len(*commands) != 0 {
 		t.Fatalf("the broker path shelled out to %v", *commands)
+	}
+}
+
+// A broker draining an older runner answers enable long after hostdCallTimeout's five
+// seconds, and past hostd's own hostdConnTimeout of ten: register waits for it, says it is
+// waiting, and takes the instance it started, with no sudo fallback. Real timeouts, a real
+// hostd serving loop over a real socket.
+func TestABrokerThatAnswersAfterMoreThanFiveSecondsIsWaitedFor(t *testing.T) {
+	const drain = 11 * time.Second
+	if drain <= hostdCallTimeout || drain <= hostdConnTimeout {
+		t.Fatalf("fixture: a drain of %s is not past hostdCallTimeout (%s) and hostdConnTimeout (%s)", drain, hostdCallTimeout, hostdConnTimeout)
+	}
+	path, stop := startHostd(t, map[string]hostdVerb{
+		"enable": func(peer hostdPeer, _ hostdRequest) hostdResponse {
+			time.Sleep(drain)
+			return hostdOK(map[string]any{"uid": peer.UID, "unit": testUnit})
+		},
+	})
+	defer stop()
+	commands := recordCommands(t)
+
+	var svc *runnerService
+	start := time.Now()
+	out := captureServiceOutput(t, func() {
+		var err error
+		svc, err = setupServiceLinux(path, nil, func() (*runnerService, error) {
+			t.Error("the sudo path ran while the broker was still draining")
+			return nil, nil
+		})
+		if err != nil {
+			t.Errorf("register: %v", err)
+		}
+	})
+	if took := time.Since(start); took < drain {
+		t.Errorf("register returned after %s, before the broker answered", took)
+	}
+	if svc == nil || svc.unit != testUnit {
+		t.Fatalf("register's service step returned %+v, want the instance the broker started, %s", svc, testUnit)
+	}
+	if !strings.Contains(out, `Waiting for the machine broker to finish "enable" — it may be draining an older runner`) {
+		t.Errorf("register did not say it was waiting; got:\n%s", out)
+	}
+	for _, never := range []string{"sudo", "falling back"} {
+		if strings.Contains(out, never) {
+			t.Errorf("register output says %q; got:\n%s", never, out)
+		}
+	}
+	if len(*commands) != 0 {
+		t.Fatalf("the broker path shelled out to %v", *commands)
+	}
+}
+
+// hostd's refusal to enable while an older runner unit of the account will not go down is
+// not one to route around either: register stops at it with hostd's message and no sudo
+// fallback, whose unit would be yet another runner beside it. Unregister prints disable's
+// report and does not reach for the sudo removal, which would remove the unit file of a
+// unit that is still running. Each answer is the real verb's, served over a real socket to
+// the real client chain.
+func TestRegisterStopsAtTheBrokersOlderRunnerRefusalWithoutSudo(t *testing.T) {
+	f, sys := newFakeSystem(t)
+	setInstance(f, testUidUnit, strconv.Itoa(testUID), "enabled", "active")
+	f.fail["systemctl stop "+testUidUnit] = errors.New("exit status 4")
+	f.stdout["systemctl stop "+testUidUnit] = "Failed to stop " + testUidUnit + ": Operation refused, unit " + testUidUnit + " may be requested by dependency only (it is configured to refuse manual start/stop).\n"
+	enable := sys.verbs()["enable"](testPeer, hostdRequest{V: 1, Verb: "enable"})
+	disable := sys.verbs()["disable"](testPeer, hostdRequest{V: 1, Verb: "disable"})
+	if enable.OK || enable.Code != hostdRefusedOlderRunner || disable.OK || disable.Code != hostdRefusedOlderRunner {
+		t.Fatalf("fixture: enable = %+v, disable = %+v, want both older-runner refusals", enable, disable)
+	}
+	path, stop := startHostd(t, map[string]hostdVerb{
+		"enable":  func(hostdPeer, hostdRequest) hostdResponse { return enable },
+		"disable": func(hostdPeer, hostdRequest) hostdResponse { return disable },
+	})
+	defer stop()
+	commands := recordCommands(t)
+
+	var err error
+	out := captureServiceOutput(t, func() {
+		_, err = setupServiceLinux(path, nil, func() (*runnerService, error) {
+			t.Error("the sudo path ran although the account's older runner is still up")
+			return nil, nil
+		})
+		if err != nil {
+			printServiceFailure(os.Stderr, err)
+		}
+	})
+	var refused *hostdRegisterRefusal
+	if !errors.As(err, &refused) || refused.code != hostdRefusedOlderRunner {
+		t.Fatalf("register's service step returned %v, want the broker's older-runner refusal", err)
+	}
+	if want := "✗ Could not start the background service: " + enable.Error + "\n"; !strings.Contains(out, want) {
+		t.Errorf("register output must carry hostd's message whole, %q; got:\n%s", want, out)
+	}
+	for _, never := range []string{"sudo", "falling back", "Start it in the foreground"} {
+		if strings.Contains(out, never) {
+			t.Errorf("register output says %q; got:\n%s", never, out)
+		}
+	}
+
+	out = captureServiceOutput(t, func() {
+		uninstallServiceLinux(path, func() { t.Error("the sudo removal ran although the account's older runner is still up") })
+	})
+	if !strings.Contains(out, disable.Error) || strings.Contains(out, "sudo") || strings.Contains(out, "removed the") {
+		t.Errorf("unregister output must carry disable's report and claim no removal; got:\n%s", out)
+	}
+	if len(*commands) != 0 {
+		t.Fatalf("register shelled out to %v", *commands)
 	}
 }
 
@@ -209,7 +337,7 @@ func TestRegisterWarnsThatTheSharedTemplateDropsTheProxy(t *testing.T) {
 	proxy := proxyServiceEnv("http://proxy.internal:3128", "https://orbit.example", "")
 
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(path, proxy, func() error { t.Error("fell back"); return nil }); err != nil {
+		if _, err := setupServiceLinux(path, proxy, func() (*runnerService, error) { t.Error("fell back"); return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -311,15 +439,15 @@ func TestRegisterStopsAtTheBrokersOwnCopyRefusalWithoutSudo(t *testing.T) {
 
 			var err error
 			out := captureServiceOutput(t, func() {
-				err = setupServiceLinux(path, nil, func() error {
+				_, err = setupServiceLinux(path, nil, func() (*runnerService, error) {
 					t.Error("the sudo path ran although the broker said the account has no copy of its own")
-					return nil
+					return nil, nil
 				})
 				if err != nil {
 					printServiceFailure(os.Stderr, err)
 				}
 			})
-			var refused *hostdOwnCopyRefusal
+			var refused *hostdRegisterRefusal
 			if !errors.As(err, &refused) {
 				t.Fatalf("register's service step returned %v, want the broker's refusal", err)
 			}
@@ -355,7 +483,7 @@ func TestRootsRefusalStillFallsBackToTheSudoPath(t *testing.T) {
 
 	installed := false
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(path, nil, func() error { installed = true; return nil }); err != nil {
+		if _, err := setupServiceLinux(path, nil, func() (*runnerService, error) { installed = true; return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -402,32 +530,4 @@ func recordCommands(t *testing.T) *[]string {
 	}
 	t.Cleanup(func() { run, runQuiet = prevRun, prevQuiet })
 	return &seen
-}
-
-// captureServiceOutput collects both streams fn writes to. The register path prints its
-// result to stdout and its reasons to stderr, and reading only one of them would miss
-// half of what the user actually sees.
-func captureServiceOutput(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	prevOut, prevErr := os.Stdout, os.Stderr
-	os.Stdout, os.Stderr = w, w
-	collected := make(chan string, 1)
-	go func() {
-		b, _ := io.ReadAll(r)
-		collected <- string(b)
-	}()
-
-	fn()
-
-	os.Stdout, os.Stderr = prevOut, prevErr
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	out := <-collected
-	r.Close()
-	return out
 }

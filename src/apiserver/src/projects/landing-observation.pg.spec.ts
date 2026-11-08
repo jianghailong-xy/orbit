@@ -44,6 +44,7 @@ import { canonicalRepoUrl, configureProjectIntegration } from './project-integra
 import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
 import * as integrationJob from './project-integration-job';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The landing observation, server side (`docs/project-integration-line-contract.md` §10.6, §10.9):

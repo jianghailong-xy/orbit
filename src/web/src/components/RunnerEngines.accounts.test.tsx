@@ -8,7 +8,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { machineChipsOf, RunnerEngines, summaryOf, tildePath } from './RunnerEngines';
-import { clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -368,5 +368,46 @@ describe('where an account lives, as a terminal would spell it', () => {
     expect(tildePath('/Users/ada/.codex')).toBe('~/.codex');
     expect(tildePath('/srv/codex')).toBe('/srv/codex');
     expect(tildePath('/rootless/.codex')).toBe('/rootless/.codex');
+  });
+});
+
+describe('a sign-in check that got no answer', () => {
+  const UNKNOWN_DEFAULT: RunnerEngineAccount = { ...DEFAULT, auth: 'unknown' };
+  const UNKNOWN_WORK: RunnerEngineAccount = { ...WORK, auth: 'unknown' };
+
+  it('names the failed check rather than calling the accounts signed out, and keeps Sign in out of the rows', async () => {
+    const page = mount([runner({ accounts: [UNKNOWN_DEFAULT, UNKNOWN_WORK] })]);
+    const accounts = rows(page, '.re-acct');
+    expect(accounts.map(tags)).toEqual([['Couldn’t check'], ['Couldn’t check']]);
+    // No reading at all — not a zero, and not the windows of a login that may have gone.
+    expect(accounts.map((row) => row.querySelector('.re-quota')?.textContent)).toEqual(['No reading', 'No reading']);
+    // Signing in is not the fix for a timeout: the rows offer only More, where the action waits for
+    // the case the login really is gone.
+    expect(accounts.flatMap((row) => rows(row, '.re-act button').map(labelOf))).toEqual([
+      'More actions',
+      'More actions',
+    ]);
+    expect((await runnerMenuItem(accounts[0], 'Sign in')).textContent?.trim()).toBe('Sign in');
+
+    const [head] = rows(page, '.re-grp');
+    expect(head.querySelector('.re-meta')?.textContent).toBe('0.156.0 · couldn’t check 2 accounts');
+    expect(head.querySelector('.re-dup')?.textContent).toBe(
+      'The runner didn’t answer the sign-in check this time. It tries again every 5 minutes; sessions can still start.',
+    );
+
+    // Folded, the head carries the same fact — a fold must not hide a check that got no answer.
+    await click(head.querySelector<HTMLButtonElement>('.re-grp-toggle')!);
+    expect(tags(head)).toEqual(['2 couldn’t be checked']);
+    expect(head.querySelector('.re-dup')).toBeNull();
+  });
+
+  it('keeps the count of what is known, and names the rest after it', () => {
+    const page = mount([runner({ accounts: [DEFAULT, UNKNOWN_WORK] })]);
+    const [head] = rows(page, '.re-grp');
+    expect(head.querySelector('.re-meta')?.textContent).toBe(
+      '0.156.0 · 1 of 2 accounts available · 1 couldn’t be checked',
+    );
+    // The account whose answer is known keeps its state; the other says only that it could not be checked.
+    expect(rows(page, '.re-acct').map(tags)).toEqual([['Available'], ['Couldn’t check']]);
   });
 });

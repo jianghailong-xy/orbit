@@ -7,6 +7,7 @@ import {
   normalizePermissionRules,
   permissionRuleToken,
   ruleCoversApproval,
+  ruleCoversBackgroundJobCard,
   serverMatchedRuntime,
 } from './permission-rules';
 
@@ -253,6 +254,150 @@ test('a stale shell-wrapper grant cannot answer a Codex command', () => {
     ),
     false,
   );
+});
+
+/** What a human approving `ls` once leaves behind. */
+const LS = [{ toolName: 'Bash', ruleContent: 'ls:*' }];
+/** Each way of asking whether a rule answers a call: an engine's own card, and a runner-hosted job's. */
+const coveredEverywhere = (input: unknown, rules: readonly { toolName: string; ruleContent?: string }[]): boolean[] => [
+  ...[AgentProvider.CODEX, AgentProvider.KIMI, AgentProvider.ANTIGRAVITY, AgentProvider.CURSOR].map((provider) =>
+    ruleCoversApproval(provider, 'Bash', input, rules),
+  ),
+  ruleCoversBackgroundJobCard(input, rules),
+];
+
+test('a rule covers only what can be read for certain: the shapes that reach a person', () => {
+  for (const input of [
+    // A backslash inside single quotes closes the quote, so a second command follows.
+    bash("ls '\\'; touch x #'"),
+    // A comment ends at its newline, so a second command follows.
+    bash("ls #'\ntouch x #'"),
+    // The call sets variables as well, and no rule has seen their values.
+    { command: 'ls', env: { BASH_ENV: '/tmp/x' } },
+    { command: 'ls', env: { PATH: '/tmp/x' } },
+    { command: 'ls', env: 'PATH=/tmp/x' },
+    { command: 'ls', env: ['PATH=/tmp/x'] },
+    // An assignment ahead of the program changes what the program is, or what it loads.
+    bash('PATH=/tmp/x ls'),
+    bash('LD_PRELOAD=/tmp/x.so ls'),
+    bash('BASH_ENV=/tmp/x ls'),
+    bash('IFS=x ls'),
+    // The other spellings of an assignment.
+    bash('env PATH=/tmp/x ls'),
+    bash('export PATH=/tmp/x; ls'),
+    bash('for PATH in /tmp/x; do ls; done'),
+    // Quoting a shell ends somewhere other than where it starts to read as text.
+    bash("ls $'\\''; touch x #'"),
+    bash("ls 'a"),
+    bash('ls "a'),
+    bash('ls a\\'),
+    bash("ls '\\'"),
+    // A close brace that can end a command in zsh, a subshell, and a space only JS sees.
+    bash('ls a}\\\n touch x'),
+    bash('ls *(x)'),
+    bash('ls\rx'),
+    bash('\u00a0ls'),
+    // A comment that would mean something if it were not one.
+    bash('ls # a; b'),
+    bash("ls # don't"),
+    bash('ls # $(b)'),
+  ]) {
+    assert.deepEqual(coveredEverywhere(input, LS), [false, false, false, false, false], JSON.stringify(input));
+  }
+});
+
+test('a heredoc reaches a person whatever the rules name, though its body is no sub-command', () => {
+  const namesEveryLine = ['cat', 'ls', 'touch', 'sh', 'EOF', 'ONE', 'TWO'].map((prefix) => ({
+    toolName: 'Bash',
+    ruleContent: `${prefix}:*`,
+  }));
+  for (const command of [
+    'cat <<EOF\nls\nEOF',
+    "cat <<'EOF'\nls\nEOF",
+    'cat <<-EOF\n\tls\n\tEOF',
+    'cat <<ONE <<TWO\nls\nONE\nls\nTWO',
+    'ls; cat <<EOF\nls\nEOF\nls',
+    // An unquoted body is expanded, and a program can run any body it is handed.
+    'cat <<EOF\n$(touch x)\nEOF',
+    "sh <<'EOF'\ntouch x\nEOF",
+    'cat <<EOF\nls\nEOF\ntouch x',
+  ]) {
+    assert.deepEqual(coveredEverywhere(bash(command), namesEveryLine), [false, false, false, false, false], command);
+  }
+});
+
+test('a rule still covers the ordinary ways of writing what it names', () => {
+  const allowed = [
+    { toolName: 'Bash', ruleContent: 'ls:*' },
+    { toolName: 'Bash', ruleContent: 'git status:*' },
+    { toolName: 'Bash', ruleContent: 'grep:*' },
+    { toolName: 'Bash', ruleContent: 'cd:*' },
+    { toolName: 'Bash', ruleContent: 'echo:*' },
+    { toolName: 'Bash', ruleContent: 'git commit:*' },
+  ];
+  for (const command of [
+    'ls',
+    'ls -la .',
+    'ls -la  # list the files',
+    'git status',
+    'git status --short',
+    'grep "a;b|c" x',
+    "grep 'a|b' x",
+    "grep 'a\\|b' x",
+    'grep "a\\|b" x',
+    'grep "#" x',
+    'ls a#b',
+    'cd /repo && git status',
+    'cd /repo; ls | grep x',
+    'cd /repo\ngit status',
+    "echo 'it'\\''s'",
+    'git commit -m "one\n\ntwo"',
+    'git commit -m "a (b)"',
+    'ls $HOME',
+    'ls FOO=bar',
+    'ls {a,b}',
+    '  ls  \n',
+  ]) {
+    assert.deepEqual(coveredEverywhere(bash(command), allowed), [true, true, true, true, true], command);
+  }
+});
+
+test('a rule that names a shell keyword covers nothing: the program comes after it', () => {
+  const keywords = ['if', 'then', 'elif', 'else', 'while', 'until', 'do', 'time'].map((word) => ({
+    toolName: 'Bash',
+    ruleContent: `${word}:*`,
+  }));
+  assert.deepEqual(normalizePermissionRules(keywords), []);
+  assert.deepEqual(dispatchAllowedTools(AgentProvider.CLAUDE, BASE, keywords), BASE);
+  const withLoop = [...keywords, { toolName: 'Bash', ruleContent: 'for f:*' }, { toolName: 'Bash', ruleContent: 'done:*' }];
+  for (const command of ['for f in a; do touch x; done', 'do touch x', 'if touch x; then echo y; fi', 'do ./x', 'time touch x']) {
+    assert.deepEqual(coveredEverywhere(bash(command), withLoop), [false, false, false, false, false], command);
+  }
+});
+
+test('a rule that names the program after a keyword covers it, and a keyword alone needs no rule', () => {
+  const rules = [
+    { toolName: 'Bash', ruleContent: 'for f:*' },
+    { toolName: 'Bash', ruleContent: 'do echo:*' },
+    { toolName: 'Bash', ruleContent: 'echo:*' },
+    { toolName: 'Bash', ruleContent: 'done:*' },
+  ];
+  for (const command of ['for f in a; do echo x; done', 'for f in a\ndo\n  echo x\ndone']) {
+    assert.deepEqual(coveredEverywhere(bash(command), rules), [true, true, true, true, true], command);
+  }
+  // What a keyword leads to is still judged: another program there asks.
+  assert.deepEqual(coveredEverywhere(bash('for f in a\ndo\n  touch x\ndone'), rules), [false, false, false, false, false]);
+});
+
+test('`env` alone only prints, so a rule for it still covers that', () => {
+  assert.deepEqual(coveredEverywhere(bash('env'), [{ toolName: 'Bash', ruleContent: 'env:*' }]), [true, true, true, true, true]);
+  assert.deepEqual(coveredEverywhere(bash('env ls'), [{ toolName: 'Bash', ruleContent: 'env:*' }]), [false, false, false, false, false]);
+});
+
+test('an env that sets nothing changes nothing', () => {
+  for (const input of [{ command: 'ls', env: {} }, { command: 'ls', env: null }, { command: 'ls' }]) {
+    assert.deepEqual(coveredEverywhere(input, LS), [true, true, true, true, true], JSON.stringify(input));
+  }
 });
 
 test('nothing to match on means ask: no rules, no command, no tool', () => {

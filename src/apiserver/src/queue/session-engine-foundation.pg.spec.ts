@@ -34,6 +34,7 @@ import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-suppor
 import { MOVE_REFUSAL } from '../sessions/session-move';
 import { SessionsService } from '../sessions/sessions.service';
 import { QueueService } from './queue.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'session-engine-foundation-spec';
@@ -81,7 +82,7 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
   const queue = new QueueService(db as unknown as PrismaService, realtime);
   // References in a delivered turn are expanded by their own service; the turns here carry none.
   const references = { expand: async (_ownerId: string, content: string | null | undefined) => content };
-  const api = new RunnerApiController(db as never, queue as never, realtime as never, {} as never, {} as never, references as never);
+  const api = new RunnerApiController(db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, references as never);
   const sessions = new SessionsService(db as unknown as PrismaService, queue, realtime);
   const providers = new ProvidersService(db as unknown as PrismaService, realtime, {} as never);
 
@@ -556,18 +557,18 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     const at = await machine(owner);
     const kimiKey = await key(owner, { runtime: 'kimi', presetSlug: 'moonshot', baseUrl: 'https://api.moonshot.ai/v1' });
     const id = await session(at, kimiKey.slug, { engine: AgentProvider.KIMI, status: RunStatus.AWAITING_INPUT, model: 'kimi-k3', runtimeSessionId: 'kimi-thread' });
-    const rebuilt = (await api.reclaim(at.runner, undefined, ALL.join(','))).sessions.find((s) => s.sessionId === id);
+    const rebuilt = (await api.reclaim(at.runner, ALL.join(','))).sessions.find((s) => s.sessionId === id);
     assert.equal(rebuilt?.provider, AgentProvider.KIMI);
     assert.equal(rebuilt?.agent.env?.KIMI_MODEL_API_KEY, kimiKey.apiKey);
     const leaseOwner = randomUUID();
-    await api.takeoverLeases(at.runner, id, { leaseOwner, expectedLeaseOwner: null } as never, undefined, ALL.join(','));
+    await api.takeoverLeases(at.runner, id, { leaseOwner, expectedLeaseOwner: null } as never, ALL.join(','));
     assert.equal((await row(id)).inboxLeaseOwner, leaseOwner, 'the takeover declares it reads the engine, and lands');
     const generation = randomUUID();
     await api.activateLeases(at.runner, id, { leaseOwner, leaseGeneration: generation }, ALL.join(','));
     assert.equal((await row(id)).inboxLeaseGeneration, generation);
     // The key's protocol changed under it: reclaim leaves it out rather than rebuild it as Codex.
     await db.modelProvider.update({ where: { slug: kimiKey.slug }, data: { runtime: 'codex' } });
-    assert.ok(!(await api.reclaim(at.runner, undefined, ALL.join(','))).sessions.some((s) => s.sessionId === id));
+    assert.ok(!(await api.reclaim(at.runner, ALL.join(','))).sessions.some((s) => s.sessionId === id));
     assert.equal(await engineOf(id), AgentProvider.KIMI);
   });
 

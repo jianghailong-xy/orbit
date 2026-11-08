@@ -45,8 +45,8 @@ import {
  *  - HELD: the coordinator holds the delivery — `coordinatorHolds` as it always read, with an ended
  *    conversation in place of a stopped one: while the conversation that was handed it is paused,
  *    with no clock; while it is live, until the project's `exceptionEscalationSeconds` have passed
- *    since the delivery. A delivery that WAITED first says so (`WakeDeliveryRecord.waited`), which is
- *    what the owner's "Sent to the coordinator" line is drawn from.
+ *    since the turn was taken up. Unread queued turns have no deadline. A delivery that WAITED first
+ *    says so (`WakeDeliveryRecord.waited`), which is what the owner's "Sent to the coordinator" line is drawn from.
  *  - otherwise: the owner's card, as it is today — a project that is not Automatic, a fuse, a
  *    coordinator that ended, was trashed or did the work, a revision only recorded, a delivery
  *    refused for any reason but a pause, or a hold whose window ran out.
@@ -149,7 +149,7 @@ export type CoordinatorEvidencePlace =
       coordinatorSessionId: string | null;
       /** The conversation the delivery was made to. */
       sessionId: string;
-      /** When it was made: the moment the hold's window runs from. */
+      /** When the delivery was recorded, for the receipt; not the hold window start. */
       deliveredAt: Date;
       /** It was made after the revision had waited for its coordinator. */
       waited: boolean;
@@ -189,9 +189,8 @@ const ATTEMPT_SELECT = {
  *     2026-10-09 a FAILED run counted as over, `sessionHasEnded`);
  *   * the turn that carried it was not taken off the queue unread: such a delivery reached nobody;
  *   * and, while that conversation is live, the project's `exceptionEscalationSeconds` have not run
- *     out since the delivery was bound. `updatedAt` is that moment: the compare-and-set that writes
- *     DELIVERED is the row's last write, and a re-sent delivery writes it again. While the
- *     conversation is paused no clock runs.
+ *     out since the delivery turn was taken up (`deliveredAt`). Unread queued turns and paused
+ *     conversations have no running clock. The wake timestamp remains the delivery receipt.
  *
  * It WAITS for the coordinator under the rule the header states.
  */
@@ -284,8 +283,9 @@ export async function coordinatorHolds(
     const held = (): CoordinatorEvidencePlace | null => {
       if (!delivery || !record || !delivery.session || !project.coordinatorEnabled) return null;
       if (conversationIsOver(delivery.session) || unread(delivery.sessionId!, record)) return null;
-      const escalatesAt = delivery.updatedAt.getTime() + project.exceptionEscalationSeconds * 1_000;
-      if (!conversationIsPaused(delivery.session) && readAt.getTime() >= escalatesAt) return null;
+      const takenAt = turnOf(delivery.sessionId!, record.clientTurnId)!.deliveredAt;
+      if (takenAt !== null && !conversationIsPaused(delivery.session)
+        && readAt.getTime() >= takenAt.getTime() + project.exceptionEscalationSeconds * 1_000) return null;
       return {
         place: 'HELD',
         coordinatorSessionId: coordinator?.id ?? null,

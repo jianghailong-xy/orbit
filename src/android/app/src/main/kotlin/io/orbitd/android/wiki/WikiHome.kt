@@ -1,14 +1,17 @@
 package io.orbitd.android.wiki
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -23,12 +26,18 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.directory.DirectoryData
@@ -41,6 +50,7 @@ import io.orbitd.android.taskprojects.SharePanel
 import io.orbitd.android.taskprojects.SharePanelCopy
 import io.orbitd.android.taskprojects.ShareRootKind
 import io.orbitd.android.taskprojects.ShareSheet
+import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -74,6 +84,8 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
     var contentsShown by rememberSaveable { mutableStateOf(false) }
+    /** Set up maintenance, which the setup card's first step opens where the reader is. */
+    var settingUp by rememberSaveable { mutableStateOf(false) }
     /** The Share panel, and the space's public link as last read or saved — what the bar's globe says. */
     var sharing by rememberSaveable { mutableStateOf(false) }
     var shareRead by remember { mutableStateOf<JsonObject?>(null) }
@@ -85,7 +97,8 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     // space's home stands in for it; until the link is settled, nothing is drawn.
     var linkedSpaceApplied by rememberSaveable(route.id) { mutableStateOf(route.id == null) }
     var linkedSpaceMissing by rememberSaveable(route.id) { mutableStateOf(false) }
-    LaunchedEffect(state.spaces, route.id) {
+    // Whether the read has answered is a key of its own: an account with no space reads an empty list, which changes nothing.
+    LaunchedEffect(state.spaces, state.spacesState.hasLoaded, route.id) {
         if (linkedSpaceApplied || !state.spacesState.hasLoaded) return@LaunchedEffect
         val linked = state.spaces.firstOrNull { sameWikiId(it.id, route.id) }
         linkedSpaceApplied = true
@@ -105,6 +118,9 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
         seen = store.seen(space.slug); store.moveSeen(space.slug)
         wikiHomeLoad(store)
     }
+    // What Trash holds: the picker offers it, and so does the first-wiki card once no wiki is left.
+    LaunchedEffect(store) { store.loadTrash() }
+    val openTrash = { nav.open(OrbitRoute(Destination.WIKI_TRASH)) }.takeIf { state.trash.isNotEmpty() }
     if (state.disabled) {
         PageBar.Bind(route, title = "")
         WikiDisabledNote()
@@ -119,7 +135,7 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     }
     if (space == null) {
         PageBar.Bind(route, title = "")
-        WikiHomePlaceholder(state) { scope.launch { store.loadSpaces() } }
+        WikiHomePlaceholder(state, store, data, openTrash) { scope.launch { store.loadSpaces() } }
         return
     }
     // The space's public link: read as each space opens, so the globe says whether it has one. A read that failed leaves
@@ -138,10 +154,12 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = {
         scope.launch { refreshing = true; try { wikiHomeLoad(store) } finally { refreshing = false } }
     }, modifier = Modifier.fillMaxSize().testTag("wiki-home")) {
-        WikiHomePage(space, state, seen, store, nav, listState, retry = { scope.launch { wikiHomeLoad(store) } },
+        WikiHomePage(space, state, seen, store, data, nav, listState, retry = { scope.launch { wikiHomeLoad(store) } },
             // The home reads the space picked as its effect's key changes.
-            pickSpace = store::select, manageSpaces = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) })
+            pickSpace = store::select, manageSpaces = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }, openTrash = openTrash,
+            setUp = { settingUp = true })
     }
+    if (settingUp) WikiSetUpSheet(store, space, data, close = { settingUp = false })
     if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Home, wikiMaintenanceRunnerOnline(space, data), close = { contentsShown = false }) { pick ->
         // The home is where the reader already is; the rest open as pages.
         if (pick != WikiContentsPick.Home) wikiGo(pick, nav)
@@ -166,27 +184,152 @@ internal fun WikiDisabledNote() {
 }
 
 /** What stands where the home would be before there is a space to draw: a spinner, the reason the spaces could not be
- * read, or — only after a read that succeeded — that there is no space yet. */
+ * read, or — only after a read that succeeded — the card of an account with no wiki, with the way to Trash ([openTrash])
+ * while it holds one. */
 @Composable
-private fun WikiHomePlaceholder(state: WikiState, retry: () -> Unit) {
+private fun WikiHomePlaceholder(state: WikiState, store: WikiStore, data: DirectoryData, openTrash: (() -> Unit)?, retry: () -> Unit) {
+    if (!state.spacesState.lastLoadFailed && state.spacesState.hasLoaded && state.spaces.isEmpty())
+        return WikiHomeFirstStart(store, data, state.trash.size, openTrash)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        when {
-            state.spacesState.lastLoadFailed -> StatusMessage("The wiki couldn't be loaded", "Check the connection, then try again.", retry)
-            state.spacesState.hasLoaded && state.spaces.isEmpty() -> StatusMessage(WikiCopy.title, WikiCopy.noSpaces)
-            else -> LoadingMessage("Loading…")
+        if (state.spacesState.lastLoadFailed) StatusMessage("The wiki couldn't be loaded", "Check the connection, then try again.", retry)
+        else LoadingMessage("Loading…")
+    }
+}
+
+/** The Wiki of an account with no wiki (mock 41): the same card, whose first step makes one. A wiki describes a repository, so
+ * with no workspace on one there is nothing to offer yet, and the step says so — once the workspaces are read, so neither a
+ * first look nor a failed read says it of an account that has them. While Trash holds [trashed] wikis — the last one moved
+ * there among them — the line under the lead says so, and [openTrash] is its way in (docs/mocks/wiki-trash). */
+@Composable
+private fun WikiHomeFirstStart(store: WikiStore, data: DirectoryData, trashed: Int, openTrash: (() -> Unit)?) {
+    val workspaces = rememberWikiWorkspaceChoices(store, data)
+    var creating by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp).testTag("wiki-home-first")) {
+        Text(WikiCopy.title, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp).semantics { heading() },
+            style = MaterialTheme.typography.headlineLarge)
+        WikiStartSteps(WikiStartLogic.firstCard(workspaces.loading || workspaces.choices.any { it.repository != null }), busy = false,
+            underLead = openTrash?.let { open -> { WikiFirstStartTrashLine(trashed, open) } }) { creating = true }
+    }
+    if (creating) WikiCreateSheet(store, data, close = { creating = false })
+}
+
+/** The web's line on its first-wiki card: what Trash holds, then Open Trash as a link. */
+@Composable
+private fun WikiFirstStartTrashLine(trashed: Int, open: () -> Unit) {
+    val link = SpanStyle(color = MaterialTheme.colorScheme.primary)
+    Text(buildAnnotatedString {
+        append(WikiModeCopy.trashHoldsWhenEmpty(trashed) + " ")
+        withLink(LinkAnnotation.Clickable("open-trash", TextLinkStyles(link)) { open() }) { append(WikiModeCopy.openTrash) }
+    }, Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 4.dp).testTag("wiki-home-first-trash"), style = WikiType.label,
+        color = WikiPalette.secondary)
+}
+
+/** The home of a wiki with nothing to read (design §12.3.1, mock 41): where it stands on the way to something, read from the
+ * plan as Activity reads it. What the owner has to do is done from here — the form opens where they are, a draft is asked for
+ * on the spot — and only the plan, which has to be read before it is confirmed, and the runners are pages of their own. It
+ * draws nothing until the plan is read. */
+@Composable
+private fun WikiHomeStart(store: WikiStore, state: WikiState, space: WikiSpace, data: DirectoryData, nav: WikiNav, setUp: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val now = rememberMinuteClock()
+    val choices = rememberWikiWorkspaceChoices(store, data).choices
+    var notice by rememberSaveable { mutableStateOf<String?>(null) }
+    val plan = state.plan ?: return
+    val maintenance = space.settings?.maintenance ?: WikiMaintenanceSettings.default
+    val readsFrom = choices.firstOrNull { sameWikiId(it.id, maintenance.workspaceId) }?.label
+    val card = WikiStartLogic.card(plan, WikiStartLogic.Context(now, maintenance.enabled, readsFrom, wikiMaintenanceRunnerOnline(space, data), state.docsDirectory))
+    WikiStartSteps(card, state.busy) { to ->
+        when (to) {
+            WikiStartLogic.ActionTo.SET_UP -> setUp()
+            WikiStartLogic.ActionTo.PLAN -> nav.open(OrbitRoute(Destination.WIKI_PLAN))
+            WikiStartLogic.ActionTo.RUNNERS -> nav.runners()
+            WikiStartLogic.ActionTo.DRAFT -> scope.launch {
+                val (created, refusal) = store.redraftPlan(null)
+                if (refusal != null) notice = refusal else OrbitToasts.show(if (created) WikiPlanCopy.redraftAsked else WikiPlanCopy.redraftAlready)
+            }
+            WikiStartLogic.ActionTo.CREATE -> Unit
+        }
+    }
+    WikiRefusalAlert(WikiCopy.planDraftFailed, notice) { notice = null }
+}
+
+/** The setup card (mock 41, the web's `WikiStartSteps`): its heading and lead over one card of three steps, with at most one
+ * filled button in it. [press] says what a step's button is for; [underLead] is a line between the lead and the steps. */
+@Composable
+internal fun WikiStartSteps(card: WikiStartLogic.Card, busy: Boolean, underLead: (@Composable () -> Unit)? = null,
+    press: (WikiStartLogic.ActionTo) -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        WikiPlanSectionHead(card.title)
+        WikiPlanFootnoteText(card.lead, "wiki-home-start-lead")
+        underLead?.invoke()
+        WikiCard(Modifier.testTag("wiki-home-start")) {
+            card.steps.forEachIndexed { index, step ->
+                if (index > 0) HorizontalDivider(Modifier.padding(start = 16.dp + wikiStartMarkSize() + 12.dp))
+                WikiStartStep(index + 1, step, busy, press)
+            }
         }
     }
 }
 
-/** One space's home (design §12.3.1, mocks 30 ③, 31 ① ③ ⑥ ⑦; iOS `WikiHomePage`): the large title with the space beside
+/** One step: its mark, its title, what it says, how far the writing has got, a note, and its button — filled when it is the
+ * one thing to press, plain when it only looks. The step in motion stands out; TalkBack reads a step's words as one, the
+ * button by itself. */
+@Composable
+private fun WikiStartStep(number: Int, step: WikiStartLogic.Step, busy: Boolean, press: (WikiStartLogic.ActionTo) -> Unit) {
+    val moving = step.state == WikiStartLogic.StepState.WAIT || step.state == WikiStartLogic.StepState.RUN
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).semantics(mergeDescendants = true) {}.testTag("wiki-home-start-step:$number"),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        WikiStartMark(number, step.state)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(step.title, style = WikiType.prose.copy(fontWeight = if (moving) FontWeight.SemiBold else FontWeight.Normal),
+                color = if (step.state == WikiStartLogic.StepState.TODO) WikiPalette.secondary else MaterialTheme.colorScheme.onSurface)
+            Text(step.text, style = WikiType.subtext, color = if (moving) MaterialTheme.colorScheme.onSurface else WikiPalette.secondary)
+            step.progress?.let { WikiPlanProgress(it, "wiki-home-start-progress") }
+            step.note?.let { Text(it, style = WikiType.label, color = WikiPalette.secondary) }
+            step.action?.let { action ->
+                val modifier = Modifier.padding(top = 4.dp).heightIn(min = 48.dp)
+                    .testTag("wiki-home-start-${action.to.name.lowercase().replace('_', '-')}")
+                if (action.primary) Button(onClick = { press(action.to) }, modifier, enabled = !busy) { Text(action.label) }
+                else OutlinedButton(onClick = { press(action.to) }, modifier, enabled = !busy) { Text(action.label) }
+            }
+        }
+    }
+}
+
+/** A step's mark grows with the type, as the number column does. */
+@Composable
+private fun wikiStartMarkSize() = with(LocalDensity.current) { 24.sp.toDp() }
+
+/** A tick once the step is done, else its number: amber waits on the owner, blue is the server at work, grey has not come yet. */
+@Composable
+private fun WikiStartMark(number: Int, state: WikiStartLogic.StepState) {
+    val green = WikiPalette.color(WikiTone.GREEN)
+    val look = when (state) {
+        WikiStartLogic.StepState.DONE -> Modifier.background(green.copy(alpha = 0.12f), CircleShape).border(1.dp, green.copy(alpha = 0.35f), CircleShape)
+        WikiStartLogic.StepState.WAIT -> Modifier.background(WikiPalette.color(WikiTone.AMBER), CircleShape)
+        WikiStartLogic.StepState.RUN -> Modifier.background(MaterialTheme.colorScheme.primary, CircleShape)
+        WikiStartLogic.StepState.TODO -> Modifier.border(1.dp, WikiPalette.secondary.copy(alpha = 0.5f), CircleShape)
+    }
+    Box(Modifier.size(wikiStartMarkSize()).then(look).testTag("wiki-home-start-mark:$number:${state.name.lowercase()}"), contentAlignment = Alignment.Center) {
+        if (state == WikiStartLogic.StepState.DONE) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(14.dp), tint = green)
+        else Text("$number", style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), color = when (state) {
+            WikiStartLogic.StepState.WAIT -> Color.White
+            WikiStartLogic.StepState.RUN -> MaterialTheme.colorScheme.onPrimary
+            else -> WikiPalette.secondary
+        })
+    }
+}
+
+/** One space's home (design §12.3.1, mocks 30 ③, 31 ① ③ ⑦, 39; iOS `WikiHomePage`): the large title with the space beside
  * it, the line that says what the space holds, the search, the principles when there are any, then the documents — each
  * category a card, each written document its number, title and two lines of lead, what is not written yet folded into one
  * row — and Browse by category · A–Z index at the foot. Its bands are [WikiLogic.HomeBand]'s, in their order. What is known
  * is drawn at once: the head is the spaces list the drawer has already read; the line and the documents are grey bars
  * until the home's own first read is in. */
 @Composable
-private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, store: WikiStore, nav: WikiNav,
-    listState: androidx.compose.foundation.lazy.LazyListState, retry: () -> Unit, pickSpace: (String) -> Unit, manageSpaces: () -> Unit) {
+private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, store: WikiStore, data: DirectoryData, nav: WikiNav,
+    listState: androidx.compose.foundation.lazy.LazyListState, retry: () -> Unit, pickSpace: (String) -> Unit, manageSpaces: () -> Unit,
+    openTrash: (() -> Unit)?, setUp: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<WikiSearchHit>>(emptyList()) }
     var searched by rememberSaveable { mutableStateOf("") }
@@ -206,9 +349,9 @@ private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, stor
     val loading = state.homeLoading
     val principles = WikiLogic.principles(state.principles)
     val line = WikiLogic.homeLine(state.docsDirectory, state.directory, loading)
-    val documents = WikiLogic.homeDocuments(state.docsDirectory, state.directory, loading, space.settings?.maintenance?.enabled == true, seen)
+    val documents = WikiLogic.homeDocuments(state.docsDirectory, state.directory, loading, seen)
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-home-list"), state = listState) {
-        item(key = "header") { HomeHeader(space, state.spaces, pickSpace, manageSpaces) }
+        item(key = "header") { HomeHeader(space, state.spaces, pickSpace, manageSpaces, openTrash) }
         WikiLogic.HomeBand.entries.forEach { band ->
             when (band) {
                 WikiLogic.HomeBand.STATE -> item(key = "state") { HomeLine(line) }
@@ -219,7 +362,7 @@ private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, stor
                     unfolded = unfolded, fold = { key -> unfolded = if (key in unfolded) unfolded - key else unfolded + key }, retry = retry,
                     openDoc = { slug -> nav.open(OrbitRoute(Destination.WIKI_DOC, slug)) },
                     openArticle = { topic -> nav.open(OrbitRoute(Destination.WIKI_ARTICLE, topic, wikiPart = 0)) },
-                    openSettings = manageSpaces)
+                    start = { WikiHomeStart(store, state, space, data, nav, setUp) })
                 WikiLogic.HomeBand.MORE -> if (!searching && documents.listed) item(key = "more") {
                     HomeMore(browse = { nav.open(OrbitRoute(Destination.WIKI_BROWSE)) }, index = { nav.open(OrbitRoute(Destination.WIKI_INDEX)) })
                 }
@@ -284,11 +427,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.principlesBand(princi
     }
 }
 
-/** The documents by category (mock 30 ③), the topic articles before a plan, a new space's card (mock 31 ⑥), or grey bars
- * while the first read is out (mock 31 ⑦) — the reason it failed, with Retry, when it did. */
+/** The documents by category (mock 30 ③), the topic articles before a plan, the setup card while there is nothing to read
+ * (mock 41) — above the categories until the first of them is written — or grey bars while the first read is out (mock 31 ⑦):
+ * the reason it failed, with Retry, when it did. */
 private fun androidx.compose.foundation.lazy.LazyListScope.documentsBand(documents: WikiLogic.HomeDocuments, failed: Boolean,
     unfolded: List<String>, fold: (String) -> Unit, retry: () -> Unit, openDoc: (String) -> Unit, openArticle: (String) -> Unit,
-    openSettings: () -> Unit) {
+    start: @Composable () -> Unit) {
+    if (documents.start) item(key = "start") { start() }
     when (documents) {
         WikiLogic.HomeDocuments.Loading -> if (failed) item(key = "documents-failed") {
             WikiCard(Modifier.testTag("wiki-home-failed")) {
@@ -332,17 +477,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.documentsBand(documen
                 }
             }
         }
-        WikiLogic.HomeDocuments.NewSpace -> item(key = "new-space") {
-            WikiCard(Modifier.padding(top = 8.dp).testTag("wiki-home-new-space")) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(WikiDocCopy.noDocumentsNote, style = WikiType.subtext, color = WikiPalette.secondary)
-                    TextButton(onClick = openSettings, modifier = Modifier.testTag("wiki-home-set-up"), contentPadding = PaddingValues(horizontal = 0.dp)) {
-                        Text(WikiPlanCopy.setUp, style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold))
-                    }
-                }
-            }
-        }
-        WikiLogic.HomeDocuments.NothingListed -> Unit
+        WikiLogic.HomeDocuments.Start -> Unit
     }
 }
 
@@ -397,19 +532,19 @@ private fun HomeMore(browse: () -> Unit, index: () -> Unit) {
 
 /** The title and the space on one row — the web's page head. */
 @Composable
-private fun HomeHeader(space: WikiSpace, spaces: List<WikiSpace>, pickSpace: (String) -> Unit, manageSpaces: () -> Unit) {
+private fun HomeHeader(space: WikiSpace, spaces: List<WikiSpace>, pickSpace: (String) -> Unit, manageSpaces: () -> Unit, openTrash: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(WikiCopy.title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineLarge)
-        WikiSpacePicker(space, spaces, pickSpace, manageSpaces)
+        WikiSpacePicker(space, spaces, pickSpace, manageSpaces, openTrash)
     }
 }
 
 /** The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④; iOS `WikiSpacePicker`): with
  * one space a grey label and no control; with several a menu of every space, the current one ticked — its name, the
  * repository and its documents under it, what waits in it as the amber number — and Manage spaces at the foot, into Wiki
- * settings. */
+ * settings, with Trash under it while Trash holds a wiki ([trash], docs/mocks/wiki-trash). */
 @Composable
-internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (String) -> Unit, manage: () -> Unit) {
+internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (String) -> Unit, manage: () -> Unit, trash: (() -> Unit)? = null) {
     val names = WikiSpaceLogic.names(spaces)
     val name = names[space.id] ?: space.title ?: space.slug
     val capsule = Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), CircleShape)
@@ -446,6 +581,8 @@ internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (S
             HorizontalDivider()
             DropdownMenuItem(modifier = Modifier.testTag("wiki-space-manage"), text = { Text(WikiCopy.manageSpaces) },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_settings), null) }, onClick = { expanded = false; manage() })
+            if (trash != null) DropdownMenuItem(modifier = Modifier.testTag("wiki-space-trash"), text = { Text(WikiModeCopy.trash) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_trash), null) }, onClick = { expanded = false; trash() })
         }
     }
 }

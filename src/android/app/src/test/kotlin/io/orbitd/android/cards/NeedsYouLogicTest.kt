@@ -296,10 +296,10 @@ class NeedsYouLogicTest {
     }
 
     /** A revision waiting for the paused coordinator, or sent to it, is not asking the owner (project 34cygPTQe5LPUT7tdUAzG): the
-     * corpus has one of each, both drawn, and the bar counts neither — without today's evidence card, no evidence at all. */
+     * corpus has one of each, only the delivery receipt is drawn, and the bar counts neither — without today's evidence card, no evidence at all. */
     @Test fun aRevisionWaitingForTheCoordinatorOrSentToItIsNotCounted() {
         val queue = corpus.obj("snapshot")!!.obj("standing")!!.obj("evidenceDecisions")!!
-        val queued = (queue.objects("waitingOnCoordinator") + queue.objects("sentToCoordinator"))
+        val queued = queue.objects("sentToCoordinator")
             .map { "evidence:${it.text("taskId")}:${it.text("evidenceRevision")}" }
         assertEquals(queued.toSet(), CardCatalog.session(corpus.text("sessionId")!!, snapshot())
             .filter { it.family == CardFamily.COORDINATOR_QUEUE }.map { it.key }.toSet())

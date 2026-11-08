@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
 import { SessionSearch } from './SessionSearch';
@@ -13,7 +13,10 @@ import { SessionSearch } from './SessionSearch';
 // api() within api.ts, so stub them separately from the query factories' api export.
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
-  return { ...actual, api: vi.fn(), getSessionEventPage: vi.fn(), getSession: vi.fn() };
+  return {
+    ...actual, api: vi.fn(), getSessionEventPage: vi.fn(), getSession: vi.fn(),
+    pinSession: vi.fn(), completeSession: vi.fn(),
+  };
 });
 vi.mock('../lib/transcriptStore', () => ({
   loadTranscript: async () => null,
@@ -118,9 +121,11 @@ let projects: Array<ReturnType<typeof project>> = [];
 let folders: Array<typeof FOLDER> = [];
 let listCalls: string[] = [];
 let location = '';
+let routerNavigate: NavigateFunction;
 
 function LocationProbe() {
   const l = useLocation();
+  routerNavigate = useNavigate();
   location = `${l.pathname}${l.search}`;
   return null;
 }
@@ -136,6 +141,13 @@ const projectRow = (): HTMLElement => {
   return found;
 };
 const preview = (): HTMLElement | null => projectRow().querySelector('.session-preview');
+/** An ordinary session's row, by its title. */
+const sessionRow = (title: string): HTMLElement => {
+  const found = [...mounted().querySelectorAll<HTMLElement>('.session-row:not(.session-project-row)')]
+    .find((el) => el.querySelector('.session-title')?.textContent === title);
+  if (!found) throw new Error(`no session row ${title}`);
+  return found;
+};
 const until = async (assertion: () => void): Promise<void> => {
   await act(async () => {
     await vi.waitFor(assertion, { timeout: 20_000, interval: 20 });
@@ -147,6 +159,14 @@ async function settle(): Promise<void> {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
   }
+}
+/** For a navigation the app starts on its own while the test waits: the router navigates in a transition,
+ *  which React runs only once the act scope it was scheduled in closes, so `until`'s one long scope would
+ *  never see it. This checks between short scopes instead. */
+async function untilAt(path: string): Promise<void> {
+  const deadline = Date.now() + 20_000;
+  while (location !== path && Date.now() < deadline) await settle();
+  expect(location).toBe(path);
 }
 async function mount(
   ready: () => void = () => expect(projectRows()).toHaveLength(1),
@@ -210,6 +230,10 @@ beforeEach(() => {
   vi.mocked(apiModule.getSessionEventPage).mockResolvedValue({ events: [], hasMore: false } as never);
   vi.mocked(apiModule.getSession).mockReset();
   vi.mocked(apiModule.getSession).mockImplementation(async (id) => (rows.find((r) => r.id === id) ?? LOOSE) as never);
+  vi.mocked(apiModule.pinSession).mockReset();
+  vi.mocked(apiModule.pinSession).mockResolvedValue({} as never);
+  vi.mocked(apiModule.completeSession).mockReset();
+  vi.mocked(apiModule.completeSession).mockResolvedValue({} as never);
   vi.mocked(apiModule.api).mockReset();
   vi.mocked(apiModule.api).mockImplementation(((path: string) => {
     const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
@@ -330,7 +354,9 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     expect(projectRow().querySelector('.session-project-status')).toBeNull();
   });
 
-  it('reads a Completed coordinator in another workspace for a local Completed project entry', async () => {
+  // Completed follows the rule Open does (owner 11-07): the coordinator, read through the project, runs in
+  // another workspace, so the project has no row here and its member is a row of its own.
+  it('reads a Completed coordinator in another workspace and lists the local Completed member as its own row', async () => {
     rows = [LOOSE, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
     remoteRows = [{
       ...COORDINATOR,
@@ -341,9 +367,11 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     }];
     await mount(() => expect(titles()).toEqual(['Loose conversation']));
     await chooseView('Completed');
-    await until(() => expect(preview()?.textContent).toBe('Completed coordinator summary'));
-    expect(titles()).toEqual(['Project Alpha']);
-    expect(projectRow().querySelector('.session-project-status')).toBeNull();
+    await until(() => expect(titles()).toEqual(['Build the package']));
+    expect(projectRows()).toHaveLength(0);
+    const mark = sessionRow('Build the package').querySelector('.session-sub > .session-project-progress');
+    expect(mark?.textContent).toBe('2/5');
+    expect(mark?.getAttribute('title')).toBe('Part of Project Alpha · open its sessions');
     expect(listCalls.some((p) => p.includes('view=completed') && p.includes(`projectId=${PROJECT_ID}`))).toBe(true);
     expect(listCalls.some((p) => p.includes('view=completed') && !p.includes('workspaceId=') && !p.includes('projectId='))).toBe(false);
   });
@@ -452,11 +480,11 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     expect(preview()?.classList.contains('tone-approval')).toBe(true);
   });
 
+  // In the coordinator's workspace, the one place the project has a row (owner 11-07).
   it('names a member waiting in another workspace while keeping the running spinner local', async () => {
-    rows = [LOOSE, TASK];
+    rows = [LOOSE, COORDINATOR, TASK];
     const elsewhere = { workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } };
     remoteRows = [
-      { ...COORDINATOR, ...elsewhere },
       {
         ...TASK, ...elsewhere, id: pid(815), title: 'Resolve issue elsewhere',
         status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT',
@@ -497,6 +525,69 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     expect(projectRow().querySelector('.session-project-status')).toBeNull();
   });
 
+  // The sixth line (§4.2) is the coordinator's own row line, so it names who sent the message it
+  // previews the same way: a task's report is the task's, and only the owner's words are "You" (§3.5,
+  // owner 11-07). An ordinary row beside it says it the same way.
+  it('names the session the coordinator’s unanswered message came from', async () => {
+    const from = { sessionId: TASK.id, title: 'Build the package' };
+    rows = [
+      { ...LOOSE, lastUserText: 'Which **branch** should I use?', lastUserFrom: { sessionId: COORDINATOR.id, title: 'Plan the release' } },
+      { ...COORDINATOR, lastUserText: 'Done: **the package builds**', lastUserFrom: from },
+      TASK,
+    ];
+    await mount();
+    expect(preview()?.textContent).toBe('Build the package: Done: the package builds');
+    expect(preview()?.classList.contains('tone-approval')).toBe(false);
+    expect(preview()?.classList.contains('tone-running')).toBe(false);
+    expect(sessionRow('Loose conversation').querySelector('.session-preview')?.textContent)
+      .toBe('Plan the release: Which branch should I use?');
+  });
+
+  // Orbit's own notification to the coordinator says Orbit and the sentence its line in the
+  // conversation says; any other message of Orbit's, its first line (§3.5, owner 11-07).
+  it('says Orbit for the notification the coordinator has not answered yet', async () => {
+    const card = {
+      kind: 'EVIDENCE_SUBMITTED', task: { id: TASK.id, title: 'Build the package' }, revision: 2, count: null,
+      deliveredAt: '2026-11-07T07:30:00.000Z', toCoordinator: true,
+    };
+    rows = [
+      LOOSE,
+      {
+        ...COORDINATOR,
+        lastUserText: 'From Orbit · project “Release” has a revision of completion evidence for you to decide\n\nTask “Build the package” …',
+        lastUserFrom: null,
+        lastUserFromOrbit: { coordinatorDelivery: card },
+      },
+      TASK,
+    ];
+    await mount();
+    expect(preview()?.textContent).toBe('Orbit: Evidence revision 2 submitted: Build the package');
+    expect(preview()?.classList.contains('tone-approval')).toBe(false);
+  });
+
+  it('says Orbit and the first line for a message of Orbit’s with no notification card', async () => {
+    rows = [
+      LOOSE,
+      {
+        ...COORDINATOR,
+        lastUserText: 'Orbit Watch w-1 matched at generation 1: the build finished\n\nThis turn was queued by the watch, not typed by a person.',
+        lastUserFromOrbit: { coordinatorDelivery: null },
+      },
+      TASK,
+    ];
+    await mount();
+    expect(preview()?.textContent).toBe('Orbit: Orbit Watch w-1 matched at generation 1: the build finished');
+  });
+
+  it.each([
+    ['the owner sent it', { lastUserFrom: null }],
+    ['an older server names no sender', {}],
+  ])('says You for an unanswered message to the coordinator when %s', async (_, sender) => {
+    rows = [LOOSE, { ...COORDINATOR, lastUserText: 'Ship the release', ...sender }, TASK];
+    await mount();
+    expect(preview()?.textContent).toBe('You: Ship the release');
+  });
+
   it('says No coordinator when none is available', async () => {
     rows = [LOOSE, TASK];
     projects = [project({ coordinatorActivity: null })];
@@ -513,12 +604,15 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
   });
 });
 
-// Owner 10-17 (docs/mocks/project-row-other-workspace): outside its coordinator's workspace an entry holds that
-// workspace's own members, as a folder row does. The arrow keys pass over it and a landing never picks it,
-// because opening the coordinator would swap the list for the coordinator's workspace.
-describe('project entries in the arrow keys and the landing', { timeout: 60_000 }, () => {
+// Owner 11-07 (docs/mocks/project-rows-by-workspace, option A; it replaces the 10-17 rule of
+// docs/mocks/project-row-other-workspace): a project is a row only in the workspace its coordinator runs in,
+// where the row stands for the coordinator. Anywhere else the project's members are that workspace's own
+// rows, marked with the project's progress, and the arrow keys, the landing, Pin, Move… and Complete treat
+// them as any session. A project with no coordinator is a row like a folder's wherever it has members.
+describe('project members outside the coordinator’s workspace, the arrow keys and the landing', { timeout: 60_000 }, () => {
   const elsewhere = { workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } };
   const OLDER = row(816, 'Older conversation', { lastTurnAt: '2026-10-02T08:00:00Z', lastAssistantText: 'An older session preview' });
+  const THREE = ['Loose conversation', 'Build the package', 'Older conversation'];
   // A session opened from the list in another workspace reads as itself, not as this workspace's first row.
   beforeEach(() => {
     vi.mocked(apiModule.getSession).mockImplementation(async (id) =>
@@ -531,17 +625,116 @@ describe('project entries in the arrow keys and the landing', { timeout: 60_000 
     });
     await settle();
   };
+  /** One more workspace in the sidebar's list, for a case that opens it. The list remembers each workspace's last
+   *  session for the page's lifetime (a module-level map), so each landing case opens a workspace no other case has. */
+  const withWorkspace = (id: string, name: string) => {
+    const fixtureApi = vi.mocked(apiModule.api).getMockImplementation()!;
+    vi.mocked(apiModule.api).mockImplementation(((path: string, ...rest: unknown[]) => path === '/workspaces'
+      ? Promise.resolve([WORKSPACE, { id, name }].map((workspace) => ({
+        ...workspace, runnerId: RUNNER_ID, lastProvider: 'claude', createdAt: '2026-01-01T00:00:00Z',
+      })))
+      : (fixtureApi as (...args: unknown[]) => unknown)(path, ...rest)) as unknown as typeof apiModule.api);
+    return { workspaceId: id, workspace: { id, name } };
+  };
 
-  it('passes over an entry whose coordinator is in another workspace and stays in this list', async () => {
+  it('lists a member there as its own row, the project’s progress first on its second line', async () => {
     rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
-    await mount();
-    expect(titles()).toEqual(['Loose conversation', 'Project Alpha', 'Older conversation']);
+    await mount(() => expect(titles()).toEqual(THREE));
+    expect(projectRows()).toHaveLength(0);
+    const member = sessionRow('Build the package');
+    const mark = member.querySelector('.session-project-progress');
+    expect(member.querySelector('.session-sub')?.firstElementChild).toBe(mark);
+    expect(mark?.textContent).toBe('2/5');
+    expect(mark?.querySelector('.session-project-progress-bar')).not.toBeNull();
+    expect(mark?.classList.contains('done')).toBe(false);
+    expect(mark?.getAttribute('title')).toBe('Part of Project Alpha · open its sessions');
+    // The rest of the row is the session's own: its line and its status, not the project's grid.
+    expect(member.querySelector('.session-preview')?.textContent).toBe('Running Bash…');
+    expect(member.querySelector('.session-project-icon')).toBeNull();
+    expect(sessionRow('Loose conversation').querySelector('.session-project-progress')).toBeNull();
+  });
+
+  it('says the status of a project the sidebar does not list, with no bar', async () => {
+    projects = [];
+    const done = (role: string) => ({ ...membership(role), projectStatus: 'DONE' });
+    rows = [LOOSE, { ...TASK, projectMembership: done('TASK') }];
+    remoteRows = [{ ...COORDINATOR, ...elsewhere, projectMembership: done('COORDINATOR') }];
+    await mount(() => expect(sessionRow('Build the package').querySelector('.session-project-progress')?.textContent).toBe('DONE'));
+    const mark = sessionRow('Build the package').querySelector('.session-project-progress');
+    expect(mark?.querySelector('.session-project-progress-bar')).toBeNull();
+    expect(mark?.classList.contains('done')).toBe(true);
+    expect(mark?.getAttribute('title')).toBe('Part of Project Alpha · open its sessions');
+  });
+
+  it('opens the project’s sessions page from the mark, and the member from the rest of its row', async () => {
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    remoteRows = [{ ...COORDINATOR, ...elsewhere }];
+    await mount(() => expect(titles()).toEqual(THREE));
+    await click(sessionRow('Build the package').querySelector('.session-project-progress'), 'the member’s mark');
+    await until(() => expect(mounted().querySelector('.session-project-page')).not.toBeNull());
+    // The column changes page and the open session stays: the press did not reach the row.
+    const [path, search] = location.split('?');
+    expect(path).toBe(`/sessions/${LOOSE.id}`);
+    expect(new URLSearchParams(search).get('project')).toBe(encodeId(PROJECT_ID));
+    await click(mounted().querySelector('.session-folder-back'), 'the project page back');
+    await until(() => expect(mounted().querySelector('.session-project-page')).toBeNull());
+    await until(() => expect(titles()).toEqual(THREE));
+    await click(sessionRow('Build the package').querySelector('.session-title'), 'the member’s title');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+  });
+
+  it('steps onto a member there with ↓ and ↑, and the list stays in this workspace', async () => {
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    remoteRows = [{ ...COORDINATOR, ...elsewhere }];
+    await mount(() => expect(titles()).toEqual(THREE));
+    await press('ArrowDown');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    expect(sessionRow('Build the package').classList.contains('active')).toBe(true);
+    expect(titles()).toEqual(THREE);
+    await press('ArrowDown');
+    await until(() => expect(location).toBe(`/sessions/${OLDER.id}`));
+    await press('ArrowUp');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await press('ArrowUp');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(listCalls.some((p) => p.includes(`workspaceId=${OTHER_WORKSPACE_ID}`))).toBe(false);
+  });
+
+  it('offers Move…, Pin and Complete on a member there, each acting on the member', async () => {
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    remoteRows = [{ ...COORDINATOR, ...elsewhere }];
+    await mount(() => expect(titles()).toEqual(THREE));
+    const openMenu = async (): Promise<void> => {
+      await click(sessionRow('Build the package').querySelector('.session-kebab'), 'the member’s ⋯');
+      await until(() => expect(menuItem('Move…')).toBeTruthy());
+    };
+    await openMenu();
+    for (const label of ['Complete', 'Pin', 'Rename…', 'Share…', 'Move…', 'Delete']) {
+      expect(menuItem(label), label).toBeTruthy();
+    }
+    await click(menuItem('Move…'), 'Move…');
+    await until(() => expect(document.querySelector('.move-dialog-sub')?.textContent).toBe('Build the package'));
+    expect(document.querySelector('.move-dialog-group')?.textContent).toBe('Folder in orbit');
+    await click(document.querySelector('.orbit-overlay-close'), 'the Move dialog’s close');
+    await until(() => expect(document.querySelector('.move-dialog-sub')).toBeNull());
+    await openMenu();
+    await click(menuItem('Pin'), 'Pin');
+    await until(() => expect(vi.mocked(apiModule.pinSession).mock.calls).toEqual([[TASK.id]]));
+    await openMenu();
+    await click(menuItem('Complete'), 'Complete');
+    await until(() => expect(vi.mocked(apiModule.completeSession).mock.calls).toEqual([[TASK.id]]));
+  });
+
+  it('passes over a project with no coordinator, as over a folder row', async () => {
+    projects = [project({ coordinatorActivity: null })];
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    await mount(() => expect(titles()).toEqual(['Loose conversation', 'Project Alpha', 'Older conversation']));
+    expect(preview()?.textContent).toBe('No coordinator');
     await press('ArrowDown');
     await until(() => expect(location).toBe(`/sessions/${OLDER.id}`));
     await press('ArrowUp');
     await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
-    expect(listCalls.some((p) => p.includes(`workspaceId=${OTHER_WORKSPACE_ID}`))).toBe(false);
   });
 
   it('opens the coordinator from its entry in the coordinator’s own workspace', async () => {
@@ -569,21 +762,49 @@ describe('project entries in the arrow keys and the landing', { timeout: 60_000 
     expect(titles()).toEqual(['Project Alpha', 'Older conversation']);
   });
 
-  it('does not land on the coordinator when a workspace opens on an entry from another workspace', async () => {
-    // A workspace no other case opens: the list remembers each workspace's last session for the page's
-    // lifetime, and a remembered session is landed on whatever the entries hold.
-    const LANDING_ID = pid(808);
-    const here = { workspaceId: LANDING_ID, workspace: { id: LANDING_ID, name: 'landing workspace' } };
+  it('lands on a member there when a workspace opens on it from the sidebar', async () => {
+    const here = withWorkspace(pid(808), 'landing workspace');
     rows = [{ ...TASK, ...here }, { ...OLDER, ...here }];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
-    const fixtureApi = vi.mocked(apiModule.api).getMockImplementation()!;
-    vi.mocked(apiModule.api).mockImplementation(((path: string, ...rest: unknown[]) => path === '/workspaces'
-      ? Promise.resolve([WORKSPACE, { id: LANDING_ID, name: 'landing workspace' }].map((workspace) => ({
-        ...workspace, runnerId: RUNNER_ID, lastProvider: 'claude', createdAt: '2026-01-01T00:00:00Z',
-      })))
-      : (fixtureApi as (...args: unknown[]) => unknown)(path, ...rest)) as unknown as typeof apiModule.api);
-    await mount(() => expect(projectRows()).toHaveLength(1), `/workspaces/${LANDING_ID}`);
-    await until(() => expect(location).toBe(`/sessions/${OLDER.id}`));
-    expect(titles()).toEqual(['Project Alpha', 'Older conversation']);
+    await mount(() => expect(titles()).toEqual(['Build the package', 'Older conversation']), `/workspaces/${here.workspaceId}`);
+    await untilAt(`/sessions/${TASK.id}`);
+    expect(titles()).toEqual(['Build the package', 'Older conversation']);
+  });
+
+  it('lands only once it knows where the coordinator runs, so a member is not passed over for an older row', async () => {
+    const here = withWorkspace(pid(823), 'slow workspace');
+    rows = [{ ...TASK, ...here }, { ...OLDER, ...here }];
+    remoteRows = [{ ...COORDINATOR, ...elsewhere }];
+    // The project's own read is held: until it answers, the member waits in a row like a folder's.
+    let answer = (): void => {};
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    const fixtureApi = vi.mocked(apiModule.api).getMockImplementation()! as (...args: unknown[]) => Promise<unknown>;
+    vi.mocked(apiModule.api).mockImplementation(((path: string, ...rest: unknown[]) =>
+      path.startsWith('/sessions?') && new URLSearchParams(path.split('?')[1]).has('projectId')
+        ? held.then(() => fixtureApi(path, ...rest))
+        : fixtureApi(path, ...rest)) as unknown as typeof apiModule.api);
+    await mount(() => expect(titles()).toEqual(['Project Alpha', 'Older conversation']), `/workspaces/${here.workspaceId}`);
+    expect(location).toBe(`/workspaces/${here.workspaceId}`);
+    await act(async () => answer());
+    await untilAt(`/sessions/${TASK.id}`);
+    expect(titles()).toEqual(['Build the package', 'Older conversation']);
+  });
+
+  it('reopens the member a workspace last had open', async () => {
+    const here = withWorkspace(pid(821), 'remembering workspace');
+    rows = [{ ...LOOSE, ...here, lastTurnAt: '2026-10-05T08:00:00Z' }, { ...TASK, ...here }];
+    remoteRows = [{ ...COORDINATOR, ...elsewhere }];
+    await mount(() => expect(titles()).toEqual(['Loose conversation', 'Build the package']), `/sessions/${TASK.id}`);
+    // The sidebar opens a workspace with no session in the address; the newest row is not the one it had open.
+    await act(async () => routerNavigate(`/workspaces/${here.workspaceId}`));
+    await untilAt(`/sessions/${TASK.id}`);
+  });
+
+  it('never lands on a project with no coordinator when a workspace opens', async () => {
+    const here = withWorkspace(pid(822), 'quiet workspace');
+    projects = [project({ coordinatorActivity: null })];
+    rows = [{ ...TASK, ...here }, { ...OLDER, ...here }];
+    await mount(() => expect(titles()).toEqual(['Project Alpha', 'Older conversation']), `/workspaces/${here.workspaceId}`);
+    await untilAt(`/sessions/${OLDER.id}`);
   });
 });

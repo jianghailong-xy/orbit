@@ -76,6 +76,7 @@ Usage:
   orbit provider <command>          List and configure the providers sessions and tasks get credentials from
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
+  orbit file <command>              Keep files in Orbit instead of in the repository
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
   orbit login [--with-token]        Act as yourself: approve a personal access token in the browser
@@ -112,6 +113,10 @@ Approve the machine in the browser (device-login), or pass --token to skip appro
 This machine becomes one runner. Its name defaults to the machine hostname and
 can be changed with --name. Workspaces are configured separately after registration.
 
+The runner belongs to the OS account that registers it. Under sudo that is the account
+that ran sudo, and the command runs as that account. It says the machine is online once
+the service has reached the server; when that does not happen it says why and exits 1.
+
 Options:
   --server <url>           Control plane base URL (default: ` + defaultServer + `)
   --token <token>          Optional one-time enrollment token (skips browser approval)
@@ -145,7 +150,8 @@ Usage:
   orbit unregister [--yes]
 
 Stops the background service, deletes the runner (and its agents) from the control
-plane, and removes the local config.
+plane, and removes the local config. Under sudo it acts on the runner of the account
+that ran sudo, as that account.
 
 Options:
   --yes, --force           Skip the confirmation prompt
@@ -211,6 +217,7 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"notify":    notifyHelp,
 	"watch":     watchHelp,
 	"wiki":      wikiHelp,
+	"file":      fileHelp,
 	"token":     tokenHelp,
 	"login":     loginHelp,
 	"logout":    logoutHelp,
@@ -267,6 +274,7 @@ var leafHelpFamilies = map[string]bool{
 	"project":   true,
 	"watch":     true,
 	"wiki":      true,
+	"file":      true,
 	"session":   true,
 	"provider":  true,
 	// `agent` has had per-action help since it shipped and has never been able to print it —
@@ -309,7 +317,7 @@ func main() {
 	if len(args) > 0 {
 		cmd = args[0]
 	}
-	flags, bools := parseFlags(args)
+	_, bools := parseFlags(args)
 
 	// Top-level help: `orbit`, `orbit help [cmd]`, `orbit --help`, `orbit -h`.
 	if cmd == "" || cmd == "help" || cmd == "--help" || cmd == "-h" {
@@ -331,11 +339,11 @@ func main() {
 
 	switch cmd {
 	case "register":
-		cmdRegister(flags, bools)
+		registerCommand(args)
 	case "run":
 		cmdRun()
 	case "unregister":
-		cmdUnregister(bools)
+		unregisterCommand(args)
 	case "status":
 		cmdStatus()
 	case "doctor":
@@ -390,6 +398,11 @@ func main() {
 	case "wiki":
 		if err := cmdWikiCLI(args[1:], os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit wiki:", err)
+			os.Exit(1)
+		}
+	case "file":
+		if err := cmdFileCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit file:", err)
 			os.Exit(1)
 		}
 	case "token":
@@ -448,7 +461,26 @@ func main() {
 	}
 }
 
+// registerCommand is `orbit register` as typed: args is the command and its arguments. Under
+// sudo it is the invoking account's to run (handOffUnderSudo).
+func registerCommand(args []string) {
+	if handOffUnderSudo(args) {
+		return
+	}
+	flags, bools := parseFlags(args)
+	cmdRegister(flags, bools)
+}
+
 func cmdRegister(flags map[string]string, bools map[string]bool) {
+	// Before anything is asked of the control plane or of a person (checkConfigStorage).
+	if err := checkConfigStorage(); err != nil {
+		who := "this account"
+		if u, err := registeringUser(); err == nil {
+			who = u.Username
+		}
+		fmt.Fprintf(os.Stderr, "orbit register: cannot keep the runner's config in %s: %v\nNothing was registered. If an earlier sudo left it to root: sudo chown -R %s %s\n", machineHome(), err, who, machineHome())
+		os.Exit(1)
+	}
 	// One runner per machine. Re-registering re-issues its credential, so confirm
 	// before clobbering the config.
 	if existing := loadConfig(); existing != nil && !bools["force"] {
@@ -496,9 +528,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	// register cwd so a runner registered inside a repo operates on that repo.
 	workDir := flags["workdir"]
 	if workDir == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			workDir = cwd
-		}
+		workDir = registerCwd()
 	}
 	// The runner spawns claude -p, which on a proxied network must use the same
 	// HTTP proxy to reach the Anthropic API. Let the user opt in.
@@ -642,19 +672,18 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 		fmt.Printf("\n    ✓ %s is now a runner.\n", cfg.Name)
 	}
 
-	serviceStarted := false
+	outcome := registeredOnly
 	if withService {
-		if err := setupService(machineHome(), proxyVars); err != nil {
-			printServiceFailure(os.Stderr, err)
-		} else {
-			serviceStarted = true
-		}
+		outcome = startService(cfg, proxyVars)
 	}
 	if u, err := registeringUser(); err == nil && u.Username == "root" {
 		fmt.Println("    Running as root — agents will have root access on this machine.")
 		fmt.Println("    For production, register with a dedicated user.")
 	}
-	printRegisterReceipt(os.Stdout, cfg, serviceStarted, foreground)
+	printRegisterReceipt(os.Stdout, cfg, outcome, foreground)
+	if outcome == serviceNotOnline {
+		os.Exit(1)
+	}
 
 	if foreground {
 		fmt.Printf("\nrunning %q in the foreground — Ctrl-C to stop\n", cfg.Name)
@@ -666,11 +695,53 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 	}
 }
 
+// startService installs and starts the background service for cfg's runner, then waits for the
+// control plane to hear from it (onlineWatch) before saying it started. A service that started but
+// was not heard from is reported with why, what it logged and where to look further.
+func startService(cfg *RunnerConfig, proxyVars []envVar) registerOutcome {
+	me := newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI).me
+	// What the control plane last heard from this runner, before the service starts: a runner
+	// registered again keeps the beats of the process its old credential belonged to.
+	before, _ := me()
+	started := time.Now()
+	svc, err := setupService(machineHome(), proxyVars)
+	if err != nil {
+		printServiceFailure(os.Stderr, err)
+		// Whoever registers under sudo asked for a running service, with root in hand. And
+		// an account whose older runner could not be taken down, or whose broker is still
+		// working, is left with a runner that is not this registration's.
+		var refused *hostdRegisterRefusal
+		if handedOffBySudo() || errors.As(err, &refused) && refused.code != hostdRefusedOwnCopy {
+			return serviceNotOnline
+		}
+		return registeredOnly
+	}
+	gaps := 0
+	state := func() (serviceState, bool) { return launchdState(svc.label, &gaps) }
+	if svc.unit != "" {
+		restarts := systemdRestarts(svc.unit)
+		state = func() (serviceState, bool) { return systemdState(svc.unit, restarts) }
+	}
+	server := strings.TrimRight(cfg.ServerURL, "/")
+	fmt.Printf("    Waiting for the runner to reach %s (up to %s)…\n", server, onlineWait)
+	watch := onlineWatch{server: server, me: me, state: state, sleep: time.Sleep, now: time.Now, wait: onlineWait, poll: onlinePoll}
+	if err := watch.until(before); err != nil {
+		printNotOnline(os.Stderr, cfg.Name, svc, err, serviceLog(svc, started.Add(-time.Second), 15))
+		return serviceNotOnline
+	}
+	printServiceStarted(svc.how)
+	for _, note := range svc.notes {
+		fmt.Println("      " + note)
+	}
+	return serviceOnline
+}
+
 // printServiceFailure says why the background service did not start and what to do
-// instead. The machine broker's refusal of an account with no copy of its own names the
-// one command that puts it right, so it is printed whole, in place of the foreground hint.
+// instead. The machine broker's answers that register stops at (hostdRegisterRefusal) say
+// what is in the way and what puts it right, so they are printed whole, in place of the
+// foreground hint.
 func printServiceFailure(w io.Writer, err error) {
-	var refused *hostdOwnCopyRefusal
+	var refused *hostdRegisterRefusal
 	if errors.As(err, &refused) {
 		fmt.Fprintf(w, "\n✗ Could not start the background service: %s\n", refused.reason)
 		return
@@ -685,14 +756,32 @@ func autoInstallEnabled(bools map[string]bool) bool {
 	return !bools["no-auto-install-engines"]
 }
 
-// printRegisterReceipt is the last thing a successful registration prints: what
-// this machine is, and the one thing to do next.
-func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, serviceStarted, foreground bool) {
-	state := "is registered"
-	if serviceStarted {
-		state = "is online"
+// registerOutcome is how a registration ended, for its receipt.
+type registerOutcome int
+
+const (
+	// registeredOnly: no background service — --no-service, --foreground, or one that could not
+	// be installed (printServiceFailure said why).
+	registeredOnly registerOutcome = iota
+	// serviceOnline: the service started and the control plane heard from it.
+	serviceOnline
+	// serviceNotOnline: the service was installed and started and the control plane did not hear
+	// from it (printNotOnline said why), or under sudo it could not be installed, or the machine
+	// broker could not take the account's older runner down (printServiceFailure).
+	serviceNotOnline
+)
+
+// printRegisterReceipt is the last thing a registration prints: what this machine is, and
+// the one thing to do next.
+func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, outcome registerOutcome, foreground bool) {
+	switch outcome {
+	case serviceOnline:
+		fmt.Fprintf(w, "\n✓ Setup complete — %s is online.\n\n", cfg.Name)
+	case serviceNotOnline:
+		fmt.Fprintf(w, "\n✗ Setup incomplete — %s is registered, but not online.\n\n", cfg.Name)
+	default:
+		fmt.Fprintf(w, "\n✓ Setup complete — %s is registered.\n\n", cfg.Name)
 	}
-	fmt.Fprintf(w, "\n✓ Setup complete — %s %s.\n\n", cfg.Name, state)
 	machine := cfg.Name
 	if host := hostnameOr(); host != "" && host != cfg.Name {
 		machine = fmt.Sprintf("%s (%s)", cfg.Name, host)
@@ -703,13 +792,30 @@ func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, serviceStarted, foregr
 	switch {
 	case foreground:
 		fmt.Fprintln(w, "    Next     Start a session; Ctrl-C stops the runner.")
-	case serviceStarted:
+	case outcome == serviceOnline:
 		fmt.Fprintln(w, "    Next     Start a session")
+	case outcome == serviceNotOnline:
+		fmt.Fprintln(w, "    Next     get its service running (see above), then Start a session")
 	default:
 		fmt.Fprintln(w, "    Next     start it with `orbit run`, then Start a session")
 	}
 	fmt.Fprintf(w, "             %s/runners/%s/new\n", strings.TrimRight(cfg.ServerURL, "/"), publicID(cfg.RunnerID))
-	fmt.Fprintln(w, "    orbit status · orbit doctor · orbit unregister")
+	tools := "    orbit status · orbit doctor · orbit unregister"
+	// A runner registered under sudo is the account's, and root's own `orbit status` knows nothing of it.
+	if u, err := registeringUser(); err == nil && handedOffBySudo() {
+		tools += " (as " + u.Username + ")"
+	}
+	fmt.Fprintln(w, tools)
+}
+
+// unregisterCommand is `orbit unregister` as typed: args is the command and its arguments. Under
+// sudo it is the invoking account's to run, as register is (handOffUnderSudo).
+func unregisterCommand(args []string) {
+	if !stayRootForRunnerLeftInRootsHome() && handOffUnderSudo(args) {
+		return
+	}
+	_, bools := parseFlags(args)
+	cmdUnregister(bools)
 }
 
 // cmdUnregister tears down this machine's runner: stops/removes the service,
@@ -717,6 +823,12 @@ func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, serviceStarted, foregr
 func cmdUnregister(bools map[string]bool) {
 	cfg := loadConfig()
 	if cfg == nil {
+		// A service that names this home and finds no config in it exits at every start: an unregister
+		// that could not remove it left it so, and running again is how to finish.
+		if u, err := registeringUser(); err == nil && serviceNamesMachineHome(runtime.GOOS, u) {
+			uninstallService()
+			return
+		}
 		fmt.Println("no runner registered on this machine")
 		return
 	}
@@ -1025,6 +1137,9 @@ func resumeCommand(sessionID, sessionDir string, meta *sessionMeta) (*exec.Cmd, 
 	}
 	if meta.WorkDir != "" {
 		cmd.Dir = expandTilde(meta.WorkDir)
+		if notice := absentCheckoutNotice(sessionID, cmd.Dir); notice != "" {
+			return nil, errors.New(notice)
+		}
 	}
 	return cmd, nil
 }

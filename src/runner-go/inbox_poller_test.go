@@ -1071,125 +1071,15 @@ func TestAnEndedInboxPollerFetchesNothing(t *testing.T) {
 	})
 }
 
-// Over HTTPS the poller is the long poll it always was: one request the server holds for its 25 s window, answered
-// empty, then the next at once; no runningTurnId. Run beside the suite's other parallel tests: it takes the whole
-// window.
-func TestInboxPollerOverHTTPSIsTheLongPollItWas(t *testing.T) {
-	t.Parallel()
-	type request struct {
-		at, answered time.Time
-		query        url.Values
-		path         string
-	}
-	var mu sync.Mutex
-	var requests []*request
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		req := &request{at: time.Now(), query: r.URL.Query(), path: r.URL.Path}
-		mu.Lock()
-		requests = append(requests, req)
-		n := len(requests)
-		mu.Unlock()
-		if n == 1 {
-			time.Sleep(25 * time.Second) // INBOX_LONG_POLL_MS: the server holds the poll, and nothing came
-			_, _ = w.Write([]byte(`{"turnId":"","seq":0,"kind":"message"}`))
-		} else {
-			_, _ = w.Write([]byte(`{"turnId":"m-1","seq":1,"kind":"message","content":"hi"}`))
-		}
-		mu.Lock()
-		req.answered = time.Now()
-		mu.Unlock()
-	}))
-	defer srv.Close()
-	p := newInboxPoller(NewTransport(srv.URL, "token"), "s1", "gen-1")
-	defer p.close()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	turn, err := p.next(ctx)
-	if err != nil || turn.TurnID != "m-1" {
-		t.Fatalf("next: %+v %v", turn, err)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(requests) != 2 {
-		t.Fatalf("%d requests, want 2", len(requests))
-	}
-	if held := requests[0].answered.Sub(requests[0].at); held < 25*time.Second {
-		t.Errorf("the long poll was held %s", held)
-	}
-	if gap := requests[1].at.Sub(requests[0].answered); gap > 250*time.Millisecond {
-		t.Errorf("the next poll went %s after an empty one", gap)
-	}
-	for i, r := range requests {
-		if r.path != "/api/runner/sessions/s1/inbox" || r.query.Get("acceptsSteer") != "1" || r.query.Get("leaseGeneration") != "gen-1" || r.query.Has("runningTurnId") {
-			t.Errorf("request %d: %s?%s", i, r.path, r.query.Encode())
-		}
-	}
-}
-
-// Over HTTPS a failed poll is followed by the next a second later, every time, whatever the answer asked, as it always
-// was; a refusal for the lease ends the poller. A link mode the control plane has not asked for changes none of it.
-func TestInboxPollerOverHTTPSFetchesAgainOneSecondAfterAFailure(t *testing.T) {
-	t.Setenv("ORBIT_HOME", t.TempDir())
-	var mu sync.Mutex
-	var at []time.Time
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		at = append(at, time.Now())
-		n := len(at)
-		mu.Unlock()
-		switch {
-		case n <= 2:
-			w.WriteHeader(http.StatusBadGateway)
-		case n == 3:
-			w.Header().Set("Retry-After", "5")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"code":"DATABASE_UNAVAILABLE","retryable":true,"retryAfterMs":5000}`))
-		case n == 4:
-			_, _ = w.Write([]byte(`{"turnId":"m-1","seq":1,"kind":"message"}`))
-		default:
-			w.WriteHeader(http.StatusConflict)
-			_, _ = w.Write([]byte(`{"code":"LEASE_GENERATION_SUPERSEDED"}`))
-		}
-	}))
-	defer srv.Close()
-	tr := NewTransport(srv.URL, "token")
-	tr.link = newLinkMode(tr, (&linkTestLog{}).log)
-	t.Cleanup(tr.link.close)
-	p := newInboxPoller(tr, "s1", "gen-1")
-	defer p.close()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if turn, err := p.next(ctx); err != nil || turn.TurnID != "m-1" {
-		t.Fatalf("next: %+v %v", turn, err)
-	}
-	if _, err := p.next(ctx); !isLeaseOwnershipError(err) {
-		t.Fatalf("after a 409: %v", err)
-	}
-	time.Sleep(1500 * time.Millisecond)
-	mu.Lock()
-	defer mu.Unlock()
-	if len(at) != 5 {
-		t.Fatalf("%d polls, want 5 (three failed, one turn, one refused for the lease)", len(at))
-	}
-	for i := 1; i < 4; i++ {
-		if gap := at[i].Sub(at[i-1]); gap < 950*time.Millisecond || gap > 1600*time.Millisecond {
-			t.Errorf("poll %d went %s after a failed one, want 1 s", i+1, gap)
-		}
-	}
-	if gap := at[4].Sub(at[3]); gap > 250*time.Millisecond {
-		t.Errorf("the poll after a turn went %s later", gap)
-	}
-}
-
-// The link's backoff after a failed fetch: its ceiling doubles from 1 s to 30 s, the wait is anywhere under it (full
+// The backoff after a failed fetch: its ceiling doubles from 1 s to 30 s, the wait is anywhere under it (full
 // jitter), and never shorter than the failed answer asked.
-func TestInboxLinkBackoffIsExponentialWithFullJitterAndHonoursRetryAfter(t *testing.T) {
+func TestInboxBackoffIsExponentialWithFullJitterAndHonoursRetryAfter(t *testing.T) {
 	failure := errors.New("the runner link is not connected")
 	for i, ceiling := range []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second,
 		16 * time.Second, 30 * time.Second, 30 * time.Second, 30 * time.Second} {
 		lo, hi := ceiling, time.Duration(0)
 		for n := 0; n < 400; n++ {
-			w := inboxLinkBackoff(i+1, failure)
+			w := inboxBackoff(i+1, failure)
 			if w <= 0 || w > ceiling+time.Millisecond {
 				t.Fatalf("failure %d waited %s, past its ceiling %s", i+1, w, ceiling)
 			}
@@ -1203,13 +1093,13 @@ func TestInboxLinkBackoffIsExponentialWithFullJitterAndHonoursRetryAfter(t *test
 		body: `{"code":"DATABASE_UNAVAILABLE","retryable":true,"retryAfterMs":2500}`, retryAfter: "3"}
 	headerOnly := &transportHTTPError{method: "GET", path: "/runner/sessions/s/inbox", statusCode: http.StatusTooManyRequests, retryAfter: "4"}
 	for n := 0; n < 50; n++ {
-		if w := inboxLinkBackoff(1, refusal); w != 2500*time.Millisecond {
+		if w := inboxBackoff(1, refusal); w != 2500*time.Millisecond {
 			t.Fatalf("a refusal asking for 2.5 s waited %s", w)
 		}
-		if w := inboxLinkBackoff(1, headerOnly); w != 4*time.Second {
+		if w := inboxBackoff(1, headerOnly); w != 4*time.Second {
 			t.Fatalf("a Retry-After of 4 waited %s", w)
 		}
-		if w := inboxLinkBackoff(6, refusal); w < 2500*time.Millisecond || w > 30*time.Second+time.Millisecond {
+		if w := inboxBackoff(6, refusal); w < 2500*time.Millisecond || w > 30*time.Second+time.Millisecond {
 			t.Fatalf("the sixth failure with a refusal asking for 2.5 s waited %s", w)
 		}
 	}

@@ -596,7 +596,7 @@ test('custom-provider', async (t) => {
   // The CLI assumes 200k for a model id its own catalog doesn't describe and auto-compacts the
   // session inside that; DeepSeek's shim serves no /v1/models for it to learn the real window from.
   // The preset's declared window is the one authoritative number, so it rides in the env the CLI
-  // reads for exactly this purpose.
+  // reads for exactly this purpose — less the compaction reserve (custom-provider.ts explains it).
   await t.test('a preset-declared window reaches the CLI as CLAUDE_CODE_MAX_CONTEXT_TOKENS', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'deepseek',
@@ -605,7 +605,7 @@ test('custom-provider', async (t) => {
       workspaceModel: null,
       workspaceEnv: null,
     });
-    assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000');
+    assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '875000');
   });
 
   // A models.dev refresh merges newer models into the offered list; those carry their own windows,
@@ -624,7 +624,113 @@ test('custom-provider', async (t) => {
         workspaceModel: null,
         workspaceEnv: null,
       });
-      assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000');
+      assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '875000');
+    } finally {
+      setModelCatalog(new Map());
+    }
+  });
+
+  // -------------------------------------------------------------------------------------------
+  // The compaction dead-end, with the production numbers (session 01a005f5, 2026-11-04, run_event
+  // seqs 3424057-3424075).
+  //
+  // Claude Code's auto-compact line is `declaredWindow - maxOutputTokens`, and 32,000 is the
+  // completion budget on every request it sent (Claude Code 2.1.318, measured: a conversation
+  // reporting 968,000 tokens with a 1,000,000-token window compacts; one reporting 960,000 does
+  // not). The compaction request then re-sends the conversation WITH that 32,000, so at the
+  // trigger line it exactly fills the declared window. Any excess the compaction request carries
+  // over the last ordinary request takes it past the endpoint's hard cap, whose 400 is
+  // deliberately non-retryable (shared/src/events.ts). A failed compaction leaves the transcript
+  // as large as it was, so every following turn compacts and 400s again: the session is wedged.
+  // -------------------------------------------------------------------------------------------
+  const ENDPOINT_CAP = 1_048_576; // deepseek-flash's hard limit, as the endpoint's 400 states it
+  const CLI_OUTPUT_BUDGET = 32_000; // max_tokens on every request those sessions sent
+  // The last ordinary request measured 1,015,430 tokens; the compaction request that followed
+  // carried 1,081,492 in the messages — the part of the transcript an ordinary request does not
+  // carry (that session had compacted 15 times before it).
+  const TRANSCRIPT_EXCESS = 1_081_492 - 1_015_430;
+  const POST_COMPACTION_TOKENS = 12_016; // the 2026-10-22 compaction in that session: post_tokens
+
+  /** One session's request loop against the endpoint, for a session that has compacted before.
+   *  `active` is what the CLI's trigger measures — the conversation its last ordinary request
+   *  carried — and it grows every turn. Returns every request sent, how many the endpoint refused,
+   *  and how many compactions ran.
+   *
+   *  A refused request is not retried differently: the transcript never shrank, so the next turn
+   *  measures the same thing and sends the same request again. That repetition is the dead-end. */
+  function runSession(
+    window: number,
+    turns: number,
+    startTokens = 900_000, // the session creeping up on the line at ~2,800 tokens a turn
+  ): { sent: number[]; refused: number; compactions: number } {
+    let active = startTokens;
+    const sent: number[] = [];
+    let refused = 0;
+    let compactions = 0;
+    for (let i = 0; i < turns; i += 1) {
+      const compacting = active >= window - CLI_OUTPUT_BUDGET;
+      // A compaction request carries the transcript, which is TRANSCRIPT_EXCESS larger than the
+      // active conversation an ordinary request carries; both add the CLI's completion budget.
+      const tokens = compacting
+        ? active + TRANSCRIPT_EXCESS + CLI_OUTPUT_BUDGET
+        : active + CLI_OUTPUT_BUDGET;
+      sent.push(tokens);
+      if (tokens > ENDPOINT_CAP) {
+        refused += 1;
+        continue;
+      }
+      if (compacting) {
+        compactions += 1;
+        active = POST_COMPACTION_TOKENS;
+      } else {
+        active += 2_800;
+      }
+    }
+    return { sent, refused, compactions };
+  }
+
+  await t.test('a custom window leaves the CLI room to compact under the endpoint cap', () => {
+    setModelCatalog(
+      new Map([
+        ['deepseek', [{ value: 'deepseek-flash', label: 'DeepSeek V4.1 Flash', contextWindow: ENDPOINT_CAP }]],
+      ]),
+    );
+    try {
+      const exec = resolveProviderExec({
+        declaredProvider: 'deepseek',
+        customRow: row({ presetSlug: 'deepseek', followsPreset: true }),
+        sessionModel: 'deepseek-flash',
+        workspaceModel: null,
+        workspaceEnv: null,
+      });
+      const declared = Number(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS);
+      assert.ok(declared > 0, 'the endpoint window must still be declared to the CLI');
+
+      // The invariant: the line the CLI compacts at, plus the whole compaction request, fits.
+      assert.ok(
+        declared + TRANSCRIPT_EXCESS <= ENDPOINT_CAP,
+        `a compaction request from the trigger line (${declared} + ${TRANSCRIPT_EXCESS}) ` +
+          `must fit the endpoint's ${ENDPOINT_CAP}-token cap`,
+      );
+
+      // And the same session, run turn by turn, compacts and never sees a 400.
+      const run = runSession(declared, 400);
+      assert.equal(run.refused, 0, `no request was refused: ${run.sent.filter((n) => n > ENDPOINT_CAP)}`);
+      assert.ok(run.compactions > 1, 'the run really did hit the compaction path, more than once');
+
+      // On the number main declared — the endpoint's own maximum — the same session tries to
+      // compact, the endpoint refuses it, and every following turn repeats that same request.
+      const unfixed = runSession(ENDPOINT_CAP, 400);
+      const refused = unfixed.sent.filter((n) => n > ENDPOINT_CAP);
+      assert.ok(refused.length > 1, 'the unreserved window reproduces the dead-end it was fixed for');
+      assert.equal(new Set(refused).size, 1, 'every following turn re-sends the same refused request');
+      assert.equal(unfixed.compactions, 0, 'no compaction ever succeeded');
+
+      // A session nowhere near the limit is untouched: it sends exactly what it sent before,
+      // because the reserve only moves where compaction starts.
+      const quiet = runSession(declared, 20, 100_000);
+      assert.deepEqual(quiet.sent, runSession(ENDPOINT_CAP, 20, 100_000).sent);
+      assert.equal(quiet.compactions, 0);
     } finally {
       setModelCatalog(new Map());
     }
@@ -671,7 +777,7 @@ test('custom-provider', async (t) => {
     assert.equal(exec.model, 'qwen3.8-27b-fp8');
     assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'http://127.0.0.1:8000');
     assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, 'EMPTY');
-    assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '131072');
+    assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '114688');
     // No declaration: effort is left exactly as it always was.
     assert.equal(exec.reasoningLevels, undefined);
     assert.equal(exec.env?.CLAUDE_CODE_EFFORT_LEVEL, undefined);

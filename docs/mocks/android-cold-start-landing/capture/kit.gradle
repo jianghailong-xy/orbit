@@ -1,0 +1,6 @@
+// Board kit: compiles src/LandingBoardShotsTest.kt into the androidTest APK of whichever tree is being built, so no tree's own tests change.
+allprojects { p ->
+    p.plugins.withId('com.android.application') {
+        p.android.sourceSets.androidTest.java.srcDir(new File(System.getenv('LANDING_KIT_SRC') ?: '/mnt/data/android-landing-board/kit/src'))
+    }
+}

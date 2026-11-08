@@ -6,9 +6,11 @@ import { routeId } from '../lib/idCodec';
 import {
   workspacesQuery,
   meQuery,
+  openProjectsQuery,
   providersQuery,
   runnersQuery,
   SESSION_PAGE_SIZE,
+  sessionFoldersQuery,
   sessionQuery,
   sessionsQuery,
   setupStatusQuery,
@@ -25,14 +27,21 @@ const BYPASS = ['/login', '/enroll', '/setup', '/privacy'];
 // the splash or the setup-status check.
 const isBypass = (pathname: string) => BYPASS.includes(pathname) || pathname.startsWith('/s/');
 
-type BootWindow = Window & {
-  __bootProgress?: (pct: number) => void;
-  __bootDone?: () => void;
+// Drive / dismiss the first-paint splash defined in index.html. The bar only ever moves forward as
+// the app reports real milestones; finishing snaps it to 100% and fades the splash out.
+let bootShown = 8;
+const setBootProgress = (pct: number) => {
+  if (pct > bootShown) bootShown = pct; // monotonic — never step backwards
+  const fill = document.getElementById('boot-fill');
+  if (fill) fill.style.width = `${bootShown}%`;
 };
-
-// Drive / dismiss the first-paint splash defined in index.html.
-const setBootProgress = (pct: number) => (window as BootWindow).__bootProgress?.(pct);
-const finishBoot = () => (window as BootWindow).__bootDone?.();
+const finishBoot = () => {
+  setBootProgress(100);
+  const boot = document.getElementById('boot');
+  if (!boot) return;
+  boot.classList.add('hide');
+  setTimeout(() => boot.remove(), 320);
+};
 
 // The console deep-links the splash must cover before revealing: opening one of these
 // straight from a reload lands in WorkspaceView, whose first screen needs the runner-scoped
@@ -150,12 +159,19 @@ export function BootGate({ children }: { children: React.ReactNode }) {
       : deep?.kind === 'agent'
         ? deep.id
         : (homeFirst?.id ?? null);
-  // The first page of the scoped Open list WorkspaceView reads on load — same factory and page size,
-  // so it lands in cache under the same key and the console paints in one shot instead of
-  // flashing "Starting…".
+  // The scoped Open list WorkspaceView reads on load — same factory, so it lands in cache under the
+  // same key and the console paints in one shot instead of flashing "Starting…". Its shape is the
+  // console's: one page, or the whole list for a workspace that shows folders or projects. Those two
+  // reads are the console's own, so they decide it first; warming one page while the console then
+  // read the whole list was a second Open-list read on every page load (docs/list-freshness-design.md
+  // W5).
+  const folders = useQuery({ ...sessionFoldersQuery(), enabled: warm });
+  const projects = useQuery({ ...openProjectsQuery(), enabled: warm });
+  const wholeList = !!workspaceId &&
+    ((folders.data ?? []).some((folder) => folder.workspaceId === workspaceId) || (projects.data?.length ?? 0) > 0);
   const scopedSessions = useQuery({
-    ...sessionsQuery({ runnerId, workspaceId, view: 'open', limit: SESSION_PAGE_SIZE }),
-    enabled: warm && !!runnerId,
+    ...sessionsQuery({ runnerId, workspaceId, view: 'open', limit: wholeList ? null : SESSION_PAGE_SIZE }),
+    enabled: warm && !!runnerId && folders.isFetched && projects.isFetched,
   });
 
   // Per-route readiness milestones (besides the mounted app). The signed-out setup check

@@ -129,11 +129,10 @@ func TestLinkEventKindsAreTheServers(t *testing.T) {
 			t.Errorf("enriching %s changed the payload it was given", b.Subtype)
 		}
 	}
+	// What an older process numbered for a live event and left in its spool: this binary numbers no such event, and sends
+	// what the spool holds as it is. A bare ping the server neither stores nor reads.
 	p := f.LiveEventSeqPlaceholder
-	if got := linkLiveEventSeqPlaceholder(); !reflect.DeepEqual(got, p.Payload) || p.Type != evSystem {
-		t.Errorf("the placeholder is %v; the fixture's is %s %v", got, p.Type, p.Payload)
-	}
-	if !p.Noise || p.CoordinatorBoundary || !linkNoiseSystemEvent(evSystem, linkLiveEventSeqPlaceholder()) {
+	if !p.Noise || p.CoordinatorBoundary || p.Type != evSystem || !linkNoiseSystemEvent(evSystem, p.Payload) {
 		t.Errorf("the placeholder must be a bare ping the server neither stores nor reads (noise %v, boundary %v)", p.Noise, p.CoordinatorBoundary)
 	}
 }

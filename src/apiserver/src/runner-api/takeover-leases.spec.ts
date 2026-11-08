@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
-import { RunnerApiController, SESSION_TERMINAL_HANDOFF_V1 } from './runner-api.controller';
+import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -60,6 +60,8 @@ function harness(
       if (!sql(args).includes('set_config(')) executeCalls.push(args);
       return 1;
     },
+    // A collected card that holds a workspace write's values loses them (workspace-write-card-values.ts): none here does.
+    approval: { findMany: async () => [] },
   };
   const prisma = {
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
@@ -180,32 +182,20 @@ test('takeover is idempotent for the process that already owns the session', asy
   assert.equal(h.notified(), SESSION_ID);
 });
 
-test('terminal-resume sentinel takeover requires the handoff capability', async () => {
+test('a terminal-resume sentinel is taken over like any other owner', async () => {
   const handoffOwner = newTerminalResumeHandoffOwner();
-  const legacy = harness(handoffOwner, GENERATION, true, RunStatus.RUNNING);
-  await assert.rejects(
-    legacy.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
-      leaseOwner: NEW_OWNER,
-      expectedLeaseOwner: handoffOwner,
-    }),
-    ConflictException,
-  );
-  assert.equal(legacy.executeCalls.length, 0);
-
-  const capable = harness(handoffOwner, GENERATION, true, RunStatus.RUNNING);
+  const h = harness(handoffOwner, GENERATION, true, RunStatus.RUNNING);
   assert.deepEqual(
-    await capable.controller.takeoverLeases(
+    await h.controller.takeoverLeases(
       { id: RUNNER_ID },
       SESSION_ID,
       {
         leaseOwner: NEW_OWNER,
         expectedLeaseOwner: handoffOwner,
-      },
-      SESSION_TERMINAL_HANDOFF_V1,
-    ),
+      }),
     { ok: true, status: RunStatus.RUNNING },
   );
-  assert.equal(capable.executeCalls.length, 3);
+  assert.equal(h.executeCalls.length, 3);
 });
 
 test('a delayed predecessor takeover cannot overwrite a newer process owner', async () => {

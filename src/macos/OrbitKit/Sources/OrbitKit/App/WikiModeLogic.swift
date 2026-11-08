@@ -24,6 +24,101 @@ public enum WikiModeCopy {
     public static let reviewModeLead = "Who has to look at a change before agents get it."   // WIKI_REVIEW_MODE_LEAD
     public static let modeDefault = "default"                                     // WIKI_MODE_DEFAULT
 
+    // The Workspaces section (mock 38).
+    public static let workspaces = "Workspaces"                                   // WIKI_WORKSPACES
+    public static let workspacesLead = "Agents in these workspaces read this wiki, and maintenance learns from their sessions."   // WIKI_WORKSPACES_LEAD
+    public static let workspaceLeftOut = "Left out. It stays out until you turn it back on."   // WIKI_WORKSPACE_LEFT_OUT
+    public static let workspacesJoin = "New workspaces on this repository join by themselves. A workspace on another repository has its own wiki."   // WIKI_WORKSPACES_JOIN
+    public static let workspacesJoinNoRepository = "This wiki has no repository behind it, so a workspace joins only when you add it."   // WIKI_WORKSPACES_JOIN_NO_REPOSITORY
+    public static let workspacesEmpty = "No workspace is in this wiki yet."       // WIKI_WORKSPACES_EMPTY
+    public static let addWorkspace = "Add workspace…"                             // WIKI_ADD_WORKSPACE
+    public static let addWorkspaceGroup = "Workspaces with no repository"         // WIKI_ADD_WORKSPACE_GROUP
+
+    // MARK: Trash (docs/mocks/wiki-trash): the foot of the page, the question Move to Trash asks, and Trash itself
+
+    public static let trashTitle = "Move to Trash"                                // WIKI_TRASH_TITLE
+    public static let trashOpen = "Move to Trash…"                                // WIKI_TRASH_OPEN
+    public static let trashConfirm = "Move to Trash"                              // WIKI_TRASH_CONFIRM
+    public static let trashNote = "It stays in Trash for 365 days and can be restored until then."   // WIKI_TRASH_NOTE
+    public static let trashLeaves = "It leaves your wikis now, and sessions stop reading it."        // WIKI_TRASH_LEAVES
+    public static let trashKept = "Workspaces and sessions are kept."             // WIKI_TRASH_KEPT
+    /// What an alert titles a refusal; the web says one inside its dialog, with no title.
+    public static let trashFailed = "Couldn't move the wiki to Trash"
+    public static func trashQuestion(_ name: String) -> String { "Move wiki “\(name)” to Trash?" }
+    public static func movedToTrash(_ name: String) -> String { "Moved wiki “\(name)” to Trash" }
+    /// What a wiki with a repository does while it is in Trash: the next session on the repository makes a new one.
+    public static func trashComesBack(_ repository: String) -> String {
+        "Until you restore it, the next session on \(repository) to use the wiki starts a new, empty one."
+    }
+    /// What the question says Trash keeps (`wikiTrashBody`). `entries` is nil when the health read has not answered:
+    /// the sentence still says what stays, with no number in it.
+    public static func trashBody(entries: Int?, documents: Int) -> String {
+        var things: [String] = []
+        if let entries {
+            if entries > 0 { things.append(counted(entries, "entry", "entries")) }
+        } else {
+            things.append("entries")
+        }
+        if documents > 0 { things.append(counted(documents, "document", "documents")) }
+        // A single entry, or a single document, and nothing else: `stays`.
+        let one = (entries == 1 && documents == 0) || (entries == 0 && documents == 1)
+        let subject = things.isEmpty ? "It stays" : "Its \(things.joined(separator: " and ")) \(one ? "stays" : "stay")"
+        return "\(subject) in Trash for 365 days: restore it any time until then. After that it is deleted for good."
+    }
+    /// The question's whole message: that it leaves at once, what Trash keeps, what a repository's wiki does meanwhile,
+    /// and what stays.
+    public static func trashMessage(entries: Int?, documents: Int, repository: String?) -> String {
+        [trashLeaves, trashBody(entries: entries, documents: documents), repository.map(trashComesBack), trashKept]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
+    }
+
+    // The ways to Trash: Wiki settings' row, the space menu's item, and the empty Wiki's line.
+    public static let trashOpenTrash = "Open Trash"                               // WIKI_TRASH_OPEN_TRASH
+    /// `1 wiki is in Trash.`, where the Wiki says it has none (`wikiTrashHoldsWhenEmpty`).
+    public static func trashHoldsWhenEmpty(_ wikis: Int) -> String {
+        "\(counted(wikis, "wiki", "wikis")) \(wikis == 1 ? "is" : "are") in Trash."
+    }
+    /// `1 wiki`, beside the word Trash on Wiki settings' row (`wikiTrashRowCount`).
+    public static func trashRowCount(_ wikis: Int) -> String { counted(wikis, "wiki", "wikis") }
+    /// The space menu's item, under Manage spaces.
+    public static let trashPickerItem = "Trash"
+
+    // Trash itself.
+    public static let trashPageTitle = "Trash"                                    // WIKI_TRASH_PAGE_TITLE
+    public static let trashPageLead = "A wiki stays here for 365 days after it was moved, then it is deleted for good."   // WIKI_TRASH_PAGE_LEAD
+    public static let trashPageEmpty = "Trash is empty."                          // WIKI_TRASH_PAGE_EMPTY
+    public static let trashRestore = "Restore"                                    // WIKI_TRASH_RESTORE
+    public static let trashDeletePermanently = "Delete permanently…"              // WIKI_TRASH_DELETE_PERMANENTLY
+    /// A row's swipe on iOS: the same press as the Mac menu's Delete permanently…, which asks first.
+    public static let trashDeleteSwipe = "Delete"
+    public static func restored(_ name: String) -> String { "Restored wiki “\(name)”" }   // wikiRestored
+    /// What an alert titles a refused restore; its message is the server's own sentence.
+    public static let trashRestoreFailed = "Couldn't restore the wiki"
+    /// One wiki's line in Trash (`wikiTrashRowLine`): when it was moved, what it holds, and when it goes.
+    public static func trashRowLine(deletedAt: String, purgeAt: String, entries: Int, timeZone: TimeZone = .current) -> String {
+        let moved = WikiModeLogic.monthDayYear(deletedAt, timeZone: timeZone) ?? ""
+        let purged = WikiModeLogic.monthDayYear(purgeAt, timeZone: timeZone) ?? ""
+        return "Moved to Trash \(moved) · \(counted(entries, "entry", "entries")) · deleted for good \(purged)"
+    }
+    public static let trashPurgeQuestion = "Delete permanently?"                  // WIKI_TRASH_PURGE_QUESTION
+    public static let trashPurgeConfirm = "Delete permanently"                    // WIKI_TRASH_PURGE_CONFIRM
+    /// What an alert titles a refused permanent delete.
+    public static let trashPurgeFailed = "Couldn't delete the wiki"
+    /// What Delete permanently says it takes (`wikiTrashPurgeBody`), as the session Trash's own question does.
+    public static func trashPurgeBody(entries: Int) -> String {
+        let subject = entries == 0 ? "Its history" : "Its \(counted(entries, "entry", "entries")) and \(entries == 1 ? "its" : "their") history"
+        return "\(subject) will be permanently deleted. This cannot be undone."
+    }
+
+    /// `11,138 entries`, `1 entry`: a count in en-US digits and its noun (the web's `counted`).
+    private static func counted(_ count: Int, _ one: String, _ many: String) -> String {
+        let format = NumberFormatter()
+        format.numberStyle = .decimal
+        format.locale = Locale(identifier: "en_US")
+        return "\(format.string(from: NSNumber(value: count)) ?? String(count)) \(count == 1 ? one : many)"
+    }
+
     /// A mode's name (`WIKI_MODE_LABELS`). Empty for one this build does not know.
     public static func modeLabel(_ mode: WikiReviewMode) -> String {
         switch mode {
@@ -156,9 +251,18 @@ public enum WikiModeCopy {
 
     // MARK: a challenge's answers
 
-    public static let reconfirm = "Re-confirm"                                    // WIKI_RECONFIRM
+    // The answers say what becomes of the entry (owner, 2026-11-07, docs/mocks/wiki-challenge-answers): Keep is
+    // `reconfirm`, and the two that ask first end in an ellipsis. None of them is the card's filled answer. `amend`
+    // and `retire` stay the words of the form and the dialog those two open, and of the After row.
+    public static let reconfirm = "Keep"                                          // WIKI_RECONFIRM
     public static let amend = "Amend"                                             // WIKI_AMEND
+    public static let amendAnswer = "Amend…"                                      // WIKI_AMEND_ANSWER
     public static let retire = "Retire"                                           // WIKI_RETIRE
+    public static let retireAnswer = "Retire…"                                    // WIKI_RETIRE_ANSWER
+    /// The After row above the answers: what each one does to the entry, and that Retire cannot be undone.
+    public static let afterKeep = "Agents get this entry again. You can still retire it later."   // WIKI_CHALLENGE_AFTER_KEEP
+    public static let afterAmend = "Agents get your version, and its anchors are checked again."  // WIKI_CHALLENGE_AFTER_AMEND
+    public static let afterRetire = "Agents stop getting it. This cannot be undone."              // WIKI_CHALLENGE_AFTER_RETIRE
     public static let challengeWaits = "Agents stop getting this entry until you answer."   // WIKI_CHALLENGE_WAITS
     public static let challenged = "Challenged"                                   // WIKI_CHALLENGED
     public static let amendNote = "Your version replaces the entry, and its anchors are checked again."
@@ -171,12 +275,14 @@ public enum WikiModeLogic {
 
     /// The settings page's sections, top to bottom — the web's order (`WIKI_SETTINGS_SECTIONS`).
     public enum SettingsSection: String, CaseIterable, Sendable {
-        case reviewMode, maintenance
+        case reviewMode, workspaces, maintenance, trash
 
         public var title: String {
             switch self {
             case .reviewMode:  return WikiModeCopy.reviewMode
+            case .workspaces:  return WikiModeCopy.workspaces
             case .maintenance: return WikiModeCopy.maintenance
+            case .trash:       return WikiModeCopy.trashTitle
             }
         }
     }
@@ -220,6 +326,13 @@ public enum WikiModeLogic {
     public static func monthDay(_ iso: String, timeZone: TimeZone = .current) -> String? {
         guard let parts = components(iso, timeZone: timeZone), let month = parts.month, let day = parts.day else { return nil }
         return "\(months[month - 1]) \(day)"
+    }
+
+    /// `Nov 7, 2026`: a day in Trash (`trashDate`), the en-US short month in the reader's time zone.
+    public static func monthDayYear(_ iso: String, timeZone: TimeZone = .current) -> String? {
+        guard let parts = components(iso, timeZone: timeZone), let month = parts.month, let day = parts.day,
+              let year = parts.year else { return nil }
+        return "\(months[month - 1]) \(day), \(year)"
     }
 
     /// `Sep 28, 07:41`: when a run was recorded (`wikiRunWhen`).
@@ -306,12 +419,12 @@ public enum WikiModeLogic {
 
     /// The bar's second line: who checked it and what they said, when known, then who applied it and
     /// when (`wikiCheckedLine`).
-    public static func checkedLine(verdict: WikiVerificationVerdict?, model: String?, tainted: Bool,
-                                   who: String?, when: String?) -> String {
+    public static func checkedLine(verdict: WikiVerificationVerdict?, model: String?, evidence: WikiVerificationEvidence? = nil,
+                                   tainted: Bool, who: String?, when: String?) -> String {
         var parts: [String] = []
         if let verdict, let model {
             parts.append("Checked by \(model): \(WikiModeCopy.verdictWord(verdict))")
-            if tainted { parts.append(WikiModeCopy.cappedAtUnreviewed) }
+            if tainted || evidenceCaps(evidence) { parts.append(WikiModeCopy.cappedAtUnreviewed) }
         }
         if let who { parts.append(when.map { "\(who), \($0)" } ?? who) }
         return parts.joined(separator: " · ")
@@ -392,6 +505,11 @@ public enum WikiModeLogic {
         return summary
     }
 
+    /// A verdict that what it could read held at Unreviewed, whatever it said (`wikiEvidenceCaps`).
+    private static func evidenceCaps(_ evidence: WikiVerificationEvidence?) -> Bool {
+        evidence == .secondHand || evidence == .unreadable
+    }
+
     private static func runRow(_ op: WikiChangesetOp, _ entries: [String: WikiEntry]) -> RunRow {
         let entryId = op.op == .add || op.op == .supersede ? (op.resultEntryId ?? op.entryId) : op.entryId
         let entry = entryId.flatMap { entries[PublicID.storageKey($0)] }
@@ -405,7 +523,8 @@ public enum WikiModeLogic {
         // An entry that has ended since (retired with its run, rejected) wears no mark.
         let trust: WikiTrust?
         if let entry { trust = entry.status == .active ? entry.trust : nil } else {
-            trust = op.tainted == true && verdictTrust != nil ? .unreviewed : verdictTrust
+            let capped = op.tainted == true || evidenceCaps(op.verification?.evidence)
+            trust = capped && verdictTrust != nil ? .unreviewed : verdictTrust
         }
         return RunRow(op: op, entryId: entryId,
                       title: entry?.title ?? draft?["title"]?.stringValue ?? "—",
@@ -514,5 +633,35 @@ public enum WikiModeLogic {
             .filter { $0.state == .changed || $0.state == .missing }
             .sorted { ($0.at ?? "") > ($1.at ?? "") }
             .first?.ref
+    }
+
+    /// Whether a challenge can be answered with Amend…: every kind but a decision, which is superseded and never
+    /// amended (contract `kinds.decision.amendable`: the server refuses its amend with WIKI_SCHEMA). An entry not
+    /// read yet, or of a kind this build does not know, keeps the answer and leaves the refusal to the server.
+    public static func amendable(_ kind: WikiEntryKind?) -> Bool {
+        kind != .decision
+    }
+
+    /// One line of a challenge's After row: an answer's word and what it does to the entry.
+    public struct AfterLine: Equatable, Sendable {
+        public let answer: String
+        public let effect: String
+        /// Retire's line, whose word is drawn in the destructive colour.
+        public let destructive: Bool
+
+        public init(answer: String, effect: String, destructive: Bool = false) {
+            self.answer = answer
+            self.effect = effect
+            self.destructive = destructive
+        }
+    }
+
+    /// The After row above a challenge's answers, in their order: Keep, Amend (only when the kind can be amended),
+    /// Retire — so a decision's card says two.
+    public static func challengeAfter(kind: WikiEntryKind?) -> [AfterLine] {
+        var lines = [AfterLine(answer: WikiModeCopy.reconfirm, effect: WikiModeCopy.afterKeep)]
+        if amendable(kind) { lines.append(AfterLine(answer: WikiModeCopy.amend, effect: WikiModeCopy.afterAmend)) }
+        lines.append(AfterLine(answer: WikiModeCopy.retire, effect: WikiModeCopy.afterRetire, destructive: true))
+        return lines
     }
 }

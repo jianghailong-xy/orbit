@@ -24,6 +24,7 @@ public enum WikiRunsCopy {
         case .docsBuild:  return "Documents"
         case .maintain:   return "Maintenance"
         case .smoke:      return "Model check"
+        case .docsFollow: return "Rewrite"
         case .unknown:    return ""
         }
     }

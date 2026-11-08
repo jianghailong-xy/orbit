@@ -56,6 +56,10 @@ export const ENABLE_USER = 'Enable';
 export const DELETE_USER = 'Delete';
 export const RESET_PASSWORD = 'Reset password';
 export const VIEW_AS = 'View as';
+/** An account's own Feishu app removed by an administrator (docs/feishu-bot-design.md §4.1): the entry, and what each answer says. */
+export const REMOVE_FEISHU_APP = 'Remove Feishu app';
+export const FEISHU_APP_REMOVED = 'Feishu app removed.';
+export const NO_FEISHU_APP = 'This account has no Feishu app.';
 export const START_VIEWING = 'Start viewing';
 /** A row's menu of every other action, named for the account it acts on. */
 export const MORE_ACTIONS = 'More actions';
@@ -319,6 +323,24 @@ export function AdminUsersPage() {
     );
 
   /**
+   * Remove the account's Feishu app, once confirmed (docs/feishu-bot-design.md §4.1, DELETE /admin/users/:id/feishu):
+   * its connection on every server ends, and its owner identity goes with it. The route answers whether there was one.
+   */
+  const askRemoveFeishu = (u: AdminUser) =>
+    void confirm({
+      title: `Remove the Feishu app of ${u.email}?`,
+      description:
+        'Orbit disconnects the Feishu app this account connected and forgets its App ID, App Secret and owner. The app itself stays in their Feishu developer console, and they can connect it again.',
+      confirmText: REMOVE_FEISHU_APP,
+      danger: true,
+      onConfirm: async () => {
+        const { removed } = await api<{ removed: boolean }>(`/admin/users/${u.id}/feishu`, { method: 'DELETE' });
+        if (removed) message.success(FEISHU_APP_REMOVED, u.email);
+        else message.info(NO_FEISHU_APP, u.email);
+      },
+    });
+
+  /**
    * View Orbit as the user, read-only, to debug what they see: the server answers a token for 30
    * minutes and records the reason. The app loads again as them, so nothing read as the administrator
    * stays on screen; the banner over every page brings the administrator back.
@@ -354,6 +376,7 @@ export function AdminUsersPage() {
       { key: 'reset', label: RESET_PASSWORD, onSelect: () => void askReset(u) },
       { key: 'tokens', label: 'Access tokens', onSelect: () => setTokensOf(u) },
       { key: 'wiki', label: UPDATE_WIKI_DOCS, onSelect: () => setWikiOf(u) },
+      { key: 'feishu', label: REMOVE_FEISHU_APP, onSelect: () => askRemoveFeishu(u) },
       ...(u.signInMethods?.google ? [{ key: 'unlink', label: UNLINK_GOOGLE, onSelect: () => askUnlink(u) }] : []),
       {
         key: 'role',

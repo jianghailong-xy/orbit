@@ -8,6 +8,7 @@ import {
   SESSION_CODEX_STEER_V1,
   SESSION_CURRENT_WORK_ROUTING_V1,
 } from '@orbit/shared';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The CURRENT_WORK create/dequeue/ACK race, run against the real application schema.

@@ -9,6 +9,9 @@ import kotlinx.coroutines.test.*
 import org.junit.Assert.*
 import org.junit.Test
 
+/** How long the store gathers a burst of account events before it reads what they moved (RealtimeStore.EVENT_WINDOW_MS, R1). */
+private const val WINDOW_MS = 500L
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class RealtimeStoreTest {
     /** [readsBefore] is how many REST reads had been made when this stream connected. */
@@ -37,6 +40,7 @@ class RealtimeStoreTest {
         val pageFailures = mutableMapOf<Long, Int>()
         var pending = true
         var title = "original"
+        var workspaces = """[{"id":"w1","name":"Alpha"}]"""
         var directoryError: Int? = null
         var detailError: Int? = null
         var project = false
@@ -58,6 +62,23 @@ class RealtimeStoreTest {
             reads.subList(from, until).map { it.api.query.toMap() }.filter { "after" in it }
         /** The query the store sends for the page past [after]. */
         fun page(after: Long) = mapOf("maxPayload" to "2048", "after" to "$after", "limit" to "200")
+        /** The directory's list reads in `reads[from until]`, in order: `sessions?view=open`, `workspaces`, `session-folders`,
+         * `session-tags`, `runners`. A session's own reads (`sessions/s1/…`) are not lists. The Open list's `since=` cursor is left
+         * out: [openReads] has it. */
+        fun lists(from: Int) = reads.subList(from, reads.size).map { it.api }.filter { it.path.size == 1 && it.path[0] in directoryPaths }
+            .map { api -> api.query.filter { it.first != "since" }.let { query ->
+                api.path[0] + query.joinToString("&", prefix = if (query.isEmpty()) "" else "?") { (k, v) -> "$k=$v" } } }
+        /** The Open list's reads in `reads[from until]`, by the `since=` cursor each asked against (null: none). */
+        fun openReads(from: Int) = reads.subList(from, reads.size).map { it.api }
+            .filter { it.path == listOf("sessions") && it.query.toMap()["view"] == "open" }.map { it.query.toMap()["since"] }
+        /** The open conversation's snapshot reads in `reads[from until]`: its detail, `sessions/<id>`. */
+        fun snapshots(from: Int, id: String = "s1") = reads.subList(from, reads.size).count { it.api.path == listOf("sessions", id) }
+        private val directoryPaths = setOf("sessions", "workspaces", "session-folders", "session-tags", "runners")
+        /** One account event of [type] on the account stream, and the store's turn to take it. */
+        suspend fun event(type: String, sessionId: String = "s2", data: String = "{}") {
+            streams.control().emit("""{"type":"$type","sessionId":"$sessionId","data":$data}""")
+            scope.runCurrent()
+        }
         fun client(dispatcher: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler)) = AuthSession(HttpTransport { request ->
             reads += request
             val path = request.api.path
@@ -70,6 +91,7 @@ class RealtimeStoreTest {
                     directoryError?.let { return@HttpTransport ApiResponse(it, "{}".encodeToByteArray()) }
                     response("""[{"id":"s1","title":"$captured","status":"RUNNING","capabilities":{"canSend":true},"permissionMode":"safe"}]""")
                 }
+                path == listOf("workspaces") -> response(workspaces)
                 path.size == 1 -> response("[]")
                 path.last() == "page" -> {
                     val query = request.api.query.toMap()
@@ -99,6 +121,10 @@ class RealtimeStoreTest {
                 else -> response(if (pending) """{"pending":[{"id":"standing-card-marker"}]}""" else "null")
             }
         }, credentials, instances, data, "test", dispatcher = dispatcher, eventTransport = streams)
+
+        /** The saved list's record, which its text is empty before anything has written. */
+        fun savedKey() = data.values.keys.first { it.third == "directory-v1" }
+        fun saved() = data.values.entries.firstOrNull { it.key.third == "directory-v1" }?.value?.decodeToString().orEmpty()
 
         suspend fun start(witness: RealtimeWitness? = null): Pair<AuthSession, RealtimeStore> {
             credentials.value = StoredSession(serverA.value, tokens())
@@ -320,6 +346,7 @@ class RealtimeStoreTest {
         assertFalse(persisted.contains("uncommitted animation"))
         assertFalse(persisted.contains("pending-card-marker"))
         assertFalse(persisted.contains("standing-card-marker"))
+        store.setForeground(false); runCurrent()
         store.close(); runCurrent()
         rig.rows = rig.rows + listOf("""{"seq":2,"type":"assistant","payload":{"text":"late second"}}""",
             """{"seq":3,"type":"assistant","payload":{"text":"third"}}""")
@@ -350,7 +377,7 @@ class RealtimeStoreTest {
         val (_, store) = rig.start()
         assertTrue(store.state.value.directoryFresh)
         assertFalse(store.state.value.directoryCached)
-        advanceTimeBy(101); runCurrent()
+        store.setForeground(false); runCurrent()
         store.close(); runCurrent()
         val auth = rig.client()
         auth.restore()
@@ -364,6 +391,104 @@ class RealtimeStoreTest {
         assertTrue(restored.state.value.directoryCached)
         rig.heldDirectory!!.complete(Unit); runCurrent()
         assertTrue(restored.state.value.directoryFresh)
+        assertFalse(restored.state.value.directoryCached)
+    }
+
+    /** The next launch's first frame (iOS `persistLaunchSnapshot`): written as the app leaves the foreground, and never by a read, which
+     * on an account with work running comes every few seconds. What a launch reads is the list, not the transcripts beside it. */
+    @Test fun theListIsSavedAsTheAppLeavesTheForegroundAndNotByAnyRead() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.directoryFresh)
+        advanceTimeBy(101); runCurrent()
+        assertFalse("a read wrote the list", rig.saved().contains("original"))
+        assertFalse("the transcripts' record holds no list", rig.data.values.values.any { it.decodeToString().contains("Alpha") })
+        store.setForeground(false); runCurrent()
+        assertTrue(rig.saved().contains("original"))
+        assertTrue(rig.saved().contains("Alpha"))
+        store.close(); runCurrent()
+        val auth = rig.client()
+        auth.restore()
+        val restored = RealtimeStore(auth, backgroundScope)
+        assertFalse("not read yet", restored.state.value.directoryRestored)
+        runCurrent()
+        assertTrue(restored.state.value.directoryRestored)
+        assertEquals("original", restored.state.value.directory!!.sessions["open"]!![0].text("title"))
+        assertEquals(listOf("Alpha"), restored.state.value.directory!!.workspaces.map { it.text("name") })
+    }
+
+    /** Leaving the foreground again with the same rows writes nothing: an unchanged list of thousands of sessions costs no write. */
+    @Test fun aListThatHasNotChangedIsNotWrittenAgain() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.setForeground(false); runCurrent()
+        val first = rig.saved()
+        rig.data.values[rig.savedKey()] = "not written again".encodeToByteArray()
+        store.setForeground(true); runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        store.setForeground(false); runCurrent()
+        assertEquals("not written again", rig.saved())
+        rig.title = "moved"
+        store.setForeground(true); runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        store.setForeground(false); runCurrent()
+        assertTrue(rig.saved(), rig.saved().contains("moved"))
+        assertNotEquals(first, rig.saved())
+    }
+
+    /** A run that never reached the server has nothing newer than the copy it started from, and leaves it as it was. */
+    @Test fun aRunThatReadNothingLeavesTheSavedListAsItWas() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.setForeground(false); runCurrent()
+        store.close(); runCurrent()
+        rig.data.values[rig.savedKey()] = rig.data.values.getValue(rig.savedKey()).decodeToString().replace("original", "still the copy").encodeToByteArray()
+        val auth = rig.client()
+        auth.restore()
+        val offline = RealtimeStore(auth, backgroundScope)
+        runCurrent()
+        offline.setForeground(true); runCurrent()
+        offline.setForeground(false); runCurrent()
+        assertTrue(rig.saved().contains("still the copy"))
+    }
+
+    /** A launch reads Open, and so does an event or a connect. Completed and Trash are the page's to read when it shows them. */
+    @Test fun theStoreReadsTheOpenListAndNoOther() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.refreshDirectory(); runCurrent()
+        val views = rig.reads.filter { it.api.path == listOf("sessions") }.map { it.api.query.toMap()["view"] }.toSet()
+        assertEquals(setOf("open"), views)
+        assertEquals(setOf("open"), store.state.value.directory!!.sessions.keys)
+    }
+
+    /** Retry does what it says: it does not wait out the backoff the failure started, which grows to many seconds. */
+    @Test fun aRetryPressedDuringTheBackoffReadsNow() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        rig.directoryError = 500
+        store.refreshDirectory(); runCurrent()
+        assertEquals(500, store.state.value.directoryError?.httpStatus)
+        rig.directoryError = null
+        // No time passes.
+        store.refreshDirectory(); runCurrent()
+        assertNull(store.state.value.directoryError)
+        assertTrue(store.state.value.directoryFresh)
+    }
+
+    /** A saved list naming no workspace is no list to draw from: an empty account's landing is the server's to decide. */
+    @Test fun anEmptyAccountStartsFromNoCopy() = runTest {
+        val rig = Rig(this)
+        rig.workspaces = "[]"
+        val (_, store) = rig.start()
+        store.setForeground(false); runCurrent()
+        store.close(); runCurrent()
+        val auth = rig.client()
+        auth.restore()
+        val restored = RealtimeStore(auth, backgroundScope)
+        runCurrent()
+        assertTrue(restored.state.value.directoryRestored)
+        assertNull(restored.state.value.directory)
         assertFalse(restored.state.value.directoryCached)
     }
 
@@ -518,14 +643,214 @@ class RealtimeStoreTest {
         assertEquals("pings are not account events", mapOf("wiki.changed" to 2L, "session.updated" to 1L), store.state.value.accountEvents)
     }
 
+    /** docs/list-freshness-design.md §4 R1 and R5: a session's event is read once its window closes, half a second after it, and what
+     * is read is the Open list alone — never the workspaces, folders, tags or runners, which no session event moves. */
+    @Test fun aSessionEventReadsTheOpenListOnceItsWindowClosesAndNoOtherList() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val start = rig.reads.size
+        val revision = store.state.value.invalidationRevision
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS - 1); runCurrent()
+        assertEquals("nothing is read inside the window", emptyList<String>(), rig.lists(start))
+        assertEquals(revision, store.state.value.invalidationRevision)
+        advanceTimeBy(1); runCurrent()
+        assertEquals(listOf("sessions?view=open"), rig.lists(start))
+        assertEquals("the pages are asked once", revision + 1, store.state.value.invalidationRevision)
+        // Short of the minute's safety read (OPEN_FALLBACK_MS).
+        advanceTimeBy(59_000); runCurrent()
+        assertEquals("and nothing more", listOf("sessions?view=open"), rig.lists(start))
+    }
+
+    /** A burst is one read: ten session events within 400 ms close one window and read the Open list once. */
+    @Test fun tenEventsWithin400MsAreOneRead() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val start = rig.reads.size
+        val revision = store.state.value.invalidationRevision
+        repeat(10) { index ->
+            rig.event(if (index % 2 == 0) "session.updated" else "approval.requested", "s$index")
+            if (index < 9) advanceTimeBy(40)
+        }
+        advanceTimeBy(WINDOW_MS); runCurrent()
+        advanceTimeBy(10_000); runCurrent()
+        assertEquals(listOf("sessions?view=open"), rig.lists(start))
+        assertEquals(revision + 1, store.state.value.invalidationRevision)
+        assertEquals(5L, store.state.value.accountEvents["session.updated"])
+    }
+
+    /** Each library event reads its own list and nothing else; a workspace's is `agent.changed`. */
+    @Test fun aLibraryEventReadsItsOwnListAndNothingElse() = runTest {
+        for ((type, list) in listOf("tag.changed" to "session-tags", "folder.changed" to "session-folders", "agent.changed" to "workspaces")) {
+            val rig = Rig(this)
+            val (_, store) = rig.start()
+            val start = rig.reads.size
+            rig.event(type, "")
+            advanceTimeBy(WINDOW_MS); runCurrent()
+            assertEquals(type, listOf(list), rig.lists(start))
+            store.close(); runCurrent()
+        }
+    }
+
+    /** An event that moves none of the store's lists reads none of them: a task's or a project's asks the pages (the invalidation), the
+     * wiki's only the wiki, and a type this build does not know asks for nothing at all. */
+    @Test fun anEventThatMovesNoListOfTheStoresReadsNone() = runTest {
+        for ((type, invalidates) in listOf("task.changed" to true, "project.changed" to true, "watch.changed" to true,
+            "wiki.changed" to false, "made.up" to false)) {
+            val rig = Rig(this)
+            val (_, store) = rig.start()
+            val start = rig.reads.size
+            val revision = store.state.value.invalidationRevision
+            rig.event(type, "")
+            advanceTimeBy(WINDOW_MS); runCurrent()
+            assertEquals(type, emptyList<String>(), rig.lists(start))
+            assertEquals(type, if (invalidates) revision + 1 else revision, store.state.value.invalidationRevision)
+            assertEquals(type, 1L, store.state.value.accountEvents[type])
+            store.close(); runCurrent()
+        }
+    }
+
+    /** A list is read once at a time: windows that close while its read is on the wire leave one more read behind it, not one each. */
+    @Test fun aListIsOnTheWireOnceAtATime() = runTest {
+        val rig = Rig(this)
+        rig.start()
+        val start = rig.reads.size
+        val held = CompletableDeferred<Unit>()
+        rig.heldDirectory = held
+        repeat(3) {
+            rig.event("session.updated")
+            advanceTimeBy(WINDOW_MS); runCurrent()
+        }
+        assertEquals(listOf("sessions?view=open"), rig.lists(start))
+        rig.heldDirectory = null
+        held.complete(Unit); runCurrent()
+        assertEquals(listOf("sessions?view=open", "sessions?view=open"), rig.lists(start))
+    }
+
+    /** A connect replays nothing, so it still reads every list at once, without waiting out a window. */
+    @Test fun aConnectReadsEveryListAtOnce() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val start = rig.reads.size
+        rig.streams.control().frames.close()
+        runCurrent(); advanceTimeBy(301); runCurrent()
+        assertEquals(2L, store.state.value.controlConnects)
+        assertEquals(setOf("workspaces", "session-folders", "session-tags", "runners", "sessions?view=open"), rig.lists(start).toSet())
+        assertEquals(5, rig.lists(start).size)
+    }
+
+    /** docs/realtime-control-plane-stream.md §4.8: the account stream declares the hint, and a `sessions.list_changed` is one
+     * conditional read of the Open list, asked against its cursor — no other list, and no page asked to read again. */
+    @Test fun aListChangedHintIsOneSinceReadOfTheOpenListAndNothingElse() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertEquals("the stream declares the hint", listOf("hints" to "list_changed"), rig.streams.control().request.api.query)
+        val start = rig.reads.size
+        val revision = store.state.value.invalidationRevision
+        rig.event("sessions.list_changed", "", """{"version":"v2"}""")
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals(listOf("sessions?view=open"), rig.lists(start))
+        assertEquals("asked as a delta", 1, rig.openReads(start).count { it != null })
+        assertEquals("a hint asks the pages nothing", revision, store.state.value.invalidationRevision)
+        assertEquals(0, rig.snapshots(start))
+        assertEquals(1L, store.state.value.accountEvents["sessions.list_changed"])
+    }
+
+    /** R1: hints are gathered for at least a second — the first is read at once, the ones of the second after it are one read behind. */
+    @Test fun theHintsOfASecondAreOneReadBehindTheFirst() = runTest {
+        val rig = Rig(this)
+        rig.start()
+        val start = rig.reads.size
+        listOf(0L, 200L, 300L, 400L).forEach { wait ->
+            advanceTimeBy(wait); rig.event("sessions.list_changed", "", """{"version":"v$wait"}""")
+        }
+        assertEquals("the first, at once", 1, rig.openReads(start).size)
+        advanceTimeBy(100); runCurrent()
+        assertEquals("then the rest of its second, once", 2, rig.openReads(start).size)
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals(2, rig.openReads(start).size)
+    }
+
+    /** Once the connection has had a hint, a session's event moves its row on the next hint, not by a read of its own: the pages are
+     * still asked, the Open list is not read. */
+    @Test fun aHintedStreamsSessionEventsDoNotReadTheOpenList() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        rig.event("sessions.list_changed", "", """{"version":"v1"}""")
+        advanceTimeBy(2_000); runCurrent()
+        val start = rig.reads.size
+        val revision = store.state.value.invalidationRevision
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals(emptyList<String>(), rig.lists(start))
+        assertEquals(revision + 1, store.state.value.invalidationRevision)
+    }
+
+    /** R1's safety read: the stream up and no hint, the Open list is read at most once a minute — and it is read. */
+    @Test fun withTheStreamUpAndNoHintTheOpenListIsReadAtMostOnceAMinute() = runTest {
+        val rig = Rig(this)
+        rig.start()
+        val start = rig.reads.size
+        advanceTimeBy(59_999); runCurrent()
+        assertEquals("nothing within the minute", 0, rig.openReads(start).size)
+        advanceTimeBy(1); runCurrent()
+        assertEquals("the safety read, by its cursor", listOf(true), rig.openReads(start).map { it != null })
+        advanceTimeBy(59_999); runCurrent()
+        assertEquals(1, rig.openReads(start).size)
+        advanceTimeBy(3 * 60_000L); runCurrent()
+        assertEquals("four minutes, four reads", 4, rig.openReads(start).size)
+        assertEquals("and no other list", rig.lists(start).toSet(), setOf("sessions?view=open"))
+    }
+
+    /** Offline or in the background there is no safety read (R2, R3). */
+    @Test fun theSafetyReadNeedsTheStreamUp() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.setForeground(false); runCurrent()
+        val start = rig.reads.size
+        advanceTimeBy(5 * 60_000L); runCurrent()
+        assertEquals(0, rig.openReads(start).size)
+    }
+
+    /** D1 left the open conversation's snapshot (and the reader's cards behind it) read on every account event. An event about
+     * another session, or another project, reads neither; one about this session or its project reads the snapshot exactly once. */
+    @Test fun anEventAboutAnotherSessionDoesNotReadTheOpenConversationsSnapshot() = runTest {
+        val rig = Rig(this)
+        rig.project = true
+        val (_, store) = rig.start()
+        val start = rig.reads.size
+        rig.event("session.updated", "s2")
+        rig.event("approval.requested", "s2")
+        rig.event("background.task", "s2")
+        rig.event("project.changed", "", """{"id":"p9"}""")
+        rig.event("task.changed", "s3", """{"taskId":"t9","taskIds":["t9"],"resync":false}""")
+        advanceTimeBy(WINDOW_MS); runCurrent()
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals("no snapshot read, so no card read behind one", 0, rig.snapshots(start))
+        assertTrue(store.state.value.session!!.fresh)
+        for ((type, session, data) in listOf(Triple("session.updated", "s1", "{}"), Triple("project.changed", "", """{"id":"p1"}"""),
+            Triple("task.changed", "s3", """{"taskId":"t1","taskIds":["t1"],"resync":false}"""))) {
+            val before = rig.reads.size
+            rig.event(type, session, data)
+            advanceTimeBy(WINDOW_MS); runCurrent()
+            advanceTimeBy(5_000); runCurrent()
+            assertEquals(type, 1, rig.snapshots(before))
+        }
+    }
+
     @Test fun emptySessionIdNudgesRefetchAndDirectoryErrorRetainsRows() = runTest {
         val rig = Rig(this)
         val (_, store) = rig.start()
         val revision = store.state.value.invalidationRevision
-        rig.directoryError = 403
+        val start = rig.reads.size
         rig.streams.control().emit("""{"type":"folder.changed","sessionId":"","data":{"id":"f1"}}""")
-        runCurrent()
+        runCurrent(); advanceTimeBy(WINDOW_MS); runCurrent()
         assertTrue(store.state.value.invalidationRevision > revision)
+        assertEquals(listOf("session-folders"), rig.lists(start))
+        rig.directoryError = 403
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
         assertFalse(store.state.value.directoryFresh)
         assertEquals(403, store.state.value.directoryError!!.httpStatus)
         assertEquals(ConnectionState.CONNECTED, store.state.value.controlConnection)
@@ -555,6 +880,123 @@ class RealtimeStoreTest {
         behind.complete(Unit); runCurrent()
         assertTrue(reread.isCompleted)
         assertEquals("after the write", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+    }
+
+    /** An account with work running is never quiet for as long as its lists take to read. A read an account event overtakes is
+     * still the newest there is, so it lands and the directory is read again behind it. Dropped, no read ever landed, and a
+     * phone with no copy of its directory sat on the spinner with nothing wrong to show. */
+    @Test fun aReadAccountEventsAlwaysOvertakeStillLands() = runTest {
+        val rig = Rig(this)
+        var held = CompletableDeferred<Unit>()
+        rig.heldDirectory = held
+        val (_, store) = rig.start()
+        assertNull(store.state.value.directory)
+        repeat(4) { round ->
+            rig.event("session.updated")
+            advanceTimeBy(WINDOW_MS); runCurrent()
+            rig.title = "read $round"
+            val next = CompletableDeferred<Unit>()
+            rig.heldDirectory = next
+            held.complete(Unit); runCurrent()
+            held = next
+            assertNotNull("read $round was overtaken and is still what there is to show", store.state.value.directory)
+        }
+        assertEquals("the rows keep moving behind the events", "read 2", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+    }
+
+    /** A write's re-read still outranks an event: the read from before the write stays dropped when an event overtook it as well. */
+    @Test fun aReadFromBeforeAWriteIsDroppedEvenWhenAnAccountEventOvertookItToo() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val earlier = CompletableDeferred<Unit>()
+        rig.title = "before the write"; rig.heldDirectory = earlier
+        store.refreshDirectory(); runCurrent()
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
+        val behind = CompletableDeferred<Unit>()
+        rig.title = "after the write"; rig.heldDirectory = behind
+        val reread = async { store.rereadDirectory() }
+        runCurrent()
+        earlier.complete(Unit); runCurrent()
+        assertFalse(reread.isCompleted)
+        assertEquals("not published", "original", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+        behind.complete(Unit); runCurrent()
+        assertTrue(reread.isCompleted)
+        assertEquals("after the write", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+    }
+
+    /** An event says the rows are about to move, not that they stopped being good: nothing that draws from them goes back to
+     * loading for it (`NewSessionComposer` blanks on `fresh`). On a busy account each of those would last as long as a read. */
+    @Test fun anAccountEventReadsTheDirectoryAgainBehindTheRowsInPlace() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val read = CompletableDeferred<Unit>()
+        rig.title = "moved"; rig.heldDirectory = read
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryRefreshing)
+        read.complete(Unit); runCurrent()
+        assertEquals("moved", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+    }
+
+    /** Nothing is replayed across a drop, so `fresh` takes a read that left after the stream opened (P06 `reconciled`). One from
+     * before lands its rows, which are still the newest there are, and leaves the page loading the connection's own. */
+    @Test fun aReadFromBeforeTheStreamOpenedLandsItsRowsButIsNotTheConnectionsRead() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val before = CompletableDeferred<Unit>()
+        rig.title = "before the stream"; rig.heldDirectory = before
+        store.refreshDirectory(); runCurrent()
+        val behind = CompletableDeferred<Unit>()
+        rig.title = "behind the stream"; rig.heldDirectory = behind
+        rig.streams.control().frames.close()
+        advanceTimeBy(301); runCurrent()
+        assertEquals(ConnectionState.CONNECTED, store.state.value.controlConnection)
+        before.complete(Unit); runCurrent()
+        assertEquals("before the stream", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+        assertFalse(store.state.value.directoryFresh)
+        assertTrue(store.state.value.directoryRefreshing)
+        behind.complete(Unit); runCurrent()
+        assertEquals("behind the stream", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryRefreshing)
+    }
+
+    /** A read can land with the stream down, and be fresh for as long as that lasts. It does not stand in for the next connection's. */
+    @Test fun aReadThatLandedWhileTheStreamWasDownDoesNotStandInForTheConnectionsRead() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val quiet = CompletableDeferred<Unit>()
+        rig.heldDirectory = quiet
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
+        rig.streams.control().frames.close(); runCurrent()
+        assertEquals(ConnectionState.BACKOFF, store.state.value.controlConnection)
+        quiet.complete(Unit); runCurrent()
+        val own = CompletableDeferred<Unit>()
+        rig.heldDirectory = own
+        advanceTimeBy(301); runCurrent()
+        assertEquals(ConnectionState.CONNECTED, store.state.value.controlConnection)
+        assertFalse(store.state.value.directoryFresh)
+        assertTrue(store.state.value.directoryRefreshing)
+        own.complete(Unit); runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryRefreshing)
+    }
+
+    /** Asked for (Refresh, or behind a write) it is a read the page shows, as it is when the connection comes back. */
+    @Test fun aReadSomeoneAskedForStillShows() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val read = CompletableDeferred<Unit>()
+        rig.heldDirectory = read
+        store.refreshDirectory(); runCurrent()
+        assertFalse(store.state.value.directoryFresh)
+        assertTrue(store.state.value.directoryRefreshing)
+        read.complete(Unit); runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryRefreshing)
     }
 
     /** In the background no read can land: the re-read waits for the first one of the next connection. */

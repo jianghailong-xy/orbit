@@ -47,6 +47,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The three guardrails that keep "merge it" from becoming a machine that never stops.
@@ -194,6 +195,7 @@ async function connect(options: { silent?: boolean } = {}): Promise<Stack> {
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],
     routeReadyDependents: async () => [],
+    routeStoppedRun: async () => null,
   } as unknown as CompletionInputRouter;
   const tasks = new TasksService(
     prisma, sessions, realtime, undefined, options.silent ? silent : router,

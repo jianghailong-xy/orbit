@@ -132,6 +132,10 @@ export async function readProjectFinish(
   const reading = await readDerivedProjectDoneReading(prisma, project.ownerId, projectId);
   if (reading.inFlight.length > 0) return { state: 'LANDING_IN_FLIGHT' };
   const { derived } = reading;
+  // Facts that prove DONE are not a question for anybody: the projection stores it. That goes for a
+  // project whose owner pressed Reopen too, which the facts prove and the press holds OPEN
+  // (`storeDerivedProjectStatus`). The owner just said it is not finished, so it does not come back to
+  // them as "Record as done…" by itself. Its coordinator can still ask (`project_request_done`).
   if (derived.done) return { state: 'NOT_FINISHED' };
   // "Every criterion met" of a project that states none is the vacuous truth the projection itself
   // refuses (`NO_CRITERIA_STATED`).

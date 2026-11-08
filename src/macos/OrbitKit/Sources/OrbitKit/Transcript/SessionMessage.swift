@@ -24,6 +24,12 @@ public struct SessionMessage: Sendable, Equatable, Codable {
     public let fromAgentName: String
     /// The task the sending session runs; nil when it runs none.
     public let fromTaskId: String?
+    /// The sending session's stored mode (`from-mode` in the block); nil on an event stored before the
+    /// card carried it. Nothing draws it yet, here or on the web.
+    public let fromMode: String?
+    /// The sender runs narrower than the session it wrote to, by the server's own comparison; nil when
+    /// it does not.
+    public let fromModeNarrower: Bool?
     /// The request this message is, when its sender asked for a reply (`expectReply`) — the
     /// request's public id; nil on every message that asked for none. Its state is not here: the
     /// card reads it live (`SessionRequestView`), because the stored event never changes and the
@@ -31,11 +37,14 @@ public struct SessionMessage: Sendable, Equatable, Codable {
     public let requestId: String?
 
     public init(fromSessionId: String, fromTitle: String = "", fromAgentName: String = "",
-                fromTaskId: String? = nil, requestId: String? = nil) {
+                fromTaskId: String? = nil, fromMode: String? = nil, fromModeNarrower: Bool? = nil,
+                requestId: String? = nil) {
         self.fromSessionId = fromSessionId
         self.fromTitle = fromTitle
         self.fromAgentName = fromAgentName
         self.fromTaskId = fromTaskId
+        self.fromMode = fromMode
+        self.fromModeNarrower = fromModeNarrower
         self.requestId = requestId
     }
 
@@ -52,12 +61,63 @@ public struct SessionMessage: Sendable, Equatable, Codable {
         guard case .object(let card)? = value,
               let from = card["fromSessionId"]?.stringValue, !from.isEmpty else { return nil }
         let task = card["fromTaskId"]?.stringValue
+        let mode = card["fromMode"]?.stringValue
         let request = card["requestId"]?.stringValue
         return SessionMessage(fromSessionId: from,
                               fromTitle: card["fromTitle"]?.stringValue ?? "",
                               fromAgentName: card["fromAgentName"]?.stringValue ?? "",
                               fromTaskId: task?.isEmpty == false ? task : nil,
+                              fromMode: mode?.isEmpty == false ? mode : nil,
+                              fromModeNarrower: card["fromModeNarrower"]?.boolValue == true ? true : nil,
                               requestId: request?.isEmpty == false ? request : nil)
+    }
+}
+
+/// Who sent the message a session row previews (`Session.lastUserText`), when another Orbit session
+/// did — `session_send`, `project_send` or `session_interrupt` (docs/session-list-projects-design.md
+/// §3.5). Mirrors `@orbit/shared`'s `SessionMessageFrom`: the same two facts the card names its sender
+/// by, as they stood when the message was written. The rows carry it as `lastUserFrom`, nil when the
+/// account owner wrote the message. Both fields default, as the card's do, so a value this build reads
+/// only in part still says that someone other than the owner sent it.
+public struct SessionMessageFrom: Sendable, Equatable, Codable {
+    /// The sending session, in the uuid spelling every other read of one uses.
+    public let sessionId: String
+    public let title: String
+
+    public init(sessionId: String, title: String = "") {
+        self.sessionId = sessionId
+        self.title = title
+    }
+
+    private enum CodingKeys: String, CodingKey { case sessionId, title }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = (try? values.decodeIfPresent(String.self, forKey: .sessionId)) ?? ""
+        title = (try? values.decodeIfPresent(String.self, forKey: .title)) ?? ""
+    }
+}
+
+/// That the message a session row previews (`Session.lastUserText`) is Orbit's own: a turn the control
+/// plane wrote itself — a fact told to a coordinator, the answer to a criteria proposal, a watch's wake,
+/// the owner's answer handed on, a task run's brief (docs/session-list-projects-design.md §3.5, owner
+/// 2026-11-07). Mirrors `@orbit/shared`'s `OrbitMessageFrom`. The rows carry it as `lastUserFromOrbit`,
+/// nil for anybody else's words, and the row says `Orbit: …` (`SessionLine.orbitLine`).
+public struct OrbitMessageFrom: Sendable, Equatable, Codable {
+    /// The card the conversation draws a coordinator's notification as, read by the conversation's own
+    /// rule (`CoordinatorDelivery.parseCard`): the row says that line's sentence. Nil for every other
+    /// message of Orbit's — and for a card this build cannot read — whose row says its first line.
+    public let coordinatorDelivery: CoordinatorDelivery?
+
+    public init(coordinatorDelivery: CoordinatorDelivery? = nil) {
+        self.coordinatorDelivery = coordinatorDelivery
+    }
+
+    private enum CodingKeys: String, CodingKey { case coordinatorDelivery }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        coordinatorDelivery = CoordinatorDelivery.parseCard(try? values.decodeIfPresent(JSONValue.self, forKey: .coordinatorDelivery))
     }
 }
 

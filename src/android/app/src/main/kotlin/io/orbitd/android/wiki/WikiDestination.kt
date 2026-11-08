@@ -44,6 +44,8 @@ internal class WikiNav(private val push: (OrbitRoute) -> Unit,
     fun job(id: String) = push(OrbitRoute(Destination.WIKI_JOB, id))
     fun project(id: String) = push(OrbitRoute(Destination.PROJECT, id, origin = Origin.LINK))
     fun runner(id: String) = push(OrbitRoute(Destination.RUNNER, id, origin = Origin.LINK))
+    /** The runners' own page, Infrastructure: a runner route that names none. */
+    fun runners() = push(OrbitRoute(Destination.RUNNER, origin = Origin.LINK))
     /** A web page — a repository host at a commit — in the browser. */
     fun url(raw: String) = external(raw)
     /** Contents' Home: back to the Wiki home under this page (iOS `popToRoot`). */
@@ -93,6 +95,7 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
             Destination.WIKI_RUN -> WikiRunScreen(store, route, nav)
             Destination.WIKI_JOB -> WikiJobScreen(store, route)
             Destination.WIKI_SETTINGS -> WikiSettingsScreen(store, route, data, nav)
+            Destination.WIKI_TRASH -> WikiTrashScreen(store, route)
             Destination.WIKI_ARTICLE -> WikiArticleScreen(store, route, data, nav)
             Destination.WIKI_BROWSE -> WikiBrowseScreen(store, route, data, nav)
             Destination.WIKI_INDEX -> WikiIndexScreen(store, route, data, nav)

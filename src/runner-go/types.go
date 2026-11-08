@@ -421,6 +421,14 @@ type HeartbeatResponse struct {
 	// "no gate" — so nil replaces the last value rather than preserving it. Contrast
 	// MaxConcurrent, where 0 is not a legal setting and therefore does mean "no news".
 	MinFreeDiskMb *int `json:"minFreeDiskMb,omitempty"`
+	// The storage budget this machine's checkouts are held to when that is not its disk: a Docker
+	// managed runner's volume, as the channel that enforces the volume's limit last measured it
+	// (docs/session-checkout-storage-design.md §5). With one, the worktree sweep judges free space
+	// against it and its floor instead of MinFreeDiskMb (checkoutStorage.judge). Absence replaces,
+	// as MinFreeDiskMb's does: nil is no budget and the sweep's rule as it was, so every answer that
+	// states the floor states the budget too, the link's quiet answer included. Nil from older
+	// control planes and for every runner the control plane has no measurement for.
+	StorageBudget *StorageBudget `json:"storageBudget,omitempty"`
 	// The one Codex rate-limit reset step claimed for this process
 	// (docs/codex-rate-limit-reset-contract.md §6). Nil from older control planes and whenever no
 	// operation is claimed for it; nothing acts on it until this binary declares
@@ -453,6 +461,25 @@ type HeartbeatResponse struct {
 	// response until the control plane records a check made at or after it. Nil on older control
 	// planes and whenever nobody is asking.
 	RegionCheckRequest *ClaudeRegionCheckRequest `json:"regionCheckRequest,omitempty"`
+}
+
+// StorageBudget is the storage a runner's checkouts may take where statfs cannot say: a Docker local
+// volume is a directory on the host's disk, so statfs inside the container reports the host's free
+// space, while the channel stops the container once the volume holds more than its limit
+// (VOLUME_OVER_LIMIT). The sweep reads free space as LimitBytes − UsageBytes, plus the bytes of the
+// checkouts it began removing after MeasuredAt, and never more than statfs reports.
+type StorageBudget struct {
+	// LimitBytes is the most the volume may hold.
+	LimitBytes int64 `json:"limitBytes"`
+	// UsageBytes is what it held when measured, as Docker's GET /system/df sizes a volume: apparent
+	// sizes, each inode once.
+	UsageBytes int64 `json:"usageBytes"`
+	// MeasuredAt is when that measurement finished, RFC 3339, by the clock of the host the volume is
+	// on, which the container shares. A checkout this runner began removing after it is still in
+	// UsageBytes; one it began removing before it is not, or not all of it.
+	MeasuredAt string `json:"measuredAt"`
+	// FloorBytes is the free space below which the sweep reclaims checkouts. Zero is no floor.
+	FloorBytes int64 `json:"floorBytes"`
 }
 
 // ClaudeRegionCheckRequest mirrors @orbit/shared: when the owner asked for a region check, ISO 8601.
@@ -593,6 +620,9 @@ type IntegrationJobCommand struct {
 	outputEvery      time.Duration
 	outputChunkBytes int
 	outputRedactor   *integrationOutputRedactor
+	// onInterrupted is told when the runner's stop has ended a job that staged a scratch worktree, before
+	// that worktree is removed (runIntegrationJobAndReport). Never on the wire.
+	onInterrupted func(phase string)
 }
 
 // IntegrationObserveTask is one task an OBSERVE_LANDING looks for (§10.6 O-S2): the commit its work
@@ -968,12 +998,14 @@ type MergeCommand struct {
 
 // ImportResultRequest settles a session's pending transcript import: ok clears the
 // importSourceCwd marker (optionally carrying the real title read out of the transcript),
-// ok=false moves the session to Trash with the reason.
+// ok=false moves the session to Trash with the reason. Forked says the transcript was placed
+// under importForkSessionID of the session's Claude id, which the session resumes from then on.
 type ImportResultRequest struct {
 	LeaseOwner string `json:"leaseOwner,omitempty"`
 	Ok         bool   `json:"ok,omitempty"`
 	Error      string `json:"error,omitempty"`
 	Title      string `json:"title,omitempty"`
+	Forked     bool   `json:"forked,omitempty"`
 }
 
 // SessionNamingRequest reports the title an engine gave its session. Replaces is the title the
@@ -985,12 +1017,15 @@ type SessionNamingRequest struct {
 }
 
 // ImportResultResponse is the control plane's receipt: applied=false on a replayed ok (the
-// CAS matched nothing), failed=true when the session went to Trash.
+// CAS matched nothing), failed=true when the session went to Trash. RuntimeSessionID answers a
+// forked ok with the Claude session id the session resumes; a control plane that predates forks
+// leaves it empty.
 type ImportResultResponse struct {
-	Ok        bool `json:"ok"`
-	Applied   bool `json:"applied"`
-	Failed    bool `json:"failed"`
-	Announced bool `json:"announced"`
+	Ok               bool   `json:"ok"`
+	Applied          bool   `json:"applied"`
+	Failed           bool   `json:"failed"`
+	Announced        bool   `json:"announced"`
+	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
 }
 
 // ClaudeHistoryCommand mirrors @orbit/shared ClaudeHistoryCommand: one working directory to report
@@ -1095,6 +1130,24 @@ type CommitCommand struct {
 	OperationID string `json:"operationId"`
 	LeaseOwner  string `json:"leaseOwner"`
 	Branch      string `json:"branch"`
+	// Discard throws the checkout's uncommitted work away instead of committing it (the owner's
+	// Discard on an abandoned checkout). Only ever sent to a runner that declares
+	// abandoned-checkout-v1: an older one would ignore the field and commit the work instead.
+	Discard bool `json:"discard,omitempty"`
+}
+
+// AbandonedCheckout is one finished session's checkout that still holds work no branch has, as
+// the runner reports it: the changed files and, when the report had room, their patch text.
+type AbandonedCheckout struct {
+	SessionID string        `json:"sessionId"`
+	Files     []ChangedFile `json:"files"`
+	Patches   []FilePatch   `json:"patches,omitempty"`
+}
+
+// AbandonedCheckoutsRequest is the runner's WHOLE inventory: a checkout the control plane holds
+// that is absent from this list is one the runner no longer finds abandoned.
+type AbandonedCheckoutsRequest struct {
+	Checkouts []AbandonedCheckout `json:"checkouts"`
 }
 
 type ArtifactCommand struct {
@@ -1227,6 +1280,9 @@ type ClaimedSession struct {
 	Provider  string          `json:"provider,omitempty"`
 	Prompt    string          `json:"prompt"`
 	Agent     AgentExecConfig `json:"agent"`
+	// liveMode is the session's permission mode as the goroutines serving its socket read it
+	// (background_gate.go); nil until that service starts.
+	liveMode *sessionLiveMode
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir          string `json:"workDir,omitempty"`
 	SessionUUID      string `json:"sessionUuid"`
@@ -1304,6 +1360,11 @@ type ClaimedSession struct {
 	// is the live worktree (nil when running shared), IsolationStatus what was done.
 	WT              *Worktree `json:"-"`
 	IsolationStatus string    `json:"-"`
+	// CheckoutCreation is how the runner made the session's checkout, when this process made it: cloned from the
+	// workspace's own checkout (checkoutCloned) or written out by git (checkoutPlain). It is "" for a checkout found
+	// on disk. The log says why a checkout was not cloned. IsolationStatus reads "worktree" for both, the one value
+	// the control plane takes for a session with a checkout of its own. Runner-internal.
+	CheckoutCreation string `json:"-"`
 	// SourceRefusal is why a pinned run may not start: setupWorktree could not stand a checkout on the
 	// pinned commit (docs/project-integration-line-contract.md §1.5 L10). On a managed runner it is
 	// also why a run may not start in a damaged repository (managed_repo_recovery.go). Non-nil means
@@ -1414,6 +1475,11 @@ type RunInboxResponse struct {
 	// Attachments for this (message) turn; the runner fetches each blob and dispatches on
 	// its type (image/PDF → content block, else → written to the worktree). Nil if none.
 	Attachments []TurnAttachment `json:"attachments,omitempty"`
+	// ExternalSender is who outside Orbit sent this message — a member of a connected Feishu group
+	// (docs/feishu-bot-design.md §8.2) — on the first delivery of a message or steer only. The inbox
+	// fetch appends a block saying so after the words (external_sender.go), so the agent does not
+	// take them as the account owner's. Nil for every other turn and from an older control plane.
+	ExternalSender *ExternalSender `json:"externalSender,omitempty"`
 	// Env is the process environment to re-spawn the engine with, sent only on a `reload` that
 	// moved the session to another provider on the same runtime (a second account with the same
 	// vendor, say). It REPLACES job.Agent.Env, so the previous provider's variables go with it —
@@ -1533,6 +1599,10 @@ type TurnCompleteRequest struct {
 	CostUsd       float64                `json:"costUsd"`
 	Usage         *TokenUsage            `json:"usage,omitempty"`
 	ModelUsage    map[string]interface{} `json:"modelUsage,omitempty"`
+	// RunningTotals says CostUsd and ModelUsage are Claude Code's running totals of one engine
+	// process, and what that process started from, so the control plane books the turn's own share
+	// (claude_running_totals.go). Nil from engines that report a turn's own numbers.
+	RunningTotals *RunningTotals `json:"runningTotals,omitempty"`
 	// UsageUnknown: the runtime measured no cost or tokens for this turn (DeepSeek Harness reports
 	// neither). costUsd is then left off the wire instead of claiming a measured $0.
 	UsageUnknown bool `json:"-"`
@@ -1668,9 +1738,10 @@ type RunFinalizeRequest struct {
 // RunFinalizeResponse is the control plane's reply when the runner finalizes a run through
 // /runner/sessions/:id/finalize. KeepCheckout is false only when the Session is Completed or
 // in Trash; for any resumable end it is true, so the isolated worktree checkout is preserved
-// for the resume. False means the checkout has become ELIGIBLE for reclamation, not that the
-// runner removes it here: gcWorktrees re-asks the same judgement (sessions/worktrees-removable)
-// on every sweep and is the only thing that acts on it.
+// for the resume, unless the disk runs short and it has nothing to lose (gcResumableCheckouts).
+// False means the checkout has become ELIGIBLE for reclamation, not that the runner removes it
+// here: gcWorktrees re-asks the same judgement (sessions/worktrees-removable) on every sweep and
+// is the only thing that acts on it.
 type RunFinalizeResponse struct {
 	Ok           bool `json:"ok"`
 	KeepCheckout bool `json:"keepCheckout"`
@@ -1678,8 +1749,14 @@ type RunFinalizeResponse struct {
 
 // WorktreesRemovableResponse lists which of the queried session ids have a removable
 // checkout (Completed / in Trash / no longer a session); any id absent must be kept.
+// Resumable is the other half: the kept sessions that are at rest here, with the branch their
+// next message comes back on. An older control plane omits it, and nothing is resumable then.
 type WorktreesRemovableResponse struct {
 	Removable []string `json:"removable"`
+	Resumable []struct {
+		ID     string `json:"id"`
+		Branch string `json:"branch"`
+	} `json:"resumable,omitempty"`
 }
 
 type Manifest struct {
@@ -1723,10 +1800,12 @@ type PermissionRule struct {
 // ApprovalDecisionResponse mirrors @orbit/shared: the resolved decision returned by
 // the approval long-poll. Status "PENDING" means the window elapsed undecided.
 type ApprovalDecisionResponse struct {
-	ID       string `json:"id"`
-	Status   string `json:"status"`
-	Behavior string `json:"behavior,omitempty"`
-	Message  string `json:"message,omitempty"`
+	DecidedByID   string `json:"decidedById,omitempty"`
+	StandingGrant bool   `json:"standingGrant,omitempty"`
+	ID            string `json:"id"`
+	Status        string `json:"status"`
+	Behavior      string `json:"behavior,omitempty"`
+	Message       string `json:"message,omitempty"`
 	// AskUserQuestion only: the human's picks, keyed by question text -> selected
 	// option labels. Fed back to claude as the tool's updatedInput.answers.
 	Answers map[string][]string `json:"answers,omitempty"`

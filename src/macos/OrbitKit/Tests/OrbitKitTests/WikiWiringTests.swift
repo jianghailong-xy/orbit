@@ -258,7 +258,7 @@ final class WikiWiringTests: XCTestCase {
         }
         let header = try slice(page, from: "private var header: some View {", to: "private func band(_ band: WikiLogic.HomeBand) -> some View {")
         assertOrder(header, ["Text(WikiCopy.title)", ".font(.largeTitle.bold())",
-                             "WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings)"],
+                             "WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,"],
                     "the header")
         XCTAssertTrue(page.contains("TextField(WikiCopy.searchPlaceholder, text: $query)"))
         XCTAssertTrue(page.contains(".redacted(reason: .placeholder)"), "grey bars while the first read is out")
@@ -276,9 +276,10 @@ final class WikiWiringTests: XCTestCase {
                                  "Text(WikiCopy.principles)", "WikiBadge(text: WikiCopy.trustLabel(.owner), tone: .owner)",
                                  "WikiCopy.allPrinciples(principles.count)"], "the principles")
         let documents = try slice(page, from: "private var documentsBand: some View {", to: "private func category(")
-        assertOrder(documents, ["case .loading:", "if failed { failure } else { skeleton }", "case .categories(let categories):",
-                                "case .topics(let groups):", "case .newSpace:", "Text(WikiDocCopy.noDocumentsNote)",
-                                "Button(WikiPlanCopy.setUp, action: actions.openSettings)", "case .nothing:"], "the documents band")
+        assertOrder(documents, ["case .loading:", "if failed { failure } else { skeleton }",
+                                "case .categories(let categories, let nothingWritten):", "if nothingWritten { startCard }",
+                                "ForEach(categories) { category in self.category(category) }", "case .topics(let groups):",
+                                "case .start:\n            startCard"], "the documents band")
         let style = try slice(code(try source("Views/WikiView.swift")), from: "@ViewBuilder func wikiHomeListStyle() -> some View {", to: "#else")
         XCTAssertTrue(style.contains("self.listStyle(.insetGrouped)"), "grouped cards on iOS (mock 30 ③)")
         // The plan page draws its documents in the same row.
@@ -382,7 +383,7 @@ final class WikiWiringTests: XCTestCase {
         assertOrder(screen, ["TimelineView(.periodic(from: .now, by: wiki.jobsUnderWay ? 5 : 60)) { context in",
                              "seen: seen, jobs: wiki.currentJobs, now: context.date, actions: actions(wiki))",
                              "await wiki.loadOtherPlans()", "await wiki.loadJobs()",
-                             "while !Task.isCancelled, wiki.jobsUnderWay {", "try? await Task.sleep(for: .seconds(5))",
+                             "while !Task.isCancelled, wiki.jobsUnderWay {", "await VisibilityGate.app.pause(5)",
                              ".refreshable {"], "Activity's runs, read and read again")
         XCTAssertTrue(view.contains("openJob: { id in model.push(.wikiJob(jobID: id)) }"), "a run's row opens its page")
         let header = try slice(page, from: "private var runsHeader: some View {", to: "private var newRows: Int")
@@ -532,7 +533,8 @@ final class WikiWiringTests: XCTestCase {
     // MARK: Review
 
     /// One card at a time with its position, and the card's answers through the approval cards' own
-    /// stack — `VStack(spacing: 10)` on iOS — Accept first, then Edit, then Reject▾; Retire then Keep.
+    /// stack — `VStack(spacing: 10)` on iOS — Accept first, then Edit, then Reject▾; Retire then Keep; a challenge's
+    /// Keep, Amend…, Retire…, none of them filled.
     func testReviewAnswersThroughApprovalActionsAcceptFirst() throws {
         let approvals = code(try source("Views/ApprovalCards.swift"))
         let stack = try slice(approvals, from: "struct ApprovalActions<Content: View>: View {", to: "#endif")
@@ -543,7 +545,8 @@ final class WikiWiringTests: XCTestCase {
                                   from: "struct WikiReviewCard: View {", to: "/// The op's chip and the kind"))
         let answers = try slice(card, from: "ApprovalActions {", to: ".disabled(busy)")
         assertOrder(answers, ["Text(WikiCopy.reviewRetire)", "Text(WikiCopy.keep)",
-                              "Text(WikiModeCopy.reconfirm)", "Text(WikiModeCopy.amend)", "Text(WikiModeCopy.retire)",
+                              "Text(WikiModeCopy.reconfirm)", "Text(WikiModeCopy.amendAnswer)",
+                              "Text(WikiModeCopy.retireAnswer)",
                               "Text(WikiCopy.accept)", "Text(WikiCopy.reviewEdit)", "Text(WikiCopy.reject)"],
                     "a card's answers — a challenge's between a retirement's and the rest")
         XCTAssertTrue(answers.contains("actions.decide(card, .reject, .notTrue)"), "Keep is a rejection as Not true")
@@ -552,11 +555,21 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertEqual(answers.components(separatedBy: ".approvalActionLabel()").count - 1, 8,
                        "every answer spans the card, as the approval cards' do")
         let challenge = try slice(answers, from: "} else if isChallenge {", to: "} else {")
-        XCTAssertTrue(challenge.contains("actions.decide(card, .reconfirm, nil)"))
-        XCTAssertTrue(challenge.contains("actions.amend(card)"))
-        XCTAssertTrue(challenge.contains("actions.decide(card, .retire, nil)"))
-        let reconfirm = try slice(challenge, from: "Text(WikiModeCopy.reconfirm)", to: "Text(WikiModeCopy.amend)")
-        XCTAssertTrue(reconfirm.contains(".buttonStyle(.borderedProminent)"), "Re-confirm is the one filled answer")
+        XCTAssertTrue(challenge.contains("actions.decide(card, .reconfirm, nil)"), "Keep is the wire's reconfirm")
+        XCTAssertFalse(challenge.contains(".borderedProminent"), "a challenge proposes no answer, so none is filled")
+        XCTAssertEqual(challenge.components(separatedBy: ".buttonStyle(.bordered)").count - 1, 3)
+        // Amend… only for a kind that can be amended (a decision is superseded, never amended).
+        let amend = try slice(challenge, from: "if WikiModeLogic.amendable(WikiLogic.cardKind(card, entry: entry)) {",
+                              to: "Text(WikiModeCopy.amendAnswer)")
+        XCTAssertTrue(amend.contains("actions.amend(card)"))
+        // Retire… is the destructive one, and asks first: it opens the dialog rather than deciding.
+        let retire = try slice(challenge, from: "Button(role: .destructive) { actions.retire(card) } label: {",
+                               to: "Text(WikiModeCopy.retireAnswer)")
+        XCTAssertFalse(retire.isEmpty)
+        // …and red on the Mac too, where a bordered button's destructive role keeps the plain label colour.
+        let retireLabel = try slice(challenge, from: "Text(WikiModeCopy.retireAnswer)", to: ".buttonStyle(.bordered)")
+        assertOrder(retireLabel, ["#if os(macOS)", ".foregroundStyle(.red)", "#endif"], "Retire… is red on the Mac")
+        XCTAssertFalse(challenge.contains("actions.decide(card, .retire"), "Retire… decides straight from the card")
         let accept = try slice(answers, from: "Text(WikiCopy.accept)", to: "Text(WikiCopy.reviewEdit)")
         XCTAssertTrue(accept.contains(".buttonStyle(.borderedProminent)"), "Accept is the one filled answer")
         let page = try slice(view, from: "struct WikiReviewPage: View {", to: "struct WikiReviewCard: View {")
@@ -565,6 +578,59 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("WikiLogic.clampedIndex(index, count: visible.count)"))
         let screens = code(try source("Views/WikiScreens.swift"))
         XCTAssertTrue(screens.contains("await wiki.decide(card, action, reason: reason)"))
+    }
+
+    /// A challenge's card says what each answer does above them (the After row), and its Retire… opens the entry
+    /// page's own dialog — the note that it cannot be undone, the challenge's reason filled in, Cancel first, Retire
+    /// destructive and only with a reason — whose reason goes with the decide as its note. Once the card on show
+    /// changes, the page goes back to its top, so the next card shows from its head (docs/mocks/wiki-challenge-answers).
+    func testAChallengesRetireAsksFirstAndTheNextCardShowsFromItsTop() throws {
+        let view = code(try source("Views/WikiView.swift"))
+        let card = code(try slice(try source("Views/WikiView.swift"),
+                                  from: "struct WikiReviewCard: View {", to: "/// The op's chip and the kind"))
+        let afterRow = try slice(card, from: "if isRetire { retireFields } else { content }", to: "ApprovalActions {")
+        assertOrder(afterRow, ["if isChallenge {", "labelled(WikiCopy.afterLabel,",
+                               "WikiModeLogic.challengeAfter(kind: WikiLogic.cardKind(card, entry: entry)).map(afterText)"],
+                    "a challenge's After row, after the content and above the answers")
+        let after = try slice(view, from: "private func afterText(_ line: WikiModeLogic.AfterLine) -> Text {", to: "}")
+        assertOrder(after, ["Text(line.answer).bold()", "line.destructive ? Color.red : nil", "Text(\" · \" + line.effect)"],
+                    "an After line: the answer's word bold, Retire's red, then what it does")
+        let actions = try slice(view, from: "struct WikiReviewActions {", to: "struct WikiReviewPage: View {")
+        XCTAssertTrue(actions.contains("var retire: (WikiLogic.ReviewCard) -> Void = { _ in }"))
+
+        let screens = code(try source("Views/WikiScreens.swift"))
+        let review = try slice(screens, from: "struct WikiReviewView: View {", to: "private struct WikiChallengeAmendForm: View {")
+        let dialog = try slice(review, from: ".alert(WikiCopy.retire, isPresented:", to: "Text(WikiCopy.retireNote)")
+        assertOrder(dialog, ["presenting: retiring) { card in",
+                             "TextField(WikiCopy.reasonPlaceholder, text: $retireReason)",
+                             "Button(\"Cancel\", role: .cancel)",
+                             "Button(WikiCopy.retireConfirm, role: .destructive) {",
+                             "await wiki.decide(card, .retire, note: why)",
+                             "finish(answer, card: card, action: .retire)",
+                             ".disabled(retireReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)",
+                             "Text(WikiCopy.retireNote)"], "a challenge's Retire… dialog")
+        let open = try slice(review, from: "retire: { card in", to: "retiring = card")
+        XCTAssertTrue(open.contains("retireReason = card.op.payload?[\"reason\"]?.stringValue ?? \"\""),
+                      "the dialog opens with the challenge's own reason")
+        // The entry page's dialog is the same one: its note, its field and its two buttons.
+        let entry = try slice(screens, from: ".alert(WikiCopy.retire, isPresented: $retiring) {", to: "Text(WikiCopy.retireNote)")
+        for part in ["TextField(WikiCopy.reasonPlaceholder, text: $reason)", "Button(\"Cancel\", role: .cancel)",
+                     "Button(WikiCopy.retireConfirm, role: .destructive) {"] {
+            XCTAssertTrue(entry.contains(part), "the entry page's Retire… dialog lost \(part)")
+        }
+
+        let model = code(try source("WikiModel.swift"))
+        let decide = try slice(model, from: "func decide(_ card: WikiLogic.ReviewCard,", to: "func loadEntriesNamed(")
+        XCTAssertTrue(decide.contains("edited: WikiEntryChanges? = nil, note: String? = nil) async -> String? {"))
+        XCTAssertTrue(decide.contains("WikiDecision(opId: card.op.id, action: action,"))
+        XCTAssertTrue(decide.contains("edited: edited, reason: reason, note: note)"), "the note rides on the decision")
+
+        let page = try slice(view, from: "struct WikiReviewPage: View {", to: "struct WikiReviewCard: View {")
+        assertOrder(page, ["ScrollViewReader { proxy in", "ScrollView {", ".padding(16)", ".id(Self.top)",
+                           ".onChange(of: shownCardID) { _, _ in proxy.scrollTo(Self.top, anchor: .top) }"],
+                    "the next card from the top of the page")
+        XCTAssertTrue(page.contains("WikiLogic.clampedIndex(index, count: visible.count).map { visible[$0].id }"),
+                      "the card on show, by the id its view is keyed on")
     }
 
     /// A decide's answer is read, not dropped. The server answers 200 for an op it could not apply too —
@@ -661,14 +727,15 @@ final class WikiWiringTests: XCTestCase {
     func testWikiChangedReReadsTheWikiNotTheSessions() throws {
         let app = code(try source("AppModel.swift"))
         let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "private func mergeSessionSummary")
-        let arm = try slice(apply, from: "case .wikiChanged:", to: "case .providerChanged:")
+        let arm = try slice(apply, from: "case .wiki:\n", to: "case .folders:")
         XCTAssertTrue(arm.contains("wiki?.nudge()"))
         XCTAssertFalse(arm.contains("scheduleControlRefresh"), "a wiki event is not a session event")
-        let wikiArm = try XCTUnwrap(apply.range(of: "case .wikiChanged:"))
-        let defaultArm = try XCTUnwrap(apply.range(of: "default:\n            scheduleControlRefresh()"))
-        XCTAssertLessThan(wikiArm.lowerBound, defaultArm.lowerBound)
-        let connected = try slice(app, from: "case .connected:", to: "case .event(let ev):")
-        XCTAssertTrue(connected.contains("if let wiki { Task { await wiki.reloadLoaded() } }"))
+        XCTAssertTrue(apply.contains("switch ControlEventRoute.of(ev) {"), "its own route, never the Open list's")
+        let connected = try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
+        XCTAssertTrue(connected.contains("if selectedSection == .wiki {\n            if let wiki { Task { await wiki.reloadLoaded() } }"),
+                      "a reconnect re-reads the Wiki while it is on screen")
+        XCTAssertTrue(connected.contains("} else if let wiki, wiki.spacesState.hasLoaded {\n            Task { await wiki.loadSpaces() }"),
+                      "and otherwise its spaces: the drawer's number is on screen beside every section")
         XCTAssertTrue(app.contains("wiki = WikiModel(baseURL: url, tokenStore: tokenStore)"))
     }
 

@@ -63,6 +63,7 @@ import { MATCHED_BY_CONTENT, mergeReceiptRow, type MergeReceiptRow } from './mer
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -255,7 +256,7 @@ async function strand(db: PrismaClient, id: string, recovery: MergeRecovery, row
  */
 async function check(s: Stack, w: World, id: string, answer: MergeRecovery, recoveryAction?: 'preview') {
   await s.sessions.mergeToMain(w.ownerId, id, answer.targetBranch, undefined, recoveryAction ? { recoveryAction } : {});
-  const commands = await s.drain.drainMergeRequests(w.runnerId, LEASE, true);
+  const commands = await s.drain.drainMergeRequests(w.runnerId, LEASE);
   assert.equal(commands.length, 1, 'the heartbeat hands out the one check');
   const [command] = commands;
   assert.equal(command!.sessionId, id);
@@ -433,7 +434,7 @@ test('S3 Done ends an ALREADY_LANDED merge recovery, and a landing from elsewher
       assert.equal((answer.receipt as Record<string, unknown>).id, receipt.id);
       // Nothing went to a runner: no operation was minted, and the heartbeat hands nothing out.
       assert.equal(done.mergeOperationId, command.operationId, `${label}: no operation was queued`);
-      assert.deepEqual(await s.drain.drainMergeRequests(w.runnerId, LEASE, true), []);
+      assert.deepEqual(await s.drain.drainMergeRequests(w.runnerId, LEASE), []);
     }
   });
 
@@ -504,11 +505,11 @@ test('S3 Done ends an ALREADY_LANDED merge recovery, and a landing from elsewher
     assert.equal((waited.receipt as Record<string, unknown>).id, record.id);
     // Neither reached a runner: the row is as Done left it, and the heartbeat hands nothing out.
     assert.deepEqual(await sessionRow(s.db, id), done);
-    assert.deepEqual(await s.drain.drainMergeRequests(w.runnerId, LEASE, true), []);
+    assert.deepEqual(await s.drain.drainMergeRequests(w.runnerId, LEASE), []);
 
     // The record answers for that source in that target only: a merge into another branch goes to the runner.
     await s.controller.mergeToMain(owner(w), id, { targetBranch: 'develop' });
-    const [elsewhere, ...more] = await s.drain.drainMergeRequests(w.runnerId, LEASE, true);
+    const [elsewhere, ...more] = await s.drain.drainMergeRequests(w.runnerId, LEASE);
     assert.equal(more.length, 0);
     assert.equal(elsewhere?.sessionId, id);
     assert.equal(elsewhere?.targetBranch, 'develop');
@@ -609,7 +610,7 @@ test('S3 Done ends an ALREADY_LANDED merge recovery, and a landing from elsewher
       const id = await finishedSession(s.db, w, 'ordinary-merge');
       await strand(s.db, id, diverged());
       await s.sessions.mergeToMain(w.ownerId, id, 'main');
-      const [merge] = await s.drain.drainMergeRequests(w.runnerId, LEASE, true);
+      const [merge] = await s.drain.drainMergeRequests(w.runnerId, LEASE);
       assert.equal(merge?.sessionId, id);
       await s.api.mergeResult({ id: w.runnerId }, id, {
         status: 'merged', operationId: merge!.operationId, leaseOwner: LEASE, sourceSha: SOURCE, targetBranch: 'main',
@@ -631,7 +632,7 @@ test('S3 Done ends an ALREADY_LANDED merge recovery, and a landing from elsewher
       };
       await strand(s.db, id, reviewed);
       await s.sessions.mergeToMain(w.ownerId, id, 'main', undefined, { recoveryAction: 'apply', previewId: 'reviewed' });
-      const [apply] = await s.drain.drainMergeRequests(w.runnerId, LEASE, true);
+      const [apply] = await s.drain.drainMergeRequests(w.runnerId, LEASE);
       await s.api.mergeResult({ id: w.runnerId }, id, {
         status: 'merged', operationId: apply!.operationId, leaseOwner: LEASE, sourceSha: SOURCE, targetBranch: 'main',
         mergedSha: MERGED, targetShaBefore: REMOTE, rebaseBaseSha: REMOTE, recovery: { ...reviewed, code: 'LOCAL_SYNC_PENDING' },
@@ -643,7 +644,7 @@ test('S3 Done ends an ALREADY_LANDED merge recovery, and a landing from elsewher
       assert.equal(pending.mergeRecoveryAction, 'apply');
 
       await s.sessions.mergeToMain(w.ownerId, id, 'main', undefined, { recoveryAction: 'sync-local', previewId: 'reviewed' });
-      const [sync] = await s.drain.drainMergeRequests(w.runnerId, LEASE, true);
+      const [sync] = await s.drain.drainMergeRequests(w.runnerId, LEASE);
       await s.api.mergeResult({ id: w.runnerId }, id, {
         status: 'merged', operationId: sync!.operationId, leaseOwner: LEASE, sourceSha: SOURCE, targetBranch: 'main',
         mergedSha: MERGED, recovery: { ...reviewed, code: 'DONE' },

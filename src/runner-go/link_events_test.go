@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -540,8 +539,9 @@ func TestLinkEventsKeptAcrossARestartAreSentFirst(t *testing.T) {
 	if got := s2.firstSeq(11); got != 31 {
 		t.Fatalf("the next process numbers from %d, want 31: after what the last one left", got)
 	}
-	m.observe(linkpb.Mode_MODE_LINK, "the test")
-	c := r.g.waitWelcomed(t, len(r.g.welcomed())+1)
+	welcomed := len(r.g.welcomed())
+	m.start()
+	c := r.g.waitWelcomed(t, welcomed+1)
 	if got := c.hello.GetSessions(); len(got) != 1 || got[0].GetLastSeq() != 30 {
 		t.Errorf("the next process's Hello resumes %v, want session-rs from 30", got)
 	}
@@ -557,8 +557,10 @@ func TestLinkEventsKeptAcrossARestartAreSentFirst(t *testing.T) {
 	}
 }
 
-// Past what memory may hold for a session, its events wait on disk, in order, and go once the stream has room. The
-// emitter never waits for the disk or the network.
+// Past what memory may hold for a session, its events wait on disk, in order, and go once the stream has room. Handing
+// them over waits for nothing the network does: the ingest comes back only once the last of them is in, so the wait
+// below is for a hand-over that would never return, and nothing here says how fast one is. A hand-over does write the
+// spool, on the session's flush; its emitters never do (TestAnEmitterWaitsForNeitherTheSpoolNorTheConnection).
 func TestLinkEventsPastMemoryWaitOnDisk(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	r.useLink(t)
@@ -568,22 +570,22 @@ func TestLinkEventsPastMemoryWaitOnDisk(t *testing.T) {
 	const payload = 32 << 10
 	n := (linkSessionMemoryBytes / payload) * 2 // twice the session's memory, 50 at a time
 	n -= n % 50
-	var slowest time.Duration
-	for i := 0; i < n; i += 50 {
-		began := time.Now()
-		if err := s.submit(linkTestRunEvents(i+1, 50, payload)); err != nil {
-			t.Fatal(err)
+	var handed atomic.Bool
+	go func() {
+		defer handed.Store(true)
+		for i := 0; i < n; i += 50 {
+			if err := s.submit(linkTestRunEvents(i+1, 50, payload)); err != nil {
+				t.Error(err)
+				return
+			}
 		}
-		slowest = max(slowest, time.Since(began))
-	}
+	}()
+	linkWaitFor(t, time.Minute, "every event to be handed over with the ingest down", handed.Load)
 	s.mu.Lock()
 	onDisk, inMemory := s.disk.count(), s.memBytes
 	s.mu.Unlock()
 	if onDisk == 0 || inMemory > linkSessionMemoryBytes {
 		t.Fatalf("%d events on disk and %d bytes in memory, past the %d the session may hold", onDisk, inMemory, linkSessionMemoryBytes)
-	}
-	if slowest > time.Second {
-		t.Errorf("handing 50 events over took %s", slowest)
 	}
 	in.setDown(false)
 	linkWaitStored(t, s, 60*time.Second)
@@ -622,26 +624,6 @@ func TestLinkEventsCrossAGapOnANewConnection(t *testing.T) {
 		if in.event("session-gap", seq) == nil {
 			t.Errorf("seq %d was never stored", seq)
 		}
-	}
-}
-
-// A session's stream ends for a refusal over HTTPS too: what it holds is dropped, and nothing is sent again.
-func TestLinkEventStreamFailsForAnHTTPSRefusal(t *testing.T) {
-	t.Setenv("ORBIT_HOME", t.TempDir())
-	m := newLinkMode(NewTransport("http://127.0.0.1:1", "runner-token"), (&linkTestLog{}).log)
-	t.Cleanup(m.close)
-	s := m.events.open("session-h")
-	if err := s.submit(linkTestRunEvents(1, 3, 10)); err != nil {
-		t.Fatal(err)
-	}
-	refusal := &transportHTTPError{method: "POST", path: "/runner/sessions/session-h/events", statusCode: 409}
-	s.fail(refusal)
-	if err := s.submit(linkTestRunEvents(4, 1, 10)); !errors.Is(err, refusal) {
-		t.Errorf("handing events over after the refusal: %v", err)
-	}
-	s.release()
-	if m.events.stream("session-h") != nil {
-		t.Error("the ended stream is still held")
 	}
 }
 

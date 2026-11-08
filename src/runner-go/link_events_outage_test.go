@@ -37,12 +37,7 @@ func TestLinkEventsSurviveTheControlPlaneBeingUnavailable(t *testing.T) {
 
 func linkOutage(t *testing.T, what string, outage time.Duration) {
 	r, in := newLinkEventsRig(t)
-	// HTTPS refuses the daemon routes: nothing sends the work back to HTTPS, however long the link is gone.
-	r.cp.mu.Lock()
-	r.cp.status = func(string) int { return http.StatusUpgradeRequired }
-	r.cp.mu.Unlock()
 	first := r.useLink(t)
-	r.m.upgradeRequired("POST /runner/heartbeat")
 	s, buf := linkSessionBuffer(r, "session-outage")
 	defer s.release()
 

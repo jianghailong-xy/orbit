@@ -1,5 +1,9 @@
 package io.orbitd.android.management
 
+import io.orbitd.android.openWorkspaceInDrawer
+import io.orbitd.android.pickFromSessionOptions
+import io.orbitd.android.hasRowMenu
+import io.orbitd.android.openRowMenu
 import android.graphics.Bitmap
 import android.util.Base64
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -142,7 +146,7 @@ class ManagementLiveTest {
         val name = read(account("owner").also { token(it) }, "workspaces/$id").jsonObject.s("name")!!
         compose.waitUntil(20_000) { shows(hasText(name) and hasClickAction()) || shows(hasText("unreadable directory", substring = true)) }
         ok("the directory lists the workspace (not \"unreadable\")", shows(hasText(name) and hasClickAction()))
-        click(hasText(name) and hasClickAction())
+        compose.openWorkspaceInDrawer(name)
     }
     private fun capture(label: String) {
         compose.waitForIdle(); instrumentation.waitForIdleSync(); android.os.SystemClock.sleep(700)
@@ -324,7 +328,7 @@ class ManagementLiveTest {
         val workspace = accounts["workspace"]!!.jsonObject.s("id")!!
         signIn(owner)
         openWorkspace(workspace)
-        compose.onNodeWithContentDescription("Workspace settings").performClick()
+        compose.pickFromSessionOptions("Settings")
         await("Working directory")
         field("Name").performTextReplacement("Stack workspace 2")
         compose.onAllNodes(hasSetTextAction()).filter(hasText("Name").not() and hasText("Path").not()).onFirst().performTextInput("Be brief.")
@@ -333,12 +337,12 @@ class ManagementLiveTest {
         eventually("server: workspace name and instructions saved") {
             read(owner, "workspaces/$workspace").jsonObject.let { it.s("name") == "Stack workspace 2" && it.s("appendSystemPrompt") == "Be brief." }
         }
-        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Working directory")
+        compose.pickFromSessionOptions("Settings"); await("Working directory")
         field("Name").performTextReplacement("Cancelled edit")
         click(hasText("Cancel") and hasClickAction(), scroll = false)
         compose.waitForIdle(); Thread.sleep(1_500)
         ok("server: Cancel wrote nothing", read(owner, "workspaces/$workspace").jsonObject.s("name") == "Stack workspace 2")
-        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Working directory")
+        compose.pickFromSessionOptions("Settings"); await("Working directory")
         ok("the form opens again on the server's record, not the cancelled edit", shows(hasSetTextAction() and hasText("Stack workspace 2")))
         click(hasText("Cancel") and hasClickAction(), scroll = false)
     }
@@ -351,8 +355,8 @@ class ManagementLiveTest {
         val title = read(owner, "sessions/$session").jsonObject.s("title") ?: "Untitled"
         fun share() = read(owner, "sessions/$session/share").jsonObject["link"]?.takeIf { it !is JsonNull }?.jsonObject
         openWorkspace(workspace)
-        compose.waitUntil(20_000) { shows(hasContentDescription("Options for", substring = true)) }
-        compose.onAllNodes(hasContentDescription("Options for", substring = true)).onFirst().performClick()
+        compose.waitUntil(20_000) { shows(hasRowMenu("Options for", substring = true)) }
+        compose.onAllNodes(hasRowMenu("Options for", substring = true)).onFirst().openRowMenu()
         click(hasText("Share…") and hasClickAction(), scroll = false)
         await("Anyone with the link")
         click(hasText("Anyone with the link") and isSelectable(), scroll = false)

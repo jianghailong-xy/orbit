@@ -68,6 +68,7 @@ import { PoolUsageLedger } from './pool-usage-ledger';
 import { ProvidersService } from './providers.service';
 import { nextUsageWindowStart, usageWindowStart } from './shared-pool';
 import { SharedPoolsService } from './shared-pools.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'pool-gateway-spec';
@@ -275,7 +276,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
   async function claim(who: Person, sessionId: string, park = true): Promise<ClaimedSession> {
     // A failed run is revived as AutoRetryService's resume revives it: PENDING, and the cancel cleared.
     await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null } });
-    const claimed = await queue.claimSessionForRunner({ id: who.runnerId }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     if (park) await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });

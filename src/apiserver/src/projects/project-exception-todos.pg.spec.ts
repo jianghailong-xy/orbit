@@ -1,3 +1,4 @@
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -58,6 +59,7 @@ import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * Exception items (docs/project-integration-line-contract.md §4): a task FAILED from any door opens
@@ -753,19 +755,17 @@ async function statedCriterion(stack: Stack, w: World, text: string): Promise<st
 }
 
 /** A run of ANOTHER task: the independent session a decision about this task may come from. */
-async function independentRun(
+async function independentSession(
   stack: Stack,
   w: World,
   label: string,
-): Promise<{ taskId: string; sessionId: string }> {
-  const review = await bareTask(stack, w, `${label}-review`);
+): Promise<{ sessionId: string }> {
   const sessionId = randomUUID();
   await stack.db.session.create({
     data: {
       id: sessionId,
       ownerId: w.ownerId,
       creatorId: w.ownerId,
-      taskId: review.taskId,
       workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId,
       title: `${label}-review`,
@@ -773,10 +773,10 @@ async function independentRun(
       provider: 'claude',
       status: RunStatus.AWAITING_INPUT,
       dispatchOrigin: SessionDispatchOrigin.USER,
-      startsTaskWork: true,
+      startsTaskWork: false,
     },
   });
-  return { taskId: review.taskId, sessionId };
+  return { sessionId };
 }
 
 function assertEscalatesAfterDefault(item: ItemRow): void {
@@ -1044,7 +1044,7 @@ test('the evidence judgment settles the task, and answers the failure item an ea
         'OPEN',
       );
 
-      const review = await independentRun(stack, w, 'judgment-settles');
+      const review = await independentSession(stack, w, 'judgment-settles');
       await stack.evidence.decide(
         w.ownerId,
         a.taskId,
@@ -1440,7 +1440,7 @@ test('an integration failure with no coordinator to hand it to is the owner\'s',
  *
  * `createTurn` on a conversation between turns files it PENDING, and the inbox hands a turn out
  * only to a session that is RUNNING — the claim is what makes the difference, and there is no
- * runner long-polling in this process to take it. Written here for the same reason `attempt` writes
+ * runner asking in this process to take it. Written here for the same reason `attempt` writes
  * the session row it starts from: the fixture stands in for the runner, not for the product.
  */
 async function claimed(stack: Stack, sessionId: string): Promise<void> {
@@ -2155,6 +2155,8 @@ test('delivering an item spends nothing of the coordinator\'s fuse budget', { sk
 async function escalate(stack: Stack, w: World, a: Attempt): Promise<ItemRow> {
   const opened = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
   assert.equal(opened.assignee, 'COORDINATOR');
+  await stack.openItems.deliverForTasks([a.taskId]);
+  await receiveOpenItem(stack.db, opened.id);
   assert.ok(opened.escalateAt, 'a coordinator item is opened with the project\'s window on it');
   await stack.db.$executeRaw(
     Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'

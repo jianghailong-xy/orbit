@@ -20,6 +20,10 @@ struct WikiHomeView: View {
     /// The Share panel, and the space's public link as last read or saved — what the bar's globe says.
     @State private var sharing = false
     @State private var shareRead: ShareLinkRead?
+    /// The setup card's Set up…: the sheet opens where the reader is (mock 41 ⑤).
+    @State private var settingUp = false
+    /// Why the setup card's Draft plan was refused.
+    @State private var draftRefusal: String?
 
     var body: some View {
         if let wiki = model.wiki {
@@ -27,15 +31,18 @@ struct WikiHomeView: View {
                 if let space = wiki.currentSpace {
                     // Until the home's first read for this space is in, the line and the documents are grey bars.
                     let loading = wiki.homeLoading
-                    WikiHomePage(space: space, spaces: wiki.spaces, principles: WikiLogic.principles(wiki.principles),
-                                 line: WikiLogic.homeLine(docs: wiki.docsDirectory, articles: wiki.directory, loading: loading),
-                                 documents: WikiLogic.homeDocuments(docs: wiki.docsDirectory, articles: wiki.directory,
-                                                                    loading: loading,
-                                                                    maintenance: space.settings?.maintenance?.enabled == true,
-                                                                    seen: seen),
-                                 seen: seen, failed: loading && wiki.homeState.lastLoadFailed, waiting: wiki.waiting,
-                                 shareLive: shareRead?.link.map { $0.state != .ended } ?? false,
-                                 besideContents: rowNavigation == .selection, actions: actions(wiki))
+                    // A minute's clock: the setup card says how long ago a run started.
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        WikiHomePage(space: space, spaces: wiki.spaces, principles: WikiLogic.principles(wiki.principles),
+                                     line: WikiLogic.homeLine(docs: wiki.docsDirectory, articles: wiki.directory, loading: loading),
+                                     documents: WikiLogic.homeDocuments(docs: wiki.docsDirectory, articles: wiki.directory,
+                                                                        loading: loading, seen: seen),
+                                     start: startCard(wiki, space: space, now: context.date), busy: wiki.busy,
+                                     seen: seen, failed: loading && wiki.homeState.lastLoadFailed, waiting: wiki.waiting,
+                                     shareLive: shareRead?.link.map { $0.state != .ended } ?? false,
+                                     trashed: wiki.trash.count,
+                                     besideContents: rowNavigation == .selection, actions: actions(wiki))
+                    }
                 } else {
                     WikiHomePlaceholder(wiki: wiki, state: wiki.spacesState) { await wiki.loadSpaces() }
                 }
@@ -66,8 +73,55 @@ struct WikiHomeView: View {
                     }
                 }
             }
+            // The setup card says where the plan's job stands, and no event says when one starts.
+            .task(id: WikiPlanLogic.jobUnderWay(wiki.plan)) {
+                while !Task.isCancelled, WikiPlanLogic.jobUnderWay(wiki.plan) {
+                    await VisibilityGate.app.pause(30)   // a job under way, and the app seen
+                    await wiki.loadPlan()
+                }
+            }
+            .sheet(isPresented: $settingUp) {
+                if let space = wiki.currentSpace { WikiSetUpSheet(wiki: wiki, space: space) }
+            }
+            .alert(WikiCopy.planDraftFailed, isPresented: Binding(get: { draftRefusal != nil }, set: { if !$0 { draftRefusal = nil } })) {
+                Button("OK", role: .cancel) { draftRefusal = nil }
+            } message: {
+                Text(draftRefusal ?? "")
+            }
         } else {
             ProgressView()
+        }
+    }
+
+    /// The setup card of a space, read from its plan as Activity reads it (`WikiStartCard.tsx`); nil until the plan is in.
+    private func startCard(_ wiki: WikiModel, space: WikiSpace, now: Date) -> WikiStartLogic.Card? {
+        guard let plan = wiki.plan else { return nil }
+        let maintenance = space.settings?.maintenance ?? .default
+        return WikiStartLogic.card(plan, context: WikiStartLogic.Context(
+            now: now, maintenance: maintenance.enabled,
+            readsFrom: model.wikiWorkspaceLabel(maintenance.workspaceId),
+            runnerOnline: model.wikiMaintenanceRunnerOnline(of: space), directory: wiki.docsDirectory))
+    }
+
+    /// What a step of the setup card offers: what the owner has to do is done from here — the form opens where they are,
+    /// a draft is asked for on the spot — and only the plan, which has to be read before it is confirmed, is another page.
+    private func act(_ to: WikiStartLogic.ActionTo, _ wiki: WikiModel) {
+        switch to {
+        case .setUp:   settingUp = true
+        case .draft:   Task { await draft(wiki) }
+        case .plan:    go(.plan)
+        case .runners: if let runner = model.wikiMaintenanceRunnerID { model.route(to: .runner(runner)) }
+        // Only the first card offers it, and that card has its own page.
+        case .create:  break
+        }
+    }
+
+    private func draft(_ wiki: WikiModel) async {
+        let answer = await wiki.redraftPlan(instructions: nil)
+        if let refusal = answer.refusal {
+            draftRefusal = refusal
+        } else {
+            model.showToast(answer.created ? WikiPlanCopy.redraftAsked : WikiPlanCopy.redraftAlready)
         }
     }
 
@@ -105,6 +159,7 @@ struct WikiHomeView: View {
             pickSpace: { slug in wiki.selectedSlug = slug },
             search: { query in await wiki.search(query) },
             openSettings: { open(.wikiSettings) },
+            openTrash: { open(.wikiTrash) },
             openContents: { contentsShown = true },
             openActivity: { open(.wikiActivity) },
             openShare: { sharing = true },
@@ -112,7 +167,8 @@ struct WikiHomeView: View {
             openArticle: { topic in go(.article(topic: topic, part: 0)) },
             openBrowse: { go(.browse) },
             openIndex: { go(.index) },
-            retry: { Task { await load(wiki) } })
+            retry: { Task { await load(wiki) } },
+            startAction: { to in act(to, wiki) })
     }
 
     /// A phone pushes the page; the three-column shells put it in the detail pane beside the directory.
@@ -125,8 +181,8 @@ struct WikiHomeView: View {
 }
 
 /// What stands where the home page — or Activity — would be: a spinner, the reason it could not be read,
-/// or — only after a read that succeeded — that there is no space yet, or that the wiki is off for this
-/// account.
+/// or — only after a read that succeeded — the setup card of an account with no space yet, or that the wiki is
+/// off for this account.
 struct WikiHomePlaceholder: View {
     let wiki: WikiModel
     /// The read the page waits on: the spaces list, for the home's head; Activity's own.
@@ -145,11 +201,28 @@ struct WikiHomePlaceholder: View {
                 Button("Retry") { Task { await retry() } }
             }
         } else if wiki.spacesState.hasLoaded && wiki.spaces.isEmpty {
-            ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
-                                   description: Text(WikiCopy.noSpaces))
+            WikiFirstStartScreen(wiki: wiki)
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+/// The Wiki of an account with no wiki (mock 41 ⑧): the same card, whose first step makes one. A wiki describes a
+/// repository, so with no workspace on one there is nothing to offer yet and the step says so — once the workspaces are
+/// read, so a first look does not say it of an account that has them. While Trash holds a wiki, the page says so and
+/// opens it (docs/mocks/wiki-trash): with no wiki left, that is the one way back to it.
+struct WikiFirstStartScreen: View {
+    @Environment(AppModel.self) private var model
+    let wiki: WikiModel
+
+    @State private var creating = false
+
+    var body: some View {
+        let workspaces = model.wikiWorkspacesLoading || model.wikiWorkspaceChoices.contains { $0.repository != nil }
+        WikiFirstStartPage(card: WikiStartLogic.firstCard(workspaces: workspaces), trashed: wiki.trash.count,
+                           openTrash: { model.push(.wikiTrash) }) { _ in creating = true }
+            .sheet(isPresented: $creating) { WikiCreateSheet(wiki: wiki) }
     }
 }
 
@@ -167,6 +240,8 @@ struct WikiDetailPane: View {
             WikiActivityView()
         } else if model.nav.wikiSettingsOnTop {
             WikiSettingsView()
+        } else if model.nav.wikiTrashOnTop {
+            WikiTrashView()
         } else if let run = model.nav.selectedWikiRunID {
             WikiRunView(changesetID: run).id(run)
         } else if let job = model.nav.selectedWikiJobID {
@@ -656,6 +731,10 @@ struct WikiReviewView: View {
     @State private var editing: WikiLogic.ReviewCard?
     /// A challenge whose Amend form is open.
     @State private var amending: WikiLogic.ReviewCard?
+    /// A challenge whose Retire… dialog is open, and the reason the dialog holds: the challenge's own until the
+    /// owner changes it.
+    @State private var retiring: WikiLogic.ReviewCard?
+    @State private var retireReason = ""
     @State private var notice: String?
 
     var body: some View {
@@ -698,6 +777,28 @@ struct WikiReviewView: View {
                     }
                 }
             }
+            // A challenge's Retire…: the entry page's own dialog, with what retiring does and that it cannot be undone,
+            // and the reason filled in from the challenge. Cancel goes first. The reason goes with the decide as its
+            // note, which the server records as the retirement's reason.
+            .alert(WikiCopy.retire, isPresented: Binding(get: { retiring != nil },
+                                                         set: { if !$0 { retiring = nil } }),
+                   presenting: retiring) { card in
+                TextField(WikiCopy.reasonPlaceholder, text: $retireReason)
+                Button("Cancel", role: .cancel) { retireReason = "" }
+                Button(WikiCopy.retireConfirm, role: .destructive) {
+                    let why = retireReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                    retireReason = ""
+                    guard !why.isEmpty else { return }
+                    Task {
+                        let answer = await wiki.decide(card, .retire, note: why)
+                        finish(answer, card: card, action: .retire)
+                    }
+                }
+                // A retirement says why, as the entry page's does: no reason, no Retire.
+                .disabled(retireReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } message: { _ in
+                Text(WikiCopy.retireNote)
+            }
             .alert(WikiCopy.decideFailed, isPresented: Binding(get: { notice != nil },
                                                           set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
@@ -719,7 +820,11 @@ struct WikiReviewView: View {
             },
             edit: { card in editing = card },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            amend: { card in amending = card })
+            amend: { card in amending = card },
+            retire: { card in
+                retireReason = card.op.payload?["reason"]?.stringValue ?? ""
+                retiring = card
+            })
     }
 
     /// A refusal opens the alert with the server's reason; an answer that landed is floated.
@@ -744,7 +849,7 @@ struct WikiReviewView: View {
 /// A challenge's Amend: the owner's version of the entry it names — its title and one line — written
 /// as the owner's revision; the anchors are checked again (contract `anchorRules.verify.answers.amend`).
 /// Only what changed is sent, and with nothing changed the answer waits: an Amend that changes nothing
-/// is a Re-confirm.
+/// is a Keep.
 private struct WikiChallengeAmendForm: View {
     let entry: WikiEntry
     /// The answer: nil once it landed and the form can close, else the refusal, which stays here.

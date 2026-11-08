@@ -67,6 +67,7 @@ import { criteriaDecisionReplyTurnId } from './criteria-decision-reply';
 import { derivedUuid } from './project-dispatch-identity';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsService } from './projects.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;

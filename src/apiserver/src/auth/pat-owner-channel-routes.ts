@@ -23,6 +23,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:id/done',
   'POST /projects/:id/pause',
   'POST /projects/:id/resume',
+  // Complete on a finished project's row (session-list-projects-design §3.6): it refuses an acting
+  // session, as pause and resume do.
+  'POST /projects/:id/sessions/complete',
   'POST /projects/:id/done-requests/:itemId/decline',
   // These answer what was put to the owner, on a door no agent has: the commitToken that decides a
   // held criteria change, the fuse that stopped a coordinator, the items escalated to the owner.
@@ -55,6 +58,12 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/changesets/:id/decide',
   'POST /wiki/changesets/:id/revert',
   'POST /wiki/spaces/:id/verifications/reopen',
+  'POST /wiki/spaces/:id/workspaces',
+  'DELETE /wiki/spaces/:id/workspaces/:workspaceId',
+  'DELETE /wiki/spaces/:id',
+  'POST /wiki/spaces/:id/restore',
+  'DELETE /wiki/spaces/:id/purge',
+  'GET /wiki/trash',
   'GET /wiki/changesets/:id',
   'GET /wiki/spaces/:id/plan',
   'GET /wiki/spaces/:id/plan/versions',
@@ -64,4 +73,21 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/plan/redraft',
   'POST /wiki/spaces/:id/plan/versions/:version/build',
   'POST /wiki/plan-proposals/:id/decide',
+  // The owner's restore of a version a section kept (contract `docs.versions.restore`): the user door's one write to a
+  // document, which refuses an acting session WIKI_OWNER_CHANNEL_ONLY as the plan's routes do.
+  'POST /wiki/doc-versions/:id/restore',
+  // Making a wiki chat (contract `chat.door`): the owner's interactive credential's, as the binding writes are.
+  'POST /wiki/spaces/:id/chats',
+  // The six presses of a chat's card (contract `chat.presses`): the owner's alone, as decide is.
+  'POST /wiki/chat-drafts/:id/apply',
+  'POST /wiki/chat-drafts/:id/edit',
+  'POST /wiki/chat-drafts/:id/discard',
+  'POST /wiki/chat-drafts/:id/undo',
+  'POST /wiki/chat-drafts/:id/retry',
+  'POST /wiki/chat-drafts/:id/seen',
+  // Connecting a Feishu group, and changing or removing one (docs/feishu-bot-design.md §8.1, §8.3): each lets people in
+  // the group start agents on the owner's machines, in the mode the owner chose.
+  'POST /integrations/feishu/chats/confirm',
+  'PATCH /integrations/feishu/chats/:id',
+  'DELETE /integrations/feishu/chats/:id',
 ];

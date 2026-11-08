@@ -86,6 +86,11 @@ export interface WikiVerifyTarget {
    * adopting as its job, of the space's ended jobs other than its own. Its verdicts are reported as adopted.
    */
   adopt?: boolean;
+  /**
+   * Only the ops that came from an agent's note (true), or only the others (false); undefined is every one. A maintenance
+   * run verifies its extraction's first, so that what those make live is there for a note's op to be a duplicate of.
+   */
+  promptedBy?: boolean;
   /** Verify at most this many ops; 0 or undefined is every one of them. */
   max?: number;
   /**
@@ -161,7 +166,7 @@ export async function verifyWikiOps(
   const max = target.max ?? 0;
   let after: string | null = null;
   for (;;) {
-    const page = await readPage(wiki, principal, context.job.spaceId, after, target.adopt === true);
+    const page = await readPage(wiki, principal, context.job.spaceId, after, target.adopt === true, target.promptedBy);
     report.mode = page.mode;
     if (page.mode !== 'automatic') {
       if (page.items.length > 0) {
@@ -276,9 +281,10 @@ async function readPage(
   spaceId: string,
   after: string | null,
   adopt: boolean,
+  promptedBy?: boolean,
 ): Promise<{ mode: string; items: WikiVerificationItem[]; next: string | null }> {
   try {
-    const page = await wiki.listVerifications(principal, spaceId, { after, limit: WIKI_VERIFY_JOB.pageSize, adopt });
+    const page = await wiki.listVerifications(principal, spaceId, { after, limit: WIKI_VERIFY_JOB.pageSize, adopt, promptedBy });
     return { mode: page.mode, items: page.items, next: page.next };
   } catch (error) {
     throw asContent(error, 'the verification list could not be read');

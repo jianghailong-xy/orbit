@@ -39,7 +39,7 @@
 // confirmed: design D1 and section 11.5 put the gateway in Compose, its coordinator filed the service) added one more
 // service, link-gateway: the WebSocket endpoint runners connect to directly, on a port of its own. It is given the token
 // signing key's public half and the gateway's secret, never the signing key itself, and no database, Docker socket or
-// host network, under a profile of its own that no install switches on, whose whole definition (o) pins. A deployment
+// host network, under a profile of its own that no install switched on then, whose whole definition (o) pins. A deployment
 // whose .env does not name that profile runs exactly what it ran.
 //
 // On 2026-10-25 the runner link's hints (project 34bc0CsOzPh9KshG7H3DW, task B1, of the plan the account owner confirmed:
@@ -85,13 +85,46 @@
 // environment: TRUSTED_PROXIES, the proxies in front of the gateway that a visitor's address is read through, empty
 // unless the host's .env sets it. No service, mount or port is added, and a deployment whose .env does not name it reads
 // every visitor's address exactly as before.
+//
+// On 2026-11-02 Orbit Files' storage layer (project 34qIISTdcSurVokwRlp4w, task T1 34qId87cYLgqqL3UPTPMW, of the design the
+// account owner approved that day, docs/orbit-files-design.md §2.10) moved attachment bytes out of Postgres into a store
+// named by sha256, and added to the apiserver six lines of environment — the store (local unless the host's .env says s3)
+// and the S3-compatible bucket's endpoint, bucket, key pair and region, each empty unless .env sets it — and one bind
+// mount, ./data/files, the local store's directory, beside ./data/postgres as the design asks. No service or port is
+// added. The two blocks below pin those lines.
+//
+// On 2026-11-02 Orbit Files' off-host copy (project 34qIISTdcSurVokwRlp4w, task T10 34qNRF5OyfOW3hQ6J0NF3, of the same
+// design, whose §2.10 has the backup sidecar sync ./data/files; its coordinator filed this mount) gave pgbackup one
+// read-only bind mount of ./data/files, so that scripts/pg-backup.sh can copy attachment bytes off the host. No service,
+// port or environment is added, and with no ORBIT_BACKUP_SYNC_TARGET nothing reads the mount. (r) pins the line.
+//
+// On 2026-11-03 Orbit Files' retention (project 34qIISTdcSurVokwRlp4w, task T9 34qId8ccRB4cbKVh8Bws1, of the same design,
+// whose §2.8 and §2.10 ask for a per-account quota and a grace period no shorter than the Postgres backup retention; its
+// coordinator approved this pin) added three lines to the apiserver's environment: the quota, empty unless the host's .env
+// sets it, and the two values pgbackup keeps base backups by, with pgbackup's own defaults, so that the grace period reads
+// the same numbers rather than a second one that could drift. No service, mount or port is added, and pgbackup's block is
+// unchanged. The block below pins them.
+//
+// On 2026-11-05 the account owner decided that a default install and an upgrade bring the runner link up before task D2
+// deletes the HTTPS work path (project 34bc0CsOzPh9KshG7H3DW, task 34sREuYT2DCEXiW6qZuOh; its coordinator approved this
+// pin): the runner-link profile is now what scripts/install-server.sh and /upgrade switch on in .env for a deployment with
+// no link. No service is added. link-gateway gains two things, so that its gateway can sit behind the web gateway's port:
+// env_file, /dev/null unless .env names deploy/runner-link/behind-web-gateway.env, which turns its TLS off and lifts its
+// limit per address, and a bind address on its port, empty unless .env sets it. A deployment that sets neither renders
+// the service with the same config hash as before, so Compose recreates nothing: (o) pins the lines and
+// test/upgrade-runner-link.test.mjs the rendering.
+//
+// Task D2 (34bsPmWGZjo7CPt4BFI5G), which the owner confirmed on 2026-11-05, deletes the HTTPS work path, so the same task's
+// guard (the coordinator's decision of that day) makes the apiserver's signing key required: a deployment with no link gets
+// a refusal from Compose naming what to run, and /upgrade's script reads the requirement as the mark of a link-only build.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const COMPOSE = 'docker-compose.yml';
@@ -122,9 +155,12 @@ const SURVIVING_CONFIGURATION_SHA = 'a68a3fe8774e4f181b9584443bfaeb1dca39547e';
 // 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. a2adab1d then
 // adds `-c jit=off` and the one comment line that explains it: production already ran jit = off for its
 // role and database, and the bundled Postgres JIT-compiled the dispatch sweep's scan.
-// docs/postgres-runtime-settings.md §10 records that approval (2026-11-01). Postgres alone is compared
+// docs/postgres-runtime-settings.md §10 records that approval (2026-11-01). 4695c8db then adds
+// `-c shared_buffers=4GB` and `-c effective_cache_size=12GB` and the three comment lines that explain them:
+// production had run both since 2026-11-06, set with ALTER SYSTEM, and the account owner asked that day for
+// them to be committed; docs/postgres-runtime-settings.md §11 records it. Postgres alone is compared
 // with this pin; every other service keeps the pin it had. New settings still require an explicit review.
-const POSTGRES_CONFIGURATION_SHA = 'a2adab1d49ab991d4fcebe2b305ddc12d7c98f8e';
+const POSTGRES_CONFIGURATION_SHA = '4695c8db4f43f242270b40f727e8f1eab70c3933';
 
 const EXPECTED_SERVICES = ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'];
 // Added by the account owner on 2026-10-07 (see the top of this file), after every pinned commit above.
@@ -292,7 +328,8 @@ function directivesNotInBaseline(block, baselineBlock) {
   return unaccounted;
 }
 
-// Unlike postgres and gateway, these three carry no relative bind mount to fence off, so the
+// Unlike postgres and gateway, these three carry no relative bind mount to fence off — but for the
+// apiserver's ./data/files, which is pinned line for line among its approved blocks below — so the
 // guarantee here is one-directional on purpose: nothing beyond the fixed configuration may be
 // added to a surviving service, while
 // a directive the repository has genuinely stopped needing is free to leave and the prose around
@@ -319,7 +356,7 @@ const APPROVED_APISERVER_BLOCKS = [
   // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
   // Listed before the managed runners' because the lines come before theirs in the file.
   [
-    '      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"',
+    '      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:?this build serves runners only over the runner link, and this deployment has none. Run .claude/skills/upgrade/upgrade.sh, which sets it up. docs/self-hosting.md, Runner link}"',
     '      RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"',
     '      RUNNER_LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"',
   ],
@@ -343,6 +380,24 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
   ],
+  // Orbit Files' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
+  // bucket's endpoint, bucket, key pair and region, each empty unless .env sets it. It comes after the releases' line in
+  // the file, and before the managed runners'.
+  [
+    '      ORBIT_FILES_BACKEND: "${ORBIT_FILES_BACKEND:-local}"',
+    '      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"',
+    '      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"',
+    '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
+    '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
+    '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+  ],
+  // Orbit Files' quota and grace period (2026-11-03, the top of this file): the quota, empty unless the host's .env sets it,
+  // and pgbackup's two retention values with its own defaults. They come right after the store's lines in the file.
+  [
+    '      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"',
+    '      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"',
+    '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"',
+  ],
   // Managed runners on this host's Docker (2026-10-17, the top of this file): the switch, off unless the
   // host's .env says true; the profile's fixed path; and the directory holding the profile and the Docker
   // channel's token and socket, read-only, with /dev/null standing in where .env names none, so that an
@@ -353,6 +408,12 @@ const APPROVED_APISERVER_BLOCKS = [
     '    volumes:',
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
   ],
+  // Orbit Files' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
+  // mount of ./data/files beside ./data/postgres. It is the next entry of the managed runners' `volumes:`, before the name
+  // every apiserver answers to.
+  [
+    '      - ./data/files:/var/lib/orbit/files',
+  ],
   // The name every apiserver answers to (2026-10-28, the top of this file), which the web gateway's routes for several
   // apiservers reach them by. It comes after the managed runners' lines in the file, behind the port the service exposes.
   [
@@ -362,11 +423,27 @@ const APPROVED_APISERVER_BLOCKS = [
   ],
 ];
 const APPROVED_APISERVER_ADDITIONS = APPROVED_APISERVER_BLOCKS.flat();
+// Orbit Files' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
+const PGBACKUP_FILES_MOUNT = '      - ./data/files:/var/lib/orbit/files:ro';
+// The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
+// service. Each is found by its LAST line: `      - -c` opens every setting, so a block's first line would find the
+// command's first setting instead. Only its lines and the comment directly above them go, up to the directive before
+// that comment, so the work_mem and JIT comments above jit=off still count.
+const APPROVED_POSTGRES_BLOCKS = [
+  // shared_buffers and effective_cache_size (2026-11-06, POSTGRES_CONFIGURATION_SHA above), right after jit=off.
+  [
+    '      - -c',
+    '      - shared_buffers=4GB',
+    '      - -c',
+    '      - effective_cache_size=12GB',
+  ],
+];
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
-  for (const name of ['pgbackup', 'apiserver', 'web']) {
+  const approved = { pgbackup: [PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: [] };
+  for (const [name, additions] of Object.entries(approved)) {
     assert.deepEqual(
       directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)),
-      name === 'apiserver' ? APPROVED_APISERVER_ADDITIONS : [],
+      additions,
       `${name} declares something the baseline did not: adding to a surviving service is forbidden`);
   }
 });
@@ -395,7 +472,7 @@ function withoutService(source, name) {
  */
 function withoutApprovedAdditions(source) {
   let lines = source.split('\n');
-  for (const block of APPROVED_APISERVER_BLOCKS) {
+  for (const block of [...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT]]) {
     const first = lines.indexOf(block[0]);
     assert.ok(first > 0, `docker-compose.yml no longer has the approved ${block[0].trim()}`);
     const last = lines.indexOf(block[block.length - 1], first);
@@ -405,13 +482,22 @@ function withoutApprovedAdditions(source) {
     while (from > 0 && /^\s*#/.test(lines[from - 1])) from -= 1;
     lines = [...lines.slice(0, from), ...lines.slice(last + 1)];
   }
+  for (const block of APPROVED_POSTGRES_BLOCKS) {
+    const last = lines.indexOf(block[block.length - 1]);
+    assert.ok(last > 0, `docker-compose.yml no longer has the approved postgres ${block[block.length - 1].trim()}`);
+    const first = last - (block.length - 1);
+    assert.deepEqual(lines.slice(first, last + 1), block);
+    let from = first;
+    while (from > 0 && /^\s*#/.test(lines[from - 1])) from -= 1;
+    lines = [...lines.slice(0, from), ...lines.slice(last + 1)];
+  }
   return lines.join('\n');
 }
 
 // The sidecar removal stays subtraction. The wiki worker the owner added on 2026-10-07 and the Docker
 // channel of 2026-10-17 are services of their own, whose every line (l) and (m) pin, and the apiserver's
-// approved blocks are pinned beside them; all are set aside here, so that a line added anywhere else still
-// turns this red exactly as it did before those decisions.
+// approved blocks are pinned beside them, as postgres's are by (i); all are set aside here, so that a line added
+// anywhere else still turns this red exactly as it did before those decisions.
 test('(k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained', () => {
   const rest = withoutApprovedAdditions(withoutService(withoutService(
     withoutService(withoutService(withoutService(current, WIKI_WORKER), DOCKER_CHANNEL), MANAGED_RUNNER_FIREWALL),
@@ -431,11 +517,11 @@ test('(k) removing the sidecars is subtraction: setting the approved wiki worker
   }
   assert.ok(rest.split('\n').length < baseline.split('\n').length);
   // And only the two approved services and the approved additions were set aside: every other service —
-  // the apiserver's own added lines are what the test above pins, line by line — reads exactly as it does in
-  // the file, so this test cannot pass by quietly rewriting something else.
+  // the apiserver's own added lines and pgbackup's are what the test above pins, line by line, and postgres's what (i)
+  // pins — reads exactly as it does in the file, so this test cannot pass by quietly rewriting something else.
   assert.deepEqual(
     new Map([...services(rest)].filter(([name]) => name !== 'apiserver')),
-    new Map([...services(current)].filter(([name]) => !['apiserver', ...APPROVED_ADDITIONS].includes(name))));
+    new Map([...services(withoutApprovedAdditions(current))].filter(([name]) => !['apiserver', ...APPROVED_ADDITIONS].includes(name))));
 });
 
 // The definition the owner approved on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), every
@@ -592,6 +678,7 @@ test('(o) the runner link gateway is exactly the service the runner link project
     '    image: orbit-link-gateway:local',
     '    container_name: orbit-link-gateway',
     '    restart: unless-stopped',
+    '    env_file: ["${RUNNER_LINK_ENV_FILE:-/dev/null}"]',
     '    stop_grace_period: 90s',
     '    read_only: true',
     '    cap_drop: [ALL]',
@@ -609,7 +696,7 @@ test('(o) the runner link gateway is exactly the service the runner link project
     '      LINK_ACME_EMAIL: "${RUNNER_LINK_ACME_EMAIL:-}"',
     '      LINK_ACME_CACHE_DIR: /var/lib/orbit-link-gateway/acme',
     '    ports:',
-    '      - "${RUNNER_LINK_PORT:-8443}:8443"',
+    '      - "${RUNNER_LINK_BIND:-}:${RUNNER_LINK_PORT:-8443}:8443"',
     '      - "127.0.0.1:${RUNNER_LINK_METRICS_PORT:-9464}:9464"',
     '    volumes:',
     '      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"',
@@ -725,4 +812,146 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
   const command = directives(currentServices.get(NATS)).find((line) => /^\s+command:/.test(line));
   assert.equal(command, '    command: ["--config", "/etc/orbit-nats/nats.conf"]');
   assert.doesNotMatch(command, /"-(?:V|D|DV|VV|DVV)"|--trace|--debug/);
+});
+
+// The files directory since Orbit Files (see the top of this file): the apiserver writes it, the backup sidecar reads it
+// and nothing else sees it. A writable mount in the sidecar could damage the only local copy of every attachment.
+test('(r) ./data/files is the apiserver\'s to write and pgbackup\'s to read, and no other service mounts it', () => {
+  const mounts = { apiserver: ['      - ./data/files:/var/lib/orbit/files'], pgbackup: [PGBACKUP_FILES_MOUNT] };
+  for (const [name, block] of currentServices) {
+    const given = directives(block).filter((line) => /- .*(\.\/data(\/files)?:|:\/var\/lib\/orbit\/files)/.test(line));
+    assert.deepEqual(given, mounts[name] ?? [], `${name} and the files directory`);
+  }
+});
+
+/**
+ * One round of scripts/pg-backup.sh's loop on a scratch archive and files directory. Every tool it runs is a stub on PATH:
+ * rsync records each call and fails for the destination `failing` names, and sleep fails, which ends the script under
+ * `set -e` once the round is done, with its status: 7 means the loop got that far. `files`, the entries of the files
+ * directory, may be null for a directory that is not there. `wal` is whether Postgres has written to this archive, and
+ * `backups` whether pg_basebackup works.
+ */
+function backupRound({ target = '', files = [], failing = '', wal = true, backups = true } = {}) {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'pg-backup-round-'));
+  try {
+    const stubs = path.join(scratch, 'stubs');
+    const filesDir = path.join(scratch, 'files');
+    const calls = path.join(scratch, 'rsync-calls');
+    mkdirSync(stubs);
+    for (const [name, body] of Object.entries({
+      psql: 'echo 0',
+      pg_basebackup: backups ? 'for arg; do case "$arg" in --pgdata=*) mkdir -p "${arg#--pgdata=}" ;; esac; done' : 'exit 1',
+      pg_archivecleanup: ':',
+      ssh: ':',
+      sleep: 'exit 7',
+      rsync: `printf '%s\\n' "$*" >> '${calls}'
+for last; do :; done
+[ "$last" != '${failing}/' ] || { echo 'connection refused' >&2; exit 12; }`,
+    })) writeFileSync(path.join(stubs, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+    if (files) {
+      mkdirSync(filesDir);
+      for (const entry of files) mkdirSync(path.join(filesDir, entry));
+    }
+    const cutShort = path.join(scratch, 'archive/base/.staging-20260101T000000Z');
+    mkdirSync(cutShort, { recursive: true });
+    mkdirSync(path.join(scratch, 'archive/wal'));
+    // A segment of the cluster the psql stub answers for: the zeros it prints are also this header's system identifier.
+    if (wal) writeFileSync(path.join(scratch, 'archive/wal/000000010000000000000001.gz'), gzipSync(Buffer.alloc(32)));
+    const round = spawnSync('sh', ['scripts/pg-backup.sh'], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: {
+        PATH: `${stubs}:${process.env.PATH}`,
+        ORBIT_ARCHIVE_DIR: path.join(scratch, 'archive'),
+        ORBIT_FILES_DIR: filesDir,
+        ORBIT_BACKUP_SYNC_TARGET: target,
+        ORBIT_BACKUP_MIN_FREE_MB: '0',
+      },
+    });
+    let rsyncCalls = [];
+    try {
+      // What it copies. It also reads the target first, which the stub answers as empty: test/pg-backup-offhost.test.mjs
+      // holds what it does with a real one.
+      rsyncCalls = readFileSync(calls, 'utf8').trim().split('\n').filter((call) => !call.includes('--list-only'));
+    } catch (error) {
+      assert.equal(error.code, 'ENOENT');
+    }
+    return { status: round.status, log: round.stdout + round.stderr, rsyncCalls, cutShortLeft: existsSync(cutShort) };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+const SYNC_TARGET = 'root@backup-host:/data/backup/orbit-pg-archive';
+const FILES_SYNC_TARGET = `${SYNC_TARGET}-files`;
+
+test('(r) with no off-host target the sidecar copies nothing, whatever the files directory holds', () => {
+  const { status, log, rsyncCalls } = backupRound({ files: ['ab', 'tmp'] });
+  assert.equal(status, 7, log);
+  assert.match(log, /completed base backup/);
+  assert.doesNotMatch(log, /ERROR/);
+  assert.deepEqual(rsyncCalls, []);
+});
+
+test('(r) a base backup cut short by a stopped container does not outlive it', () => {
+  const { status, log, cutShortLeft } = backupRound();
+  assert.equal(status, 7, log);
+  assert.equal(cutShortLeft, false);
+});
+
+test('(r) the sidecar copies the files after the archive, beside its target, with no --delete and without tmp/', () => {
+  const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files: ['ab', 'tmp'] });
+  assert.equal(status, 7, log);
+  assert.doesNotMatch(log, /ERROR/);
+  assert.equal(rsyncCalls.length, 3, log);
+  const [wal, archive, files] = rsyncCalls;
+  assert.ok(wal.endsWith(` ${SYNC_TARGET}/`), wal);
+  assert.doesNotMatch(wal, /--delete/);
+  assert.ok(archive.endsWith(` ${SYNC_TARGET}/`), archive);
+  assert.match(archive, /--delete/);
+  assert.ok(files.endsWith(` ${FILES_SYNC_TARGET}/`), files);
+  assert.doesNotMatch(files, /--delete/);
+  assert.match(files, / --exclude \/tmp\/ /);
+  // A target written with its trailing slash names the same two directories.
+  const slashed = backupRound({ target: `${SYNC_TARGET}/`, files: ['ab'] });
+  assert.ok(slashed.rsyncCalls[2].endsWith(` ${FILES_SYNC_TARGET}/`), slashed.rsyncCalls[2]);
+});
+
+test('(r) a files directory with nothing but tmp/ has nothing to copy, as with ORBIT_FILES_BACKEND=s3, and that is no error', () => {
+  for (const files of [['tmp'], []]) {
+    const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files });
+    assert.equal(status, 7, log);
+    assert.doesNotMatch(log, /ERROR/);
+    assert.equal(rsyncCalls.length, 2, log);
+    assert.ok(rsyncCalls.every((call) => call.endsWith(` ${SYNC_TARGET}/`)), rsyncCalls.join('\n'));
+  }
+});
+
+test('(r) a files directory that is not there is still tried, so that a container missing its mount says so', () => {
+  const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files: null });
+  assert.equal(status, 7, log);
+  assert.equal(rsyncCalls.length, 3, log);
+});
+
+test('(r) the mirror refuses an archive that cannot be the real one, so that --delete cannot empty its target', () => {
+  // An empty mount under a healthy Postgres: this round's own base backup lands in it, and Postgres writes no WAL there.
+  for (const archive of [{ wal: false }, { backups: false }, { wal: false, backups: false }]) {
+    const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files: ['ab'], ...archive });
+    assert.equal(status, 7, log);
+    assert.ok(log.includes(`ERROR: refusing off-host sync to ${SYNC_TARGET}:`), log);
+    assert.deepEqual(rsyncCalls.filter((call) => call.includes('--delete')), [], log);
+    // The files copy deletes nothing, so it still goes.
+    assert.equal(rsyncCalls.length, 1, log);
+    assert.ok(rsyncCalls[0].endsWith(` ${FILES_SYNC_TARGET}/`), rsyncCalls[0]);
+  }
+});
+
+test('(r) a failed off-host copy is logged and costs neither the other copy nor the base backup', () => {
+  for (const [failing, other] of [[FILES_SYNC_TARGET, SYNC_TARGET], [SYNC_TARGET, FILES_SYNC_TARGET]]) {
+    const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files: ['ab'], failing });
+    assert.equal(status, 7, log);
+    assert.match(log, /completed base backup/);
+    assert.ok(log.includes(`ERROR: off-host sync to ${failing} failed: connection refused`), log);
+    assert.ok(rsyncCalls.some((call) => call.endsWith(` ${other}/`)), rsyncCalls.join('\n'));
+  }
 });

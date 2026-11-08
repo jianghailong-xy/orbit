@@ -419,32 +419,36 @@ export class SessionsController {
     };
     // The Open list is polled every few seconds with the last ETag. Answer that from the data
     // version (open-list-version.ts) before building anything: on a hit nothing is read or
-    // serialized. The 304 is ended here rather than left to Express's `req.fresh`, which refuses
-    // any request carrying `Cache-Control: no-cache` (as fetch() adds to every conditional one);
-    // what Nest sends after it is a no-op on a finished response. Other views keep Express's
-    // body-hash ETag. A landing-aware read is a different list, so it has its own version scope:
-    // an insert or a settlement moves that one and leaves the plain list's where it was.
-    // A plain project read (`projectId` without `includeLanding`) is built every time instead: a
-    // workspace list sends one for each project it shows, every 4 s while its stream is down, and
-    // the version reads the whole account (~230 ms on 6.7k sessions) to spare a few rows that take
-    // milliseconds — one such tab was most of production's database time on 2026-10-20.
-    if (res && isOpenListView(view) && (projectId === undefined || withLanding)) {
-      const etag = openListEtag(await this.sessions.openListVersion(user.userId, withLanding), {
+    // serialized. The 304 is decided here rather than left to Express's `req.fresh`, which refuses
+    // any request carrying `Cache-Control: no-cache` (as fetch() adds to every conditional one).
+    // It is only set, not ended: Nest calls `res.send()` once this handler returns, and that call
+    // sends the 304. Had the response already ended, that call would throw ERR_HTTP_HEADERS_SENT
+    // (`send` removes headers from every 304), and ExceptionsHandler would log it on each poll.
+    // Other views keep Express's body-hash ETag.
+    // A project read is built every time instead, landing-aware or not: a workspace list sends one
+    // for each project it shows, every 4 s while its stream is down, and the version reads the whole
+    // account (~230 ms on 6.7k sessions) to spare a few rows that take milliseconds — one such tab
+    // was most of production's database time on 2026-10-20. The landing-aware read (the project
+    // page's own) is a few rows too: the account-wide version answered only ~5% of its polls with
+    // 304, so it now keeps Express's body-hash ETag like the plain one, and pays no version at all.
+    let version: string | undefined;
+    if (res && isOpenListView(view) && projectId === undefined) {
+      version = await this.sessions.openListVersion(user.userId);
+      const etag = openListEtag(version, {
         runnerId: filters.runnerId,
         workspaceId: filters.workspaceId,
         tagId,
-        projectId,
-        includeLanding: withLanding ? 1 : undefined,
         confinedTo: confinedTo?.join(','),
         limit: filters.limit,
       });
       res.setHeader('ETag', etag);
       if (ifNoneMatchHits(ifNoneMatch, etag)) {
-        res.status(304).end();
+        res.status(304);
         return undefined;
       }
     }
-    return this.sessions.list(user.userId, filters);
+    // Built once per version for every read that asks at it (SessionsService.sharedOpenList).
+    return this.sessions.list(user.userId, filters, version);
   }
 
   // Per-workspace Open-session tallies for the nav sidebar's attention badges. Also above
@@ -775,6 +779,14 @@ export class SessionsController {
     return this.sessions.commitWorktree(user.userId, id);
   }
 
+  /** Throw away a finished session's uncommitted checkout work, so its checkout can be
+   *  reclaimed (the Discard beside the runner page's abandoned-checkout list). */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/checkout/discard')
+  discardCheckout(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.discardCheckout(user.userId, id);
+  }
+
   /** Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
    *  session's tracked branch, so Merge/diff act on the real work instead of a stale "In main". */
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
@@ -935,7 +947,7 @@ export class SessionsController {
     @Param('approvalId', PublicIdPipe) approvalId: string,
     @Body() dto: ApprovalDecisionRequest,
   ) {
-    return this.sessions.decideApproval(user.userId, id, approvalId, dto);
+    return this.sessions.decideApproval(user.userId, id, approvalId, dto, user.credential);
   }
 
   /**

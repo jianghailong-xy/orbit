@@ -32,7 +32,10 @@
  * Not destructive: every row belongs to a user this run creates.
  */
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
@@ -40,10 +43,13 @@ import { uuidToBase62 } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
+import { uploadExpiry } from '../files/file-retention';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { openItemsNoLongerOwed } from '../projects/project-open-item';
 import { RUNNER_DELETE_APPROVAL_TOOL_NAME, WORKSPACE_DELETE_APPROVAL_TOOL_NAME } from '../runner-api/runner-delete-approval';
+import { workspaceWriteDigest } from '../runner-api/runner-workspace-approval';
+import { WORKSPACE_CREATE_APPROVAL_TOOL_NAME, WORKSPACE_UPDATE_APPROVAL_TOOL_NAME } from '../sessions/workspace-write-card-values';
 import { call, startApiserver, type Apiserver, type Reply } from './pat-test-apiserver';
 import { type Tenant, type TenantRequest } from './tenant-isolation-cases';
 import {
@@ -67,6 +73,8 @@ import {
   type SharedCase,
   type SharedLinkKind,
 } from './tenant-isolation-runner-cases';
+import '../test-support/daemon-routes-over-http';
+import { sessionLease } from '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -95,10 +103,14 @@ test('tenant isolation: past the runner gate and through the share links, anothe
   await sql.connect();
   const db: PrismaClient = prismaClientFor(url);
   let server: Apiserver | undefined;
+  // Where the server keeps the files it is sent (ORBIT_FILES_DIR, files/file-store.ts): this run's own directory, so an
+  // owner's upload is kept and a refused one is seen removed, whatever the host's /var/lib allows.
+  const filesDir = mkdtempSync(path.join(tmpdir(), 'tenant-isolation-files-'));
   t.after(async () => {
     await server?.stop();
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
+    rmSync(filesDir, { recursive: true, force: true });
   });
   await verifyCoordinatorPgIdentity(sql);
   process.env.PROVIDER_SECRET_KEY = PROVIDER_SECRET_KEY;
@@ -110,6 +122,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     PROVIDER_SECRET_KEY,
     // No reaching models.dev from a spec: the catalogue keeps the lists this build shipped.
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
+    ORBIT_FILES_DIR: filesDir,
   });
   const fixtures = censusFixtures({ run: RUN, db, sql, server, jwt });
   const { account, tenant, ok, idOf } = fixtures;
@@ -133,7 +146,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
   const send = (who: Holder, as: RunnerCredential | 'none', route: string, request: TenantRequest): Promise<Reply> => {
     const { bearer, headers } = credentialed(who, as, request);
     return request.file
-      ? upload(server!, methodOf(route), pathOf(route, request), { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}), ...headers }, request.file)
+      ? upload(server!, methodOf(route), pathOf(route, request), { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}), ...headers }, request.file, request.fields)
       : call(server!, methodOf(route), pathOf(route, request), bearer, request.body, headers);
   };
 
@@ -167,6 +180,25 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       });
       return id;
     };
+    /**
+     * A `file_upload` of the session's, its bytes kept: what a folder bundle is made of. Dated as the upload route dates one
+     * (`uploadExpiry`): an undated upload is what the retention sweep's first tick dates a minute after the apiserver started
+     * (`FileRetentionSweep.dateUndatedFiles`) — a write of A's the trap pinned on whichever request was in flight, and then
+     * found again late, whenever the census was still asking by then.
+     */
+    const uploadOf = async (sessionId: string) => {
+      const id = randomUUID();
+      const sha256 = createHash('sha256').update('census').digest('hex');
+      await db.fileBlob.upsert({ where: { sha256 }, create: { sha256, sizeBytes: 6, storage: 'local' }, update: {} });
+      const createdAt = new Date();
+      await db.attachment.create({
+        data: {
+          id, ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', sha256, retention: 'file_upload',
+          createdAt, expiresAt: uploadExpiry(createdAt),
+        },
+      });
+      return id;
+    };
     const eventOf = (sessionId: string) =>
       db.runEvent.create({ data: { sessionId, seq: 1, type: 'assistant_text', payload: { text: 'the census was here' } } });
 
@@ -194,12 +226,19 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const leaseGeneration = randomUUID();
     const activateSessionId = await open('activate session', { status: 'RUNNING', inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: leaseGeneration });
     const inboxSessionId = await open('inbox session', { status: 'RUNNING' });
+    const inboxLeaseGeneration = await sessionLease(db, inboxSessionId);
     await turnOf(inboxSessionId, { kind: 'interrupt', status: 'PENDING' });
     const turnSessionId = await open('turn session', { status: 'RUNNING' });
     const shellTurnId = await turnOf(turnSessionId, { kind: 'shell', status: 'IN_FLIGHT', content: 'true', deliveredAt: new Date() });
     const finalizeSessionId = await open('finalize session', { status: 'RUNNING' });
-    const completeSessionId = await open('complete session', { status: 'RUNNING' });
     const sessionAttachmentId = await fileOf({ sessionId: machineSessionId });
+    const uploadedFileId = await uploadOf(machineSessionId);
+    const { id: evidenceRevisionId } = await db.taskCompletionEvidence.findFirstOrThrow({ where: { taskId: of.evidenceTaskId }, select: { id: true } });
+    // Cited by that revision, so that the doors reading a session's files are also asked about a file evidence cites, the
+    // one thing that reaches beyond the session (FilesService.readableInSession).
+    await db.attachment.update({ where: { id: sessionAttachmentId }, data: { evidenceId: evidenceRevisionId } });
+    const runningTaskId = await task('task the machine is running');
+    const runningTaskSessionId = await open('session running a task', { status: 'RUNNING', taskId: runningTaskId });
     const allowedApprovalId = randomUUID();
     await db.approval.create({ data: { id: allowedApprovalId, sessionId: machineSessionId, toolName: 'Bash', input: { command: 'true' }, status: 'ALLOWED' } });
     // The owner's yes, in the calling session, to deleting the spare runner and the spare workspace:
@@ -210,6 +249,21 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     ] as const) {
       await db.approval.create({
         data: { sessionId: callingSessionId, toolName, input, status: 'ALLOWED', decidedAt: new Date(), decidedById: ownerId },
+      });
+    }
+    // The same for the writes the census sends that name a runner: its own request, one yes each, since
+    // each spends the card it finds (runner-api/runner-workspace-approval.ts). PATCH goes under both names.
+    for (const [toolName, workspaceId, write] of [
+      [WORKSPACE_CREATE_APPROVAL_TOOL_NAME, null, { name: 'census workspace', runnerId: of.runnerId }],
+      [WORKSPACE_CREATE_APPROVAL_TOOL_NAME, null, { name: 'census agent', runnerId: of.runnerId }],
+      [WORKSPACE_UPDATE_APPROVAL_TOOL_NAME, of.workspaceId, { runnerId: of.runnerId }],
+      [WORKSPACE_UPDATE_APPROVAL_TOOL_NAME, of.workspaceId, { runnerId: of.runnerId }],
+    ] as const) {
+      await db.approval.create({
+        data: {
+          sessionId: callingSessionId, toolName, status: 'ALLOWED', decidedAt: new Date(), decidedById: ownerId,
+          input: { writeSalt: 'census', writeDigest: workspaceWriteDigest('census', workspaceId, write) },
+        },
       });
     }
     const artifactRequestId = await turnOf(machineSessionId, {
@@ -369,8 +423,9 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     return {
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
       landingSessionId,
-      takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, turnSessionId, shellTurnId,
-      finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId, landingTaskId,
+      takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, inboxLeaseGeneration, turnSessionId, shellTurnId,
+      finalizeSessionId, sessionAttachmentId, uploadedFileId, evidenceRevisionId, runningTaskId, runningTaskSessionId, allowedApprovalId,
+      artifactRequestId, integrationJobId, landingTaskId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,

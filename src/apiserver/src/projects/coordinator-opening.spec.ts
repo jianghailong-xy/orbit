@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { uuidToBase62 } from '@orbit/shared';
+import { refuseHumanOnlyAction } from './coordinator-authority';
+import { classifyCriteriaEdit } from './criteria-edit-classification';
 import {
   buildCoordinatorDeliveryInstructions,
   buildCoordinatorInstructions,
@@ -83,6 +85,7 @@ test('with Automatic on, the coordinator is told it judges task completion, and 
     );
     assert.match(form, /Send each decision as a question with ask_owner, each with the default you recommend/);
     assert.match(form, /where you can move forward on the default, move forward on it rather than stopping to wait/);
+    assert.match(form, /A change to the criteria is the exception: file it with project_update, and its card is the question/);
     // A failed landing of a DONE task is the coordinator's to rerun or send back (J-T1b), and
     // task_start is named as the door that does NOT do it.
     assert.match(form, /task_start does not queue the landing again/);
@@ -116,7 +119,7 @@ test('with Automatic off, the coordinator keeps the conversational text and no A
       form,
       /Progress comes from talking with people: say clearly where things stand, ask what needs asking, agree on the next step, then act\. No automatic loop decides for you when to act\./,
     );
-    assert.match(form, /Both are recorded through the account owner’s channel — say clearly what should change and what is still missing, and let the account owner at the screen decide/);
+    assert.match(form, /Both are recorded through the account owner’s channel, and the asking is yours: say clearly what should change and what is still missing, file it as below, and let the account owner at the screen decide/);
     assert.doesNotMatch(form, /Automatic/);
     assert.doesNotMatch(form, /whether a task is done is yours to judge/);
     assert.doesNotMatch(form, /task_evidence_decide/);
@@ -132,7 +135,7 @@ test('with Automatic off, the coordinator keeps the conversational text and no A
 // as being about its tasks too — the step from there to OWNER_CONFIRMED on a task is short.
 test('the DONE a coordinator does not decide is the project’s, in both modes', () => {
   for (const form of EVERY_FORM) {
-    assert.match(form, /Two things are not yours to decide: changing this project’s acceptance criteria, and recording this project as DONE\./);
+    assert.match(form, /Two things are not yours to decide: a change to this project’s acceptance criteria that does not plainly tighten them, and recording this project as DONE\./);
     assert.doesNotMatch(form, /recording it as DONE/);
     assert.match(form, /The DONE meant here is the project’s own, not that of any of its tasks: whether a task is done goes by the completion criterion it declared\./);
     // Every sentence that says DONE says whose it is.
@@ -142,6 +145,44 @@ test('the DONE a coordinator does not decide is the project’s, in both modes',
       assert.match(sentence, /project/, `a DONE sentence that does not name the project: ${sentence}`);
     }
   }
+});
+
+// "Not yours to decide" with no route was read as "only the owner can write", and left the owner a
+// to-do with nothing to press; "the ruler it is judged by" was read as "the platform judges these
+// words" (seen 2026-09-17 and 2026-11-04). What corrects both is in `project_update`'s description,
+// which a Claude session does not load until it looks the tool up, so every form says it.
+test('every form says who files a criteria change, and what the project’s DONE reads', () => {
+  for (const form of EVERY_FORM) {
+    assert.match(form, /To change the criteria, do not ask the account owner to edit them: send the complete set with project_update \(acceptanceCriteriaItems\)/);
+    assert.match(form, /An edit that plainly tightens them, such as adding a criterion, applies at once, and the account owner confirms the new set again/);
+    assert.match(form, /any other edit, such as rewording or dropping a criterion, is held as a proposal, and the account owner approves or refuses it on a card/);
+    assert.match(form, /the tasks serving it declare it again with task_update \(criterionKey\), or it stops counting as met/);
+    assert.match(form, /Orbit never compares a criterion’s words with the work/);
+    assert.match(form, /It records this project DONE by itself once the tasks serving every criterion are done by the completion criteria they declared, their work is on main, no session producing a criterion’s evidence also wrote it, and the account owner’s confirmation names the criteria as they stand/);
+    assert.match(form, /this project can be recorded DONE against a sentence nobody met/);
+    assert.match(form, /When this project is finished and Orbit cannot prove it, ask with project_request_done/);
+    // The name that taught "only a human can": it is the judgment session's refusal, not this role's.
+    assert.doesNotMatch(form, /HUMAN_ONLY/);
+  }
+});
+
+// The sentence above outlived the door it described once already: it was written on 2026-08-25, the
+// hold arrived on 2026-09-09, and nothing failed. These are the doors it now names, so moving one
+// reds a spec that says to read the opening again.
+test('what the opening says about a criteria edit is what the write path does', () => {
+  const stated = [{ id: 'c1', text: 'Backfill all history', verificationMethod: 'a review of the result' }];
+
+  // Adding one applies at once; rewording or dropping one is held.
+  assert.equal(
+    classifyCriteriaEdit(stated, [...stated, { text: 'And one more', verificationMethod: 'a review' }]),
+    'ADDITIVE',
+  );
+  assert.equal(classifyCriteriaEdit(stated, [{ ...stated[0], text: 'Backfill from 10-21 on' }]), 'WEAKENING');
+  assert.equal(classifyCriteriaEdit(stated, []), 'WEAKENING');
+
+  // And a coordinator may send one: only the one-shot judgment session is refused.
+  assert.equal(refuseHumanOnlyAction('NON_JUDGMENT', 'EDIT_ACCEPTANCE_CRITERIA'), null);
+  assert.ok(refuseHumanOnlyAction('JUDGMENT', 'EDIT_ACCEPTANCE_CRITERIA'));
 });
 
 test('the two texts differ, so the switch is part of what a coordinator is told', () => {

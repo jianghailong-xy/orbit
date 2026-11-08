@@ -169,6 +169,12 @@ export function branchName(ref: string): string {
   return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
 }
 
+/** The stable, de-duplicated target-branch spellings a receipt may store for one ref. */
+export function receiptTargetBranches(ref: string): string[] {
+  const short = branchName(ref);
+  return short === ref ? [ref] : [short, ref];
+}
+
 /** A project's main branch by name, as the reads whose words say "main" carry it (`mainBranch`):
  *  its binding's upstream, or null when it has no repository bound — and the words then say main. */
 export function mainBranchOf(codebase: { upstreamRef: string } | null | undefined): string | null {

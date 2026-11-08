@@ -23,9 +23,10 @@ struct WikiHomeActions {
     var openEntry: (String) -> Void = { _ in }
     var pickSpace: (String) -> Void = { _ in }
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
-    /// The space's Wiki settings: the gear in the bar (mock 12 ①), Manage spaces, and a new space's Set up
-    /// maintenance (mock 31 ⑥).
+    /// The space's Wiki settings: the gear in the bar (mock 12 ①) and Manage spaces.
     var openSettings: () -> Void = {}
+    /// Trash, from the space menu under Manage spaces (docs/mocks/wiki-trash).
+    var openTrash: () -> Void = {}
     /// The Contents sheet — the directory — from the list button in the bar (mock 30 ③).
     var openContents: () -> Void = {}
     /// Activity, from the bar's history mark (design §12.3.2).
@@ -41,6 +42,8 @@ struct WikiHomeActions {
     var openIndex: () -> Void = {}
     /// The home's first read again, after it failed.
     var retry: () -> Void = {}
+    /// What a step of the setup card offers (mock 41).
+    var startAction: (WikiStartLogic.ActionTo) -> Void = { _ in }
 }
 
 /// One space's home (design §12.3.1, mocks 30 ③, 31 ① ③ ⑥ ⑦): the large title with the space beside it, the
@@ -48,7 +51,8 @@ struct WikiHomeActions {
 /// each category a group of cards on the grouped background, each written document its number, title and two
 /// lines of lead, what is not written yet folded into one row — and Browse by category · A–Z index at the
 /// foot. Its bands are `WikiLogic.HomeBand`'s, in their order. How the wiki is kept is Activity's, behind the
-/// bar's history mark with what waits on the owner on it.
+/// bar's history mark with what waits on the owner on it — but for the setup card, which stands in the documents
+/// band until there is something to read (mock 41).
 ///
 /// WHAT IS KNOWN IS DRAWN AT ONCE: the head is the spaces list the drawer has already read; the line and the
 /// documents are grey bars (`.redacted`) until the home's own first read is in.
@@ -64,6 +68,10 @@ struct WikiHomePage: View {
     /// The line under the head (`WikiLogic.homeLine`): nil, a grey bar, while the first read is out.
     var line: String? = nil
     var documents: WikiLogic.HomeDocuments = .loading
+    /// The setup card, as the plan reads; nil until the plan is in. The documents band says whether it is drawn.
+    var start: WikiStartLogic.Card? = nil
+    /// A write is on its way: the setup card's Draft plan takes no second press.
+    var busy = false
     /// When the reader last looked (`WikiSeenLog`): what the principles' blue dots mark; nil marks none.
     var seen: Double? = nil
     /// The first read failed: said where the documents would be, with Retry.
@@ -72,6 +80,8 @@ struct WikiHomePage: View {
     var waiting = 0
     /// The space has a public link open: the bar's globe is green.
     var shareLive = false
+    /// How many wikis are in Trash: the space menu offers it while any is.
+    var trashed = 0
     /// Drawn beside the directory column: no head, no Contents in the bar, no foot.
     var besideContents = false
     var actions = WikiHomeActions()
@@ -173,7 +183,8 @@ struct WikiHomePage: View {
                 .font(.largeTitle.bold())
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
-            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings)
+            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,
+                            trashed: trashed, openTrash: actions.openTrash)
         }
         .padding(.top, 4)
     }
@@ -274,32 +285,26 @@ struct WikiHomePage: View {
         }
     }
 
-    /// The documents by category (mock 30 ③), the topic articles before a plan, a new space's card (mock 31 ⑥),
-    /// or grey bars while the first read is out (mock 31 ⑦).
+    /// The documents by category (mock 30 ③), the topic articles before a plan, or grey bars while the first read
+    /// is out (mock 31 ⑦) — and, until any of it can be read, the setup card: alone, or above a plan's categories
+    /// while none of their documents is written (mock 41 ⑦).
     @ViewBuilder private var documentsBand: some View {
         switch documents {
         case .loading:
             if failed { failure } else { skeleton }
-        case .categories(let categories):
+        case .categories(let categories, let nothingWritten):
+            if nothingWritten { startCard }
             ForEach(categories) { category in self.category(category) }
         case .topics(let groups):
             ForEach(groups) { group in topics(group) }
-        case .newSpace:
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(WikiDocCopy.noDocumentsNote)
-                        .font(.orbitSubtext)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button(WikiPlanCopy.setUp, action: actions.openSettings)
-                        .font(.orbitSubtext.weight(.semibold))
-                        .buttonStyle(.borderless)
-                }
-                .padding(.vertical, 4)
-            }
-        case .nothing:
-            EmptyView()
+        case .start:
+            startCard
         }
+    }
+
+    /// The setup card, once the plan it reads is in.
+    @ViewBuilder private var startCard: some View {
+        if let start { WikiStartSection(card: start, busy: busy, act: actions.startAction) }
     }
 
     /// One category: its written documents with their leads, then one row for the rest — `+3 not written yet`,
@@ -438,16 +443,183 @@ struct WikiHomePage: View {
     }
 }
 
+/// The setup card (mock 41): a section whose head is the card's title with its lead under it, and a row a step — a
+/// numbered circle (a tick when done, amber waits on the owner, blue is the server at work, grey has not come yet), then
+/// the title, the text, how far the writing has got, the note and at most one prominent button (`WikiStartCard.tsx`).
+struct WikiStartSection: View {
+    let card: WikiStartLogic.Card
+    var busy = false
+    var act: (WikiStartLogic.ActionTo) -> Void = { _ in }
+
+    var body: some View {
+        Section {
+            ForEach(Array(card.steps.enumerated()), id: \.element.id) { index, step in
+                row(step, number: index + 1)
+            }
+        } header: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.title)
+                    .font(.title3.bold())
+                    .foregroundStyle(Color.primary)
+                    .accessibilityAddTraits(.isHeader)
+                Text(card.lead)
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .textCase(nil)
+        }
+    }
+
+    private func row(_ step: WikiStartLogic.Step, number: Int) -> some View {
+        let moving = step.state == .wait || step.state == .run
+        return HStack(alignment: .top, spacing: 11) {
+            WikiStartMark(state: step.state, number: number)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(step.title)
+                    .font(.orbitProse.weight(moving ? .semibold : .regular))
+                    .foregroundStyle(step.state == .todo ? Color.secondary : Color.primary)
+                Text(step.text)
+                    .font(.orbitSubtext)
+                    .foregroundStyle(moving ? Color.primary : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let progress = step.progress {
+                    ProgressView(value: Double(progress.done), total: Double(max(1, progress.total)))
+                        .padding(.top, 7)
+                    if let now = progress.now {
+                        (Text(WikiPlanCopy.writingNow) + Text(" ") + Text(now).bold())
+                            .font(.orbitLabel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let note = step.note {
+                    Text(note)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let action = step.action { button(action) }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// At most one is prominent: what the owner has to press. The other is the way to the plan while the server works.
+    private func button(_ action: WikiStartLogic.Action) -> some View {
+        Group {
+            if action.primary {
+                Button(action.label) { act(action.to) }
+                    .buttonStyle(.borderedProminent)
+            } else {
+                Button(action.label) { act(action.to) }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .buttonBorderShape(.capsule)
+        .fontWeight(.semibold)
+        .disabled(busy && action.to == .draft)
+        .padding(.top, 7)
+    }
+}
+
+/// A step's circle: its number, or a tick once it is done, in the Wiki's colours.
+private struct WikiStartMark: View {
+    let state: WikiStartLogic.StepState
+    let number: Int
+
+    private var fill: Color {
+        switch state {
+        case .done: return WikiPalette.color(.green).opacity(0.12)
+        case .wait: return WikiPalette.color(.amber)
+        case .run:  return WikiPalette.color(.blue)
+        case .todo: return Color.clear
+        }
+    }
+
+    private var edge: Color {
+        switch state {
+        case .done: return WikiPalette.color(.green).opacity(0.35)
+        case .wait, .run: return fill
+        case .todo: return Color.secondary.opacity(0.4)
+        }
+    }
+
+    private var ink: Color {
+        switch state {
+        case .done: return WikiPalette.color(.green)
+        case .wait, .run: return Color.white
+        case .todo: return Color.secondary
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().fill(fill)
+            Circle().strokeBorder(edge, lineWidth: 1)
+            if state == .done {
+                Image(systemName: "checkmark")
+                    .font(.orbitMeta.weight(.bold))
+            } else {
+                Text("\(number)")
+                    .font(.orbitLabel.weight(.semibold).monospacedDigit())
+            }
+        }
+        .foregroundStyle(ink)
+        .frame(width: 24, height: 24)
+        .padding(.top, 1)
+    }
+}
+
+/// The Wiki of an account with no wiki (mock 41 ⑧): the title, then the setup card, whose first step makes one — and,
+/// while Trash holds a wiki, how many it holds and Open Trash under the card (docs/mocks/wiki-trash).
+struct WikiFirstStartPage: View {
+    let card: WikiStartLogic.Card
+    var trashed = 0
+    var openTrash: () -> Void = {}
+    var act: (WikiStartLogic.ActionTo) -> Void = { _ in }
+
+    var body: some View {
+        List {
+            Section {
+                Text(WikiCopy.title)
+                    .font(.largeTitle.bold())
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.top, 4)
+                    .wikiHomeOnBackground()
+            }
+            WikiStartSection(card: card, act: act)
+            if trashed > 0 {
+                Section {
+                    Button(WikiModeCopy.trashOpenTrash, action: openTrash)
+                } header: {
+                    Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))
+                        .textCase(nil)
+                }
+            }
+        }
+        .wikiHomeListStyle()
+        .environment(\.defaultMinListRowHeight, 0)
+        .navigationTitle("")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+}
+
 /// The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④) — the home's head
 /// on a phone, the directory column's beside it. With one space it is a grey label and no control: no chevron,
 /// no menu. With several, a menu of every space, the current one ticked — a toggle per space, whose tick a menu
 /// draws in its own column, its name the title and the repository and documents the line under it — what waits
-/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings.
+/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings, with Trash under it while Trash
+/// holds a wiki (docs/mocks/wiki-trash).
 struct WikiSpacePicker: View {
     let space: WikiSpace
     let spaces: [WikiSpace]
     var pick: (String) -> Void = { _ in }
     var manage: () -> Void = {}
+    /// How many wikis are in Trash.
+    var trashed = 0
+    var openTrash: () -> Void = {}
 
     var body: some View {
         let names = WikiSpaceLogic.names(spaces)
@@ -480,6 +652,11 @@ struct WikiSpacePicker: View {
                 Divider()
                 Button(action: manage) {
                     Label(WikiCopy.manageSpaces, systemImage: "gearshape")
+                }
+                if trashed > 0 {
+                    Button(action: openTrash) {
+                        Label(WikiModeCopy.trashPickerItem, systemImage: "trash")
+                    }
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -880,7 +1057,7 @@ struct WikiEntryPage: View {
         let current = detail.history.max { ($0.revision ?? 0) < ($1.revision ?? 0) }
         let verification = detail.verification
         let line = WikiModeLogic.checkedLine(verdict: verification?.verdict, model: verification?.model,
-                                             tainted: entry.tainted == true,
+                                             evidence: verification?.evidence, tainted: entry.tainted == true,
                                              who: current.map { Self.historyWord($0.authorKind) },
                                              when: current?.createdAt.flatMap { RelativeTime.format($0, now: now) })
         return HStack(alignment: .top, spacing: 8) {
@@ -1149,6 +1326,9 @@ struct WikiReviewActions {
     var openSession: (String) -> Void = { _ in }
     /// A challenge's Amend: the owner's version of the entry it names.
     var amend: (WikiLogic.ReviewCard) -> Void = { _ in }
+    /// A challenge's Retire…: the entry page's own Retire… dialog, the challenge's reason filled in. The card never
+    /// retires the entry straight from the press.
+    var retire: (WikiLogic.ReviewCard) -> Void = { _ in }
 }
 
 /// Review: the proposals waiting for the owner, one card at a time with its position ("1 of 3"),
@@ -1170,33 +1350,50 @@ struct WikiReviewPage: View {
 
     private var shown: [WikiLogic.ReviewCard] { WikiLogic.cards(cards, in: tab) }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Picker(WikiCopy.reviewTitle, selection: $tab) {
-                    ForEach(WikiLogic.ReviewTab.allCases, id: \.self) { tab in
-                        Text(WikiLogic.tabLabel(tab, cards: cards)).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+    /// The page's content, which a card that takes another's place is shown from the top of.
+    private static let top = "wiki-review-top"
 
-                let visible = shown
-                if let at = WikiLogic.clampedIndex(index, count: visible.count) {
-                    if visible.count > 1 { pager(at: at, count: visible.count) }
-                    WikiReviewCard(card: visible[at], entry: namedEntry(visible[at]), now: now,
-                                   busy: busy, actions: actions)
-                        .id(visible[at].id)
-                } else {
-                    Text(WikiCopy.noReview)
-                        .font(.orbitSubtext)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 28)
+    /// The card on show, by id.
+    private var shownCardID: String? {
+        let visible = shown
+        return WikiLogic.clampedIndex(index, count: visible.count).map { visible[$0].id }
+    }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Picker(WikiCopy.reviewTitle, selection: $tab) {
+                        ForEach(WikiLogic.ReviewTab.allCases, id: \.self) { tab in
+                            Text(WikiLogic.tabLabel(tab, cards: cards)).tag(tab)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+
+                    let visible = shown
+                    if let at = WikiLogic.clampedIndex(index, count: visible.count) {
+                        if visible.count > 1 { pager(at: at, count: visible.count) }
+                        WikiReviewCard(card: visible[at], entry: namedEntry(visible[at]), now: now,
+                                       busy: busy, actions: actions)
+                            .id(visible[at].id)
+                    } else {
+                        Text(WikiCopy.noReview)
+                            .font(.orbitSubtext)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 28)
+                    }
+                    autoAccept
                 }
-                autoAccept
+                .padding(16)
+                .id(Self.top)
             }
-            .padding(16)
+            // When the card on show changes (an answer took it away, or Previous, Next or a tab moved on), the next
+            // one shows from its head and its reason, not at the scroll the last one was answered at. Its answers are
+            // then a scroll away, never under the finger that just pressed (owner, 2026-11-07,
+            // docs/mocks/wiki-challenge-answers D4).
+            .onChange(of: shownCardID) { _, _ in proxy.scrollTo(Self.top, anchor: .top) }
         }
         .navigationTitle(WikiCopy.reviewTitle)
         #if os(iOS)
@@ -1295,7 +1492,7 @@ struct WikiReviewCard: View {
 
     private var op: WikiChangesetOp { card.op }
     private var isRetire: Bool { op.op == .retire }
-    /// A challenge is answered about the entry it names: Re-confirm, Amend or Retire.
+    /// A challenge is answered about the entry it names: Keep, Amend… or Retire….
     private var isChallenge: Bool { op.op == .challenge }
     private var tainted: Bool { op.tainted == true }
 
@@ -1309,6 +1506,10 @@ struct WikiReviewCard: View {
                 .font(.title3.bold())
                 .fixedSize(horizontal: false, vertical: true)
             if isRetire { retireFields } else { content }
+            if isChallenge {
+                labelled(WikiCopy.afterLabel,
+                         texts: WikiModeLogic.challengeAfter(kind: WikiLogic.cardKind(card, entry: entry)).map(afterText))
+            }
             ApprovalActions {
                 if isRetire {
                     Button { actions.decide(card, .accept, nil) } label: {
@@ -1320,17 +1521,27 @@ struct WikiReviewCard: View {
                     }
                     .buttonStyle(.bordered)
                 } else if isChallenge {
+                    // Each answer says what becomes of the entry, and none is filled: a challenge proposes no answer
+                    // to accept (owner, 2026-11-07, docs/mocks/wiki-challenge-answers D1, D2). Amend… only for a kind
+                    // that can be amended (D5); Retire… asks first, in the entry page's own dialog (D3).
                     Button { actions.decide(card, .reconfirm, nil) } label: {
                         Text(WikiModeCopy.reconfirm).approvalActionLabel()
                     }
-                    .buttonStyle(.borderedProminent)
-                    Button { actions.amend(card) } label: {
-                        Text(WikiModeCopy.amend).approvalActionLabel()
-                    }
                     .buttonStyle(.bordered)
-                    .disabled(entry == nil)
-                    Button { actions.decide(card, .retire, nil) } label: {
-                        Text(WikiModeCopy.retire).approvalActionLabel()
+                    if WikiModeLogic.amendable(WikiLogic.cardKind(card, entry: entry)) {
+                        Button { actions.amend(card) } label: {
+                            Text(WikiModeCopy.amendAnswer).approvalActionLabel()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(entry == nil)
+                    }
+                    Button(role: .destructive) { actions.retire(card) } label: {
+                        Text(WikiModeCopy.retireAnswer).approvalActionLabel()
+                            #if os(macOS)
+                            // macOS draws a bordered button's destructive role in the plain label colour; the
+                            // answer that cannot be undone is red on every client (owner, 2026-11-07).
+                            .foregroundStyle(.red)
+                            #endif
                     }
                     .buttonStyle(.bordered)
                 } else {
@@ -1528,6 +1739,23 @@ struct WikiReviewCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// A row whose lines carry their own emphasis: a challenge's After row.
+    private func labelled(_ label: String, texts: [Text]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(.orbitLabel).foregroundStyle(.secondary)
+            ForEach(Array(texts.enumerated()), id: \.offset) { _, text in
+                text
+                    .font(.orbitProse)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// `Keep · Agents get this entry again…`: the answer's word in bold, Retire's in red, then what it does.
+    private func afterText(_ line: WikiModeLogic.AfterLine) -> Text {
+        Text(line.answer).bold().foregroundColor(line.destructive ? Color.red : nil) + Text(" · " + line.effect)
     }
 
     /// One field's red and green lines.

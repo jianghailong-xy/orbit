@@ -93,6 +93,8 @@ var cliParityParamAlias = map[string]string{
 	// as a separator.
 	"kinds": "--kind",
 	"paths": "--path",
+	// One section per flag at a terminal, repeatable, as doc/key: wiki_draft's sections are { doc, section } objects.
+	"sections": "--section",
 }
 
 // Tools whose command takes the whole MCP input as ONE JSON document (`--input JSON | --input-file -`),
@@ -113,7 +115,7 @@ func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 	// One direction only: every MCP tool needs a command, and a command needs no tool. The person's
 	// own commands (userCLICapabilities: login, logout, whoami, api) have none — MCP runs only inside
 	// sessions, where the CLI never acts as the person (docs/personal-access-token-design.md §7.4).
-	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, userCLICapabilities} {
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, userCLICapabilities} {
 		for _, spec := range list {
 			specs[spec.Tool] = spec
 		}
@@ -199,6 +201,11 @@ func TestWorkspaceCreateParametersStayInParityAcrossHTTPMCPAndCLI(t *testing.T) 
 	}
 	var mcpBody map[string]interface{}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// These fields are put on the owner's card first (agent_write_card_test.go).
+		if strings.Contains(r.URL.Path, "/approvals") {
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/api/runner/agents" {
 			t.Errorf("agent_create hit %s %s", r.Method, r.URL.Path)
 		}

@@ -13,12 +13,11 @@ import (
 )
 
 // Durable events (docs/runner-link-design.md §5.8, §6.6). An EventBatch is stored by the apiserver's existing ingest
-// route, POST /runner/sessions/<id>/events, as the batch a runner posts over HTTPS today (the inverse of the shadow
-// mapping). The route stores each event once per seq, so a batch sent again stores nothing twice. Called by the link,
-// the route refuses a bad event on its own (runner-api/link-events.ts): a tombstone holds its seq, the events after it
-// are stored, and the answer's durableSeq and rejected are what EventAck says. A payload_json that is not JSON is
-// passed as a JSON string, which the route refuses as that one event's payload, so one bad event never holds back the
-// session's others.
+// route, POST /runner/sessions/<id>/events, as the batch a runner posted over HTTPS before the link. The route stores
+// each event once per seq, so a batch sent again stores nothing twice. Called by the link, the route refuses a bad
+// event on its own (runner-api/link-events.ts): a tombstone holds its seq, the events after it are stored, and the
+// answer's durableSeq and rejected are what EventAck says. A payload_json that is not JSON is passed as a JSON string,
+// which the route refuses as that one event's payload, so one bad event never holds back the session's others.
 //
 // One session's batches are forwarded one after another, in the order they came, so they are stored in seq order.
 // EventAck.durable_seq says every event up to it is stored, so it may only cover a batch whose predecessors are
@@ -578,8 +577,8 @@ func (b *creditBook) dropLocked(w *waiter) {
 	}
 }
 
-// announce gives every connection in MODE_LINK the credit the queue's depth grants now, in a Credit frame: reduced
-// says which way it has just changed.
+// announce gives every connection the credit the queue's depth grants now, in a Credit frame: reduced says which way
+// it has just changed.
 func (b *creditBook) announce(reduced bool) {
 	m := b.g.metrics
 	b.mu.Lock()

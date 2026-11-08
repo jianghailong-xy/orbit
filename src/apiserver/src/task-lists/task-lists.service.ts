@@ -689,7 +689,8 @@ export class TaskListsService {
         title: `Dispatch: ${list.title}`.slice(0, 80),
         prompt: this.buildConsoleOpening(list.title, list.id),
       },
-      { source: 'user' },
+      // The opening is the platform's own words, not the owner's (0493, design §3.5).
+      { source: 'user', promptByOrbit: true },
     );
     // Written after the session exists, so a failed create leaves no dangling pointer — and as a
     // compare-and-swap against the pointer this call read, not an unconditional write. Two people
@@ -849,13 +850,20 @@ export class TaskListsService {
    * this is a compound operation and not a cascade: the intent is transferred onto the tasks
    * first (they are the only rows that survive), and only then does the list go.
    */
-  async remove(ownerId: string, id: string) {
+  async remove(ownerId: string, id: string, actingSessionId?: string) {
     await this.get(ownerId, id);
     // Read while the tasks still point at the list — after the delete they are unfindable by it.
     const running = await this.prisma.session.findMany({
       where: { ownerId, task: { listId: id }, status: { in: TASK_OCCUPYING } },
       select: { id: true },
     });
+    // Every one of these is ended below, so a session that may not end one of them may not do it from here
+    // (sessions/session-reach.ts). A person's own delete names no session.
+    if (actingSessionId) {
+      for (const session of running) {
+        await this.sessions.assertMayReach(ownerId, actingSessionId, session.id, 'deleteList');
+      }
+    }
     // Only the automatic dispatch goes: status and dependency edges are left alone, so a
     // detached task is still there to read and still startable by hand.
     //

@@ -39,13 +39,13 @@ import { settleUnrunWakeTurns, signalDrainedWakeups } from '../runner-api/wake-t
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
   RUNNER_BEATS,
-  RUNNER_OFFLINE_AFTER_MS,
   RUNNER_SILENT_AFTER_MS,
   RunnerPresenceService,
   runnerLastBeatAt,
   type CellLosses,
   type RunnerBeats,
 } from '../runners/runner-presence';
+import { KEEPS_SESSION_IN_TRASH } from '../files/file-retention';
 import { ControlPlaneLeader } from './control-plane-leader';
 
 const REAP_INTERVAL_MS = 30_000;
@@ -56,14 +56,33 @@ const PURGE_INTERVAL_MS = 60 * 60_000;
 const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60_000;
 /** How long after an apiserver process was last seen its row in `apiserver_process` is kept (migration 0449). */
 const GONE_PROCESS_RETENTION_MS = 24 * 60 * 60_000;
-const OFFLINE_AFTER_MS = RUNNER_OFFLINE_AFTER_MS; // runner missed ~3 heartbeats
+/**
+ * How long a runner may be silent before the reaper finalizes a RUNNING session as `runner offline`:
+ * five minutes, well past the RUNNER_OFFLINE_AFTER_MS the runner list calls a machine offline by.
+ *
+ * The two answer different questions. The list says whether a machine is reachable NOW — 90 s of
+ * absence is enough for that, and being wrong costs a dot. The reaper decides that work in flight is
+ * lost, and that decision cannot be taken back: the task is reclaimed and re-run, while the engine
+ * that was in fact still working is told at the next heartbeat that its lease is gone. A runner whose
+ * own network blips for one to three minutes — a Wi-Fi or VPN flap — misses heartbeats while its
+ * engines keep running, and the runner reconnects by itself; a reap at 90 s throws that work away for
+ * nothing. Field case (2026-11-05, runner 01a11ee9): the link dropped at 13:44:42 and was back at
+ * 13:46:49, and the reaper had finalized two streaming sessions 55 s before it returned; the same
+ * runner's seven-day history is 21 such reaps, one to two minutes after its last stored event each time.
+ *
+ * A genuinely dead runner is therefore finalized 3.5 minutes later than before, which delays its
+ * task's retry by that much and nothing else. The holds in `silenceHold` read the same window: any
+ * evidence that the control plane, not the runner, may have produced the silence has to cover the
+ * whole span the verdict is taken from.
+ */
+export const RUNNER_REAP_AFTER_MS = 5 * 60_000;
 /**
  * How long after it starts the reaper reaps no session as `runner offline`. Its evidence is the
  * absence of beats in `runner_presence`, an UNLOGGED table a crash or a failover of the primary
  * empties (docs/runner-link-design.md §6.5); a control plane that has just come up — after a deploy,
  * or beside a database that just came back — has not yet had the time to hear every live runner
- * again. Two windows of OFFLINE_AFTER_MS: six heartbeat intervals. A reaper whose process has just
- * taken the sweeps over from another starts again too (`ReaperService.leading`).
+ * again. Six heartbeat intervals, and shorter than RUNNER_REAP_AFTER_MS. A reaper whose process has
+ * just taken the sweeps over from another starts again too (`ReaperService.leading`).
  */
 export const STARTUP_GRACE_MS = 3 * 60_000;
 /**
@@ -187,13 +206,16 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  * One function rather than an expression at each site because it is asked TWICE about the same
  * session and the two answers have to be the same question: once from the sweep's snapshot, to
  * decide there is something to do, and once inside the transaction that actually writes FAILED,
- * against whatever the row says by then. Two copies of `now - hb > OFFLINE_AFTER_MS` are two
+ * against whatever the row says by then. Two copies of `now - hb > RUNNER_REAP_AFTER_MS` are two
  * copies that can drift, and the whole point of the second ask is that it is the first one's
  * predicate re-run, not a similar one.
  *
  * `status` is not a second opinion: nothing in this control plane ever writes OFFLINE, which only
  * a runner reports about itself on its way out (`runner-api.controller.ts` heartbeat). A crashed
- * machine leaves ONLINE behind, so the heartbeat's age is the whole of the signal.
+ * machine leaves ONLINE behind, so the heartbeat's age is the whole of the signal. It is read against
+ * RUNNER_REAP_AFTER_MS, not the shorter RUNNER_OFFLINE_AFTER_MS the runner list calls a machine
+ * offline by: this verdict destroys work in flight, and a runner whose own network blipped while its
+ * engines kept running must not lose that work to it (see the constant).
  *
  * Save for one thing the runner says just as surely: `claimedAt`, the session's own claim of the
  * run (`run_claimed_at`), is the runner process asking for this very run, and one inside the window
@@ -213,9 +235,9 @@ function runnerLooksOffline(
   claimedAt?: Date | null,
 ): boolean {
   if (!runner) return true;
-  if (claimedAt && now - claimedAt.getTime() <= OFFLINE_AFTER_MS) return false;
+  if (claimedAt && now - claimedAt.getTime() <= RUNNER_REAP_AFTER_MS) return false;
   if (runner.status === 'OFFLINE') return true;
-  return now - (runnerLastBeatAt(runner)?.getTime() ?? 0) > OFFLINE_AFTER_MS;
+  return now - (runnerLastBeatAt(runner)?.getTime() ?? 0) > RUNNER_REAP_AFTER_MS;
 }
 
 /**
@@ -230,7 +252,7 @@ function offlineFromSilence(runner: { status: string } | null | undefined): bool
 
 /** `runnerLooksOffline`'s claim clause as the finalizing write's WHERE: not claimed inside the window. */
 function claimedLongAgo(now: number) {
-  return { OR: [{ runClaimedAt: null }, { runClaimedAt: { lt: new Date(now - OFFLINE_AFTER_MS) } }] };
+  return { OR: [{ runClaimedAt: null }, { runClaimedAt: { lt: new Date(now - RUNNER_REAP_AFTER_MS) } }] };
 }
 
 /**
@@ -248,9 +270,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * Whether the PREVIOUS sweep watched the database refuse a unit of work.
    *
    * Carried across the sweep boundary because the verdict is about a span, not an instant: a
-   * session is called offline on 90s of silence, and sweeps are 30s apart, so the silence a sweep
-   * is reading overlaps the sweeps before it. A refusal in any of them is a refusal that could
-   * have produced the silence. One sweep the database answers in full clears it — this is
+   * session is called offline on RUNNER_REAP_AFTER_MS of silence, and sweeps are 30s apart, so the
+   * silence a sweep is reading overlaps the sweeps before it. A refusal in any of them is a refusal
+   * that could have produced the silence. One sweep the database answers in full clears it — this is
    * disqualified evidence, not a latch, or the first storm would stop the reaper for the life of
    * the process.
    */
@@ -347,10 +369,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * window. The DB-level ON DELETE CASCADE drops each session's events, turns, tool calls,
    * usage, approvals, diff and session-scoped attachments along with it. This is the only
    * path that actually removes session data — soft-delete just hides it.
+   *
+   * A session holding a file somebody pinned or evidence cites waits in Trash until that stops, with everything else in it
+   * (docs/orbit-files-design.md §2.8): the row would go with the session, and nobody asked for that. A person who empties
+   * Trash by hand (`SessionsService.purge`) is asking for exactly that, and gets it.
    */
   private async purgeTrash(): Promise<void> {
     const cutoff = new Date(Date.now() - TRASH_RETENTION_MS);
-    const res = await this.prisma.session.deleteMany({ where: { deletedAt: { lt: cutoff } } });
+    const res = await this.prisma.session.deleteMany({
+      where: { deletedAt: { lt: cutoff }, attachments: { none: KEEPS_SESSION_IN_TRASH } },
+    });
     if (res.count > 0) {
       this.log.log(`purged ${res.count} trashed session(s) past ${TRASH_RETENTION_DAYS}-day retention`);
     }
@@ -510,7 +538,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             if (heartbeatEvidenceIsDisqualified()) {
               this.log.warn(
                 `not reaping ${s.id}: this control plane could not reach its own database within ` +
-                  `the window its ${OFFLINE_AFTER_MS}ms of runner silence was read from`,
+                  `the window its ${RUNNER_REAP_AFTER_MS}ms of runner silence was read from`,
               );
               continue;
             }
@@ -722,14 +750,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    *  - The reaper started less than STARTUP_GRACE_MS ago. The presence table is UNLOGGED, so a crash
    *    or a failover of the primary empties it, and a process that has just come up — after a deploy,
    *    or beside a database that just came back — has not yet had the time to hear every live runner.
-   *  - A heartbeat write failed in this process within OFFLINE_AFTER_MS: the beat that would have
+   *  - A heartbeat write failed in this process within RUNNER_REAP_AFTER_MS: the beat that would have
    *    answered may be one the database refused, here.
    *  - The same, in another apiserver process (RunnerPresenceService.otherProcesses): the link gateway
    *    spreads beats over every process, so a runner whose beats went to one that could not write them
    *    is silent here. Read from that process's row in `apiserver_process`, which says when a beat it
    *    took last failed. And a process that has stopped writing its row (APISERVER_PROCESS_QUIET_AFTER_MS)
    *    may be failing every beat it takes without being able to say so — its pool exhausted, or the
-   *    database out of its reach — so it holds too: for OFFLINE_AFTER_MS past the line whatever it is,
+   *    database out of its reach — so it holds too: for RUNNER_REAP_AFTER_MS past the line whatever it is,
    *    since a process just cut off and one just killed look the same from here; and for as long as
    *    MASS_SILENCE_WINDOW_MS while it is still connected (it still holds its own lock,
    *    control-plane-leader.ts), which a process that has gone does not. Coming back, it says a beat was
@@ -748,18 +776,18 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     }
     if (!this.presence) return null;
     const lostAt = this.presence.lastBeatNotRecordedAt();
-    if (lostAt !== null && now - lostAt <= OFFLINE_AFTER_MS) {
-      return `a heartbeat write failed ${s(now - lostAt)} ago, inside the ${s(OFFLINE_AFTER_MS)} runner silence is read from`;
+    if (lostAt !== null && now - lostAt <= RUNNER_REAP_AFTER_MS) {
+      return `a heartbeat write failed ${s(now - lostAt)} ago, inside the ${s(RUNNER_REAP_AFTER_MS)} runner silence is read from`;
     }
     const others = await this.presence.otherProcesses(MASS_SILENCE_WINDOW_MS);
-    const lostElsewhere = others.find((p) => p.beatLostAgoMs !== null && p.beatLostAgoMs <= OFFLINE_AFTER_MS);
+    const lostElsewhere = others.find((p) => p.beatLostAgoMs !== null && p.beatLostAgoMs <= RUNNER_REAP_AFTER_MS);
     if (lostElsewhere) {
       return `a heartbeat write failed on apiserver process ${lostElsewhere.id.slice(0, 8)} `
-        + `${s(lostElsewhere.beatLostAgoMs!)} ago, inside the ${s(OFFLINE_AFTER_MS)} runner silence is read from`;
+        + `${s(lostElsewhere.beatLostAgoMs!)} ago, inside the ${s(RUNNER_REAP_AFTER_MS)} runner silence is read from`;
     }
     const quiet = others.find((p) => {
       const past = p.seenAgoMs - APISERVER_PROCESS_QUIET_AFTER_MS;
-      return past >= 0 && (past <= OFFLINE_AFTER_MS || (p.connected && past <= MASS_SILENCE_WINDOW_MS));
+      return past >= 0 && (past <= RUNNER_REAP_AFTER_MS || (p.connected && past <= MASS_SILENCE_WINDOW_MS));
     });
     if (quiet) {
       return `apiserver process ${quiet.id.slice(0, 8)} has not reported for ${s(quiet.seenAgoMs)}`
@@ -821,7 +849,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       // Before anything is written: is the thing this decision was made ABOUT still true? The
       // sweep's verdict came from one snapshot read at the top of a loop that awaits a transaction
-      // per session, so under the database stress that produces "no heartbeat for 90s" in the
+      // per session, so under the database stress that produces "no heartbeat for five minutes" in the
       // first place, this write can be minutes younger than the read that authorised it — and a
       // runner that came back inside that gap was killed by a fact that had expired. The row lock
       // this takes is the session's, not the runner's: a heartbeat committing between this read

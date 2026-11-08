@@ -45,7 +45,7 @@ struct SessionRequestStatusView: View {
             // While it waits, look again now and then: the deadline passing is an event only once
             // the worker has closed it.
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
+                await VisibilityGate.app.pause(60)   // not while the app cannot be seen
                 if Task.isCancelled { break }
                 if request?.state == .open || request == nil { await load() }
             }

@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -12,15 +13,13 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.management.RunnerPage
-import io.orbitd.android.reader.EngineErrors
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.*
-import java.time.Instant
-import java.time.ZoneId
 
 /** [recorded]: drawn in a review as the record this window's press made of it — what the press made past is left out. */
 @Composable
@@ -31,6 +30,14 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
     if (card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") != null) { OwnerCardBody(card, open, owner, reopen, recorded); return }
     if (card.key.startsWith("receipt:")) {
         CardFields(row, listOf("title", "decision", "decidedAt", "decidedByType", "note", "report", "review", "answers", "reason", "problems", "resultingSeal"), open)
+        // The one way to an older version's files, and so to where they are seen to expire: the latest version's do not (§2.8), and only
+        // the latest is ever a card. Read when it is pressed: a receipt rides every read of the conversation, and reads nothing itself.
+        if (card.family == CardFamily.EVIDENCE && row.flag("citesFiles")) LocalEvidenceFiles.current?.let { files ->
+            OutlinedButton(onClick = { files.open(card.key) }, Modifier.testTag("${card.key}:files")) {
+                Text(EvidenceFiles.title)
+                Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.padding(start = 4.dp).size(14.dp))
+            }
+        }
         return
     }
     when (card.family) {
@@ -74,12 +81,18 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             Field("The agent says it no longer blocks", input["reason"], open)
         }
         CardFamily.DELETE -> DeleteCardBody(DeleteCards.read(row.text("toolName").orEmpty(), row.obj("input") ?: JsonObject(emptyMap())))
+        CardFamily.WORKSPACE_WRITE -> {
+            val input = row.obj("input") ?: JsonObject(emptyMap())
+            // A server that predates this card files what the asker sent: all of it, or the card would ask for a yes with nothing on it.
+            if (input.obj("changes") == null) CodeText(input.toString(), "json")
+            else WorkspaceWriteCardBody(WorkspaceWriteCards.read(row.text("toolName").orEmpty(), input))
+        }
         CardFamily.EVIDENCE -> {
             Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
-            // Opened by Decide it myself: still saying what it waits for, and that deciding here is the owner's choice.
-            if (CoordinatorQueue.isDecidingMyself(card)) { CoordinatorPausedLine(card); CoordinatorNote(card, CoordinatorQueue.decideHere) }
             Text("Evidence revision ${row.text("evidenceRevision") ?: ""}", style = MaterialTheme.typography.labelMedium)
             Field("Criterion", row.obj("criterion")?.get("text"), open)
+            // What the evidence is, right under what it is measured against, and only when this version cites a file (§2.6).
+            EvidenceFilesArea(card)
             Field("What the submitter says was established", row["claim"], open)
             Field("Not established", row["gaps"], open)
             Text("Cited checks", style = MaterialTheme.typography.titleSmall)
@@ -141,12 +154,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
         CardFamily.WIKI -> CardFields(row, listOf("op", "entryId", "baseRevision", "payload", "similar", "tainted", "decision", "reason", "change", "facts", "version", "categories", "docs", "gate", "sources", "summary", "fields", "trust", "revert"), open)
         CardFamily.BACKGROUND -> CardFields(row, listOf("state", "predicate", "targets", "matches", "expiryDeliveries", "expiresAt"), open)
         CardFamily.REVIEW, CardFamily.SESSION_REQUEST -> CardFields(row, row.keys.filterNot { it.endsWith("Token") }, open)
-        // A revision waiting for its paused coordinator (`CoordinatorQueue`); one sent to it is a line of the rail (`SessionCards`).
-        CardFamily.COORDINATOR_QUEUE -> if (!CoordinatorQueue.isSent(card)) {
-            Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            CoordinatorPausedLine(card)
-            CoordinatorNote(card, CoordinatorQueue.explanation)
-        }
+        CardFamily.COORDINATOR_QUEUE -> Unit
     }
 }
 
@@ -181,27 +189,34 @@ private fun DeleteCardBody(delete: DeleteCard) {
 }
 
 /**
- * Why a revision waits for its coordinator (project 34cygPTQe5LPUT7tdUAzG), read off the coordinator's own session: the quota
- * window it ran out of — judged as the conversation's own quota row judges it (`EngineErrors`), from what its failed run said, else
- * from its last reply, since a usage limit can park a retry without failing the run — and when that resets (its `retryAt`); for any
- * other failure, when it retries. A coordinator no longer paused gets the revision when its current turn ends.
+ * What a workspace write does (iOS `ToolApprovalCard`'s write branch, web `WorkspaceWriteBody`): the name on its own row, where it
+ * stands, each variable by name and value, what a write of the variables takes away, then the rest of what changes. A value is on its
+ * own block in full, with no line limit: a value cut short would be a yes to something nobody read.
  */
-internal fun coordinatorPauseLine(coordinator: JsonObject, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String {
-    if (!CoordinatorQueue.isPaused(coordinator)) return CoordinatorQueue.back
-    val failed = (coordinator.text("runState") ?: coordinator.text("status")) == "FAILED"
-    val said = coordinator.text("error")?.takeIf { failed && it.isNotBlank() } ?: coordinator.text("lastAssistantText")
-    val window = said?.takeIf(EngineErrors::isUsageLimitErrorText)?.let(EngineErrors::quotaWindow)
-    return CoordinatorQueue.pausedLine(window, coordinator.text("retryAt")?.let { OwnerReview.receiptTime(it, now, zone) })
+@Composable
+private fun WorkspaceWriteCardBody(write: WorkspaceWriteCard) {
+    val small = MaterialTheme.typography.bodySmall
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val caption = MaterialTheme.typography.labelMedium
+    @Composable fun Block(text: String) = Text(text, style = small, fontFamily = FontFamily.Monospace)
+    Text(write.name, style = MaterialTheme.typography.titleSmall)
+    Text(DeleteCards.onRunner(write.host), style = small, color = muted)
+    write.workDir?.let { Block(it) }
+    write.env?.let { env ->
+        Text(WorkspaceWriteCards.variables, style = caption)
+        if (env.isEmpty()) Text(WorkspaceWriteCards.noVariables, style = small, color = muted)
+        env.forEach { Block(it.line) }
+    }
+    if (write.envRemoved.isNotEmpty()) {
+        Text(WorkspaceWriteCards.removed, style = caption)
+        write.envRemoved.forEach { Block(it) }
+    }
+    write.fields.forEach { field ->
+        Text(field.caption, style = caption)
+        Block(field.value)
+    }
+    Text(WorkspaceWriteCards.note, style = small, color = muted)
 }
-
-@Composable
-private fun CoordinatorPausedLine(card: InteractionCard) = Text(coordinatorPauseLine(card.context.obj("coordinator") ?: JsonObject(emptyMap())),
-    Modifier.testTag("${card.key}:paused"), style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.needsYou)
-
-/** The line under the paused one: that the owner may still decide, or — once they chose to — that it is theirs to choose. */
-@Composable
-private fun CoordinatorNote(card: InteractionCard, text: String) = Text(text, Modifier.testTag("${card.key}:note"),
-    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
 @Composable
 internal fun CardFields(source: JsonObject, fields: List<String>, open: (String) -> Unit) {

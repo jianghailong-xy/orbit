@@ -102,6 +102,16 @@ public final class APIClient: @unchecked Sendable {
         }
     }
 
+    /// Trade the stored refresh token for a fresh access token, through the same single-flight refresh
+    /// a REST call's 401 takes. For the control-plane stream, which is not a REST call: its 401 asks
+    /// for this and connects again. False when there is no fresh token now — the refresh token is
+    /// gone or refused, or the server could not be reached.
+    public func refreshSession() async -> Bool {
+        let refresher = await SessionRefresherRegistry.shared.refresher(
+            baseURL: baseURL, tokenStore: tokenStore, session: session)
+        return await refresher.refresh()
+    }
+
     /// Revoke a refresh token server-side on sign-out. Best-effort (`try?`); takes the token
     /// explicitly so the caller can clear local storage immediately without racing this call.
     public func revokeRefreshToken(_ refreshToken: String) async {
@@ -378,6 +388,14 @@ public final class APIClient: @unchecked Sendable {
             _ = try await postRaw("sessions/\(id)/archive", body: Optional<Empty>.none)
         }
     }
+    /// Complete on a DONE or CANCELLED project's row (docs/session-list-projects-design.md §3.6): its
+    /// coordinator and its members still in Open, in every workspace, move to Completed together.
+    /// Answers how many moved; an OPEN project is refused 409 PROJECT_STILL_OPEN.
+    public func completeProjectSessions(_ projectID: String) async throws -> Int {
+        struct Completed: Decodable { let completed: Int }
+        let data = try await postRaw("projects/\(projectID)/sessions/complete", body: Optional<Empty>.none)
+        return try decoder.decode(Completed.self, from: data).completed
+    }
     public func restoreSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/restore", body: Optional<Empty>.none) }
     public func deleteSession(_ id: String) async throws { try await deleteRaw("sessions/\(id)") }
     /// Hard-delete a trashed session and all its data — irreversible (the Trash tab's "Delete
@@ -572,6 +590,22 @@ public final class APIClient: @unchecked Sendable {
     public func decideEvidence(taskID: String,
                                _ req: EvidenceDecisionRequest) async throws -> EvidenceDecisionResult {
         try await post("tasks/\(taskID)/evidence/decision", body: req)
+    }
+
+    /// What one version of a task's evidence cites, a page at a time, for the card that shows it
+    /// (`EvidenceFiles.swift`): read from rows, so a file reads the same after it has expired. The
+    /// first page leaves the offset out, as web's read does.
+    public func evidenceFiles(taskID: String, revision: String, offset: Int = 0) async throws -> EvidenceFilePage {
+        try await get("tasks/\(taskID)/evidence/\(revision)/files",
+                      query: offset > 0 ? [URLQueryItem(name: "offset", value: String(offset))] : [])
+    }
+
+    /// Pin a file or take its pin away. A pin brings back a file with a tombstone whose bytes remain, and
+    /// once they have gone it answers 410.
+    public func setAttachmentPinned(_ id: String, pinned: Bool) async throws -> EvidenceFilePinAnswer {
+        let data = try await send(makeRequest("attachments/\(id)/pin", method: pinned ? "PUT" : "DELETE",
+                                              body: Optional<Empty>.none))
+        return try decoder.decode(EvidenceFilePinAnswer.self, from: data)
     }
 
     // MARK: an OWNER_CONFIRMED task — the question only its owner answers
@@ -1260,10 +1294,46 @@ public final class APIClient: @unchecked Sendable {
     public func submitWikiChangeset(spaceID: String, _ req: WikiChangesetRequest) async throws -> WikiChangeResult {
         try await post("wiki/spaces/\(spaceID)/changesets", body: req)
     }
+    /// `POST /wiki/spaces`: a wiki made by its owner — the space, with maintenance on and its plan's first draft asked
+    /// for, in one request; answers with the space. Maintenance is refused to every session.
+    public func createWikiSpace(_ req: WikiSpaceCreate) async throws -> WikiSpace {
+        try await post("wiki/spaces", body: req)
+    }
     /// `PATCH /wiki/spaces/:id`: the owner's settings — the review mode, Automatic's spot checks and
     /// maintenance; answers with the space as the server kept it. Refused to every session.
     public func updateWikiSpace(_ id: String, _ req: WikiSpaceUpdate) async throws -> WikiSpace {
         try await patch("wiki/spaces/\(id)", body: req)
+    }
+    /// `GET /wiki/spaces/:id/workspaces`: who is in the wiki, and who can be added to it.
+    public func wikiSpaceWorkspaces(_ spaceID: String) async throws -> WikiSpaceWorkspaces {
+        try await get("wiki/spaces/\(spaceID)/workspaces")
+    }
+    /// `POST /wiki/spaces/:id/workspaces`: bring a workspace into the wiki, or back into it. Refused to every session.
+    public func addWikiWorkspace(spaceID: String, workspaceID: String) async throws {
+        _ = try await postRaw("wiki/spaces/\(spaceID)/workspaces", body: WikiWorkspaceAddRequest(workspaceId: workspaceID))
+    }
+    /// `DELETE /wiki/spaces/:id/workspaces/:workspaceId`: leave a workspace out of the wiki. Refused to every session.
+    public func leaveWikiWorkspaceOut(spaceID: String, workspaceID: String) async throws {
+        try await deleteRaw("wiki/spaces/\(spaceID)/workspaces/\(workspaceID)")
+    }
+    /// `DELETE /wiki/spaces/:id`: move a wiki to Trash, where it is kept 365 days (contract `space.trash`). Refused to
+    /// every session, as the three Trash calls below are.
+    public func moveWikiSpaceToTrash(_ id: String) async throws -> WikiTrashMove {
+        try await delete("wiki/spaces/\(id)")
+    }
+    /// `POST /wiki/spaces/:id/restore`: bring a wiki back from Trash; answers it as `GET /wiki/spaces/:id` does. A 409's
+    /// message says which newer wiki holds its repository, and what to do.
+    public func restoreWikiSpace(_ id: String) async throws -> WikiSpace {
+        try await postEmpty("wiki/spaces/\(id)/restore")
+    }
+    /// `DELETE /wiki/spaces/:id/purge`: delete a wiki in Trash for good. It leaves Trash at once; the server deletes what
+    /// it holds in the background.
+    public func purgeWikiSpace(_ id: String) async throws {
+        try await deleteRaw("wiki/spaces/\(id)/purge")
+    }
+    /// `GET /wiki/trash`: the owner's wikis in Trash, the newest move first (contract `space.trash.list`).
+    public func wikiTrash() async throws -> WikiTrash {
+        try await get("wiki/trash")
     }
     /// `POST /wiki/entries/:id/confirm`: the owner vouching for what a review mode applied — the entry
     /// becomes Confirmed and is pushed from then on.
@@ -1326,6 +1396,41 @@ public final class APIClient: @unchecked Sendable {
     /// `POST /wiki/plan-proposals/:id/decide`: accept (a new draft, over the newest version) or reject.
     public func decideWikiPlanProposal(_ id: String, _ req: WikiPlanDecideRequest) async throws -> WikiPlanDecisionResult {
         try await post("wiki/plan-proposals/\(id)/decide", body: req)
+    }
+
+    // MARK: the wiki chat (contract `chat`) — the user door, JWT only
+
+    /// `GET /wiki/spaces/:id/chats`: the space's chats newest first, the round button's three counts, and where a
+    /// new chat runs — the remembered workspace as it stands and the ones it could be.
+    public func wikiChats(spaceID: String) async throws -> WikiChatList {
+        try await get("wiki/spaces/\(spaceID)/chats")
+    }
+    /// `POST /wiki/spaces/:id/chats`: a chat made with the owner's first words, word for word, its first turn filed
+    /// under the client's UUID; the page and the selection ride beside the words (`wikiContext`).
+    public func createWikiChat(spaceID: String, _ req: WikiChatCreateRequest) async throws -> WikiChatCreateAnswer {
+        try await post("wiki/spaces/\(spaceID)/chats", body: req)
+    }
+    /// `GET /wiki/chats/:id/drafts`: every card of a chat (its session id), oldest first.
+    public func wikiChatDrafts(sessionID: String) async throws -> WikiChatDrafts {
+        try await get("wiki/chats/\(sessionID)/drafts")
+    }
+    /// `GET /wiki/chat-drafts/:id`: one card, its state derived on the read.
+    public func wikiChatDraft(_ id: String) async throws -> WikiChatDraftView {
+        try await get("wiki/chat-drafts/\(id)")
+    }
+    /// `POST /wiki/chat-drafts/:id/<press>`: Apply, Discard, Undo, Try again (retry) or seen — the owner's presses,
+    /// which only the interactive credential makes. Edit carries a body: `editWikiChatDraft`.
+    public func pressWikiChatDraft(_ id: String, _ press: WikiChatPress) async throws -> WikiChatPressAnswer {
+        try await postEmpty("wiki/chat-drafts/\(id)/\(press.rawValue)")
+    }
+    /// `POST /wiki/chat-drafts/:id/edit`: the owner's version laid over the card's ops, applied as Review's Edit.
+    public func editWikiChatDraft(_ id: String, _ req: WikiChatEditRequest) async throws -> WikiChatPressAnswer {
+        try await post("wiki/chat-drafts/\(id)/edit", body: req)
+    }
+    /// `GET /wiki/spaces/:id/docs/:slug/sections/:key/versions`: the versions a section kept, newest first, each
+    /// compared sentence by sentence with the text that replaced it — what See changes draws.
+    public func wikiDocSectionVersions(spaceID: String, slug: String, key: String) async throws -> WikiDocSectionVersions {
+        try await get("wiki/spaces/\(spaceID)/docs/\(slug)/sections/\(key)/versions")
     }
 
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized

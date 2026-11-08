@@ -110,6 +110,8 @@ import { CodexLoginService } from './codex-login.service';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsController } from './shared-pools.controller';
 import { SharedPoolsService } from './shared-pools.service';
+import '../test-support/dequeue-under-lease';
+import '../test-support/daemon-routes-over-http';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts keys and the code under test decrypts them; both only need the same secret.
@@ -535,7 +537,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
   const tasks = new TasksService(prisma, sessions, realtime);
   const providers = new ProvidersService(prisma, realtime, usage);
   const runnerApi = new RunnerApiController(
-    db as never, queue as never, realtime as never, {} as never, {} as never, {} as never,
+    db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
   );
   doorsOver.providers = providers;
   doorsOver.login = new CodexLoginService(prisma, realtime);
@@ -604,7 +606,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
 
   /** The runner asking for work — which has to be `sessionId`. */
   async function claim(runnerId: string, sessionId: string): Promise<ClaimedSession> {
-    const claimed = await queue.claimSessionForRunner({ id: runnerId }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     return claimed;
@@ -805,7 +807,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     for (const [label, slug] of [['bob-claims-her-pool', alicePool.slug], ['bob-claims-her-member', personal.row.slug]]) {
       const at = await machine(db, bob, label);
       const session = await queued(db, bob, at, slug);
-      const offered = await queue.claimSessionForRunner({ id: at.runnerId }, 0, false, false);
+      const offered = await queue.claimSessionForRunner({ id: at.runnerId });
       assert.deepEqual(herKeysIn(offered), [], 'her key is in what his runner was handed');
       assert.equal(offered, null, `his runner was handed his session on ${label}`);
       assert.deepEqual(

@@ -34,10 +34,11 @@ type fakeIngest struct {
 	sessions map[string]*fakeIngestSession // by decodeSessionID
 	conns    map[*fakeWorkConn]*fakeIngestConn
 	// down fails every batch, retryable, the way a database failing over does; refuse fails every batch with that
-	// code, not retryable; ackDelay holds each answer back.
+	// code, not retryable; ackDelay holds each answer back, and ackHold holds it until it is closed.
 	down     bool
 	refuse   string
 	ackDelay time.Duration
+	ackHold  chan struct{}
 	// refuseBatch, when it returns a failure, answers a batch with it.
 	refuseBatch func(eb *linkpb.EventBatch) *linkpb.Failure
 	// credit is what each connection's Welcome grants.
@@ -229,7 +230,7 @@ func (g *fakeWorkGateway) onEventBatch(c *fakeWorkConn, eb *linkpb.EventBatch) {
 		rec.result = "stored"
 	}
 	in.batches = append(in.batches, rec)
-	delay := in.ackDelay
+	delay, hold := in.ackDelay, in.ackHold
 	if ack.Failure == nil {
 		ic.unacked.events += amount.events
 		ic.unacked.bytes += amount.bytes
@@ -244,11 +245,17 @@ func (g *fakeWorkGateway) onEventBatch(c *fakeWorkConn, eb *linkpb.EventBatch) {
 		}
 		c.send(&linkpb.Frame{Body: &linkpb.Frame_EventAck{EventAck: ack}})
 	}
-	if delay > 0 {
+	switch {
+	case hold != nil:
+		go func() {
+			<-hold
+			answer()
+		}()
+	case delay > 0:
 		time.AfterFunc(delay, answer)
-		return
+	default:
+		answer()
 	}
-	answer()
 }
 
 // onLiveBatch records a live batch.

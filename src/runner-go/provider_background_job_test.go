@@ -76,11 +76,11 @@ func newProviderBgFixture(t *testing.T, executable, id string) *providerBgFixtur
 		SessionUUID: "11111111-1111-4111-8111-111111111111",
 		Agent: AgentExecConfig{
 			Model:          "model",
-			PermissionMode: "dontAsk",
+			PermissionMode: "auto",
 			Env:            map[string]string{"ORBIT_TEST_CAPTURE_FILE": capture},
 		},
 	}
-	stopService, err := startSessionBgJobService(context.Background(), h.bg, job, h.dir, h.dir)
+	stopService, err := startSessionBgJobService(context.Background(), nil, h.bg, job, h.dir, h.dir)
 	if err != nil {
 		t.Fatalf("background job service did not start: %v", err)
 	}
@@ -154,6 +154,7 @@ func (f *providerBgFixture) engineOwnedShell(t *testing.T, toolUseID string) int
 	if err := os.WriteFile(output, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	f.bg.noteToolUse(toolUseID, "Bash", map[string]interface{}{"run_in_background": true})
 	f.bg.onToolResult(toolUseID, "Command running in background with ID: "+toolUseID+
 		". Output is being written to: "+output+". You will be notified when it completes.")
 	return cmd.Process.Pid

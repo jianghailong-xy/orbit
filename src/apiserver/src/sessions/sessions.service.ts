@@ -31,7 +31,9 @@ import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
-import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnKey } from './orbit-authored-turn';
+import { importForkSessionId } from './import-fork';
+import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
   readSteerWithdrawRequest,
   steerWithdrawAnswer,
@@ -40,6 +42,17 @@ import {
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
 import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
+import {
+  externalSenderColumns,
+  externalSenderOf,
+  lastUserFromExternalOf,
+  lastUserFromOf,
+  lastUserFromOrbitOf,
+  pendingMessageColumns,
+  readSessionMessageFrom,
+  type ExternalTurnSender,
+} from './session-message';
+import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -109,6 +122,7 @@ import {
   type PlanUsage,
   CREATE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
+  type WikiChatContext,
 } from '@orbit/shared';
 import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -128,13 +142,19 @@ import { readTaskRouteSummaries } from '../tasks/task-route-decision';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   accountDefaultPermissionMode,
+  DEFAULT_PERMISSION_MODE,
+  isWiderThanStarter,
+  modeLimitsWhatItStarts,
+  modesItMayStart,
   resolvePermissionMode,
+  widerModeRefusal,
 } from '../common/permission-mode';
 import { cursorDefaultPermissionMode } from '../common/permission-semantics';
 import { PatRefusal, refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
+import { reachesPastOneMcpTool } from './remember-rules';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -149,10 +169,11 @@ import {
   readOwnerDecisionsBySession,
   sessionWaitingKind,
 } from '../projects/owner-decision-signal';
-import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
+import { chatSourceColumns, decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
+import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
-import { INTEGRATION_ITEM_KINDS, openItemOwed } from '../projects/project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
@@ -164,7 +185,10 @@ import {
   mergeStatusForResult,
 } from './merge-receipt';
 import { RealtimeService } from '../realtime/realtime.service';
-import { MAX_UPLOAD_BYTES, toBytes } from '../attachments/attachments.media';
+import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
+import { trashHoldOf } from '../files/file-retention';
+import { FilesService } from '../files/files.service';
+import { attachmentDisposition } from '../files/user-file-response';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
@@ -208,6 +232,7 @@ import {
 } from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals, readByLiveBackgroundJob } from './abandoned-approvals';
+import { holdsWorkspaceWriteValues, withoutEnvValues } from './workspace-write-card-values';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   normalizeBuiltinPermissionMode,
@@ -300,7 +325,7 @@ import {
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { returnQueuedTurns } from '../projects/project-open-item';
 import { OpenListDeltaStore } from './open-list-delta';
-import { readOpenListVersion } from './open-list-version';
+import { openListEtag, readOpenListVersion } from './open-list-version';
 import {
   SESSION_KIND_CONVERSATION,
   SESSION_KIND_LANDING,
@@ -348,6 +373,9 @@ function isPlatformContentTurn(clientTurnId: string | null | undefined): boolean
 // window a provider actually reports — a weekly quota — so a bad clock parks a session for days
 // at worst, never indefinitely.
 const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
+
+/** How long a finished Open-list build answers the reads of its version (`sharedOpenList`). */
+const OPEN_LIST_BUILD_KEEP_MS = 5_000;
 
 // A lease this close to expiry is not a usable CURRENT_WORK target: capability resolution and the
 // insert still have to commit before the runner can poll. The final check uses PostgreSQL's clock.
@@ -474,6 +502,28 @@ function expectedTurnAttachments(
 }
 
 /**
+ * A wiki chat on a workspace that does not run its sessions in worktrees of their own (wiki contract
+ * `chat.create.makes`): 409, and nothing is made. A chat never runs in a shared checkout.
+ */
+function chatWorktreeRequired(): ConflictException {
+  return new ConflictException(
+    'This workspace does not run its sessions in worktrees of their own, and a wiki chat never runs in a shared '
+      + 'checkout. Turn worktrees on for it, or choose another workspace.',
+  );
+}
+
+/** The mode a session gets when nobody names one, as create() stores it. */
+function modeOfNoneNamed(owner: { preferences: unknown }, engine: string | null): PermissionMode {
+  const accountDefault = accountDefaultPermissionMode(owner);
+  return engine === AgentProvider.CURSOR
+    ? cursorDefaultPermissionMode(accountDefault)
+    : accountDefault ?? DEFAULT_PERMISSION_MODE;
+}
+
+/** A header value the id middleware could not decode is left as it arrived, and Prisma would 500 on it. */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * Guards the two spawn paths a machine drives — `orbit mcp` / `orbit session create` and the
  * headless service-token bridge. Their caller is a model or a script, not a form with a picker, so
  * an invented mode would be stored verbatim and only surface when the claim hands it to the CLI:
@@ -518,11 +568,6 @@ function legacyArtifactMime(filePath: string): string {
     default:
       return 'application/octet-stream';
   }
-}
-
-function legacyArtifactDisposition(filename: string): string {
-  const ascii = filename.replace(/[^\x20-\x7E]|["\\\r\n]/g, '_') || 'download';
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -774,11 +819,26 @@ interface AccountSwitchWrite {
   cursorAccountPinned?: boolean;
 }
 
+/** completeProjectSessions' gate: the owner's project, and one that is DONE or CANCELLED. */
+function refuseUnlessProjectFinished(project: { status: string } | null | undefined): void {
+  if (!project) throw new NotFoundException('project not found');
+  if (project.status !== 'DONE' && project.status !== 'CANCELLED') {
+    throw new ConflictException({
+      code: 'PROJECT_STILL_OPEN',
+      message:
+        `This project is ${project.status}: its sessions move to Completed together only once it is `
+        + 'DONE or CANCELLED. Nothing was moved.',
+    });
+  }
+}
+
 @Injectable()
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
   /** The snapshots `listOpenSince` answers a cursor against — see open-list-delta.ts. */
   private readonly openListDelta = new OpenListDeltaStore();
+  /** Open lists built at a version, shared by the reads that ask for the same one (`sharedOpenList`). */
+  private readonly openListBuilds = new Map<string, { builtAt: number; rows: Promise<unknown> }>();
   /** How long a steer's withdrawal waits for the runner's answer (steer-withdraw.ts). A field so a
    *  spec can wait less for an answer it knows is not coming. */
   protected steerWithdrawWaitMs = STEER_WITHDRAW_WAIT_MS;
@@ -794,7 +854,17 @@ export class SessionsService {
      * by hand, which is the same.
      */
     @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
-  ) {}
+    /**
+     * Where attachment bytes are kept and read (files/files.service.ts): a worktree file a runner sent
+     * for preview, a legacy artifact. Nest's one instance; the specs that build this service by hand get
+     * their own over the same prisma and the same environment, which behaves the same.
+     */
+    @Optional() files?: FilesService,
+  ) {
+    this.files = files ?? new FilesService(prisma);
+  }
+
+  private readonly files: FilesService;
 
   /**
    * Work for `runnerId` has just been recorded — a session or a turn queued — or is about to be, as
@@ -949,6 +1019,13 @@ export class SessionsService {
        */
       titleManagedByProject?: boolean;
       /**
+       * The platform wrote `dto.prompt`, not a person (0493): set by the doors that open a session with
+       * a prompt of their own — a project's coordinator, a judgment, a task list's dispatch console, an
+       * @-mention's reply. Its opening turn is then Orbit's on the row and the queue
+       * (`isOrbitAuthoredTurnOf`). Internal: public session creation cannot claim it.
+       */
+      promptByOrbit?: boolean;
+      /**
        * The HTTP create door's credential. A personal access token may not choose `permissionMode`
        * at all, to any value, for the reason `updateConfig` refuses it one (§5.1 of
        * docs/personal-access-token-design.md): a session opened in a mode that runs without asking
@@ -956,9 +1033,36 @@ export class SessionsService {
        * session opens in the account's default mode, as every session that names none does.
        */
       credential?: AuthCredential;
+      /**
+       * Wiki contract `chat.create`: this session is a chat of that space. Internal, and set only by the
+       * chat door (wiki/wiki-chat.ts), which read the space under this owner and found the workspace
+       * eligible. The session is written by `writeChat`: in one transaction it re-reads that the
+       * workspace still runs its sessions in worktrees (409, and nothing is made, when it no longer
+       * does), writes `wiki_chat_space_id` and the SR54 selector into the row's own INSERT, and files
+       * the first turn as the owner's message door files one.
+       */
+      wikiChat?: {
+        spaceId: string;
+        clientTurnId: string;
+        wikiContext: WikiChatContext | null;
+        /** The workspace's repository identity, frozen as the selector's (SR54, SR36). */
+        repository: { repoUrl: string; rootCommitSha: string | null };
+      };
+      /**
+       * Who outside Orbit sent the opening message (docs/feishu-bot-design.md §8.2): a member of a connected Feishu
+       * group whose mention opened this session (feishu-group.service.ts). Internal, like `createTurn`'s. The
+       * opening turn is then laid down now, carrying the sender, rather than by the claim, which knows of none.
+       */
+      externalSender?: ExternalTurnSender;
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
+    const wikiChat = opts?.wikiChat;
+    // A chat is a conversation of its workspace and nothing else: it executes no task, makes no
+    // workspace and opens with words (wiki contract `chat.create`). The door never asks for more.
+    if (wikiChat && (dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || opts?.noWorktree)) {
+      throw new Error('a wiki chat is a session of its workspace that executes no task and opens with words');
+    }
     // Attachments with no words are a whole opening message, as they are on any later turn: the
     // runtime is handed the files either way. A shell command is nothing without its words.
     const attachmentsAlone =
@@ -1099,6 +1203,9 @@ export class SessionsService {
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
     }
+    // A chat never runs in a shared checkout (wiki contract `chat.workspace.eligible`). Read again, under
+    // the workspace row's lock, in the transaction that writes the chat (writeChat).
+    if (wikiChat && !enableWorktree) throw chatWorktreeRequired();
     // The engine it runs on and the credential it spends, resolved together by the one rule every door
     // follows (providers/engine-provider.ts, docs/provider-engine-contract.md §3): the pair the caller
     // named, an engine alone (its own sign-in, OpenCode's own config, or DeepSeek Harness on the
@@ -1170,13 +1277,14 @@ export class SessionsService {
         throw new BadRequestException(
           `runner "${target.name}" runs as root, and Claude Code refuses "${dto.permissionMode}" ` +
             `under root — the session would exit before its first turn. Use ` +
-            `"${ROOT_FALLBACK_PERMISSION_MODE}", which also never asks.`,
+            `"${ROOT_FALLBACK_PERMISSION_MODE}", which also runs without stopping for a person.`,
         );
       }
       // Substituted into the stored column rather than only at dispatch, so the Mode pill reads
-      // what the session will really do. Narrowing only (Bypass -> Don't Ask, allow -> deny), which
-      // is why this is safe to persist where the general rule is to derive: the account's own
-      // default is untouched, and a session cannot move to a runner that would have honored it.
+      // what the session will really do. Narrowing only (Bypass -> Auto, or Default on a model with
+      // no Auto, which dispatch decides as for any Auto), which is why this is safe to persist where
+      // the general rule is to derive: the account's own default is untouched, and a session cannot
+      // move to a runner that would have honored it.
       if (target?.runsAsRoot) rootRefusedFallback = ROOT_FALLBACK_PERMISSION_MODE;
     }
     // Linking to a task: it must belong to the same user (no cross-tenant linking). The same read
@@ -1208,7 +1316,12 @@ export class SessionsService {
     // `defaultMergeTarget` (SR1/SR3). Which machine this lands on is decided above and contributes
     // nothing here. A session that executes no task, or whose project has no binding, resolves
     // `UNBOUND` and behaves exactly as it did before migration 0231 (SR45).
-    const source = await decideSessionSource(this.prisma, sourceTask);
+    //
+    // A wiki chat is the one session that executes no task and still freezes a selector: origin/main,
+    // by a constant rule rather than the table (SR54).
+    const source = wikiChat
+      ? { columns: chatSourceColumns(wikiChat.repository) }
+      : await decideSessionSource(this.prisma, sourceTask);
     // Validate any compose-page image refs up front (caller's, still unscoped) so a bad
     // one fails the request before a session is created. They're scoped to the session
     // below and linked to the seeded first turn when the runner claims it (queue.service).
@@ -1375,6 +1488,7 @@ export class SessionsService {
         title,
         titleManagedByProject: opts?.titleManagedByProject ?? false,
         titleBeforeProjectManagement: null,
+        promptByOrbit: opts?.promptByOrbit ?? false,
         branch,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
@@ -1441,6 +1555,9 @@ export class SessionsService {
         // database agrees — migration 0231's freeze guard refuses every later write to these nine
         // columns, so there is no second statement that could write them.
         ...source.columns,
+        // A chat for its whole life, from this statement (wiki contract `chat.binding`); 0476's guard
+        // refuses every later write of it.
+        ...(wikiChat ? { wikiChatSpaceId: wikiChat.spaceId } : {}),
       },
     });
     const session = await (newWorkspace
@@ -1449,7 +1566,9 @@ export class SessionsService {
           shell: dto.shell === true,
           attachmentsAlone,
         })
-      : this.writeFenced(opts?.fence, (client) => insertSession(client))
+      : wikiChat
+        ? this.writeChat(dto.workspaceId!, dto.prompt, wikiChat, attachmentIds, insertSession)
+        : this.writeFenced(opts?.fence, (client) => insertSession(client))
     ).catch(async (e: unknown) => {
       // The folder checked above was deleted before this INSERT reached it: the same 400 as naming
       // a deleted one. Re-read rather than parsed out of the error, so a P2003 about any other key
@@ -1467,8 +1586,9 @@ export class SessionsService {
     // Scope the compose-page uploads to this session now that it exists. They stay
     // turn-less until the runner seeds the first turn (queue.service links them to it),
     // and cascade-delete with the session. A session that made its workspace did this, and the
-    // two seeds below, inside that transaction (createInNewWorkspace).
-    if (attachmentIds.length > 0 && !newWorkspace) {
+    // two seeds below, inside that transaction (createInNewWorkspace); a wiki chat linked them to
+    // its first turn inside its own (writeChat).
+    if (attachmentIds.length > 0 && !newWorkspace && !wikiChat) {
       await this.prisma.attachment.updateMany({
         // `taskId: null` for the same reason the validator carries it, but here it is the
         // CONCURRENT case: an upload that became a task's input between that check and this write
@@ -1492,6 +1612,8 @@ export class SessionsService {
     // as an imported transcript's and lays no turn down, so without this the files would never
     // reach the engine.
     if (attachmentsAlone && !newWorkspace) await this.seedOpeningTurn(session);
+    // Opened by somebody outside Orbit: the opening turn says who, so it is laid down now with them on it.
+    else if (opts?.externalSender && !newWorkspace && !dto.shell) await this.seedOpeningTurn(session, opts.externalSender);
     this.queue.notifySessionQueued(session.assignedRunnerId);
     // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
@@ -1520,6 +1642,8 @@ export class SessionsService {
     const {
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      // Read where the row is (orbit-authored-turn.ts); the row already says it as `lastUserFromOrbit`.
+      promptByOrbit: _promptByOrbit,
       ...publicSession
     } = session;
     return withSessionState(publicSession);
@@ -1574,6 +1698,52 @@ export class SessionsService {
     };
   }
 
+  /**
+   * A wiki chat's one transaction (wiki contract `chat.create.makes`): its workspace re-read under the row's
+   * lock — one deleted, or no longer running its sessions in worktrees, since the door looked is refused and
+   * nothing is made — then the session row, its chat column and SOURCE selector in that INSERT, then its
+   * first turn. The turn is filed as the owner's message door files one (`createTurn`): the words as they
+   * were written, under the client's UUID, with an explicit routing intent, so they are first-hand
+   * (`reviewModes.tiered.auto.ownerWords`); and it carries the page and selection as ids, which delivery
+   * reads (chat.notes). Neither seeder lays an opening turn down for a chat (`ensurePromptSeeded`,
+   * queue.buildSession): this one is it. The pictures and files sent with it (board 43) join it here too: uploads the
+   * caller made before any session existed (`assertScopableAttachments`), scoped to this session and linked to this
+   * turn in the same statement, so delivery hands them over with the words as it does a later message's. Locks: the
+   * workspace (15) FOR SHARE, the session (30) it inserts, the turn and the attachment rows it links (60).
+   */
+  private async writeChat<S extends { id: string }>(
+    workspaceId: string,
+    content: string,
+    chat: { clientTurnId: string; wikiContext: WikiChatContext | null },
+    attachmentIds: readonly string[],
+    insertSession: (tx: Prisma.TransactionClient) => PromiseLike<S>,
+  ): Promise<S> {
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const [workspace] = await tx.$queryRaw<Array<{ enableWorktree: boolean }>>`
+        SELECT "enable_worktree" AS "enableWorktree" FROM "workspace"
+         WHERE "id" = ${workspaceId}::uuid AND "deleted_at" IS NULL
+           FOR SHARE`;
+      if (!workspace) throw new ForbiddenException('workspace not found');
+      if (!workspace.enableWorktree) throw chatWorktreeRequired();
+      const session = await insertSession(tx);
+      const turn = await this.insertTurnLocked(tx, session.id, {
+        kind: 'message',
+        content,
+        clientTurnId: chat.clientTurnId,
+        sendIntent: 'NEXT_TURN',
+        ...(chat.wikiContext ? { wikiContext: chat.wikiContext as unknown as Prisma.InputJsonValue } : {}),
+      });
+      if (attachmentIds.length > 0) {
+        // Still unscoped, as `create` found them; one taken by a task or another session since is left where it went.
+        await tx.attachment.updateMany({
+          where: { id: { in: [...attachmentIds] }, sessionId: null, turnId: null, taskId: null },
+          data: { sessionId: session.id, turnId: turn.id },
+        });
+      }
+      return session;
+    }, loggedRetry(this.logger, 'sessions.writeChat'));
+  }
+
   /** pg_advisory_xact_lock namespace for the per-account workspace-name serializer (createInNewWorkspace). */
   private static readonly WORKSPACE_NAME_LOCK_NAMESPACE = 4000457;
 
@@ -1590,7 +1760,7 @@ export class SessionsService {
    * After the commit the runner is marked changed: its next heartbeat lists the new directory (`agentDirs`). One log
    * line says how it ended, either way: nothing else on this path does.
    */
-  private async createInNewWorkspace<S extends { id: string; prompt: string; importedAt: Date | null }>(
+  private async createInNewWorkspace<S extends { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null }>(
     ownerId: string,
     target: NewWorkspaceTarget,
     insertSession: (tx: Prisma.TransactionClient, workspaceId: string) => PromiseLike<S>,
@@ -1653,7 +1823,8 @@ export class SessionsService {
    * The row is written PENDING with `runtimeSessionId` = the Claude session id and a non-null
    * `importSourceCwd` (the transcript's original cwd, or the workspace workDir for the web path,
    * where the runner locates the file itself). The runner then, inside one claim: copies the
-   * transcript into the session's `~/.claude/projects/<slug>/` directory, replays it as run
+   * transcript into the session's `~/.claude/projects/<slug>/` directory (forking it under
+   * `importForkSessionId` when that copy would be the transcript itself), replays it as run
    * events so Orbit can read and search the conversation, and clears the marker (or Trashes the
    * session) via POST /runner/sessions/:id/import-result — and spawns no engine, because an
    * import has no user turn behind it to run. The session parks at AWAITING_INPUT, and the
@@ -1690,6 +1861,12 @@ export class SessionsService {
       enableWorktree: boolean;
       enabled: boolean;
     } | null;
+    // The machine the transcript is on, when a runner asks (the CLI door): the import runs there,
+    // so only a workspace on that machine can hold it. The same path on another machine is another
+    // directory — on 2026-11-06 a transcript recorded in /root/orbit on one host went to a
+    // workspace at that path on a different host, the first of four that matched it.
+    const machine = opts?.assignedRunnerId;
+    const onThisMachine = machine ? ' on this machine' : '';
     if (dto.workspaceId) {
       workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -1697,25 +1874,43 @@ export class SessionsService {
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
+      if (machine && workspace.runnerId && workspace.runnerId !== machine) {
+        throw new BadRequestException(
+          `workspace ${workspace.name} is on another machine, and the transcript is on this one; pick a workspace on this machine`,
+        );
+      }
     } else {
       // No explicit pick: the transcript's cwd names its workspace. Longest workDir prefix wins,
-      // so a project nested inside another binds the transcript to the tighter one.
+      // so a project nested inside another binds the transcript to the tighter one; two that hold
+      // it equally are the caller's to choose between, never the order the rows come back in. A
+      // workspace bound to no runner at all may be this machine's.
       const cwd = dto.sourceCwd;
       if (!cwd) throw new BadRequestException('pick a workspace or pass the transcript cwd');
       const candidates = await this.prisma.workspace.findMany({
         where: { ownerId, deletedAt: null },
         select: { id: true, name: true, workDir: true, runnerId: true, enableWorktree: true, enabled: true },
       });
-      workspace = candidates
+      const matches = candidates
+        .filter((c) => !machine || c.runnerId === null || c.runnerId === machine)
         .map((c) => ({ c, matched: c.workDir === null ? -1 : workDirPrefixLength(c.workDir, cwd) }))
-        .filter((s) => s.matched >= 0)
-        .sort((a, b) => b.matched - a.matched)[0]?.c;
-      if (!workspace) {
+        .filter((s) => s.matched >= 0);
+      const longest = Math.max(-1, ...matches.map((s) => s.matched));
+      const tightest = matches.filter((s) => s.matched === longest).map((s) => s.c);
+      if (tightest.length === 0) {
         throw new BadRequestException(
-          `no workspace of yours contains the transcript's cwd ${cwd}; pass --workspace to pick one`,
+          `no workspace of yours${onThisMachine} contains the transcript's cwd ${cwd}; pass --workspace to pick one`,
         );
       }
-      if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
+      const open = tightest.filter((c) => c.enabled !== false);
+      if (open.length === 0) throw new ForbiddenException('workspace is disabled');
+      if (open.length > 1) {
+        throw new BadRequestException(
+          `${open.length} workspaces${onThisMachine} contain the transcript's cwd ${cwd}: `
+            + open.map((c) => `${c.name} (${uuidToBase62(c.id)})`).join(', ')
+            + '; pass --workspace to pick one',
+        );
+      }
+      workspace = open[0];
     }
     if (!workspace.workDir) throw new BadRequestException('the workspace has no work directory');
     if (dto.sourceCwd) {
@@ -1752,11 +1947,16 @@ export class SessionsService {
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SessionsService.IMPORT_LOCK_NAMESPACE}, ${lockKey})`;
         // Rejection ③: a Claude transcript can be imported once — the imported session IS the
-        // continuation of it. A Trashed one does not count: deleting the import frees the id.
+        // continuation of it, whether it resumes the transcript itself or the fork a runner placed
+        // beside it (import-fork.ts). A Trashed one does not count: deleting the import frees the id.
         // Once per account: a session of another account with this engine id is not this
         // account's to be told about — not that it exists, nor its id or title — nor in its way.
         const claimed = await tx.session.findFirst({
-          where: { ownerId, runtimeSessionId: dto.claudeSessionId, deletedAt: null },
+          where: {
+            ownerId,
+            runtimeSessionId: { in: [dto.claudeSessionId, importForkSessionId(dto.claudeSessionId)] },
+            deletedAt: null,
+          },
           select: { id: true, title: true },
         });
         if (claimed) {
@@ -1806,7 +2006,8 @@ export class SessionsService {
     this.queue.notifySessionQueued(session.assignedRunnerId);
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     this.realtime.publishSessionCreated(session.id);
-    return withSessionState(session);
+    // The workspace by name too, so whoever asked sees at once where the import landed.
+    return { ...withSessionState(session), workspace: { id: workspace.id, name: workspace.name } };
   }
 
   /**
@@ -2165,8 +2366,8 @@ export class SessionsService {
       /** The child's engine, resolved with `provider` as on create (engine-provider.ts). */
       engine?: string;
       provider?: string;
-      /** The child's own permission posture. Omitted, create() materializes the account default —
-       *  the spawn does NOT inherit the parent's mode, which is per-run and not per-tree. */
+      /** The child's own permission posture, never wider than the parent's: a wider one named is
+       *  refused. Omitted, it is the account default, or the parent's own mode where that is wider. */
       permissionMode?: string;
     },
   ): Promise<{
@@ -2184,6 +2385,9 @@ export class SessionsService {
     /** The engine the child runs on, beside the credential it spends. */
     engine: string | null;
     provider: string;
+    /** Only when the account default was wider than the parent: the mode the child got instead, and why. */
+    permissionMode?: string;
+    permissionModeNote?: string;
   }> {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     assertKnownPermissionMode(dto.permissionMode);
@@ -2194,6 +2398,8 @@ export class SessionsService {
         rootSessionId: true,
         spawnDepth: true,
         workspaceId: true,
+        permissionMode: true,
+        engine: true,
         owner: { select: { preferences: true } },
       },
     });
@@ -2243,6 +2449,13 @@ export class SessionsService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+    // Resolve an @-mentioned workspace name to its id (owner-scoped). An explicit workspaceId wins.
+    const wantId = dto.workspaceId ?? dto.agentId;
+    const wantName = dto.workspaceName ?? dto.agentName;
+    const workspaceId =
+      wantId ?? (wantName ? await this.resolveWorkspaceByName(ownerId, wantName) : undefined);
+    // Before anything is written, so a refused request leaves the parent as it found it.
+    const narrowedTo = await this.assertChildModeOrNarrow(ownerId, parent, dto, workspaceId);
     // A root joins its own tree the first time it spawns; before that it belongs to no tree
     // and must not be counted against one. Nothing else writes this column on the parent, so
     // an unconditional write of the same value is idempotent under concurrent spawns.
@@ -2252,11 +2465,6 @@ export class SessionsService {
         data: { rootSessionId },
       });
     }
-    // Resolve an @-mentioned workspace name to its id (owner-scoped). An explicit workspaceId wins.
-    const wantId = dto.workspaceId ?? dto.agentId;
-    const wantName = dto.workspaceName ?? dto.agentName;
-    const workspaceId =
-      wantId ?? (wantName ? await this.resolveWorkspaceByName(ownerId, wantName) : undefined);
     // Give the child a real effort like a normal new session would (the target workspace's own
     // effort, else the owner's account default). create() normalizes it for the selected runtime
     // model. Without this the child's effort is empty, so a codex child falls back to the
@@ -2273,7 +2481,9 @@ export class SessionsService {
         model: dto.model,
         engine: dto.engine,
         provider: dto.provider,
-        permissionMode: dto.permissionMode,
+        // Named from here on when narrowed, so an engine that cannot keep the mode refuses it as it
+        // refuses any mode named for it, rather than running as something else.
+        permissionMode: narrowedTo ?? dto.permissionMode,
         effort,
       },
       {
@@ -2300,7 +2510,110 @@ export class SessionsService {
       agentName: targetWorkspace?.name ?? null,
       engine: created.engine,
       provider: created.provider,
+      ...(narrowedTo
+        ? {
+            permissionMode: narrowedTo,
+            permissionModeNote:
+              `Started in "${narrowedTo}", this session's own mode: the account default is wider than ` +
+              'this session may start. Where that mode asks, the new session waits on a card for a person.',
+          }
+        : {}),
     };
+  }
+
+  /**
+   * What a session may start, for `spawnFromSession`: a wider mode named is refused, and a default
+   * wider than the parent gives way to the parent's own mode, which is returned. Undefined leaves the
+   * request as it came. An Auto or Bypass parent reads nothing more.
+   */
+  private async assertChildModeOrNarrow(
+    ownerId: string,
+    parent: { permissionMode: string | null; engine: string | null; owner: { preferences: unknown } },
+    dto: { permissionMode?: string; engine?: string; provider?: string; model?: string },
+    workspaceId: string | undefined,
+  ): Promise<string | undefined> {
+    const starter = { mode: resolvePermissionMode(parent.permissionMode, parent.owner), engine: parent.engine };
+    if (!modeLimitsWhatItStarts(starter.mode)) return undefined;
+    const engine = await this.engineOfStart(ownerId, { ...dto, workspaceId });
+    if (dto.permissionMode) {
+      if (!isWiderThanStarter(starter, dto.permissionMode, engine)) return undefined;
+      throw widerModeRefusal(
+        starter.mode,
+        dto.permissionMode,
+        engine,
+        `Name a mode it may start (${modesItMayStart(starter, engine).join(', ')}). For a wider session, ask ` +
+          "the account owner to start it, or to switch this session's mode.",
+      );
+    }
+    return isWiderThanStarter(starter, modeOfNoneNamed(parent.owner, engine), engine) ? starter.mode : undefined;
+  }
+
+  /**
+   * Refuse a session opening a session at the account's default when that default is wider than the
+   * session may start. For a door with no mode to name (`task_start`, `task_update`, a coordinator's
+   * rotation), so `next` is a person's way forward. A caller that is not a session of this owner has
+   * nothing to compare: an owner's own door passes none, and the header it came from attributes, it
+   * does not authorize.
+   */
+  async assertMayStartAtAccountDefault(
+    ownerId: string,
+    actingSessionId: string | undefined,
+    target: { engine?: string | null; provider?: string | null; model?: string | null; workspaceId?: string | null },
+    next: string,
+  ): Promise<void> {
+    if (!actingSessionId || !UUID_SHAPE.test(actingSessionId)) return;
+    const acting = await this.prisma.session.findFirst({
+      where: { id: actingSessionId, ownerId },
+      select: { permissionMode: true, engine: true, owner: { select: { preferences: true } } },
+    });
+    if (!acting) return;
+    const starter = { mode: resolvePermissionMode(acting.permissionMode, acting.owner), engine: acting.engine };
+    if (!modeLimitsWhatItStarts(starter.mode)) return;
+    const engine = await this.engineOfStart(ownerId, target);
+    const mode = modeOfNoneNamed(acting.owner, engine);
+    if (isWiderThanStarter(starter, mode, engine)) throw widerModeRefusal(starter.mode, mode, engine, next);
+  }
+
+  /**
+   * What a session may do to another that already exists (session-reach.ts). Every runner door that gives
+   * a session a turn or ends one asks here, so an MCP call, the CLI and a bare HTTP request meet one check.
+   * A header value the id middleware could not decode names no session of this owner, and `task_start`'s
+   * header is attribution rather than proof, so it is treated as what it is: nobody to compare.
+   */
+  async assertMayReach(
+    ownerId: string,
+    callerSessionId: string,
+    targetSessionId: string,
+    act: SessionAct,
+    clientTurnId?: string,
+  ): Promise<{ narrower: boolean }> {
+    if (!UUID_SHAPE.test(callerSessionId) || !UUID_SHAPE.test(targetSessionId)) return { narrower: false };
+    return assertSessionMayReach(this.prisma, ownerId, callerSessionId, targetSessionId, act, clientTurnId);
+  }
+
+  /** Whether this session may move this task into a project (session-reach.ts), with the same reading of the header. */
+  async assertMayMoveRuns(ownerId: string, callerSessionId: string, taskId: string): Promise<void> {
+    if (UUID_SHAPE.test(callerSessionId)) await assertMayMoveRuns(this.prisma, ownerId, callerSessionId, taskId);
+  }
+
+  /** The engine a session started this way would run on, by create()'s own rule; null when it would be refused there. */
+  private async engineOfStart(
+    ownerId: string,
+    target: { engine?: string | null; provider?: string | null; model?: string | null; workspaceId?: string | null },
+  ): Promise<string | null> {
+    try {
+      const resolved = await resolveEngineProvider(this.engineProviderDeps(), {
+        ownerId,
+        engine: target.engine ?? undefined,
+        provider: target.provider ?? undefined,
+        model: target.model ?? undefined,
+        door: 'session',
+        seed: target.workspaceId ? () => agentProviderSeed(this.prisma, target.workspaceId!) : undefined,
+      });
+      return resolved.engine;
+    } catch {
+      return null;
+    }
   }
 
   /** The effort a normal new session under this workspace would inherit: the workspace's own effort if
@@ -2487,6 +2800,7 @@ export class SessionsService {
         providerBuiltin: true,
         model: true,
         effort: true,
+        permissionMode: true,
         workspaceId: true,
         parentSessionId: true,
         taskId: true,
@@ -3199,10 +3513,39 @@ export class SessionsService {
     return [...counts.values()];
   }
 
-  /** The Open list's data version; see open-list-version.ts. `includeLanding` widens it to the
-   *  landing source, which only a project-scoped read that asks for landings can see. */
-  openListVersion(ownerId: string, includeLanding = false): Promise<string> {
-    return readOpenListVersion(this.prisma, ownerId, Date.now(), includeLanding);
+  /** The Open list's data version; see open-list-version.ts. Only the flat list reads it, for the
+   *  plain read's 304 and `listOpenSince`'s empty delta — a project read is built every time (see
+   *  the controller's list handler). */
+  openListVersion(ownerId: string): Promise<string> {
+    return readOpenListVersion(this.prisma, ownerId, Date.now());
+  }
+
+  /**
+   * `list`'s answer for the flat Open list, built once for every read that asks for it at the same
+   * data version with the same filters: a change hints every device of the account at once
+   * (`sessions.list_changed`), and each of them reads. Reads that arrive while the build is in flight
+   * await it; for OPEN_LIST_BUILD_KEEP_MS after it finished they are answered from it. A version is
+   * read before the list it stands beside is built, so these rows can only be newer than the version
+   * every reader of them read, never older: a reader is never handed a list that lags what it asked
+   * for. A failed build is forgotten at once. Each reader gets its own copy, because the response
+   * interceptors rewrite ids in place, per request.
+   */
+  private async sharedOpenList<T>(key: string, build: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    for (const [k, entry] of this.openListBuilds) {
+      if (now - entry.builtAt >= OPEN_LIST_BUILD_KEEP_MS) this.openListBuilds.delete(k);
+    }
+    let entry = this.openListBuilds.get(key);
+    if (!entry) {
+      const fresh = { builtAt: Number.POSITIVE_INFINITY, rows: build() };
+      fresh.rows.then(
+        () => { fresh.builtAt = Date.now(); },
+        () => { if (this.openListBuilds.get(key) === fresh) this.openListBuilds.delete(key); },
+      );
+      this.openListBuilds.set(key, fresh);
+      entry = fresh;
+    }
+    return structuredClone((await entry.rows) as T);
   }
 
   async list(
@@ -3220,6 +3563,9 @@ export class SessionsService {
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
     },
+    /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
+     *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
+    version?: string,
   ) {
     // Open = neither completed nor deleted; Completed = completed but not deleted;
     // Trash = deleted, regardless of completion state. Legacy view names remain aliases.
@@ -3294,12 +3640,20 @@ export class SessionsService {
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
-    return this.listRows(ownerId, {
+    const build = () => this.listRows(ownerId, {
       scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
       visibility,
       orderBy,
       pageLimit,
     });
+    if (version === undefined || view !== 'open' || filters.projectId !== undefined) return build();
+    return this.sharedOpenList(JSON.stringify([
+      ownerId, version, filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null,
+      filters.confinedTo ?? null,
+      typeof filters.limit === 'number' && Number.isFinite(filters.limit) && filters.limit > 0
+        ? Math.floor(filters.limit)
+        : null,
+    ]), build);
   }
 
   /**
@@ -3321,20 +3675,44 @@ export class SessionsService {
     },
     since: string | undefined,
   ) {
-    const rows = await this.list(ownerId, { ...filters, view: 'open' });
     // A cursor is only valid for the list that produced it: the same filters with and without
     // landings are two different lists, and one's cursor must not be read as the other's.
     const scope = JSON.stringify([
       filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null, filters.projectId ?? null,
       filters.includeLanding === true, filters.confinedTo ?? null,
     ]);
+    // The flat list is answered from its data version first, as its plain read's 304 is: if the
+    // cursor's snapshot was built at the version that stands now, the caller already holds the list
+    // as it reads now, so it gets an empty delta and nothing is built. The version is read before
+    // the build, so the one kept beside the rows can only lag them: a write between the two costs
+    // one more build, never an empty delta over a list that moved. Scoped to the cursor's filters,
+    // it equals the ETag the plain read sends for them. A project read reads no version and is built
+    // every time, as its plain read is: its rows are a few, and the LANDING rows of the
+    // landing-aware one are not sources of the version.
+    const dataVersion = filters.projectId === undefined ? await this.openListVersion(ownerId) : undefined;
+    const version = dataVersion !== undefined
+      ? openListEtag(dataVersion, {
+          runnerId: filters.runnerId,
+          workspaceId: filters.workspaceId,
+          tagId: filters.tagId,
+          projectId: filters.projectId,
+          includeLanding: filters.includeLanding ? '1' : undefined,
+          confinedTo: filters.confinedTo?.join(','),
+        })
+      : undefined;
+    if (since && version !== undefined && this.openListDelta.unchanged(ownerId, scope, since, version)) {
+      return { full: false as const, upserts: [], removedIds: [], cursor: since };
+    }
+    const rows = await this.list(ownerId, { ...filters, view: 'open' }, dataVersion);
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
     // nothing from the raw timestamp — what it decides (the queue gate, capabilities) are fields of
     // their own and still count — so it is left out of what counts as a change, and a row sent
     // here may carry an older heartbeat than the plain list would.
-    const delta = this.openListDelta.answer(ownerId, scope, rows, since, (row) =>
-      row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row,
+    const delta = this.openListDelta.answer(
+      ownerId, scope, rows, since,
+      (row) => row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row,
+      version,
     );
     if (delta.full) return delta;
     // Rows have their `id` rewritten to the public spelling on the way out; bare id lists are not
@@ -3411,6 +3789,11 @@ export class SessionsService {
       lastAssistantText: string | null;
       lastToolUse: string | null;
       lastUserText: string | null;
+      lastUserFromSessionId: string | null;
+      lastUserFromTitle: string | null;
+      lastUserFromOrbit: Prisma.JsonValue | null;
+      lastUserFromExternalSource: string | null;
+      lastUserFromExternalName: string | null;
       // The rolling recap and when it was written (0418): the line the list prefers to the raw
       // last reply. Both null on a session no pass has recapped yet.
       recapText: string | null;
@@ -3503,6 +3886,14 @@ export class SessionsService {
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
+        -- Who sent it, when another session did (0485): the row names that session, not "You".
+        s.last_user_from_session_id AS "lastUserFromSessionId",
+        s.last_user_from_title AS "lastUserFromTitle",
+        -- Or that Orbit wrote it (0491), with the notification card its line is written from.
+        s.last_user_from_orbit AS "lastUserFromOrbit",
+        -- Or who outside Orbit sent it (0502): a Feishu group's member.
+        s.last_user_from_external_source AS "lastUserFromExternalSource",
+        s.last_user_from_external_name AS "lastUserFromExternalName",
         -- The rolling recap (0418), clipped like the previews above. A session with no recap yet
         -- answers nulls, which is what the row falls back from to lastAssistantText.
         left(s.recap_text, ${SessionsService.PREVIEW_LEN}::int) AS "recapText",
@@ -3593,6 +3984,7 @@ export class SessionsService {
                    AND oi.project_id = l.project_id
                    AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
                    AND ${openItemOwed('oi')}
+                   AND ${openItemVisible('oi')}
                    AND (oi.task_id = l.task_id
                         OR oi.promotion_id = l.promotion_id
                         OR EXISTS (
@@ -3716,6 +4108,12 @@ export class SessionsService {
         lastAssistantText: r.lastAssistantText,
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
+        // `{ sessionId, title }` of the session that sent lastUserText, null for the owner's own.
+        lastUserFrom: lastUserFromOf(r),
+        // `{ coordinatorDelivery }` when Orbit wrote it, null for anybody else's.
+        lastUserFromOrbit: lastUserFromOrbitOf(r),
+        // `{ source: 'FEISHU', name }` when somebody outside Orbit sent it (0502), null otherwise.
+        lastUserFromExternal: lastUserFromExternalOf(r),
         recapText: r.recapText,
         recapAt: r.recapAt,
         mergeStatus: r.mergeStatus,
@@ -3988,12 +4386,21 @@ export class SessionsService {
       sharedAt: _retiredSharedAt,
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      // Internal, as in `create`: the row says it as `lastUserFromOrbit`, the queue as `authoredByOrbit`.
+      promptByOrbit: _promptByOrbit,
       // Read, never spread: it is the input to the count below, and a client that wants to know
       // which jobs are moving asks the count, not the per-job instants behind it.
       runningBgJobActivity,
       // OpenAI's own id of the ChatGPT account a login-pool session runs on (migration 0324): no response
       // names an account but by its email and masked form (providers/codex-login.ts).
       poolCodexAccountId: _poolCodexAccountId,
+      // Read, never spread: answered as one `lastUserFrom`, the shape the list row and the summary carry.
+      lastUserFromSessionId,
+      lastUserFromTitle,
+      // Read, never spread, as the list row reads it (`lastUserFromOrbitOf`).
+      lastUserFromOrbit,
+      lastUserFromExternalSource,
+      lastUserFromExternalName,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -4035,6 +4442,8 @@ export class SessionsService {
       // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
       // tell (docs/provider-engine-contract.md §6.1).
       engine: await sessionEngine(this.prisma, session),
+      // What its Trash note says when a file is keeping it there past the 30 days.
+      trashHold: session.deletedAt ? await trashHoldOf(this.prisma, session.id) : null,
       workspace: session.workspace ? {
         ...session.workspace,
         antigravityKeyAvailableByRunner: assignedRunner ? {
@@ -4070,6 +4479,11 @@ export class SessionsService {
       projectTitle: coordinatorForProject?.title ?? null,
       projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
       projectMembership: await readSessionProjectMembership(this.prisma, session.id),
+      // Who sent lastUserText, when another session did — the list row's and the summary's key.
+      lastUserFrom: lastUserFromOf({ lastUserFromSessionId, lastUserFromTitle }),
+      // Or that Orbit wrote it, with the notification card its line is written from.
+      lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
+      lastUserFromExternal: lastUserFromExternalOf({ lastUserFromExternalSource, lastUserFromExternalName }),
       sourceLanding,
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
@@ -4920,7 +5334,18 @@ export class SessionsService {
     if (!session.assignedRunner || !runnerIsOnline(session.assignedRunner)) {
       throw new HttpException('The runner is offline. Try again when it is online.', HttpStatus.SERVICE_UNAVAILABLE);
     }
+    return this.readWorktreeArtifact(ownerId, id, filePath, session.assignedRunner.id);
+  }
 
+  /** The bytes of one file in the session's checkout, read by its runner. The caller has already
+   *  decided the path is one this session may read and that the runner is online; this only asks
+   *  and waits for the answer. */
+  private async readWorktreeArtifact(
+    ownerId: string,
+    id: string,
+    filePath: string,
+    runnerId: string,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
     // A new request always reads fresh bytes, including two files with the same basename.
     const content = { source: 'worktree' as const, path: filePath };
     const turn = await this.insertTurn(id, {
@@ -4929,7 +5354,7 @@ export class SessionsService {
     // The runner's heartbeat hands the request over. Have it beat now rather than at its next 30s
     // tick, as a Merge or a Commit does: whoever opened the file is watching it load. Over the runner
     // link the same wake marks the runner changed and hints it.
-    this.realtime.notifyRunnerWake(session.assignedRunner.id);
+    this.realtime.notifyRunnerWake(runnerId);
     const deadline = Date.now() + 40_000;
     while (true) {
       const result = await this.prisma.conversationTurn.findFirst({
@@ -4938,7 +5363,7 @@ export class SessionsService {
           status: true, content: true,
           attachments: {
             where: { ownerId, sessionId: id }, take: 1,
-            select: { id: true, data: true, mimeType: true },
+            select: { id: true },
           },
         },
       });
@@ -4947,13 +5372,16 @@ export class SessionsService {
         const receipt = readWorktreeArtifactRequest(result.content)?.result;
         const attachment = result.attachments[0];
         if (receipt?.status === 'uploaded' && attachment) {
-          // Preview bytes are transient; do not retain a new blob for every file opening.
+          const uploaded = await this.files.read({ id: attachment.id });
+          // Preview bytes are transient; do not retain a new attachment for every file opening. The
+          // bytes stay in the file store, where the same content opened again is the same file.
           await this.prisma.attachment.deleteMany({
             where: { id: attachment.id, turnId: turn.id, ownerId, sessionId: id },
           });
+          if (!uploaded) throw new NotFoundException('File is no longer available.');
           return {
-            data: Buffer.from(attachment.data), mimeType: attachment.mimeType,
-            disposition: legacyArtifactDisposition(path.posix.basename(filePath)),
+            data: uploaded.data, mimeType: uploaded.mimeType,
+            disposition: attachmentDisposition(path.posix.basename(filePath)),
           };
         }
         if (receipt?.status === 'missing') throw new NotFoundException('File is no longer available.');
@@ -4976,7 +5404,7 @@ export class SessionsService {
       }
       // The runner's answer wakes this at once; the second is the fallback for a wake that is lost, or
       // that came between the read above and the wait.
-      await this.realtime.waitForInbox(worktreeFileAnswerKey(turn.id), 1_000);
+      await this.realtime.waitForNotice(worktreeFileAnswerKey(turn.id), 1_000);
     }
   }
 
@@ -4985,12 +5413,42 @@ export class SessionsService {
     id: string,
     rawPath: string | undefined,
   ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    // A reply can name a file the way an agent works with one — relative to the checkout it is in
+    // (`docs/mocks/x.png`). The runner rewrites such a link to an attachment when its upload lands,
+    // but a reply that lost that upload still holds the path in the transcript; this is what reads
+    // it back. The legacy branch below only knows absolute paths into the two `.orbit` directories.
+    if (isWorktreeArtifactPath(rawPath)) {
+      return this.getWorktreeArtifactForTranscript(ownerId, id, rawPath);
+    }
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
     return this.getLegacyArtifact(session.id, rawPath);
+  }
+
+  /** A relative path from a transcript, read out of the session's checkout by its runner. Unlike
+   *  the changed-file preview, it does not require the file to still be listed as changed: a reply
+   *  outlives the run, and the checkout outlives its list. The path must be one the transcript
+   *  actually names, as the legacy door requires, so this cannot be used to walk the checkout. */
+  private async getWorktreeArtifactForTranscript(
+    ownerId: string,
+    id: string,
+    filePath: string,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true, assignedRunner: { select: { id: true, status: true, ...RUNNER_BEATS } } },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    if (!(await runEventPayloadMentions(this.prisma, id, filePath))) {
+      throw new NotFoundException('artifact not found');
+    }
+    if (!session.assignedRunner || !runnerIsOnline(session.assignedRunner)) {
+      throw new HttpException('The runner is offline. Try again when it is online.', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    return this.readWorktreeArtifact(ownerId, id, filePath, session.assignedRunner.id);
   }
 
   /**
@@ -5037,7 +5495,7 @@ export class SessionsService {
     const local = {
       data,
       mimeType: legacyArtifactMime(localFile),
-      disposition: legacyArtifactDisposition(filename),
+      disposition: attachmentDisposition(filename),
     };
     await this.persistLegacyArtifactAttachment(sessionId, filename, local.mimeType, data).catch(() => undefined);
     return local;
@@ -5105,13 +5563,14 @@ export class SessionsService {
     const row = await this.prisma.attachment.findFirst({
       where: { sessionId, fileName: filename, turnId: null },
       orderBy: { createdAt: 'desc' },
-      select: { data: true, mimeType: true, fileName: true },
+      select: { id: true, fileName: true },
     });
-    if (!row) return null;
+    const stored = row && (await this.files.read({ id: row.id }));
+    if (!row || !stored) return null;
     return {
-      data: Buffer.from(row.data),
-      mimeType: row.mimeType,
-      disposition: legacyArtifactDisposition(row.fileName ?? filename),
+      data: stored.data,
+      mimeType: stored.mimeType,
+      disposition: attachmentDisposition(row.fileName ?? filename),
     };
   }
 
@@ -5123,6 +5582,7 @@ export class SessionsService {
   ): Promise<void> {
     const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { ownerId: true } });
     if (!session) return;
+    const sha256 = await this.files.storeBytes(data);
     await this.prisma.attachment.create({
       data: {
         ownerId: session.ownerId,
@@ -5130,7 +5590,7 @@ export class SessionsService {
         mimeType,
         sizeBytes: data.length,
         fileName: filename,
-        data: toBytes(data),
+        sha256,
       },
     });
   }
@@ -5311,13 +5771,17 @@ export class SessionsService {
    * that already has one, and the message that triggered it would be answered a turn late.
    * `importedAt` says so durably; `importSourceCwd` cannot, having been cleared by the import
    * itself, and numTurns is now honestly 0 for these rows.
+   *
+   * A wiki chat has no prompt to lay down either: its opening turn was filed with the session, under
+   * the owner's UUID (`writeChat`), and a seed beside it would hand the engine the same words twice.
    */
   private async ensurePromptSeeded(
     tx: Prisma.TransactionClient,
-    session: { id: string; prompt: string; importedAt: Date | null },
+    session: { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null },
     excludedAttachmentIds: readonly string[] = [],
+    externalSender?: ExternalTurnSender,
   ) {
-    if (session.importedAt) return;
+    if (session.importedAt || session.wikiChatSpaceId) return;
     const existing = await tx.conversationTurn.findUnique({
       where: {
         sessionId_clientTurnId: {
@@ -5327,11 +5791,22 @@ export class SessionsService {
       },
       select: { id: true },
     });
-    if (existing) return;
+    if (existing) {
+      // A claim that came between the session's INSERT and this seed laid the opening turn down knowing no sender.
+      // Still undelivered, it is given its sender now; once handed out, the engine has read it as it was.
+      if (externalSender) {
+        await tx.conversationTurn.updateMany({
+          where: { id: existing.id, status: 'PENDING', externalSenderSource: null },
+          data: externalSenderColumns(externalSender),
+        });
+      }
+      return;
+    }
     const turn = await this.insertTurnLocked(tx, session.id, {
       kind: 'message',
       content: session.prompt,
       clientTurnId: SessionsService.initialTurnClientId(session.id),
+      ...externalSenderColumns(externalSender),
     });
     // Link any compose-page uploads (scoped to the session, still turn-less) to the seed
     // turn, exactly as the claim would, so they ride along with the prompt.
@@ -5350,18 +5825,30 @@ export class SessionsService {
    * a session `create` opened with attachments alone. The uploads are linked in the same
    * transaction as the turn, so no runner can take the turn without them.
    */
-  private async seedOpeningTurn(session: { id: string; prompt: string; importedAt: Date | null }) {
+  private async seedOpeningTurn(
+    session: { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null },
+    externalSender?: ExternalTurnSender,
+  ) {
     await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
-      await this.ensurePromptSeeded(tx, session);
+      await this.ensurePromptSeeded(tx, session, [], externalSender);
     }, loggedRetry(this.logger, 'sessions.seedOpeningTurn'));
+  }
+
+  /**
+   * A wiki chat's opening turn: the message `writeChat` filed with the session, its first. It is the
+   * chat's prompt as the seeded `initial-` turn is any other session's, so it is listed and withdrawn no
+   * more than that one is.
+   */
+  private static isChatOpeningTurn(session: { wikiChatSpaceId?: string | null }, turn: { seq: number }): boolean {
+    return Boolean(session.wikiChatSpaceId) && turn.seq === 1;
   }
 
   /** The fixed clientTurnId of the seeded first turn (the prompt) — see ensurePromptSeeded
    *  / queue.service.buildSession. It's a real PENDING message turn but isn't a withdrawable
    *  queued follow-up, so the queued-turn list/cancel paths exclude it. */
   static initialTurnClientId(sessionId: string): string {
-    return `initial-${sessionId}`;
+    return openingTurnKey(sessionId);
   }
 
   /** Allocate a turn while the caller holds the Session row lock. */
@@ -5508,6 +5995,12 @@ export class SessionsService {
       sendIntent?: SessionTurnIntent;
       targetTurnId?: string;
       senderSessionId?: string;
+      /** Who outside Orbit sent it (migration 0502), as `externalSenderColumns` writes it. */
+      externalSenderSource?: string;
+      externalSenderId?: string;
+      externalSenderName?: string | null;
+      /** A wiki chat's page and selection (migration 0476), which delivery reads. */
+      wikiContext?: Prisma.InputJsonValue;
     },
   ) {
     const existing = await tx.conversationTurn.findUnique({
@@ -5573,8 +6066,9 @@ export class SessionsService {
   ): Promise<string[]> {
     const ids = [...new Set(attachmentIds ?? [])];
     if (ids.length === 0) return [];
+    // No expired file: a copy holds the bytes it names, and those are on their way out, or gone.
     const found = await tx.attachment.findMany({
-      where: { id: { in: ids }, ownerId, sessionId },
+      where: { id: { in: ids }, ownerId, sessionId, expiredAt: null },
       select: { id: true, turnId: true },
     });
     if (found.length !== ids.length) {
@@ -5586,10 +6080,12 @@ export class SessionsService {
         .map((a) => [a.id, resentAttachmentId(sessionId, clientTurnId, a.id)] as const),
     );
     if (copyOf.size === 0) return ids;
-    // In the database, so the bytes are not carried through this process under the session lock.
+    // In the database, so the bytes are not carried through this process under the session lock. The
+    // copy names the same stored bytes (sha256) as the row it copies, or carries `data` for a row from
+    // before Orbit Files.
     await tx.$executeRaw`
-      INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, data)
-      SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.data
+      INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, sha256, data)
+      SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.sha256, a.data
         FROM unnest(ARRAY[${Prisma.join([...copyOf.keys()])}]::uuid[],
                     ARRAY[${Prisma.join([...copyOf.values()])}]::uuid[]) AS c(source_id, copy_id)
         JOIN "attachment" a ON a.id = c.source_id`;
@@ -5725,6 +6221,12 @@ export class SessionsService {
        * sender. Written on a NEW turn only; a replay returns the turn as it was written.
        */
       senderSessionId?: string;
+      /**
+       * Who outside Orbit sent this turn (`conversation_turn.external_sender_*`, migration 0502): a member of a
+       * connected Feishu group, from the event Feishu delivered (feishu-group.service.ts, docs/feishu-bot-design.md
+       * §8.2). Like `senderSessionId`, an option of this call and never a field of `dto`. Written on a NEW turn only.
+       */
+      externalSender?: ExternalTurnSender;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
@@ -5769,6 +6271,9 @@ export class SessionsService {
     // Keep the distinction all the way to `send_intent` so mixed-version retries and dequeue can
     // preserve the behaviour that accepted the row.
     const intent = dto.intent;
+    // A wiki chat's page and selection (contract `chat.turns`): shape-checked before anything is read,
+    // and taken only by a chat, which is decided under the lock below.
+    const wikiContext = readWikiChatContext(dto.wikiContext);
     // Retried whole. This is where a user turn serializes against the runner's claim and against
     // turnComplete, and every one of those decisions is taken from the Session row read under the
     // lock inside the closure. A victim wrote no turn, so a re-run enqueues once — and the delivery
@@ -5800,6 +6305,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
       // No engine turn can be queued onto the platform's landing container (§2.9 LS6).
       assertEngineSessionRow(session);
+      if (wikiContext && !session.wikiChatSpaceId) throw wikiContextOutsideChat();
       turnRunnerId = session.assignedRunnerId;
       // A committed operation owns its key even after its Session later ends or moves to Trash.
       // Check the durable receipt while holding the Session lock before any lifecycle, attachment
@@ -5849,6 +6355,7 @@ export class SessionsService {
           || expectedAttachments.some((attachmentId, index) => attachmentId !== storedAttachments[index])
           || (existing.requestFingerprint != null
             && existing.requestFingerprint !== opts?.requestFingerprint)
+          || !sameWikiChatContext(existing.wikiContext, wikiContext)
         ) {
           throw new ConflictException(
             'clientTurnId was already used with a different turn payload',
@@ -6042,9 +6549,23 @@ export class SessionsService {
         ...(steerTarget ? { sendIntent: 'CURRENT_WORK' } : intent ? { sendIntent: intent } : {}),
         ...(targetTurnId ? { targetTurnId } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...externalSenderColumns(opts?.externalSender),
+        ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       await opts?.onTurnWritten?.(tx, turn);
+      // Who the row names beside that message when another session sent it: the session its card
+      // will name (session-message.ts). A plain read of the sender's row, never a lock on it — the
+      // one a foreign key would take is what 0349 and 0485 avoid.
+      const sentBy = dto.content && opts?.senderSessionId
+        ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
+        : null;
+      // Or that Orbit wrote it — a coordinator's notification, a watch's wake, the owner's answer
+      // handed on — with the notification's card, which the hook above has already bound to this turn
+      // (orbit-message.ts). Read only for a key in the platform's own namespace.
+      const sentByOrbit = dto.content
+        ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6057,8 +6578,11 @@ export class SessionsService {
           // rest of that turn — and throughout it the row previewed the PREVIOUS reply, which is
           // the one thing that reads as "already answered". The runner's own `user` event rewrites
           // the same value; only a reply clears it (ANSWERS_USER_TURN). An attachment-only send
-          // carries no text to preview and so leaves the column as it found it.
-          ...(dto.content ? { lastUserText: dto.content } : {}),
+          // carries no text to preview and so leaves the column as it found it. Its sender goes
+          // with it (`lastUserFrom`, `lastUserFromOrbit`, `lastUserFromExternal`), all null for the owner's own words.
+          ...(dto.content
+            ? pendingMessageColumns(dto.content, sentBy, sentByOrbit, externalSenderOf(externalSenderColumns(opts?.externalSender)))
+            : {}),
           // A message on this session disarms any auto-retry waiting on it — whether it
           // came from the user (they took over; sending their own message again behind
           // their back would be a second, unasked-for turn) or from the sweeper itself
@@ -6356,6 +6880,13 @@ export class SessionsService {
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
+      // Its sender, read as createTurn reads one.
+      const sentBy = content && opts?.senderSessionId
+        ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
+        : null;
+      const sentByOrbit = content
+        ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6363,8 +6894,8 @@ export class SessionsService {
           status: nextStatus,
           lastTurnAt: new Date(),
           // The redirected message is what the session is waiting on now — previewed from here
-          // exactly as in createTurn.
-          ...(content ? { lastUserText: content } : {}),
+          // exactly as in createTurn, with who sent it.
+          ...(content ? pendingMessageColumns(content, sentBy, sentByOrbit) : {}),
           // The person took over: an auto-retry waiting on this session must not fire a
           // second, unasked-for turn behind the one they just redirected to. A claim the sweep had
           // in flight ends for the same reason (migration 0354) — this turn is not its.
@@ -6435,8 +6966,9 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       // What the cards are read against (turn-cards.ts): whose rows they may name, and the task a
-      // run's brief was built from.
-      select: { id: true, ownerId: true, taskId: true, runSource: true },
+      // run's brief was built from. And whether it is a wiki chat, whose opening turn is its prompt.
+      // And whether the platform wrote that prompt (0493), which makes the opening Orbit's.
+      select: { id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const turns = await this.prisma.conversationTurn.findMany({
@@ -6467,6 +6999,8 @@ export class SessionsService {
         content: true,
         createdAt: true,
         senderSessionId: true,
+        externalSenderSource: true,
+        externalSenderName: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
@@ -6483,6 +7017,7 @@ export class SessionsService {
       // A turn handing back the outcomes of this session's requests is the same kind of row
       // (sessions/session-request.ts): listed with the blocks it will be delivered with.
       .filter((turn) => turn.clientTurnId !== initialClientTurnId
+        && !SessionsService.isChatOpeningTurn(session, turn)
         && (!isPlatformContentTurn(turn.clientTurnId) || wakeContent.has(turn.id)))
       .map((turn) => ({
         turn,
@@ -6520,7 +7055,7 @@ export class SessionsService {
             mimeType: attachment.mimeType,
           })),
           ...cards.get(turn.id),
-          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
     }
@@ -6589,7 +7124,7 @@ export class SessionsService {
               }
             : {}),
           ...cards.get(turn.id),
-          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({
@@ -6695,6 +7230,8 @@ export class SessionsService {
           kind: { in: ['message', 'shell'] },
           status: 'PENDING',
           clientTurnId: { not: SessionsService.initialTurnClientId(id) },
+          // A wiki chat's opening turn is its prompt, as the seeded one is any other session's.
+          ...(session.wikiChatSpaceId ? { seq: { gt: 1 } } : {}),
         },
       });
       if (res.count === 0) {
@@ -7498,15 +8035,46 @@ export class SessionsService {
    * is refused exactly as before.
    */
   async commitWorktree(ownerId: string, id: string) {
+    return this.queueCheckoutAction(ownerId, id, 'commit');
+  }
+
+  /**
+   * Throw away a finished session's uncommitted checkout, so the checkout can be reclaimed
+   * instead of carried past every cap forever (commitWorktree's doc applies here, read the other
+   * way round).
+   *
+   * It rides the commit relay on purpose: the same operation fence, the same heartbeat delivery,
+   * the same result door. What differs is one flag on the command the runner runs. Only a
+   * finished session may be discarded — a live one is being worked in, and "discard" there would
+   * race its turn — and only a runner that declares abandoned-checkout-v1 may be asked: an older
+   * one would ignore the flag and commit the work instead.
+   */
+  async discardCheckout(ownerId: string, id: string) {
+    return this.queueCheckoutAction(ownerId, id, 'discard');
+  }
+
+  private async queueCheckoutAction(ownerId: string, id: string, action: 'commit' | 'discard') {
+    const discard = action === 'discard';
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     assertEngineSessionRow(session);
     if (session.isolationStatus !== 'worktree' || !session.branch) {
-      throw new BadRequestException('session has no worktree to commit');
+      throw new BadRequestException(
+        discard ? 'session has no worktree checkout to discard' : 'session has no worktree to commit',
+      );
     }
     const ended = !SessionsService.LIVE.includes(session.status);
+    if (discard && !ended) {
+      throw new ConflictException(
+        'the session is still running — end it before discarding its checkout',
+      );
+    }
     if (ended && session.worktreeDirty !== true) {
-      throw new ConflictException('the session has ended — its work is already committed');
+      throw new ConflictException(
+        discard
+          ? 'the checkout has no uncommitted work to discard'
+          : 'the session has ended — its work is already committed',
+      );
     }
     if (!ended && session.cancelRequestedAt) {
       throw new ConflictException('the session has ended — its work is already committed');
@@ -7520,7 +8088,16 @@ export class SessionsService {
     if (!session.assignedRunnerId) {
       throw new ConflictException('no runner is associated with this session');
     }
-    if (session.commitStatus === 'pending') return { ok: true };
+    if (discard && !(await this.runnerCanDiscard(session.assignedRunnerId))) {
+      throw new ConflictException(
+        'this runner does not support discarding a checkout yet — update it first',
+      );
+    }
+    if (session.commitStatus === 'pending') {
+      // The same press twice is the same answer; a different one has to wait for the first.
+      if ((session.commitAction === 'discard') === discard) return { ok: true };
+      throw new ConflictException('wait for the pending checkout operation to finish');
+    }
     if (session.mergeStatus === 'pending') {
       throw new ConflictException('wait for the pending branch merge to finish');
     }
@@ -7546,9 +8123,11 @@ export class SessionsService {
         ...idle,
         commitStatus: session.commitStatus,
         mergeStatus: session.mergeStatus,
+        commitAction: session.commitAction,
       },
       data: {
         commitStatus: 'pending',
+        commitAction: discard ? 'discard' : null,
         commitRequestedAt: new Date(),
         commitOperationId: randomUUID(),
         commitOperationOwner: null,
@@ -7567,7 +8146,11 @@ export class SessionsService {
             !current.cancelRequestedAt &&
             current.runningSubagents.length === 0
           : current.worktreeDirty === true);
-      if (current?.commitStatus === 'pending' && stillCommittable) {
+      if (
+        current?.commitStatus === 'pending' &&
+        stillCommittable &&
+        (current.commitAction === 'discard') === discard
+      ) {
         return { ok: true };
       }
       if (current?.mergeStatus === 'pending') {
@@ -7580,6 +8163,17 @@ export class SessionsService {
     // As for a merge: have the runner heartbeat now rather than at its next 30s tick.
     this.realtime.notifyRunnerWake(session.assignedRunnerId);
     return { ok: true };
+  }
+
+  /** Whether this runner declared that its commit relay also carries `discard` (the runner-api
+   *  controller's ABANDONED_CHECKOUT_V1). Read fresh: a machine updates itself while the page
+   *  that shows the button stays open. */
+  private async runnerCanDiscard(runnerId: string): Promise<boolean> {
+    const runner = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { capabilities: true, capabilitiesReportedAt: true },
+    });
+    return !!runner?.capabilitiesReportedAt && runner.capabilities.includes('abandoned-checkout-v1');
   }
 
   /**
@@ -7700,6 +8294,27 @@ export class SessionsService {
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
     requireNoProjectBinding = false,
+  ) {
+    // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
+    // re-run sees whichever end actually committed rather than re-applying one that did not.
+    return withTransactionRetry(
+      this.prisma,
+      (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding),
+      loggedRetry(this.logger, 'sessions.transitionEnd'),
+    );
+  }
+
+  /**
+   * transitionEnd's work, inside the caller's transaction: it takes the Session row lock itself, and a
+   * caller ending several sessions in one transaction (completeProjectSessions) holds them already.
+   */
+  private async transitionEndLocked(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    sessionId: string,
+    reason: SessionEndReason,
+    lifecycle?: 'completedAt' | 'deletedAt',
+    requireNoProjectBinding = false,
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
@@ -7710,174 +8325,170 @@ export class SessionsService {
     endReason: SessionEndReason | null;
     projectBound: boolean;
   }> {
-    // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
-    // re-run sees whichever end actually committed rather than re-applying one that did not.
-    return withTransactionRetry(this.prisma, async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "session"
-        WHERE id = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
-        FOR UPDATE`;
-      if (locked.length === 0) throw new NotFoundException('session not found');
-      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
-      // End and Trash both land here; the platform's landing container is not a person's to close or
-      // throw away (§2.9 LS6).
-      assertEngineSessionRow(session);
-      if (requireNoProjectBinding) {
-        // Every Project binding path takes this same Session lock first. A non-locking lookup made
-        // after acquiring it therefore decides a stable fact: an existing adopter is preserved,
-        // while a future adopter cannot pass the deleted_at guard until this transaction commits.
-        const project = await tx.project.findFirst({
-          where: { coordinatorSessionId: sessionId },
-          select: { id: true },
-        });
-        if (project) {
-          return {
-            changed: false,
-            runnerId: session.assignedRunnerId,
-            status: session.status,
-            lifecycleState: deriveSessionLifecycleState(session),
-            filingState: deriveSessionFilingState(session),
-            endReason:
-              session.endReason == null ? null : (session.endReason as SessionEndReason),
-            projectBound: true,
-          };
-        }
-      }
-      if (lifecycle === 'completedAt' && session.deletedAt != null) {
-        throw new ConflictException(
-          'a session in Trash must be moved to Open before it can be completed',
-        );
-      }
-      const now = new Date();
-      // Keep the first filing timestamp stable across retries. This matters especially
-      // for deletedAt, which starts the Trash retention clock.
-      const lifecycleData: {
-        completedAt?: Date;
-        /** @deprecated Rolling-version compatibility mirror. */
-        archivedAt?: Date;
-        deletedAt?: Date;
-      } = {};
-      let finalCompletedAt = session.completedAt ?? session.archivedAt;
-      let finalDeletedAt = session.deletedAt;
-      if (lifecycle === 'completedAt' && finalCompletedAt == null) {
-        lifecycleData.completedAt = now;
-        // Keep old replicas and clients coherent during the compatibility window.
-        lifecycleData.archivedAt = now;
-        finalCompletedAt = now;
-      }
-      if (lifecycle === 'deletedAt' && session.deletedAt == null) {
-        lifecycleData.deletedAt = now;
-        finalDeletedAt = now;
-      }
-      const lifecycleState = deriveSessionLifecycleState({
-        completedAt: finalCompletedAt,
-        deletedAt: finalDeletedAt,
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "session"
+      WHERE id = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
+      FOR UPDATE`;
+    if (locked.length === 0) throw new NotFoundException('session not found');
+    const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+    // End and Trash both land here; the platform's landing container is not a person's to close or
+    // throw away (§2.9 LS6).
+    assertEngineSessionRow(session);
+    if (requireNoProjectBinding) {
+      // Every Project binding path takes this same Session lock first. A non-locking lookup made
+      // after acquiring it therefore decides a stable fact: an existing adopter is preserved,
+      // while a future adopter cannot pass the deleted_at guard until this transaction commits.
+      const project = await tx.project.findFirst({
+        where: { coordinatorSessionId: sessionId },
+        select: { id: true },
       });
-      const filingState = deriveSessionFilingState({
-        completedAt: finalCompletedAt,
-        deletedAt: finalDeletedAt,
-      });
-      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-        if (Object.keys(lifecycleData).length > 0 || requireNoProjectBinding) {
-          await tx.session.update({
-            where: { id: sessionId },
-            data: {
-              ...lifecycleData,
-              ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-            },
-          });
-        }
+      if (project) {
         return {
           changed: false,
           runnerId: session.assignedRunnerId,
           status: session.status,
-          lifecycleState,
-          filingState,
+          lifecycleState: deriveSessionLifecycleState(session),
+          filingState: deriveSessionFilingState(session),
           endReason:
             session.endReason == null ? null : (session.endReason as SessionEndReason),
-          projectBound: false,
+          projectBound: true,
         };
       }
-      await terminalizePendingCurrentWorkSteers(tx, sessionId, {
-        code: CURRENT_WORK_SESSION_ENDED,
-        reason: 'CURRENT_WORK was not delivered because the session ended.',
-      });
-      // Both branches below retire every queued message, a Watch wake among them: its delivery
-      // stops reading DELIVERED first (watches/watch-wake-drain.ts).
-      await deadLetterQueuedWatchWakes(tx, sessionId, {
-        code: 'OBSERVER_SESSION_ENDED',
-        ending: `an end was requested: ${reason}`,
-      });
-      // An exception item queued for this project's coordinator goes back to being owed, and to the
-      // account owner: a conversation that is ending cannot read it (projects/project-open-item.ts).
-      await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
-      // Outcomes queued back to this session as an asker are let go, to be held for it and written on
-      // its task. The requests queued here are left to the end itself: the status write below (or the
-      // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
-      await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
-      if (session.status === RunStatus.PENDING) {
+    }
+    if (lifecycle === 'completedAt' && session.deletedAt != null) {
+      throw new ConflictException(
+        'a session in Trash must be moved to Open before it can be completed',
+      );
+    }
+    const now = new Date();
+    // Keep the first filing timestamp stable across retries. This matters especially
+    // for deletedAt, which starts the Trash retention clock.
+    const lifecycleData: {
+      completedAt?: Date;
+      /** @deprecated Rolling-version compatibility mirror. */
+      archivedAt?: Date;
+      deletedAt?: Date;
+    } = {};
+    let finalCompletedAt = session.completedAt ?? session.archivedAt;
+    let finalDeletedAt = session.deletedAt;
+    if (lifecycle === 'completedAt' && finalCompletedAt == null) {
+      lifecycleData.completedAt = now;
+      // Keep old replicas and clients coherent during the compatibility window.
+      lifecycleData.archivedAt = now;
+      finalCompletedAt = now;
+    }
+    if (lifecycle === 'deletedAt' && session.deletedAt == null) {
+      lifecycleData.deletedAt = now;
+      finalDeletedAt = now;
+    }
+    const lifecycleState = deriveSessionLifecycleState({
+      completedAt: finalCompletedAt,
+      deletedAt: finalDeletedAt,
+    });
+    const filingState = deriveSessionFilingState({
+      completedAt: finalCompletedAt,
+      deletedAt: finalDeletedAt,
+    });
+    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (Object.keys(lifecycleData).length > 0 || requireNoProjectBinding) {
         await tx.session.update({
           where: { id: sessionId },
           data: {
             ...lifecycleData,
             ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-            status: RunStatus.CANCELLED,
-            endReason: reason,
-            cancelRequestedAt: now,
-            finishedAt: now,
-            // A queued session can still be holding what its last run left running — a job parked
-            // with the session and never reaped — and CANCELLED is the end of the line for it
-            // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
-            // and what its drain then reports is refused: this status has closed the door.
-            ...CLEARED_RUNNING_WORK,
           },
-        });
-        // A session that ends before it ran is still a finish of the task's work, and may be the one
-        // a DONE task's identity was waiting for (§10.5 O-L4 3).
-        await settleDeliveredIdentityAfterFinish(tx, session);
-        await retireSessionInboxGeneration(tx, sessionId);
-        // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
-        // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
-        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-        await tx.conversationTurn.updateMany({
-          where: { sessionId, status: { not: 'ANSWERED' } },
-          data: { status: 'ANSWERED', answeredAt: now },
-        });
-      } else {
-        await tx.session.update({
-          where: { id: sessionId },
-          data: {
-            ...lifecycleData,
-            ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-            cancelRequestedAt: now,
-            endReason: reason,
-          },
-        });
-        // A `bg-wake:` turn queued here is one of the messages retired below: the wakeups filed onto it are
-        // dropped with the session that is ending, and taken out of their loop's runs
-        // (runner-api/wake-turn-withdraw.ts).
-        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-        // Retire queued messages in place. This prevents replay while preserving target FKs,
-        // attachments and clientTurnId receipts as durable audit evidence.
-        await tx.conversationTurn.updateMany({
-          where: { sessionId, kind: 'message', status: 'PENDING' },
-          data: { status: 'ANSWERED', answeredAt: now },
-        });
-        await this.insertTurnLocked(tx, sessionId, {
-          kind: 'end',
-          clientTurnId: randomUUID(),
         });
       }
       return {
-        changed: true,
+        changed: false,
         runnerId: session.assignedRunnerId,
-        status: session.status === RunStatus.PENDING ? RunStatus.CANCELLED : session.status,
+        status: session.status,
         lifecycleState,
         filingState,
-        endReason: reason,
+        endReason:
+          session.endReason == null ? null : (session.endReason as SessionEndReason),
         projectBound: false,
       };
-    }, loggedRetry(this.logger, 'sessions.transitionEnd'));
+    }
+    await terminalizePendingCurrentWorkSteers(tx, sessionId, {
+      code: CURRENT_WORK_SESSION_ENDED,
+      reason: 'CURRENT_WORK was not delivered because the session ended.',
+    });
+    // Both branches below retire every queued message, a Watch wake among them: its delivery
+    // stops reading DELIVERED first (watches/watch-wake-drain.ts).
+    await deadLetterQueuedWatchWakes(tx, sessionId, {
+      code: 'OBSERVER_SESSION_ENDED',
+      ending: `an end was requested: ${reason}`,
+    });
+    // An exception item queued for this project's coordinator goes back to being owed, and to the
+    // account owner: a conversation that is ending cannot read it (projects/project-open-item.ts).
+    await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
+    // Outcomes queued back to this session as an asker are let go, to be held for it and written on
+    // its task. The requests queued here are left to the end itself: the status write below (or the
+    // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
+    await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
+    if (session.status === RunStatus.PENDING) {
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          ...lifecycleData,
+          ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
+          status: RunStatus.CANCELLED,
+          endReason: reason,
+          cancelRequestedAt: now,
+          finishedAt: now,
+          // A queued session can still be holding what its last run left running — a job parked
+          // with the session and never reaped — and CANCELLED is the end of the line for it
+          // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
+          // and what its drain then reports is refused: this status has closed the door.
+          ...CLEARED_RUNNING_WORK,
+        },
+      });
+      // A session that ends before it ran is still a finish of the task's work, and may be the one
+      // a DONE task's identity was waiting for (§10.5 O-L4 3).
+      await settleDeliveredIdentityAfterFinish(tx, session);
+      await retireSessionInboxGeneration(tx, sessionId);
+      // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
+      // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
+      await settleUnrunWakeTurns(tx, sessionId, { drained: true });
+      await tx.conversationTurn.updateMany({
+        where: { sessionId, status: { not: 'ANSWERED' } },
+        data: { status: 'ANSWERED', answeredAt: now },
+      });
+    } else {
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          ...lifecycleData,
+          ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
+          cancelRequestedAt: now,
+          endReason: reason,
+        },
+      });
+      // A `bg-wake:` turn queued here is one of the messages retired below: the wakeups filed onto it are
+      // dropped with the session that is ending, and taken out of their loop's runs
+      // (runner-api/wake-turn-withdraw.ts).
+      await settleUnrunWakeTurns(tx, sessionId, { drained: true });
+      // Retire queued messages in place. This prevents replay while preserving target FKs,
+      // attachments and clientTurnId receipts as durable audit evidence.
+      await tx.conversationTurn.updateMany({
+        where: { sessionId, kind: 'message', status: 'PENDING' },
+        data: { status: 'ANSWERED', answeredAt: now },
+      });
+      await this.insertTurnLocked(tx, sessionId, {
+        kind: 'end',
+        clientTurnId: randomUUID(),
+      });
+    }
+    return {
+      changed: true,
+      runnerId: session.assignedRunnerId,
+      status: session.status === RunStatus.PENDING ? RunStatus.CANCELLED : session.status,
+      lifecycleState,
+      filingState,
+      endReason: reason,
+      projectBound: false,
+    };
   }
 
   /** Emit runner/control-plane effects for a newly persisted end intent. */
@@ -7998,14 +8609,26 @@ export class SessionsService {
     );
   }
 
-  /** Record a human allow/deny on a pending approval; the runner's long-poll picks
-   *  it up and returns it to claude's --permission-prompt-tool. */
+  /** Record a human allow/deny on a pending approval; the runner's next read picks
+   *  it up and returns it to claude's --permission-prompt-tool.
+   *
+   *  `credential` is the door the decider came in by, recorded on the decision that lands
+   *  (`decided_credential_kind`, 0500). A FEISHU one is a click on a Feishu card
+   *  (docs/feishu-bot-design.md §7.2): its clicker's open_id and the card's message_id are recorded
+   *  beside it, and it carries only a plain allow or deny — "always allow" widens a standing grant and
+   *  "Create and start" starts work, both of which stay in the app — so either is refused before anything
+   *  is written. */
   async decideApproval(
     ownerId: string,
     id: string,
     approvalId: string,
     dto: ApprovalDecisionRequest,
+    credential?: AuthCredential,
   ): Promise<ApprovalInfo> {
+    const feishu = credential?.kind === 'FEISHU' ? credential : null;
+    if (feishu && (dto.rememberRules !== undefined || dto.startAfterCreate !== undefined)) {
+      throw new BadRequestException('a decision from a Feishu card is a plain allow or deny: "always allow" and "Create and start" stay in Orbit');
+    }
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true, workspaceId: true, sessionKind: true },
@@ -8050,25 +8673,56 @@ export class SessionsService {
       }
     }
     const status = dto.behavior === 'allow' ? 'ALLOWED' : 'DENIED';
-    // Only the first decision on a still-PENDING approval applies (idempotent).
-    const res = await this.prisma.approval.updateMany({
+    // A workspace write's card holds its variables' values only while it asks (workspace-write-card-values.ts).
+    const answering = await this.prisma.approval.findFirst({
+      where: { id: approvalId, sessionId: id },
+      select: { toolName: true, input: true },
+    });
+    // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's
+    // decision is also an Activity row (docs/feishu-bot-design.md §7.2): written in the same
+    // transaction, and only by the decision that lands, so a replayed event or a stale card's
+    // click records nothing more.
+    const decide = async (db: Prisma.TransactionClient) => {
+      const landed = await db.approval.updateMany({
       where: { id: approvalId, sessionId: id, status: 'PENDING' },
       data: {
         status,
         startAfterCreate,
+        ...(answering && holdsWorkspaceWriteValues(answering.toolName)
+          ? { input: withoutEnvValues(answering.input) as Prisma.InputJsonValue }
+          : {}),
         message: dto.message ?? null,
         answers: dto.answers ? (dto.answers as Prisma.InputJsonValue) : Prisma.DbNull,
         // Only an allow can carry "remember same kind" rules; the runner reads them off
-        // the long-poll and adds them to claude's session permissions. Stored as a JSON
+        // that read and adds them to claude's session permissions. Stored as a JSON
         // array (the schemaless `remember_rule` column holds either shape).
         rememberRule:
           dto.behavior === 'allow' && dto.rememberRules?.length
             ? (dto.rememberRules as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
         decidedById: ownerId,
+        decidedCredentialKind: credential?.kind ?? null,
+        decidedFeishuOpenId: feishu?.openId ?? null,
+        decidedFeishuMessageId: feishu?.messageId ?? null,
         decidedAt: new Date(),
       },
     });
+      if (feishu && landed.count > 0) {
+        await db.activity.create({
+          data: {
+            actorId: ownerId,
+            type: 'feishu.approval.decided',
+            credentialKind: 'FEISHU',
+            payload: {
+              sessionId: id, approvalId, behavior: dto.behavior,
+              appId: feishu.appId, openId: feishu.openId, messageId: feishu.messageId ?? null,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+      return landed;
+    };
+    const res = await withTransactionRetry(this.prisma, (tx) => decide(tx), loggedRetry(this.logger, 'sessions.decideApproval'));
     const a = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId: id } });
     if (!a) throw new NotFoundException('approval not found');
     if (res.count > 0) {
@@ -8091,14 +8745,14 @@ export class SessionsService {
    *  later sessions start with them (see WorkspacePermissionRule). Duplicates are skipped by
    *  the unique index, so re-approving something already granted is a no-op rather than a
    *  second row. A session with no workspace stores nothing — the decision still applies to
-   *  the running session through the runner's long-poll, as it always did. */
+   *  the running session through the runner's read of it, as it always did. */
   private async rememberForWorkspace(
     workspaceId: string,
     ownerId: string,
     approvalId: string,
     rules: PermissionRule[] | undefined,
   ): Promise<void> {
-    const stored = normalizePermissionRules(rules);
+    const stored = normalizePermissionRules(rules).filter((rule) => !reachesPastOneMcpTool(rule.toolName));
     if (!stored.length) return;
     await this.prisma.workspacePermissionRule.createMany({
       data: stored.map((rule) => ({
@@ -8437,6 +9091,8 @@ export class SessionsService {
   ): Promise<SessionResumeAnswer> {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
     assertPromptSize(dto.content, 'message');
+    // A chat's next message may revive it, and carries its page and selection here as on a live one.
+    const wikiContext = readWikiChatContext(dto.wikiContext);
     const requestFingerprint = resumeRequestFingerprint(dto);
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
@@ -8445,6 +9101,7 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
+    if (wikiContext && !session.wikiChatSpaceId) throw wikiContextOutsideChat();
     // Reviving is an engine door: the platform's landing container has nothing to revive (§2.9 LS6).
     assertEngineSessionRow(session);
     // The run this request may stop is an engine door too, named in the body rather than the path.
@@ -8735,6 +9392,7 @@ export class SessionsService {
           || expectedAttachments.some(
             (attachmentId, index) => attachmentId !== storedAttachments[index],
           )
+          || !sameWikiChatContext(existing.wikiContext, wikiContext)
         ) {
           throw new ConflictException(
             'clientTurnId was already used with a different resume payload',
@@ -8832,6 +9490,7 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       await opts?.onTurnWritten?.(tx, turn);
@@ -8858,6 +9517,13 @@ export class SessionsService {
       // and the claim builds one from it — so the only question is whether the value is true, and
       // the claim polices it against whatever model this revive resolves to.
       const normalizedFastMode = dto.fastMode !== undefined ? dto.fastMode === true : undefined;
+      // Its sender, read as createTurn reads one.
+      const sentBy = dto.content && opts?.senderSessionId
+        ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
+        : null;
+      const sentByOrbit = dto.content
+        ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
+        : null;
       await tx.session.update({
         where: { id },
         data: {
@@ -8874,8 +9540,9 @@ export class SessionsService {
           result: null,
           lastTurnAt: new Date(),
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
-          // turn, and until the runner reports it the row would show the reply from before.
-          ...(dto.content ? { lastUserText: dto.content } : {}),
+          // turn, and until the runner reports it the row would show the reply from before. With
+          // its sender, as there.
+          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,
@@ -9052,6 +9719,57 @@ export class SessionsService {
       ended.lifecycleState,
     );
     return { ok: true };
+  }
+
+  /**
+   * A finished project's Complete (docs/session-list-projects-design.md §3.6): its coordinator and
+   * every member still in Open, in whichever workspace, moved to Completed in one transaction, each
+   * by the transition its own Complete makes, so one still running is ended the way Complete ends
+   * it. The members are the ones `GET /sessions?projectId=` lists in Open, read by the same SQL
+   * (session-project-membership.ts): never a LANDING container, and nothing already Completed or in
+   * Trash. Answers how many moved.
+   *
+   * Only a DONE or CANCELLED project: an OPEN one is refused 409 PROJECT_STILL_OPEN, and another
+   * owner's project, or none, is a 404. Both are decided before anything is locked, and the status
+   * again under the project row once the members are held (rank 30, then 40), so a Reopen cannot
+   * land between the check and the moves.
+   */
+  async completeProjectSessions(ownerId: string, projectId: string): Promise<{ completed: number }> {
+    const moved = await withTransactionRetry(this.prisma, async (tx) => {
+      refuseUnlessProjectFinished(await tx.project.findFirst({
+        where: { id: projectId, ownerId },
+        select: { status: true },
+      }));
+      const members = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT s.id FROM session s
+        WHERE s.owner_id = ${ownerId}::uuid
+          AND s.kind = 'CONVERSATION'
+          AND COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL
+          AND ${sessionInProjectSql('s', projectId)}
+        ORDER BY s.id
+        FOR UPDATE OF s`;
+      const [held] = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT "status"::text AS "status" FROM "project" WHERE "id" = ${projectId}::uuid FOR SHARE`;
+      refuseUnlessProjectFinished(held);
+      const ended = [];
+      for (const { id } of members) {
+        ended.push({
+          id,
+          end: await this.transitionEndLocked(tx, ownerId, id, SessionEndReason.COMPLETED, 'completedAt'),
+        });
+      }
+      return ended;
+    }, loggedRetry(this.logger, 'sessions.completeProjectSessions', {
+      // One member after another, each waiting for its row: a project with many still open can take
+      // longer than Prisma's 5 s interactive-transaction default.
+      transaction: { maxWait: 10_000, timeout: 30_000 },
+    }));
+    // What each one's own Complete sends, after the commit.
+    for (const { id, end } of moved) {
+      this.publishEndIntent(id, end);
+      this.realtime.publishSessionLifecycleChanged(id, end.status, end.endReason, end.lifecycleState);
+    }
+    return { completed: moved.length };
   }
 
   /**

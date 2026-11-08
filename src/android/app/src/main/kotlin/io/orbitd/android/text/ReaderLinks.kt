@@ -12,9 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.attachments.AttachmentActions
+import io.orbitd.android.cards.ExpiredAttachmentFace
 import io.orbitd.android.core.auth.*
+import io.orbitd.android.core.cards.EvidenceFiles
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.navigation.*
 import kotlinx.coroutines.*
@@ -78,6 +81,9 @@ internal fun externalImage(source: String): Boolean = runCatching {
 
 val LocalReaderResources = staticCompositionLocalOf<ReaderResources?> { null }
 
+/** A read of a file told its bytes have gone (410), and when they expired, from a server that says. */
+internal data class ExpiredRead(val at: String?)
+
 @Composable
 fun rememberReaderLinkHandler(resources: ReaderResources, open: (OrbitRoute) -> Unit): (String) -> Unit {
     val context = LocalContext.current
@@ -116,6 +122,8 @@ fun TranscriptImage(source: String, alt: String, open: (String) -> Unit) {
     var zoom by remember { mutableStateOf(false) }
     var selected by remember(source) { mutableStateOf(source) }
     var failed by remember(source, resources) { mutableStateOf(false) }
+    // Told its bytes have gone, there is nothing to try again: what is left of it is the placeholder.
+    var expired by remember(source, resources) { mutableStateOf<ExpiredRead?>(null) }
     val bitmap by produceState<android.graphics.Bitmap?>(null, source, resources, retry) {
         value = null; failed = false
         try {
@@ -129,20 +137,24 @@ fun TranscriptImage(source: String, alt: String, open: (String) -> Unit) {
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: error("Unreadable image")
             }
         } catch (cancel: CancellationException) { throw cancel }
-        catch (_: Exception) { failed = true }
+        catch (failure: Exception) {
+            if (EvidenceFiles.isExpiredRead(failure)) expired = ExpiredRead(EvidenceFiles.expiredAtOf(failure)) else failed = true
+        }
     }
     Column {
         // Fixed preview bounds prevent a late decode from displacing the reader's anchor.
         Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
             val loaded = bitmap
+            val gone = expired
             when {
                 loaded != null -> Image(loaded.asImageBitmap(), alt.ifBlank { "Image" }, Modifier.fillMaxSize().clickable { selected = source; zoom = true }, contentScale = ContentScale.Fit)
+                gone != null -> ExpiredAttachmentFace(gone.at, Modifier.size(120.dp, 90.dp).testTag("attachment-expired"))
                 failed -> TextButton(onClick = { retry++ }) { Text("Image unavailable · Retry") }
                 else -> CircularProgressIndicator()
             }
         }
         if (alt.isNotBlank()) Text(alt, style = MaterialTheme.typography.bodySmall)
-        if (!source.startsWith("data:")) TextButton(onClick = { open(source) }) { Text("Open image") }
+        if (!source.startsWith("data:") && expired == null) TextButton(onClick = { open(source) }) { Text("Open image") }
     }
     if (zoom && bitmap != null && resources?.available() == true) {
         val info = resources.metadata(selected)

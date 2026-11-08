@@ -81,10 +81,14 @@ export function upload(
   path: string,
   headers: Record<string, string>,
   file: NonNullable<TenantRequest['file']>,
+  fields: Record<string, string> = {},
 ): Promise<Reply> {
   const boundary = `census-${randomUUID()}`;
+  const textParts = Object.entries(fields).map(
+    ([name, value]) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+  );
   const payload = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\n`
+    `${textParts.join('')}--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\n`
       + `Content-Type: ${file.type}\r\n\r\n${file.content}\r\n--${boundary}--\r\n`,
   );
   return new Promise((resolve, reject) => {
@@ -455,7 +459,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     const wikiSpaceId = idOf(await as('POST', '/wiki/spaces', { title: `${name} wiki` }), 'a wiki space');
     // The wiki as its maintenance runs leave it: a topic with an article of two parts, an entry
     // waiting on its owner, a changeset waiting on its owner, a plan confirmed at version 1 with one
-    // document, a draft of version 2, and a proposal to change it.
+    // document of one section, that document written and its section written again once — the version
+    // the rewrite kept — a draft of version 2, and a proposal to change it.
     const wikiTopicId = randomUUID();
     const wikiLeadId = randomUUID();
     const wikiEntryId = randomUUID();
@@ -463,6 +468,11 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     const wikiChangesetOpId = randomUUID();
     const wikiConfirmedPlanId = randomUUID();
     const wikiPlanProposalId = randomUUID();
+    const wikiPlanDocId = randomUUID();
+    const wikiPlanSectionId = randomUUID();
+    const wikiDocId = randomUUID();
+    const wikiDocSectionId = randomUUID();
+    const wikiDocVersionId = randomUUID();
     const wiki = (text: string, values: unknown[]) => sql.query(text, values);
     await wiki(`INSERT INTO "wiki_topic"("id","space_id","owner_id","slug","title") VALUES ($1,$2,$3,'census','Census')`, [wikiTopicId, wikiSpaceId, ownerId]);
     await wiki(
@@ -492,8 +502,36 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     );
     await wiki(
       `INSERT INTO "wiki_plan_doc"("id","plan_id","owner_id","position","category","slug","title","question","length_min","length_max")
-       VALUES (gen_random_uuid(),$1,$2,0,'census','census','Census','What does the census hold?',100,1000)`,
-      [wikiConfirmedPlanId, ownerId],
+       VALUES ($3,$1,$2,0,'census','census','Census','What does the census hold?',100,1000)`,
+      [wikiConfirmedPlanId, ownerId, wikiPlanDocId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_plan_section"("id","doc_id","owner_id","position","key","title","kind","covers","length","sources")
+       VALUES ($1,$2,$3,0,'census','Census','overview','What the census holds.',100,'{}')`,
+      [wikiPlanSectionId, wikiPlanDocId, ownerId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_doc"("id","space_id","owner_id","slug","plan_id","plan_version","plan_doc_id","repo_sha")
+       VALUES ($1,$2,$3,'census',$4,1,$5,repeat('c',40))`,
+      [wikiDocId, wikiSpaceId, ownerId, wikiConfirmedPlanId, wikiPlanDocId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_doc_section"("id","doc_id","owner_id","key","plan_section_id","material_sha256","blocks","repo_sha")
+       VALUES ($1,$2,$3,'census',$4,repeat('d',64),'[{"kind":"paragraph"}]',repeat('c',40))`,
+      [wikiDocSectionId, wikiDocId, ownerId, wikiPlanSectionId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_doc_sentence"("id","section_id","owner_id","position","block","text","status")
+       VALUES (gen_random_uuid(),$1,$2,0,0,'The census holds one sentence now.','transition')`,
+      [wikiDocSectionId, ownerId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_doc_section_version"("id","space_id","owner_id","doc_slug","section_key","blocks","sentences","footnotes",
+                                              "repo_sha","material_sha256","generated_at","reason","job_id")
+       VALUES ($1,$2,$3,'census','census','[{"kind":"paragraph"}]',
+               '[{"block":0,"text":"The census held another sentence.","status":"transition","notes":[],"newTokens":[],"withdrawn":null}]','[]',
+               repeat('b',40),repeat('e',64),now(),'maintenance',gen_random_uuid())`,
+      [wikiDocVersionId, wikiSpaceId, ownerId],
     );
     await wiki(
       `INSERT INTO "wiki_plan"("id","space_id","owner_id","version","status","origin","base_version","categories","docs_min","docs_max","gate","author_user_id")
@@ -504,6 +542,47 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       `INSERT INTO "wiki_plan_proposal"("id","space_id","owner_id","base_version","reason","change","facts","gate","author_session_id")
        VALUES ($1,$2,$3,1,'the census','{}','[]','{}',$4)`,
       [wikiPlanProposalId, wikiSpaceId, ownerId, sessionId],
+    );
+    // A wiki chat of the space (`session.wiki_chat_space_id`, written with the row) and one card its agent drafted: a
+    // rewrite of the written census section, which the owner's presses below can apply, undo and leave seen.
+    const wikiChatId = randomUUID();
+    await db.session.create({
+      data: {
+        id: wikiChatId,
+        title: `${name} wiki chat`,
+        prompt: `${name} wiki chat`,
+        ownerId,
+        creatorId: ownerId,
+        workspaceId,
+        assignedRunnerId: runnerId,
+        status: 'AWAITING_INPUT',
+        startedAt: new Date(),
+        runtimeSessionId: `runtime-${wikiChatId}`,
+        wikiChatSpaceId: wikiSpaceId,
+      },
+    });
+    const wikiChatDraftId = randomUUID();
+    await wiki(
+      `INSERT INTO "wiki_chat_draft"("id","owner_id","space_id","session_id","kind","rationale","sections","rewrites")
+       VALUES ($1,$2,$3,$4,'rewrite','The census section lags behind main.','[{"doc":"census","key":"census"}]','[{"doc":"census","key":"census"}]')`,
+      [wikiChatDraftId, ownerId, wikiSpaceId, wikiChatId],
+    );
+    // And an applied plan card of the chat (C17): its press changed the census section's covers and made version 99, which
+    // the plan never reached, so the plan has moved past it — its Undo is refused, and its Try again asks for no build.
+    const wikiPlanCardId = randomUUID();
+    await wiki(
+      `INSERT INTO "wiki_chat_draft"("id","owner_id","space_id","session_id","kind","rationale","change","sections","decision","decided_at")
+       VALUES ($1,$2,$3,$4,'plan','The census section should say who it is for.',$5::jsonb,'[{"doc":"census","key":"census"}]','applied',now())`,
+      [wikiPlanCardId, ownerId, wikiSpaceId, wikiChatId, JSON.stringify({
+        baseVersion: 1,
+        version: 99,
+        docs: [{
+          category: 'census', slug: 'census', title: 'Census', question: 'What does the census hold?', audience: [], scopeIn: [], scopeOut: [],
+          length: { min: 100, max: 1000 }, protected: false,
+          sections: [{ key: 'census', title: 'Census', kind: 'overview', covers: 'What the census holds, for a first-time reader.', length: 100, sources: {} }],
+        }],
+        categories: [],
+      })],
     );
 
     const deviceUserCode = `${name.toUpperCase()}${RUN.slice(0, 4)}-CNSS`.slice(0, 9);
@@ -572,6 +651,18 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     const shareTaskId = await task(`${name} shared task`);
     ok(await as('PUT', `/tasks/${shareTaskId}/share`, {}), 'a share link');
     const shareLinkId = (await db.shareLink.findFirstOrThrow({ where: { ownerId, taskId: shareTaskId } })).id;
+
+    // A Feishu app of the account's, switched off so no replica connects it, and two groups connected to it (§8.1).
+    const feishuAppId = `cli_census_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    await db.feishuApp.create({ data: { ownerId, platform: 'FEISHU', appId: feishuAppId, appSecretEnc: 'census:not:a-secret', enabled: false } });
+    const feishuChatRoute = async (chat: string) => (await db.feishuChatRoute.create({
+      data: {
+        ownerId, appId: feishuAppId, chatId: `oc_${chat}_${randomUUID().slice(0, 8)}`, chatName: `${name} ${chat}`,
+        workspaceId, permissionMode: 'default', enabled: true, confirmedAt: new Date(),
+      },
+    })).id;
+    const feishuChatRouteId = await feishuChatRoute('group');
+    const spareFeishuChatRouteId = await feishuChatRoute('spare-group');
 
     const purgedSessionId = await session(ownerId, workspaceId, runnerId, `${name} trashed session`);
     await db.session.update({ where: { id: purgedSessionId }, data: { deletedAt: new Date() } });
@@ -649,7 +740,13 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       wikiArticleSlug: 'census',
       wikiArticlePart: 1,
       wikiDocSlug: 'census',
+      wikiDocSectionKey: 'census',
+      wikiDocVersionId,
+      wikiChatId,
+      wikiChatDraftId,
+      wikiPlanCardId,
       wikiTopicSlug: 'census',
+      feishuChatRouteId,
       adminSubjectId: adminSubject.userId,
       adminSubjectTokenId,
       adminProviderId: await adminProvider(`${name}-admin-provider`),
@@ -668,8 +765,14 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         folderId: idOf(await as('POST', '/session-folders', { workspaceId, name: `${name} spare folder` }), 'a spare folder'),
         sessionId: await session(ownerId, workspaceId, runnerId, `${name} spare session`),
         purgedSessionId,
+        trashedWikiSpaceId: await (async () => {
+          const id = idOf(await as('POST', '/wiki/spaces', { title: `${name} spare wiki` }), 'a spare wiki');
+          ok(await as('DELETE', `/wiki/spaces/${id}`), 'moving the spare wiki to Trash');
+          return id;
+        })(),
         tagId: idOf(await as('POST', '/session-tags', { name: `${name} spare tag`, color: '#663399' }), 'a spare tag'),
         shareLinkId,
+        feishuChatRouteId: spareFeishuChatRouteId,
         listId: idOf(await as('POST', '/task-lists', { title: `${name} spare list` }), 'a spare list'),
         taskId: await task(`${name} spare task`),
       },

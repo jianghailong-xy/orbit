@@ -2624,7 +2624,245 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved triggers/functions is named, and no function, trigger, type, index or constraint is created, replaced
       // or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored runner reads
       // NULL in both.
-      '0461_runner_region'],
+      '0461_runner_region',
+      // Orbit Files' storage layer (0462, docs/orbit-files-design.md §2.1; files/files.service.ts): a new table
+      // `file_blob` (sha256 primary key, size_bytes, storage, last_referenced_at, with three CHECKs) holds one row per
+      // stored content; `attachment` gains seven nullable columns (sha256 with a foreign key to file_blob ON DELETE
+      // RESTRICT and an index, retention, expires_at, expired_at, pinned_at, file_bundle_id, evidence_id), `data` drops
+      // NOT NULL, and attachment_bytes_present requires `data` or `sha256`. Neither table is a preserved relation: no
+      // `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is
+      // named, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every stored attachment keeps its bytes in `data`.
+      '0462_file_blob',
+      // A workspace the owner left out of its wiki (0463, docs/mocks/wiki/38-workspaces; wiki/wiki-workspaces.ts): one
+      // nullable column `wiki_space_workspace.left_out_at`. Not a preserved relation: no `task`, `session`, `project`
+      // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function,
+      // trigger, type, index or constraint is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every binding stays in its space.
+      '0463_wiki_workspace_left_out',
+      // Orbit Files' label (0464, docs/orbit-files-design.md §2.3): one nullable column on `attachment`, which is not a
+      // preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions is named, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0464_attachment_label',
+      // Orbit Files' test report summary (0465, docs/orbit-files-design.md §2.5): one nullable JSONB column on
+      // `attachment`, which is not a preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object
+      // nor any of the six preserved triggers/functions is named, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE.
+      '0465_attachment_test_report_summary',
+      // 0466 is Orbit Files' retention (docs/orbit-files-design.md §2.8): three nullable columns on `file_blob`, two
+      // partial indexes on `attachment`, and one UPDATE that gives the rows `file_upload` wrote before it, cited by a version
+      // already let go of, the `expires_at` they would have had, reading the ledger's revisions and decisions and writing
+      // neither. No ledger table is written,
+      // and none of the six preserved triggers/functions is named, so it is not another writer of the DONE fence.
+      '0466_file_retention',
+      // 0467 widens `project_coordinator_wake_event_chk` by `TASK_RUN_STOPPED` and changes nothing else: no row is
+      // written, and no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another
+      // writer of the DONE fence.
+      '0467_task_run_stopped_wake',
+      // 0468 is one `CREATE INDEX ... IF NOT EXISTS`, a partial btree beside `task_completion_evidence`: an index is a new
+      // relation of its own, not a rewrite of the table, as with 0283. No row is written, and nothing is altered or dropped, so
+      // the ledger stays append-only and this is not another writer of the DONE fence.
+      '0468_evidence_cites_files_idx',
+      // 0469 adds `project.reopened_at` and `reopened_facts`, both NULL on every existing row, and two CHECKs on
+      // those columns alone: no row is written, and no `task`, `session`, ledger table or preserved trigger/function
+      // is named, so it is not another writer of the DONE fence.
+      '0469_project_owner_reopen',
+      // 0470 widens `wiki_changeset_op_verification_evidence_chk` by `second_hand` and changes nothing else: no row is
+      // written, `wiki_changeset_op` is not a preserved relation, and no `task`, `session`, ledger table or preserved
+      // trigger/function is named, so it is not another writer of the DONE fence.
+      '0470_wiki_verification_second_hand',
+      // A nullable column for what an op's note was, and a CHECK of its shape: nothing to preserve, no row written.
+      '0471_wiki_op_prompted_by',
+      // A nullable column saying which session wrote a note, and its index: nothing to preserve, no row written.
+      '0472_wiki_note_session',
+      // 0473 widens four int4 counts of `usage` to bigint. `usage` is not a preserved relation, every value keeps its
+      // value, and no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another writer
+      // of the DONE fence.
+      '0473_usage_token_counts_bigint',
+      // 0474 is the abandoned-checkout table and one nullable column on `session` (`commit_action`, with a CHECK on its
+      // two values). `abandoned_checkout` is a new relation with its own primary key, a unique `session_id` and no
+      // trigger; `session` is not a preserved relation (nothing here names `task`, `project` or `project_acceptance_*`,
+      // and no column any preserved trigger reads is touched), and no function, trigger or type is created, replaced or
+      // dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads
+      // NULL in the new column, and the new table starts empty.
+      '0474_abandoned_checkout',
+      // 0475 is one new table, `wiki_doc_section_version` (the versions a rewritten section keeps, contract
+      // `docs.versions`), with its own primary key, CHECKs, a foreign key to `wiki_space` and two indexes, all created IF NOT
+      // EXISTS. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of
+      // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
+      // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
+      '0475_wiki_doc_section_version',
+      // 0476 is the wiki chat's session: a nullable `session.wiki_chat_space_id` and a guard
+      // (`session_wiki_chat_space_guard`, BEFORE UPDATE OF that one column, which raises and writes nothing),
+      // `CHAT_UPSTREAM` admitted by three CHECKs on `session`'s SOURCE columns (added back NOT VALID; 0479 validates
+      // them), and a nullable `conversation_turn.wiki_context`, all in one DO statement that takes both tables' locks
+      // in short tries and writes no row. Neither table is a preserved relation, nothing here names `task`, `project`
+      // or `project_acceptance_*`, and the one function it creates writes no row, so it is not another writer of the
+      // DONE fence. No INSERT, UPDATE or DELETE: every stored row reads NULL in both new columns.
+      '0476_wiki_chat_session',
+      // 0477 widens `wiki_job_kind_chk` by `docs_follow` and replaces `wiki_job_space_running_key` with two partial unique
+      // indexes over the same table (contract `jobs.onePerSpace`'s exception for the follow job), all in one DO statement
+      // that takes wiki_job's lock in short tries and writes no row. `wiki_job` is not a preserved relation, no `task`,
+      // `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is named,
+      // and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence.
+      // No INSERT, UPDATE or DELETE: every stored job satisfies both as it stands.
+      '0477_wiki_docs_follow',
+      // 0478 adds one nullable jsonb column to `session` (`engine_usage_totals`, the engine's running totals as last
+      // booked) and nothing else. `session` is not a preserved relation, no column any preserved trigger reads is
+      // touched, and no function, trigger, type or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL in it.
+      '0478_session_engine_usage_totals',
+      // 0479 finishes 0476: it validates the three SOURCE CHECKs 0476 added back NOT VALID and builds the partial
+      // `session_wiki_chat_space_idx` CONCURRENTLY (dropping a leftover one first). `session` is not a preserved
+      // relation, no column any preserved trigger reads is touched, and no function, trigger, type or constraint is
+      // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0479_wiki_chat_session_checks_index',
+      // 0480 adds one nullable jsonb column to `managed_runner` (`volume_measurement`, the data volume as its backend
+      // last measured it) and nothing else. `managed_runner` is not a preserved relation, no `task`, `session`, `project`
+      // or `project_acceptance_*` object nor any preserved trigger/function is named, and no function, trigger, type or
+      // constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: every stored mapping reads NULL in it.
+      '0480_managed_runner_volume_measurement',
+      // A nullable column for what a wiki model call was made from, and a CHECK of its shape: nothing to preserve, no row
+      // written. One DO statement takes wiki_model_request's lock in short tries and adds both, the CHECK NOT VALID;
+      // after a COMMIT, a VALIDATE reads the stored rows under SHARE UPDATE EXCLUSIVE.
+      '0482_wiki_model_request_material',
+      // 0483 is one new table, `wiki_chat_draft` (a wiki chat's cards and the owner's presses, contract `chat.drafts`),
+      // with its own primary key, CHECKs, a foreign key to `wiki_space` and five indexes, all created IF NOT EXISTS, and no
+      // DO block. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of
+      // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
+      // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
+      '0483_wiki_chat_draft',
+      // 0484 makes the Open list's data version cheap: a new `open_list_epoch` table, four
+      // statement-level bump functions (`open_list_bump_owner`, `open_list_bump_via_project`,
+      // `open_list_bump_via_session`, `open_list_bump_session`), their triggers on 29 tables
+      // (including `task`, `session` and `conversation_turn`), three indexes on `session`, and a
+      // nullable `task_completion_evidence.review_turn_at`, backfilled once from the matching
+      // review turn and thereafter stamped by a trigger on `conversation_turn` inserts. The bump
+      // triggers write `open_list_epoch`, never the table they are on, and the one UPDATE writes
+      // `review_turn_at` alone: no preserved row or column is touched, none of the six preserved
+      // triggers/functions is named or replaced, and no preserved object is dropped, so it is not
+      // another writer of the DONE fence.
+      '0484_open_list_epoch',
+      // 0485 adds two nullable columns to `session` (`last_user_from_session_id`, `last_user_from_title`: who sent the
+      // message the row previews) in one DO statement that takes the table's lock in short tries, and nothing else.
+      // `session` is not a preserved relation, no column any preserved trigger reads is touched, and no function,
+      // trigger, type or constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: every stored session reads NULL in both.
+      '0485_session_last_user_from',
+      // 0486 (the wiki's Trash) adds five columns, a CHECK and a partial index to `wiki_space` alone, in one DO block that
+      // asks for the table's lock 2 s at a time. It is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger or
+      // type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0486_wiki_space_trash',
+      // 0487 spreads 0484's Open-list counters over several `open_list_epoch` rows so that writers never queue on one: a
+      // new sequence `open_list_epoch_shard_seq`, a new function `open_list_bump`, and CREATE OR REPLACE of 0484's four
+      // bump functions to call it. No table, column, constraint or trigger is created, altered or dropped; the functions
+      // write `open_list_epoch` alone, no preserved row or column is touched, and none of the six preserved
+      // triggers/functions is named or replaced, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE runs at apply time.
+      '0487_open_list_epoch_shards',
+      // 0488 (an amend answering a challenge) adds two nullable columns to `wiki_changeset_op`
+      // (`answers_challenge`, a history reference with no foreign key, and `answered_by`) and three CHECKs, and
+      // nothing else. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*`
+      // object nor any of the six preserved triggers/functions is named, and no function, trigger or type is
+      // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: every stored op reads NULL in both columns and satisfies the CHECKs as it stands.
+      '0488_wiki_op_answers_challenge',
+      // 0489 is two new tables for the Feishu bot integration (docs/feishu-bot-design.md §4.1): `feishu_app`, each account's
+      // own app, with its primary key, two unique indexes (owner_id, app_id), CHECKs and foreign keys to `user` (ON DELETE
+      // CASCADE) and `workspace` (ON DELETE SET NULL), and `feishu_deployment_setting`, the administrators' switch, of at
+      // most one row (`feishu_deployment_setting_one_row_chk`, `id` = 1) with no foreign key. Neither is a preserved
+      // relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: both tables start empty.
+      '0489_feishu_app',
+      // 0491 adds one nullable JSONB column to `session` (`last_user_from_orbit`: that Orbit wrote the message the row
+      // previews, with the notification card its line is written from) in one DO statement that takes the table's lock
+      // in short tries, and nothing else. `session` is not a preserved relation, no column any preserved trigger reads
+      // is touched, and no function, trigger, type or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL.
+      '0491_session_last_user_from_orbit',
+      // 0492 is two new tables for the Feishu bot integration (docs/feishu-bot-design.md §4.4, §7.1): `feishu_inbound_event`,
+      // the inbound inbox, unique on (app_id, event_id), and `feishu_link`, each replica's connection of each app, keyed
+      // (app_id, replica_id); both reference `feishu_app` (app_id) ON DELETE CASCADE, with CHECKs and one partial index.
+      // Neither is a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the
+      // six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
+      // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: both tables start empty.
+      '0492_feishu_inbound_event',
+      // 0493 adds one BOOLEAN NOT NULL DEFAULT false column to `session` (`prompt_by_orbit`: that the platform wrote
+      // the session's opening prompt) in one DO statement that takes the table's lock in short tries, and nothing
+      // else. `session` is not a preserved relation, no column any preserved trigger reads is touched, and no
+      // function, trigger, type or constraint is created, replaced or dropped, so it is not another writer of the
+      // DONE fence. No INSERT, UPDATE or DELETE: a constant default is a catalog change, every stored session reads
+      // false.
+      '0493_session_prompt_by_orbit',
+      // 0494 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §5.1): `feishu_connect_code`, the
+      // owner-identity codes, with its primary key, a unique index on code_hash, indexes on owner_id and expires_at, one
+      // CHECK, and a foreign key to `user` (ON DELETE CASCADE). It is not a preserved relation, no `task`, `session`,
+      // `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no
+      // function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: the table starts empty.
+      '0494_feishu_connect_code',
+      // 0495 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §6.2): `feishu_message`, the alert
+      // cards sent to an app's owner, with its primary key, unique indexes on (app_id, collapse_key) and message_id,
+      // indexes on session_id, open_item_id and owner_id, four CHECKs, and foreign keys to `user` and `feishu_app` (ON
+      // DELETE CASCADE). session_id names a session without a foreign key. It is not a preserved relation, no `task`,
+      // `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and
+      // no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: the table starts empty.
+      '0495_feishu_message',
+      // 0496 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §8.1): `feishu_chat_route`, the
+      // group chats an account connected, with its primary key, unique indexes on (app_id, chat_id) and ticket_hash,
+      // indexes on owner_id and workspace_id, five CHECKs, and foreign keys to `user`, `feishu_app` (app_id) and
+      // `workspace` (all ON DELETE CASCADE). It is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: the table starts empty.
+      '0496_feishu_chat_route',
+      // 0497 adds one TEXT NOT NULL DEFAULT 'cost' column to `workspace` (`model_routing_optimize_for`: what model
+      // routing optimizes for) and one CHECK on it (`workspace_model_routing_optimize_for_check`: cost, balance or
+      // intelligence), and nothing else. `workspace` is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function,
+      // trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: a constant default is a catalog change, every stored workspace reads 'cost'.
+      '0497_model_routing_optimize_for',
+      // 0498 replaces one CHECK of `feishu_message` (docs/feishu-bot-design.md §6.2, task F1-5): status gains CLOSED. It
+      // is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
+      // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0498_feishu_message_closed',
+      // 0499 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §7.3, task F2-3):
+      // `feishu_thread`, the Feishu message chains that belong to a session, with its primary key, a unique index on
+      // (app_id, chat_id, root_message_id), indexes on (session_id, last_spoken_at) and owner_id, one CHECK and foreign
+      // keys to `user` and `feishu_app` (app_id, both ON DELETE CASCADE); and `activity_credential_chk` replaced so
+      // credential_kind may also be FEISHU. Neither is a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE.
+      '0499_feishu_thread',
+
+      // 0500 adds three nullable columns and one CHECK to `approval` (docs/feishu-bot-design.md §7.2, task F2-1): the
+      // credential an approval's decision came in by, and the Feishu clicker and card when that was a Feishu card. It is
+      // not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
+      // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it
+      // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0500_approval_decided_via',
+      // 0501 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §7.5, task F2-4):
+      // `feishu_outbox`, a session's replies on their way back to Feishu, with its primary key, a unique index on
+      // turn_id, a partial index on due_at, indexes on (session_id, created_at), owner_id and app_id, two CHECKs and
+      // foreign keys to `user` and `feishu_app` (app_id, both ON DELETE CASCADE). It is not a preserved relation, no
+      // `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is
+      // named, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE.
+      '0501_feishu_outbox',
+      // 0502 adds three nullable columns and a CHECK to `conversation_turn` (`external_sender_*`: who outside Orbit sent
+      // the turn, a Feishu group's member — docs/feishu-bot-design.md §8.2, task F3-5) and two nullable columns and a
+      // CHECK to `session` (`last_user_from_external_*`, beside 0485's), in one DO statement that takes the locks in short
+      // tries, then validates both CHECKs. Neither is a preserved relation, no column any preserved trigger reads is
+      // touched, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every stored turn and session reads NULL in all five.
+      '0502_conversation_turn_external_sender'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

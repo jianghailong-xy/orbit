@@ -59,14 +59,33 @@ public struct EvidenceDecisionCitation: Codable, Equatable, Sendable {
     /// The cited row in words when the server has better than the ref: the tool's name and the
     /// command it ran. Null for a citation that did not resolve, and for kinds whose ref reads.
     public let label: String?
+    /// What a report said, on a FILE citation of one (`EvidenceFiles.testReports`).
+    public let testReport: EvidenceTestReport?
 
     public init(kind: String, ref: String, resolved: Bool, reason: String? = nil,
-                label: String? = nil) {
+                label: String? = nil, testReport: EvidenceTestReport? = nil) {
         self.kind = kind
         self.ref = ref
         self.resolved = resolved
         self.reason = reason
         self.label = label
+        self.testReport = testReport
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case kind, ref, resolved, reason, label, testReport
+    }
+
+    // Tolerant about the report alone: it is a line on a card, and a summary this build cannot read must
+    // not fail the whole queue, which would take every pending card down with it.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(String.self, forKey: .kind)
+        ref = try c.decode(String.self, forKey: .ref)
+        resolved = try c.decode(Bool.self, forKey: .resolved)
+        reason = try c.decodeIfPresent(String.self, forKey: .reason)
+        label = try c.decodeIfPresent(String.self, forKey: .label)
+        testReport = try? c.decodeIfPresent(EvidenceTestReport.self, forKey: .testReport)
     }
 }
 
@@ -190,10 +209,7 @@ public struct EvidenceDecisionQueue: Codable, Equatable, Sendable {
     /// after a card's question is gone. A read that has not published them yet decodes as empty
     /// rather than failing the whole queue, which would take the pending cards down with it.
     public let decided: [RecordedEvidenceDecision]
-    /// Versions of the project THIS session coordinates that are waiting for it — it is paused, or
-    /// has not been handed them yet — oldest submission first, each shaped as a `pending` row. Not a
-    /// question this reader is asked, so nothing counts them (`EvidenceDecisions.isOpen`), but each
-    /// is its owner's to decide at any moment (`Decide it myself`).
+    /// Retained for wire compatibility; the server sends an empty array. Never drawn.
     public let waitingOnCoordinator: [EvidenceDecisionRow]
     /// Versions that waited and have since been handed to THIS session, which still holds them —
     /// neither decided nor replaced by a later revision. Earliest delivery first.
@@ -267,7 +283,8 @@ public struct SentToCoordinatorRow: Codable, Equatable, Sendable, Identifiable {
 /// Small on purpose — it rides every poll — and it is the ONLY copy of the answer the console keeps:
 /// the receipt is drawn from it, so a reload, a relaunch or another device shows the same record.
 /// The evidence it answered is not here; the browser fetches that when a reader opens the receipt's
-/// fold, which is a step this client does not need and does not take.
+/// fold, which is a step this client does not need and does not take. Its files are one press away when
+/// it cites any (`citesFiles`), and read on that press.
 public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiable {
     public let taskId: String
     public let title: String
@@ -281,10 +298,13 @@ public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiab
     /// `USER` when the owner pressed a card, `AGENT` when a run of the deciding session called the
     /// door. The receipt says which, because the two are different events in a conversation.
     public let decidedByType: String
+    /// Whether the version it answered cites a file: what its receipt goes by to offer that version's
+    /// files. A server older than this field offers none, so nil reads as no.
+    public let citesFiles: Bool?
 
     public init(taskId: String, title: String, projectId: String?, evidenceRevision: String,
                 decision: EvidenceDecisionAnswer, note: String?, decidedAt: String,
-                decidedByType: String) {
+                decidedByType: String, citesFiles: Bool? = nil) {
         self.taskId = taskId
         self.title = title
         self.projectId = projectId
@@ -293,6 +313,7 @@ public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiab
         self.note = note
         self.decidedAt = decidedAt
         self.decidedByType = decidedByType
+        self.citesFiles = citesFiles
     }
 
     public var recordedByAgent: Bool { decidedByType == "AGENT" }
@@ -360,10 +381,6 @@ public struct EvidenceDecisionStanding: Equatable, Sendable {
     public enum State: Equatable, Sendable {
         /// The revision is in the read, and the read still says this session may answer it.
         case decidable(EvidenceDecisionRow)
-        /// Not a question to this reader: it waits for the coordinator this conversation is — paused,
-        /// or not handed it yet (`waitingOnCoordinator`). Its owner may still decide it here
-        /// (`Decide it myself`), which is why the row is carried.
-        case waiting(EvidenceDecisionRow)
         /// It waited, and has since been handed to the coordinator, which holds it
         /// (`sentToCoordinator`).
         case sent(SentToCoordinatorRow)
@@ -391,21 +408,13 @@ public struct EvidenceDecisionStanding: Equatable, Sendable {
     /// has no evidence to show: see the file header.
     public var row: EvidenceDecisionRow? {
         switch state {
-        case .decidable(let row), .waiting(let row): return row
+        case .decidable(let row): return row
         case .sent, .superseded, .alreadyDecided, .unread: return nil
         }
     }
 
-    /// Whether the door would take an answer from this card: a question, and a version waiting for
-    /// the coordinator, which its owner may decide all the same.
+    /// Whether the door would take an answer from this question.
     public var answerable: Bool { row != nil }
-
-    /// Whether this version waits for the coordinator — the folded card, and the notice on top of the
-    /// card it opens into.
-    public var waitsForCoordinator: Bool {
-        if case .waiting = state { return true }
-        return false
-    }
 }
 
 // MARK: - what the card shows
@@ -431,16 +440,6 @@ public struct FoldedClaim: Equatable, Sendable {
 public struct GapPreview: Equatable, Sendable {
     public let shown: [String]
     public let rest: [String]
-}
-
-/// Why the coordinator does not have a waiting version yet, read off its own conversation — the one
-/// this console is (web's `CoordinatorPause`).
-public enum CoordinatorPause: Equatable, Sendable {
-    /// Paused, by the server's own rule: its run FAILED, or it armed a retry. `window` is the usage
-    /// window it ran out of when that is why; `retryAt` is when the retry it armed fires.
-    case paused(window: String?, retryAt: String?)
-    /// Neither: it is back, and gets the version when its current turn ends.
-    case back
 }
 
 // MARK: - the logic
@@ -472,20 +471,6 @@ public enum EvidenceDecisions {
         return projectId != nil && row.projectId == projectId
     }
 
-    /// The versions waiting for this conversation's coordinator, under the same rule as the cards
-    /// above (web's `coordinatorQueueRows`).
-    ///
-    /// The server lists them for the conversation the project is coordinated from and for no other
-    /// reader. None of them is a question this reader is asked — nothing counts them (`isOpen`) —
-    /// but each is the owner's to decide at any moment, so each gets the evidence card's slot, drawn
-    /// folded until it is opened (`Decide it myself`). An older server sends none.
-    public static func coordinatorQueueRows(queue: EvidenceDecisionQueue?, projectId: String?,
-                                            sessionId: String? = nil) -> [EvidenceDecisionRow] {
-        (queue?.waitingOnCoordinator ?? []).filter {
-            drawnHere($0, projectId: projectId, sessionId: sessionId)
-        }
-    }
-
     /// The versions that waited and have since been handed to this conversation's coordinator,
     /// while it still holds them: one line each where its card was. This project's rows only.
     public static func sentRows(queue: EvidenceDecisionQueue?,
@@ -503,10 +488,6 @@ public enum EvidenceDecisions {
     /// Where one delivered card stands RIGHT NOW, derived from the read and from nothing else.
     /// A nil queue is the read not having come back, which is `unread` and not "nothing pending".
     ///
-    /// A version keeps ONE card while it moves between the groups — folded while it waits for the
-    /// coordinator, one line once it is handed over, the question card if it becomes the reader's
-    /// after all — so the card is asked where its version is, in that order (web's `evidenceSlot`).
-    /// A later revision in either drawn group is what supersedes it.
     public static func standing(queue: EvidenceDecisionQueue?, projectId: String?,
                                 sessionId: String? = nil, taskId: String,
                                 evidenceRevision: String) -> EvidenceDecisionStanding {
@@ -530,13 +511,7 @@ public enum EvidenceDecisions {
         }) {
             return .sent(sent)
         }
-        let waiting = coordinatorQueueRows(queue: queue, projectId: projectId, sessionId: sessionId)
-        if let row = waiting.first(where: { row in
-            row.taskId == taskId && row.evidenceRevision == evidenceRevision
-        }) {
-            return .waiting(row)
-        }
-        if let replacement = (rows + waiting).first(where: { row in
+        if let replacement = rows.first(where: { row in
             row.taskId == taskId && isLaterRevision(row.evidenceRevision, than: evidenceRevision)
         }) {
             return .superseded(replacement: replacement)
@@ -554,53 +529,30 @@ public enum EvidenceDecisions {
     ///
     /// The bar above the transcript counts by this and the buttons are gated by `answerable`, and
     /// the two differ in two cases. A card this device could not re-derive is unanswerable and still
-    /// open, for the reason `CriteriaDecisions.isOpen` gives. A version waiting for the coordinator is
-    /// answerable — its owner may decide it — and not open: nobody is asking the reader yet, so the
-    /// bar neither counts it nor points at it, and nor is one handed to the coordinator (the owner's
-    /// decision of 2026-10-09, `docs/evidence-waits-for-coordinator-design.md` §2.2).
+    /// open, for the reason `CriteriaDecisions.isOpen` gives. A version handed to the coordinator
+    /// is not a question for the reader.
     public static func isOpen(_ standing: EvidenceDecisionStanding) -> Bool {
         switch standing.state {
         case .decidable, .unread:                          return true
-        case .waiting, .sent, .superseded, .alreadyDecided: return false
+        case .sent, .superseded, .alreadyDecided: return false
         }
     }
 
-    /// Whether a reason typed against this version still has somewhere to go, so the armed composer
-    /// keeps it: a question, a read that has not come back, and a version waiting for the coordinator
-    /// that its owner opened to decide here (web's `still`). One handed over, answered or replaced
-    /// has not.
+    /// Keep a reply while its question remains or its read has not returned.
     public static func holdsReply(_ standing: EvidenceDecisionStanding) -> Bool {
         switch standing.state {
-        case .decidable, .unread, .waiting:          return true
+        case .decidable, .unread:          return true
         case .sent, .superseded, .alreadyDecided:    return false
         }
     }
 
-    /// Whether the card drawn for this version is let go of rather than left to explain itself: the
-    /// read lists it nowhere now — a later revision took its place, or it was settled elsewhere — and
-    /// it was never a question here. `engaged` is that: asked in `pending`, or opened with Decide it
-    /// myself. A version that only ever waited asked nobody anything, so it leaves nothing behind.
+    /// Let a version go once it leaves the read if it was never a question here.
     public static func letsGo(_ standing: EvidenceDecisionStanding, engaged: Bool) -> Bool {
         guard !engaged else { return false }
         switch standing.state {
         case .superseded, .alreadyDecided:           return true
-        case .decidable, .waiting, .sent, .unread:   return false
+        case .decidable, .sent, .unread:   return false
         }
-    }
-
-    /// Whether a conversation re-reads the queue on a timer, as the browser does every 20 s: it
-    /// coordinates a project, and either its coordinator is paused — a version submitted now waits
-    /// — or the read lists a version waiting for it or handed to it.
-    ///
-    /// Nothing on the conversation's own row moves at those moments. A version that waits counts
-    /// toward nothing (`isOpen`), so the row's count — what re-reads the cards otherwise — stays put
-    /// when one is queued, handed over or decided by the coordinator.
-    public static func rereadsQueue(_ queue: EvidenceDecisionQueue?, coordinates: Bool,
-                                    pause: CoordinatorPause) -> Bool {
-        guard coordinates else { return false }
-        if case .paused = pause { return true }
-        guard let queue else { return false }
-        return !queue.waitingOnCoordinator.isEmpty || !queue.sentToCoordinator.isEmpty
     }
 
     // MARK: the copy
@@ -686,7 +638,7 @@ public enum EvidenceDecisions {
     /// not re-derive. A version handed to the coordinator is no longer waiting on the reader.
     public static func heading(_ standing: EvidenceDecisionStanding) -> String {
         switch standing.state {
-        case .decidable, .waiting:                 return askHeading
+        case .decidable:                 return askHeading
         case .unread:                              return unreadHeading
         case .sent, .superseded, .alreadyDecided:  return staleHeading
         }
@@ -703,9 +655,8 @@ public enum EvidenceDecisions {
     /// only "you cannot" has been told the button is broken.
     public static func staleExplanation(_ standing: EvidenceDecisionStanding) -> String? {
         switch standing.state {
-        // Nothing to explain: a question, a version its owner may still decide, and one handed to
-        // the coordinator, whose own line says where it went (`sentLine`).
-        case .decidable, .waiting, .sent:
+        // Nothing to explain: a question, or a delivery receipt with its own line (`sentLine`).
+        case .decidable, .sent:
             return nil
         case .superseded(let replacement):
             var out = "Superseded: this task has submitted version "
@@ -936,79 +887,9 @@ public enum EvidenceDecisions {
             ?? false
     }
 
-    // MARK: while the coordinator is paused
-    //
-    // An Automatic project's evidence is its coordinator's to decide. While that conversation is
-    // paused — a usage limit, a 429, an expired sign-in, a runner that went away, a retry it armed —
-    // the server keeps each new version for it rather than making it the owner's card
-    // (`waitingOnCoordinator`), and hands it over once the coordinator is back (`sentToCoordinator`).
-    // Neither is a question this reader is asked (`isOpen`); the card is folded to what waits, why,
-    // and one way in, Decide it myself, which opens the card above (the owner's decisions of
-    // 2026-10-09, `docs/evidence-waits-for-coordinator-design.md`). Why it waits is read off the
-    // coordinator's own row — its run state, its error, the retry it armed — and every word is the
-    // web card's, held by `EvidenceDecisionCopyParityTests`.
-
-    /// The folded card's heading (`EVIDENCE_DECISION_QUEUED_HEADING`).
-    public static let queuedHeading = "Waiting for the coordinator"
-    /// What the folded card says under why it waits (`EVIDENCE_DECISION_QUEUED_NOTE`).
-    public static let queuedNote = "It goes to the coordinator when it’s back. You can still decide now."
-    /// The folded card's one way in (`DECISION_DECIDE_MYSELF_ACTION`): it opens the card that
-    /// decides it.
-    public static let decideMyselfAction = "Decide it myself"
-    /// What the opened card says under why it waits (`EVIDENCE_DECISION_QUEUED_OPEN_NOTE`).
-    public static let queuedOpenNote =
-        "It gets this when it’s back. Decide here only if you don’t want to wait."
-    /// Why it waits while the coordinator is paused — the whole line when nothing more is known
-    /// (`EVIDENCE_DECISION_COORDINATOR_PAUSED`).
-    public static let coordinatorPaused = "Coordinator paused"
-    /// And once it is back, before this version has been handed to it
-    /// (`EVIDENCE_DECISION_COORDINATOR_BACK`).
-    public static let coordinatorBack = "Coordinator is back · it gets this when its current turn ends"
-    /// The usage window a paused coordinator ran out of, as `AutoRetryLogic.quotaWindowKind` tells
-    /// them apart (`DECISION_PAUSE_FIVE_HOUR_LIMIT` and the two beside it).
-    public static let pauseFiveHourLimit = "5-hour limit"
-    public static let pauseWeeklyLimit = "weekly limit"
-    public static let pauseUsageLimit = "usage limit"
     /// What a version that waited says once it is handed over, ahead of when
     /// (`EVIDENCE_DECISION_SENT_TO_COORDINATOR`).
     public static let sentToCoordinator = "Sent to the coordinator"
-
-    /// Where this conversation stands as the coordinator its queued versions wait for, read off its
-    /// own row. With no row to read it is paused for a reason nobody knows: the server lists a
-    /// waiting version for a paused coordinator, or for a turn's few seconds.
-    ///
-    /// The window is named by the judgment the transcript's quota card makes
-    /// (`AutoRetryLogic.quotaWindowKind`), and only for a failure that is a usage limit at all, so
-    /// the line under the card can never name another window than the card above it.
-    public static func coordinatorPause(_ session: Session?) -> CoordinatorPause {
-        let retryAt = session?.retryAt.flatMap { $0.isEmpty ? nil : $0 }
-        if let session, session.effectiveRunState != .failed, retryAt == nil { return .back }
-        let error = session?.error ?? ""
-        guard EngineErrors.isUsageLimitErrorText(error) else {
-            return .paused(window: nil, retryAt: retryAt)
-        }
-        let window: String
-        switch AutoRetryLogic.quotaWindowKind(error) {
-        case .fiveHour: window = pauseFiveHourLimit
-        case .weekly:   window = pauseWeeklyLimit
-        case .other:    window = pauseUsageLimit
-        }
-        return .paused(window: window, retryAt: retryAt)
-    }
-
-    /// The line under a waiting version's title: why the coordinator does not have it, and when it
-    /// is expected back when its conversation says — in the receipt's clock (`receiptTime`), as the
-    /// web line uses the web receipt's.
-    public static func pauseLine(_ pause: CoordinatorPause, now: Date = Date()) -> String {
-        guard case .paused(let window, let retryAt) = pause else { return coordinatorBack }
-        let at = retryAt.map { receiptTime($0, now: now) }
-        switch (window, at) {
-        case let (window?, at?): return "\(coordinatorPaused) · \(window) · resets \(at)"
-        case let (window?, nil): return "\(coordinatorPaused) · \(window)"
-        case let (nil, at?):     return "\(coordinatorPaused) · retries \(at)"
-        case (nil, nil):         return coordinatorPaused
-        }
-    }
 
     /// The one line a version that waited leaves once it is handed to the coordinator.
     public static func sentLine(_ deliveredAt: String, now: Date = Date()) -> String {

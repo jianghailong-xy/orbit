@@ -16,12 +16,16 @@ import {
   type WikiReviewMode,
   type WikiSpaceSettings,
 } from '@orbit/shared';
-import { WIKI_REVIEW_REJECT } from './wiki';
+import { WIKI_RETIRE_NOTE, WIKI_REVIEW_REJECT } from './wiki';
 import {
   WIKI_AMEND,
+  WIKI_AMEND_ANSWER,
   WIKI_AMEND_NOTE,
   WIKI_CANCEL,
   WIKI_CHALLENGED,
+  WIKI_CHALLENGE_AFTER_AMEND,
+  WIKI_CHALLENGE_AFTER_KEEP,
+  WIKI_CHALLENGE_AFTER_RETIRE,
   WIKI_CHALLENGE_WAITS,
   WIKI_CONFIRM,
   WIKI_CONFIRMED,
@@ -45,6 +49,7 @@ import {
   WIKI_REJECTED,
   WIKI_REJECT_ON_RECORD,
   WIKI_RETIRE,
+  WIKI_RETIRE_ANSWER,
   WIKI_REVERTED,
   WIKI_REVERT_KEEPS,
   WIKI_REVERT_RUN,
@@ -58,7 +63,40 @@ import {
   WIKI_RUN_REINFORCED,
   WIKI_SAVE,
   WIKI_SETTINGS,
+  WIKI_ADD_WORKSPACE,
+  WIKI_ADD_WORKSPACE_GROUP,
+  WIKI_TRASH_CLOSE,
+  WIKI_TRASH_CONFIRM,
+  WIKI_TRASH_DELETE_PERMANENTLY,
+  WIKI_TRASH_KEPT,
+  WIKI_TRASH_LEAVES,
+  WIKI_TRASH_NOTE,
+  WIKI_TRASH_OPEN,
+  WIKI_TRASH_OPEN_TRASH,
+  WIKI_TRASH_PAGE_EMPTY,
+  WIKI_TRASH_PAGE_LEAD,
+  WIKI_TRASH_PAGE_TITLE,
+  WIKI_TRASH_PURGE_CONFIRM,
+  WIKI_TRASH_PURGE_QUESTION,
+  WIKI_TRASH_RESTORE,
+  WIKI_TRASH_TITLE,
+  wikiMovedToTrash,
+  wikiRestored,
+  wikiTrashBody,
+  wikiTrashComesBack,
+  wikiTrashHolds,
+  wikiTrashHoldsWhenEmpty,
+  wikiTrashPurgeBody,
+  wikiTrashQuestion,
+  wikiTrashRowCount,
+  wikiTrashRowLine,
   WIKI_SETTINGS_SECTIONS,
+  WIKI_WORKSPACE_LEFT_OUT,
+  WIKI_WORKSPACES,
+  WIKI_WORKSPACES_EMPTY,
+  WIKI_WORKSPACES_JOIN,
+  WIKI_WORKSPACES_JOIN_NO_REPOSITORY,
+  WIKI_WORKSPACES_LEAD,
   WIKI_SETTINGS_TITLE,
   WIKI_SET_UP,
   WIKI_SET_UP_TITLE,
@@ -103,6 +141,32 @@ interface Fixture {
     title: string;
     crumb: string;
     sections: string[];
+    workspaces: { lead: string; leftOut: string; join: string; joinNoRepository: string; empty: string; add: string; addGroup: string };
+    trash: {
+      title: string;
+      open: string;
+      confirm: string;
+      note: string;
+      leaves: string;
+      kept: string;
+      question: { name: string; text: string };
+      moved: { name: string; text: string };
+      comesBack: { repository: string; text: string };
+      bodies: Array<{ entries: number | null; documents: number; text: string }>;
+      openTrash: string;
+      counts: Array<{ wikis: number; settings: string; empty: string; row: string }>;
+      page: {
+        title: string;
+        lead: string;
+        empty: string;
+        restore: string;
+        deletePermanently: string;
+        close: string;
+        rows: Array<{ deletedAt: string; purgeAt: string; entries: number; text: string }>;
+        restored: { name: string; text: string };
+        purge: { question: string; confirm: string; bodies: Array<{ entries: number; text: string }> };
+      };
+    };
     reviewModeHint: string;
     lead: string;
     defaultTag: string;
@@ -141,7 +205,7 @@ interface Fixture {
     whereUsed: string | null;
   }>;
   checkedLines: Array<{
-    verification: { verdict: string; model: string } | null;
+    verification: { verdict: string; model: string; evidence?: string } | null;
     tainted: boolean;
     who: string | null;
     when: string | null;
@@ -178,7 +242,14 @@ interface Fixture {
     items: Array<{ opId: string; at: string; origin: string; changesetId?: string | null; changesetAppliedByMode?: string | null }>;
     rows: Array<{ run?: string; origin?: string; at?: string; items?: string[]; op?: string }>;
   }>;
-  challenge: { answers: string[]; waits: string; challenged: string; amendNote: string };
+  challenge: {
+    answers: string[];
+    after: { label: string; keep: string; amend: string; retire: string };
+    retireNote: string;
+    waits: string;
+    challenged: string;
+    amendNote: string;
+  };
   challenges: Array<{
     name: string;
     anchors: WikiAnchor[];
@@ -217,7 +288,58 @@ const shared = fixture();
 describe('the Wiki settings page says the fixture’s words, in its order', () => {
   const settings = shared.settings;
 
-  it('titles the page and its two sections in the order both clients draw them', () => {
+  it('says the Workspaces card’s words', () => {
+    expect(WIKI_WORKSPACES).toBe(settings.sections[1]);
+    expect(WIKI_WORKSPACES_LEAD).toBe(settings.workspaces.lead);
+    expect(WIKI_WORKSPACE_LEFT_OUT).toBe(settings.workspaces.leftOut);
+    expect(WIKI_WORKSPACES_JOIN).toBe(settings.workspaces.join);
+    expect(WIKI_WORKSPACES_JOIN_NO_REPOSITORY).toBe(settings.workspaces.joinNoRepository);
+    expect(WIKI_WORKSPACES_EMPTY).toBe(settings.workspaces.empty);
+    expect(WIKI_ADD_WORKSPACE).toBe(settings.workspaces.add);
+    expect(WIKI_ADD_WORKSPACE_GROUP).toBe(settings.workspaces.addGroup);
+  });
+
+  it('says Move to Trash’s words, and what Trash keeps at each count', () => {
+    const words = settings.trash;
+    expect(WIKI_TRASH_TITLE).toBe(settings.sections[3]);
+    expect(WIKI_TRASH_TITLE).toBe(words.title);
+    expect(WIKI_TRASH_OPEN).toBe(words.open);
+    expect(WIKI_TRASH_CONFIRM).toBe(words.confirm);
+    expect(WIKI_TRASH_NOTE).toBe(words.note);
+    expect(WIKI_TRASH_LEAVES).toBe(words.leaves);
+    expect(WIKI_TRASH_KEPT).toBe(words.kept);
+    expect(wikiTrashQuestion(words.question.name)).toBe(words.question.text);
+    expect(wikiMovedToTrash(words.moved.name)).toBe(words.moved.text);
+    expect(wikiTrashComesBack(words.comesBack.repository)).toBe(words.comesBack.text);
+    expect(words.bodies.length).toBeGreaterThan(0);
+    for (const body of words.bodies) expect(wikiTrashBody(body.entries, body.documents)).toBe(body.text);
+  });
+
+  it('says the ways to Trash and Trash’s own words, its rows in any time zone near the date', () => {
+    const words = settings.trash;
+    expect(WIKI_TRASH_OPEN_TRASH).toBe(words.openTrash);
+    for (const count of words.counts) {
+      expect(wikiTrashHolds(count.wikis)).toBe(count.settings);
+      expect(wikiTrashHoldsWhenEmpty(count.wikis)).toBe(count.empty);
+      expect(wikiTrashRowCount(count.wikis)).toBe(count.row);
+    }
+    expect(WIKI_TRASH_PAGE_TITLE).toBe(words.page.title);
+    expect(WIKI_TRASH_PAGE_LEAD).toBe(words.page.lead);
+    expect(WIKI_TRASH_PAGE_EMPTY).toBe(words.page.empty);
+    expect(WIKI_TRASH_RESTORE).toBe(words.page.restore);
+    expect(WIKI_TRASH_DELETE_PERMANENTLY).toBe(words.page.deletePermanently);
+    expect(WIKI_TRASH_CLOSE).toBe(words.page.close);
+    expect(wikiRestored(words.page.restored.name)).toBe(words.page.restored.text);
+    // The fixture's instants are at noon UTC: the same day from UTC-11 to UTC+11, the host's +0800 and CI's UTC among them.
+    for (const tz of ['UTC', 'Asia/Shanghai', 'America/Los_Angeles']) {
+      for (const row of words.page.rows) expect(inTimeZone(tz, () => wikiTrashRowLine(row))).toBe(row.text);
+    }
+    expect(WIKI_TRASH_PURGE_QUESTION).toBe(words.page.purge.question);
+    expect(WIKI_TRASH_PURGE_CONFIRM).toBe(words.page.purge.confirm);
+    for (const body of words.page.purge.bodies) expect(wikiTrashPurgeBody(body.entries)).toBe(body.text);
+  });
+
+  it('titles the page and its sections in the order every client draws them', () => {
     expect(WIKI_SETTINGS_TITLE).toBe(settings.title);
     expect(WIKI_SETTINGS).toBe(settings.crumb);
     expect([...WIKI_SETTINGS_SECTIONS]).toEqual(settings.sections);
@@ -397,8 +519,18 @@ describe('a challenge', () => {
     }
   });
 
-  it('is answered Re-confirm, Amend or Retire', () => {
-    expect([WIKI_RECONFIRM, WIKI_AMEND, WIKI_RETIRE]).toEqual(shared.challenge.answers);
+  it('is answered Keep, Amend… or Retire…, each with what it does to the entry, in the words every client shares', () => {
+    expect([WIKI_RECONFIRM, WIKI_AMEND_ANSWER, WIKI_RETIRE_ANSWER]).toEqual(shared.challenge.answers);
+    // The bare words head the After row's lines and name the Amend form and the Retire dialog's button.
+    expect([WIKI_RECONFIRM, WIKI_AMEND, WIKI_RETIRE]).toEqual(['Keep', 'Amend', 'Retire']);
+    expect([WIKI_CHALLENGE_AFTER_KEEP, WIKI_CHALLENGE_AFTER_AMEND, WIKI_CHALLENGE_AFTER_RETIRE]).toEqual([
+      shared.challenge.after.keep,
+      shared.challenge.after.amend,
+      shared.challenge.after.retire,
+    ]);
+    expect(shared.challenge.after.label).toBe('After');
+    expect(shared.challenge.after.retire).toContain('This cannot be undone.');
+    expect(WIKI_RETIRE_NOTE).toBe(shared.challenge.retireNote);
     expect(WIKI_CHALLENGE_WAITS).toBe(shared.challenge.waits);
     expect(WIKI_CHALLENGED).toBe(shared.challenge.challenged);
     expect(WIKI_AMEND_NOTE).toBe(shared.challenge.amendNote);

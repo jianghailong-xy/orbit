@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
@@ -417,6 +417,32 @@ test('the declared order is a strict ranking with argued gaps', () => {
   assert.equal(LOCK_ORDER_EXCEPTIONS.length, 3);
   assert.ok(LOCK_ORDER_COMPATIBLE.some((c) => c.relation === 'workspace'));
   assert.ok(LOCK_ORDER_COMPATIBLE.some((c) => c.relation === 'runner'));
+  assert.ok(LOCK_ORDER_COMPATIBLE.some((c) => c.relation === 'open_list_epoch'));
+});
+
+/** The last body a migration gave this function: the one the database runs today. */
+function lastFunctionBody(name: string): string {
+  const dir = path.resolve(__dirname, '../..', 'prisma/migrations');
+  const created = new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+"?${name}"?\\s*\\([\\s\\S]*?\\$\\$([\\s\\S]*?)\\$\\$`, 'gi');
+  let body = '';
+  for (const migration of readdirSync(dir).sort()) {
+    const file = path.join(dir, migration, 'migration.sql');
+    if (!existsSync(file)) continue;
+    for (const match of readFileSync(file, 'utf8').matchAll(created)) body = match[1];
+  }
+  return body;
+}
+
+test('the Open-list counters are taken without waiting, as their compatibility argument says', () => {
+  const bump = lastFunctionBody('open_list_bump');
+  assert.match(bump, /FROM open_list_epoch[\s\S]*FOR UPDATE SKIP LOCKED/, 'a counter row is taken in a way that can wait');
+  assert.match(bump, /nextval\('open_list_epoch_shard_seq'\)/, 'a new counter row is keyed some other way');
+  assert.doesNotMatch(bump, /ON CONFLICT/i, 'an insert that can conflict waits for the transaction holding the key');
+  for (const fn of ['open_list_bump_owner', 'open_list_bump_via_project', 'open_list_bump_via_session', 'open_list_bump_session']) {
+    const body = lastFunctionBody(fn);
+    assert.match(body, /PERFORM open_list_bump\(/, `${fn} no longer bumps through open_list_bump`);
+    assert.doesNotMatch(body, /open_list_epoch/, `${fn} writes open_list_epoch itself`);
+  }
 });
 
 test('the compatibility arguments still describe the code they are about', () => {

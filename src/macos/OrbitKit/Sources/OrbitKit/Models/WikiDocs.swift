@@ -189,6 +189,9 @@ public struct WikiDocSentence: Codable, Equatable, Sendable {
         public let at: String?
     }
 
+    /// The sentence's public id: what a wiki chat's selection names (contract `chat.notes.wikiContext`). A section
+    /// written again gets new sentences and so new ids. Nil from a server older than the chat.
+    public let id: String?
     public let text: String
     public let status: WikiDocSentenceStatus
     /// The document's footnote numbers it carries.
@@ -218,6 +221,9 @@ public struct WikiDocSection: Codable, Equatable, Sendable {
     public let repoSha: String?
     public let model: String?
     public let blocks: [WikiDocBlock]?
+    /// Its latest change (contract `docs.versions.reads.doc`): nil while no write has replaced it, and from a server
+    /// older than the versions.
+    public let change: WikiDocSectionChange?
 }
 
 /// One footnote of the document, numbered by first appearance.

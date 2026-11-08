@@ -354,7 +354,7 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 | `provider` / `providerBuiltin` | Session **create** | 只读。**Session 的 provider 终生固定**（运行时线程属于开它的 CLI），这是既有约束，v1 不改 |
 | `requiredCapabilities` | Session **create** | 只读 |
 | `resolution` | Session **create** | 只读 |
-| `permissionMode` | Session **create** | 只读。create 时 materialize 账号默认，冻结的是这次运行的**权限意图**；只有已知 runner 根本无法启动的组合可在 create 时安全收窄（例如 root runner 上 `Bypass` → `Don't Ask`）。依赖实际 model 的 `Auto` → `Default` 由 Queue 在 claim 物化 model 后派生，不回写本列 |
+| `permissionMode` | Session **create** | 只读。create 时 materialize 账号默认，冻结的是这次运行的**权限意图**；只有已知 runner 根本无法启动的组合可在 create 时安全收窄（例如 root runner 上 `Bypass` → `Auto`）。依赖实际 model 的 `Auto` → `Default` 由 Queue 在 claim 物化 model 后派生，不回写本列 |
 | `model` | **首次 claim**（既有行为，保留） | 首次 claim 后只读。既有例外保留：模型被 runtime 彻底下架（`retiredPin`）时改写一次 |
 | `effort` | **首次 claim** | 同 `model` |
 | `snapshotFrozenAt` | Session **create** | 一旦非 null，**上表中冻结时刻为 Session create 的那九列**进入只读。它**不**封 `model` / `effort` —— 那两列的封条是首次 claim，见 S4 |
@@ -447,11 +447,24 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
   5. **决定一次，冻结在 run target 里**：路由结果写进冻结的 run target（`TaskRunExecuteTarget` / `TaskRunBatchPlan` v2
      的 `effort` 与 `route`），接管者照它执行、不重算；Route Decision 按 `(task_id, request_token)` 幂等写入，同一个
      run request 只有一条。Session 的 `model` / `effort` 仍在首次 claim 封存（§6 S4）—— 路由只是给 create 提供了值。
-  6. **从不拒绝**：定不出档位（例如没有建议、上次也没有失败）、引擎没有档位表、目标 runner 没报模型列表，都保持基线，
-     并在 Route Decision 里写明理由。路由步骤**不新增任何 §12 错误码**，也不落 `project_blocker` —— 它是一次选择，
-     不是一道闸门。
+  6. **Never refuse**: if no enabled source produces a tier, the engine has no tier table, or the target runner has no usable catalog,
+     keep the baseline and explain why in the Route Decision. Routing adds no §12 error code or `project_blocker`;
+     it selects execution settings rather than introducing a dispatch gate.
   7. **纯函数**：路由器在派发路径上不发网络请求；它的输入（任务与它的失败历史、目标 runner 的模型列表与额度、账号
      默认的权限模式与 effort）在租约内、事务外读好再传入。
+
+**Phase-2 design amendment (pending owner confirmation, 2026-11-08):**
+[Model-routing design §3.5](./model-routing-design.md#35-phase-2-auto-hint-and-optimize-for)
+defines missing-hint rule inference after explicit hints, and owner-editable Agent Optimize For modes.
+Cost preserves one-tier failure escalation; Balance and Intelligence add missing-hint floors only.
+Neither inference nor modes replace a model pin or an explicit hint; failure escalation still applies.
+These are additional inputs to P7, not changes to WHO, WHERE, V1, engine authorization or session freezing.
+The dispatch adapter supplies persisted snapshots; the router performs no I/O and never writes task pins or hints.
+Classifier implementation is deferred beyond this project; any future classifier must compute asynchronously
+on task create/update and persist a revision-matched tier for the adapter to read, never run on dispatch.
+New policies require a separate shadow-first rollout gate even where `modelRouting` is already enabled;
+P7.3 permits application only after that policy is approved (§10.3 of the design).
+This documentation amendment does not enable behavior or claim owner acceptance.
 
 ### 7.3 WHERE —— 在哪里做
 
@@ -675,7 +688,7 @@ Task 的 `assigneeAgentId` 写入时必须全部通过，任一失败即 400/403
 | REST `/agents` | **Agent**（新表） | v1 新增 |
 | REST `/projects/:id/team` | **Project Member** | v1 新增 |
 | REST `/projects/:id/workspaces` | **Project Workspace** | v1 新增 |
-| MCP `agent_list` / `agent_create` / `agent_update` | **Workspace**（Legacy agent alias） | **冻结 + deprecated**，行为一字不改 |
+| MCP `agent_list` / `agent_create` / `agent_update` | **Workspace**（Legacy agent alias） | **deprecated**，指向不变。写 `env`、`workDir`、`systemPrompt`、`appendSystemPrompt`、`runnerId`、`enableWorktree` 要所有者的卡片（`runner-api/runner-workspace-approval.ts`），其余行为不变 |
 | CLI `orbit agent …` | **Workspace**（Legacy agent alias） | **冻结 + deprecated** |
 | CLI `orbit workspace …` | Workspace | v1 新增，`orbit agent` 的推荐拼法 |
 | MCP `team_list` / `team_add` / `team_remove`、CLI `orbit project team …` | Project Member + Agent | v1 新增 |

@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { KIMI_LOGIN_REGION_V1, RunnerStatus, type LoginCommand, type RunnerLoginState } from '@orbit/shared';
+import { ANTIGRAVITY_GOOGLE_LOGIN_V1 } from '../common/antigravity-readiness';
 import type { AuthUser } from '../common/current-user.decorator';
 import {
-  CLAUDE_ACCOUNT_LOGIN_V1,
-  CODEX_ACCOUNT_LOGIN_V1,
-  KIMI_ACCOUNT_LOGIN_V1,
+  CURSOR_ACCOUNT_LOGIN_V1,
+  LOGIN_LINK_REFUSED,
   RunnerApiController,
 } from '../runner-api/runner-api.controller';
 import { StartLoginDto } from './dto';
@@ -29,11 +29,11 @@ const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
 const SLOT = '1a2b3c4d';
 const ADDED_SLOT = '5e6f7a8b';
 const USER = { userId: OWNER } as AuthUser;
-const ACCOUNT_CAPABLE = `session-worktree-ops-v1,${CODEX_ACCOUNT_LOGIN_V1}`;
-const CLAUDE_ACCOUNT_CAPABLE = `session-worktree-ops-v1,${CLAUDE_ACCOUNT_LOGIN_V1}`;
+const ACCOUNT_CAPABLE = `session-worktree-ops-v1,codex-account-login/v1`;
+const CLAUDE_ACCOUNT_CAPABLE = `session-worktree-ops-v1,claude-account-login/v1`;
 /** A runner that chooses Kimi's site, with and without keeping more than one Kimi account. */
 const KIMI_SITE_CAPABLE = `session-worktree-ops-v1,${KIMI_LOGIN_REGION_V1}`;
-const KIMI_ACCOUNT_CAPABLE = `${KIMI_SITE_CAPABLE},${KIMI_ACCOUNT_LOGIN_V1}`;
+const KIMI_ACCOUNT_CAPABLE = `${KIMI_SITE_CAPABLE},kimi-account-login/v1`;
 
 type Row = Record<string, unknown>;
 
@@ -214,7 +214,7 @@ test('a body that cannot name an account is refused, never read as the runner’
   assert.equal(await h.beat(), undefined);
 });
 
-test('a Claude account is signed in by name, on a runner that declares that', async () => {
+test('a Claude account is signed in by name', async () => {
   const h = harness();
   await h.post({ engine: 'claude', account: SLOT });
   assert.deepEqual(await h.beat(CLAUDE_ACCOUNT_CAPABLE), {
@@ -236,11 +236,6 @@ test('a Claude account is signed in by name, on a runner that declares that', as
     code: 'the-code',
     attempt: attemptOf(h.row),
   });
-  // A runner that has only ever signed in Codex accounts is not handed this one: it would take the
-  // named account for a plain sign-in and put the machine's own login on the line.
-  await h.post({ engine: 'claude', account: SLOT });
-  assert.equal(await h.beat(ACCOUNT_CAPABLE), undefined);
-  assert.match((await h.state()).message ?? '', /too old to sign in another Claude account/);
 });
 
 test('the link a runner reports ends at its first control character', async () => {
@@ -256,7 +251,125 @@ test('the link a runner reports ends at its first control character', async () =
   }
 });
 
-test('a Kimi account is signed in by name on the site it is added on, on a runner that declares that', async () => {
+/** The sign-in link of each engine, in the shape its CLI prints it (runner-go's own login fixtures). */
+const ENGINE_LINKS: Array<[string, 'awaiting_code' | 'awaiting_approval', string]> = [
+  ['claude', 'awaiting_code', 'https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=user%3Ainference&code_challenge=frcAznfHKdQ3nNYn157q799r9SIaDMeJqq9HqdHD2JQ&code_challenge_method=S256&state=D_hsM6JpU6Uy2Ji8q0WtyOhF_Lq8iTIkuetcNISuRs'],
+  ['codex', 'awaiting_approval', 'https://auth.openai.com/codex/device'],
+  ['kimi', 'awaiting_approval', 'https://www.kimi.com/code/authorize_device?user_code=SHG3-0DSI'],
+  ['kimi', 'awaiting_approval', 'https://www.kimi.ai/code/authorize_device?user_code=7K06-QP86'],
+  ['kimi', 'awaiting_approval', 'https://auth.kimi.com/verify?user_code=WDJB-MJHT'],
+  ['antigravity', 'awaiting_code', 'https://accounts.google.com/o/oauth2/auth?response_type=code&state=fixture&code_challenge=fixture'],
+  ['cursor', 'awaiting_approval', 'https://cursor.com/loginDeepControl?challenge=Q2hhbGxlbmdl&uuid=7d2e0c1a-0000-4000-8000-000000000001&mode=login&redirectTarget=cli&supportsSelectedTeamLogin=true'],
+];
+
+/** Addresses no sign-in has: other schemes in the spellings a browser reads as them, and no address at all. */
+const NOT_HTTPS_LINKS = [
+  'javascript:void(0)', 'JAVASCRIPT:void(0)', 'JaVaScRiPt:void(0)', ' javascript:void(0)', '  JaVaScRiPt:void(0)',
+  '\tjavascript:void(0)', '\njavascript:void(0)', '\x01javascript:void(0)', 'java\tscript:void(0)', 'java\nscript:void(0)',
+  'java\rscript:void(0)', 'javascript\t:void(0)',
+  'data:text/html,hello', 'DATA:text/html,hello', ' data:text/html,hello', 'data:text/html;base64,aGVsbG8=', 'da\tta:text/html,hello',
+  'vbscript:msgbox(0)', 'VBScript:msgbox(0)', ' vbscript:msgbox(0)',
+  'http://claude.com/cai/oauth/authorize?code=true', 'HTTP://claude.com/', 'http://localhost:1455/auth/callback',
+  'file:///etc/hosts', 'blob:https://orbit.test/1', 'about:blank', 'ftp://claude.com/', 'mailto:someone@example.test', 'orbit-task:1',
+  '/runners', 'claude.com/cai/oauth/authorize', '//claude.com/cai/oauth/authorize', 'https:', 'https://', '',
+];
+
+test('the link of every engine is kept as its CLI printed it', async () => {
+  const h = harness();
+  // What a start of Antigravity's and Cursor CLI's needs of the runner, before any link is reported.
+  h.row.capabilities = [ANTIGRAVITY_GOOGLE_LOGIN_V1, CURSOR_ACCOUNT_LOGIN_V1];
+  h.row.capabilitiesReportedAt = new Date();
+  for (const [engine, status, link] of ENGINE_LINKS) {
+    await h.post({ engine });
+    const report = await h.report({ status, url: link, userCode: 'ABCD-1234', attempt: attemptOf(h.row) });
+    assert.deepEqual(report, { ok: true, applied: true }, link);
+    const state = await h.state();
+    assert.equal(state.status, status, link);
+    assert.equal(state.url, link);
+    assert.equal(state.message, null, link);
+    assert.equal(state.userCode, status === 'awaiting_approval' ? 'ABCD-1234' : null, link);
+  }
+});
+
+test('a sign-in link that is not https is not kept, and ends the sign-in', async () => {
+  const h = harness();
+  for (const status of ['awaiting_code', 'awaiting_approval']) {
+    for (const url of NOT_HTTPS_LINKS) {
+      await h.post({ engine: 'claude' });
+      const before = h.writes.length;
+      const report = await h.report({
+        status,
+        url,
+        userCode: 'ABCD-1234',
+        message: 'from the runner',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        attempt: attemptOf(h.row),
+      });
+      const label = JSON.stringify([status, url]);
+      assert.deepEqual(report, { ok: true, applied: true }, label);
+      assert.equal(h.writes.length, before + 1, label);
+      const write = h.writes[before];
+      assert.equal(write.loginStatus, 'failed', label);
+      assert.equal(write.loginUrl, null, label);
+      assert.equal(write.loginUserCode, null, label);
+      assert.equal(write.loginExpiresAt, null, label);
+      assert.deepEqual(await h.state(), {
+        status: 'failed',
+        engine: 'claude',
+        userCode: null,
+        url: null,
+        message: LOGIN_LINK_REFUSED,
+        account: null,
+      }, label);
+    }
+  }
+});
+
+test('the failure of a refused link says what happened in English, and repeats nothing of the link', () => {
+  assert.match(LOGIN_LINK_REFUSED, /^[\x20-\x7e]+$/);
+  assert.match(LOGIN_LINK_REFUSED, /isn't https/);
+  assert.doesNotMatch(LOGIN_LINK_REFUSED, /javascript|data:|vbscript/i);
+});
+
+test('a report with no link is taken as before: there is nothing to refuse', async () => {
+  const h = harness();
+  await h.post({ engine: 'claude' });
+  await h.report({ status: 'awaiting_code', attempt: attemptOf(h.row) });
+  const state = await h.state();
+  assert.equal(state.status, 'awaiting_code');
+  assert.equal(state.url, null);
+  assert.equal(state.message, null);
+});
+
+test('a sign-in that ended on a refused link can be started again', async () => {
+  const h = harness();
+  await h.post({ engine: 'claude' });
+  await h.report({ status: 'awaiting_code', url: 'javascript:void(0)', attempt: attemptOf(h.row) });
+  assert.equal((await h.state()).status, 'failed');
+
+  await h.post({ engine: 'claude' });
+  assert.equal((await h.state()).status, 'pending');
+  assert.equal((await h.state()).message, null);
+  const [, status, link] = ENGINE_LINKS[0];
+  await h.report({ status, url: link, attempt: attemptOf(h.row) });
+  assert.equal((await h.state()).status, status);
+  assert.equal((await h.state()).url, link);
+});
+
+test('a refused link about a start this row has moved past changes nothing', async () => {
+  const h = harness();
+  await h.post({ engine: 'claude' });
+  const stale = attemptOf(h.row);
+  await new Promise((resolve) => setTimeout(resolve, 2));
+  await h.post({ engine: 'claude' });
+  assert.notEqual(attemptOf(h.row), stale);
+  const report = await h.report({ status: 'awaiting_code', url: 'javascript:void(0)', attempt: stale });
+  assert.deepEqual(report, { ok: true, applied: false });
+  assert.equal((await h.state()).status, 'pending');
+  assert.equal((await h.state()).message, null);
+});
+
+test('a Kimi account is signed in by name on the site it is added on', async () => {
   const h = harness();
   await h.post({ engine: 'kimi', accountName: ' Work ', region: 'global' });
   assert.deepEqual(await h.beat(KIMI_ACCOUNT_CAPABLE), {
@@ -276,43 +389,9 @@ test('a Kimi account is signed in by name on the site it is added on, on a runne
     region: 'mainland-cn',
   });
 
-  // A runner that keeps one Kimi login — however it chooses the site, and whatever other engines'
-  // accounts it keeps — is not handed a named one: it would sign the new account in over Default's.
-  for (const capabilities of [KIMI_SITE_CAPABLE, `${KIMI_SITE_CAPABLE},${CODEX_ACCOUNT_LOGIN_V1},${CLAUDE_ACCOUNT_LOGIN_V1}`, null]) {
-    await h.post({ engine: 'kimi', accountName: 'Work', region: 'global' });
-    assert.equal(await h.beat(capabilities), undefined, String(capabilities));
-    const state = await h.state();
-    assert.equal(state.status, 'failed');
-    assert.equal(state.message, 'This runner is too old to sign in another Kimi account — update it, then try again.');
-  }
-  await h.post({ engine: 'kimi', account: SLOT });
-  assert.equal(await h.beat(KIMI_SITE_CAPABLE), undefined);
-  assert.match((await h.state()).message ?? '', /too old to sign in another Kimi account/);
   // Its own login, on a site, is handed over as it always was.
   await h.post({ engine: 'kimi', region: 'global' });
   assert.deepEqual(await h.beat(KIMI_SITE_CAPABLE), { action: 'start', engine: 'kimi', attempt: attemptOf(h.row), region: 'global' });
-});
-
-test('a runner that does not declare account sign-in is never handed a start naming another account', async () => {
-  const h = harness();
-  await h.post({ engine: 'codex', account: SLOT });
-  assert.equal(await h.beat('session-worktree-ops-v1'), undefined);
-  const state = await h.state();
-  assert.equal(state.status, 'failed');
-  assert.match(state.message ?? '', /too old to sign in another Codex account/);
-
-  await h.post({ engine: 'codex', accountName: 'Work' });
-  assert.equal(await h.beat(null), undefined);
-  assert.equal((await h.state()).status, 'failed');
-
-  // Default is what such a runner signs in anyway, so asking for it by name is still handed over.
-  await h.post({ engine: 'codex', account: 'default' });
-  assert.deepEqual(await h.beat(null), {
-    action: 'start',
-    engine: 'codex',
-    attempt: attemptOf(h.row),
-    account: 'default',
-  });
 });
 
 test('a report about a start the row has moved past changes nothing', async () => {

@@ -31,6 +31,13 @@ class AttachedNoteTest {
     private val refTask = "<referenced-task id=\"550e8400\">\n  标题   [W 009/250] → WARC\n</referenced-task>"
     private val sessionMessage = "<orbit-session-message from-session=\"34Y\" from-title=\"Worker\" from-agent=\"orbit\">\n这条消息来自另一个 Orbit 会话。\n</orbit-session-message>"
     private val coordinator = "<orbit_project_coordinator_context>\n  你是项目的协调会话。\n</orbit_project_coordinator_context>"
+    // A wiki chat's blocks as the apiserver appends them (wiki contract `chat.notes`, wiki-chat-notes.ts). Android has no
+    // chat this phase: it draws them as any block it does not know, and counts nothing from them (design §9).
+    private val wikiChat = "<orbit_wiki_chat>\nYou are chatting beside a page of this repository's Orbit wiki.\n</orbit_wiki_chat>"
+    private val wikiPage = "<orbit_wiki_page of=\"doc\" doc=\"1.1\" slug=\"sessions-runtime\" section=\"2\" key=\"turn-delivery\" repoSha=\"1f1f\">\n" +
+        "1.1 Sessions runtime · §2 Turn delivery\nThe runner leases one turn at a time.\n  - src/runner-go/inbox.go@1f1f#L10-40\n</orbit_wiki_page>"
+    private val wikiSelection = "<orbit_wiki_selection doc=\"1.1\" slug=\"sessions-runtime\" section=\"2\" key=\"turn-delivery\" sentences=\"1\" sources=\"1\">\n" +
+        "§2 Turn delivery\nThe runner leases one turn at a time.\n  - src/runner-go/inbox.go@1f1f#L10-40\n</orbit_wiki_selection>"
 
     @Test fun splitsExactlyWhereTheRecordedNoteBegins() {
         val note = "\n\n$backgroundJobs"
@@ -59,6 +66,14 @@ class AttachedNoteTest {
         assertEquals("context", describeNote("<orbit_something_new>\n  x\n</orbit_something_new>"))
         assertEquals("context", describeNote("<background-jobs-v2>\n  x\n</background-jobs-v2>"))
         assertEquals("context", describeNote("[Image #1]"))
+    }
+
+    @Test fun drawsAWikiChatsBlocksAsAnyBlockItDoesNotKnow() {
+        val note = "\n\n$wikiChat\n\n$wikiPage\n\n$wikiSelection"
+        assertEquals("context ×3", describeNote(note))
+        assertEquals("Is the lease really ninety seconds?" to note.trim(), splitRecordedNote("Is the lease really ninety seconds?$note", note))
+        val event = RunEvent("user", 1, buildJsonObject { put("text", "Is the lease really ninety seconds?$note"); put("controlPlaneNote", note) })
+        assertEquals("Is the lease really ninety seconds?", event.personWords())
     }
 
     @Test fun theLineSaysWhatIsAttachedAndOpensToWhatTheModelRead() {

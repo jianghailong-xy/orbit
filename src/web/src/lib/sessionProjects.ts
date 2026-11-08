@@ -25,6 +25,7 @@ export interface SessionProjectSession extends GroupableSession {
   folderId?: string | null;
   projectMembership?: SessionProjectMembership | null;
   ownerItems?: readonly { since: string }[];
+  workspace?: { id?: string | null } | null;
 }
 
 export interface SessionProjectLine {
@@ -52,8 +53,19 @@ export interface SessionProjectRow<T> extends GroupableSession {
   runningCount: number;
 }
 
+/** The project an ordinary row belongs to where that project has no row: a member in a workspace its
+ *  coordinator does not run in (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A). */
+export interface SessionProjectMark {
+  projectId: string;
+  title: string;
+  status: SessionProjectMembership['projectStatus'];
+  /** Absent for a project the sidebar does not list (a DONE one, an older server): the mark is its status. */
+  taskCounts?: ProjectSidebarTaskCounts;
+  runningCount: number;
+}
+
 export type SessionProjectEntry<T> =
-  | (T & { kind: 'session' })
+  | (T & { kind: 'session'; projectMark?: SessionProjectMark })
   | (SessionProjectRow<T> & { kind: 'project' });
 
 export interface SessionProjectListing<T> {
@@ -69,9 +81,12 @@ export const listShowsProjects = (view: SessionListView, byTag: boolean, searchi
 export const SESSION_PROJECT_COPY = {
   progress: (done: number, total: number) => `${done}/${total}`,
   progressHint: (sessions: number, running: number) => `${sessions} sessions · ${running} running`,
+  /** The progress mark on a member's own row, where its project has no row (owner 2026-11-07). */
+  markHint: (title: string) => `Part of ${title} · open its sessions`,
   waitingSession: (text: string, title: string) => `${text} · ${title}`,
   noCoordinator: 'No coordinator',
   openSession: 'Open Session',
+  complete: 'Complete',
   openCoordinator: 'Open Coordinator',
   sessions: 'Sessions',
   openProject: 'Open Project',
@@ -277,6 +292,7 @@ export const SESSION_LANDINGS_COPY = {
   MERGED_INTO: 'merged into',
   TODAY: 'today',
   NOTHING_LANDED_TODAY: 'Nothing landed today',
+  NO_LANDINGS_YET: 'No landings yet',
   NOW: 'Now',
   ORBIT_RUNS_THESE_LANDINGS: 'Orbit runs these landings — nothing to type here.',
 } as const;
@@ -464,6 +480,31 @@ export function landingsWindow(
   return { days, now };
 }
 
+/** How far apart two settled landings may be and still read as one group of messages: ten minutes
+ *  (OrbitKit's `SessionProjectLandings.groupGap`). */
+export const LANDINGS_GROUP_GAP_MS = 10 * 60 * 1000;
+
+/**
+ * A day's rows, oldest first, as the runs Orbit reported close together (owner 2026-11-02,
+ * docs/mocks/landings-chat-bubbles): the window draws each run as one group of messages, Orbit's
+ * avatar once beside the first, so a task's landing and the merge into main that carried it read as
+ * one exchange. A row joins the group of the one before it when it settled at most
+ * `LANDINGS_GROUP_GAP_MS` after it, and starts a group of its own when it came later or either
+ * instant is unknown. The day sections already split at midnight.
+ */
+export function landingsWindowGroups(rows: readonly LandingsWindowRow[]): LandingsWindowRow[][] {
+  const runs: LandingsWindowRow[][] = [];
+  for (const row of rows) {
+    const last = runs.at(-1)?.at(-1);
+    if (last && Number.isFinite(last.at) && Number.isFinite(row.at) && row.at - last.at <= LANDINGS_GROUP_GAP_MS) {
+      runs[runs.length - 1].push(row);
+    } else {
+      runs.push([row]);
+    }
+  }
+  return runs;
+}
+
 /** The Landings row's three facts: the mark of the most urgent landing, how long it has waited (or
  *  how long ago the last one settled), and the counts under them. */
 export interface LandingsRowSummary {
@@ -544,7 +585,12 @@ const waitingInstant = (session: SessionProjectSession): number => {
 };
 
 /** Split one view of one workspace. Supplemental coordinators affect placement and wording only:
- *  a coordinator from another workspace/view never inflates this view's activity or folder count. */
+ *  a coordinator from another workspace/view never inflates this view's activity or folder count.
+ *
+ *  A project is a row only in the workspace its coordinator runs in. Anywhere else its members are
+ *  that workspace's own rows, filed by their own folders and each marked with the project (owner
+ *  2026-11-07, docs/mocks/project-rows-by-workspace, option A). A project with no coordinator is a
+ *  row wherever it has members, as before. */
 export function sessionProjectListing<T extends SessionProjectSession>(
   sessions: readonly T[],
   folders: readonly SessionFolder[],
@@ -557,18 +603,16 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     runnerOffline?: boolean;
     now?: number;
     coordinators?: readonly T[];
+    /** The workspace this list is; without one, every project with members here is a row. */
+    workspaceId?: string | null;
     /** Same-view sessions across workspaces, used for the waiting line and tooltip count. */
     contentSessions?: readonly T[];
     line: (session: T) => SessionProjectLine;
   } & FolderSessionReadings<T>,
 ): SessionProjectListing<T> {
-  const flat = (rows: T[], folderRows: SessionFolderRow[] = []): SessionProjectListing<T> => ({
-    folders: folderRows,
-    projects: [],
-    sessions: rows,
-    entries: rows.map((session) => ({ ...session, kind: 'session' })),
-  });
-  if (!listShowsProjects(opts.view, opts.byTag, opts.searching)) return flat([...sessions]);
+  if (!listShowsProjects(opts.view, opts.byTag, opts.searching)) {
+    return { folders: [], projects: [], sessions: [...sessions], entries: sessions.map((session) => ({ ...session, kind: 'session' })) };
+  }
 
   const groups = new Map<string, T[]>();
   const coordinators = new Map<string, T>();
@@ -577,15 +621,23 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       coordinators.set(session.projectMembership.projectId, session);
     }
   }
-  for (const session of sessions) {
+  // The project whose row holds this session here: none for a session in no project, or for a member
+  // whose coordinator runs in another workspace.
+  const heldBy = (session: T): string | null => {
     const id = session.projectMembership?.projectId;
+    if (!id) return null;
+    const home = coordinators.get(id)?.workspace?.id;
+    return opts.workspaceId && home && home !== opts.workspaceId ? null : id;
+  };
+  for (const session of sessions) {
+    const id = heldBy(session);
     if (!id) continue;
     const members = groups.get(id);
     if (members) members.push(session);
     else groups.set(id, [session]);
   }
   const assigned = sessions.map((session) => {
-    const id = session.projectMembership?.projectId;
+    const id = heldBy(session);
     return id ? { ...session, folderId: coordinators.get(id)?.folderId ?? null } : session;
   });
   const folderListing = sessionFolderListing(assigned, folders, opts);
@@ -593,10 +645,28 @@ export function sessionProjectListing<T extends SessionProjectSession>(
   const inScope = (folderId: string | null | undefined) => opts.folderId
     ? folderId === opts.folderId
     : !folderId || !knownFolders.has(folderId);
-  const loose = sessions.filter((session) => !session.projectMembership && inScope(session.folderId));
-  if (!groups.size) return flat(loose, opts.folderId ? [] : folderListing.folders);
-
+  const loose = sessions.filter((session) => !heldBy(session) && inScope(session.folderId));
   const summaries = new Map(projects.map((project) => [project.id, project]));
+  const looseEntries = loose.map((session): SessionProjectEntry<T> => {
+    const membership = session.projectMembership;
+    if (!membership) return { ...session, kind: 'session' };
+    const summary = summaries.get(membership.projectId);
+    return {
+      ...session,
+      kind: 'session',
+      projectMark: {
+        projectId: membership.projectId,
+        title: summary?.title ?? membership.projectTitle,
+        status: summary?.status ?? membership.projectStatus,
+        taskCounts: summary?.taskCounts,
+        runningCount: summary?.buckets.running ?? 0,
+      },
+    };
+  });
+  if (!groups.size) {
+    return { folders: opts.folderId ? [] : folderListing.folders, projects: [], sessions: loose, entries: looseEntries };
+  }
+
   const rows: SessionProjectRow<T>[] = [];
   for (const [projectId, members] of groups) {
     const coordinator = coordinators.get(projectId) ?? null;
@@ -678,7 +748,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     });
   }
   const entries: SessionProjectEntry<T>[] = [
-    ...loose.map((session) => ({ ...session, kind: 'session' as const })),
+    ...looseEntries,
     ...rows.map((project) => ({ ...project, kind: 'project' as const })),
   ];
   entries.sort((a, b) => {

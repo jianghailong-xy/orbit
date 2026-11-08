@@ -30,11 +30,12 @@ import {
 } from '@ant-design/icons';
 import { Image } from './ui/Image';
 import { ImagePreview, type ImagePreviewItem } from './ui/ImagePreview';
+import { rehypeCodeWords } from '../lib/codeWords';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
 import { checkDuration } from '../lib/checkDuration';
 import { quotaWindowKind } from '../lib/quotaWindow';
-import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import {
   AgentProvider,
@@ -64,6 +65,13 @@ import {
 } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
+import {
+  EVIDENCE_FILE_EXPIRED,
+  ExpiredAttachmentError,
+  evidenceExpiryDate,
+  evidenceFileExpiredLine,
+} from '../lib/evidenceFiles';
+import { saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
 import {
@@ -83,6 +91,8 @@ import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { WikiContextNote } from './WikiContextNote';
+import { WikiDraftCard, WikiDraftCardCtx } from './WikiDraftCard';
+import { wikiChatDraftIdOf, wikiChatDraftingCall } from '../lib/wikiChat';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
 import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
@@ -103,10 +113,11 @@ import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseSessionMessage } from '../lib/sessionMessage';
+import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
 import { parseConfirmationReturn, parseConfirmationReviewRequest } from '../lib/confirmationReviewTurns';
 import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
 import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
-import type { SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
+import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
 import { SessionReplyCards } from './SessionReplyCard';
@@ -126,7 +137,7 @@ export const ArtifactResolverContext =
 // Where the transcript's links to tasks, projects and sessions go on a public page, which is read
 // signed out: the page's resolver answers for every AppLink and SameOriginLink in the tree.
 export { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
-import Markdown from 'react-markdown';
+import Markdown from './Markdown';
 import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
@@ -412,25 +423,30 @@ function useFullPayload(seq: number, truncated: boolean | undefined, want: boole
 }
 
 // ── session-wide image preview ──────────────────────────────────────────────
-// Every image thumbnail in the transcript (user-sent, durable attachment, tool
-// result) registers here so one full-screen lightbox can page across all of them
-// with the left/right arrows — clicking any thumbnail opens the group at that
-// image. Order is by event `seq`, not mount order: durable attachments resolve
-// their blobs asynchronously and scroll-up paging prepends older turns, so
-// registration order ≠ visual order; sorting by seq keeps the pager in transcript
-// order regardless. A thumbnail registers only once its src is ready (an
+// Every image the transcript draws (user-sent, durable attachment, tool result, a
+// reply's own Markdown picture) registers here so one full-screen lightbox can page
+// across all of them with the left/right arrows — clicking any thumbnail opens the
+// group at that image. Order is where each is drawn on the page, read at click
+// time, not mount order: durable attachments resolve their blobs asynchronously
+// and scroll-up paging prepends older turns, so registration order ≠ visual order.
+// Reading the page also spares a picture knowing which event it belongs to, which
+// a Markdown picture does not. A thumbnail registers only once its src is ready (an
 // attachment registers after its blob resolves), so the pager never shows a blank
-// slide. When this context is absent (the composer's unsent previews, the static
-// HTML export) ChatImage falls back to its own standalone single-image preview.
+// slide. When this context is absent (the composer's unsent previews, a queued
+// turn, the static HTML export) ChatImage falls back to its own standalone
+// single-image preview.
 type PreviewRegistry = {
-  register: (key: string, order: number, src: string, alt: string) => void;
+  register: (key: string, element: Element, src: string, alt: string) => void;
   unregister: (key: string) => void;
   open: (key: string) => void;
 };
 const ImagePreviewContext = createContext<PreviewRegistry | null>(null);
 
+// `Node` here is the transcript's own type, so the DOM's constant is read off the element.
+const drawnBefore = (a: Element, b: Element) => (a.compareDocumentPosition(b) & a.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
 function ImagePreviewProvider({ children }: { children: ReactNode }) {
-  const entries = useRef(new Map<string, { order: number; item: ImagePreviewItem }>());
+  const entries = useRef(new Map<string, { element: Element; item: ImagePreviewItem }>());
   const [state, setState] = useState<{ open: boolean; current: number; items: ImagePreviewItem[] }>({
     open: false,
     current: 0,
@@ -438,16 +454,16 @@ function ImagePreviewProvider({ children }: { children: ReactNode }) {
   });
   const registry = useMemo<PreviewRegistry>(
     () => ({
-      register: (key, order, src, alt) => {
-        entries.current.set(key, { order, item: { src, alt } });
+      register: (key, element, src, alt) => {
+        entries.current.set(key, { element, item: { src, alt } });
       },
       unregister: (key) => {
         entries.current.delete(key);
       },
-      // Snapshot the images in seq order at click time and open the group at the
+      // Snapshot the images in page order at click time and open the group at the
       // clicked one; images arriving mid-preview needn't join the frozen set.
       open: (key) => {
-        const sorted = [...entries.current.entries()].sort((a, b) => a[1].order - b[1].order);
+        const sorted = [...entries.current.entries()].sort((a, b) => (drawnBefore(a[1].element, b[1].element) ? -1 : 1));
         const current = sorted.findIndex(([k]) => k === key);
         if (current < 0) return;
         setState({ open: true, current, items: sorted.map(([, v]) => v.item) });
@@ -556,6 +572,10 @@ type TextNode = {
   // the echo (`sessionMessage`, lib/sessionMessage). Somebody's words, but not the reader's: drawn
   // as "From [that session]" instead of the owner's bubble.
   sessionMessage?: SessionMessage;
+  // Somebody outside Orbit sent it — a connected Feishu group's member — as the control plane recorded
+  // beside the echo (`externalSender`, lib/externalSender): still a bubble, headed `From Feishu · <name>`
+  // so it does not read as the owner's own.
+  externalSender?: ExternalMessageFrom;
   // The outcomes of this session's own requests the turn handed back, when the control plane
   // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
   sessionReplies?: SessionReply[];
@@ -1177,6 +1197,7 @@ function buildTranscript(
         const taskStart = taskStartFromPayload ?? retriedTaskStart;
         const startedCard = parseProjectStarted(p) ?? undefined;
         const sessionMessage = parseSessionMessage(p) ?? undefined;
+        const externalSender = parseExternalSender(p.externalSender) ?? undefined;
         const sessionReplies = parseSessionReplies(p) ?? undefined;
         const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
         const reviewReturn = parseConfirmationReturn(p) ?? undefined;
@@ -1214,6 +1235,7 @@ function buildTranscript(
             taskStart,
             startedCard,
             sessionMessage,
+            externalSender,
             sessionReplies,
             reviewRequest,
             reviewReturn,
@@ -1691,7 +1713,9 @@ function NodeList({
   /** Only the conversation's own lists carry inserts; a sub-workspace's nested list has none. */
   placed?: ReadonlyMap<number, TranscriptInsert[]>;
 }) {
-  const items = useMemo(() => groupToolRuns(nodes), [nodes]);
+  // In a wiki chat a drafting call is its card, which no run summary may fold away (`isGroupableTool`).
+  const chat = useContext(WikiDraftCardCtx) !== null;
+  const items = useMemo(() => groupToolRuns(nodes, chat), [nodes, chat]);
   return (
     <>
       {items.flatMap((item) => {
@@ -1717,7 +1741,7 @@ function NodeList({
   );
 }
 
-function groupToolRuns(nodes: Node[]): NodeListItem[] {
+function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
   const out: NodeListItem[] = [];
   let run: ToolNode[] = [];
   const flush = () => {
@@ -1730,7 +1754,7 @@ function groupToolRuns(nodes: Node[]): NodeListItem[] {
   };
 
   for (const node of nodes) {
-    if (isGroupableTool(node)) {
+    if (isGroupableTool(node, chat)) {
       run.push(node);
       continue;
     }
@@ -1753,9 +1777,11 @@ function groupToolRuns(nodes: Node[]): NodeListItem[] {
 // reaches the reader as nothing at all. The hop this costs happens once and never reverses: an
 // image block that has arrived stays arrived, unlike the running/failed states the folded row
 // deliberately reports instead of opening on.
-function isGroupableTool(node: Node): node is ToolNode {
+function isGroupableTool(node: Node, chat = false): node is ToolNode {
   return (
     node.kind === 'tool' &&
+    // A wiki chat's drafting call is its card (`WikiDraftCard`), told by its name, as the others here are.
+    !(chat && wikiChatDraftingCall(node.name, node.input)) &&
     node.children.length === 0 &&
     !hasResultImage(node.result?.content) &&
     !node.id.startsWith('shell-') &&
@@ -2738,7 +2764,10 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // of it looks like a block. Copying and the length cap follow the typed text for the same reason:
   // neither should be measured against a block nobody wrote.
   const typed = node.text;
-  const note = useControlPlaneNote(node.note ? { kind: describeNote(node.note), text: node.note } : null);
+  // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
+  // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
+  const noteKind = node.note ? describeNote(node.note) : '';
+  const note = useControlPlaneNote(node.note && noteKind ? { kind: noteKind, text: node.note } : null);
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {
@@ -2771,6 +2800,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
     ) : null;
   return (
     <div className="chat-user-wrap">
+      {node.externalSender && <div className="chat-user-from">{externalSenderLabel(node.externalSender)}</div>}
       <div
         className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
         data-seq={queued ? undefined : node.seq}
@@ -2829,14 +2859,14 @@ function TurnAttachments({ node }: { node: TextNode }) {
       {localImgs && (
         <div className="chat-images">
           {localImgs.map((im, i) => (
-            <ChatImage key={i} src={im.url} previewKey={`u${node.seq}-l${i}`} order={node.seq * 1e4 + i} />
+            <ChatImage key={i} src={im.url} />
           ))}
         </div>
       )}
       {imgRefs.length > 0 && (
         <div className="chat-images">
-          {imgRefs.map((r, i) => (
-            <AttachmentImage key={r.id} id={r.id} previewKey={`u${node.seq}-a${r.id}`} order={node.seq * 1e4 + i} />
+          {imgRefs.map((r) => (
+            <AttachmentImage key={r.id} id={r.id} />
           ))}
         </div>
       )}
@@ -2936,16 +2966,12 @@ export function relTime(iso: string): string {
 // object URL, revoking it on unmount. Stays blank until loaded (and on error).
 export function AttachmentImage({
   id,
-  previewKey,
-  order,
   // The composer draws the same stored image at chip size when one is handed back out of a
   // message, and the tray above it as a row's thumbnail, so each says which it is asking for rather
   // than restyling a transcript image.
   variant = 'transcript',
 }: {
   id: string;
-  previewKey?: string;
-  order?: number;
   variant?: 'transcript' | 'chip' | 'tray';
 }) {
   const className = variant === 'chip' ? 'composer-attach-thumb' : variant === 'tray' ? 'pending-tray-thumb' : 'chat-image';
@@ -2955,8 +2981,8 @@ export function AttachmentImage({
       className={className}
       alt="Image sent by user"
       loadingClassName={`${className} chat-image-loading`}
-      previewKey={previewKey}
-      order={order}
+      // A chip and a tray's row are too small to say it, and hold what a person just sent.
+      saysExpired={variant === 'transcript'}
     />
   );
 }
@@ -3005,24 +3031,38 @@ function resolveFileObjectUrl(
   });
 }
 
+/** What a file whose bytes have gone leaves in a conversation: the grey a card's tile has, in the card's words. */
+function AttachmentExpiredTile({ at, name }: { at: string | null; name: string }) {
+  return (
+    <span className="chat-expired" title={name}>
+      {EVIDENCE_FILE_EXPIRED}
+      {at === null ? null : (
+        <>
+          <br />
+          {evidenceExpiryDate(at)}
+        </>
+      )}
+    </span>
+  );
+}
+
 function ResolvedAttachmentImage({
   id,
   className,
   alt,
   loadingClassName,
-  previewKey,
-  order,
+  saysExpired = true,
 }: {
   id: string;
   className: string;
   alt: string;
   loadingClassName: string;
-  previewKey?: string;
-  order?: number;
+  saysExpired?: boolean;
 }) {
   const resolve = useContext(AttachmentResolverContext);
   const exp = useContext(ExportCtx);
   const [url, setUrl] = useState<string | null>(null);
+  const [expired, setExpired] = useState<{ id: string; at: string | null } | null>(null);
   useEffect(() => {
     if (exp) return; // export: bytes are pre-resolved into the data-URL map, no live fetch
     let active = true;
@@ -3036,7 +3076,10 @@ function ResolvedAttachmentImage({
           URL.revokeObjectURL(u); // unmounted before the fetch resolved
         }
       })
-      .catch(() => undefined);
+      // Only a read told the bytes have gone says so. Anything else may come back, and stays as it was.
+      .catch((error: unknown) => {
+        if (active && error instanceof ExpiredAttachmentError) setExpired({ id, at: error.expiredAt });
+      });
     return () => {
       active = false;
       if (made) URL.revokeObjectURL(made);
@@ -3046,8 +3089,9 @@ function ResolvedAttachmentImage({
     const data = exp.images.get(id);
     return data ? <ChatImage src={data} className={className} alt={alt} /> : <span className={loadingClassName} />;
   }
+  if (saysExpired && expired?.id === id) return <AttachmentExpiredTile at={expired.at} name={alt} />;
   if (!url) return <span className={loadingClassName} />;
-  return <ChatImage src={url} className={className} alt={alt} previewKey={previewKey} order={order} />;
+  return <ChatImage src={url} className={className} alt={alt} />;
 }
 
 // A non-image file the user sent: a chip that downloads the blob on click (the download
@@ -3058,6 +3102,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [expired, setExpired] = useState<{ at: string | null } | null>(null);
   const label = name || 'file';
   // Static export: the download endpoint is bearer-guarded and non-image files aren't
   // embedded, so surface the attachment's name as an inert chip rather than a dead button.
@@ -3069,23 +3114,30 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
       </span>
     );
   }
+  // Its bytes have gone, so there is nothing to press or to try again.
+  if (expired) {
+    return (
+      <span className="chat-file is-expired" title={label}>
+        <PaperClipOutlined />
+        <span className="chat-file-name">{label}</span>
+        <span className="chat-file-expired">{`· ${evidenceFileExpiredLine(expired.at)}`}</span>
+      </span>
+    );
+  }
   const download = async (): Promise<void> => {
     if (busy) return;
     setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolveFileObjectUrl(resolve, id);
-      const a = document.createElement('a');
-      a.href = objUrl;
-      a.download = label;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
-    } catch {
-      // Keep the chip retryable, but make a failed fetch visible. Previously this catch left a
-      // clicked chip indistinguishable from an unclicked one, which looked like a dead control.
-      setFailed(true);
+      saveUserFile(await resolveFileObjectUrl(resolve, id), label);
+    } catch (error) {
+      if (error instanceof ExpiredAttachmentError) {
+        setExpired({ at: error.expiredAt });
+      } else {
+        // Keep the chip retryable, but make a failed fetch visible. Previously this catch left a
+        // clicked chip indistinguishable from an unclicked one, which looked like a dead control.
+        setFailed(true);
+      }
     } finally {
       setBusy(false);
     }
@@ -3113,16 +3165,10 @@ export function ChatImage({
   src,
   className = 'chat-image',
   alt = 'Image sent by user',
-  previewKey,
-  order,
 }: {
   src: string;
   className?: string;
   alt?: string;
-  // When set (and inside the transcript's ImagePreviewProvider) this image joins the
-  // session-wide left/right preview group under this stable key, ordered by `order`.
-  previewKey?: string;
-  order?: number;
 }) {
   const exp = useContext(ExportCtx);
   const registry = useContext(ImagePreviewContext);
@@ -3130,12 +3176,8 @@ export function ChatImage({
   // plain <img> (the src is already the full-resolution data URL).
   if (exp) return <img className={className} src={src} alt={alt} />;
   // In the transcript: join the shared left/right pager (see ImagePreviewProvider).
-  if (registry && previewKey !== undefined && order !== undefined) {
-    return (
-      <GroupedChatImage registry={registry} previewKey={previewKey} order={order} src={src} className={className} alt={alt} />
-    );
-  }
-  // Standalone (the composer's unsent previews): its own single-image preview.
+  if (registry) return <GroupedChatImage registry={registry} src={src} className={className} alt={alt} />;
+  // Standalone (the composer's unsent previews, a queued turn): its own single-image preview.
   return (
     <Image
       className={className}
@@ -3150,30 +3192,28 @@ export function ChatImage({
   );
 }
 
-// A transcript thumbnail wired into the session-wide preview group: registers its src on
-// mount (re-registering if the src changes, e.g. an object URL is replaced), unregisters on
-// unmount, and opens the group at this image on click.
+// A transcript thumbnail wired into the session-wide preview group: registers its src and its
+// button, which says where it is drawn, on mount (re-registering if the src changes, e.g. an
+// object URL is replaced), unregisters on unmount, and opens the group at this image on click.
 function GroupedChatImage({
   registry,
-  previewKey,
-  order,
   src,
   className,
   alt,
 }: {
   registry: PreviewRegistry;
-  previewKey: string;
-  order: number;
   src: string;
   className: string;
   alt: string;
 }) {
+  const key = useId();
+  const button = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    registry.register(previewKey, order, src, alt);
-    return () => registry.unregister(previewKey);
-  }, [registry, previewKey, order, src, alt]);
+    registry.register(key, button.current!, src, alt);
+    return () => registry.unregister(key);
+  }, [registry, key, src, alt]);
   return (
-    <button type="button" className="chat-image-btn" onClick={() => registry.open(previewKey)}>
+    <button ref={button} type="button" className="chat-image-btn" onClick={() => registry.open(key)}>
       <img className={className} src={src} alt={alt} />
       <span className="chat-image-mask">
         <EyeOutlined /> Preview
@@ -3268,6 +3308,16 @@ function looksLikeImagePath(src: string): boolean {
   return /\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i.test(src.split(/[?#]/)[0] ?? src);
 }
 
+// A file named the way an agent names one while it works: relative to the checkout
+// (`docs/mocks/x.png`). Not a URL, not a site path, and not a home-relative one; the extension is
+// what says the reader meant a picture (see looksLikeImagePath). The runner uploads such a link
+// when it can, but a reply whose upload was lost still carries the path — and the artifact route
+// can read it back out of the checkout.
+function isCheckoutRelativeImageSrc(src: string): boolean {
+  return looksLikeImagePath(src) && !/[?#]/.test(src)
+    && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\|~)/i.test(src);
+}
+
 // Source references often add `:line` (or `:line-line`) after the file name. It is useful to the
 // reader, but the artifact route and the runner need the path without that location hint.
 function artifactPathFromLink(src: string): string {
@@ -3313,6 +3363,9 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
         <code>{fileLabel(src)}</code>
       </span>
     );
+  }
+  if (typeof src === 'string' && isCheckoutRelativeImageSrc(src)) {
+    return <LocalArtifactImage artifactPath={src} alt={typeof alt === 'string' ? alt : 'Image'} />;
   }
   return <img {...rest} className="md-image" src={src} alt={alt ?? ''} />;
 }
@@ -3386,14 +3439,7 @@ function LocalArtifactFile({
     setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolveFileObjectUrl(resolve, artifactPath);
-      const a = document.createElement('a');
-      a.href = objUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
+      saveUserFile(await resolveFileObjectUrl(resolve, artifactPath), filename);
     } catch {
       // The artifact endpoint may refuse a stale path or an offline runner. Surface that state so
       // the user knows the click was handled and can retry when the runner is back.
@@ -3512,7 +3558,7 @@ export const MD = memo(function MD({
     <div className="md">
       <Markdown
         remarkPlugins={plugins}
-        rehypePlugins={highlight ? [rehypeHighlight] : []}
+        rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
         urlTransform={transcriptUrlTransform}
         components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink, ...orbitLinkCardComponents }}
       >
@@ -3736,6 +3782,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
   const exp = useContext(ExportCtx);
+  // A wiki chat's drafting call (contract `chat.drafts.toolResult`) is drawn as the card its answer names, wherever the
+  // chat is shown — the panel and the full session page provide the card's host; a share link and an export do not.
+  const draftCall = useContext(WikiDraftCardCtx) !== null && wikiChatDraftingCall(node.name, node.input);
   // A plan is the point of the turn — open it by default; a result carrying an image (a
   // screenshot the workspace produced for the user) opens so the picture shows without a click.
   // A static export opens every card (nothing can be un-folded after the fact).
@@ -3768,7 +3817,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
   // fail to parse and render nothing — it needs the whole result regardless of the fold. So does a
   // question's record.
-  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion;
+  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall;
   const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
@@ -3823,6 +3872,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     // Nothing to render until the untrimmed result lands (see needsWholeResult).
     if (node.result.truncated && !fullResult) return null;
     return <SessionCreateCard result={resultContent} />;
+  }
+  // A drafting call that made a card is the card; one that made none (a dry run, a refusal) stays a call. A clipped
+  // answer that does not name its card yet waits for the whole one (see needsWholeResult), as a session's does.
+  if (draftCall && node.result && !node.result.isError) {
+    const draftId = wikiChatDraftIdOf(resultContent);
+    if (draftId) return <WikiDraftCard draftId={draftId} />;
+    if (node.result.truncated && !fullResult) return null;
   }
   return (
     <div
@@ -4445,7 +4501,7 @@ function ToolResult({
       {images.length > 0 && (
         <div className="chat-images">
           {images.map((src, i) => (
-            <ChatImage key={i} src={src} previewKey={`r${seq}-${i}`} order={seq * 1e4 + i} />
+            <ChatImage key={i} src={src} />
           ))}
         </div>
       )}

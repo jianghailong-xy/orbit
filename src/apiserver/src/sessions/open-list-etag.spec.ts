@@ -28,6 +28,8 @@ const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
 
 async function harness(t: { after: (fn: () => Promise<void>) => void }) {
   const state = { version: 'v1', listed: 0, versions: 0 };
+  // What the app logs at ERROR, where ExceptionsHandler reports anything thrown on the way out.
+  const errors: unknown[] = [];
   const sessions = {
     openListVersion: async (ownerId: string) => {
       assert.equal(ownerId, OWNER_ID);
@@ -57,7 +59,10 @@ async function harness(t: { after: (fn: () => Promise<void>) => void }) {
   })
   class OpenListHarness {}
 
-  const app = await NestFactory.create(OpenListHarness, { logger: false, abortOnError: false });
+  const app = await NestFactory.create(OpenListHarness, {
+    logger: { log() {}, warn() {}, error: (message: unknown) => errors.push(message) },
+    abortOnError: false,
+  });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
   app.useGlobalInterceptors(new WorkspaceAliasInterceptor(), new PublicIdInterceptor());
@@ -76,10 +81,10 @@ async function harness(t: { after: (fn: () => Promise<void>) => void }) {
     return { status: response.status, etag: response.headers.get('etag'), body: await response.text() };
   }
   /** As the native clients ask: no `Cache-Control` beside the If-None-Match (fetch() adds one). */
-  function getPlain(query: string, ifNoneMatch: string) {
+  function getPlain(query: string, ifNoneMatch: string, extraHeaders: Record<string, string> = {}) {
     return new Promise<{ status: number; etag: string | undefined; body: string }>((resolve, reject) => {
       const req = request(`${base}/api/sessions${query}`, {
-        headers: { authorization: 'Bearer owner', 'if-none-match': ifNoneMatch },
+        headers: { authorization: 'Bearer owner', 'if-none-match': ifNoneMatch, ...extraHeaders },
       }, (res) => {
         let body = '';
         res.on('data', (chunk) => { body += chunk; });
@@ -89,7 +94,7 @@ async function harness(t: { after: (fn: () => Promise<void>) => void }) {
       req.end();
     });
   }
-  return { state, get, getPlain };
+  return { state, errors, get, getPlain };
 }
 
 test('an unchanged version answers 304 without reading or serializing the list', async (t) => {
@@ -111,6 +116,23 @@ test('an unchanged version answers 304 without reading or serializing the list',
   assert.equal(plain.body, '');
   assert.equal(state.listed, 1, 'a matching If-None-Match still built the list');
   assert.equal(state.versions, 5);
+});
+
+test('a conditional request with Cache-Control: no-cache answers 304, empty, and logs no error', async (t) => {
+  const { state, errors, get, getPlain } = await harness(t);
+  const first = await get('?view=open');
+  // Express's `req.fresh` refuses this request, so the handler's own status is all that makes it a 304.
+  const hit = await getPlain('?view=open', first.etag!, { 'cache-control': 'no-cache' });
+  assert.equal(hit.status, 304);
+  assert.equal(hit.body, '');
+  assert.equal(hit.etag, first.etag, 'a 304 carries the ETag it confirms');
+  assert.equal(state.listed, 1, 'a matching If-None-Match still built the list');
+  // And as the native clients ask, which `req.fresh` accepts.
+  assert.equal((await getPlain('?view=open', first.etag!)).status, 304);
+  // A client can hold its 304 before the server has finished with the request, so read the log only
+  // after one more round trip.
+  assert.equal((await get('?view=open')).status, 200);
+  assert.deepEqual(errors, [], 'a 304 left an error in the log');
 });
 
 test('a moved version answers 200 with the list and a new ETag', async (t) => {
@@ -147,17 +169,20 @@ test('other views keep the body-hash ETag and never consult the version', async 
   assert.equal(state.versions, 0);
 });
 
-test('a plain project read is built every time and never consults the version', async (t) => {
+test('a project read is built every time and never consults the version', async (t) => {
   const { state, get } = await harness(t);
   const project = await get(`?view=open&projectId=${PROJECT_ID}`);
   assert.equal(project.status, 200);
   assert.doesNotMatch(project.etag ?? '', /ol1-/);
   assert.equal(state.versions, 0);
   assert.equal(state.listed, 1);
-  // The project page's landing-aware read keeps its own version scope.
+  // The project page's landing-aware read is built the same way: the account-wide version answered
+  // only a few percent of its polls, so it keeps only Express's body-hash ETag.
   const landing = await get(`?view=open&projectId=${PROJECT_ID}&includeLanding=1`);
-  assert.match(landing.etag ?? '', /^W\/"ol1-/);
-  assert.equal(state.versions, 1);
+  assert.equal(landing.status, 200);
+  assert.doesNotMatch(landing.etag ?? '', /ol1-/);
+  assert.equal(state.versions, 0);
+  assert.equal(state.listed, 2);
 });
 
 test('a delta poll (`since`) is the delta store\'s to answer, not the version\'s', async (t) => {

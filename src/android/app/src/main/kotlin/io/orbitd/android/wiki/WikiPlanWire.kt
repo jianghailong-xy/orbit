@@ -42,9 +42,13 @@ data class WikiPlanDoc(val id: String, val position: Int? = null, val category: 
 @Serializable
 data class WikiPlanNewField(val at: String, val name: String, val why: String? = null, val values: Int? = null)
 
+/** One thing a stored draft says to look at: a sentence for the owner, under the check it belongs to. */
+@Serializable
+data class WikiPlanGateNote(val check: String, val text: String)
+
 @Serializable
 data class WikiPlanGateReport(val checkedAt: String? = null, val checks: Map<String, String>? = null, val docs: Int? = null,
-    val target: WikiPlanRange? = null, val needsNewFields: List<WikiPlanNewField>? = null)
+    val target: WikiPlanRange? = null, val needsNewFields: List<WikiPlanNewField>? = null, val notes: List<WikiPlanGateNote>? = null)
 
 @Serializable
 data class WikiPlanRepoCheck(val sha: String, val checked: Int? = null, val missing: List<Miss>? = null) {

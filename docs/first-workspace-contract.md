@@ -257,4 +257,5 @@ and session reads false.
   `createInNewWorkspace` among the writers of `agentDirs`.
 - Route lists: `REFUSED_OVER_HTTPS` (`runner-link-required.spec.ts`, and the route counts its pg twin
   `runner-link-required.pg.spec.ts` drives) and `linkDaemonRoutes` (`src/runner-go/link_mode.go`, with its count in
-  `link_mode_test.go`): 53 routes, 48 of them the daemon's.
+  `link_mode_test.go`): 53 routes then, 48 of them the daemon's; 55 and 48 since the cleanup after the cut-over and the
+  abandoned-checkout inventory.

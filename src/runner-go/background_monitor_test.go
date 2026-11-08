@@ -53,6 +53,7 @@ func TestMonitorStartIsRegisteredFromToolResult(t *testing.T) {
 	// Text that quotes a receipt is not a Monitor that exists.
 	h.bg.onToolResult("toolu_quoted", "src/runner-go/background_monitor_test.go:22: "+monitorTimeoutReceipt)
 	output := filepath.Join(h.dir, "bei1.output")
+	h.bg.noteToolUse("toolu_bash", "Bash", map[string]interface{}{"run_in_background": true})
 	h.bg.onToolResult("toolu_bash", "Command running in background with ID: bei1. Output is being"+
 		" written to: "+output+". You will be notified when it completes.")
 

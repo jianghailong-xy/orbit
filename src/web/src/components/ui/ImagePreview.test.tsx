@@ -115,16 +115,44 @@ describe('ImagePreview', () => {
     await click(button('Next image')!);
     expect(picture().getAttribute('src')).toBe('blob:third');
     expect(position()).toBe('3 / 3');
-    expect(button('Next image')!.disabled).toBe(true);
+    expect(button('Next image')!.getAttribute('aria-disabled')).toBe('true');
     await key(button('Close')!, 'ArrowRight');
     expect(position()).toBe('3 / 3');
     await key(button('Close')!, 'ArrowLeft');
     await key(button('Close')!, 'ArrowLeft');
     expect(picture().getAttribute('src')).toBe('blob:first');
     expect(position()).toBe('1 / 3');
-    expect(button('Previous image')!.disabled).toBe(true);
+    expect(button('Previous image')!.getAttribute('aria-disabled')).toBe('true');
     await click(button('Previous image')!);
     expect(position()).toBe('1 / 3');
+  });
+
+  it('keeps focus on a button that greys out under it, so the keys stay in the viewer, and a press on it does nothing', async () => {
+    await render(<Group />);
+    // An arrow pressed to the end of the group. A disabled button would drop this focus onto the page behind.
+    const next = button('Next image')!;
+    next.focus();
+    await click(next);
+    expect(position()).toBe('3 / 3');
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(next.disabled).toBe(false);
+    expect(document.activeElement).toBe(next);
+    await click(next);
+    expect(position()).toBe('3 / 3');
+    await key(next, 'ArrowLeft');
+    expect(position()).toBe('2 / 3');
+    expect(next.getAttribute('aria-disabled')).toBeNull();
+    // Zoom out, pressed back to the picture's own size.
+    await click(button('Zoom in')!);
+    const zoomOut = button('Zoom out')!;
+    zoomOut.focus();
+    await click(zoomOut);
+    expect(picture().style.transform).toContain('scale3d(1, 1, 1)');
+    expect(zoomOut.getAttribute('aria-disabled')).toBe('true');
+    expect(zoomOut.disabled).toBe(false);
+    expect(document.activeElement).toBe(zoomOut);
+    await click(zoomOut);
+    expect(picture().style.transform).toContain('scale3d(1, 1, 1)');
   });
 
   it('shows a single picture with neither the position nor the arrows, and ←/→ do nothing', async () => {
@@ -138,10 +166,10 @@ describe('ImagePreview', () => {
 
   it('zooms with the buttons, the wheel and a double click, and never below its own size', async () => {
     await render(<Group />);
-    expect(button('Zoom out')!.disabled).toBe(true);
+    expect(button('Zoom out')!.getAttribute('aria-disabled')).toBe('true');
     await click(button('Zoom in')!);
     expect(picture().style.transform).toContain('scale3d(1.5, 1.5, 1)');
-    expect(button('Zoom out')!.disabled).toBe(false);
+    expect(button('Zoom out')!.getAttribute('aria-disabled')).toBeNull();
     await click(button('Zoom out')!);
     expect(picture().style.transform).toContain('scale3d(1, 1, 1)');
     expect(picture().style.transform).toContain('translate3d(0px, 0px, 0)');
@@ -306,5 +334,57 @@ describe('Image', () => {
     cover.getBoundingClientRect = () => ({ x: 100, y: 40, width: 200, height: 120, top: 40, left: 100, right: 300, bottom: 160, toJSON: () => ({}) });
     await click(cover);
     expect(dialog()!.querySelector<HTMLElement>('.orbit-image-preview-body')!.style.transformOrigin).toBe('200px 100px');
+  });
+});
+
+describe('what a caller adds to the viewer', () => {
+  it('says the position its own way, says what the picture is, and adds its buttons after the zoom', async () => {
+    const onSave = vi.fn();
+    await render(
+      <ImagePreview
+        group
+        open
+        onClose={() => {}}
+        items={ITEMS}
+        current={1}
+        position={(shown, total) => `${shown} of ${total}`}
+        caption={<span className="what-it-is">shots/menu.png</span>}
+        actions={[{ key: 'save', label: 'Download', icon: <i />, onClick: onSave }]}
+      />,
+    );
+    const popup = document.querySelector('.orbit-image-preview')!;
+    expect(popup.querySelector('.orbit-image-preview-progress')?.textContent).toBe('2 of 3');
+    expect(popup.querySelector('.orbit-image-preview-caption .what-it-is')?.textContent).toBe('shots/menu.png');
+    expect(popup.classList.contains('orbit-image-preview-captioned')).toBe(true);
+    const buttons = [...popup.querySelectorAll<HTMLButtonElement>('.orbit-image-preview-action')].map((button) => button.getAttribute('aria-label'));
+    expect(buttons.slice(-2)).toEqual(['Zoom in', 'Download']);
+    await act(async () => popup.querySelector<HTMLButtonElement>('[aria-label="Download"]')!.click());
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('greys out a button it adds that can’t act now, which keeps focus and does nothing when pressed', async () => {
+    const onPin = vi.fn();
+    await render(
+      <ImagePreview group open onClose={() => {}} items={ITEMS} current={1} actions={[{ key: 'pin', label: 'Pin', icon: <i />, onClick: onPin, disabled: true }]} />,
+    );
+    const pin = button('Pin')!;
+    expect(pin.getAttribute('aria-disabled')).toBe('true');
+    expect(pin.disabled).toBe(false);
+    await act(async () => pin.click());
+    expect(onPin).not.toHaveBeenCalled();
+  });
+
+  it('draws as it always did when a caller adds nothing', async () => {
+    await render(<ImagePreview group open onClose={() => {}} items={ITEMS} current={1} />);
+    const popup = document.querySelector('.orbit-image-preview')!;
+    expect(popup.querySelector('.orbit-image-preview-progress')?.textContent).toBe('2 / 3');
+    expect(popup.querySelector('.orbit-image-preview-caption')).toBeNull();
+    expect(popup.classList.contains('orbit-image-preview-captioned')).toBe(false);
+    expect(popup.querySelectorAll('.orbit-image-preview-action')).toHaveLength(6);
+  });
+
+  it('waits on an empty frame while a picture is being read', async () => {
+    await render(<ImagePreview group open onClose={() => {}} items={[{ alt: 'still reading' }, ...ITEMS]} current={0} />);
+    expect(document.querySelector('.orbit-image-preview-img')?.hasAttribute('src')).toBe(false);
   });
 });

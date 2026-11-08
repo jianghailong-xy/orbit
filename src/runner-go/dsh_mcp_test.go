@@ -555,7 +555,7 @@ func (h *dshRealHarness) serveBgJobs() func(jobID string) bgWake {
 	wakes := map[string]bgWake{}
 	bg := newBgTailer(h.ctx, func(string, map[string]interface{}) {}, nil)
 	bg.wakeSessionVia(func(w bgWake) error { mu.Lock(); wakes[w.JobID] = w; mu.Unlock(); return nil })
-	stop, err := startSessionBgJobService(h.ctx, bg, h.job, h.work, t.TempDir())
+	stop, err := startSessionBgJobService(h.ctx, nil, bg, h.job, h.work, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

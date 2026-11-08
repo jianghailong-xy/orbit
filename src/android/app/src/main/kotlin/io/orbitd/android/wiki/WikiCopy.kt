@@ -72,7 +72,8 @@ internal object WikiCopy {
 
     const val editNote = "Only the title and the one-line summary change here."
     const val supersedeNote = "The replacement keeps this entry’s kind, fields and anchor, and this entry points at it."
-    const val retireNote = "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record."
+    /** Retire…'s dialog, on an entry's page and on a challenge's card: what retiring does, and that it is final. */
+    const val retireNote = "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record. This cannot be undone."
     const val titlePlaceholder = "Title"
     const val summaryPlaceholder = "One line"
     const val reasonPlaceholder = "Why it no longer holds"
@@ -139,7 +140,6 @@ internal object WikiCopy {
     const val decidedEdited = "Accepted with your edits"
     const val rejected = "Rejected"
     const val decidedKept = "Kept"
-    const val decidedReconfirmed = "Re-confirmed"
     const val decidedAmended = "Amended"
     const val decideFailed = "Couldn't record your answer"
     const val accept = "Accept"
@@ -209,6 +209,71 @@ internal object WikiModeCopy {
     const val reviewModeHint = "Only you can switch it"
     const val reviewModeLead = "Who has to look at a change before agents get it."
     const val modeDefault = "default"
+    const val workspaces = "Workspaces"
+    const val workspacesLead = "Agents in these workspaces read this wiki, and maintenance learns from their sessions."
+    const val workspaceLeftOut = "Left out. It stays out until you turn it back on."
+    const val workspacesJoin = "New workspaces on this repository join by themselves. A workspace on another repository has its own wiki."
+    const val workspacesJoinNoRepository = "This wiki has no repository behind it, so a workspace joins only when you add it."
+    const val workspacesEmpty = "No workspace is in this wiki yet."
+    const val addWorkspace = "Add workspace…"
+    const val addWorkspaceGroup = "Workspaces with no repository"
+
+    // The wiki's Trash (docs/mocks/wiki-trash, the web's `WIKI_TRASH_*`): the foot of Wiki settings, the question Move to
+    // Trash asks, the ways to Trash, and Trash itself.
+    const val trashTitle = "Move to Trash"
+    const val trashNote = "It stays in Trash for 365 days and can be restored until then."
+    const val trashOpen = "Move to Trash…"
+    const val trashConfirm = "Move to Trash"
+    const val trashLeaves = "It leaves your wikis now, and sessions stop reading it."
+    const val trashKept = "Workspaces and sessions are kept."
+    /** What an alert titles a refusal; the web says one inside its dialog, with no title. */
+    const val trashFailed = "Couldn't move the wiki to Trash"
+    fun trashQuestion(name: String) = "Move wiki “$name” to Trash?"
+    fun movedToTrash(name: String) = "Moved wiki “$name” to Trash"
+    /** What a wiki with a repository does while it is in Trash: the next session on the repository makes a new one. */
+    fun trashComesBack(repository: String) = "Until you restore it, the next session on $repository to use the wiki starts a new, empty one."
+    private fun counted(count: Int, one: String, many: String) = "${WikiArticleCopy.count(count)} ${if (count == 1) one else many}"
+    /** What the question says Trash keeps. [entries] is null when the health read has not answered: the sentence still
+     * says what stays, with no number in it. */
+    fun trashBody(entries: Int?, documents: Int): String {
+        val things = buildList {
+            if (entries == null) add("entries") else if (entries > 0) add(counted(entries, "entry", "entries"))
+            if (documents > 0) add(counted(documents, "document", "documents"))
+        }
+        val one = things.size == 1 && ((entries == 1 && documents == 0) || (entries == 0 && documents == 1))
+        val subject = if (things.isEmpty()) "It stays" else "Its ${things.joinToString(" and ")} ${if (one) "stays" else "stay"}"
+        return "$subject in Trash for 365 days: restore it any time until then. After that it is deleted for good."
+    }
+    /** The question's whole message: that it leaves now, what Trash keeps, what a repository's wiki does meanwhile, and
+     * what stays. */
+    fun trashMessage(entries: Int?, documents: Int, repository: String?) =
+        listOfNotNull(trashLeaves, trashBody(entries, documents), repository?.let(::trashComesBack), trashKept).joinToString("\n\n")
+    /** The way to Trash from the first-wiki card, when no wiki is left: `1 wiki is in Trash.`, then Open Trash. */
+    const val openTrash = "Open Trash"
+    fun trashHoldsWhenEmpty(wikis: Int) = "${counted(wikis, "wiki", "wikis")} ${if (wikis == 1) "is" else "are"} in Trash."
+    /** The settings page's Trash row, beside its name. */
+    fun trashRowCount(wikis: Int) = counted(wikis, "wiki", "wikis")
+    /** Trash's own name: the page's title, the settings page's row and the space picker's item. */
+    const val trash = "Trash"
+    const val trashLead = "A wiki stays here for 365 days after it was moved, then it is deleted for good."
+    const val trashEmpty = "Trash is empty."
+    const val restore = "Restore"
+    const val deletePermanently = "Delete permanently…"
+    fun restored(name: String) = "Restored wiki “$name”"
+    const val restoreFailed = "Couldn't restore the wiki"
+    /** One wiki's line in Trash: when it was moved, what it holds, and when it goes — each day in the reader's time zone. */
+    fun trashRowLine(deletedAt: String?, purgeAt: String?, entries: Int, zone: ZoneId = ZoneId.systemDefault()): String {
+        fun day(iso: String?) = iso?.let { WikiModeLogic.monthDayYear(it, zone) }.orEmpty()
+        return "Moved to Trash ${day(deletedAt)} · ${counted(entries, "entry", "entries")} · deleted for good ${day(purgeAt)}"
+    }
+    const val purgeQuestion = "Delete permanently?"
+    const val purgeConfirm = "Delete permanently"
+    const val purgeFailed = "Couldn't delete the wiki"
+    /** What Delete permanently says it takes, as the sessions' Trash says it of a session. */
+    fun purgeBody(entries: Int): String {
+        val subject = if (entries == 0) "Its history" else "Its ${counted(entries, "entry", "entries")} and ${if (entries == 1) "its" else "their"} history"
+        return "$subject will be permanently deleted. This cannot be undone."
+    }
     fun modeLabel(mode: String?) = when (mode) { "manual" -> "Manual"; "tiered" -> "Tiered"; "automatic" -> "Automatic"; else -> "" }
     fun modeNote(mode: String?) = when (mode) {
         "manual" -> "Every change from sessions, maintenance and imports waits for you in Review."
@@ -294,9 +359,17 @@ internal object WikiModeCopy {
     fun rejectedByCheck(count: Int) = "$count rejected by the check"
     fun toReview(count: Int) = "$count to review"
 
-    const val reconfirm = "Re-confirm"
+    // A challenge's answers say what becomes of the entry (owner, 2026-11-07): Keep is `reconfirm`, and the two that ask
+    // first end in an ellipsis. Amend and Retire stay the words of the form and the dialog those two open.
+    const val reconfirm = "Keep"
     const val amend = "Amend"
+    const val amendAnswer = "Amend…"
     const val retire = "Retire"
+    const val retireAnswer = "Retire…"
+    /** The After row above the answers: what each one does to the entry, and that Retire cannot be undone. */
+    const val afterKeep = "Agents get this entry again. You can still retire it later."
+    const val afterAmend = "Agents get your version, and its anchors are checked again."
+    const val afterRetire = "Agents stop getting it. This cannot be undone."
     const val challengeWaits = "Agents stop getting this entry until you answer."
     const val challenged = "Challenged"
     const val amendNote = "Your version replaces the entry, and its anchors are checked again."
@@ -443,12 +516,10 @@ internal object WikiDocCopy {
     fun monthDayTime(iso: String?, zone: ZoneId = ZoneId.systemDefault()): String? =
         iso?.let { WikiModeLogic.runWhen(it, zone).ifEmpty { null } }
 
-    // The home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ① ⑥).
+    // The home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ①).
 
     /** The line under the home's head once a plan is confirmed: `35 documents · 5 written` (`wikiDocsWritten`). */
     fun docsWritten(total: Int, written: Int) = "${plural(total, "document", "documents")} · ${WikiArticleCopy.count(written)} written"
-    /** A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_NO_DOCUMENTS_NOTE`). */
-    const val noDocumentsNote = "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space."
     /** A category's documents not written yet, folded into one row under its written ones (`wikiNotWrittenYet`). */
     fun notWrittenYet(n: Int) = "+${WikiArticleCopy.count(n)} not written yet"
     /** A category none of whose documents is written yet, as its one row (`wikiDocsNotWrittenYet`). */

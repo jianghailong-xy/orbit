@@ -65,6 +65,7 @@ import {
 import { readPendingEvidenceJudgments, type PendingEvidenceJudgment } from './pending-evidence-judgments';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -235,7 +236,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
     /** Move a delivery back in time: the read's clock is the only clock this rule has. */
     async function age(sessionId: string, evidenceId: string, ms: number) {
       await sql.query(
-        `UPDATE "conversation_turn" SET "created_at" = "created_at" - ($3 || ' milliseconds')::interval
+        `UPDATE "conversation_turn" SET "delivered_at" = "delivered_at" - ($3 || ' milliseconds')::interval
           WHERE "session_id" = $1::uuid AND "client_turn_id" = $2`,
         [sessionId, `${PREFIX}${evidenceId}`, String(ms)],
       );
@@ -318,8 +319,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         assert.match(block, new RegExp(
           `<orbit-evidence-review task="${uuidToBase62(work.taskId)}" revision="1" run-session="${uuidToBase62(work.run)}" due-at="`,
         ));
-        const dueAt = new Date(turn.createdAt.getTime() + WINDOW_MS).toISOString().slice(0, 19);
-        assert.ok(block.includes(`due-at="${dueAt}Z"`), 'due 30 minutes after the delivery');
+        assert.ok(block.includes('due-at=""'), 'queued evidence has no deadline before pickup');
         assert.ok(block.includes(`What settles it (the task's acceptance criteria, first 2000 characters): ${STANDARD}`));
         assert.ok(block.includes('What the run claims: renamed all 38 and the suite passes'));
         assert.ok(block.includes('What it says it did not establish: the report was not opened'));
@@ -335,13 +335,14 @@ suite('outside a project the dispatching session settles the evidence, and the o
           dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: null): Promise<{ turnId: string; content?: string } | null>;
         }).dequeueTurn(dispatcher, runnerId, null);
         assert.equal(handed?.turnId, turn.id);
-        assert.equal(handed?.content, block, 'the same bytes are handed to the engine');
+        assert.equal(handed?.content?.replace(/due-at="[^"]*"/, 'due-at=""'), block,
+          'pickup adds the deadline to the same evidence block');
 
         // A failed delivery turn is re-sent as itself, and no caller may take the key.
         assert.equal(isConfirmationReviewContentTurn(turn.clientTurnId), true);
         const retry = confirmationReviewRetryTurnId(turn.clientTurnId, 'n1');
         assert.equal(retry, `${PREFIX}${revision.id}:retry:n1`);
-        assert.equal(await queuedConfirmationReviewContent(db, retry!), block, 'the re-send says the same');
+        assert.equal(await queuedConfirmationReviewContent(db, retry!), handed?.content, 'the re-send keeps the pickup deadline');
         assert.throws(() => assertClientTurnIdNotReserved(`${PREFIX}${revision.id}`), BadRequestException);
       });
 
@@ -391,7 +392,13 @@ suite('outside a project the dispatching session settles the evidence, and the o
         const revision = await latestEvidence(late.taskId);
         assert.equal(await cardIn(reviewer, late.taskId), null, 'held at first');
 
-        // The read's clock alone ends it: half a minute past the window.
+        // Queue age does not start the window; pickup does.
+        assert.equal(await cardIn(reviewer, late.taskId, new Date(Date.now() + 10 * WINDOW_MS)), null);
+        await db.conversationTurn.updateMany({
+          where: { sessionId: reviewer, clientTurnId: `${PREFIX}${revision.id}` },
+          data: { deliveredAt: new Date() },
+        });
+        // The read's clock alone ends it: half a minute past the pickup window.
         const past = new Date(Date.now() + WINDOW_MS + 30_000);
         const card = await cardIn(reviewer, late.taskId, past);
         assert.ok(card, 'past the window the owner is asked, in the dispatching session');
@@ -421,6 +428,77 @@ suite('outside a project the dispatching session settles the evidence, and the o
         assert.equal(await waitingOn(reviewer), 0, 'and the row goes dark');
       });
 
+    await t.test('unavailable dispatchers wait, recover once, and start the window only at pickup', async () => {
+      const reviewer = await conversation('temporarily unavailable', { status: RunStatus.FAILED });
+      const work = await dispatched('wait for the reviewer', reviewer);
+      await submit(work, 'ready');
+      const revision = await latestEvidence(work.taskId);
+      assert.deepEqual(await deliveredTo(reviewer), []);
+      assert.deepEqual(await anywhere(work.taskId, [reviewer, work.run, bystander]), []);
+      assert.equal(await waitingOn(reviewer), 0);
+      assert.equal(await waitingOn(work.run), 0);
+      await db.session.update({ where: { id: reviewer }, data: {
+        status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + WINDOW_MS),
+      } });
+      await reviews.deliverOwedTo(reviewer);
+      assert.deepEqual(await deliveredTo(reviewer), [], 'scheduled retries remain untouched');
+      await db.session.update({ where: { id: reviewer }, data: { retryAt: null } });
+      await Promise.all([reviews.deliverOwedTo(reviewer), reviews.deliverOwedTo(reviewer)]);
+      let turns = await deliveredTo(reviewer);
+      assert.equal(turns.length, 1);
+      await db.conversationTurn.update({ where: { id: turns[0].id }, data: { status: 'ANSWERED' } });
+      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED } });
+      assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 10 * WINDOW_MS)), null);
+      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.AWAITING_INPUT } });
+      await Promise.all([reviews.deliverOwedTo(reviewer), reviews.deliverOwedTo(reviewer)]);
+      turns = await deliveredTo(reviewer);
+      assert.equal(turns.length, 2, 'exactly one replacement for the drained unread turn');
+      const replacement = turns.find((turn) => turn.status !== 'ANSWERED')!;
+      assert.notEqual(replacement.clientTurnId, `${PREFIX}${revision.id}`);
+      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.PENDING } });
+      assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 10 * WINDOW_MS)), null);
+      assert.equal(await waitingOn(reviewer), 0);
+      const takenAt = new Date();
+      await db.conversationTurn.update({ where: { id: replacement.id }, data: { deliveredAt: takenAt } });
+      assert.equal(await cardIn(reviewer, work.taskId, new Date(takenAt.getTime() + WINDOW_MS - 1)), null);
+      assert.ok(await cardIn(reviewer, work.taskId, new Date(takenAt.getTime() + WINDOW_MS)));
+      await reviews.deliverOwedTo(reviewer);
+      assert.equal((await deliveredTo(reviewer)).length, 2, 'read evidence never receives a fresh window');
+    });
+
+    await t.test('repeated global recovery skips non-independent and ended reviewers before createTurn', async () => {
+      const nonIndependent = await conversation('reviewer also ran its task', { status: RunStatus.FAILED });
+      const ownWork = await dispatched('cannot judge its own work', nonIndependent);
+      await db.session.update({ where: { id: nonIndependent }, data: { taskId: ownWork.taskId } });
+      await submit(ownWork, 'ready for an independent reviewer');
+      assert.equal(await reviews.deliver(ownerId, ownWork.taskId, (await latestEvidence(ownWork.taskId)).id),
+        'REVIEWER_NOT_INDEPENDENT', 'the fixture is refused for independence');
+      // Release the run's execution claim before making the other session live on the same task.
+      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED } });
+      await db.session.update({ where: { id: nonIndependent }, data: { status: RunStatus.AWAITING_INPUT } });
+
+      const ended = await conversation('interrupted with a recorded end', { status: RunStatus.FAILED });
+      const endedWork = await dispatched('cannot deliver after end', ended);
+      await submit(endedWork, 'ready before the reviewer ended');
+      await db.session.update({ where: { id: ended }, data: {
+        status: RunStatus.INTERRUPTED, completedAt: new Date(),
+      } });
+      assert.equal(await reviews.deliver(ownerId, endedWork.taskId, (await latestEvidence(endedWork.taskId)).id),
+        'REVIEWER_ENDED', 'the interrupted fixture has an actual end');
+
+      const before = await db.conversationTurn.count();
+      let sends = 0;
+      const recovering = new EvidenceReviewService(prisma, {
+        createTurn: async () => { sends++; throw new Error('no revision in this sweep is owed a delivery'); },
+      } as unknown as SessionsService);
+      await recovering.deliverOwedTo();
+      await recovering.deliverOwedTo();
+      assert.equal(sends, 0, 'permanent refusals do not reach the write transaction');
+      assert.equal(await db.conversationTurn.count(), before, 'neither sweep writes any turn');
+      assert.equal((await deliveredTo(nonIndependent)).length, 0);
+      assert.equal((await deliveredTo(ended)).length, 0);
+    });
+
     // (6) -------------------------------------------------------------------------------------------
     await t.test('(6) a dispatching session that has ended holds nothing, and one already ended is not handed it',
       async () => {
@@ -428,10 +506,10 @@ suite('outside a project the dispatching session settles the evidence, and the o
         const ended = await dispatched('reconcile the ledger', reviewer);
         await submit(ended, 'reconciled');
         assert.equal(await cardIn(reviewer, ended.taskId), null, 'held while it is open');
-        await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED } });
+        await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
         const card = await cardIn(reviewer, ended.taskId);
         assert.ok(card, 'its end hands the card to the owner at once, without the window');
-        assert.equal(await waitingOn(reviewer), 1);
+        assert.equal(await waitingOn(reviewer), 0, 'completed conversations have no open-session badge');
 
         // Ended before the revision arrives: nothing is delivered, and the owner is asked at once.
         const gone = await conversation('files work and is completed', {});
@@ -504,7 +582,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         assert.equal(notice.status, 'PENDING');
         assert.equal(notice.senderSessionId, null, 'the platform’s words, not another session’s');
         assert.match(notice.content ?? '', new RegExp(
-          `<orbit-evidence-send-back task="${uuidToBase62(again.taskId)}" revision="1">`,
+          `<orbit-evidence-send-back task="${uuidToBase62(again.taskId)}" revision="1" from-session="${uuidToBase62(reviewer)}" from-mode="auto">`,
         ));
         assert.match(notice.content ?? '', /sent back by the session that reviewed it/);
         assert.ok((notice.content ?? '').includes('show the count of images before and after'));

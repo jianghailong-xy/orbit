@@ -699,6 +699,54 @@ test('the confirmation makes a docs_build job and no task; the worker builds eve
     ['ended', 'succeeded', v2, { written: 1, unchanged: 2, failed: 0 }]);
   // The snapshot was not sent again: the space already held that commit.
   assert.deepEqual(runner.ops.filter((op) => op.kind === 'snapshot').map((op) => op.input.skipSha), [null, HEAD]);
+  // The overview it wrote again kept the one it replaced, as replaced by this build of v2 (docs.versions); the first
+  // build replaced nothing, and the two sections left as they were keep nothing.
+  const versions = await h.sql.query<{ section_key: string; reason: string; reason_plan_version: number | null; job_id: string; texts: number }>(
+    `SELECT "section_key", "reason", "reason_plan_version", "job_id"::text, jsonb_array_length("sentences")::int AS "texts"
+       FROM "wiki_doc_section_version" WHERE "space_id" = $1`,
+    [s.spaceId],
+  );
+  assert.deepEqual(versions.rows.map((row) => [row.section_key, row.reason, row.reason_plan_version, row.job_id]),
+    [[sections[0].key, 'build', v2, second!.job_id]]);
+  assert.ok(versions.rows[0].texts > 0, 'it holds the overview the first build wrote');
+});
+
+// ── references a draft was stored with, not found ──────────────────────────────────────────────────
+
+test('a draft stored with what the repository does not have is confirmed and built: the build goes on without it, and says which', { skip, timeout: 180_000 }, async () => {
+  const h = await boot();
+  await modelUp(h);
+  const s = await scene(h, 'references not found');
+  const plan = planFor(s) as { docs: Array<{ sections: Array<Record<string, unknown> & { sources: { docs?: unknown[]; code?: unknown[] } }> }> };
+  const [, flow] = plan.docs[0].sections;
+  flow.sources.docs = [...(flow.sources.docs ?? []), { path: 'docs/design.md', section: '9. No such heading' }];
+  flow.sources.code = [...(flow.sources.code ?? []), { path: 'src/gone.go', symbols: [] }];
+  // A section with nothing left to draw on: it is still written, its sentences unsourced.
+  plan.docs[0].sections.push({ title: '概念', kind: 'concepts', covers: '会话的几个概念。', length: 300, sources: { docs: [{ path: 'docs/gone.md', section: 'Nowhere' }] } });
+  const missing = [
+    { kind: 'docSection', ref: 'docs/design.md § 9. No such heading', at: 'plan.docs[0].sections[1].sources.docs[1].section' },
+    { kind: 'file', ref: 'src/gone.go', at: 'plan.docs[0].sections[1].sources.code[1].path' },
+    { kind: 'file', ref: 'docs/gone.md', at: 'plan.docs[0].sections[3].sources.docs[0].path' },
+  ];
+  const stored = await h.plans.submitServerDraft(s.drafter, {
+    baseVersion: null, target: { min: 1, max: 10 }, plan, repoCheck: { sha: 'a'.repeat(40), checked: 9, missing }, model: MODEL,
+  });
+  assert.deepEqual(stored.repoCheck?.missing, missing, 'the server keeps what the job could not find');
+  await confirm(h, s, stored.version);
+
+  const [build] = await builds(h, s.spaceId);
+  const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
+  playRunner(h, s.runner.id, () => tree(HEAD));
+  const ended = await runToEnd(h, worker(h), build.job_id!);
+  assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
+  const report = ended.report as { written: number; failed: number; docs: Array<{ sections: Array<{ title: string; outcome: string; missing?: string[] }> }> };
+  assert.deepEqual([report.written, report.failed], [4, 0]);
+  const by = new Map(report.docs[0].sections.map((section) => [section.title, section]));
+  assert.deepEqual(by.get('turn 怎么投递')?.missing?.slice().sort(), ['docs/design.md § 9. No such heading', 'src/gone.go (not at origin/main)']);
+  assert.equal(by.get('turn 怎么投递')?.outcome, 'written', 'and what was found is written from');
+  assert.equal(by.get('概念')?.outcome, 'written', 'a section with nothing found is written all the same');
+  const [built] = await builds(h, s.spaceId);
+  assert.deepEqual([built.state, built.outcome], ['ended', 'succeeded']);
 });
 
 // ── 5. held until the workspace is named ─────────────────────────────────────────────────────────────

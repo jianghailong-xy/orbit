@@ -27,6 +27,23 @@ launchctl list com.orbit.runner
 tail -n 100 ~/.orbit/runner.log
 ```
 
+An account logged in at the Mac's screen gets an Aqua agent, in `gui/<uid>`. An account that only logs in over
+SSH has no desktop session, so `orbit register` limits its agent to the Background session, in `user/<uid>`.
+`launchctl list com.orbit.runner` finds either. Which one is installed is in the plist:
+
+```bash
+# macOS only. Background means user/<uid>; "Could not extract value" means an Aqua agent in gui/<uid>.
+plutil -extract LimitLoadToSessionType raw ~/Library/LaunchAgents/com.orbit.runner.plist
+```
+
+A Background agent does not start by itself, so it stays down after the Mac restarts, and logging in over SSH
+does not bring it back. Start it again from an SSH shell:
+
+```bash
+# macOS only, for a Background agent.
+launchctl bootstrap user/$(id -u) ~/Library/LaunchAgents/com.orbit.runner.plist
+```
+
 If registered with `--foreground`, inspect the terminal running `orbit run`. Do not start a second
 runner process to diagnose an already-running service.
 
@@ -70,6 +87,12 @@ tokens, browser codes, cookies, full server URLs if private, account/runner IDs,
    above. Expected: the service is running and the age stays recent as heartbeats advance. A successful
    registration alone does not start polling when `--no-service` was used. Start the installed service
    or run `orbit run` in the intended supervised terminal. Resolve a crash loop from its first error.
+   `orbit register` waits for the service it installs to reach the deployment; when it does not, it ends
+   with "not online", the service's state, the end of its log and these commands. A log repeating
+   `cannot secure runner config storage: chmod /root/.orbit: permission denied` is a service an older
+   `sudo orbit register` installed: `sudo orbit unregister` removes it and its runner, or `sudo orbit register`
+   gives the account a working runner, with its config in its own home. The old config then stays in
+   `/root/.orbit` until `sudo -i env -u SUDO_USER orbit unregister` removes it.
 2. Run the two curl probes from branch A on the runner host. Expected: both routes answer through the
    configured origin. If the gateway works but API requests return 502, inspect API/container health.
    If both fail, check DNS, TLS certificates, firewall, and the service's proxy/network environment.
@@ -105,9 +128,285 @@ tokens, authentication headers, cookies, internal network addresses, identifiers
    Expected next action: wait for the reported reset or select an authorized provider with available
    quota, then retry. Use the [first-run task check](first-run.md#5-complete-a-small-task) to verify success.
 
+**A Mac account that only logs in over SSH shows Claude as signed out:** its Background agent cannot read the
+login Keychain, even one unlocked with `security unlock-keychain` in an SSH shell: that unlock stays in that
+shell. Sign in again with the UI's runner sign-in action. Claude Code then keeps the login in
+`~/.claude/.credentials.json`, mode 0600, which the service can read.
+
 **Safe issue evidence:** selected runtime/provider type, runtime and Orbit versions, doctor status for
 that runtime (installed/auth/service PATH), UTC timestamps, and sanitized error text. Redact API keys,
 OAuth/device codes, tokens, cookies, credential files, private provider URLs, and repository contents.
+
+## D. The disk is short, or a session's checkout has gone
+
+**Symptom:** the runner log has `gc: reclaimed checkout <session> — ...` lines, or a session that is resumed
+spends its first minutes reinstalling dependencies.
+
+Each session works in its own checkout, `<ORBIT_HOME>/worktrees/<session id>`, and the runner looks them
+over every five minutes. The floor is **Keep Free** on the runner's page (Capacity). A runner with no floor
+set, or a platform that cannot report free space, reclaims nothing for lack of disk.
+
+A managed runner, the one a deployment gives each account, has a floor even with no Keep Free set: a quarter of
+its data volume, which is 5 GiB of the default 20 GiB. A Keep Free its owner sets always wins. The default is
+worked out each time the runner checks in and is never stored, so the runner's page shows Keep Free only as its
+owner set it. A managed runner on Docker also judges free space by its volume's **storage budget**, not by the
+host's disk: what the volume has left under its limit, as the Docker channel last measured it (about every two
+minutes), less the checkouts the runner has made since and plus the ones it has removed, and never more than the
+disk has free. Until a new volume has been measured, it has neither the budget nor the default floor. Operators:
+[Docker](managed-runner-docker-operations.md#session-checkouts-and-the-volumes-limit),
+[Kubernetes](managed-runner-kubernetes-operations.md#session-checkouts-and-the-volume).
+
+| Free space | What goes |
+| --- | --- |
+| Above the floor | Only finished sessions' checkouts beyond the 32 most recent |
+| Below the floor | Every finished session's checkout (Completed, in Trash, or moved to another runner), then the checkouts below |
+
+Below the floor the runner goes on to the checkouts of sessions that can still resume, oldest first, one at a
+time, and stops as soon as free space is back above the floor. One goes only if all of this holds, judged
+twice, the second time immediately before it goes:
+
+- The control plane answers that the session is at rest on this runner and a message would resume it: waiting
+  for input, failed, cancelled or otherwise ended but not Completed. A session queued for an engine, running,
+  or being ended is not.
+- Nothing of the session is at work on the runner: no turn, no resident engine, no background job, no merge or
+  commit under way. An idle session with no engine does not count as work.
+- No process has its working directory or executable in the checkout, or holds a file in it open, and nothing
+  is mounted inside it. This is read from `/proc`, so on macOS and Windows these checkouts are never reclaimed.
+- Nothing in it has been written for 14 days. That covers every file and directory except those under a
+  dependency directory: `node_modules`, `.venv`, `venv`, `__pycache__`, `vendor`, `Pods` or `.gradle`.
+- `git status` reports nothing, untracked files included, whatever the repository's own settings say, and no
+  file is marked assume-unchanged or skip-worktree.
+- Every ignored file or directory it holds can be made again, going by its name: the dependency directories
+  above, or the build output `dist`, `build`, `.build`, `target`, `.next`, `.turbo`, `coverage` or
+  `tsconfig.tsbuildinfo`. Anything else ignored, such as a local `.env` or a report, keeps the checkout, however
+  old it is.
+- `git rev-list HEAD --not --remotes` is empty: every commit is on a remote. A repository with no remote
+  keeps its checkouts.
+- `HEAD` is on the session's own branch and its fork point is on record, no merge, rebase, cherry-pick, revert or
+  bisect is half done, the worktree is not locked (`git worktree lock`), and no other repository is nested in
+  it, a submodule or a clone in a dependency directory included.
+
+**Under a storage budget's floor** two of these rules are set aside, because resting sessions would otherwise
+fill the volume before any of their checkouts could go. Nothing need have gone 14 days unwritten: the checkout
+written to longest ago goes first. And a commit on the session's own branch counts as kept whether a remote has
+it or not, since the branch and its commits stay in the repository and the checkout comes back from the branch.
+Every other rule holds, so a checkout goes only when nothing in it would be lost.
+
+**When it looks.** All of this runs on the loop that claims messages, so no message is claimed on that runner
+while it does. Finished sessions' checkouts are looked over every five minutes with no time limit: below the floor
+every one of them goes in the same sweep. The checkouts of sessions that can resume are looked over on the same five
+minutes, below the floor only, within two limits:
+
+- **A look that finds nothing waits an hour.** When the rule has kept every one of these checkouts and the disk is
+  still below the floor, the runner logs `gc: no resumable checkout can go and the disk is still under its floor; not
+  looking again until <time>, or sooner once the disk is back above its floor` and leaves them alone until then.
+  Sweeps come every five minutes, so the next look is the first sweep after that time, 60 to 66 minutes after this
+  one ended. A checkout that reaches 14 days during a wait goes at the next look. A git command that fails or times
+  out on a checkout counts as the rule keeping it.
+  The wait ends early once a sweep finds free space back above the floor: the next time the disk is short, the runner
+  looks at once. A look that could not finish starts no wait, and the next sweep looks again: the control plane
+  did not answer, `/proc` could not be read, or a checkout could not be marked or moved aside. The wait is only in
+  memory, so restarting the runner forgets it.
+  - **Under a storage budget's floor the wait is 7.5 minutes.** The runner logs `gc: no resumable checkout can go
+    and the storage budget is still under its floor; not looking again until <time>, or sooner once a newer
+    measurement of the volume comes in or the budget is back above its floor`. There a resting checkout may go as
+    soon as its session's engine has gone cold, which nothing tells the runner, so it looks again soon. The channel
+    measures the volume about every two minutes, and a measurement keeps its time while its figures stay the same,
+    so a newer one means the volume's usage has moved. The next sweep, five minutes on, looks again only if the
+    volume has been measured since; the one after, ten minutes on, looks either way. A budget that arrives under
+    its floor during an hour's wait ends that wait too.
+- **Taking checkouts has a budget of 60 seconds a sweep.** It starts with the first checkout that goes, or that could
+  not be judged or taken, and it is read between checkouts, never during one, so a sweep can pass it by as long as
+  the checkout in hand takes. Once it is spent the runner logs `gc: stopping this sweep of resumable checkouts after
+  <time>` and stops, and that starts no wait. The next sweep, five minutes after this one began or at once if this
+  one took longer, looks again and goes on with the oldest left. Checkouts the second look keeps ahead of the first
+  one to go do not count against the budget, and a sweep with nothing but those ends by itself and waits.
+
+What that holds the loop for, below the floor of a runner without a storage budget:
+
+| The host | How long the loop is held |
+| --- | --- |
+| Nothing can go | One look every 60 to 66 minutes, where it used to be one every five. A look over 149 checkouts at a load of about 21 took about 28 seconds, so that is at most about 28 seconds an hour, down from about 5.6 minutes. Add a second look for each checkout that passes the first look and not the second. |
+| Checkouts can go | A sweep every five minutes until the disk is back above the floor or nothing is left: one look, a second look for each checkout the rule keeps, then up to about 60 seconds of removals, plus the rest of the checkout in hand. |
+
+**Before a new checkout, under a storage budget.** A managed runner on Docker makes room for a session's checkout
+before it makes it. It estimates what the checkout will take: the size of the files its commit tracks or, with git
+2.42 or later, of those a sparse checkout keeps ([F](#f-a-sessions-checkout-lacks-some-paths)). When the budget's
+free space less that would fall below the floor, it logs `session <id> — its checkout, about <size>, would leave
+<size> free of the storage budget, under its <size> floor: reclaiming checkouts first`, and runs the sweep at
+once, whatever wait an earlier look started: ended sessions' checkouts, then resting ones until the new checkout
+fits. A checkout is never refused for want of room. When nothing more can go, it is made all the same, and the
+runner logs `session <id> — nothing more can be reclaimed, so its checkout is made <size> short of the storage
+budget's floor`. Every way a session checkout is made does this: a new session, one pinned to a commit, and a
+checkout coming back.
+
+**What comes back.** The session's next message makes a new checkout of its branch at the same path, before the
+engine starts, and the conversation goes on. The branch and its commits were never touched, and the session's
+fork point is kept in `refs/orbit-base/<session id>`, so its diff is the same as before.
+
+**A runner restart brings back no checkout of a session at rest**, whatever took it: this cleanup, or a person
+with `rm -rf`. While the session's branch exists, the runner registers the session and logs `session <id> — its
+checkout is not on disk and stays away until its next turn`. The session's next message makes the checkout, on
+the fork point in its base ref, or else its pinned commit, or else the merge-base with the shared checkout's
+`HEAD`. So a checkout removed by hand to free space stays removed. Anything uncommitted in it is gone: the
+checkout comes back from the branch. A session with a background job carried across a self-update is at work,
+not at rest, and gets its checkout at once.
+
+**What does not come back.** Installed dependencies and build output, which the agent has to rebuild. These go by
+name, so a file a session put inside `dist` or `node_modules` goes with them.
+
+**A checkout holding work no branch has is never reclaimed** — `git status --porcelain` is not empty — because
+that work exists nowhere else. Such a checkout used to sit on disk indefinitely: nothing could commit it, and
+nothing said it was there. A runner with `abandoned-checkout-v1` scans its checkouts hourly and reports the ones
+that are dirty and belong to a session the control plane no longer wants a checkout for; the finished sessions
+among them appear on the runner's page under **Uncommitted checkouts**, with their diff and two actions:
+
+- **Commit to branch** puts the work on the session's branch, exactly as the session's own Commit does.
+- **Discard** throws the working-tree changes away. The runner records them first at
+  `refs/orbit-discarded/<session id>` in the repository, so a press by mistake is still recoverable from there,
+  and the checkout then reads clean and can be reclaimed on a later sweep.
+
+A runner older than that capability is offered Commit only, and the control plane hands it no discard (it would
+read one as a commit). Set **Keep Free** at least as high as whatever else guards the disk — a host-level
+reclaimer with a higher floor and a runner with a lower one means neither acts at the level the other expects.
+
+**If the checkout cannot come back**, for example because the disk is still too full or the branch is checked
+out somewhere else, the run ends with an error giving git's reason. It never runs in the shared working directory
+instead. Free the space or the branch and send the message again. `orbit resume` in a terminal needs the checkout
+to be there, so it says so and gives the command that sends the message.
+
+**Mixed versions.** Neither direction reclaims more than the older side would:
+
+| Runner | Control plane | Behaviour |
+| --- | --- | --- |
+| New | Old | The answer has no `resumable` list, so no session counts as resumable and these checkouts stay. |
+| Old | New | The runner reads only `removable`, which is unchanged, and ignores the new list. |
+| Old, after a new runner reclaimed some | Either | At its next start the old runner makes those checkouts again, and works their fork point out from the shared checkout's `HEAD`, as it always has. On a disk too full to hold them, `git worktree add` fails and it runs that session in the shared working directory, also as it always has, so free space before rolling a runner back. |
+
+A runner from before storage budgets ignores them: on Docker it judges the host's disk against Keep Free, as
+before. A control plane from before them sends none, which a runner reads as no budget.
+
+## E. Every session checkout takes as much disk as a full copy
+
+**Symptom:** each new session checkout adds as much to the disk as the workspace's own checkout takes, or the
+runner log has `checkout plain: ...` lines.
+
+Where the filesystem can clone files, the runner makes a session's checkout by cloning the files of the
+workspace's own checkout, the one sessions fork from. A clone shares the original's blocks on disk until one of
+the two is written, so a new checkout costs next to nothing: on Orbit's own repository, 26 MiB on XFS where a
+plain checkout took 1.8 GiB. Everywhere else, and whenever cloning fails, git writes the checkout out as it always
+has, and the session goes on. Either way the checkout is the same to git. Files are never hardlinked between
+checkouts.
+
+| Filesystem | Session checkouts |
+| --- | --- |
+| APFS (macOS) | Cloned |
+| XFS made with `reflink=1` (the default of `mkfs.xfs` since xfsprogs 5.1; `xfs_info <mount point>` shows it) | Cloned |
+| btrfs | Cloned |
+| OpenZFS 2.2 or later, with block cloning enabled | Cloned |
+| ext4, exFAT, and any other filesystem that cannot clone files | Plain: git writes every file |
+
+The runner does not go by the filesystem's name: it tries a clone and goes by the answer. On Linux it clones
+with the `FICLONE` ioctl, as `cp --reflink=always` does, and on macOS with `clonefile(2)`, as `cp -c` does, so
+either command shows whether a filesystem can. Nothing needs a privilege or a setting, but the workspace's
+checkout and the runner's worktrees directory, `<ORBIT_HOME>/worktrees`, have to be on one filesystem. By
+default both are in the account's home: `ORBIT_HOME` is `~/.orbit`, and workspaces Orbit makes go in
+`~/orbit-repos`. A workspace on another disk gets plain checkouts, and so does one in another btrfs subvolume,
+since the runner compares device numbers and each subvolume has its own. To have its checkouts cloned, move
+`ORBIT_HOME` ([configuration](configuration.md#runner-machine-only)) or the workspace, so that both are on one
+filesystem that can clone.
+
+When it starts, the runner tries a clone in the worktrees directory and logs the answer:
+
+```text
+checkouts: cloned: the filesystem of <ORBIT_HOME>/worktrees can clone files, so session checkouts are cloned from their workspace's checkout
+checkouts: plain: probe failed (<ERRNO>): the filesystem of <ORBIT_HOME>/worktrees cannot clone files, so git writes out every session checkout
+```
+
+It keeps each filesystem's answer until it restarts, so restart it after changing the filesystem, such as
+turning block cloning on. Each session checkout then gets one line, in a form that stays the same so that you can
+search for it:
+
+```text
+session <id> — checkout cloned: <n> files from <the workspace's checkout>
+session <id> — checkout plain: <reason>: <detail>
+```
+
+| Reason | What it means |
+| --- | --- |
+| `probe failed (<ERRNO>)` | The worktrees directory's filesystem cannot clone files: `EOPNOTSUPP` on Linux (ext4, say), `ENOTSUP` on macOS off APFS. |
+| `another filesystem (EXDEV)` | The workspace's checkout is not on the worktrees directory's filesystem. |
+| `unreadable workspace (<ERRNO>)` | The runner could not look at the workspace's checkout. |
+| `clone failed (<ERRNO>)` | The first file could not be cloned. The detail names it. |
+| `clone failed midway (<ERRNO>)` | A file could not be cloned after others were, `ENOSPC` on a full disk, say. |
+| `clone failed (git)` | A git step of the cloned checkout failed. The detail has git's error. |
+
+In every case the session gets a plain checkout and goes on. After a clone that failed, the runner first removes
+what it had made.
+
+A clone saves disk, not time. git reads every cloned file once to confirm it holds what the commit does, so a
+cloned checkout can take up to about twice as long to make as a plain one. Only the files the commit tracks are
+cloned: dependencies and build output are not copied, so each checkout still installs its own. A cloned checkout
+is filled in with `git reset --hard`, so the repository's `post-checkout` hook does not run for it. On a managed
+runner on Docker, the volume's limit counts each cloned file at full size, so cloning saves the host's disk, not
+the account's limit
+([the operators' runbook](managed-runner-docker-operations.md#session-checkouts-and-the-volumes-limit)).
+
+## F. A session's checkout lacks some paths
+
+**Symptom:** a file or directory the repository tracks is missing from a session's checkout, or the runner log
+has `sparse checkout: ...` lines.
+
+A repository can name paths its session checkouts leave out, in a file it commits: `.orbit/checkout-exclude`. The
+runner then makes each session checkout sparse. The left-out paths are still in git, and diffs and commits treat
+them as before, but they are not on disk. Only session checkouts are sparse: the workspace's own checkout, and the
+scratch checkouts of merges and integration checks, which run test suites that may read anything, hold every path.
+
+The format is one pattern a line, in gitignore syntax. A line starting with `#` is a comment, and blank lines are
+skipped. A line starting with `!` brings back a path an earlier line left out, a single file in a left-out
+directory included: the last line that matches a path decides. For example:
+
+```text
+# Mockups and evidence no session reads.
+docs/mocks/
+docs/evidence/
+# A test reads this one, so it stays.
+!docs/mocks/wiki/42-wiki-chat.png
+```
+
+Orbit's own [.orbit/checkout-exclude](../.orbit/checkout-exclude) works this way, with each path it brings back
+named beside its reader.
+
+- **The runner reads the file from the commit.** It reads it from the commit the session forks from, never from
+  a working tree, so it is versioned with the code, can differ per branch, and applies to the sessions that fork
+  from a commit that has it. A repository whose `.gitignore` ignores `.orbit/` (Orbit's own does, for
+  runner-local state) adds the file with `git add -f .orbit/checkout-exclude`. Once it is tracked, later edits
+  stage as usual, and ignore rules never affect what the runner reads.
+- **git 2.34 or later on the runner.** An older git cannot stage a new file under a left-out path
+  (`git add --sparse`), so it gets full checkouts.
+- **Bringing a path in.** In the session's checkout, `git sparse-checkout add <path>` brings a path in, and it
+  stays in that checkout from then on. The agent is told which paths are left out and how to bring one in.
+- **Nothing written is lost.** A file an agent writes under a left-out path is still committed with the session's
+  work, because the runner stages with `git add -A --sparse`. To stage one yourself, use `git add --sparse`.
+
+The runner logs which checkout each session got, and why:
+
+```text
+session <id> — sparse checkout: .orbit/checkout-exclude at <commit> leaves out <its patterns>
+session <id> — full checkout: no paths to leave out in .orbit/checkout-exclude at <commit>
+session <id> — full checkout: .orbit/checkout-exclude at <commit> names paths to leave out, but <git version> is older than 2.34, the first git with `git add --sparse`
+```
+
+A sparse checkout changes a few things in the repository:
+
+- `git sparse-checkout set` in a session checkout sets `extensions.worktreeConfig=true` in the repository's
+  shared configuration. With git 2.34.x it also raises `core.repositoryformatversion` to 1, so an old tool that
+  does not know that extension may refuse to open the repository. A repository without the file is left untouched.
+- A sparse checkout, like a cloned one ([E](#e-every-session-checkout-takes-as-much-disk-as-a-full-copy)), is
+  filled in with `git reset --hard`, so the repository's `post-checkout` hook does not run for it. A plain
+  `git worktree add` runs it.
+- git 2.34.x takes `--no-cone` in `git sparse-checkout set --no-cone` as one more pattern (the option arrived in
+  2.35). The checkout is still sparse and works.
 
 ## Before opening a public issue
 

@@ -118,18 +118,6 @@ test('a Kimi sign-in naming no site is the bare start it always was', async () =
   }
 });
 
-test('a runner that cannot choose a site is refused the start, in words the user can act on', async () => {
-  const h = harness();
-  await h.post({ engine: 'kimi', region: 'global' });
-  // It would run a bare `kimi login` — kimi.com on an install Orbit made — whatever was asked.
-  assert.equal(await h.beat(NOT_SITE_CAPABLE), undefined);
-  const state = await h.state();
-  assert.equal(state.status, 'failed');
-  assert.match(state.message ?? '', /too old to choose a Kimi site — update it/u);
-  // Refused once, not handed over later: the row is no longer pending.
-  assert.equal(await h.beat(SITE_CAPABLE), undefined);
-});
-
 test('only Kimi signs in on a site of the user\'s choosing', async () => {
   const h = harness();
   for (const engine of ['claude', 'codex', 'antigravity']) {

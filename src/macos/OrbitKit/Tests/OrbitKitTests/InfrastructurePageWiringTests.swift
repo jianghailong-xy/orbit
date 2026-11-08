@@ -96,9 +96,9 @@ final class InfrastructurePageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains(".navigationTitle(AppSection.runners.title)"))
         // The machines are read again while the page is up, so a row's Offline and its "N / M running"
         // never come from two different reads' worth of time.
-        try assertInOrder(page, ["await runners.load()", "while !Task.isCancelled {",
-                                 "try? await Task.sleep(for: .seconds(15))", "await runners.load()"],
-                          "the page's machines, read again while it is up")
+        try assertInOrder(page, ["await runners.load()",
+                                 "await ViewPoll.run(model, every: 15, inFlight: { 15 }) { await runners.load() }"],
+                          "the page's machines, read again while it is up — and the app can be seen")
         for read in [".task { await self.model.agents?.reloadPools() }",
                      ".task { await self.model.agents?.loadOwnKeys() }", ".task { await self.model.sharedPools?.load() }",
                      "await self.model.sharedPools?.loadAccess(id)",
@@ -581,7 +581,7 @@ final class InfrastructurePageWiringTests: XCTestCase {
 
         let menu = try slice(page, from: "private func accountMenu(", to: "private func addAccountRow(")
         try assertInOrder(menu, ["Label(\"Rename…\", systemImage: \"pencil\")",
-                                 "Label(\"Sign In Again\", systemImage: \"arrow.clockwise\")",
+                                 "Label(line.auth == \"yes\" ? \"Sign In Again\" : \"Sign In\", systemImage: \"arrow.clockwise\")",
                                  "Label(\"Resume Now\", systemImage: \"play.fill\")",
                                  "Label(\"Change Duration…\", systemImage: \"clock\")",
                                  "Label(\"Pause…\", systemImage: \"pause.fill\")",
@@ -593,8 +593,8 @@ final class InfrastructurePageWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("RunnerPageFormat.loginExpiresLine(line, now: now)"))
         XCTAssertTrue(row.contains("Button(RunnerPageCopy.RUNNER_ENGINE_RENEW) { signingIn = line.id }"))
         XCTAssertTrue(row.contains("RunnerPageFormat.signedOutNote(line, alone: alone, engine: engine)"))
-        XCTAssertTrue(row.contains("&& (Self.pressesOnRow || line.auth != \"yes\") {"),
-                      "on a phone a signed-in account is signed in again from its menu, not its row")
+        XCTAssertTrue(row.contains("&& (line.auth == \"no\" || (Self.pressesOnRow && line.auth == \"yes\")) {"),
+                      "a phone's row offers Sign In only where the account is out; an unanswered check gets none")
         XCTAssertTrue(row.contains("} else if Self.pressesOnRow && canPause"), "a Mac keeps the pause on the row")
     }
 

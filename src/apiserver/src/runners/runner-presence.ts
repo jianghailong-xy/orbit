@@ -27,7 +27,11 @@ import { APISERVER_PROCESS_LOCK_PREFIX, ControlPlaneLeader } from '../realtime/c
  */
 export const RUNNER_HEARTBEAT_EVERY_MS = 30_000;
 
-/** Runners heartbeat every 30 s; three missed beats and a runner reads as offline. */
+/**
+ * Runners heartbeat every 30 s; three missed beats and a runner reads as offline. This is the display
+ * and dispatch rule ("is the machine reachable now"). The reaper, whose verdict destroys work in
+ * flight, waits RUNNER_REAP_AFTER_MS (five minutes) instead — reaper.service.ts.
+ */
 export const RUNNER_OFFLINE_AFTER_MS = 90_000;
 
 /**
@@ -400,14 +404,14 @@ export class RunnerPresenceService implements OnModuleInit, OnModuleDestroy {
    *    leaves of its loss: a disconnection most runners come back from within seconds is silent at no sweep's moment.
    *    Counted by the second.
    *
-   * The line is a missed beat, not the RUNNER_OFFLINE_AFTER_MS that calls one runner offline. Runners
-   * cut off at the same moment had their last beats spread across a heartbeat period, so they cross
-   * the offline line one by one over a whole period, and a count taken at that line reads an outage as
-   * a machine or two until the last of them is across (the C1b drill, 2026-10-26: a sweep between two
-   * such crossings saw a tenth of the cell and reaped a run). When the first of them is across, it and
-   * every runner cut off with it have been silent for at least RUNNER_OFFLINE_AFTER_MS less a period —
-   * two periods — while a runner still beating is about a period from its last beat at most: a period
-   * and a half leaves half a period of room on either side.
+   * The line is a missed beat, not the reaper's RUNNER_REAP_AFTER_MS (five minutes; the runner list calls
+   * a machine offline at RUNNER_OFFLINE_AFTER_MS, 90 s). Runners cut off at the same moment had their last
+   * beats spread across a heartbeat period, so they cross the reap line one by one over a whole period, and
+   * a count taken at that line reads an outage as a machine or two until the last of them is across (the
+   * C1b drill, 2026-10-26: a sweep between two such crossings saw a tenth of the cell and reaped a run). A
+   * line at a period and a half from the last beat is past every one of them long before the first crosses
+   * the reap line, and a runner still beating is at most about a period from its last beat: half a period
+   * of room on either side.
    *
    * Only runners that can LOSE contact are counted, in any number. Not one marked OFFLINE: that is
    * what a runner's row is created with, before it has beaten, or what a runner reports about itself

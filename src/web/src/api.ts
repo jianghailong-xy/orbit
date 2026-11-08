@@ -13,6 +13,9 @@ import type {
   SessionCapabilities,
   SessionLandingView,
   SessionMessageCard,
+  SessionMessageFrom,
+  ExternalMessageFrom,
+  OrbitMessageFrom,
   SessionReplyCard,
   SessionMoveTargets,
   SessionRequestView,
@@ -28,6 +31,9 @@ import type {
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
 import type { CodexLogin } from './lib/codexLogin';
+import { ExpiredAttachmentError, type EvidenceFilePinAnswer } from './lib/evidenceFiles';
+import type { TrashHold } from './lib/trashNote';
+import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
@@ -655,22 +661,35 @@ export const deleteAttachment = async (id: string): Promise<void> => {
   }
 };
 
+/** The bytes a read of attachment `id` came back with, as a blob. */
+async function attachmentBlob(res: Response, id: string): Promise<Blob> {
+  if (res.status === 410) {
+    const body = (await res.json().catch(() => null)) as { expiredAt?: unknown } | null;
+    throw new ExpiredAttachmentError(typeof body?.expiredAt === 'string' ? body.expiredAt : null);
+  }
+  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
+  return res.blob();
+}
+
 /** Fetch an attachment's bytes as a blob object URL, for rendering a past turn's image in
  *  the transcript after reload. The download endpoint is bearer-guarded, so an `<img src>`
  *  pointing straight at it would 401 — fetch with the token, then hand back an object URL
- *  the caller must revoke. */
+ *  the caller must revoke (lib/userFile.ts says what kind: an SVG's is a data: URL). */
 export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
   const res = await authedFetch(`/api/attachments/${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  return URL.createObjectURL(await res.blob());
+  return userFileUrl(await attachmentBlob(res, id));
 };
+
+/** Pin a file, or take its pin away. A pin brings back a file with a tombstone whose bytes remain; once they have gone, 410. */
+export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
+  api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
 
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
   const res = await authedFetch(
     `/api/sessions/${encodeURIComponent(sessionId)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
   );
   if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
-  return URL.createObjectURL(await res.blob());
+  return userFileUrl(await res.blob());
 };
 
 /** Fetch an attachment's bytes as a base64 data URL — used by the HTML export, where the
@@ -1011,6 +1030,12 @@ export const completeSession = async (sessionId: string) => {
     return api(`/sessions/${sessionId}/archive`, { method: 'POST' });
   }
 };
+
+/** Complete on a DONE or CANCELLED project's row (docs/session-list-projects-design.md §3.6): its
+ *  coordinator and its members still in Open, in every workspace, move to Completed together.
+ *  Answers how many moved; an OPEN project is refused 409 PROJECT_STILL_OPEN. */
+export const completeProjectSessions = (projectId: string) =>
+  api<{ completed: number }>(`/projects/${encodeURIComponent(projectId)}/sessions/complete`, { method: 'POST' });
 
 export const deleteSession = (sessionId: string) =>
   api(`/sessions/${sessionId}`, { method: 'DELETE' });
@@ -1666,14 +1691,15 @@ export const getSharedEventsAfter = (
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
   sharedGet<SharedEvent>(token, `${sharedConversation(sessionId)}/events/${seq}`);
 
+/** The public attachment route: no bearer, so a browser can be sent straight to it. */
+export const sharedAttachmentUrl = (token: string, id: string): string =>
+  `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`;
+
 /** Object URL for an inline image in a shared transcript, via the public attachment route
  *  (no bearer). Caller revokes it. Mirrors fetchAttachmentObjectUrl for the shared page. */
 export const fetchSharedAttachmentObjectUrl = async (token: string, id: string): Promise<string> => {
-  const res = await fetch(
-    `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`,
-  );
-  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  return URL.createObjectURL(await res.blob());
+  const res = await fetch(sharedAttachmentUrl(token, id));
+  return userFileUrl(await attachmentBlob(res, id));
 };
 
 export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: string): Promise<string> => {
@@ -1681,7 +1707,7 @@ export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: 
     `/api/shared/${encodeURIComponent(token)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
   );
   if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
-  return URL.createObjectURL(await res.blob());
+  return userFileUrl(await res.blob());
 };
 
 /** Base64 data URL for an inline image in a shared transcript, via the public attachment
@@ -1730,6 +1756,20 @@ export type SessionListItem = Record<string, any> & {
    *  session no pass has recapped yet. */
   recapText?: string | null;
   recapAt?: string | null;
+  /** Who sent the unanswered message the row previews (`lastUserText`), when another Orbit session
+   *  did: the row names that session instead of saying "You" (docs/session-list-projects-design.md
+   *  §3.5). Null for the owner's own words; absent from an older server, where every message reads as
+   *  the owner's, as it always did. */
+  lastUserFrom?: SessionMessageFrom | null;
+  /** That the unanswered message is Orbit's own (a coordinator's notification, a watch's wake, the
+   *  owner's answer handed on…), with the notification card its line is written from: the row says
+   *  `Orbit: …` (docs/session-list-projects-design.md §3.5). Null for anybody else's words; absent
+   *  from an older server. */
+  lastUserFromOrbit?: OrbitMessageFrom | null;
+  /** Who sent it when somebody outside Orbit did — a Feishu group's member (docs/feishu-bot-design.md
+   *  §8.2): the row says `From Feishu · <name>` instead of "You". Null for anybody else; absent from an
+   *  older server. */
+  lastUserFromExternal?: ExternalMessageFrom | null;
 };
 
 /** The repair conversation attached to a merge recovery on its parent session. */
@@ -1792,6 +1832,8 @@ export interface SessionDetail {
   /** A LANDING session's subject view (§2.9 LS1/LS6): its attempt, phase, checks, liveness,
    *  timeline and todos. Present on a landing and on the pre-generated id before its row exists. */
   landing?: SessionLandingView | null;
+  /** What keeps this session in Trash past its 30 days, when it is there. Optional, because an older server does not send it. */
+  trashHold?: TrashHold | null;
   /** Latest run outcome and sidebar lifecycle location are independent product dimensions. */
   runState?: string;
   lifecycleState?: string;
@@ -1817,6 +1859,12 @@ export interface SessionDetail {
    *  Null on a session no pass has recapped yet. */
   recapText?: string | null;
   recapAt?: string | null;
+  /** Who sent the unanswered message, as the list row carries it (`SessionListItem.lastUserFrom`). */
+  lastUserFrom?: SessionMessageFrom | null;
+  /** That Orbit wrote it, as the list row carries it (`SessionListItem.lastUserFromOrbit`). */
+  lastUserFromOrbit?: OrbitMessageFrom | null;
+  /** And when somebody outside Orbit sent it (`SessionListItem.lastUserFromExternal`). */
+  lastUserFromExternal?: ExternalMessageFrom | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   error?: string | null;
@@ -1936,7 +1984,7 @@ export interface SessionDetail {
   // so the bar falls back to the session lifecycle). commitStatus is 'pending' while the
   // runner commits, then 'committed' | 'nochange' | 'error' (commitError carries why).
   worktreeDirty?: boolean | null;
-  commitStatus?: 'pending' | 'committed' | 'nochange' | 'error' | null;
+  commitStatus?: 'pending' | 'committed' | 'nochange' | 'discarded' | 'error' | null;
   commitError?: string | null;
   /** What the runner said alongside a terminal commit status. For a commit that went through:
    *  which background jobs were live in the checkout while it committed, and what it did about them
@@ -1993,6 +2041,39 @@ export interface SessionFilePatch {
   width?: number;
   height?: number;
 }
+
+/** Throw away a finished session's uncommitted checkout work, so its checkout can be reclaimed.
+ *  Rides the commit relay: the outcome lands on the session's commitStatus/worktreeDirty. */
+export const discardSessionCheckout = (sessionId: string) =>
+  api<{ ok: true }>(`/sessions/${sessionId}/checkout/discard`, { method: 'POST' });
+
+/** One checkout a finished session left behind holding work no branch has (the runner page's
+ *  abandoned-checkout list, GET /runners/:id/abandoned-checkouts). */
+export interface AbandonedCheckout {
+  sessionId: string;
+  /** The base62 spelling, which the session routes take. */
+  sessionPublicId?: string;
+  title: string;
+  branch: string | null;
+  status: string;
+  files: SessionChangedFile[];
+  /** Whether the runner's report carried the diff text (its patch budget can drop it). */
+  hasPatches: boolean;
+  observedAt: string;
+  commitStatus?: 'pending' | 'committed' | 'nochange' | 'discarded' | 'error' | null;
+  commitError?: string | null;
+  commitResultMessage?: string | null;
+}
+
+/** The finished sessions' checkouts this runner reported as still holding uncommitted work. */
+export const getAbandonedCheckouts = (runnerId: string) =>
+  api<{ checkouts: AbandonedCheckout[] }>(`/runners/${runnerId}/abandoned-checkouts`);
+
+/** One abandoned checkout's per-file diffs, fetched when it is opened. */
+export const getAbandonedCheckoutDiff = (runnerId: string, sessionId: string) =>
+  api<{ sessionId: string; files: SessionChangedFile[]; patches: SessionFilePatch[] }>(
+    `/runners/${runnerId}/abandoned-checkouts/${sessionId}`,
+  );
 
 /** The session's per-file diffs, kept off the session payload and fetched on demand when a
  *  file in the worktree status bar is opened (GET /sessions/:id/diff). */

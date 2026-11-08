@@ -42,6 +42,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * What an authorized wake is spent on, once "where is the work" is one of the things it is spent
@@ -150,6 +151,7 @@ async function connect(options: { silent?: boolean } = {}): Promise<Stack> {
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],
     routeReadyDependents: async () => [],
+    routeStoppedRun: async () => null,
   } as unknown as CompletionInputRouter;
   const router = options.silent ? silent : wired;
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router);

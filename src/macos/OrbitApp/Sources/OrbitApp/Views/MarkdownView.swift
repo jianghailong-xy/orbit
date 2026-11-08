@@ -596,6 +596,8 @@ private struct MarkdownImageView: View {
                         .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) },
                     image: img
                 )
+            } else if let expired = store.expiry(id) {
+                ExpiredAttachmentFace(at: expired.expiredAt).frame(width: 120, height: 90)
             } else if store.isNotImage(id) {
                 unavailable   // the bytes didn't decode as an image
             } else {
@@ -685,7 +687,7 @@ private struct MarkdownImageView: View {
 
     /// What comes back is decided by what it is, not by what the path promised: bytes that decode as
     /// an image are drawn in place (tappable into the same viewer every other image opens), anything
-    /// else goes to the platform — the share sheet on iOS, the file's own application on a Mac, which
+    /// else goes to the platform — the share sheet on iOS, `FileHandoff`'s list on a Mac, which
     /// has no such viewer. A fetch that comes back empty, or a tap on a path that turned out not to
     /// be an image, says so rather than leaving the reader unanswered.
     private func fetch(_ path: String) {
@@ -702,7 +704,7 @@ private struct MarkdownImageView: View {
                 inlineImage = image
                 return
             }
-            if !FileHandoff.deliver(data, named: AttachmentLink.fileName(inPath: path)) {
+            if !FileHandoff.deliver(data, named: AttachmentLink.fileName(inPath: path), app: app) {
                 app?.showToast("Couldn't open that file", detail: path, tone: .error)
             }
         }
@@ -770,7 +772,9 @@ private struct MarkdownFileLinkView: View {
     private var previewImages: [PreviewImage] {
         image.map { [.inline(id: previewKey, image: $0)] } ?? []
     }
-    private var canFetch: Bool { attachmentID != nil || artifactPath != nil }
+    private var canFetch: Bool { (attachmentID != nil || artifactPath != nil) && expired == nil }
+    /// What a read of this file was told, once its bytes have gone: the card says so and opens nothing.
+    private var expired: ExpiredAttachment? { attachmentID.flatMap { store.expiry($0) } }
 
     var body: some View {
         Group {
@@ -795,6 +799,10 @@ private struct MarkdownFileLinkView: View {
                     .disabled(fetching)
                     .accessibilityLabel(fileName)
                     .accessibilityHint("Preview or open this file")
+            } else if let expired {
+                card
+                    .accessibilityLabel(fileName)
+                    .accessibilityHint(EvidenceFiles.expiredLine(expired.expiredAt))
             } else {
                 card
                     .accessibilityLabel(fileName)
@@ -842,7 +850,9 @@ private struct MarkdownFileLinkView: View {
         .overlay {
             RoundedRectangle(cornerRadius: image == nil ? 9 : 14)
                 .strokeBorder(image != nil ? Color.primary.opacity(0.10)
-                    : canFetch ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.13), lineWidth: 1)
+                    : expired != nil ? Color.secondary.opacity(0.6)
+                    : canFetch ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.13),
+                    style: StrokeStyle(lineWidth: 1, dash: expired != nil ? [3, 3] : []))
         }
         .contentShape(Rectangle())
     }
@@ -865,7 +875,11 @@ private struct MarkdownFileLinkView: View {
                 Text(label)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if canFetch {
+                if let expired {
+                    Text(EvidenceFiles.expiredLine(expired.expiredAt))
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                } else if canFetch {
                     Text(image != nil ? imageCaption : "Preview file")
                         .font(.orbitMeta)
                         .foregroundStyle(.secondary)
@@ -939,7 +953,10 @@ private struct MarkdownFileLinkView: View {
                 data = nil
             }
             guard let data else {
-                app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
+                // Told its bytes went, the card says so; anything else may come back.
+                if expired == nil {
+                    app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
+                }
                 return
             }
             // An old link may have lost its filename. Decode the bytes before choosing a reader:
@@ -959,7 +976,7 @@ private struct MarkdownFileLinkView: View {
             }
             if let preview = TextFilePreview(data: data, fileName: fileName) {
                 textPreview = preview
-            } else if !FileHandoff.deliver(data, named: handoffName) {
+            } else if !FileHandoff.deliver(data, named: handoffName, app: app) {
                 app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
             }
         }
@@ -993,9 +1010,12 @@ func inlineMarkdown(_ s: String, codeBackground: Bool = true) -> Text {
     // A file reference in a block that cannot host a SwiftUI file card (a table cell or heading) is
     // still drawn as muted prose instead of a tinted link whose click could only do nothing. The
     // iOS selectable renderer adds the matching paperclip glyph. The same goes for a reference this
-    // app has no screen for (`ReferenceLink.isInert`). Ranges first, as above.
+    // app has no screen for (`ReferenceLink.isInert`) and a link that may not leave the app
+    // (`ExternalLink.isDead`). Ranges first, as above.
     let deadRanges = attributed.runs
-        .filter { $0.link.map { AttachmentLink.isFileReference($0) || ReferenceLink.isInert($0) } == true }
+        .filter { run in
+            run.link.map { AttachmentLink.isFileReference($0) || ReferenceLink.isInert($0) || ExternalLink.isDead($0) } == true
+        }
         .map(\.range)
     for range in deadRanges {
         attributed[range].link = nil

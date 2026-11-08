@@ -1066,6 +1066,7 @@ class ImageSwitchTest(ChannelFixture):
         status, view = self.call("GET", f"/v1/containers/{name}")
         self.assertEqual((status, view["uid"], view["status"]), (200, created["uid"], "running"), "nothing that runs is touched")
         self.assertEqual(self.docker.containers_by_name[name]["Image"], IMAGE)
+        self.assertEqual((created["image"], view["image"]), (IMAGE, IMAGE), "the view says which image it was made from: the previous one now")
         self.assertEqual(self.call("GET", f"/v1/volumes/mr-data-{RUNNER}/holders")[1], {"holders": [{"name": name, "managed": True}]})
         self.assertEqual([c["uid"] for c in self.call("GET", "/v1/resources")[1]["containers"]], [created["uid"]])
         self.assertEqual(self.call("DELETE", f"/v1/containers/{name}?uid={created['uid']}")[1]["code"], "CONTAINER_RUNNING")
@@ -1104,6 +1105,7 @@ class ImageSwitchTest(ChannelFixture):
         self.assertEqual(status, 201, body)
         made = self.docker.containers_by_name[f"mr-{RUNNER}"]
         self.assertEqual((made["Image"], made["Config"]["Labels"]["orbit.managed-runner.generation"], body["volumeUid"]), (self.NEW, "2", volume["uid"]))
+        self.assertEqual(body["image"], self.NEW)
         self.assertNotEqual(body["uid"], created["uid"])
         self.assertEqual(self.docker.calls.count(("create_container", f"mr-{RUNNER}")), 2, "one container per generation, never two at once")
 

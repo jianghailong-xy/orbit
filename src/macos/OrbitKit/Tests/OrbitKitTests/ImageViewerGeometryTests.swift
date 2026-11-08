@@ -7,6 +7,29 @@ final class ImageViewerGeometryTests: XCTestCase {
         ImageViewerGeometry(imageWidth: width, imageHeight: height, viewportWidth: 393, viewportHeight: 852)
     }
 
+    /// Between a viewer's own bars the viewport is shorter than a phone's screen, and a screenshot of one
+    /// is still a picture to see whole. Past the shape it is given, an image is long there as well.
+    func testAViewportThatIsNotTheScreenGoesByTheShapeItIsGiven() {
+        let between = { (width: Double, height: Double) in
+            ImageViewerGeometry(imageWidth: width, imageHeight: height, viewportWidth: 402, viewportHeight: 640,
+                                longerThan: 2.4)
+        }
+        let screenshot = between(780, 1688)
+        XCTAssertFalse(screenshot.fillsWidth)
+        XCTAssertEqual(screenshot.restHeight, 640, accuracy: 1e-9)
+        XCTAssertEqual(screenshot.restWidth, 780 * 640 / 1688, accuracy: 1e-9)
+        XCTAssertEqual(screenshot.travel, 0)
+        XCTAssertEqual(screenshot.restOffsetY, 0)
+
+        let page = between(780, 6000)
+        XCTAssertTrue(page.fillsWidth)
+        XCTAssertEqual(page.restWidth, 402, accuracy: 1e-9)
+        XCTAssertEqual(page.travel, 6000 * 402 / 780 - 640, accuracy: 1e-9)
+
+        // And with no shape given, the same viewport reads that screenshot as long, as it always has.
+        XCTAssertTrue(ImageViewerGeometry(imageWidth: 780, imageHeight: 1688, viewportWidth: 402, viewportHeight: 640).fillsWidth)
+    }
+
     func testALongImageFillsTheWidthAndOpensAtItsTop() {
         // The reported case: a 962×2230 mockup, only a little longer than the screen's own shape.
         let long = onPhone(962, 2230)

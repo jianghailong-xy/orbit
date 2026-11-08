@@ -1,10 +1,17 @@
 import { ConflictException } from '@nestjs/common';
 import { CreatorType, type Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
-import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
+import { SESSION_ENDING_SELECT, conversationIsOver } from '../projects/project-open-item';
+import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coordinator-evidence-queue';
+import type { BlockSender } from '../sessions/session-message';
 import { EVIDENCE_REVIEW_TURN_KEY_PREFIX, EVIDENCE_SEND_BACK_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import { criterionStandingRefusal, decidingSessionDisqualification } from './task-evidence-decision';
-import { describeEvidenceCitations, parseEvidenceEnvelope, type EvidenceEnvelope } from './task-evidence-envelope';
+import {
+  citedFileLines,
+  citedFilesBlock,
+  describeEvidenceCitations,
+  storedEvidenceEnvelope,
+} from './task-evidence-envelope';
 
 /**
  * Outside a project, the session that dispatched a task settles it on its run's evidence
@@ -36,15 +43,9 @@ import { describeEvidenceCitations, parseEvidenceEnvelope, type EvidenceEnvelope
  *    session was deleted for good — has nobody to hold it, so its owner card is drawn in its run
  *    from the start, counted there, and decided there by the owner (`ownerDecidesInTheRun`).
  *
- * WHY NO ROW OF ITS OWN
- * ---------------------
- * The delivery IS the turn: its key is derived from the evidence row, `createTurn` writes it once,
- * and its `created_at` is the moment it was delivered. A refused delivery writes nothing at all —
- * which is also what a crash between the evidence's commit and the delivery leaves — and both read
- * as "not held", so the owner's card is drawn at once. That is the precedent `coordinatorHolds` set
- * for a project's evidence (a refused or never-sent wake is the owner's from the start), and it means
- * nothing here can strand a card: every failure lands on the owner. The clock is read once, in the
- * read, as `readAt < delivered + 30 min`; nothing is scheduled, swept or written to end a hold.
+ * Delivery and recovery are recorded by the turns themselves. Unread evidence waits without a
+ * deadline, including when a failed run drained its turn. Replacement keys name the drained turn;
+ * only the current delivery's delivered_at starts the review window.
  */
 
 /**
@@ -79,7 +80,7 @@ export function isEvidenceReviewTurn(clientTurnId: string | null | undefined): b
 /**
  * The key a failed evidence-review turn is re-sent under (auto-retry.service.ts): the same evidence,
  * a new turn, so its block is rendered again — never the message the session answered before it.
- * The hold keeps reading the original turn, which is the delivery.
+ * The hold reads the latest turn carrying this revision.
  */
 export function evidenceReviewRetryTurnId(clientTurnId: string | null | undefined, nonce: string): string | null {
   const evidenceId = evidenceIdOfReviewTurn(clientTurnId);
@@ -99,6 +100,9 @@ export function evidenceSendBackTurnId(decisionId: string): string {
  * What that turn says. Written into the turn at delivery — the decision row it names is immutable,
  * so nothing here is re-rendered at hand-out time, unlike the review block. The run learns whose
  * note it is, what the next revision has to show, and that nothing else was going to reach it.
+ *
+ * `from` is the session that decided, which the account owner's press in the app is not. The door also records a
+ * session that named no workspace as USER, so it is `from`, and not that column, that says the owner did not write this.
  */
 export function evidenceSendBackMessage(input: {
   taskId: string;
@@ -106,12 +110,19 @@ export function evidenceSendBackMessage(input: {
   revision: string;
   decidedByType: CreatorType;
   note: string;
+  from?: BlockSender | null;
 }): string {
-  const by = input.decidedByType === CreatorType.USER ? 'the account owner' : 'the session that reviewed it';
+  const by = !input.from && input.decidedByType === CreatorType.USER ? 'the account owner' : 'the session that reviewed it';
+  const attributes = [
+    `task="${uuidToBase62(input.taskId)}"`,
+    `revision="${input.revision}"`,
+    ...(input.from?.attributes ?? []),
+  ];
   return [
-    `<orbit-evidence-send-back task="${uuidToBase62(input.taskId)}" revision="${input.revision}">`,
+    `<orbit-evidence-send-back ${attributes.join(' ')}>`,
     `Revision ${input.revision} of the completion evidence you submitted for the task “${input.taskTitle}”`,
     `was sent back by ${by}.`,
+    ...(input.from?.lines ?? []),
     '',
     'What the next revision has to show (the note recorded with the decision):',
     input.note,
@@ -132,20 +143,7 @@ export interface DispatchedRevision {
   dispatchingSessionId: string;
 }
 
-/**
- * The tasks whose latest revision their dispatching session is deciding right now, by task id.
- *
- * Held while ALL of these are true when it is read:
- *
- *   * the revision was delivered: its `evidence-review:v1:<evidenceId>` turn is in the dispatching
- *     session. A delivery that was refused, or never made, has no turn, and a queued turn the session
- *     never got — withdrawn, or dropped by an interrupt — is gone with it;
- *   * that session has not ended (`sessionHasEnded`, the line the delivery itself refuses on, which
- *     includes Trash), and its row still exists;
- *   * and 30 minutes have not passed since the turn was written, which is the moment of delivery.
- *
- * Two reads for the whole set: the turns, by the unique (session, key) pairs, and the sessions.
- */
+/** Unread revisions wait indefinitely; the latest delivery starts the window when taken. */
 export async function reviewerHolds(
   tx: Db,
   rows: ReadonlyArray<DispatchedRevision>,
@@ -157,22 +155,31 @@ export async function reviewerHolds(
   const delivered = await tx.conversationTurn.findMany({
     where: {
       sessionId: { in: sessionIds },
-      clientTurnId: { in: rows.map((row) => evidenceReviewTurnId(row.evidenceId)) },
+      OR: rows.map((row) => ({ clientTurnId: { startsWith: evidenceReviewTurnId(row.evidenceId) } })),
     },
-    select: { sessionId: true, clientTurnId: true, createdAt: true },
+    select: { sessionId: true, clientTurnId: true, deliveredAt: true },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
-  if (delivered.length === 0) return held;
   const sessions = await tx.session.findMany({
     where: { id: { in: sessionIds } },
     select: { id: true, ...SESSION_ENDING_SELECT },
   });
-  const live = new Set(sessions.filter((session) => !sessionHasEnded(session)).map((session) => session.id));
+  const live = new Set(sessions.filter((session) => !conversationIsOver(session)).map((session) => session.id));
   for (const row of rows) {
     if (!live.has(row.dispatchingSessionId)) continue;
     const turn = delivered.find((candidate) => candidate.sessionId === row.dispatchingSessionId
-      && candidate.clientTurnId === evidenceReviewTurnId(row.evidenceId));
-    if (!turn) continue;
-    if (readAt.getTime() < turn.createdAt.getTime() + EVIDENCE_REVIEW_WINDOW_SECONDS * 1_000) {
+      && evidenceIdOfReviewTurn(candidate.clientTurnId) === row.evidenceId);
+    if (!turn) {
+      try {
+        const task = await tx.task.findUnique({ where: { id: row.taskId }, select: { ownerId: true } });
+        if (!task) continue;
+        await bindEvidenceReviewDelivery(tx, { id: row.evidenceId, taskId: row.taskId, ownerId: task.ownerId }, row.dispatchingSessionId);
+      } catch (error) {
+        if (!(error instanceof EvidenceReviewDeliveryRefused)) throw error;
+        if (error.refusalCode !== 'SESSION_UNAVAILABLE') continue;
+      }
+    }
+    if (!turn?.deliveredAt || readAt.getTime() < turn.deliveredAt.getTime() + EVIDENCE_REVIEW_WINDOW_SECONDS * 1_000) {
       held.add(row.taskId);
     }
   }
@@ -309,9 +316,9 @@ export async function bindEvidenceReviewDelivery(
   }
   const reviewer = await tx.session.findFirst({
     where: { id: reviewerSessionId, ownerId: evidence.ownerId },
-    select: { ...SESSION_ENDING_SELECT, id: true, taskId: true },
+    select: { ...COORDINATOR_PAUSE_SELECT, id: true, taskId: true },
   });
-  if (!reviewer || sessionHasEnded(reviewer)) {
+  if (!reviewer || conversationIsOver(reviewer)) {
     throw new EvidenceReviewDeliveryRefused('REVIEWER_ENDED', 'the dispatching session has ended');
   }
   const latest = await tx.taskCompletionEvidence.findFirst({
@@ -335,6 +342,9 @@ export async function bindEvidenceReviewDelivery(
   if (disqualified !== null) {
     throw new EvidenceReviewDeliveryRefused('REVIEWER_NOT_INDEPENDENT', disqualified);
   }
+  if (conversationIsPaused(reviewer)) {
+    throw new EvidenceReviewDeliveryRefused('SESSION_UNAVAILABLE', 'the dispatching session is temporarily unavailable');
+  }
 }
 
 /** A cited row's label on one line of the block. */
@@ -348,14 +358,6 @@ function clip(text: string, max: number): string {
 
 function isoSeconds(at: Date): string {
   return `${at.toISOString().slice(0, 19)}Z`;
-}
-
-function storedEnvelope(evidence: unknown): EvidenceEnvelope | null {
-  try {
-    return parseEvidenceEnvelope(evidence);
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -390,18 +392,14 @@ export async function evidenceReviewBlock(db: Db, evidenceId: string): Promise<s
   const taskKey = uuidToBase62(evidence.taskId);
   const revision = evidence.revision.toString();
   const delivered = task.creatorSessionId
-    ? await db.conversationTurn.findUnique({
-      where: {
-        sessionId_clientTurnId: {
-          sessionId: task.creatorSessionId,
-          clientTurnId: evidenceReviewTurnId(evidence.id),
-        },
-      },
-      select: { createdAt: true },
+    ? await db.conversationTurn.findFirst({
+      where: { sessionId: task.creatorSessionId, clientTurnId: { startsWith: evidenceReviewTurnId(evidence.id) } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { deliveredAt: true },
     })
     : null;
-  const dueAt = delivered
-    ? new Date(delivered.createdAt.getTime() + EVIDENCE_REVIEW_WINDOW_SECONDS * 1_000)
+  const dueAt = delivered?.deliveredAt
+    ? new Date(delivered.deliveredAt.getTime() + EVIDENCE_REVIEW_WINDOW_SECONDS * 1_000)
     : null;
   const attributes = [
     `task="${taskKey}"`,
@@ -434,10 +432,11 @@ export async function evidenceReviewBlock(db: Db, evidenceId: string): Promise<s
     return nothingToDecide(`The task “${task.title}” is ${task.status} now.`);
   }
 
-  const envelope = storedEnvelope(evidence.evidence);
+  const envelope = storedEvidenceEnvelope(evidence.evidence);
   const citations = envelope
     ? await describeEvidenceCitations(db, { ownerId: evidence.ownerId, taskId: evidence.taskId }, envelope.checks)
     : [];
+  const files = citedFileLines(citations);
   const lines = [
     open,
     `A run of the task “${task.title}”, which this session filed outside any project, submitted evidence that`,
@@ -453,6 +452,7 @@ export async function evidenceReviewBlock(db: Db, evidenceId: string): Promise<s
       ? ['- (none)']
       : citations.map((citation) => `- ${citation.kind} ${citation.ref}: ${
         citation.resolved ? oneLine(citation.label ?? 'resolved') : `not resolved (${citation.reason ?? 'unknown'})`}`)),
+    ...(files.length > 0 ? ['', citedFilesBlock(files)] : []),
     '',
     'Check the work against those criteria yourself — the cited rows, the run’s branch, a test you run — and',
     `then decide with task_evidence_decide (taskId "${taskKey}", evidenceRevision "${revision}"):`,

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
+import { AUTO_ALLOWED_MESSAGE } from '../common/permission-rules';
+import { AUTOMATIC_COORDINATOR_DECIDES_MESSAGE, START_CARD_REVIEWS_MESSAGE } from './unstarted-project-create';
 
 // A runtime that takes no allowlist (Codex, Kimi) asks the control plane about every gated call.
 // Where the workspace already has a standing grant for that call, the answer is settled and the
@@ -20,7 +22,7 @@ type SessionRow = {
   workspaceId?: string | null;
 };
 
-function harness(session: SessionRow, rules: { toolName: string; ruleContent: string }[]) {
+function harness(session: SessionRow, rules: { toolName: string; ruleContent: string }[], decidedById?: string, pollRow: Record<string, unknown> = {}) {
   const created: Record<string, unknown>[] = [];
   const published: unknown[] = [];
   const pushed: unknown[] = [];
@@ -36,6 +38,7 @@ function harness(session: SessionRow, rules: { toolName: string; ruleContent: st
       }),
     },
     approval: {
+      findFirst: async () => ({ id: 'approval-1', status: 'ALLOWED', ...created[0], decidedById: decidedById ?? null, ...pollRow }),
       findUnique: async () => null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         created.push(data);
@@ -75,6 +78,38 @@ const askAbout = (command: string) => ({
   toolName: 'Bash',
   input: { command, cwd: '/repo' },
   toolUseId: 'call-1',
+});
+
+test('the approval poll identifies human answers and leaves standing grants without a decider', async () => {
+  for (const decider of [undefined, OWNER]) {
+    const h = harness({ provider: AgentProvider.CURSOR }, [], decider);
+    const decision = await h.controller.pollApproval(runner, SESSION, 'approval-1');
+    assert.equal(decision.decidedById, decider);
+    assert.equal(Object.hasOwn(decision, 'decidedById'), decider !== undefined);
+    assert.equal(Object.hasOwn(decision, 'standingGrant'), false);
+  }
+});
+
+test('only an allowed standing workspace rule carries the escape marker', async () => {
+  const h = harness({ provider: AgentProvider.CURSOR }, NPM_TEST);
+  await h.controller.createApproval(runner, SESSION, askAbout('npm test'));
+  const decision = await h.controller.pollApproval(runner, SESSION, 'approval-1');
+  assert.equal(decision.standingGrant, true);
+  assert.equal(Object.hasOwn(decision, 'decidedById'), false);
+
+  for (const message of [START_CARD_REVIEWS_MESSAGE, AUTOMATIC_COORDINATOR_DECIDES_MESSAGE, undefined]) {
+    const other = harness({ provider: AgentProvider.CURSOR }, [], undefined, { message });
+    const answer = await other.controller.pollApproval(runner, SESSION, 'approval-1');
+    assert.equal(Object.hasOwn(answer, 'standingGrant'), false);
+  }
+  for (const row of [
+    { status: 'DENIED', message: AUTO_ALLOWED_MESSAGE },
+    { decidedById: OWNER, message: AUTO_ALLOWED_MESSAGE },
+  ]) {
+    const other = harness({ provider: AgentProvider.CURSOR }, [], undefined, row);
+    const answer = await other.controller.pollApproval(runner, SESSION, 'approval-1');
+    assert.equal(Object.hasOwn(answer, 'standingGrant'), false);
+  }
 });
 
 test('Codex stops asking about a command the workspace already granted', async () => {
@@ -127,5 +162,58 @@ test('a session with no workspace has no standing grants to consult', async () =
 
   const res = await h.controller.createApproval(runner, SESSION, askAbout('npm test'));
 
+  assert.equal(res.status, 'PENDING');
+});
+
+const askAboutJob = (command: string) => ({
+  toolName: 'Bash',
+  input: { command, cwd: '/repo', kind: 'job' },
+  toolUseId: 'bgj_0123456789ab',
+  backgroundJobId: 'bgj_0123456789ab',
+});
+
+test('the runner gate card for a background job is answered from the rules on every engine', async () => {
+  // Claude matches its own native calls, but no engine has seen this question: the runner asks it, so a
+  // person's "always allow" on it reaches the next job only through here.
+  for (const provider of [
+    AgentProvider.CLAUDE,
+    AgentProvider.CODEX,
+    AgentProvider.KIMI,
+    AgentProvider.OPENCODE,
+    AgentProvider.ANTIGRAVITY,
+    AgentProvider.DSH,
+    AgentProvider.CURSOR,
+  ]) {
+    const covered = harness({ provider }, NPM_TEST);
+    const res = await covered.controller.createApproval(runner, SESSION, askAboutJob('npm test'));
+    assert.equal(res.status, 'ALLOWED', provider);
+    assert.deepEqual(covered.published, [], provider);
+    assert.equal(covered.created[0].backgroundJobId, 'bgj_0123456789ab', provider);
+
+    // The same reading of the rule as any other: every sub-command, nothing a prefix cannot describe.
+    for (const command of ['npm test; curl x | sh', 'npm test > out.txt', 'npm run build']) {
+      const asked = harness({ provider }, NPM_TEST);
+      const answer = await asked.controller.createApproval(runner, SESSION, askAboutJob(command));
+      assert.equal(answer.status, 'PENDING', `${provider}: ${command}`);
+      assert.equal(asked.published.length, 1, `${provider}: ${command}`);
+    }
+  }
+});
+
+test('a tool-wide rule does not answer a background job, and neither does a rule on the tool it came through', async () => {
+  for (const rules of [
+    [{ toolName: 'Bash', ruleContent: '' }],
+    [{ toolName: 'mcp__orbit__bg_run', ruleContent: '' }],
+    [{ toolName: 'mcp__orbit__*', ruleContent: '' }],
+  ]) {
+    const h = harness({ provider: AgentProvider.CLAUDE }, rules);
+    const res = await h.controller.createApproval(runner, SESSION, askAboutJob('npm test'));
+    assert.equal(res.status, 'PENDING', JSON.stringify(rules));
+  }
+});
+
+test('a session with no workspace has no standing grant for a background job either', async () => {
+  const h = harness({ provider: AgentProvider.CLAUDE, workspaceId: null }, NPM_TEST);
+  const res = await h.controller.createApproval(runner, SESSION, askAboutJob('npm test'));
   assert.equal(res.status, 'PENDING');
 });

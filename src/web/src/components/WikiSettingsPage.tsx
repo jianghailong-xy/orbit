@@ -1,29 +1,23 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ExclamationCircleOutlined, RightOutlined } from '@ant-design/icons';
 import {
-  WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
-  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   wikiSpaceSettings,
   type WikiMaintenanceSettings,
   type WikiReviewMode,
   type WikiSystemModelStatus,
 } from '@orbit/shared';
-import { wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
+import { wikiSpacesQuery, wikiSpaceWorkspacesQuery, wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
-import { WIKI_SETTINGS_SAVED, WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
+import { WIKI_PATH, WIKI_SETTINGS_SAVED, WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
+import { wikiSpaceNames } from '../lib/wikiSpace';
 import {
-  WIKI_CANCEL,
   WIKI_DAILY_LIMIT,
-  WIKI_DAILY_LIMIT_NOTE,
   WIKI_DEFAULT_REVIEW_MODE,
   WIKI_FLOORS_LEAD,
   WIKI_FLOORS_NOTE,
   WIKI_LOOKBACK,
-  WIKI_LOOKBACK_CHOICES,
-  WIKI_LOOKBACK_NOTE,
-  WIKI_LOOKBACK_UNIT,
   WIKI_MAINTENANCE,
   WIKI_MAINTENANCE_EDIT,
   WIKI_MAINTENANCE_NAME,
@@ -33,43 +27,44 @@ import {
   WIKI_MODE_NOTES,
   WIKI_MODE_ORDER,
   WIKI_MODEL,
-  WIKI_MODEL_NOTE,
-  WIKI_NO_WORKSPACE,
   WIKI_OFF,
   WIKI_ON,
+  WIKI_ADD_WORKSPACE,
+  WIKI_ADD_WORKSPACE_GROUP,
   WIKI_REPO_FROM,
-  WIKI_REPO_FROM_NOTE,
   WIKI_REVIEW_MODE,
   WIKI_REVIEW_MODE_HINT,
   WIKI_REVIEW_MODE_LEAD,
-  WIKI_RUNS_A_DAY,
-  WIKI_SAVE,
   WIKI_SETTINGS,
   WIKI_SETTINGS_TITLE,
   WIKI_SET_UP,
-  WIKI_SET_UP_TITLE,
   WIKI_SPOT_CHECK,
   WIKI_SPOT_CHECK_NOTE,
   WIKI_STATUS,
   WIKI_TURN_OFF,
-  WIKI_TURN_ON,
-  wikiLookbackChoice,
-  wikiLookbackDays,
-  wikiLookbackDaysOffered,
   wikiLookbackLabel,
   wikiModeFallback,
   wikiRunsADay,
+  WIKI_TRASH_NOTE,
+  WIKI_TRASH_OPEN,
+  WIKI_TRASH_TITLE,
+  wikiTrashHolds,
+  WIKI_WORKSPACE_LEFT_OUT,
+  WIKI_WORKSPACES,
+  WIKI_WORKSPACES_EMPTY,
+  WIKI_WORKSPACES_JOIN,
+  WIKI_WORKSPACES_JOIN_NO_REPOSITORY,
+  WIKI_WORKSPACES_LEAD,
   wikiWorkspaceLabel,
-  type WikiLookbackChoice,
 } from '../lib/wikiReviewMode';
-import { updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
+import { addWikiWorkspace, leaveWikiWorkspaceOut, updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
+import { WikiTrashLink, useMoveWikiToTrash } from './WikiTrashDialog';
 import { WikiModelLine, WikiPrivacyNote } from './WikiSystemModel';
+import { WikiSetUpDialog } from './WikiSetUpDialog';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
-import { Dialog } from './ui/Dialog';
-import { NumberInput } from './ui/NumberInput';
+import { Menu } from './ui/Menu';
 import { Radio, RadioGroup } from './ui/Radio';
-import { Select } from './ui/Select';
 import { Switch } from './ui/Switch';
 
 /**
@@ -170,6 +165,8 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
         </div>
       </Card>
 
+      <WikiWorkspacesCard space={space} />
+
       <Card className="wk-settings-card" title={WIKI_MAINTENANCE}>
         {settings.maintenance.enabled ? (
           <MaintenanceOn
@@ -196,19 +193,108 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
         )}
       </Card>
 
+      <WikiTrashCard space={space} />
+
       {setUp && (
-        <MaintenanceSetUp
-          maintenance={settings.maintenance}
-          server={server}
-          spaceSlug={space.slug}
-          onClose={() => setSetUp(false)}
-          onSubmit={async (maintenance) => {
-            await write.mutateAsync({ maintenance });
-            toast.success(WIKI_SETTINGS_SAVED);
-          }}
-        />
+        <WikiSetUpDialog space={space} onClose={() => setSetUp(false)} />
       )}
     </div>
+  );
+}
+
+/**
+ * The last card of the page (docs/mocks/wiki-trash): it asks first, as nothing else on this page does, and under it the
+ * way to Trash while anything is in it.
+ */
+function WikiTrashCard({ space }: { space: WikiSpaceRow }) {
+  const navigate = useNavigate();
+  const spaces = useQuery(wikiSpacesQuery());
+  const [ask, confirmation] = useMoveWikiToTrash(() => navigate(WIKI_PATH));
+  const name = wikiSpaceNames(spaces.data ?? []).get(space.id) ?? space.title;
+  return (
+    <Card className="wk-settings-card" title={WIKI_TRASH_TITLE}>
+      <div className="wk-delete">
+        <div className="wk-maint-d">{WIKI_TRASH_NOTE}</div>
+        <Button danger onClick={() => ask(space, name)}>{WIKI_TRASH_OPEN}</Button>
+      </div>
+      <WikiTrashLink sentence={wikiTrashHolds} className="wk-trash-link-card" />
+      {confirmation}
+    </Card>
+  );
+}
+
+/**
+ * The Workspaces card (mock 38, contract `space.workspaces`): the workspaces in this wiki, each with its switch, and
+ * the ones with no repository that can be added. Like every control here it writes at once; a row stays on the list
+ * when it is turned off, and the list goes by name, so nothing moves under the pointer.
+ */
+function WikiWorkspacesCard({ space }: { space: WikiSpaceRow }) {
+  const toast = useToast();
+  const listed = useQuery(wikiSpaceWorkspacesQuery(space.id));
+  const write = useWikiWrite(({ workspaceId, inWiki }: { workspaceId: string; inWiki: boolean }) =>
+    inWiki ? addWikiWorkspace(space.id, workspaceId) : leaveWikiWorkspaceOut(space.id, workspaceId),
+  );
+
+  const change = async (workspaceId: string, inWiki: boolean) => {
+    try {
+      await write.mutateAsync({ workspaceId, inWiki });
+      toast.success(WIKI_SETTINGS_SAVED);
+    } catch (error) {
+      toast.error("Couldn't save the wiki settings", error instanceof Error ? error.message : undefined);
+    }
+  };
+
+  return (
+    <Card className="wk-settings-card" title={WIKI_WORKSPACES}>
+      <div className="wk-settings-lead">{WIKI_WORKSPACES_LEAD}</div>
+      {listed.data && (
+        <>
+          {listed.data.workspaces.length === 0 ? (
+            <div className="wk-ws-empty">{WIKI_WORKSPACES_EMPTY}</div>
+          ) : (
+            <div className="wk-ws-list">
+              {listed.data.workspaces.map((row) => (
+                <div className={`wk-ws-row${row.inWiki ? '' : ' off'}`} key={row.id}>
+                  <div className="wk-ws-tx">
+                    <div className="wk-ws-t">
+                      {row.name}
+                      {row.runner && <span className="dim"> · {row.runner}</span>}
+                    </div>
+                    {!row.inWiki && <div className="wk-ws-d">{WIKI_WORKSPACE_LEFT_OUT}</div>}
+                  </div>
+                  <Switch
+                    aria-label={row.name}
+                    checked={row.inWiki}
+                    disabled={write.isPending}
+                    onCheckedChange={(inWiki) => void change(row.id, inWiki)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="wk-ws-foot">
+            <div className="wk-ws-note">{space.repoUrlNorm ? WIKI_WORKSPACES_JOIN : WIKI_WORKSPACES_JOIN_NO_REPOSITORY}</div>
+            {listed.data.addable.length > 0 && (
+              <Menu
+                align="end"
+                disabled={write.isPending}
+                trigger={<Button>{WIKI_ADD_WORKSPACE}</Button>}
+                items={[{
+                  type: 'group',
+                  key: 'addable',
+                  label: WIKI_ADD_WORKSPACE_GROUP,
+                  children: listed.data.addable.map((row) => ({
+                    key: row.id,
+                    label: row.runner ? `${row.name} · ${row.runner}` : row.name,
+                    onSelect: () => void change(row.id, true),
+                  })),
+                }]}
+              />
+            )}
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -264,151 +350,5 @@ function MaintenanceOn({
         </Button>
       </div>
     </>
-  );
-}
-
-/**
- * Set up maintenance: the workspace it reads the repository from, the System model, how many runs a day it may
- * start and how far back it starts reading — then Turn on (or Save, for one already on).
- *
- * THERE IS NO PROVIDER TO PIN (mock 35 ②): the System model is shown, read-only, nothing writes `provider` —
- * whatever a space named before server execution stays as it was, and the server drops it from any write
- * (contract `space.settings.maintenance.keys.provider`) — and the form ends on where the wiki's material goes.
- */
-function MaintenanceSetUp({
-  maintenance,
-  server,
-  spaceSlug,
-  onClose,
-  onSubmit,
-}: {
-  maintenance: WikiMaintenanceSettings;
-  server: WikiSystemModelStatus | null;
-  spaceSlug: string;
-  onClose: () => void;
-  onSubmit: (maintenance: NonNullable<WikiSpaceUpdate['maintenance']>) => Promise<void>;
-}) {
-  const workspaces = useQuery(workspacesQuery());
-  const rows = (workspaces.data ?? []) as Array<{ id: string; name?: string; runner?: { name?: string; displayName?: string } }>;
-  // A space names a codebase, and so does a workspace's name more often than not: the one called
-  // what the space is called is where its runs most likely belong, so it is the first offered.
-  const [workspaceId, setWorkspaceId] = useState<string | null>(
-    () => maintenance.workspaceId ?? rows.find((row) => row.name === spaceSlug)?.id ?? null,
-  );
-  const [limit, setLimit] = useState(maintenance.dailyRunLimit);
-  const [lookback, setLookback] = useState(() => wikiLookbackChoice(maintenance.lookbackDays));
-  const [days, setDays] = useState(() => wikiLookbackDaysOffered(maintenance.lookbackDays));
-  const [saving, setSaving] = useState(false);
-  const [refusal, setRefusal] = useState<string | null>(null);
-  const chosen = workspaceId ?? rows.find((row) => row.name === spaceSlug)?.id ?? null;
-
-  const submit = async () => {
-    if (!chosen) return;
-    setSaving(true);
-    setRefusal(null);
-    try {
-      await onSubmit({
-        enabled: true,
-        workspaceId: chosen,
-        dailyRunLimit: limit,
-        lookbackDays: wikiLookbackDays(lookback, days),
-      });
-      onClose();
-    } catch (error) {
-      setSaving(false);
-      setRefusal(error instanceof Error ? error.message : 'The server refused it');
-    }
-  };
-
-  return (
-    <Dialog
-      open
-      title={WIKI_SET_UP_TITLE}
-      onClose={onClose}
-      className="wk-setup-dialog"
-      footer={
-        <>
-          <Button onClick={onClose}>{WIKI_CANCEL}</Button>
-          <Button variant="primary" disabled={!chosen} loading={saving} onClick={() => void submit()}>
-            {maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}
-          </Button>
-        </>
-      }
-    >
-      <p className="wk-modal-note">{WIKI_MAINTENANCE_NOTE_SERVER}</p>
-      <div className="wk-setup">
-        <label className="wk-setup-k" htmlFor="wk-setup-workspace">
-          {WIKI_REPO_FROM}
-        </label>
-        <Select
-          id="wk-setup-workspace"
-          value={chosen}
-          placeholder={WIKI_NO_WORKSPACE}
-          onValueChange={(value) => setWorkspaceId(value)}
-          options={rows.map((row) => ({ value: row.id, label: wikiWorkspaceLabel(row) }))}
-          loading={workspaces.isLoading}
-        />
-        <div className="wk-setup-d">{WIKI_REPO_FROM_NOTE}</div>
-
-        {server && (
-          <>
-            <span className="wk-setup-k">{WIKI_MODEL}</span>
-            <div className="wk-setup-model">
-              <WikiModelLine model={server} />
-            </div>
-            <div className="wk-setup-d">{WIKI_MODEL_NOTE}</div>
-          </>
-        )}
-
-        <label className="wk-setup-k" htmlFor="wk-setup-limit">
-          {WIKI_DAILY_LIMIT}
-        </label>
-        <div className="wk-setup-limit">
-          <NumberInput
-            id="wk-setup-limit"
-            min={WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min}
-            max={WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max}
-            precision={0}
-            value={limit}
-            onValueChange={(value) => setLimit(typeof value === 'number' ? value : maintenance.dailyRunLimit)}
-          />
-          <span>{WIKI_RUNS_A_DAY}</span>
-        </div>
-        <div className="wk-setup-d">{WIKI_DAILY_LIMIT_NOTE}</div>
-
-        <label className="wk-setup-k" htmlFor="wk-setup-lookback">
-          {WIKI_LOOKBACK}
-        </label>
-        <Select<WikiLookbackChoice>
-          id="wk-setup-lookback"
-          value={lookback}
-          onValueChange={(value) => {
-            if (value !== null) setLookback(value);
-          }}
-          options={WIKI_LOOKBACK_CHOICES.map((choice) => ({ value: choice, label: wikiLookbackLabel(wikiLookbackDays(choice, days)) }))}
-        />
-        {lookback === 'days' && (
-          <div className="wk-setup-limit wk-setup-days">
-            <NumberInput
-              aria-label={WIKI_LOOKBACK_UNIT}
-              min={1}
-              max={WIKI_MAINTENANCE_LOOKBACK_DAYS.max}
-              precision={0}
-              value={days}
-              onValueChange={(value) => setDays(typeof value === 'number' ? value : days)}
-            />
-            <span>{WIKI_LOOKBACK_UNIT}</span>
-          </div>
-        )}
-        <div className="wk-setup-d">{WIKI_LOOKBACK_NOTE}</div>
-      </div>
-      {server && <WikiPrivacyNote />}
-      {refusal && (
-        <div className="wk-warn wk-setup-refusal" role="alert">
-          <ExclamationCircleOutlined className="ic" />
-          <span>{refusal}</span>
-        </div>
-      )}
-    </Dialog>
   );
 }

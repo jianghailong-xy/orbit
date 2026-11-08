@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   WIKI_PLAN_JOB_RULES,
+  WIKI_PLAN_NO_DRAFT,
   WIKI_PLAN_RULES,
   WIKI_PLAN_SERVER_JOB,
   type WikiPlanGateError,
@@ -22,10 +23,10 @@ import {
   parseWikiPlanDetails,
   parseWikiPlanDocBody,
   wikiPlanDocInput,
+  wikiPlanIdentifier,
   type WikiPlanCat,
   type WikiPlanCatalogue,
   type WikiPlanDocRead,
-  type WikiPlanDraft,
   type WikiPlanHeader,
   type WikiPlanMove,
   type WikiPlanSources,
@@ -37,6 +38,8 @@ import {
   wikiPlanCountError,
   wikiPlanDocIndex,
   wikiPlanNumber,
+  wikiPlanSettle,
+  wikiPlanSettleNames,
   type WikiPlanAssembled,
 } from './wiki-plan-gate';
 import { wikiPlanSessionsText } from './wiki-plan-materials';
@@ -86,7 +89,8 @@ import {
  * made from, and the documents that merge or are new. Everything it says is held to this job's own gate
  * (wiki-plan-gate.ts), which checks every file, docs section and symbol on the space's snapshot of origin/main,
  * then to the plan's gate on the server (`WikiPlans.submitServerDraft`). What either finds goes back to the model,
- * unit by unit, three rounds at most; only a draft both let through is stored.
+ * unit by unit, three rounds at most. What the third still leaves is settled and noted (`wikiPlanSettle`), so a draft
+ * the model wrote is stored, for the owner to read; only a job with no draft to show has failed.
  *
  * EVERY CALL IS A BREAKPOINT, AND A REPLAY ASKS THE SAME QUESTIONS. Each call is a queue request (step `plan_*`, unit
  * `a<round>/<unit>@<sha12 of the call>`), so a job replayed after its worker died, or retried after the model was
@@ -216,7 +220,6 @@ class WikiPlanDraftRun implements WikiPlanRunState {
   private readonly planJobId: string;
   private rules = '';
   private lastErrors: WikiPlanGateError[] = [];
-  private lastDraft: WikiPlanDraft | null = null;
   private readonly report: WikiPlanJobReport;
   private snapshot: WikiPlanSnapshotIndex | null = null;
   /** Whether the space's runner read whole files (`wiki-repo-op-read/v1`), as the last readiness read said. */
@@ -265,10 +268,7 @@ class WikiPlanDraftRun implements WikiPlanRunState {
       const report = await this.close();
       const finish: Record<string, unknown> = { outcome: 'failed', error: cutRunes(error.message, WIKI_PLAN_JOB_RULES.errorMaxChars), report };
       if (report.attempts.length > 0) finish.attempt = report.attempts.length;
-      if (this.lastErrors.length > 0) finish.errors = this.lastErrors.slice(0, WIKI_PLAN_RULES.errorsMax);
-      if (this.lastDraft && Buffer.byteLength(JSON.stringify(this.lastDraft), 'utf8') <= WIKI_PLAN_JOB_RULES.draftMaxBytes) finish.draft = this.lastDraft;
-      // Its last draft and errors are the model's words: without any U+0000 (contract `jobs.serverWrites`).
-      await this.deps.plans.finishServerJob({ ownerId: job.ownerId, spaceId: job.spaceId, planJobId: planJob.id, wikiJobId: job.id }, stripNul(finish));
+      await this.deps.plans.finishServerJob({ ownerId: job.ownerId, spaceId: job.spaceId, planJobId: planJob.id, wikiJobId: job.id }, finish);
       throw new WikiJobContentError(`plan ${this.kind}: ${error.message}`, this.wikiJobReport('failed', null, error.message, report));
     }
     const report = await this.close();
@@ -335,34 +335,49 @@ class WikiPlanDraftRun implements WikiPlanRunState {
       else await this.redo(attempt, this.lastErrors, assembled);
       await this.readSymbolTexts();
       assembled = wikiPlanAssemble(this);
-      this.lastDraft = assembled.plan;
+      const last = attempt === WIKI_PLAN_JOB_RULES.attemptsMax;
       const round = { attempt, local: assembled.errors.length, server: 0, checks: {} as Record<string, number> };
-      this.report.categories = assembled.plan.categories.length;
-      this.report.docs = assembled.plan.docs.length;
-      this.report.sections = assembled.sections;
-      this.report.repo = { sha: assembled.repo.sha, checked: assembled.repo.checked, missing: assembled.repo.missing.length };
+      this.report.attempts.push(round);
       if (assembled.errors.length > 0) {
         for (const e of assembled.errors) round.checks[e.check] = (round.checks[e.check] ?? 0) + 1;
-        this.report.attempts.push(round);
         this.lastErrors = assembled.errors;
-        this.say(`Attempt ${attempt}: this job's gate found ${count(assembled.errors.length, 'error', 'errors')} (${checksLine(round.checks)}); handing them back to the model.`);
-        continue;
+        this.say(`Attempt ${attempt}: this job's gate found ${count(assembled.errors.length, 'error', 'errors')} (${checksLine(round.checks)})${last ? '' : '; handing them back to the model'}.`);
+        if (!last) {
+          this.reportOn(assembled);
+          continue;
+        }
+        assembled = wikiPlanSettle(this);
+        if (assembled.plan.docs.length === 0) throw new WikiPlanStop(WIKI_PLAN_NO_DRAFT.documents);
+        this.say(`The rounds are out: the draft is stored with what it has, ${count(assembled.repo.missing.length, 'reference', 'references')} not found and ${count(assembled.notes.length, 'note', 'notes')}.`);
       }
+      this.reportOn(assembled);
       await this.progress({ attempt, step: 'submit' });
-      const { version, refused } = await this.submit(assembled);
-      if (refused === null) {
-        this.report.attempts.push(round);
-        this.say(`Attempt ${attempt}: both gates let the draft through; it is version ${version}.`);
-        return version;
+      let stored = await this.submit(assembled);
+      if (stored.refused !== null) {
+        round.server = stored.refused.length;
+        for (const e of stored.refused) round.checks[e.check] = (round.checks[e.check] ?? 0) + 1;
+        this.lastErrors = stored.refused;
+        this.say(`Attempt ${attempt}: the server's gate refused it with ${count(stored.refused.length, 'error', 'errors')} (${checksLine(round.checks)})${last ? '' : '; handing them back to the model'}.`);
+        if (!last) continue;
+        wikiPlanSettleNames(assembled, stored.refused, assembled.notes);
+        stored = await this.submit(assembled);
+        if (stored.refused !== null) {
+          this.say(`The server's gate refused the settled draft: ${errorLine(stored.refused[0])}`);
+          throw new WikiPlanStop(WIKI_PLAN_NO_DRAFT.unexpected);
+        }
       }
-      round.server = refused.length;
-      for (const e of refused) round.checks[e.check] = (round.checks[e.check] ?? 0) + 1;
-      this.report.attempts.push(round);
-      this.lastErrors = refused;
-      this.say(`Attempt ${attempt}: the server's gate refused it with ${count(refused.length, 'error', 'errors')} (${checksLine(round.checks)}); handing them back to the model.`);
+      this.say(`Attempt ${attempt}: the draft is version ${stored.version}.`);
+      return stored.version;
     }
-    throw new WikiPlanStop(`the draft did not pass the plan's gate in ${WIKI_PLAN_JOB_RULES.attemptsMax} rounds: ${count(this.lastErrors.length, 'error', 'errors')} `
-      + `on the last, the first of them: ${errorLine(this.lastErrors[0])}`);
+    throw new WikiPlanStop(WIKI_PLAN_NO_DRAFT.unexpected);
+  }
+
+  /** What the report says of the draft as it stands. */
+  private reportOn(a: WikiPlanAssembled): void {
+    this.report.categories = a.plan.categories.length;
+    this.report.docs = a.plan.docs.length;
+    this.report.sections = a.sections;
+    this.report.repo = { sha: a.repo.sha, checked: a.repo.checked, missing: a.repo.missing.length };
   }
 
   /** Where the job is, for Activity: its own progress, under the claim's generation. */
@@ -560,8 +575,9 @@ class WikiPlanDraftRun implements WikiPlanRunState {
     try {
       return parseWikiPlanCatalogue(await this.ask(attempt, step, unit, prompt, (text) => parseWikiPlanCatalogue(text) !== null))!;
     } catch (error) {
-      if (error instanceof WikiPlanUnitError) throw new WikiPlanStop(error.message);
-      throw error;
+      if (!(error instanceof WikiPlanUnitError)) throw error;
+      this.say(error.message);
+      throw new WikiPlanStop(WIKI_PLAN_NO_DRAFT.catalogue);
     }
   }
 
@@ -687,7 +703,8 @@ class WikiPlanDraftRun implements WikiPlanRunState {
   }
 
   adoptCatalogue(catalogue: WikiPlanCatalogue, revision: boolean): void {
-    wikiPlanAdoptCatalogue(this, catalogue, revision);
+    const named = wikiPlanAdoptCatalogue(this, catalogue, revision);
+    if (named > 0) this.say(`${count(named, 'key or slug', 'keys and slugs')} of the catalogue had to be put in form.`);
   }
 
   /** The catalogue as it stands, number → slug: what a body written now means by `见 3.2`. */
@@ -800,6 +817,7 @@ class WikiPlanDraftRun implements WikiPlanRunState {
       plan: a.plan,
       repoCheck: a.repo,
     };
+    if (a.notes.length > 0) request.notes = a.notes.slice(0, WIKI_PLAN_RULES.notesMax);
     if (this.deps.model) request.model = this.deps.model;
     request.idempotencyKey = wikiPlanServerDraftKey(this.planJobId, job.id, request);
     try {
@@ -817,20 +835,48 @@ class WikiPlanDraftRun implements WikiPlanRunState {
           : [{ check: 'schema', path: 'plan', message: refusal.message } as WikiPlanGateError];
         return { version: 0, refused: errors };
       }
-      if (refusal.code === 'WIKI_PLAN_STALE') {
-        throw new WikiPlanStop(`the plan changed while the draft was written (${refusal.code}: ${refusal.message}): nothing was stored; the owner asks for another draft`);
-      }
-      throw new WikiPlanStop(`the server refused the draft (${refusal.code}): ${refusal.message}`);
+      this.say(`the server refused the draft (${refusal.code}): ${refusal.message}`);
+      throw new WikiPlanStop(refusal.code === 'WIKI_PLAN_STALE' ? WIKI_PLAN_NO_DRAFT.changed : WIKI_PLAN_NO_DRAFT.unexpected);
     }
   }
+}
+
+/**
+ * A catalogue's keys and slugs as the plan keeps them (contract `plan.jobs.server`). They are identifiers, not the
+ * model's words, so a way of writing one never costs a round: the form is made right here, before the gate reads it.
+ * One that is nothing once that is done falls back — a category to its number, which the owner never sees; a document
+ * to its title, or a digest of it, so that it is the same document next round — and one that repeats takes the next
+ * number. Answers how many it changed: a model that keeps being corrected is a prompt to look at.
+ */
+export function wikiPlanNameCatalogue(catalogue: WikiPlanCatalogue): number {
+  let changed = 0;
+  const named = (taken: Set<string>, wrote: string, name: string): string => {
+    let out = name;
+    for (let n = 2; taken.has(out); n += 1) out = `${name.slice(0, 60)}-${n}`;
+    taken.add(out);
+    if (out !== wrote) changed += 1;
+    return out;
+  };
+  const keys = new Set<string>();
+  catalogue.cats.forEach((cat, i) => {
+    cat.key = named(keys, cat.key, wikiPlanIdentifier(cat.key) || `c${i + 1}`);
+  });
+  const slugs = new Set<string>();
+  for (const unit of catalogue.units) {
+    const digest = createHash('sha256').update(unit.title).digest('hex').slice(0, 8);
+    unit.slug = named(slugs, unit.slug, wikiPlanIdentifier(unit.slug) || wikiPlanIdentifier(unit.title) || `doc-${digest}`);
+  }
+  return changed;
 }
 
 /**
  * A catalogue made the draft's: its categories, and its documents — a document of the same slug as one already
  * written keeping what was written of it. In a revision, a document of the version revised that the catalogue
  * names is carried: a protected one as it is, one made from it alone with its outline, less the sections moved out.
+ * Answers how many of its keys and slugs had to be put in form.
  */
-export function wikiPlanAdoptCatalogue(r: WikiPlanRunState, catalogue: WikiPlanCatalogue, revision: boolean): void {
+export function wikiPlanAdoptCatalogue(r: WikiPlanRunState, catalogue: WikiPlanCatalogue, revision: boolean): number {
+  const named = wikiPlanNameCatalogue(catalogue);
   const previous = new Map<string, WikiPlanUnit>();
   for (const unit of r.units) previous.set(unit.slug, unit);
   // What each document takes in by moves, before and after: a document whose moved sections changed is written again.
@@ -843,10 +889,6 @@ export function wikiPlanAdoptCatalogue(r: WikiPlanRunState, catalogue: WikiPlanC
   const after = incoming(catalogue.moves);
   r.cats = catalogue.cats;
   r.moves = catalogue.moves;
-  r.cats.forEach((cat, i) => {
-    // A key the model left out: the category's number, which the owner never sees.
-    if (cat.key === '') cat.key = `c${i + 1}`;
-  });
   const units: WikiPlanUnit[] = [];
   const kept = new Map<WikiPlanUnit, WikiPlanUnit>();
   for (const card of catalogue.units) {
@@ -894,6 +936,7 @@ export function wikiPlanAdoptCatalogue(r: WikiPlanRunState, catalogue: WikiPlanC
       }
     }
   }
+  return named;
 }
 
 /**
@@ -918,7 +961,7 @@ export function wikiPlanTextsWanted(r: Pick<WikiPlanRunState, 'repo' | 'units'>)
 }
 
 function emptyAssembled(): WikiPlanAssembled {
-  return { plan: { categories: [], docs: [] }, units: [], errors: [], repo: { sha: '', checked: 0, missing: [] }, sections: 0, slugIds: new Map() };
+  return { plan: { categories: [], docs: [] }, units: [], errors: [], repo: { sha: '', checked: 0, missing: [] }, sections: 0, slugIds: new Map(), notes: [] };
 }
 
 function frameOf(raw: unknown): WikiPlanFrame | null {

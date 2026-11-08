@@ -1,5 +1,6 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.hasRowMenu
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Process
@@ -98,10 +99,10 @@ class ProjectSessionsRealStackDeviceTest {
             }
             // A list of many projects and sessions: scrolled until the row is composed.
             scrollTo("directory-list", row)
-            // A member is the row, not a row of its own: no options of its own outside the project's row (whose ⋯ may say the same
+            // A member is the row, not a row of its own: no menu of its own outside the project's row (whose menu may say the same
             // words — a coordinator is often titled as its project).
             local.forEach { member -> assertTrue("${member.text("title")} is the row, not a row of its own",
-                compose.onAllNodes(hasContentDescription("Options for ${member.text("title")}") and !hasAnyAncestor(row)).fetchSemanticsNodes().isEmpty()) }
+                compose.onAllNodes(hasRowMenu("Options for ${member.text("title")}") and !hasAnyAncestor(row)).fetchSemanticsNodes().isEmpty()) }
             if (counts != null) compose.waitUntil(30_000) {
                 compose.onAllNodes(hasText("${counts.number("done")}/${counts.number("total")}") and hasAnyAncestor(hasTestTag("project-progress-chip")), true)
                     .fetchSemanticsNodes().isNotEmpty()

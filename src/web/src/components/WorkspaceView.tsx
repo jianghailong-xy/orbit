@@ -47,7 +47,6 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
-import { settleThinking } from '../lib/thinkingDraft';
 import {
   NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
@@ -61,22 +60,23 @@ import {
   JUMP_TO_LATEST,
   LOADING_NEWER,
   RECORD_FLASH_MS,
-  RECORD_NOT_FOUND,
   RECORD_PARAM,
   itemAtOf,
   sessionItemHref,
   recordAtOf,
   recordScrollDelta,
 } from '../lib/transcriptDeepLink';
-import { memoizeEventFull } from '../lib/eventFull';
 import { plainPreview } from '../lib/plainPreview';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
 import {
+  type ComponentProps,
+  type Dispatch,
   type DragEvent as ReactDragEvent,
   Fragment,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
+  type SetStateAction,
   type TouchEvent as ReactTouchEvent,
   useCallback,
   useEffect,
@@ -106,7 +106,8 @@ import {
   type SwipeGeometry,
   type SwipeSide,
 } from '../lib/sessionSwipe';
-import { useControlPlaneLive } from '../lib/useControlPlane';
+import { useControlPlaneLive, useRefreshSessionLists } from '../lib/useControlPlane';
+import { listPollMs, pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { useSessionProjectData } from '../lib/useSessionProjectData';
 import {
   workspacesQuery,
@@ -248,7 +249,6 @@ import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeNamesCtx } from './WatchWakeCard';
-import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import {
   ago,
   sameResourceId,
@@ -259,17 +259,9 @@ import {
   type SessionWatching,
 } from '../lib/watches';
 import { isQueuedWatchWake, returnsToComposer } from '../lib/queuedTurnRestore';
-import type { BgShell } from '../lib/backgroundShells';
-import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
-import {
-  EMPTY_LIVE_TASK_PROGRESS,
-  reduceLiveTaskProgress,
-  type SessionLiveTaskProgress,
-} from '../lib/liveTaskProgress';
 import {
   api,
   ApiError,
-  type ActiveSessionTurn,
   type ApprovalInfo,
   armAutoRetry,
   completeSession,
@@ -287,23 +279,17 @@ import {
   cleanUpWorkspaceRepo,
   enableWorkspaceIsolation,
   setWorkspaceWorktree,
-  getBackgroundShells,
   getSession,
   interruptSession,
   listApprovals,
-  listQueuedTurns,
+  completeProjectSessions,
   mergeSessionToMain,
   type EventPageEvent,
   type PermissionRule,
   pinSession,
   purgeSession,
-  getSessionEventFull,
-  getSessionEventPage,
-  getSessionEventPageAfter,
-  getSessionEventPageAround,
   getSessionRetryMessage,
   resendSessionRetryMessage,
-  type TranscriptAroundPage,
   renameSession,
   renameSessionFolder,
   restoreSession,
@@ -312,11 +298,10 @@ import {
   type SessionFolder,
   type SessionListItem,
   sendTurn,
-  sessionEventsUrl,
+  type TaskRunRoute,
   unpinSession,
   updateSessionConfig,
   switchSessionAccount,
-  type TurnCards,
   uploadAttachment,
 } from '../api';
 import { DshRepairCard } from './Transcript';
@@ -328,7 +313,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, type CursorQuotaHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnAttachmentRef, type TurnImage, UndeliveredCtx, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -397,7 +382,6 @@ import {
   DECISION_SENDING_BACK_PREFIX,
   EvidenceDecisionReceipt,
   SessionEvidenceDecisionCard,
-  coordinatorQueueRows,
   evidenceDecisionCardRows,
   evidenceDecisionRefusal,
   sendEvidenceDecision,
@@ -477,7 +461,6 @@ import {
   permissionModeAvailableOnRunner,
   runtimeTakesMidTurnSteer,
   STEER_WITHDRAW_ERRORS,
-  TRASH_RETENTION_DAYS,
   withEnginePlanUsage,
   type AccountEngine,
 } from '@orbit/shared';
@@ -514,33 +497,17 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
-import { streamAnchorAfter } from '../lib/streamAnchor';
+import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
-import { firstPaintSlice, transcriptPlaceholder } from '../lib/transcriptPaint';
-import { loadTranscript, saveTranscript } from '../lib/transcriptStore';
-import {
-  clearLiveToolOutputsForSession,
-  EMPTY_LIVE_TOOL_OUTPUTS,
-  reduceLiveToolOutputs,
-  type SessionLiveToolOutputs,
-} from '../lib/liveToolOutputs';
+import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
+import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
+import { coordinatorDeliverySentence, parseCoordinatorDelivery } from '../lib/coordinatorDelivery';
+import { trashNoteWhen } from '../lib/trashNote';
+import { transcriptPlaceholder } from '../lib/transcriptPaint';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
-import {
-  acceptedUserTurnEvent,
-  acceptedUserTurnLanded,
-  clearAcceptedUserTurnsForSession,
-  clearAcceptedUserTurnsForTurn,
-  queuedTurnEvent,
-  queuedTurnsOutsideTranscript,
-  reconcileAcceptedUserTurnSnapshot,
-  reconcileQueuedTurnSnapshot,
-  transcriptEventsWithDurableDeliveryReceipts,
-  turnCardsOf,
-  type AcceptedUserTurn,
-} from '../lib/acceptedUserTurn';
+import { queuedTurnEvent } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
 import { commitFailureCopy, resolveCommitPrompt } from '../lib/commitFailure';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
@@ -589,58 +556,16 @@ import {
   waitingNoticeFor,
   waitingNoticeScope,
 } from '../lib/runnerSlots';
-import { reseedWithActiveSnapshot } from '../lib/reseedActiveSnapshot';
+import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSessionStream';
+import { SessionConversation } from './SessionConversation';
+import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 
-interface RunEvent {
-  seq: number;
-  type: string;
-  payload: any;
-  turnId?: string | null;
-  ts?: string;
-}
+// The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
+// and tests that import them from here still can.
+export { queuedTurnFromActiveSnapshot, type QueuedTurn } from '../lib/useSessionStream';
 
-// A user message accepted while a turn is running: it sits in the inbox (PENDING)
-// until the current turn finishes. Tracked locally so the composer can show it and
-// offer to withdraw it before the runner picks it up. A `!cmd` shell turn queues the
-// same way, so it gets a bubble too — rendered as the command it will run.
-//
-// The cards it is drawn as (`TurnCards`) are the ones the active snapshot carried, exactly as the
-// accepted-turn placeholder holds them: the queued tail draws the card the transcript will, rather
-// than a bubble it replaces when the runner takes the turn.
-export interface QueuedTurn extends TurnCards {
-  turnId: string;
-  content: string;
-  shell?: boolean;
-  /** Server receipt only: current-turn/next-turn is never inferred from local status. */
-  placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
-  /** For a steer, the executable turn it was written into. */
-  targetTurnId?: string;
-  delivery?: 'failed' | 'unconfirmed';
-  deliveryCode?: string;
-  deliveryReason?: string;
-  // Server-side image refs (id + mime), so a reopened/reloaded queue can still render an
-  // image-only follow-up turn — the local turnImages previews don't survive a reload.
-  attachments?: { id: string; mimeType: string }[];
-  /** When the server queued it — the receipt's own timestamp, as an accepted turn's `acceptedAt`. */
-  createdAt?: string;
-  /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
-  authoredByOrbit?: true;
-}
-
-/** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is
- * represented by the optimistic/transcript bridge instead, so it deliberately has no queue row. */
-export function queuedTurnFromActiveSnapshot(row: ActiveSessionTurn): QueuedTurn | null {
-  const placement = turnPlacementOf(row);
-  if (placement === 'accepted') return null;
-  return {
-    ...row,
-    shell: row.kind === 'shell',
-    placement,
-  };
-}
-
-interface LocalStatusCard {
+export interface LocalStatusCard {
   id: string;
   rows: LocalStatusRow[];
 }
@@ -665,7 +590,7 @@ type PendingSessionOperation =
 // none: its bytes are on the server under `id`, which is the whole of what a send references. So
 // what the chip shows is carried beside the blob rather than read out of it, and `size` is absent
 // for the ones the server describes (the queue snapshot reports id and mime, not length).
-interface ComposerImage {
+export interface ComposerImage {
   uid: string;
   file?: File;
   name: string;
@@ -792,7 +717,7 @@ const fmtTokens = (n: number): string =>
 // resolved separately can describe a different model than the numerator it lands under — a
 // mid-session model switch, or a table that never knew this CLI's answer. Older runners send no
 // window; the caller then falls back to contextWindowFor.
-function lastContextReading(events: RunEvent[]): { tokens: number; window?: number } {
+export function lastContextReading(events: RunEvent[]): { tokens: number; window?: number } {
   for (let i = events.length - 1; i >= 0; i--) {
     const payload = events[i].payload as { contextTokens?: unknown; contextWindow?: unknown } | undefined;
     const ct = payload?.contextTokens;
@@ -990,26 +915,6 @@ const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_SLOP_PX = 24;
 
-// Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
-// the list doesn't open-then-immediately-close a connection per session skipped past.
-const SWITCH_DEBOUNCE_MS = 150;
-// Cap on cached transcripts (mount-scoped), so a long browsing session can't grow
-// the cache without bound. Least-recently-selected entries are evicted first.
-const TRANSCRIPT_CACHE_MAX = 20;
-// Tail-first lazy loading: open a fresh transcript with only its newest page (so a long
-// session lands straight at the latest message instead of replaying its whole history), then
-// prepend older pages as the user scrolls up. TAIL_PAGE is deliberately large enough to fill
-// any viewport in one shot, so no auto-load fires until the user actually scrolls up.
-const TAIL_PAGE = 200;
-const OLDER_PAGE = 200;
-// A link to one record (`?at=`, lib/transcriptDeepLink) opens on the page around it instead: half
-// before the record and half after, the same size as a tail page so it fills the view as well.
-const AROUND_PAGE = 200;
-// Consecutive reconnects that fail to move the resume cursor before the transcript stops trying to
-// resume and re-seeds from a tail page instead. Three is past any single dropped connection while
-// still costing ~12s of the backoff below — short enough that a wedged tab recovers on its own,
-// long enough that an ordinary redeploy blip never throws away a loaded window. See reseed().
-const RESEED_AFTER_STALLED_RECONNECTS = 3;
 // Distance from the top (px) at which scrolling up pulls in the next older page — and, in a window
 // opened at a record, from the bottom at which scrolling down pulls in the next newer one.
 const LOAD_OLDER_AT = 400;
@@ -1028,16 +933,6 @@ const STRANDED_AFTER_MS = 400;
 // "not typed by you" is the screen contradicting itself — which is what the account owner
 // photographed on 2026-09-17, over a watch's wake.
 const STICKY_LABEL = 'Your question';
-// How long a cached /background scan stays fresh. `/background` scans the session's whole
-// tool-event history, so re-opening a session (or scrubbing the list) within this window paints
-// the cached shells instead of re-running that scan — see bgCacheRef.
-const BG_TTL_MS = 30_000;
-
-interface TranscriptCacheEntry {
-  events: RunEvent[];
-  oldestSeq: number | null; // seq of the earliest loaded event (null = nothing loaded)
-  hasMoreOlder: boolean; // older events exist before oldestSeq on the server
-}
 
 // Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
 // recall only this session's recently sent prompts (never another session's). Stored
@@ -1055,7 +950,7 @@ function loadHistory(sessionId?: string | null): string[] {
     return [];
   }
 }
-function pushHistory(sessionId: string | undefined, entry: string): void {
+export function pushHistory(sessionId: string | undefined, entry: string): void {
   if (!sessionId) return;
   const e = entry.trim();
   if (!e) return;
@@ -1123,7 +1018,7 @@ const subagentRunningLabel = (n: number): string =>
 // header word and list line — without this the row says "Waiting for your reply" over a session
 // the user can watch working. Outranks parkedWorkLabel below: this is the workspace itself
 // generating, not something it left running behind a finished turn.
-const isGenerating = (s: any, state: string): boolean =>
+export const isGenerating = (s: any, state: string): boolean =>
   state === 'RUNNING' || (state === 'AWAITING_INPUT' && s.engineTurnActive === true);
 
 // Live background work that outlives a parked (AWAITING_INPUT) turn — an async sub-workspace
@@ -1157,14 +1052,50 @@ type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
 };
-// The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
-// line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
-// exactly alike, and "has it answered me yet?" is the one question the list has to answer while a
-// turn is running. Same flattening as a reply preview — it may be markdown too.
-const sentLine = (text: string): SessionLine => ({
-  text: `You: ${plainPreview(text)}`,
+// The line for a message the workspace hasn't answered yet, marked with who sent it (`sentBy`).
+// Prefixed, because the preview line is otherwise the workspace's voice: unmarked, a message and a
+// reply to it read exactly alike, and "has it answered me yet?" is the one question the list has to
+// answer while a turn is running. Same flattening as a reply preview — it may be markdown too.
+const sentLine = (text: string, sender: string): SessionLine => ({
+  text: `${sender}: ${plainPreview(text)}`,
   tone: 'preview',
 });
+// Keep this literal declaration: native parity tests read the web source directly.
+export const SENT_BY_YOU = 'You';
+// Who sent the message a row previews (`lastUserText`). "You" only for the owner's own words — and
+// for every message from an older server, which names no sender. A message another Orbit session sent
+// (`session_send`, `project_send`) names that session (`lastUserFrom`) as the conversation's card
+// names it: its title, or what an untitled one is called (docs/session-list-projects-design.md §3.5,
+// owner 2026-11-07). A coordinator's unanswered message is usually a task's report, which "You:" put
+// in the owner's mouth.
+//
+// Somebody outside Orbit — a member of a connected Feishu group (`lastUserFromExternal`,
+// docs/feishu-bot-design.md §8.2) — is named the way the conversation names them over their words:
+// `From Feishu · <name>`. One message has one sender, so this is asked first.
+const sentBy = (s: any): string => {
+  const outsider = parseExternalSender(s.lastUserFromExternal);
+  if (outsider) return externalSenderLabel(outsider);
+  const from = s.lastUserFrom;
+  if (!from || typeof from !== 'object') return SENT_BY_YOU;
+  return (typeof from.title === 'string' ? from.title.trim() : '') || SESSION_MESSAGE_UNTITLED;
+};
+// Keep this literal declaration: native parity tests read the web source directly.
+export const SENT_BY_ORBIT = 'Orbit';
+// The line for a message Orbit wrote itself (`lastUserFromOrbit`, docs/session-list-projects-design.md
+// §3.5, owner 2026-11-07), or null for anybody else's: Orbit says it, never "You", which put "You: From
+// Orbit · project …" on a coordinator's row while it read the notification. A notification the
+// conversation draws as a line says that line's own sentence, from the card the server read it with
+// (`coordinatorDeliverySentence`); any other says its first line, flattened like a preview — the rest is
+// written for the agent. An older server sends no mark, and every message reads as before.
+const orbitLine = (s: any): SessionLine | null => {
+  const orbit = s.lastUserFromOrbit;
+  if (!orbit || typeof orbit !== 'object') return null;
+  const card = parseCoordinatorDelivery(orbit);
+  const said = card
+    ? coordinatorDeliverySentence(card)
+    : plainPreview(String(s.lastUserText).split('\n').find((line) => line.trim() !== '') ?? '');
+  return { text: `${SENT_BY_ORBIT}: ${said}`, tone: 'preview' };
+};
 
 // The five owner items, one word each: no project and no count, because a row is one line and the
 // project it is about is the conversation the row already names (contract §7.6 V13). The native
@@ -1276,11 +1207,11 @@ export const sessionLine = (
     // through to the muted last-reply preview, which reads as idle.
     if ((s.runningSubagentCount ?? 0) > 0)
       return { text: `${subagentRunningLabel(s.runningSubagentCount)}…`, tone: 'running' };
-    // The workspace hasn't answered yet: show the message you sent (the server keeps lastUserText
+    // The workspace hasn't answered yet: show the message it was sent (the server keeps lastUserText
     // from the moment it is enqueued until a reply lands) instead of the previous turn's reply,
     // which would read as if this one had already been answered. It's content, not status — the
     // spinner already carries "working" — so it takes the muted preview tone, not blue.
-    if (s.lastUserText) return sentLine(s.lastUserText);
+    if (s.lastUserText) return orbitLine(s) ?? sentLine(s.lastUserText, sentBy(s));
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
@@ -1299,7 +1230,7 @@ export const sessionLine = (
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
-  if (s.lastUserText) return sentLine(s.lastUserText);
+  if (s.lastUserText) return orbitLine(s) ?? sentLine(s.lastUserText, sentBy(s));
   // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
   // here — below every live line above — so a working session still says what it is doing. Off
@@ -1877,7 +1808,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
   );
 }
 
-function SessionStatusCard({ card }: { card: LocalStatusCard }) {
+export function SessionStatusCard({ card }: { card: LocalStatusCard }) {
   return (
     <div className="chat-status-card" role="status" aria-label="Session status">
       <div className="chat-status-head">
@@ -2153,11 +2084,8 @@ export function WorkspaceView({
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
   // The record a link opened the session at (`/sessions/<id>?at=<record>`, lib/transcriptDeepLink),
-  // in its public spelling, or null. Mirrored for the session effect, which reads the one it opens
-  // with and must not re-run — re-seeding the whole window — when only this changes.
+  // in its public spelling, or null.
   const recordAt = recordAtOf(searchParams);
-  const recordAtRef = useRef(recordAt);
-  recordAtRef.current = recordAt;
   // The owner-item card a list/banner deep link should reveal after the open-items read and its
   // transcript insert have rendered. Kept separate from `at`, because an item is not a transcript
   // record and must not reseed the transcript window.
@@ -2220,9 +2148,6 @@ export function WorkspaceView({
   // draft rather than in the URL or the server, because it only has to survive as long as the
   // text it annotates — a token the user edits stops matching and simply travels as prose.
   const [composerRefs, setComposerRefs] = useState<ReferenceMap>({});
-  // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
-  // its auto-grow cap.
-  const [composerScroll, setComposerScroll] = useState(0);
   // Composer history cursor: -1 = editing the live draft; otherwise an index into the
   // session's stored history. `histDraft` stashes what was typed before recall started,
   // so stepping back past the newest entry restores it (shell-style).
@@ -2375,11 +2300,6 @@ export function WorkspaceView({
   // small window where a second full-selection PUT could otherwise start before items disable.
   const tagSaveInFlight = useRef(false);
   const [workspaceId, setWorkspaceId] = useState<string | undefined>(undefined);
-  const [events, setEvents] = useState<RunEvent[]>([]);
-  // `events` is replaced in an effect after navigation. Keep its owner explicit so a render in
-  // between cannot treat the previous session's transcript as the newly selected session's.
-  const [eventsSessionId, setEventsSessionId] = useState<string | null>(selectedId);
-  const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
   // An armed reply: the next composer send carries what is typed to one card's business instead of
   // being an ordinary message, and the card that armed it stays until then. Five presses arm it — a
   // question's "Chat about this", a decline of one of Orbit's own asks, the confirmation card's
@@ -2410,50 +2330,7 @@ export function WorkspaceView({
     /** Carried ahead of the typed message by a send that starts an ordinary turn. */
     context?: string;
   } | null>(null);
-  const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
-  const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
-  // When the stretch of reasoning on screen began: the live row counts up from it, and the row it
-  // settles into states how long it took. Client-side only — `thinking_delta` is broadcast and
-  // never persisted, so a reload has no clock to recover this from (see lib/thinkingDraft).
-  const [thinkStartedAt, setThinkStartedAt] = useState<number | null>(null);
-  // Mirrors of both, for the SSE handler: it is registered once per session and would otherwise
-  // close over the values of the render that registered it.
-  const streamingThinkRef = useRef('');
-  const thinkStartedAtRef = useRef<number | null>(null);
-  const [liveToolOutputState, setLiveToolOutputState] = useState<SessionLiveToolOutputs>({
-    sessionId: selectedId,
-    outputs: EMPTY_LIVE_TOOL_OUTPUTS,
-  });
-  // Broadcast-only progress of the workspace's background agents and workflows — the same kind of
-  // side channel as the shell snapshots above, and scoped to its session the same way.
-  const [liveTaskProgressState, setLiveTaskProgressState] = useState<SessionLiveTaskProgress>({
-    sessionId: selectedId,
-    progress: EMPTY_LIVE_TASK_PROGRESS,
-  });
-  // The seq the stream was at when the current stretch of generation began, so the transcript can
-  // render the drafts where they started rather than always last. A ref, not state: it only ever
-  // moves alongside a draft update, so the render that shows the new text already reads the new
-  // anchor — and keeping it out of state means a chunk doesn't re-render anything extra.
-  const streamAnchorRef = useRef<number | null>(null);
-  const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
-  const [queued, setQueued] = useState<QueuedTurn[]>([]); // messages sent while a turn was running
-  const queuedRef = useRef<QueuedTurn[]>(queued);
-  queuedRef.current = queued;
-  const [queuedSessionId, setQueuedSessionId] = useState<string | null>(selectedId);
-  // A normal idle/new-session send is accepted before the runner emits its durable `user` event.
-  // Keep that acknowledged message visible in the gap; queued/steered follow-ups stay in `queued`
-  // above because their status + Cancel affordance are meaningful rather than transport noise.
-  const [acceptedUserTurns, setAcceptedUserTurns] = useState<AcceptedUserTurn[]>([]);
-  const acceptedUserTurnsRef = useRef<AcceptedUserTurn[]>(acceptedUserTurns);
-  acceptedUserTurnsRef.current = acceptedUserTurns;
   const [localStatusCards, setLocalStatusCards] = useState<LocalStatusCard[]>([]);
-  // The apiserver's authoritative background-shell list (all launches + output recovered from the
-  // workspace's Read polls). The loaded event window only holds recent launches, so the tray merges
-  // this complete set with its live-derived overlay — see BackgroundShellsTray.
-  const [serverBgShells, setServerBgShells] = useState<BgShell[]>([]);
-  // Per-session cache of the server /background scan. The tray is cleared to [] on every switch, so
-  // the throttle in the SSE effect repopulates from here (not just skips) when it's still fresh.
-  const bgCacheRef = useRef<Map<string, { at: number; shells: BgShell[] }>>(new Map());
   const [images, setImages] = useState<ComposerImage[]>([]); // images staged in the composer
   // One key per logical send, retained across an uncertain network/5xx result. A changed wire
   // payload mints another key; a verbatim retry lets the server return its committed receipt.
@@ -2464,64 +2341,24 @@ export function WorkspaceView({
   // so these local previews are joined back into the user bubble (and the queued bubble)
   // to show the sent image in the transcript. Object URLs are revoked on session switch.
   const [turnImages, setTurnImages] = useState<Record<string, TurnImage[]>>({});
-  const seen = useRef<Set<number>>(new Set());
-  // Per-session transcript cache (mount-scoped): switching seeds events from here for
-  // an instant paint and resumes the SSE just past the cached seq, instead of replaying
-  // each session's full history from seq 0 on every visit. Stores the older-pagination
-  // boundary too, so a reopened session keeps its "load earlier" state.
-  const transcriptCache = useRef<Map<string, TranscriptCacheEntry>>(new Map());
-  // Live mirror of `events`, so the SSE handler (append) and loadOlder (prepend) both mutate
-  // one source of truth without racing stale closures — see the load effect below.
-  const accRef = useRef<RunEvent[]>([]);
-  // Tail-first lazy loading state for the open session. Refs drive the (deps-free) scroll
-  // handler; loadingOlder (state) drives the top "loading earlier" spinner.
-  const oldestSeqRef = useRef<number | null>(null); // earliest loaded seq
-  const hasMoreOlderRef = useRef(false); // older events exist before oldestSeq on the server
-  // The in-flight page request, if any: it both guards against a second one and lets a caller
-  // that needs to know when older content has landed (⌘F's "search earlier") await the one
-  // already running instead of being told "no".
-  const loadingOlderRef = useRef<Promise<boolean> | null>(null);
-  const [loadingOlder, setLoadingOlder] = useState(false);
-  // Render mirror of hasMoreOlderRef, refreshed by measure() the way setAtBottom is: it decides
-  // whether the top of the transcript offers the way back to the first message.
+  // Render mirror of the stream's older edge (hasOlderNow), refreshed by measure() the way
+  // setAtBottom is: it decides whether the top of the transcript offers the way back to the first
+  // message.
   const [hasMoreOlder, setHasMoreOlder] = useState(false);
   // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
   // stamped as one that wants the top (see prependAnchorRef).
   const jumpingToStartRef = useRef(false);
-  // A window opened at a record (`?at=`) stops short of the tail: this is the `after=` cursor for the
-  // page newer than what is loaded, and it is non-null exactly while that is so. The live stream stays
-  // closed meanwhile — its events belong after the gap, not at the bottom of this window — and opens
-  // once paging down reaches the latest event (joinLiveRef) or the reader jumps there (backToLatestRef).
-  const newerCursorRef = useRef<number | null>(null);
-  const [detached, setDetached] = useState(false); // render mirror of newerCursorRef !== null
-  const loadingNewerRef = useRef<Promise<boolean> | null>(null);
-  const [loadingNewer, setLoadingNewer] = useState(false);
   // The record to bring into view and mark once its page has rendered; the tick re-asks when the page
   // is already on screen, where nothing else would re-render.
   const pendingRecordRef = useRef<{ sessionId: string; seq: number } | null>(null);
   const [recordTick, setRecordTick] = useState(0);
-  // The `?at=` already followed (`<session> <record>`), so one link is followed once, not on every render.
-  const followedRecordRef = useRef<string | null>(null);
   const followedItemRef = useRef<string | null>(null);
-  // Set by the session effect, which owns the stream: open a record of the session already open, join
-  // the live stream once a detached window reaches the latest event, and trade a detached window for
-  // the tail.
-  const openRecordRef = useRef<((recordId: string) => void) | null>(null);
-  const joinLiveRef = useRef<(() => void) | null>(null);
-  const backToLatestRef = useRef<(() => void) | null>(null);
-  // True from the moment a session with no cached transcript is selected until its tail page
-  // lands (or gives up). Drives the skeleton: without it an unvisited session paints a blank
-  // pane for the whole fetch, since an ended session matches none of the empty-state notes.
-  const [seeding, setSeeding] = useState(false);
   // Set by loadOlder just before it prepends a page; a layout effect reads it to compensate
   // scrollTop so the viewport stays put instead of jumping when older content grows above. `toTop`
   // marks a page fetched by the walk to the beginning, which wants the top rather than the
   // position it was at — carried on the anchor, not read off the walk's flag when the page lands,
   // because the last page commits after the walk has already finished.
   const prependAnchorRef = useRef<{ prevHeight: number; prevTop: number; toTop: boolean } | null>(null);
-  // Re-opens the transcript SSE after a `final` event paused it and the session was
-  // resumed in place (set by the SSE effect, called by the liveness watcher below).
-  const resumeStreamRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
 
@@ -2529,7 +2366,9 @@ export function WorkspaceView({
   const rowView = projectView ?? view;
   const sessionRowView = useCallback((session: SessionListItem): SessionView => openProjectId
     ? sessionLifecycleStateOf(session).toLowerCase() as SessionView : rowView, [openProjectId, rowView]);
-  const onRowTouchStart = (e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string): void => {
+  const onRowTouchStart = (
+    e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string, movable = sessionMovable(session),
+  ): void => {
     if (!isMobile) return;
     const t = e.touches[0];
     // Clear any guard left set by a prior swipe that fired no trailing click, so the next
@@ -2540,7 +2379,7 @@ export function WorkspaceView({
     const rect = e.currentTarget.getBoundingClientRect();
     const geometry = projectId
       ? { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH, fullSwipeAt: null, maxOffset: SWIPE_ACTION_WIDTH + 20 }
-      : swipeGeometry(sessionRowView(session), rect.width, canFullSwipe, sessionMovable(session));
+      : swipeGeometry(sessionRowView(session), rect.width, canFullSwipe, movable);
     swipeRef.current = {
       session,
       id,
@@ -2646,230 +2485,6 @@ export function WorkspaceView({
   // When the reader last had their own hand on the scroller (wheel, finger, scrollbar, arrow key).
   // The browser reports no scroll phase, so this is the evidence that a falling scrollTop is theirs.
   const readerInputAtRef = useRef(0);
-  // Tail-first lazy loading: pull in the next older page when the user scrolls near the top.
-  // Guarded to one request in flight; prepends the page and stamps prependAnchorRef so the
-  // layout effect below holds the viewport steady while older content grows above it.
-  // Resolves true when events were actually prepended, so an awaiting caller can tell "there's
-  // more history now" from "that was the end of it".
-  const loadOlder = useCallback((): Promise<boolean> => {
-    if (loadingOlderRef.current) return loadingOlderRef.current;
-    if (!selectedId || !hasMoreOlderRef.current) return Promise.resolve(false);
-    const before = oldestSeqRef.current;
-    if (before == null) return Promise.resolve(false);
-    setLoadingOlder(true);
-    const inFlight = getSessionEventPage(selectedId, { before, limit: OLDER_PAGE })
-      .then((page) => {
-        if (selectedIdRef.current !== selectedId) return false; // user switched sessions mid-fetch
-        const fresh = page.events.filter((e) => !seen.current.has(e.seq));
-        for (const e of fresh) if (typeof e.seq === 'number') seen.current.add(e.seq);
-        if (fresh.length) {
-          const el = scrollRef.current;
-          if (el) {
-            prependAnchorRef.current = {
-              prevHeight: el.scrollHeight,
-              prevTop: el.scrollTop,
-              toTop: jumpingToStartRef.current,
-            };
-          }
-          accRef.current = [...fresh, ...accRef.current];
-          setEvents(accRef.current);
-        }
-        oldestSeqRef.current = page.events.length ? page.events[0].seq : before;
-        hasMoreOlderRef.current = page.hasMore;
-        // A window opened at a record is not cached: the cache is a window that ends at the tail,
-        // which a reopen resumes the live stream from.
-        if (newerCursorRef.current === null) {
-          transcriptCache.current.set(selectedId, {
-            events: accRef.current,
-            oldestSeq: oldestSeqRef.current,
-            hasMoreOlder: page.hasMore,
-          });
-        }
-        return fresh.length > 0;
-      })
-      .catch(() => false)
-      .finally(() => {
-        loadingOlderRef.current = null;
-        setLoadingOlder(false);
-      });
-    loadingOlderRef.current = inFlight;
-    return inFlight;
-  }, [selectedId]);
-  // Walk the pages back until the session's first message is loaded, then sit at the top.
-  //
-  // Scrolling up alone can't get there: each page lands with the reader's position anchored
-  // (below), which puts them a page BELOW the top again, so the start recedes once per page and a
-  // long session's first message is unreachable in practice. This is that loop, made explicit —
-  // and bounded, so it can't become an unattended full-history download.
-  const jumpToStart = useCallback(async (): Promise<void> => {
-    if (jumpingToStartRef.current) return;
-    const session = selectedIdRef.current;
-    jumpingToStartRef.current = true;
-    // Leaving the tail is the whole point, so say so before the first page lands: a transcript
-    // still counting itself pinned re-scrolls to the bottom on every content change, which would
-    // undo each page of this walk as it arrives.
-    atBottomRef.current = false;
-    setAtBottom(false);
-    try {
-      for (let page = 0; page < JUMP_TO_START_PAGES && hasMoreOlderRef.current; page++) {
-        if (!(await loadOlder())) break; // that was the end of it (or the session was switched)
-      }
-    } finally {
-      jumpingToStartRef.current = false;
-    }
-    // Each page the walk pulled in lands pinned to the top (the anchor branch below); this catches
-    // the case where the walk ended without one — nothing more to load, or the cap was hit. Not
-    // when the reader has moved on to another session, whose transcript this is now.
-    if (selectedIdRef.current === session) scrollRef.current?.scrollTo({ top: 0 });
-  }, [loadOlder]);
-  // loadOlder's mirror, for a window opened at a record: pull in the page just newer than what is
-  // loaded as the reader nears the bottom. Rows appended below the viewport move nothing the reader is
-  // looking at, so there is no position to hold. The page that reaches the latest event re-attaches
-  // the window to the tail, and the live stream opens from there (joinLiveRef).
-  const loadNewer = useCallback((): Promise<boolean> => {
-    if (loadingNewerRef.current) return loadingNewerRef.current;
-    const after = newerCursorRef.current;
-    if (!selectedId || after === null) return Promise.resolve(false);
-    setLoadingNewer(true);
-    const inFlight = getSessionEventPageAfter(selectedId, after, { limit: OLDER_PAGE })
-      .then((page) => {
-        // Another session, or the window re-opened at another record meanwhile: not this window's page.
-        if (selectedIdRef.current !== selectedId || newerCursorRef.current !== after) return false;
-        const fresh = page.events.filter((e) => !seen.current.has(e.seq));
-        for (const e of fresh) if (typeof e.seq === 'number') seen.current.add(e.seq);
-        if (fresh.length) {
-          accRef.current = [...accRef.current, ...fresh];
-          setEvents(accRef.current);
-        }
-        newerCursorRef.current = page.after;
-        if (page.after === null) {
-          setDetached(false);
-          joinLiveRef.current?.();
-        }
-        return fresh.length > 0;
-      })
-      .catch(() => false)
-      .finally(() => {
-        loadingNewerRef.current = null;
-        setLoadingNewer(false);
-      });
-    loadingNewerRef.current = inFlight;
-    return inFlight;
-  }, [selectedId]);
-  // The tail-first window's edges, read through callbacks because they live in refs (kept out of
-  // render for cost). ⌘F needs both: whether older events exist, and how far back it has loaded.
-  const hasOlderNow = useCallback(() => hasMoreOlderRef.current, []);
-  const oldestSeqNow = useCallback(() => oldestSeqRef.current, []);
-  // Pull back the untrimmed payload of an event the server clipped to a preview (see
-  // MAX_EVENT_PAYLOAD). The transcript calls this when the user expands such a card, so a big
-  // Read output or Write body only crosses the network if someone actually opens it — and, because
-  // a remounted row is a new card with no memory of the first ask, only once (see
-  // lib/eventFull.ts). Rebuilt per session: seqs are per session, so a memo outliving the switch
-  // would answer this session's 99323 with the last session's.
-  const fetchEventFull = useMemo(
-    () => memoizeEventFull((seq: number) => getSessionEventFull(selectedId ?? '', seq)),
-    [selectedId],
-  );
-  // Recompute, on scroll and after content changes: are we at the bottom, and which top-level
-  // user bubble (if any) has scrolled above the viewport top (= the prompt to surface)?
-  const measure = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) {
-      setStuck(null);
-      return;
-    }
-    const top = el.scrollTop;
-    // Pin to the bottom while at (or near) it; un-pin only when the READER scrolls up. Both the
-    // reasoning behind that and the clients' copy of the rule live in tailPinning.ts.
-    const sample = sampleTail(el);
-    atBottomRef.current = !reviewPositionHeldRef.current && pinnedToTail(
-      atBottomRef.current,
-      lastSampleRef.current,
-      sample,
-      performance.now() - readerInputAtRef.current < READER_INPUT_GRACE_MS,
-    );
-    lastSampleRef.current = sample;
-    // A window opened at a record is never at the live tail, whatever its scroll says: its bottom is a
-    // gap, so nothing may pin there — and near it the next newer page comes in.
-    if (newerCursorRef.current !== null) {
-      atBottomRef.current = false;
-      if (el.scrollHeight - top - el.clientHeight < LOAD_OLDER_AT) loadNewer();
-    }
-    // Whether the tail is out of view, whatever put it there, with the pin's own slack — so the
-    // button and the follow agree on where the end is. Only a pinned transcript is decided here (one
-    // the reader scrolled up shows the button already); the tail back in view ends it at once.
-    if (!atBottomRef.current || sample.bottomGap <= NEAR_BOTTOM) {
-      window.clearTimeout(strandTimerRef.current);
-      strandTimerRef.current = undefined;
-      setStranded(false);
-    } else if (strandTimerRef.current === undefined) {
-      strandTimerRef.current = window.setTimeout(() => setStranded(true), STRANDED_AFTER_MS);
-    }
-    setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
-    setHasMoreOlder(hasMoreOlderRef.current); // same bail-out; drives the way back to the start
-    // Near the top with older history still on the server → pull in the next page.
-    if (top < LOAD_OLDER_AT) loadOlder();
-    const topY = el.getBoundingClientRect().top;
-    setOpenItemsAbove(
-      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
-        .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
-        .map((card) => card.getAttribute('data-open-item'))
-        .join(' '),
-    );
-    // A turn the control plane queued is one of these too — it is where the answer under it starts,
-    // so it is where the bar has to point — but it is no bubble and nobody typed it, so its card
-    // hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued twin in the
-    // tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a background
-    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is still
-    // giving (WatchWakeCard, BackgroundWakeCard), so it carries no label and the bar keeps the question.
-    const bubbles = Array.from(
-      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
-    ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
-    let cur: HTMLElement | null = null;
-    for (const b of bubbles) {
-      if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
-      else break;
-    }
-    if (cur) {
-      const label = cur.getAttribute('data-sticky-label');
-      // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose
-      // hover mask ("Preview") and file chips are in the DOM regardless of visibility, and a raw
-      // textContent would splice those labels in front of the question.
-      setStuck({
-        seq: cur.getAttribute('data-seq'),
-        label: label ?? STICKY_LABEL,
-        text: label === null
-          ? cur.querySelector('.md')?.textContent || ''
-          : cur.getAttribute('data-sticky-text') || '',
-      });
-    } else if (hasMoreOlderRef.current) {
-      // No loaded user prompt sits above the viewport, but older pages remain: the prompt for
-      // the content now in view is in an unloaded page. Don't blank the bar — show a loading
-      // state and pull the earlier page in (no-op if one is already in flight), so measure
-      // re-runs after the prepend and resolves the real question.
-      setStuck({ seq: null, label: STICKY_LABEL, text: '', loading: true });
-      loadOlder();
-    } else {
-      setStuck(null);
-    }
-  }, [loadOlder, loadNewer]);
-  // The same button in a window opened at a record: the latest message is past the gap, so the window
-  // is traded for the tail (backToLatestRef), and the record leaves the URL — a reload now opens at the
-  // latest message, which is where the reader went.
-  const backToLatest = useCallback(() => {
-    reviewPositionHeldRef.current = false;
-    atBottomRef.current = true;
-    setAtBottom(true);
-    backToLatestRef.current?.();
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.delete(RECORD_PARAM);
-        return next;
-      },
-      { replace: true },
-    );
-  }, [setSearchParams]);
   // Snap back to the live tail; the scroll events it fires re-pin atBottomRef via measure().
   const scrollToBottom = useCallback(() => {
     reviewPositionHeldRef.current = false;
@@ -2899,8 +2514,11 @@ export function WorkspaceView({
   // The workspace whose conversation list this column is. The route names it on /workspaces/<id>;
   // a /sessions/<id> deep link doesn't, so it's latched from the open session once that
   // resolves (see the effect below) — the query itself is scoped by it, so it can't be
-  // derived further down where the list it would depend on is built.
-  const [scopeWorkspaceId, setScopeWorkspaceId] = useState<string | null>(lockedWorkspaceId ?? null);
+  // derived further down where the list it would depend on is built. On a reload of a session's
+  // page the splash has already read that session (BootGate), so the list starts in its workspace:
+  // starting from none, it read the runner's whole Open list first and this workspace's a frame later.
+  const [scopeWorkspaceId, setScopeWorkspaceId] = useState<string | null>(() =>
+    lockedWorkspaceId ?? qc.getQueryData(sessionQuery(selectedId).queryKey)?.workspace?.id ?? null);
   // How much of the list is loaded. One page on open; scrolling toward the end widens the
   // window (see loadMoreSessions), which re-keys the query to the larger page.
   const [sessionLimit, setSessionLimit] = useState(SESSION_PAGE_SIZE);
@@ -2934,13 +2552,17 @@ export function WorkspaceView({
     limit: scopeWorkspaceId && (foldersShown || projectsShown) ? null : sessionLimit,
   });
   const sessionsKey = sessionsOpts.queryKey;
-  // While the control-plane stream is connected it pushes list changes (a coalesced refetch per
-  // event), so stop the 4s poll; on any stream gap `controlLive` flips false and it resumes.
+  // While the control-plane stream is connected it re-reads the list on every event that touches
+  // it, so the poll is only the list budget's safety read; on any stream gap `controlLive` flips
+  // false and the shared outage backoff takes over (lib/listBudget).
   const controlLive = useControlPlaneLive();
+  // What a write made here re-reads the lists with: in the stream's coalescing window, which the
+  // server's own event for the write joins (W5).
+  const refreshSessionLists = useRefreshSessionLists();
   const sessionsQ = useQuery({
     ...sessionsOpts,
     enabled: !openProjectId,
-    refetchInterval: controlLive || openProjectId ? false : 4000,
+    refetchInterval: openProjectId ? false : (query) => listPollMs(controlLive, query),
     // Widening the window re-keys the query, so hold the rows already on screen while the
     // larger page loads instead of blanking the list. Only within one scope (every key part
     // but the page size): another scope's rows must never stand in for this one's, even for
@@ -3030,11 +2652,18 @@ export function WorkspaceView({
       // server runs after it has answered. Then it goes quiet.
       if (detail && mergeRepairLoopLive(detail)) return 3000;
       // A deep-linked/Completed ENDING row may already be absent from the Open list. Keep polling
-      // its own current detail until terminal instead of relying solely on selectedFromList.
-      return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
+      // its own current detail until terminal instead of relying solely on selectedFromList. Every
+      // `session.*` event about it re-reads it (useControlPlane), so while the stream is live this
+      // is the list budget's safety read.
+      return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? listPollMs(controlLive, q, 5000) : false;
     },
   });
   const detailForSelected = sessionDetailQ.data?.id === selectedId ? sessionDetailQ.data : null;
+  // A wiki chat's full page draws the same cards as its panel (contract `chat.drafts.toolResult`, `chat.binding.read`).
+  const wikiChatCards = useWikiChatSessionCards(
+    selectedId ?? null,
+    (detailForSelected as { wikiChatSpaceId?: string | null } | null)?.wikiChatSpaceId ?? null,
+  );
   // The renderer is chosen by the DETAIL's answer, never by `kind` on a list row: a session row is
   // `kind: 'session'` there, and a landing's own flag is `sessionKind` (§2.9 LS6). A landing whose
   // row has not been inserted yet answers the same way through its pre-generated id (LS1), so the
@@ -3322,7 +2951,14 @@ export function WorkspaceView({
   // list lands, and the case where no workspace resolves at all.
   const resolvedWorkspaceId =
     lockedWorkspaceId ?? selected?.workspace?.id ?? detailForSelected?.workspace?.id ?? null;
-  useEffect(() => setScopeWorkspaceId(resolvedWorkspaceId), [resolvedWorkspaceId]);
+  // Until the open session's detail answers, a workspace nothing names is not "no workspace": the scope
+  // stays as it is. Narrowing to the workspace the session's row named swaps the list for one still
+  // loading, so the row is gone for a moment. Widening again would find it again, and the two would
+  // trade places without ever yielding to the reads that end this: React's update limit, on the page.
+  const workspaceUnknown = !!selectedId && !resolvedWorkspaceId && !detailForSelected;
+  useEffect(() => {
+    if (!workspaceUnknown) setScopeWorkspaceId(resolvedWorkspaceId);
+  }, [resolvedWorkspaceId, workspaceUnknown]);
   const visibleSessions = useMemo(() => {
     let list = resolvedWorkspaceId ? sessions.filter((s) => s.workspace?.id === resolvedWorkspaceId) : sessions;
     // The tag filter is the query's too; re-applying it here keeps arrow-nav, auto-select and
@@ -3332,22 +2968,24 @@ export function WorkspaceView({
     return list;
   }, [sessions, resolvedWorkspaceId, tagFilter]);
   // Other workspaces may contain only workers. Read the project's words across workspaces,
-  // keeping this view's activity and folder count scoped to its own members.
+  // keeping this view's activity and folder count scoped to its own members. From the list's first
+  // frame, not a render later when `projectsShown` catches up: the landing waits on these reads.
   const projectData = useSessionProjectData({
-    sessions: visibleSessions, view: effectiveView, enabled: projectsShown && !openProjectId,
+    sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !openProjectId,
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
-  // read ever sees one (§2.9 LS6).
+  // read ever sees one (§2.9 LS6). `priority`: the page is waiting on these two, so they do not
+  // queue behind the workspace list's background project reads (queries.ts projectRead).
   const projectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
-    refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const completedProjectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
-    refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   // The merges into main this project has made: they are rows of its Landings window (owner
   // 2026-10-27), and the page's Landings row counts today's.
@@ -3411,7 +3049,7 @@ export function WorkspaceView({
   const pageOpenItemsQ = useQuery({
     ...projectOpenItemsQuery(openProjectId ?? ''),
     enabled: !!openProjectId && pageNotStarted,
-    refetchInterval: controlLive ? 20_000 : 4000,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const pageStart = pageNotStarted
     ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
@@ -3462,6 +3100,7 @@ export function WorkspaceView({
       byTag: listByTag,
       folderId: openFolder?.id,
       coordinators: projectData.coordinators,
+      workspaceId: resolvedWorkspaceId,
       contentSessions: projectData.contentSessions,
       runnerOffline: runner.online === false,
       needsYou: sessionNeedsYou,
@@ -3470,23 +3109,15 @@ export function WorkspaceView({
         effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, machineName(runner)),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled],
+      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled,
+      resolvedWorkspaceId],
   );
-  // A project's entry stands for its coordinator only in the workspace the coordinator runs in.
-  // Elsewhere it holds that workspace's own members, as a folder row holds its sessions: the arrow keys
-  // pass over it and a landing never picks it, because opening the coordinator would swap this list for
-  // the coordinator's workspace. A click still opens the project's sessions page (owner 10-17,
-  // docs/mocks/project-row-other-workspace).
-  const entrySession = useCallback(
-    (entry: { coordinator: SessionListItem | null }): SessionListItem[] =>
-      entry.coordinator && (!resolvedWorkspaceId || entry.coordinator.workspace?.id === resolvedWorkspaceId)
-        ? [entry.coordinator] : [],
-    [resolvedWorkspaceId],
-  );
+  // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
+  // for the coordinator; one with no coordinator is passed over, as a folder row is.
   const listedSessions = useMemo(
     () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
-      ? entrySession(entry) : [entry]),
-    [folderListing, openProjectId, projectMembers, entrySession],
+      ? entry.coordinator ? [entry.coordinator] : [] : [entry]),
+    [folderListing, openProjectId, projectMembers],
   );
   // Where a session opened from this list lives. On a folder's page the page goes along, so the
   // list stays on it while the conversations it lists are opened one after another.
@@ -3592,8 +3223,8 @@ export function WorkspaceView({
   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
   // "open the next one after completing") has to walk this, not the pre-section list.
   const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
-    entry.kind === 'project' ? entrySession(entry) : [entry],
-  )), [sections, entrySession]);
+    entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
+  )), [sections]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/workspaces/<id>/new),
@@ -3628,27 +3259,33 @@ export function WorkspaceView({
   // opens a session so the right pane is never blank. Prefer the one the user last had open
   // for this workspace (remembered above) — reopening where they left off — and fall back to the
   // most recent when there's no memory (or it's since been completed/trashed out of view).
-  // replace() keeps it out of history; Completed/Trash never auto-open.
+  // replace() keeps it out of history; Completed/Trash never auto-open. A project's Landings window
+  // is the right pane already, and its own address must not leave for a conversation.
   useEffect(() => {
     // On mobile the list is its own full screen — auto-opening would trap the back
     // button (it returns here, which would immediately redirect into a session again).
-    if (openProjectId || isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
+    if (openProjectId || landingsProjectId || isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
       return;
     // Not before the folders are known: the session opened is one the list shows, and until then a
     // session filed in a folder could be picked from under it. A server without folders answers
     // with an error, which is known too.
     if (foldersQ.isPending) return;
+    // Nor before each project's coordinator is found: where it runs decides whether the project's members
+    // here are rows of their own or held in its row (owner 2026-11-07).
+    if (projectData.placing) return;
     const remembered = scopeWorkspaceId ? lastSessionByWorkspace.get(scopeWorkspaceId) : undefined;
     const target = listedSessions.find((s) => s.id === remembered) ?? listedSessions[0];
     if (target) navigate(sessionItemPath(target), { replace: true });
   }, [
     isMobile,
     openProjectId,
+    landingsProjectId,
     selectedId,
     composingRoute,
     view,
     sessionsQ.isSuccess,
     foldersQ.isPending,
+    projectData.placing,
     listedSessions,
     scopeWorkspaceId,
     navigate,
@@ -4296,69 +3933,200 @@ export function WorkspaceView({
       setProviderMenuOpen(true);
     }, 0);
   };
-  const scopedEvents = useMemo(
-    () => (eventsSessionId === selectedId ? events : []),
-    [events, eventsSessionId, selectedId],
-  );
-  const scopedLiveToolOutputs =
-    liveToolOutputState.sessionId === selectedId
-      ? liveToolOutputState.outputs
-      : EMPTY_LIVE_TOOL_OUTPUTS;
-  const scopedLiveTaskProgress =
-    liveTaskProgressState.sessionId === selectedId
-      ? liveTaskProgressState.progress
-      : EMPTY_LIVE_TASK_PROGRESS;
-  // Which of the workspace's Agent/Workflow calls are still at work — the tray's own list, read the
-  // same way, so a card's spinner and its tray row always agree.
-  const runningTasks = useMemo(() => {
-    const running = new Set<string>();
-    const shells = mergeBackgroundShells(serverBgShells, deriveBackgroundShells(events, { sessionLive: live }));
-    for (const s of shells) {
-      if ((s.kind === 'agent' || s.kind === 'workflow') && s.status === 'running') running.add(s.toolUseId);
+  // The polled status the stream falls back on for idleness, should its turn_end be missed.
+  const runStatus = selectedSession ? sessionRunStatusOf(selectedSession) : undefined;
+  // A terminal run has no turn in flight either, and it may have reached that state
+  // without a turn_end — so this is the recovery path when the `final` event was the one
+  // that got missed. Deliberately the live/terminal split, not "anything but RUNNING":
+  // a QUEUED session has nothing running yet, but the next message still has to queue
+  // behind the turn it is waiting for.
+  const runTerminal = !!selectedSession && isSessionTerminal(selectedSession);
+  // The open session's conversation: its event window, the live stream that extends it, and what
+  // that stream keeps beside it (lib/useSessionStream). This view's scroll state hears where a
+  // linked record is and when older events are about to go in above the reader.
+  const stream = useSessionStream({
+    sessionId: selectedId,
+    landingSession,
+    recordAt,
+    live,
+    runStatus,
+    runTerminal,
+    revealRecord: (sessionId, seq) => {
+      // The reader came for this record, not the latest message: nothing may pin to the bottom.
+      atBottomRef.current = false;
+      setAtBottom(false);
+      pendingRecordRef.current = { sessionId, seq };
+      setRecordTick((n) => n + 1);
+    },
+    forgetRecord: () => {
+      pendingRecordRef.current = null;
+    },
+    beforePrepend: () => {
+      const el = scrollRef.current;
+      if (el) {
+        prependAnchorRef.current = {
+          prevHeight: el.scrollHeight,
+          prevTop: el.scrollTop,
+          toTop: jumpingToStartRef.current,
+        };
+      }
+    },
+  });
+  const {
+    events,
+    eventsSessionId,
+    transcriptEvents,
+    visibleQueuedTurns,
+    seeding,
+    detached,
+    loadingOlder,
+    loadingNewer,
+    streamingText,
+    streamingThink,
+    liveToolOutputs: scopedLiveToolOutputs,
+    liveTaskProgress: scopedLiveTaskProgress,
+    approvals,
+    setApprovals,
+    idle,
+    setIdle,
+    queued,
+    setQueued,
+    setAcceptedUserTurns,
+    serverBgShells,
+    loadOlder,
+    loadNewer,
+    hasOlderNow,
+    oldestSeqNow,
+    detachedNow,
+    backToLatest: streamBackToLatest,
+  } = stream;
+  // Walk the pages back until the session's first message is loaded, then sit at the top.
+  //
+  // Scrolling up alone can't get there: each page lands with the reader's position anchored
+  // (below), which puts them a page BELOW the top again, so the start recedes once per page and a
+  // long session's first message is unreachable in practice. This is that loop, made explicit —
+  // and bounded, so it can't become an unattended full-history download.
+  const jumpToStart = useCallback(async (): Promise<void> => {
+    if (jumpingToStartRef.current) return;
+    const session = selectedIdRef.current;
+    jumpingToStartRef.current = true;
+    // Leaving the tail is the whole point, so say so before the first page lands: a transcript
+    // still counting itself pinned re-scrolls to the bottom on every content change, which would
+    // undo each page of this walk as it arrives.
+    atBottomRef.current = false;
+    setAtBottom(false);
+    try {
+      for (let page = 0; page < JUMP_TO_START_PAGES && hasOlderNow(); page++) {
+        if (!(await loadOlder())) break; // that was the end of it (or the session was switched)
+      }
+    } finally {
+      jumpingToStartRef.current = false;
     }
-    return running;
-  }, [events, live, serverBgShells]);
-  const taskActivity = useMemo<TaskActivity>(
-    () => ({ live: scopedLiveTaskProgress, running: runningTasks }),
-    [scopedLiveTaskProgress, runningTasks],
-  );
-  const visibleAcceptedUserTurns = useMemo(
-    () =>
-      acceptedUserTurns.filter(
-        (turn) =>
-          turn.sessionId === selectedId &&
-          !acceptedUserTurnLanded(turn, eventsSessionId, scopedEvents),
-      ),
-    [acceptedUserTurns, eventsSessionId, scopedEvents, selectedId],
-  );
-  const optimisticTranscriptEvents = useMemo(() => {
-    if (visibleAcceptedUserTurns.length === 0) return scopedEvents;
-    const lastSeq = scopedEvents.reduce((max, event) => Math.max(max, event.seq), 0);
-    return [
-      ...scopedEvents,
-      ...visibleAcceptedUserTurns.map((turn, index) =>
-        acceptedUserTurnEvent(
-          turn,
-          lastSeq + (index + 1) / (visibleAcceptedUserTurns.length + 1),
-        ),
-      ),
-    ];
-  }, [scopedEvents, visibleAcceptedUserTurns]);
-  const scopedQueuedTurns = useMemo(
-    () => (queuedSessionId === selectedId ? queued : []),
-    [queued, queuedSessionId, selectedId],
-  );
-  const transcriptEvents = useMemo(
-    () => transcriptEventsWithDurableDeliveryReceipts(
-      optimisticTranscriptEvents,
-      scopedQueuedTurns,
-    ),
-    [optimisticTranscriptEvents, scopedQueuedTurns],
-  );
-  const visibleQueuedTurns = useMemo(
-    () => queuedTurnsOutsideTranscript(scopedQueuedTurns, transcriptEvents),
-    [scopedQueuedTurns, transcriptEvents],
-  );
+    // Each page the walk pulled in lands pinned to the top (the anchor branch below); this catches
+    // the case where the walk ended without one — nothing more to load, or the cap was hit. Not
+    // when the reader has moved on to another session, whose transcript this is now.
+    if (selectedIdRef.current === session) scrollRef.current?.scrollTo({ top: 0 });
+  }, [loadOlder, hasOlderNow]);
+  // Recompute, on scroll and after content changes: are we at the bottom, and which top-level
+  // user bubble (if any) has scrolled above the viewport top (= the prompt to surface)?
+  const measure = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) {
+      setStuck(null);
+      return;
+    }
+    const top = el.scrollTop;
+    // Pin to the bottom while at (or near) it; un-pin only when the READER scrolls up. Both the
+    // reasoning behind that and the clients' copy of the rule live in tailPinning.ts.
+    const sample = sampleTail(el);
+    atBottomRef.current = !reviewPositionHeldRef.current && pinnedToTail(
+      atBottomRef.current,
+      lastSampleRef.current,
+      sample,
+      performance.now() - readerInputAtRef.current < READER_INPUT_GRACE_MS,
+    );
+    lastSampleRef.current = sample;
+    // A window opened at a record is never at the live tail, whatever its scroll says: its bottom is a
+    // gap, so nothing may pin there — and near it the next newer page comes in.
+    if (detachedNow()) {
+      atBottomRef.current = false;
+      if (el.scrollHeight - top - el.clientHeight < LOAD_OLDER_AT) loadNewer();
+    }
+    // Whether the tail is out of view, whatever put it there, with the pin's own slack — so the
+    // button and the follow agree on where the end is. Only a pinned transcript is decided here (one
+    // the reader scrolled up shows the button already); the tail back in view ends it at once.
+    if (!atBottomRef.current || sample.bottomGap <= NEAR_BOTTOM) {
+      window.clearTimeout(strandTimerRef.current);
+      strandTimerRef.current = undefined;
+      setStranded(false);
+    } else if (strandTimerRef.current === undefined) {
+      strandTimerRef.current = window.setTimeout(() => setStranded(true), STRANDED_AFTER_MS);
+    }
+    setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
+    setHasMoreOlder(hasOlderNow()); // same bail-out; drives the way back to the start
+    // Near the top with older history still on the server → pull in the next page.
+    if (top < LOAD_OLDER_AT) loadOlder();
+    const topY = el.getBoundingClientRect().top;
+    setOpenItemsAbove(
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+        .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
+        .map((card) => card.getAttribute('data-open-item'))
+        .join(' '),
+    );
+    // A turn the control plane queued is one of these too — it is where the answer under it starts,
+    // so it is where the bar has to point — but it is no bubble and nobody typed it, so its card
+    // hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued twin in the
+    // tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a background
+    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is still
+    // giving (WatchWakeCard, BackgroundWakeCard), so it carries no label and the bar keeps the question.
+    const bubbles = Array.from(
+      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
+    ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
+    let cur: HTMLElement | null = null;
+    for (const b of bubbles) {
+      if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
+      else break;
+    }
+    if (cur) {
+      const label = cur.getAttribute('data-sticky-label');
+      // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose
+      // hover mask ("Preview") and file chips are in the DOM regardless of visibility, and a raw
+      // textContent would splice those labels in front of the question.
+      setStuck({
+        seq: cur.getAttribute('data-seq'),
+        label: label ?? STICKY_LABEL,
+        text: label === null
+          ? cur.querySelector('.md')?.textContent || ''
+          : cur.getAttribute('data-sticky-text') || '',
+      });
+    } else if (hasOlderNow()) {
+      // No loaded user prompt sits above the viewport, but older pages remain: the prompt for
+      // the content now in view is in an unloaded page. Don't blank the bar — show a loading
+      // state and pull the earlier page in (no-op if one is already in flight), so measure
+      // re-runs after the prepend and resolves the real question.
+      setStuck({ seq: null, label: STICKY_LABEL, text: '', loading: true });
+      loadOlder();
+    } else {
+      setStuck(null);
+    }
+  }, [loadOlder, loadNewer, hasOlderNow, detachedNow]);
+  // The same button in a window opened at a record: the latest message is past the gap, so the window
+  // is traded for the tail (the stream's backToLatest), and the record leaves the URL — a reload now
+  // opens at the latest message, which is where the reader went.
+  const backToLatest = useCallback(() => {
+    reviewPositionHeldRef.current = false;
+    atBottomRef.current = true;
+    setAtBottom(true);
+    streamBackToLatest();
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete(RECORD_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams, streamBackToLatest]);
   // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be. Only
   // the rows the tray does not hold (`inPendingTray`): what Orbit queued, and a message whose
   // delivery settled undelivered, which is part of the conversation's record.
@@ -4369,25 +4137,6 @@ export function WorkspaceView({
         .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
   );
-  // The reader's steers the engine has not read yet: the transcript leaves them out, and the tray
-  // above the composer holds them (Transcript `UnreadSteer`).
-  const unreadSteers = useMemo(
-    () => unreadSteersOf(transcriptEvents, turnImages),
-    [transcriptEvents, turnImages],
-  );
-  // The render-time filter above removes duplication in the same frame the SSE event lands. Trim
-  // the acknowledged copy afterwards so landed turns do not accumulate in memory.
-  useEffect(() => {
-    if (!selectedId) return;
-    setAcceptedUserTurns((current) => {
-      const next = current.filter(
-        (turn) =>
-          turn.sessionId !== selectedId ||
-          !acceptedUserTurnLanded(turn, eventsSessionId, scopedEvents),
-      );
-      return next.length === current.length ? current : next;
-    });
-  }, [acceptedUserTurns, eventsSessionId, scopedEvents, selectedId]);
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -4400,23 +4149,6 @@ export function WorkspaceView({
     seeding,
     streaming: !!streamingText || !!streamingThink,
   });
-  // Null when nothing is being generated, so the transcript can skip splitting itself in two
-  // (and keep grouping runs of tool calls across the seam) whenever there are no drafts to place.
-  const streamingDrafts = useMemo(
-    () =>
-      streamingText || streamingThink
-        ? { text: streamingText, think: streamingThink, thinkStartedAt: thinkStartedAt ?? undefined }
-        : null,
-    [streamingText, streamingThink, thinkStartedAt],
-  );
-  // Mirror the live reasoning and its start into the refs the SSE handler reads, so a block that
-  // closes with no text of its own can be settled from what was streamed.
-  useEffect(() => {
-    streamingThinkRef.current = streamingThink;
-  }, [streamingThink]);
-  useEffect(() => {
-    thinkStartedAtRef.current = thinkStartedAt;
-  }, [thinkStartedAt]);
 
   // Mirror the live composer text into a ref. Declared before the switch effect so that
   // on a commit changing both `text` and `draftKey` (e.g. send → navigate + clear) this
@@ -4436,33 +4168,11 @@ export function WorkspaceView({
     prevDraftKey.current = draftKey;
   }, [draftKey]);
 
-  // Subscribe to the session's event stream; reset only when the selection changes.
+  // What this view keeps beside the conversation belongs to the session it was kept for: reset it
+  // when the selection changes, in the same commit as the stream's own reset (useSessionStream).
   useEffect(() => {
-    setEventsSessionId(selectedId);
-    setQueuedSessionId(selectedId);
-    // Keep API-accepted turns across navigation. Rendering is session-scoped above, the list is
-    // bounded to 32, and returning to this session lets its matching durable user event retire the
-    // transient copy. Dropping it here creates a visible REST debounce gap and loses it entirely
-    // when startup fails after acceptance but before the first user event.
-    // Live/ephemeral drafts belong to the previous selection — clear them at once.
-    setStreamingText('');
-    setStreamingThink('');
-    setLiveToolOutputState((current) =>
-      current.sessionId === selectedId && current.outputs.size === 0
-        ? current
-        : { sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS },
-    );
-    setLiveTaskProgressState((current) =>
-      current.sessionId === selectedId && current.progress.size === 0
-        ? current
-        : { sessionId: selectedId, progress: EMPTY_LIVE_TASK_PROGRESS },
-    );
-    streamAnchorRef.current = null;
-    setApprovals([]);
     setReplyTo(null);
-    setQueued([]);
     setLocalStatusCards([]);
-    setIdle(false);
     setStuck(null);
     // Staged uploads are scoped to the previous session (can't be linked to another), and
     // the sent-image previews are this session's object URLs — drop and revoke both.
@@ -4481,746 +4191,12 @@ export function WorkspaceView({
     window.clearTimeout(strandTimerRef.current); // nor is it stranded off a tail not yet drawn
     strandTimerRef.current = undefined;
     setStranded(false);
-    // Reset tail-first lazy-loading state for the session being opened.
+    // Reset the scroll half of tail-first lazy loading for the session being opened.
     prependAnchorRef.current = null;
-    loadingOlderRef.current = null;
     jumpingToStartRef.current = false; // a walk to the start belongs to the session it was run on
-    setLoadingOlder(false);
     setHasMoreOlder(false); // measure() re-reads it once this session's window is established
-    // Every session opens attached to its tail, unless its own link names a record (below).
-    newerCursorRef.current = null;
-    loadingNewerRef.current = null;
     pendingRecordRef.current = null;
-    setDetached(false);
-    setLoadingNewer(false);
-    if (!selectedId || landingSession) {
-      accRef.current = [];
-      setEvents([]);
-      seen.current = new Set();
-      oldestSeqRef.current = null;
-      hasMoreOlderRef.current = false;
-      followedRecordRef.current = null;
-      setSeeding(false);
-      return;
-    }
-    const isSeq = (s: unknown): s is number =>
-      typeof s === 'number' && s !== Number.MAX_SAFE_INTEGER;
-    const maxSeqOf = (list: RunEvent[]): number =>
-      list.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
-    // A link to one record of this session (`?at=`) opens on the page around that record — not on
-    // the cached window, which ends at the tail and may be nowhere near it.
-    const openAt = recordAtRef.current;
-    followedRecordRef.current = openAt ? `${selectedId} ${openAt}` : null;
-    // Seed from cache for an instant paint; touch the entry so it's most-recently-used. On a
-    // cache miss the transcript stays empty until boot() fetches the newest page below (no more
-    // replaying the whole history over SSE — that's what caused a long session to "fast-forward"
-    // on open). The older-pagination boundary is restored from cache, or established by boot().
-    const cache = transcriptCache.current;
-    const entry = openAt ? undefined : cache.get(selectedId);
-    const cached = entry?.events ?? [];
-    if (entry) {
-      cache.delete(selectedId);
-      cache.set(selectedId, entry);
-    }
-    accRef.current = cached;
-    setEvents(cached);
-    setSeeding(cached.length === 0); // nothing to paint yet — show the skeleton, not a blank pane
-    setServerBgShells([]); // clear the previous session's list until the fetch below repopulates it
-    seen.current = new Set(cached.map((e) => e.seq).filter(isSeq));
-    oldestSeqRef.current = entry ? entry.oldestSeq : null;
-    hasMoreOlderRef.current = entry ? entry.hasMoreOlder : false;
-    let es: EventSource | null = null;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    let closed = false;
-    // Queue refreshes can overlap when another client quickly adds/withdraws turns. Only the most
-    // recently requested snapshot may paint, or a slower stale response can resurrect a cancelled
-    // row. The snapshot is authoritative for rows known when its request began; reconcile below
-    // preserves a local POST that committed while that older request was in flight.
-    let queuedRefreshGeneration = 0;
-    const refreshQueued = (): void => {
-      const generation = ++queuedRefreshGeneration;
-      const knownBefore = new Set(queuedRef.current.map((turn) => turn.turnId));
-      const knownAcceptedBefore = new Set(
-        acceptedUserTurnsRef.current
-          .filter((turn) => turn.sessionId === selectedId)
-          .map((turn) => turn.key),
-      );
-      listQueuedTurns(selectedId)
-        .then((rows) => {
-          if (closed || generation !== queuedRefreshGeneration) return;
-          const acceptedRows = rows.filter(
-            (row) => turnPlacementOf(row) === 'accepted' && row.kind !== 'shell',
-          );
-          const accepted = acceptedRows
-            .map((row): AcceptedUserTurn => ({
-              key: row.turnId,
-              sessionId: selectedId,
-              source: 'activeSnapshot',
-              turnId: row.turnId,
-              text: row.content,
-              acceptedAt: row.createdAt ?? new Date().toISOString(),
-              attachments: (row.attachments ?? []).map((attachment) => ({
-                id: attachment.id,
-                mime: attachment.mimeType || 'application/octet-stream',
-              })),
-              // Every card the snapshot carried, so the placeholder this row paints is the card the
-              // runner's echo will replace it with.
-              ...turnCardsOf(row),
-            }))
-            .filter(
-              (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
-            );
-          setAcceptedUserTurns((current) =>
-            reconcileAcceptedUserTurnSnapshot(
-              accepted,
-              current,
-              selectedId,
-              knownAcceptedBefore,
-            ),
-          );
-          const serverQueued = rows.flatMap((row) => {
-            const queued = queuedTurnFromActiveSnapshot(row);
-            return queued ? [queued] : [];
-          });
-          const representedTurnIds = new Set(rows.map((row) => row.turnId));
-          setQueued((current) =>
-            reconcileQueuedTurnSnapshot(
-              serverQueued,
-              current,
-              knownBefore,
-              representedTurnIds,
-            ),
-          );
-        })
-        .catch(() => undefined);
-    };
-    // Set when a `final` event arrives: the connection is dropped (don't hold an idle
-    // stream to a finished session) but NOT permanently — unlike `closed`, a paused
-    // stream can be re-opened in place when the session resumes (see resumeStreamRef).
-    let paused = false;
-    let fails = 0;
-    // Resume just past what's loaded so only the gap is streamed, not the whole history.
-    let lastSeq = cached.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
-    // The cursor the current connection opened at, and how many connections in a row have died
-    // without moving it. A reconnect that resumes from the same seq re-requests the same replay,
-    // so a cursor the client can't get past is a loop, not a retry — see reseed().
-    let seqAtConnect = -1;
-    let stalled = 0;
-    const writeCache = (): void => {
-      // A window opened at a record ends at a gap, not at the tail: a reopen must not resume from it.
-      if (newerCursorRef.current !== null) return;
-      const snapshot = {
-        events: accRef.current,
-        oldestSeq: oldestSeqRef.current,
-        hasMoreOlder: hasMoreOlderRef.current,
-      };
-      cache.set(selectedId, snapshot);
-      if (cache.size > TRANSCRIPT_CACHE_MAX) {
-        const oldest = cache.keys().next().value;
-        if (oldest !== undefined && oldest !== selectedId) cache.delete(oldest);
-      }
-      // Mirror into the persistent L2 so the same transcript survives a reload. Returns at once —
-      // this runs on every appended event, and the store batches the actual write into an idle
-      // callback rather than opening a transaction per token.
-      saveTranscript(selectedId, snapshot);
-    };
-    const seedAbort = new AbortController();
-    // Pending release of the events the first paint held back (see firstPaintSlice).
-    let paintRest: ReturnType<typeof setTimeout> | undefined;
-    const stop = (): void => {
-      closed = true;
-      if (retry) clearTimeout(retry);
-      if (paintRest) clearTimeout(paintRest);
-      es?.close();
-      // Scrubbing the list fires one tail page per session passed through (they're no longer
-      // debounced — see below); aborting the superseded one keeps at most a single seed in
-      // flight instead of a burst the user will never look at.
-      seedAbort.abort();
-    };
-    const push = (ev: RunEvent): void => {
-      accRef.current = [...accRef.current, ev];
-      writeCache();
-      setEvents(accRef.current);
-    };
-    const applyLiveTaskEvent = (ev: RunEvent): void => {
-      setLiveTaskProgressState((current) => {
-        const base = current.sessionId === selectedId ? current.progress : EMPTY_LIVE_TASK_PROGRESS;
-        const progress = reduceLiveTaskProgress(base, ev);
-        return current.sessionId === selectedId && progress === current.progress
-          ? current
-          : { sessionId: selectedId, progress };
-      });
-    };
-    const applyLiveToolEvent = (ev: RunEvent): void => {
-      setLiveToolOutputState((current) => {
-        const base =
-          current.sessionId === selectedId ? current.outputs : EMPTY_LIVE_TOOL_OUTPUTS;
-        const outputs = reduceLiveToolOutputs(base, ev);
-        return current.sessionId === selectedId && outputs === current.outputs
-          ? current
-          : { sessionId: selectedId, outputs };
-      });
-    };
-    /**
-     * Throw the loaded window away and start over from a tail page, exactly as a cold open does.
-     *
-     * Two callers, one situation: the cursor this tab holds is not a viable place to resume from.
-     * The server says so with `resync` when the gap is too long to replay; the stall counter below
-     * infers it when reconnecting from the same seq keeps failing to advance it. Both used to be
-     * unrecoverable in place — the tab reconnected from that cursor forever, re-downloading the
-     * same replay while the session it was watching ran on without it.
-     *
-     * Resetting `seen` and the pagination boundary along with the events is what makes this a real
-     * re-seed rather than a patch over a hole: the tail page re-establishes both.
-     */
-    const reseed = async (): Promise<void> => {
-      accRef.current = [];
-      seen.current = new Set();
-      setLiveToolOutputState({ sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS });
-      setLiveTaskProgressState({ sessionId: selectedId, progress: EMPTY_LIVE_TASK_PROGRESS });
-      oldestSeqRef.current = null;
-      hasMoreOlderRef.current = false;
-      lastSeq = 0;
-      stalled = 0;
-      try {
-        const page = await reseedWithActiveSnapshot(
-          () => getSessionEventPage(selectedId, {
-            tail: TAIL_PAGE,
-            signal: seedAbort.signal,
-          }),
-          () => { if (!closed) refreshQueued(); },
-        );
-        if (closed) return;
-        accRef.current = page.events;
-        for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
-        oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
-        hasMoreOlderRef.current = page.hasMore;
-        lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
-        setEvents(accRef.current);
-        writeCache();
-      } catch {
-        // Leave lastSeq at 0 and let the reconnect below carry it: a cursor-less connect is
-        // server-capped, so the fallback for a failed re-seed is still a bounded replay.
-      }
-      if (closed) return;
-      // `fails` is deliberately NOT reset: re-seeding is a different way to spend the same retry
-      // budget, not a fresh start. Zeroing it would turn the give-up below into an unreachable
-      // branch — a permanently broken stream would reconnect, stall, re-seed, forever.
-      connect();
-    };
-    const connect = (): void => {
-      seqAtConnect = lastSeq;
-      es = new EventSource(sessionEventsUrl(selectedId, lastSeq));
-      es.onmessage = (e) => {
-        fails = 0; // a message means the stream is healthy
-        const ev = JSON.parse(e.data) as RunEvent;
-        // Server keepalive (~20s): a health byte with no seq/payload, sent so an idle transcript
-        // stream isn't reaped by Cloudflare. Discard it by type before the reducer below, which
-        // would otherwise dedup-miss (seq undefined) and append it as a junk transcript row.
-        if (ev.type === 'ping') return;
-        // The server refused to replay our gap — it's longer than it will stream (SSE_GAP_CAP).
-        // Handled here, before the seq bookkeeping and the dedup below, because it rides seq 0
-        // like the approval nudges. Re-seed from a tail page instead; this connection is spent.
-        if (ev.type === 'resync') {
-          es?.close();
-          void reseed();
-          return;
-        }
-        // A still-PENDING turn is not in the transcript stream until the runner leases it.
-        // Re-fetch the durable queue when another web/native client adds or withdraws one.
-        if (ev.type === 'queued_turns_changed') {
-          refreshQueued();
-          return;
-        }
-        // Whole-output snapshots for a foreground `!` shell are live animation, like the text
-        // deltas below: replace their side-channel value and return before advancing lastSeq,
-        // entering `seen`, or writing the transcript cache. A runner restart/reconnect must never
-        // turn one into durable history or make its ephemeral seq the resume cursor.
-        if (ev.type === 'tool_output') {
-          applyLiveToolEvent(ev);
-          return;
-        }
-        // How far a background agent or workflow has got: animation like the snapshot above — the
-        // task's end (a durable background_task) carries the last of it into the transcript.
-        if (ev.type === 'task_progress') {
-          applyLiveTaskEvent(ev);
-          return;
-        }
-        if (ev.type === 'background_task' || (ev.type === 'system' && ev.payload?.subtype === 'resumed')) {
-          applyLiveTaskEvent(ev);
-        }
-        // The durable result wins in the same render that appends it. Clearing here also releases
-        // the potentially large snapshot once the result has entered the ordinary transcript.
-        if (
-          ev.type === 'tool_result' ||
-          ev.type === 'turn_end' ||
-          ev.payload?.final ||
-          (ev.type === 'system' && ev.payload?.subtype === 'resumed')
-        ) {
-          applyLiveToolEvent(ev);
-        }
-        if (typeof ev.seq === 'number' && ev.seq !== Number.MAX_SAFE_INTEGER) {
-          lastSeq = Math.max(lastSeq, ev.seq);
-        }
-        if (ev.payload?.final) {
-          // Session finalized (turn-complete failure, idle-recycle, or a user end). Drop
-          // the live connection so we don't hold an idle stream — but a gracefully-ended
-          // session is resumable IN PLACE (same selectedId, so this effect
-          // doesn't re-run), and a resumed turn's events would be published to a stream
-          // we'd have permanently closed, leaving the open transcript stale while the
-          // polled sidebar advances. So pause instead of closing for good; the liveness
-          // watcher re-opens it (replaying the missed seq) once the session is live again.
-          paused = true;
-          es?.close();
-          // However the run ended, no turn is in flight any more. `turn_end` is the
-          // only other event that says so, and a run that died before its first one —
-          // an engine that failed during session setup, a crash before the first
-          // reply — never emits it. Without this the console keeps the turn state of
-          // a session that is already terminal: a half-streamed bubble left mid-air,
-          // and the next message queued behind a turn that will never end.
-          setIdle(true);
-          setStreamingText('');
-          setStreamingThink('');
-          setThinkStartedAt(null);
-          streamAnchorRef.current = null;
-          // A snapshot started before this terminal signal must not resurrect an accepted/queued
-          // fallback after the terminal cleanup below.
-          queuedRefreshGeneration += 1;
-          setAcceptedUserTurns((current) =>
-            clearAcceptedUserTurnsForSession(current, selectedId),
-          );
-          return;
-        }
-        // Streaming increment: append to the in-progress assistant bubble. Don't
-        // dedup or store it — it's pure animation; the trailing `assistant` event
-        // carries the authoritative full text and finalizes the bubble.
-        //
-        // The first chunk of a stretch also fixes where that bubble sits: at the cursor as it
-        // stands now, so a mid-turn message the runner echoes back renders below it rather than
-        // above. See streamAnchorAfter for what moves that anchor afterwards.
-        if (ev.type === 'text_delta') {
-          const chunk = ev.payload?.text;
-          if (typeof chunk === 'string') {
-            streamAnchorRef.current = streamAnchorAfter(streamAnchorRef.current, ev, lastSeq);
-            setStreamingText((p) => p + chunk);
-          }
-          return;
-        }
-        if (ev.type === 'thinking_delta') {
-          const chunk = ev.payload?.text;
-          if (typeof chunk === 'string') {
-            streamAnchorRef.current = streamAnchorAfter(streamAnchorRef.current, ev, lastSeq);
-            setStreamingThink((p) => p + chunk);
-            // The first chunk of a stretch starts its clock; the rest ride the one already running.
-            setThinkStartedAt((at) => at ?? Date.now());
-          }
-          return;
-        }
-        // Approval nudges (live-only, seq 0) — handle BEFORE the seq dedup, which is
-        // keyed on seq and would drop the second one. They drive `approvals`, not the
-        // transcript reducer.
-        if (ev.type === 'approval_request') {
-          const p = ev.payload as { id: string; toolName: string; input: unknown; toolUseId?: string };
-          setApprovals((prev) =>
-            prev.some((x) => x.id === p.id)
-              ? prev
-              : [
-                  ...prev,
-                  { ...p, sessionId: selectedId, status: 'PENDING', createdAt: new Date().toISOString() } as ApprovalInfo,
-                ],
-          );
-          return;
-        }
-        if (ev.type === 'approval_resolved') {
-          const id = ev.payload?.id as string | undefined;
-          if (id) setApprovals((prev) => prev.filter((x) => x.id !== id));
-          return;
-        }
-        if (seen.current.has(ev.seq)) return;
-        seen.current.add(ev.seq);
-        // A block the provider closes with no text of its own would otherwise take its reasoning
-        // with it: the draft is cleared just below, and an empty durable event renders nothing.
-        // Keep what was streamed — and how long it took, when the runner did not say — on this
-        // LOCAL copy of the event. It is never sent back, so a reload still reads the server's
-        // empty text and still renders nothing, which is deliberate (see lib/thinkingDraft).
-        if (ev.type === 'thinking') {
-          const patch = settleThinking(
-            ev.payload,
-            streamingThinkRef.current,
-            thinkStartedAtRef.current,
-            Date.now(),
-          );
-          push(Object.keys(patch).length ? { ...ev, payload: { ...ev.payload, ...patch } } : ev);
-        } else {
-          push(ev);
-        }
-        // The authoritative full text (or a turn/user/interrupt boundary) supersedes
-        // the live drafts — clear them so streamed text isn't rendered twice. Text
-        // implies thinking is done, so a text/turn boundary clears both; the durable
-        // `thinking` block clears only its own draft. A mid-turn crash skips turn_end
-        // and re-spawns with a `resumed` system event — clear there too so a partial
-        // bubble can't outlive its turn. (Don't clear on every system event: claude's
-        // stderr also arrives as `system` and would wipe an in-progress bubble.)
-        // A steer is the one `user` event that is NOT a boundary — see supersedesLiveDrafts.
-        // Where the drafts belong afterwards is streamAnchorAfter's call: a boundary ends the
-        // stretch they were anchored to, while the model's own output (a closed thinking block,
-        // a tool call) moves the anchor past itself so what is still being generated follows it.
-        if (supersedesLiveDrafts(ev)) {
-          setStreamingText('');
-          setStreamingThink('');
-          setThinkStartedAt(null);
-        } else if (ev.type === 'thinking') {
-          setStreamingThink('');
-          setThinkStartedAt(null);
-        } else if (ev.type === 'system' && ev.payload?.subtype === 'resumed') {
-          setStreamingText('');
-          setStreamingThink('');
-          setThinkStartedAt(null);
-        }
-        streamAnchorRef.current = streamAnchorAfter(streamAnchorRef.current, ev, lastSeq);
-        // Track turn boundaries live so the composer re-enables the instant a turn
-        // ends, rather than waiting for the 4s session poll.
-        if (ev.type === 'turn_end') {
-          setIdle(true);
-          setAcceptedUserTurns((current) =>
-            clearAcceptedUserTurnsForTurn(current, selectedId, ev.turnId),
-          );
-          // The terminal boundary is persisted and replayable; use it to refresh the active
-          // snapshot too, so an accepted placeholder also clears when an older runner omitted the
-          // turn id or a queued successor moved into the executable head at the same boundary.
-          refreshQueued();
-          // Refresh the worktree status bar: the runner reports this turn's diff +
-          // isolation on /turn-complete. Delay a touch so that POST (which persists
-          // changed_files) lands before we refetch the detail, rather than racing the
-          // turn_end event broadcast.
-          setTimeout(() => qc.invalidateQueries({ queryKey: ['session', selectedId] }), 400);
-        }
-        else if (ev.type === 'user') {
-          setIdle(false);
-          // The runner just picked up this turn — it's now in the transcript, so drop
-          // it from the local queue (no-op if it wasn't ours / already cleared). Re-fetch too:
-          // an older queue request may have snapshotted this row just before the lease and could
-          // otherwise arrive afterwards and resurrect it; the generation fence drops that reply.
-          if (ev.turnId) {
-            setQueued((q) => q.filter((x) => x.turnId !== ev.turnId));
-          }
-          refreshQueued();
-        }
-      };
-      es.onerror = () => {
-        es?.close();
-        if (closed || paused) return;
-        // A connection that died without moving the cursor forward left us exactly where we
-        // started, so reconnecting asks the server for the same replay again. Once is a dropped
-        // connection; three in a row is a replay this tab cannot get through — the shape a single
-        // outsized event makes — and the only way out is to stop asking for it. See reseed().
-        stalled = lastSeq > seqAtConnect ? 0 : stalled + 1;
-        if (stalled >= RESEED_AFTER_STALLED_RECONNECTS) {
-          void reseed();
-          return;
-        }
-        // Auto-reconnect, resuming after lastSeq — survives long idle / redeploy
-        // drops (the seq dedup set makes any replay overlap harmless).
-        if (++fails > 12) return;
-        retry = setTimeout(connect, Math.min(2000 * fails, 15000) + Math.random() * 500);
-      };
-    };
-    // Bridge for the liveness watcher: re-open a stream paused by a `final` event once the
-    // session is live again. No-op unless paused (so it's safe to call on any status tick);
-    // reconnect resumes from lastSeq, so the server replays the turns missed while paused.
-    resumeStreamRef.current = () => {
-      if (closed || !paused) return;
-      paused = false;
-      fails = 0;
-      // A window opened at a record stays off the stream until it reaches the tail (joinLiveRef).
-      if (newerCursorRef.current !== null) return;
-      connect();
-    };
-    /**
-     * Make the page around a record the loaded window. Its older edge is set from the page's `before`
-     * cursor, as a tail page's `hasMore` would set it; where the page stops short of the latest event
-     * the newer edge stays open (newerCursorRef) and the stream stays closed, since what it streams
-     * belongs past the gap. The record is brought into view once its row has rendered.
-     */
-    const applyRecordPage = (page: TranscriptAroundPage): void => {
-      accRef.current = page.events;
-      seen.current = new Set(page.events.map((e) => e.seq).filter(isSeq));
-      oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
-      hasMoreOlderRef.current = page.before !== null;
-      lastSeq = maxSeqOf(page.events);
-      newerCursorRef.current = page.after;
-      setDetached(page.after !== null);
-      // Drafts streamed into the window being replaced are not this window's to show.
-      setStreamingText('');
-      setStreamingThink('');
-      setThinkStartedAt(null);
-      streamAnchorRef.current = null;
-      // The reader came for this record, not the latest message: nothing may pin to the bottom.
-      atBottomRef.current = false;
-      setAtBottom(false);
-      pendingRecordRef.current = { sessionId: selectedId, seq: page.anchor.seq };
-      setRecordTick((n) => n + 1);
-      setEvents(accRef.current);
-      setSeeding(false);
-      writeCache(); // only a page that reaches the tail is a window a reopen may resume from
-    };
-    // A detached window's last newer page reached the latest event: resume the stream from there.
-    joinLiveRef.current = () => {
-      if (closed) return;
-      lastSeq = maxSeqOf(accRef.current);
-      writeCache();
-      es?.close();
-      if (!paused) connect();
-    };
-    // "Jump to the latest" from a detached window: the latest message is past the gap, so the window
-    // is traded for a tail page and the stream reopens from it — reseed() is exactly that.
-    backToLatestRef.current = () => {
-      if (closed) return;
-      es?.close();
-      clearTimeout(retry);
-      newerCursorRef.current = null;
-      pendingRecordRef.current = null;
-      setDetached(false);
-      void reseed();
-    };
-    // A record of this session, named by a link followed while it is open. A record already in the
-    // window — every seq from its oldest to its newest is loaded — is a scroll; one elsewhere in the
-    // history replaces the window with the page around it, exactly as opening the session at it does.
-    openRecordRef.current = (recordId: string): void => {
-      void (async () => {
-        let page: TranscriptAroundPage;
-        try {
-          page = await getSessionEventPageAround(selectedId, recordId, {
-            limit: AROUND_PAGE,
-            signal: seedAbort.signal,
-          });
-        } catch {
-          if (!closed) message.info(RECORD_NOT_FOUND);
-          return;
-        }
-        if (closed) return;
-        const seq = page.anchor.seq;
-        const oldest = oldestSeqRef.current;
-        if (oldest !== null && seq >= oldest && seq <= maxSeqOf(accRef.current)) {
-          atBottomRef.current = false;
-          setAtBottom(false);
-          pendingRecordRef.current = { sessionId: selectedId, seq };
-          setRecordTick((n) => n + 1);
-          return;
-        }
-        es?.close();
-        es = null;
-        clearTimeout(retry);
-        applyRecordPage(page);
-        if (page.after === null && !paused) connect();
-      })();
-    };
-    // Tail-first seed, fired NOW rather than from the debounced block below: on a cache miss it
-    // is the only request whose answer the transcript is waiting on, so making it wait out the
-    // debounce — behind a whole-history /background scan, no less — was pure dead time under a
-    // blank pane. What the debounce protected against is covered by the abort in stop() instead.
-    // Null on a cache hit, where the SSE's replay of the gap after the cached seq is enough. The
-    // debounced block awaits this before connect(), so the stream still opens at the seq the
-    // page established, however long it took.
-    const seedTail = async (): Promise<void> => {
-      // L2 first: the same transcript, kept in IndexedDB so it outlives the page. A hit skips
-      // the tail page entirely — the SSE resumes from the stored max seq and replays only what
-      // happened since, exactly as an L1 hit does. A miss (or any error) returns null and falls
-      // through to the network below, so this can only save a request, never cost correctness.
-      const stored = await loadTranscript(selectedId);
-      if (closed) return;
-      if (stored && stored.events.length > 0) {
-        accRef.current = stored.events;
-        for (const e of stored.events) if (isSeq(e.seq)) seen.current.add(e.seq);
-        oldestSeqRef.current = stored.oldestSeq;
-        hasMoreOlderRef.current = stored.hasMoreOlder;
-        lastSeq = stored.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
-        const { now, deferred } = firstPaintSlice(stored.events);
-        setEvents(now);
-        setSeeding(false);
-        // Into L1 too, so switching away and back in this page load is synchronous again.
-        cache.set(selectedId, stored);
-        if (deferred) {
-          paintRest = setTimeout(() => {
-            if (!closed) setEvents(accRef.current);
-          }, 0);
-        }
-        return;
-      }
-      // Retry the tail seed a few times before giving up. A transient failure here used to fall
-      // straight through to the SSE with lastSeq=0, replaying the whole history (now server-capped,
-      // but still a needless full tail). Stop as soon as a page seeds; on total failure fall through.
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const page = await getSessionEventPage(selectedId, {
-            tail: TAIL_PAGE,
-            signal: seedAbort.signal,
-          });
-          if (closed) return;
-          accRef.current = page.events;
-          for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
-          oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
-          hasMoreOlderRef.current = page.hasMore;
-          lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
-          // Paint the newest slice first and release the rest after the browser has drawn it:
-          // a full page is a few hundred Markdown bodies to parse and highlight in one
-          // synchronous burst, which the user would otherwise spend staring at the skeleton.
-          // accRef keeps the whole page throughout, so the SSE and the cache are unaffected,
-          // and the remainder lands above a viewport that stays pinned to the tail.
-          const { now, deferred } = firstPaintSlice(page.events);
-          setEvents(now);
-          setSeeding(false); // history is on screen — drop the skeleton
-          writeCache();
-          if (deferred) {
-            // A macrotask, not rAF: rAF callbacks run BEFORE the paint they're queued for,
-            // which would merge the two renders and defeat the split.
-            paintRest = setTimeout(() => {
-              if (!closed) setEvents(accRef.current);
-            }, 0);
-          }
-          return;
-        } catch {
-          if (closed) return;
-          // Last attempt failed: fall through to the SSE (the server caps a cursor-less replay).
-          if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
-        }
-      }
-      // Every attempt failed. Clear the skeleton anyway rather than spin forever — the SSE
-      // replay below is the remaining path to content.
-      if (!closed) setSeeding(false);
-    };
-    // A link to one record: the page around it — or, for a record that is not this session's, the
-    // tail, with a note saying the link could not be followed.
-    const seedRecord = async (recordId: string): Promise<void> => {
-      try {
-        const page = await getSessionEventPageAround(selectedId, recordId, {
-          limit: AROUND_PAGE,
-          signal: seedAbort.signal,
-        });
-        if (closed) return;
-        applyRecordPage(page);
-        return;
-      } catch {
-        if (closed) return;
-        message.info(RECORD_NOT_FOUND);
-      }
-      await seedTail();
-    };
-    const seed: Promise<void> | null = openAt
-      ? seedRecord(openAt)
-      : cached.length === 0
-        ? seedTail()
-        : null;
-    // Debounce the rest of the network work: scrubbing the list with the arrow keys shouldn't
-    // open (and tear down) a connection — nor re-fetch approvals/queued turns — for each
-    // session skipped past. The cached transcript above is already on screen meanwhile.
-    const start = setTimeout(() => {
-      // Pending approvals aren't in the event stream (separate table) — fetch them so
-      // a refresh/deep-link shows any request already awaiting a decision.
-      listApprovals(selectedId)
-        .then(setApprovals)
-        .catch(() => undefined);
-      // Same for queued messages: a still-PENDING turn emits no event until the runner
-      // picks it up, so switching away and back (or a refresh/deep-link) would lose the
-      // visible queue — restore it from the DB, the source of truth.
-      refreshQueued();
-      // The complete background-shell list (all launches, output recovered from Read polls) —
-      // the loaded event window only holds the most recent launches, so without this the tray
-      // under-counts a long session. Merged with the live-derived overlay in the tray. Throttled
-      // per session (BG_TTL_MS): this scans the session's whole history, so a re-open within the
-      // window paints the cached shells instead of re-running it. A failed fetch isn't cached, so
-      // it retries next open.
-      const loadBackgroundShells = (): void => {
-        const bgCached = bgCacheRef.current.get(selectedId);
-        if (bgCached && Date.now() - bgCached.at < BG_TTL_MS) {
-          setServerBgShells(bgCached.shells);
-          return;
-        }
-        getBackgroundShells(selectedId)
-          .then((shells) => {
-            bgCacheRef.current.set(selectedId, { at: Date.now(), shells });
-            // Still cache it above (it belongs to `selectedId`, whenever it lands), but only the
-            // open session may paint: this now runs after the transcript, so a slow scan can
-            // easily outlive the switch away — and `serverBgShells` is one slot, not per-session.
-            if (!closed) setServerBgShells(shells);
-          })
-          .catch(() => undefined);
-      };
-      // Open the stream once the seed above has established the resume point, so the SSE
-      // streams only what's newer than the page (no full-history replay). The seed started at
-      // t=0 and this block at t=SWITCH_DEBOUNCE_MS, so on a cache hit — or a seed that already
-      // landed — this connects immediately.
-      void (async () => {
-        await seed;
-        if (closed) return;
-        // A window opened at a record waits for the reader to reach the tail (joinLiveRef).
-        // The reader may have joined already while this startup was debounced.
-        if (newerCursorRef.current === null && !es) connect();
-        // Last, deliberately: the tray it feeds sits below the fold and nothing else waits on it,
-        // whereas the scan behind it is the most expensive read on this path. Issuing it here
-        // rather than alongside the seed keeps it from competing for the connection — and, on the
-        // server, the event loop — with the one request the transcript is actually waiting for.
-        loadBackgroundShells();
-      })();
-    }, SWITCH_DEBOUNCE_MS);
-    return () => {
-      resumeStreamRef.current = null;
-      openRecordRef.current = null;
-      joinLiveRef.current = null;
-      backToLatestRef.current = null;
-      clearTimeout(start);
-      stop();
-    };
   }, [selectedId, landingSession]);
-
-  // A link to a record of the session already open — a footnote, a link in a message, back and
-  // forward through them. The session effect above followed the record the session opened with.
-  useEffect(() => {
-    if (!selectedId || !recordAt) {
-      followedRecordRef.current = null;
-      return;
-    }
-    const key = `${selectedId} ${recordAt}`;
-    if (followedRecordRef.current === key) return;
-    followedRecordRef.current = key;
-    openRecordRef.current?.(recordAt);
-  }, [selectedId, recordAt]);
-
-  // Polled fallback for idleness, in case an SSE turn_end was missed / reconnected.
-  // Also keyed on selectedId so it re-syncs on a session switch: the SSE effect above
-  // resets idle→false for the freshly opened session, but switching between two sessions
-  // that share a status (both AWAITING_INPUT) wouldn't change `runStatus`, so without the
-  // selectedId dep this effect wouldn't re-run and idle would stay wrongly false — flipping
-  // turnActive on and hiding the worktree bar's "committed"/merge state until a refresh.
-  const runStatus = selectedSession ? sessionRunStatusOf(selectedSession) : undefined;
-  // A terminal run has no turn in flight either, and it may have reached that state
-  // without a turn_end — so this is the recovery path when the `final` event was the one
-  // that got missed. Deliberately the live/terminal split, not "anything but RUNNING":
-  // a QUEUED session has nothing running yet, but the next message still has to queue
-  // behind the turn it is waiting for.
-  const runTerminal = !!selectedSession && isSessionTerminal(selectedSession);
-  useEffect(() => {
-    // The normalized terminal outcome wins over a stale raw runStatus on rolling-upgrade payloads.
-    // AWAITING_INPUT is equally conclusive here: the foreground command has returned, even if its
-    // result/turn_end SSE was the event this tab missed.
-    if (runTerminal || runStatus === 'AWAITING_INPUT') {
-      setIdle(true);
-      // SSE `tool_result`/`turn_end`/`final` normally clear this first. This is the missed-event
-      // fallback: once the REST/control-plane poll observes idle/terminal, no live output is real.
-      setLiveToolOutputState((current) =>
-        clearLiveToolOutputsForSession(current, selectedId),
-      );
-    } else if (runStatus === 'RUNNING') setIdle(false);
-  }, [runStatus, runTerminal, selectedId]);
-
-  // A finalized session can be resumed in place (same selectedId, so the SSE effect above
-  // doesn't re-run and its stream was paused on `final`). When the polled status shows it
-  // live again, re-open the paused stream so the open transcript catches the resumed turn —
-  // otherwise only the sidebar (separately polled) would advance and the conversation would
-  // look stuck until a manual refresh.
-  useEffect(() => {
-    if (live) resumeStreamRef.current?.();
-  }, [live]);
 
   // Tail-first prepend: after loadOlder grows older content above the viewport, restore the
   // scroll position so what the user was reading stays put instead of jumping down. Runs before
@@ -5444,28 +4420,30 @@ export function WorkspaceView({
     gcTime: Infinity,
   });
 
-  // The merges this project has already made, for the record each one leaves where it happened
-  // (`ProjectPromotionReceipt` below). NOT the read the strip's card is drawn from: that one is the
-  // candidate on offer, and it moves on to the next one — a receipt drawn from it would describe a
-  // different merge every time the branch was offered again, which is exactly what the card at the
-  // bottom of this pane used to do. Polled with the card, because a conversation that is open is
-  // where somebody watches their own merge land.
-  const mergedPromotions = useQuery({
-    ...projectMergedPromotionsQuery(coordinatedProjectId ?? ''),
-    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
-    refetchInterval: 20_000,
-  });
-
   // The candidate on offer, read HERE as well as inside the strip's card below, for the one state
   // the strip does not keep: a candidate a check blocked has a moment, and where that moment falls
   // is a fact about this conversation's own events (`transcriptEvents`), which only this view
   // holds. Same query key as the card's own read, so the two share one request. Polled, because a
   // blocked candidate is still moving — somebody is resolving it — and the card drawn from it says
-  // who and for how long.
+  // who and for how long. A merge check ending announces nothing on the stream, so while one runs
+  // the candidate keeps its cadence; otherwise it follows the stream (lib/listBudget).
   const currentPromotion = useQuery({
     ...projectPromotionQuery(coordinatedProjectId ?? ''),
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
-    refetchInterval: 20_000,
+    refetchInterval: pollWhileInFlight(20_000, (query) => promotionInFlight(query.state.data)),
+  });
+
+  // The merges this project has already made, for the record each one leaves where it happened
+  // (`ProjectPromotionReceipt` below). NOT the read the strip's card is drawn from: that one is the
+  // candidate on offer, and it moves on to the next one — a receipt drawn from it would describe a
+  // different merge every time the branch was offered again, which is exactly what the card at the
+  // bottom of this pane used to do. Polled with the card while a merge is in flight, because a
+  // conversation that is open is where somebody watches their own merge land.
+  const mergeInFlight = promotionInFlight(currentPromotion.data);
+  const mergedPromotions = useQuery({
+    ...projectMergedPromotionsQuery(coordinatedProjectId ?? ''),
+    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+    refetchInterval: pollWhileInFlight(20_000, () => mergeInFlight),
   });
 
   // What this project still owes somebody, for the exceptions drawn into the transcript at the
@@ -5475,7 +4453,7 @@ export function WorkspaceView({
   const openItems = useQuery({
     ...projectOpenItemsQuery(coordinatedProjectId ?? ''),
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
 
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
@@ -6064,16 +5042,13 @@ export function WorkspaceView({
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
     // the card is drawn from, and only once that read has come back, for the reason below. A
-    // version waiting for the coordinator is still the reader's to send back from the card they
-    // opened (`Decide it myself`), so its place in that queue counts as being there.
+    // reply stays armed only while its question remains in the read.
     if (replyTo.target.kind === 'evidenceDecision') {
       const read = pendingDecisions.data;
       if (!read) return;
       const address = decisionRowKey(replyTo.target);
-      const still = [
-        ...evidenceDecisionCardRows(read, selectedSession?.projectId ?? null, selectedId),
-        ...coordinatorQueueRows(read, selectedSession?.projectId ?? null, selectedId),
-      ].some((row) => decisionRowKey(row) === address);
+      const still = evidenceDecisionCardRows(read, selectedSession?.projectId ?? null, selectedId)
+        .some((row) => decisionRowKey(row) === address);
       if (!still) setReplyTo(null);
       return;
     }
@@ -6384,7 +5359,7 @@ export function WorkspaceView({
         setComposerRefs({});
         setImages([]);
         setView('open');
-        qc.invalidateQueries({ queryKey: ['sessions'] });
+        refreshSessionLists();
         navigate(`/sessions/${encodeId(routedToSessionId)}`);
         return;
       }
@@ -6487,7 +5462,7 @@ export function WorkspaceView({
           );
         }
       }
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       // Reviving moves the row from Completed to Open server-side (see SessionsService.resume),
       // so refetch the detail too — otherwise the header ⋮ keeps offering Move to Open for a
       // session that's already back in Open.
@@ -6623,31 +5598,10 @@ export function WorkspaceView({
       if (restored) setText(restored);
       stageRestored(theirs.flatMap((q) => q.attachments ?? []));
       setQueued([]);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error) => message.error("Couldn't stop the session", e.message),
   });
-  // Withdraw a queued message. Optimistically remove it; if the runner already leased
-  // it (it's no longer cancellable) it'll arrive in the transcript via its `user` event.
-  const cancelQueued = async (turnId: string): Promise<void> => {
-    if (!selectedId) return;
-    const withdrawn = queued.find((x) => x.turnId === turnId);
-    setQueued((q) => q.filter((x) => x.turnId !== turnId));
-    try {
-      await cancelQueuedTurn(selectedId, turnId);
-      // Withdrawing shouldn't silently eat what the user typed (interrupt parity): fold the
-      // message back into the composer so it can be edited and resent. Only restored once the
-      // DELETE succeeds — a rejected withdraw means the runner already leased it, so it lands
-      // in the transcript and restoring would duplicate it. Withdrawn from the tray it comes back
-      // as a withdrawn steer does (decided 2026-10-16, docs/mocks/steer-tray): an explicit press,
-      // so a draft keeps its place above the words rather than losing them to it. Nor does a turn
-      // nobody typed come back (`returnsToComposer`).
-      const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
-      if (body) restoreUndelivered?.(withdrawn?.shell ? `!${body}` : body, withdrawn?.attachments);
-    } catch {
-      message.info('This message is already being processed and cannot be withdrawn');
-    }
-  };
   // Withdraw a wake a watch queued. Nobody typed it, so unlike a message nothing folds back into the
   // composer — and it is gone for good: the server dead-letters the watch's delivery (WAKE_WITHDRAWN)
   // and the watch never sends it again. That is why this one asks first, where Cancel does not.
@@ -6682,7 +5636,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       setView('open');
       refreshProjectSession(session.id, session.projectId);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       qc.invalidateQueries({ queryKey: ['session', session.id] });
       if (session.notify) {
         message.sessionNotice({
@@ -6761,7 +5715,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id, session.projectId);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       showUndo(session, 'complete');
     },
     onError: (e: Error, session) =>
@@ -6773,6 +5727,17 @@ export function WorkspaceView({
         detail: e.message,
         tone: 'error',
       }),
+  });
+  // Complete on a finished project's row (design §4.3, §3.6): the server moves its coordinator and
+  // every member still in Open, in any workspace, to Completed in one call.
+  const completeProjectMut = useMutation({
+    mutationFn: ({ projectId }: { projectId: string; memberIds: string[] }) => completeProjectSessions(projectId),
+    onSuccess: (_d, { projectId, memberIds }) => {
+      if (selectedId && memberIds.includes(selectedId)) leaveIfOpen(selectedId);
+      memberIds.forEach((id) => dropFromLists(id, projectId));
+      qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    onError: (e: Error) => message.error("Couldn't complete the project's sessions", e.message),
   });
   const requestComplete = useCallback(
     (session: any): void => {
@@ -6839,7 +5804,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id, session.projectId);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       showUndo(session, 'trash');
     },
     onError: (e: Error, session) =>
@@ -6909,7 +5874,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       message.sessionNotice({
         sessionId: session.id,
         sessionTitle: session.title,
@@ -6955,7 +5920,7 @@ export function WorkspaceView({
     },
     onError: (e: Error) => message.error("Couldn't rename the session", e.message),
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       void qc.invalidateQueries({ queryKey: ['project-sessions'] });
     },
   });
@@ -6977,7 +5942,7 @@ export function WorkspaceView({
     onError: (e: Error, { pin }) =>
       message.error(pin ? "Couldn't pin the session" : "Couldn't unpin the session", e.message),
     onSettled: (_data, _error, { projectId }) => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       if (projectId) void qc.invalidateQueries({ queryKey: ['project-sessions', projectId] });
     },
   });
@@ -7023,7 +5988,7 @@ export function WorkspaceView({
     },
     onSettled: (_data, _error, { id }) => {
       tagSaveInFlight.current = false;
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
     },
   });
@@ -7148,7 +6113,7 @@ export function WorkspaceView({
         headline: continued ? 'Handed to the existing repair session' : 'Repair session started',
         detail: 'Opening the repair session.', tone: 'info' });
       navigate(`/sessions/${encodeId(session.id)}`);
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error) => message.error("Couldn't start the repair session", e.message),
   });
@@ -7200,7 +6165,7 @@ export function WorkspaceView({
         icon: 'sync',
       });
       void qc.invalidateQueries({ queryKey: ['session', vars.id] });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error, vars) =>
       message.sessionNotice({
@@ -7238,7 +6203,7 @@ export function WorkspaceView({
         icon: 'sync',
       });
       void qc.invalidateQueries({ queryKey: ['session', vars.id] });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error, vars) =>
       message.sessionNotice({
@@ -7342,7 +6307,7 @@ export function WorkspaceView({
         e.message,
       );
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    onSettled: () => refreshSessionLists(),
   });
   // Move a session to another of its runner's accounts, or back onto Automatic (switchAccount). The
   // gauge, its popover and the menu read the session's detail, so that is re-read with the list.
@@ -7352,7 +6317,7 @@ export function WorkspaceView({
       message.error("Couldn't switch the account", e.message);
     },
     onSettled: (_result, _error, vars) => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       void qc.invalidateQueries({ queryKey: ['session', vars.id] });
     },
   });
@@ -7393,82 +6358,7 @@ export function WorkspaceView({
     !selectedTrashed &&
     !sameSessionSendBlocked &&
     (selected ? live || resumable : composing);
-  const imageUid = useRef(0);
-  // Validate, then upload an attachment as a staged chip. Uploaded eagerly (not on send) so
-  // the turn carries only the id and a slow upload doesn't block typing. When composing
-  // there's no session yet, so it's uploaded unscoped; create scopes it to the new session.
-  // An inline-image type gets a thumbnail preview and the tighter image cap; any other type
-  // is a generic file (no preview, 25MB cap) that the runner drops into the worktree.
-  const addImage = useCallback(
-    async (file: File): Promise<void> => {
-      if (!canAttach) {
-        message.error('Attachments need a live session and an online runner');
-        return;
-      }
-      const isInlineImage = ALLOWED_IMAGE_TYPES.includes(file.type);
-      const cap = isInlineImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
-      if (file.size <= 0) {
-        message.error(`${file.name || 'File'} is empty`);
-        return;
-      }
-      if (file.size > cap) {
-        message.error(isInlineImage ? 'Image exceeds the 5MB limit' : 'File exceeds the 25MB limit');
-        return;
-      }
-      const uid = `att-${imageUid.current++}`;
-      const previewUrl = isInlineImage ? URL.createObjectURL(file) : undefined;
-      setImages((prev) => [
-        ...prev,
-        { uid, file, name: file.name, mime: file.type, size: file.size, previewUrl, status: 'uploading' },
-      ]);
-      try {
-        const { id } = await uploadAttachment(file, selected?.id);
-        setImages((prev) => prev.map((im) => (im.uid === uid ? { ...im, status: 'done', id } : im)));
-      } catch (e) {
-        // Drop the failed chip and free its preview; the toast explains why.
-        setImages((prev) => prev.filter((im) => im.uid !== uid));
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        message.error(
-          isInlineImage ? "Couldn't upload the image" : "Couldn't upload the file",
-          (e as Error).message,
-        );
-      }
-    },
-    [canAttach, selected, message],
-  );
-  // Hand attachments already on the control plane back to the composer as staged chips. There is no
-  // blob to make and none is wanted: the bytes are under `id`, which is all a send references, so a
-  // message put back carries its files without the reader finding them a second time. A queue
-  // snapshot reports id and mime only, so a file chip drawn from one shows no size and an image is
-  // drawn from the stored bytes rather than a local object URL.
-  const composerImagesFromRefs = (
-    refs: readonly { id: string; mime?: string; mimeType?: string; name?: string }[],
-  ): ComposerImage[] =>
-    refs.map((ref) => ({
-      uid: `att-${imageUid.current++}`,
-      name: ref.name ?? 'Attachment',
-      mime: ref.mime ?? ref.mimeType ?? '',
-      status: 'done' as const,
-      id: ref.id,
-    }));
-  // Appended, never replacing: put-back is explicitly user-initiated and must not discard chips
-  // already staged for the message being typed. Anything already staged by id stays once.
-  const stageRestored = (
-    refs: readonly { id: string; mime?: string; mimeType?: string; name?: string }[] | undefined,
-  ): void => {
-    if (!refs?.length) return;
-    setImages((prev) => {
-      const held = new Set(prev.map((im) => im.id).filter(Boolean));
-      return [...prev, ...composerImagesFromRefs(refs.filter((ref) => !held.has(ref.id)))];
-    });
-  };
-  const removeImage = (uid: string): void => {
-    setImages((prev) => {
-      const target = prev.find((im) => im.uid === uid);
-      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
-      return prev.filter((im) => im.uid !== uid);
-    });
-  };
+  const { addImage, stageRestored, removeImage } = useComposerImages(canAttach, selected?.id, setImages);
   // A send waits for every staged upload to finish (so all ids are known), and goes out
   // with whatever images are ready plus the text. Either text or an image is enough.
   const uploading = images.some((im) => im.status === 'uploading');
@@ -7826,85 +6716,8 @@ export function WorkspaceView({
   // turn instead of into this one — which ⌥Enter does from a keyboard (decided 2026-10-16,
   // docs/mocks/steer-tray). A phone has no ⌥.
   const queueOffered = defaultSendIntent === 'CURRENT_WORK' && !showStop && runtimeTakesMidTurnSteer(selectedEngine);
-  const [queueOffer, setQueueOffer] = useState(false);
-  const queueOfferRef = useRef<HTMLDivElement>(null);
-  // The press now on Send, and whether it was held long enough to open the offer instead of sending.
-  const sendHold = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
-  const releaseSendHold = () => {
-    const hold = sendHold.current;
-    if (hold && !hold.fired) {
-      clearTimeout(hold.timer);
-      sendHold.current = null;
-    }
-  };
-  useEffect(() => {
-    if (!queueOffer) return undefined;
-    const close = (event: PointerEvent | KeyboardEvent) => {
-      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !queueOfferRef.current?.contains(event.target as Element | null)) {
-        setQueueOffer(false);
-      }
-    };
-    document.addEventListener('pointerdown', close, true);
-    document.addEventListener('keydown', close, true);
-    return () => {
-      document.removeEventListener('pointerdown', close, true);
-      document.removeEventListener('keydown', close, true);
-    };
-  }, [queueOffer]);
-  // Nothing to send that way any more (sent, emptied, the turn ended): the offer goes too.
-  useEffect(() => {
-    if (!queueOffered) setQueueOffer(false);
-  }, [queueOffered]);
 
-  // ── `/` command, skill, and local command autocomplete ─────────────────────
-  // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
-  // / runner.skills). Show them as a hint menu while the cursor sits on a `/token`
-  // at the start of input or right after whitespace/newline, like the Claude Code TUI;
-  // picking one replaces just that token with `/<name> ` (the trailing space drops the
-  // regex match, so the menu auto-hides).
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const suggestionHintId = useId();
-  // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
-  // timer that hands a held first tap on as the box's focus.
-  const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
-  // drags the top handle, that height wins over autoSize until they double-click to reset.
-  const [composerHeight, setComposerHeight] = useState<number | null>(null);
-  // Drag the top handle to set an explicit composer height. Drag up = taller; the height is
-  // clamped so it can't collapse away or swallow the transcript.
-  const startComposerResize = useCallback((e: ReactMouseEvent): void => {
-    e.preventDefault();
-    const ta = taRef.current;
-    const startY = e.clientY;
-    const startH = ta?.offsetHeight ?? composerHeight ?? 120;
-    const onMove = (ev: MouseEvent): void => {
-      setComposerHeight(Math.min(Math.max(startH + (startY - ev.clientY), 44), 640));
-    };
-    const onUp = (): void => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      document.body.style.userSelect = '';
-    };
-    document.body.style.userSelect = 'none';
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [composerHeight]);
-  // The resize handle only earns its keep once auto-grow has hit its maxRows cap (the box is
-  // scrolling) or the user already dragged an explicit height — a short/empty box has nothing
-  // worth resizing, so we hide the handle until then. Re-measure whenever the text or the
-  // manual height changes (a double-click reset drops us back to auto-grow).
-  const [composerCapped, setComposerCapped] = useState(false);
-  useEffect(() => {
-    const ta = taRef.current;
-    if (!ta) return;
-    // Measure on the next frame: the Textarea's autoSize pass has set this value's height before paint.
-    const id = requestAnimationFrame(() => {
-      setComposerCapped(ta.scrollHeight > ta.clientHeight + 1);
-    });
-    return () => cancelAnimationFrame(id);
-  }, [text, composerHeight]);
   // Drag-and-drop files anywhere onto the session pane (transcript + composer) — a far bigger
   // target than the composer box, matching Slack/ChatGPT. Same upload path as the picker/paste,
   // gated on canAttach. dragDepth counts enter/leave across child elements (each fires its own
@@ -7942,187 +6755,14 @@ export function WorkspaceView({
     e.preventDefault();
     files.forEach((f) => void addImage(f));
   };
-  const [slashIndex, setSlashIndex] = useState(0);
-  const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
-  // The `+` menu opens the picker scoped to one asset kind; null (manual `/` typing) shows both.
-  const [slashScope, setSlashScope] = useState<'command' | 'skill' | null>(null);
-  const slashToken = getSlashToken(text);
   // Scope the `/` menu to the composer's workspace: host-level assets (no workspaceId — e.g.
   // ~/.claude or the runner's default dir) plus the assets of the workspace this session
   // runs as. A live session's workspace is fixed; a draft uses the picked workspace.
   const composerWorkspaceId = live ? selected?.workspace?.id : workspaceId;
   const slashItems = useMemo<ComposerSlashItem[]>(
-    () => [
-      ...LOCAL_SLASH_ITEMS,
-      ...(codexComposer ? [] : [
-        ...(runner.commands ?? []).map((c) => ({
-          name: c.name,
-          description: c.description,
-          type: 'command' as const,
-          provider: c.provider,
-          workspaceId: c.agentId,
-          builtin: c.builtin,
-        })),
-        ...(runner.skills ?? []).map((s) => ({
-          name: s.name,
-          description: s.description,
-          type: 'skill' as const,
-          provider: s.provider,
-          workspaceId: s.agentId,
-          builtin: s.builtin,
-        })),
-      ].filter(
-        (it) =>
-          slashAssetMatchesEngine(it.provider, shownEngine) &&
-          (!it.workspaceId || it.workspaceId === composerWorkspaceId),
-      )),
-    ],
+    () => composerSlashItems(runner.commands, runner.skills, codexComposer, shownEngine, composerWorkspaceId),
     [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownEngine],
   );
-  const slashMatches = useMemo(() => {
-    const items = runner.online ? slashItems : slashItems.filter((it) => it.type === 'local');
-    return getSlashMatches(items, slashToken, slashScope);
-  }, [slashItems, slashToken, slashScope, runner.online]);
-  useEffect(() => {
-    setSlashIndex(0);
-    if (slashToken === null) setSlashScope(null);
-  }, [slashToken]);
-  const showSlash =
-    slashToken !== null &&
-    slashToken !== slashDismissed &&
-    !selectedTrashed &&
-    !selectedMissing &&
-    slashMatches.length > 0;
-  const slashIdx = slashMatches.length ? Math.min(slashIndex, slashMatches.length - 1) : 0;
-  const pickSlash = (name: string): void => {
-    // Replace only the trailing `/token` ($1 preserves the start-or-whitespace before
-    // it), so picking a command mid-message doesn't clobber text typed earlier.
-    setText(replaceSlashToken(text, name));
-    setSlashDismissed(null);
-    setTimeout(() => taRef.current?.focus(), 0);
-  };
-  // ── `@` workspace-mention autocomplete ─────────────────────────────────────────
-  // Type `@` to reference another workspace on this runner; picking one inserts
-  // `@<name> ` as plain text. The in-session orchestrator reads the mention from
-  // the turn (sent verbatim) and can hand work off to that workspace via its session
-  // tools — so this is purely a composer convenience with no separate send path.
-  // Mirrors the `/` menu above and the task-comment mention menu (TaskDetailPanel).
-  const [mentionIndex, setMentionIndex] = useState(0);
-  const [mentionDismissed, setMentionDismissed] = useState<string | null>(null);
-  const mentionToken = /(?:^|\s)@([^\s@]*)$/.exec(text)?.[1] ?? null;
-  const mentionMatches = useMemo(() => {
-    if (mentionToken === null) return [];
-    const q = mentionToken.toLowerCase();
-    return workspacesForRunner
-      .filter((a) => a.name.toLowerCase().includes(q))
-      .sort((a, b) => {
-        const pa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
-        const pb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
-        return pa - pb || a.name.localeCompare(b.name);
-      })
-      .slice(0, 8);
-  }, [workspacesForRunner, mentionToken]);
-  useEffect(() => {
-    setMentionIndex(0);
-  }, [mentionToken]);
-  const showMention =
-    mentionToken !== null &&
-    mentionToken !== mentionDismissed &&
-    !selectedTrashed &&
-    !selectedMissing &&
-    mentionMatches.length > 0;
-  const mentionIdx = mentionMatches.length ? Math.min(mentionIndex, mentionMatches.length - 1) : 0;
-  const pickMention = (name: string): void => {
-    // Replace only the trailing `@token` ($1 preserves the start-or-whitespace before it),
-    // so picking a workspace mid-message doesn't clobber text typed earlier.
-    setText(text.replace(/(^|\s)@([^\s@]*)$/, `$1@${name} `));
-    setMentionDismissed(null);
-    setTimeout(() => taRef.current?.focus(), 0);
-  };
-  // ── `#` task / task-list references ────────────────────────────────────────────────────
-  // Type `#` to reference a list or task; picking one inserts `#<title>` as readable text and
-  // records which id that title meant. The full `[title](orbit-list:<id>)` link is materialised
-  // on send (see materializeReferences) and expanded by the server at delivery — the box never
-  // holds a uuid, because the chip layer that hides one cannot keep the caret aligned with it.
-  const [refIndex, setRefIndex] = useState(0);
-  const [refDismissed, setRefDismissed] = useState<string | null>(null);
-  const refToken = referenceToken(text);
-  const refListsQ = useQuery({
-    queryKey: ['task-lists'],
-    queryFn: () => api<Array<{ id: string; title: string }>>('/task-lists'),
-    // Only once the user reaches for the menu: most drafts never contain a reference, and the
-    // list index is not otherwise needed on this screen.
-    enabled: refToken !== null,
-    staleTime: 30_000,
-  });
-  const refTasksQ = useQuery({
-    queryKey: ['tasks', 'ref-picker', refToken],
-    queryFn: () =>
-      api<{ items: Array<{ id: string; title: string }> }>(
-        `/tasks/page?limit=8&counts=none&q=${encodeURIComponent(refToken ?? '')}`,
-      ).then((p) => p.items),
-    // A blank `#` lists lists only: every task in the deployment is not a useful first screen,
-    // and the search is what makes the task half navigable at 56k rows.
-    enabled: !!refToken,
-    staleTime: 10_000,
-  });
-  const refMatches = useMemo(() => {
-    if (refToken === null) return [];
-    const q = refToken.toLowerCase();
-    const lists = (refListsQ.data ?? [])
-      .filter((l) => l.title.toLowerCase().includes(q))
-      .slice(0, 5)
-      .map((l) => ({ kind: 'list' as const, id: l.id, title: l.title }));
-    const tasks = (refTasksQ.data ?? [])
-      .slice(0, 5)
-      .map((t) => ({ kind: 'task' as const, id: t.id, title: t.title }));
-    return [...lists, ...tasks];
-  }, [refToken, refListsQ.data, refTasksQ.data]);
-  useEffect(() => {
-    setRefIndex(0);
-  }, [refToken]);
-  const showRef =
-    refToken !== null &&
-    refToken !== refDismissed &&
-    !selectedTrashed &&
-    !selectedMissing &&
-    refMatches.length > 0;
-  const refIdx = refMatches.length ? Math.min(refIndex, refMatches.length - 1) : 0;
-  const pickRef = (m: { kind: 'list' | 'task'; id: string; title: string }): void => {
-    const next = applyReferencePick(text, m.title, { kind: m.kind, id: m.id }, composerRefs);
-    setText(next.text);
-    setComposerRefs(next.refs);
-    setRefDismissed(null);
-    setTimeout(() => taRef.current?.focus(), 0);
-  };
-
-  // Open the autocomplete from the `+` menu scoped to one asset kind: drop a `/` (prefixed
-  // with a space when mid-message) so slashToken matches and the menu pops.
-  const insertSlash = (scope: 'command' | 'skill'): void => {
-    setSlashScope(scope);
-    setText(openSlash);
-    setSlashDismissed(null);
-    setTimeout(() => taRef.current?.focus(), 0);
-  };
-  // The draft is a `!cmd` shell command, not a message: onSend routes it raw to the runner,
-  // bypassing the workspace. Mirrors that branch's condition exactly (it reads the trimmed text,
-  // and a reply-to-question draft resolves an approval instead), so the composer only turns
-  // red when the send really would be a shell turn.
-  const shellMode = !replyTo && text.trim().startsWith('!');
-  // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
-  // shell command (run on the runner, bypassing claude). The user types the command after.
-  const insertShell = (): void => {
-    setText((t) => (t.startsWith('!') ? t : `!${t}`));
-    setTimeout(() => taRef.current?.focus(), 0);
-  };
-  // The exact inverse: drop the `!` so the draft goes back to being a message for the workspace.
-  // This is what the `❯` replacing the `+` does in shell mode — a mode you can enter needs a
-  // way out that isn't "select the character and delete it". Leading whitespace goes too,
-  // since shellMode reads the trimmed text (`  !ls` is shell mode just as much as `!ls`).
-  const exitShell = (): void => {
-    setText((t) => t.replace(/^\s*!/, ''));
-    setTimeout(() => taRef.current?.focus(), 0);
-  };
   // "Chat about this" on a question card hands the reply off to the main composer: show the
   // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
   const startChatReply = (id: string, question: string): void => {
@@ -8502,7 +7142,7 @@ export function WorkspaceView({
       api(`/tasks/${taskId}/execute`, { method: 'POST', body: { triggerId } }),
     onSuccess: () => {
       message.success('Assignee workspace triggered');
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       if (selectedId) void qc.invalidateQueries({ queryKey: ['session', selectedId] });
     },
     // The task moved on between the page's read and the press; the refusal names the run that has
@@ -8599,153 +7239,22 @@ export function WorkspaceView({
     if (setup.held || setup.folder) setup.finish(runner.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [machineDraft, workspacesQ.isSuccess, bareMachine, send.isPending, setup.held, setup.folder]);
-  // Steers asked for back and not yet answered — drawn "Withdrawing…" — and those the server has
-  // confirmed, hidden before the runner's own `withdrawn` delivery reaches the transcript.
-  const [withdrawingSteers, setWithdrawingSteers] = useState<ReadonlySet<string>>(() => new Set());
-  const [withdrawnSteers, setWithdrawnSteers] = useState<ReadonlySet<string>>(() => new Set());
-  // Take back a message sent into the running turn while nothing has read it (lib/steerDelivery).
-  // Only the engine's word that it dropped the message unread removes it, so nothing is hidden or
-  // handed back until the server says so. Then the words and their files go back into the composer
-  // the way "Put back in the composer" puts them: an explicit press, so a draft keeps its place
-  // above them instead of winning over them.
-  const withdrawSteer = async (
-    turnId: string,
-    text: string,
-    attachments?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[],
-  ): Promise<void> => {
-    const sessionId = selectedId;
-    if (!sessionId || withdrawingSteers.has(turnId)) return;
-    setWithdrawingSteers((s) => new Set(s).add(turnId));
-    try {
-      await cancelQueuedTurn(sessionId, turnId);
-      setWithdrawnSteers((s) => new Set(s).add(turnId));
-      setQueued((q) => q.filter((x) => x.turnId !== turnId));
-      restoreUndelivered?.(text, attachments);
-    } catch (e) {
-      if (e instanceof ApiError && e.code === STEER_WITHDRAW_ERRORS.ALREADY_READ) {
-        // Said in the reader's terms; the server's longer sentence is for the API's own callers.
-        const reader =
-          shownEngine === AgentProvider.CODEX ? 'Codex' : shownEngine === AgentProvider.CLAUDE ? 'Claude' : 'The agent';
-        message.info('Too late to withdraw', `${reader} has already read it.`);
-      } else {
-        message.error("Couldn't withdraw the message", e instanceof Error ? e.message : undefined);
-      }
-    } finally {
-      setWithdrawingSteers((s) => {
-        const next = new Set(s);
-        next.delete(turnId);
-        return next;
-      });
-    }
-  };
-  const withdrawSteerRef = useRef(withdrawSteer);
-  withdrawSteerRef.current = withdrawSteer;
-  // What the transcript's steers offer (SteerWithdrawCtx). Kept stable between the sets' changes, so
-  // a streaming reply does not redraw every bubble; nothing to take back where nothing can be sent.
-  const steerWithdrawal: SteerWithdrawHandle | null = useMemo(
-    () =>
-      selectedTrashed || selectedMissing
-        ? null
-        : {
-            withdraw: (turnId, text, attachments) => void withdrawSteerRef.current(turnId, text, attachments),
-            withdrawing: withdrawingSteers,
-            withdrawn: withdrawnSteers,
-          },
-    [selectedTrashed, selectedMissing, withdrawingSteers, withdrawnSteers],
-  );
-  // Queued messages a Steer is out for: drawn as on their way into the turn until the server answers.
-  const [steeringTurns, setSteeringTurns] = useState<ReadonlySet<string>>(() => new Set());
-  // The tray's Steer: send a message queued for the next turn into the one running now. The server
-  // makes it the steer it would have been (POST …/steer), and the row moves on from there as a steer
-  // does; with no turn left to join it stays queued, and is told so.
-  const steerQueued = async (turnId: string): Promise<void> => {
-    const sessionId = selectedId;
-    if (!sessionId || steeringTurns.has(turnId)) return;
-    setSteeringTurns((s) => new Set(s).add(turnId));
-    try {
-      const res = await steerQueuedTurn(sessionId, turnId);
-      setQueued((current) =>
-        current.map((turn) =>
-          turn.turnId === turnId
-            ? { ...turn, placement: 'steer', ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}) }
-            : turn,
-        ),
-      );
-    } catch (e) {
-      if (isCurrentWorkUnavailable(e)) {
-        const reason = e instanceof ApiError ? e.body?.reason : undefined;
-        message.info(
-          "Couldn't send it into this turn",
-          reason === 'STEER_UNSUPPORTED'
-            ? "This agent can't take a message mid-turn. It stays queued for the next turn."
-            : 'The turn is over or being stopped. It stays queued for the next turn.',
-        );
-      } else {
-        message.error("Couldn't send it into this turn", e instanceof Error ? e.message : undefined);
-      }
-    } finally {
-      setSteeringTurns((s) => {
-        const next = new Set(s);
-        next.delete(turnId);
-        return next;
-      });
-    }
-  };
   // Steer is offered while a turn runs on an engine that can take a message into one (the server
   // still asks the runner, and refuses one too old).
   const steerOffered = !!live && selectedRunStatus === 'RUNNING' && runtimeTakesMidTurnSteer(selectedEngine);
-  // The tray's rows, in the order they were sent: the reader's steers nothing has read (from the
-  // transcript's events) and their messages still on the queue (`inPendingTray`).
-  const pendingTrayRows = ((): PendingTrayRow[] => {
-    if (selectedTrashed || selectedMissing) return [];
-    const steerRow = (steer: UnreadSteer): PendingTrayRow => {
-      // Missed the turn it was aimed at and handed back to run as the next turn: queued now, and
-      // shortly the message that opens that turn.
-      const requeued = steer.delivery === 'requeued';
-      const withdrawing = withdrawingSteers.has(steer.turnId);
-      return {
-        key: steer.turnId,
-        heading: requeued ? 'next' : 'current',
-        text: steer.text,
-        ...trayPictures(steer.images, steer.attachmentRefs),
-        state: withdrawing ? 'Withdrawing…' : requeued ? 'Queued for next turn' : steerDeliveryState(steer.delivery).label,
-        busy: withdrawing,
-        onWithdraw:
-          !requeued && steerWithdrawal && offersSteerWithdraw(steer.delivery, steer.withdrawable)
-            ? () => steerWithdrawal.withdraw(steer.turnId, steer.text, steer.attachmentRefs)
-            : undefined,
-      };
-    };
-    const queuedRow = (turn: QueuedTurn): PendingTrayRow => {
-      const steering = steeringTurns.has(turn.turnId);
-      const intoTurn = turn.placement === 'steer' || steering;
-      const withdrawing = withdrawingSteers.has(turn.turnId);
-      const refs: TurnAttachmentRef[] | undefined = turn.attachments?.map((a) => ({ id: a.id, mime: a.mimeType || undefined }));
-      return {
-        key: turn.turnId,
-        heading: intoTurn ? 'current' : 'next',
-        text: turn.content,
-        shell: turn.shell,
-        ...trayPictures(turnImages[turn.turnId], refs),
-        state: withdrawing ? 'Withdrawing…' : intoTurn ? steerDeliveryState(undefined).label : 'Queued for next turn',
-        busy: withdrawing || steering,
-        // Not handed to a runner yet, either way: the server takes it back alone.
-        onWithdraw: turn.placement === 'steer'
-          ? steerWithdrawal ? () => steerWithdrawal.withdraw(turn.turnId, turn.content, refs) : undefined
-          : () => void cancelQueued(turn.turnId),
-        onSteer: !intoTurn && !turn.shell && steerOffered ? () => void steerQueued(turn.turnId) : undefined,
-      };
-    };
-    return [
-      ...unreadSteers
-        .filter((steer) => !withdrawnSteers.has(steer.turnId))
-        .map((steer) => ({ at: steer.ts, row: steerRow(steer) })),
-      ...visibleQueuedTurns.filter(inPendingTray).map((turn) => ({ at: turn.createdAt, row: queuedRow(turn) })),
-    ]
-      // A row this tab just sent has no receipt time yet: it is the newest.
-      .sort((a, b) => (a.at ?? '\uffff').localeCompare(b.at ?? '\uffff'))
-      .map(({ row }) => row);
-  })();
+  const { cancelQueued, steerWithdrawal, pendingTrayRows } = usePendingTray({
+    selectedId: selectedId ?? null,
+    selectedTrashed,
+    selectedMissing,
+    queued,
+    setQueued,
+    visibleQueuedTurns,
+    transcriptEvents,
+    turnImages,
+    restoreUndelivered,
+    shownEngine,
+    steerOffered,
+  });
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -9102,7 +7611,7 @@ export function WorkspaceView({
           Array.isArray(old) ? old.map((s) => (s.folderId === folder.id ? { ...s, folderId: null } : s)) : old,
         );
         void qc.invalidateQueries({ queryKey: ['session-folders'] });
-        void qc.invalidateQueries({ queryKey: ['sessions'] });
+        refreshSessionLists();
         if (openFolder?.id === folder.id) leaveFolder(true);
       },
     });
@@ -9237,13 +7746,6 @@ export function WorkspaceView({
     navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
   };
   const activeTag = tagFilter ? (sessionTags.find((t) => t.id === tagFilter) ?? null) : null;
-  // Selection reads on the trailing edge, not in a leading icon column. The tag names already
-  // need a swatch in front of them, and a leading check on top of that pushed every label so
-  // far off the left edge that the menu read as right-heavy. Always rendered (blank when off)
-  // so a row's width doesn't change as the selection moves.
-  const checkSlot = (on: boolean): ReactNode => (
-    <span className="scope-menu-check">{on ? <CheckOutlined /> : null}</span>
-  );
   // ── The composer's model control ───────────────────────────────────────────────────────────
   // Provider, model, effort and speed used to be four pills; they are one button now, labelled
   // "model effort", with a menu that lists the current provider's models and puts the rarer
@@ -9591,11 +8093,6 @@ export function WorkspaceView({
     modelSeedState.current = dirtyContextSeed(modelContextKey);
     setModel(next);
   };
-  const menuValue = (value: string): ReactNode => (
-    <span className="scope-menu-value">
-      <span className="scope-menu-value-text">{value}</span>
-    </span>
-  );
   // The runner's accounts of the session's engine, listed under it in the Provider submenu for a
   // session on built-in Codex, Claude, Antigravity or Kimi to move between — each with its own quota, as
   // the New Session picker lists them. Only with two or more (one is nothing to choose), and for a session
@@ -9651,7 +8148,6 @@ export function WorkspaceView({
   // The menu's title: the engine this session runs on — its own, recorded when it started and never
   // changed, so no pick below can move it (board 5 ③); a draft's is the one the hero picked.
   const engineTitle = useMemo(() => engineTitleFor(shownEngine), [shownEngine]);
-  const engineTitleGlyph = engineTitle.glyphKey ? PROVIDER_GLYPHS[engineTitle.glyphKey] : undefined;
   // What the Provider row says it is on: an engine's own sign-in by the account in use — Automatic
   // while Orbit picks it — OpenCode's own configuration by that, anything else by its own name.
   const shownProviderRow = providerSwitchChoices.find((choice) => choice.slug === shownProvider);
@@ -9833,201 +8329,32 @@ export function WorkspaceView({
         ]
       : []),
   ];
-  const modelMenuItems: MenuItem[] = [
-    // The menu's own title, and not a control: the one fact none of the rows below states is which
-    // CLI executes at all. It is never picked here — a run keeps its engine for its whole life, and
-    // moving it is the Provider row's job — so the row carries no onClick, no chevron, and the
-    // class drops the item's pointer and hover fill.
-    {
-      key: 'engine-title',
-      className: 'composer-engine-title',
-      label: (
-        <span className="composer-engine-title-row">
-          {/* In the brand's colour — except Cursor's, which is black and would vanish on a dark menu:
-              the text's own colour carries its cube. */}
-          <span
-            className="composer-engine-title-glyph"
-            style={{ color: shownEngine === AgentProvider.CURSOR ? 'var(--text-1)' : engineTitle.brand.from }}
-          >
-            {engineTitleGlyph ? (
-              <svg
-                viewBox="0 0 24 24"
-                width={14}
-                height={14}
-                fill="currentColor"
-                aria-hidden="true"
-                dangerouslySetInnerHTML={{ __html: engineTitleGlyph }}
-              />
-            ) : (
-              <span className="composer-engine-title-mono">{engineTitle.brand.mono}</span>
-            )}
-          </span>
-          <span className="composer-engine-title-name">{engineTitle.name}</span>
-        </span>
-      ),
-    },
-    ...(smartRoute
-      ? [
-          {
-            key: 'smart-route',
-            type: 'group' as const,
-            label: (
-              <div className="composer-route-note">
-                <div className="composer-route-head">
-                  <span className="composer-model-spark">✦</span>
-                  Picked by smart selection · tier {smartRoute.level}
-                </div>
-                {smartRoute.reasons[0] && <div className="composer-route-reason">{smartRoute.reasons[0]}</div>}
-                <div className="composer-route-reason">
-                  Changing the model here applies to this run only. To fix the model for every run, set it on the
-                  task.
-                </div>
-              </div>
-            ),
-          },
-          { key: 'smart-route-divider', type: 'separator' as const },
-        ]
-      : []),
-    // Only when there is somewhere to go: another credential the session's engine runs — a key, a
-    // pool, its own sign-in — or another of the runner's accounts. One entry means no switch is
-    // possible, and the row is left out rather than shown inert — the common case, one Claude sign-in
-    // and no keys.
-    ...(providerSwitchChoices.length > 1 || accountsOffered
-      ? [
-          {
-            key: 'provider',
-            // Opened by the region card's Use another provider, as well as by hover and press.
-            open: providerMenuOpen,
-            onOpenChange: setProviderMenuOpen,
-            label: (
-              <span className="scope-menu-row">
-                Provider
-                {shownKeyGone ? (
-                  <span className="scope-menu-value is-warning">
-                    <span className="scope-menu-value-text">{shownKeyGone.status}</span>
-                  </span>
-                ) : (
-                  menuValue(shownProviderValue)
-                )}
-              </span>
-            ),
-            children: providerMenuGroups,
-          },
-          { key: 'provider-divider', type: 'separator' as const },
-        ]
-      : []),
-    ...shownModelOptions.map((option) => ({
-      key: `model:${option.value}`,
-      disabled: !shownProviderCapabilitiesResolved,
-      label: (
-        <span className="scope-menu-row">
-          {option.label}
-          {checkSlot(option.value === shownModelName)}
-        </span>
-      ),
-      onSelect: () => pickModel(option.value),
-    })),
-    { key: 'effort-divider', type: 'separator' as const },
-    // Cursor CLI's Auto takes no parameters (contract §10): no Effort to offer, and a line on what it
-    // does instead. Every other Cursor model offers the efforts it takes, by their own values.
-    ...(cursorAuto
-      ? [
-          {
-            key: 'cursor-auto-note',
-            type: 'group' as const,
-            label: (
-              <div className="composer-route-note">
-                <div className="composer-route-reason">{CURSOR_AUTO_NOTE}</div>
-              </div>
-            ),
-          },
-        ]
-      : [
-          {
-            key: 'effort',
-            label: (
-              <span className="scope-menu-row">
-                Effort
-                {menuValue(shownEffortLabel)}
-              </span>
-            ),
-            children: shownEffortOptions.map((option) => ({
-              key: `effort:${option.value}`,
-              label: (
-                <span className="scope-menu-row">
-                  {option.label}
-                  {checkSlot(option.value === shownEffort)}
-                </span>
-              ),
-              onSelect: () => pickEffort(option.value),
-            })),
-          },
-        ]),
-    // A Cursor model's own settings (board Web 5 ① ③ ④): its context size, and Speed, its fast lane —
-    // a setting of the model, unlike the engine-level fast mode below, which Cursor CLI does not have.
-    // Each row offers the values the runner's catalogue lists for the model, under their own names.
-    ...cursorSettings.map((setting) => ({
-      key: `cursor-setting:${setting.id}`,
-      label: (
-        <span className="scope-menu-row">
-          {setting.title}
-          {menuValue(setting.label)}
-        </span>
-      ),
-      children: setting.values.map((option) => ({
-        key: `cursor-setting:${setting.id}:${option.value}`,
-        label: (
-          <span className="scope-menu-row">
-            {option.label}
-            {checkSlot(option.value === setting.value)}
-          </span>
-        ),
-        onSelect: () => pickCursorSetting(setting.id, option.value),
-      })),
-    })),
-    // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast" tier
-    // both exist on some models and not others. A row offered to a session that cannot have it
-    // would be a control whose only outcome is being ignored — the server clamps it at dispatch
-    // either way. A session that stored `true` and then moved to a model without a fast lane keeps
-    // the stored value while the row is away, so going back to a model that has one restores what
-    // was asked for rather than silently dropping it.
-    ...(fastModeUsable
-      ? [
-          {
-            key: 'speed',
-            label: (
-              <span className="scope-menu-row">
-                Speed
-                {menuValue(shownFastMode ? 'Fast' : 'Standard')}
-              </span>
-            ),
-            children: [
-              { value: false, label: 'Standard' },
-              { value: true, label: 'Fast' },
-            ].map((option) => ({
-              key: `speed:${option.value ? 'fast' : 'standard'}`,
-              label: (
-                <span className="scope-menu-row">
-                  {option.label}
-                  {checkSlot(option.value === shownFastMode)}
-                </span>
-              ),
-              onSelect: () => pickFastMode(option.value),
-            })),
-          },
-        ]
-      : []),
-    ...(smartRoute
-      ? [
-          { key: 'smart-route-open-divider', type: 'separator' as const },
-          {
-            key: 'open-task',
-            label: <span className="composer-route-open">Open task ›</span>,
-            onSelect: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
-          },
-        ]
-      : []),
-  ];
+  const modelMenuItems = composerModelMenuItems({
+    shownEngine,
+    engineTitle,
+    smartRoute,
+    providerSwitchable: providerSwitchChoices.length > 1 || accountsOffered,
+    providerMenuOpen,
+    setProviderMenuOpen,
+    shownKeyGone,
+    shownProviderValue,
+    providerMenuGroups,
+    shownModelOptions,
+    shownProviderCapabilitiesResolved,
+    shownModelName,
+    pickModel,
+    cursorAuto,
+    shownEffortLabel,
+    shownEffortOptions,
+    shownEffort,
+    pickEffort,
+    cursorSettings,
+    pickCursorSetting,
+    fastModeUsable,
+    shownFastMode,
+    pickFastMode,
+    openTask: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
+  });
   const selectedSessionTagIds = ((selected?.tags ?? []) as SessionTagRef[]).map((t) => t.id);
   const setTagsFromMenu = ({
     key,
@@ -10230,39 +8557,6 @@ export function WorkspaceView({
       ta.focus();
       ta.selectionStart = ta.selectionEnd = ta.value.length;
     }, 0);
-  };
-  // A touch screen has no Tab: two taps on the box take the suggestion, as on the iPhone. The second
-  // tap is kept from the box, so it neither zooms the page nor drops the caret into the words it just
-  // received. The first is held too while the box is not focused yet: the keyboard it would raise
-  // lifts the page, and the second tap would land on the keyboard instead. A lone tap is handed on as
-  // the box's focus once the double-tap window passes (a timer this short keeps the tap's user
-  // activation, so the keyboard still comes up). A focused box keeps its first tap.
-  const onComposerTouchEnd = (e: ReactTouchEvent<HTMLTextAreaElement>): void => {
-    const touch = e.changedTouches[0];
-    const last = lastComposerTap.current;
-    if (!offeredSuggestion || !touch) {
-      lastComposerTap.current = null;
-      return;
-    }
-    const tap = { at: e.timeStamp, x: touch.clientX, y: touch.clientY };
-    if (
-      last &&
-      tap.at - last.at <= DOUBLE_TAP_MS &&
-      Math.hypot(tap.x - last.x, tap.y - last.y) <= DOUBLE_TAP_SLOP_PX
-    ) {
-      window.clearTimeout(last.held);
-      lastComposerTap.current = null;
-      e.preventDefault();
-      acceptSuggestion();
-      return;
-    }
-    const box = e.currentTarget;
-    let held: number | undefined;
-    if (document.activeElement !== box) {
-      e.preventDefault();
-      held = window.setTimeout(() => box.focus(), DOUBLE_TAP_MS);
-    }
-    lastComposerTap.current = { ...tap, held };
   };
 
   return (
@@ -10539,6 +8833,16 @@ export function WorkspaceView({
                       } : undefined}
                       // The menu stops its own clicks before they reach the row, which would open it.
                       menu={[
+                        // A finished project's row can leave Open: Complete moves its coordinator and
+                        // the members still open to Completed (§4.3; board 2026-11-07, part ④).
+                        ...(effectiveView === 'open' && (s.status === 'DONE' || s.status === 'CANCELLED') ? [
+                          { key: 'complete', icon: <CheckOutlined />, label: SESSION_PROJECT_COPY.complete,
+                            onSelect: () => {
+                              setMenuOpenId(null);
+                              completeProjectMut.mutate({ projectId: s.projectId, memberIds: s.members.map((m: any) => m.id) });
+                            } },
+                          { key: 'divider-complete', type: 'separator' as const },
+                        ] : []),
                         { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
                           onSelect: () => { setMenuOpenId(null); openTarget(); } },
                         { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
@@ -10556,7 +8860,10 @@ export function WorkspaceView({
                 }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const memberView = sessionRowView(actionSession);
-                const movable = sessionMovable(s);
+                // A member whose project has no row here is a row of its own, filed by its own folder
+                // (owner 2026-11-07).
+                const mark = s.projectMark;
+                const movable = sessionMovable(s) || !!mark;
                 const swipeActions = sessionSwipeActions(memberView, movable);
                 const swipeSizes = swipeWidths(memberView, movable);
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
@@ -10656,7 +8963,7 @@ export function WorkspaceView({
                           navigate(sessionItemPath(actionSession), { state: stampFromList() }),
                         );
                     }}
-                    onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe); }}
+                    onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe, undefined, movable); }}
                     onTouchMove={onRowTouchMove}
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
@@ -10725,6 +9032,34 @@ export function WorkspaceView({
                                 or waiting on, else its recap (sessionLine). Tags are filed and
                                 filtered by, not drawn on the row (the owner, 2026-10-22). */}
                             <div className="session-sub">
+                              {/* A member whose project has no row in this workspace: the project's
+                                  progress, which opens its sessions page (owner 2026-11-07). */}
+                              {mark && (
+                                <button
+                                  type="button"
+                                  className={`session-project-progress${mark.status === 'DONE' ? ' done' : ''}`}
+                                  title={SESSION_PROJECT_COPY.markHint(mark.title)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (swipeClickGuard.current) {
+                                      swipeClickGuard.current = false;
+                                      return;
+                                    }
+                                    if (swipeOpen) {
+                                      setSwipeOpen(null);
+                                      return;
+                                    }
+                                    enterProjectSessions(mark.projectId);
+                                  }}
+                                >
+                                  {mark.taskCounts ? (
+                                    <>
+                                      <SessionProjectProgressBar counts={mark.taskCounts} runningCount={mark.runningCount} />
+                                      {SESSION_PROJECT_COPY.progress(mark.taskCounts.done, mark.taskCounts.total)}
+                                    </>
+                                  ) : mark.status}
+                                </button>
+                              )}
                               <div
                                 className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
                               >
@@ -11312,43 +9647,22 @@ export function WorkspaceView({
               {/* An unvisited session's history is still in flight: hold the shape of a
                   conversation instead of a blank pane. */}
               {placeholder === 'skeleton' && <TranscriptSkeleton />}
-              <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
-                <EventFullCtx.Provider value={fetchEventFull}>
-                  <AuthErrorCtx.Provider value={authErrorHelp}>
-                    <AutoRetryCtx.Provider value={autoRetryHelp}>
-                      <UndeliveredCtx.Provider value={restoreUndelivered}>
-                      <SteerWithdrawCtx.Provider value={steerWithdrawal}>
-                        <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
-                          <TaskActivityCtx.Provider value={taskActivity}>
-                          <StreamingDraftsCtx.Provider value={streamingDrafts}>
-                            {/* The links in this conversation, drawn as cards. The provider is
-                                what makes a card possible at all — the shared page and the export
-                                mount none — and it re-reads the links when the detail above is
-                                re-read, which is the only clock this view has. */}
-                            <OrbitLinkCardsProvider
-                              stateWord={orbitLinkStateWord}
-                              refreshKey={sessionDetailQ.dataUpdatedAt}
-                            >
-                              <AnsweredQuestionsCtx.Provider value={answeredQuestions}>
-                                <Transcript
-                                  events={transcriptEvents}
-                                  live={live && !selectedRegionHeld}
-                                  turnImages={turnImages}
-                                  artifactSessionId={selectedId}
-                                  streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
-                                  inserts={transcriptInserts}
-                                />
-                              </AnsweredQuestionsCtx.Provider>
-                            </OrbitLinkCardsProvider>
-                          </StreamingDraftsCtx.Provider>
-                          </TaskActivityCtx.Provider>
-                        </LiveToolOutputsCtx.Provider>
-                      </SteerWithdrawCtx.Provider>
-                      </UndeliveredCtx.Provider>
-                    </AutoRetryCtx.Provider>
-                  </AuthErrorCtx.Provider>
-                </EventFullCtx.Provider>
-              </SessionNavCtx.Provider>
+              {/* The transcript, in the contexts its cards read (SessionConversation). */}
+              <SessionConversation
+                sessionId={selectedId}
+                stream={stream}
+                live={live && !selectedRegionHeld}
+                turnImages={turnImages}
+                inserts={transcriptInserts}
+                authErrorHelp={authErrorHelp}
+                autoRetryHelp={autoRetryHelp}
+                restoreUndelivered={restoreUndelivered}
+                steerWithdrawal={steerWithdrawal}
+                linkStateWord={orbitLinkStateWord}
+                linkRefreshKey={sessionDetailQ.dataUpdatedAt}
+                answeredQuestions={answeredQuestions}
+                wikiChat={wikiChatCards}
+              />
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
                   which stay nearest the composer, and only once the transcript it sums up is drawn.
@@ -11428,7 +9742,6 @@ export function WorkspaceView({
                   key={`evidence:${selectedId}`}
                   sessionId={selectedId}
                   projectId={selectedSession?.projectId ?? null}
-                  coordinator={selectedSession}
                   onSendBack={startEvidenceSendBack}
                 />
               )}
@@ -11595,26 +9908,13 @@ export function WorkspaceView({
               {selected &&
                 selectedTrashed &&
                 (() => {
-                  // Days until the reaper permanently purges this trashed session. Reframes
+                  // When the reaper purges this trashed session, or what is keeping it here. Reframes
                   // the retained transcript as an honest, time-boxed Trash rather than a
-                  // "delete that didn't delete", and offers a real permanent delete.
-                  const left = selected.deletedAt
-                    ? Math.max(
-                        0,
-                        Math.ceil(
-                          (new Date(selected.deletedAt).getTime() +
-                            TRASH_RETENTION_DAYS * 86_400_000 -
-                            Date.now()) /
-                            86_400_000,
-                        ),
-                      )
-                    : null;
-                  const when =
-                    left === null
-                      ? ''
-                      : left <= 0
-                        ? ' · deletes soon'
-                        : ` · auto-deletes in ${left} day${left === 1 ? '' : 's'}`;
+                  // "delete that didn't delete", and offers a real permanent delete. Only the detail
+                  // knows what holds a session, so the list row alone promises no date.
+                  const when = detailForSelected
+                    ? trashNoteWhen(selected.deletedAt, detailForSelected.trashHold)
+                    : '';
                   return (
                     <div className="chat-note">
                       In Trash{when}.{' '}
@@ -11907,731 +10207,98 @@ export function WorkspaceView({
             {composerProviderNote}
           </div>
         )}
-        <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
-          {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
-              Only shown once the box has hit its auto-grow cap or the user set a manual
-              height — an empty/short composer has nothing worth resizing. */}
-          {(composerHeight != null || composerCapped) && (
-            <div
-              className="composer-resize-handle"
-              onMouseDown={startComposerResize}
-              onDoubleClick={() => setComposerHeight(null)}
-              title="Drag to resize · double-click to reset"
-            />
-          )}
-          {showSlash && (
-            <div className="composer-slash-menu" role="listbox">
-              {slashMatches.map((it, i) => (
-                <div
-                  key={`${it.type}:${it.name}`}
-                  role="option"
-                  aria-selected={i === slashIdx}
-                  className={`composer-slash-item${i === slashIdx ? ' is-active' : ''}`}
-                  // mousedown (not click) + preventDefault keeps focus in the textarea.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    pickSlash(it.name);
-                  }}
-                  onMouseEnter={() => setSlashIndex(i)}
-                >
-                  <span className="composer-slash-name">/{it.name}</span>
-                  <span className="composer-slash-type">
-                    {it.type === 'skill' ? 'skill' : it.type === 'local' ? 'local' : 'cmd'}
-                  </span>
-                  {it.workspaceId && <span className="composer-slash-type">project</span>}
-                  {it.description && <span className="composer-slash-desc">{it.description}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-          {showRef && (
-            <div className="composer-slash-menu" role="listbox">
-              {refMatches.map((m, i) => (
-                <div
-                  key={`${m.kind}:${m.id}`}
-                  role="option"
-                  aria-selected={i === refIdx}
-                  className={`composer-slash-item${i === refIdx ? ' is-active' : ''}`}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    pickRef(m);
-                  }}
-                  onMouseEnter={() => setRefIndex(i)}
-                >
-                  <span className="composer-slash-name">#{m.title}</span>
-                  <span className="composer-slash-type">{m.kind === 'list' ? 'list' : 'task'}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {showMention && (
-            <div className="composer-slash-menu" role="listbox">
-              {mentionMatches.map((a, i) => (
-                <div
-                  key={a.id}
-                  role="option"
-                  aria-selected={i === mentionIdx}
-                  className={`composer-slash-item${i === mentionIdx ? ' is-active' : ''}`}
-                  // mousedown (not click) + preventDefault keeps focus in the textarea.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    pickMention(a.name);
-                  }}
-                  onMouseEnter={() => setMentionIndex(i)}
-                >
-                  <span className="composer-slash-name">@{a.name}</span>
-                  <span className="composer-slash-type">workspace</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* Hidden picker the `Image` menu item triggers; we upload via addImage
-              ourselves and reset value so re-picking the same file fires onChange again. */}
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            multiple
-            hidden
-            onChange={(e) => {
-              Array.from(e.target.files ?? []).forEach((f) => void addImage(f));
-              e.target.value = '';
-            }}
-          />
-          {/* Hidden picker for the `File` menu item — any type (the runner routes by
-              MIME: images/PDFs inline, everything else into the worktree). Same upload path. */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => {
-              Array.from(e.target.files ?? []).forEach((f) => void addImage(f));
-              e.target.value = '';
-            }}
-          />
-          {/* Staged attachments sit inside the card, above the text they go out with, so a
-              screenshot reads as part of the message you're about to send — not as one more strip
-              of the band above, separated from the text by the watch, tray and branch bars. */}
-          {images.length > 0 && (
-            <div className="composer-attachments">
-              {images.map((im) =>
-                // An image picked here draws from its local object URL (instant); one handed back out
-                // of a sent message has no blob and draws from the bytes the control plane holds.
-                im.previewUrl || (im.id && im.mime.startsWith('image/')) ? (
-                  <span key={im.uid} className="composer-pill composer-attach">
-                    {im.previewUrl ? (
-                      <Image
-                        className="composer-attach-thumb"
-                        src={im.previewUrl}
-                        alt=""
-                        label={im.name || PREVIEW_IMAGE_LABEL}
-                        cover={<EyeOutlined className="composer-attach-eye" />}
-                      />
-                    ) : (
-                      <AttachmentImage id={im.id as string} variant="chip" />
-                    )}
-                    {im.status === 'uploading' && (
-                      <span className="composer-attach-spin">
-                        <LoadingOutlined spin />
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="composer-attach-remove"
-                      onClick={() => removeImage(im.uid)}
-                      aria-label="Remove image"
-                    >
-                      <CloseOutlined />
-                    </button>
-                  </span>
-                ) : (
-                  <span key={im.uid} className="composer-pill composer-file">
-                    {im.status === 'uploading' ? (
-                      <LoadingOutlined spin className="composer-file-icon" />
-                    ) : (
-                      <PaperClipOutlined className="composer-file-icon" />
-                    )}
-                    <span className="composer-file-name" title={im.name}>
-                      {im.name}
-                    </span>
-                    {im.size !== undefined && (
-                      <span className="composer-file-size">{fmtBytes(im.size)}</span>
-                    )}
-                    <button
-                      type="button"
-                      className="composer-file-remove"
-                      onClick={() => removeImage(im.uid)}
-                      aria-label="Remove file"
-                    >
-                      <CloseOutlined />
-                    </button>
-                  </span>
-                ),
-              )}
-            </div>
-          )}
-          <div className="composer-field">
-          {/* Behind the input, drawing its chips. Same characters, same metrics — see the
-              `.composer-field` block in index.css for why that is not negotiable. */}
-          <ComposerMirror text={text} refs={composerRefs} scrollTop={composerScroll} />
-          <Textarea
-            ref={taRef}
-            onScroll={(e) => setComposerScroll(e.currentTarget.scrollTop)}
-            onTouchEnd={onComposerTouchEnd}
-            className={shellMode ? 'composer-shell' : undefined}
-            variant="borderless"
-            // Auto-grow up to 12 rows, then scroll — unless the user has dragged the handle to
-            // a fixed height, which takes over (autoSize off + explicit height).
-            autoSize={composerHeight == null ? { minRows: 1, maxRows: 12 } : false}
-            style={composerHeight == null ? undefined : { height: composerHeight }}
-            // Hard-cap input length: an oversized prompt freezes the composer (autoSize
-            // remeasures the whole value on every keystroke) and the transcript. Pasting past
-            // the cap truncates; very large content should go through File instead.
-            maxLength={MAX_PROMPT_CHARS}
-            placeholder={offeredSuggestion ? '' : composerPlaceholder}
-            aria-describedby={offeredSuggestion ? suggestionHintId : undefined}
-            value={text}
-            disabled={composerDisabled}
-            // Typing exits history recall: the next Up starts fresh from this draft.
-            onChange={(e) => {
-              setText(e.target.value);
-              if (histIdx !== -1) setHistIdx(-1);
-            }}
-            // Paste a file straight from the clipboard — a screenshot, or a file copied in the
-            // OS file manager (best-effort: only where the browser exposes it as a clipboard
-            // file). Only swallow the paste when it carries files, so pasting text is untouched.
-            onPaste={(e) => {
-              if (!canAttach) return;
-              const files = Array.from(e.clipboardData?.items ?? [])
-                .filter((it) => it.kind === 'file')
-                .map((it) => it.getAsFile())
-                .filter((f): f is File => !!f);
-              if (files.length) {
-                e.preventDefault();
-                files.forEach((f) => void addImage(f));
-              }
-            }}
-            // One keydown handler: drive the menu while open, else Up/Down recall
-            // history (when it doesn't fight cursor movement), Enter=send / Shift+Enter=newline.
-            onKeyDown={(e) => {
-              if (showRef && !e.nativeEvent.isComposing) {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  setRefIndex((i) => (i + 1) % refMatches.length);
-                  return;
+        <SessionComposer
+          text={text}
+          setText={setText}
+          composerRefs={composerRefs}
+          setComposerRefs={setComposerRefs}
+          histIdx={histIdx}
+          setHistIdx={setHistIdx}
+          histDraft={histDraft}
+          setHistDraft={setHistDraft}
+          selectedId={selectedId ?? null}
+          images={images}
+          readyImages={readyImages}
+          addImage={addImage}
+          removeImage={removeImage}
+          canAttach={canAttach}
+          taRef={taRef}
+          composerPlaceholder={composerPlaceholder}
+          composerDisabled={composerDisabled}
+          offeredSuggestion={offeredSuggestion}
+          acceptSuggestion={acceptSuggestion}
+          replyTo={replyTo}
+          slashItems={slashItems}
+          runner={runner}
+          workspacesForRunner={workspacesForRunner}
+          shellUnavailable={sameSessionSendBlocked || (!!selected && !live && !resumable)}
+          workspaceReadOnly={workspaceReadOnly}
+          shownWorkspaceId={shownWorkspaceId}
+          setWorkspaceId={setWorkspaceId}
+          lockedWorkspaceId={lockedWorkspaceId}
+          live={live}
+          shownMode={shownMode}
+          configMut={configMut}
+          onDraftMode={(v) => {
+            modeSeedState.current = dirtyContextSeed(modelContextKey);
+            setMode(v);
+          }}
+          permissionSemanticsFor={permissionSemanticsFor}
+          shownEngine={shownEngine}
+          configEditable={configEditable}
+          managedDraftBlocked={managedDraftBlocked}
+          modelMenuOpen={modelMenuOpen}
+          setModelMenuOpen={setModelMenuOpen}
+          setProviderMenuOpen={setProviderMenuOpen}
+          modelMenuItems={modelMenuItems}
+          smartRoute={smartRoute}
+          shownModelLabel={shownModelLabel}
+          shownEffortLabel={shownEffortLabel}
+          cursorAuto={cursorAuto}
+          fastModeUsable={fastModeUsable}
+          shownFastMode={shownFastMode}
+          cursorSettings={cursorSettings}
+          shownPool={shownPool}
+          shownPoolAccount={shownPoolAccount}
+          shownPlanUsage={shownPlanUsage}
+          shownModel={shownModel}
+          // Which of the runner's Codex, Claude, Antigravity or Kimi accounts this quota is, named
+          // inside the popover rather than beside the gauge, where a phone's toolbar has no room for
+          // an email. A draft names the one it would start on.
+          planUsageAccount={
+            shownAccountEngine && shownAccountLabel
+              ? {
+                  label: shownAccountLabel,
+                  ...(!selectedId &&
+                  !draftAccountOf(shownAccountEngine) &&
+                  automaticOfferedOn(shownAccountEngine, pickedWorkspace)
+                    ? { note: 'Automatic — the account whose quota resets soonest' }
+                    : selectedId && sessionAutomatic && accountsOffered
+                      ? { note: 'Automatic — moves to another account when this one hits its limit' }
+                      : {}),
                 }
-                if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  setRefIndex((i) => (i - 1 + refMatches.length) % refMatches.length);
-                  return;
-                }
-                if (e.key === 'Enter' || e.key === 'Tab') {
-                  e.preventDefault();
-                  pickRef(refMatches[refIdx]);
-                  return;
-                }
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setRefDismissed(refToken);
-                  return;
-                }
-              }
-              if (showMention && !e.nativeEvent.isComposing) {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  setMentionIndex((i) => (i + 1) % mentionMatches.length);
-                  return;
-                }
-                if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
-                  return;
-                }
-                if (e.key === 'Enter' || e.key === 'Tab') {
-                  e.preventDefault();
-                  pickMention(mentionMatches[mentionIdx].name);
-                  return;
-                }
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setMentionDismissed(mentionToken);
-                  return;
-                }
-              }
-              if (showSlash && !e.nativeEvent.isComposing) {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  setSlashIndex((i) => (i + 1) % slashMatches.length);
-                  return;
-                }
-                if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  setSlashIndex((i) => (i - 1 + slashMatches.length) % slashMatches.length);
-                  return;
-                }
-                if (e.key === 'Enter' || e.key === 'Tab') {
-                  e.preventDefault();
-                  pickSlash(slashMatches[slashIdx].name);
-                  return;
-                }
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setSlashDismissed(slashToken);
-                  return;
-                }
-              }
-              // Tab takes the offered suggestion. An open menu above has already had the key, and
-              // with no suggestion on offer Tab moves focus as it always has.
-              if (
-                e.key === 'Tab' &&
-                offeredSuggestion &&
-                !e.shiftKey &&
-                !e.altKey &&
-                !e.ctrlKey &&
-                !e.metaKey &&
-                !e.nativeEvent.isComposing
-              ) {
-                e.preventDefault();
-                acceptSuggestion();
-                return;
-              }
-              // Shell-style history recall. Up only fires on the first line and Down on
-              // the last line (with no text selected), so navigating within a multi-line
-              // draft still moves the caret normally. After recall the caret is parked at
-              // the start (Up) / end (Down) so a repeat keeps stepping through history.
-              if (
-                (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
-                !e.nativeEvent.isComposing &&
-                !e.metaKey &&
-                !e.ctrlKey &&
-                !e.altKey &&
-                !e.shiftKey
-              ) {
-                const ta = e.currentTarget;
-                const noSelection = ta.selectionStart === ta.selectionEnd;
-                const onFirstLine = !ta.value.slice(0, ta.selectionStart).includes('\n');
-                const onLastLine = !ta.value.slice(ta.selectionEnd).includes('\n');
-                const setCaret = (pos: number): void => {
-                  // setText re-renders the textarea; restore the caret on the next tick.
-                  setTimeout(() => {
-                    ta.selectionStart = ta.selectionEnd = pos;
-                  }, 0);
-                };
-                if (e.key === 'ArrowUp' && noSelection && onFirstLine) {
-                  const list = loadHistory(selectedId);
-                  if (list.length) {
-                    e.preventDefault();
-                    if (histIdx === -1) setHistDraft(text);
-                    const idx = histIdx === -1 ? list.length - 1 : Math.max(0, histIdx - 1);
-                    setHistIdx(idx);
-                    setText(list[idx]);
-                    setCaret(0);
-                    return;
-                  }
-                }
-                if (e.key === 'ArrowDown' && noSelection && onLastLine && histIdx !== -1) {
-                  e.preventDefault();
-                  const list = loadHistory(selectedId);
-                  if (histIdx < list.length - 1) {
-                    const idx = histIdx + 1;
-                    setHistIdx(idx);
-                    setText(list[idx]);
-                    setCaret(list[idx].length);
-                  } else {
-                    setHistIdx(-1);
-                    setText(histDraft);
-                    setCaret(histDraft.length);
-                  }
-                  return;
-                }
-              }
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                // An Enter with something to send is the send's alone. The send empties the box
-                // before the key reaches the window, where a waiting card answers Enter on an
-                // empty field (CardHotkey) — so the same press also started a project. An Enter on
-                // an empty box still goes on to the card.
-                //
-                // While a reply is armed the keys are this composer's, empty or not: the box is
-                // where that sentence is typed, and what the press would otherwise reach is either
-                // another card's door — on the chord, a READY candidate merges main
-                // (`ProjectPromotionCard`) — or the arming card's own, pressed from a box the
-                // reader is still composing in (the settlement card's Start the project, the
-                // confirmation card's Confirm done).
-                if (text.trim() || readyImages.length > 0 || replyTo) e.stopPropagation();
-                // ⌥Enter sends it the other way while a turn runs: queued for the next turn instead
-                // of into this one (decided 2026-10-16, docs/mocks/steer-tray).
-                onSend(e.altKey ? 'NEXT_TURN' : undefined);
-              }
-            }}
-          />
-          {offeredSuggestion && (
-            <div className="composer-suggestion">
-              {/* Drawn for the eye; a screen reader hears the box's description below instead. */}
-              <span className="composer-suggestion-text" title={offeredSuggestion} aria-hidden="true">
-                {offeredSuggestion}
-              </span>
-              {/* The grey line itself says how to take it, and there is no button to see: Tab with a
-                  keyboard, a double-tap on the box on a touch screen. Which shows is CSS's call. Drawn in
-                  docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
-              <kbd className="composer-suggestion-key" aria-hidden="true">
-                Tab
-              </kbd>
-              <span className="composer-suggestion-tap" aria-hidden="true">
-                Double-tap to use
-              </span>
-              {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
-                  from the eye there, and gone with a keyboard, which has Tab. */}
-              <button
-                type="button"
-                className="composer-suggestion-use"
-                // Fill without blurring the box first: the click's focus change would land the
-                // caret somewhere before the text arrives.
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={acceptSuggestion}
-                aria-label={`Use suggestion: ${offeredSuggestion}`}
-                title="Use this suggestion"
-              >
-                Use
-              </button>
-              <span id={suggestionHintId} className="sr-only">
-                Suggested reply: {offeredSuggestion}.
-                <span className="composer-suggestion-tab-hint"> Press Tab to use it.</span>
-              </span>
-            </div>
-          )}
-          </div>
-          <div className="composer-toolbar">
-            {/* In shell mode this stops being a menu: the `❯` below is a button on its own that leaves
-                shell mode, instead of opening the attachment menu. Nothing in that menu applies to a
-                raw command anyway — and a mode you can enter needs a visible way out. */}
-            {shellMode ? (
-              <Button
-                className="composer-attach-btn composer-shell-btn"
-                variant="text"
-                onClick={exitShell}
-                disabled={composerDisabled}
-                aria-label="Leave shell mode"
-                title="Leave shell mode"
-              >
-                ❯
-              </Button>
-            ) : (
-            <Menu
-              side="top"
-              align="start"
-              disabled={composerDisabled}
-              // On a phone it takes the native menu's density (`variant="attachment"`, ui/Floating.css).
-              variant="attachment"
-              popupClassName="composer-attach-menu"
-              // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
-              // array's last entry is the one beside the `+` — while the native menu
-              // (ComposerView.swift `addMenu`) hands its items to the system with the first one
-              // nearest the button and gets them back reversed. Hence the native source reads
-              // Command…File and this reads File…Command: both clients put Command under the
-              // thumb and File at the far end, and a divider between the two groups. Pinned by
-              // WorkspaceView.composerMenu.test.tsx, drawn in
-              // docs/mocks/composer-attach-menu-phone.html.
-              items={[
-                  {
-                    key: 'file',
-                    icon: <PaperClipOutlined />,
-                    label: 'File',
-                    onSelect: () => fileInputRef.current?.click(),
-                  },
-                  {
-                    key: 'image',
-                    icon: <PictureOutlined />,
-                    // One word per action, the way the native composer's `+` menu writes them
-                    // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
-                    // upload can't work in says so on pick, rather than greying the item out.
-                    label: 'Image',
-                    onSelect: () => imageInputRef.current?.click(),
-                  },
-                  { key: 'divider', type: 'separator' },
-                  {
-                    key: 'shell',
-                    // The terminal box, as native Shell draws it — not `ConsoleSqlOutlined`, whose
-                    // SQL monitor appeared in neither client.
-                    icon: <CodeOutlined />,
-                    // Works on a live session, a brand-new draft (sent as the first turn), and
-                    // an ended-but-resumable session (sent as the revive turn — the runner
-                    // --resumes claude, runs the command, and buffers its output for the next
-                    // message). Only an unresumable ended session blocks it (never started, or
-                    // its runner is offline) — there's no claude context to wake.
-                    label:
-                      sameSessionSendBlocked || (!!selected && !live && !resumable)
-                        ? 'Shell (session unavailable)'
-                        : 'Shell',
-                    disabled: sameSessionSendBlocked || (!!selected && !live && !resumable),
-                    onSelect: insertShell,
-                  },
-                  {
-                    key: 'skill',
-                    icon: <ThunderboltOutlined />,
-                    label: 'Skill',
-                    disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
-                    onSelect: () => insertSlash('skill'),
-                  },
-                  {
-                    key: 'command',
-                    icon: <SlashCommandIcon />,
-                    label: 'Command',
-                    disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
-                    onSelect: () => insertSlash('command'),
-                  },
-                ]}
-              trigger={
-                <Button
-                  className="composer-attach-btn"
-                  variant="text"
-                  icon={<PlusOutlined />}
-                  disabled={composerDisabled}
-                  aria-label="Add attachment"
-                />
-              }
-            />
-            )}
-            {/* The workspace is only a Select when it can actually be picked (new, unlocked
-                session); once read-only it shows as a static pill left of Model below. */}
-            {!workspaceReadOnly && (
-              <span className="composer-pill composer-pill-workspace">
-                <Select
-                  size="small"
-                  variant="borderless"
-                  showArrow={false}
-                  value={shownWorkspaceId ?? null}
-                  onValueChange={(v) => setWorkspaceId(v ?? undefined)}
-                  options={workspacesForRunner.map((a) => ({ value: a.id, label: a.name }))}
-                  placeholder="Default"
-                  disabled={live || !!lockedWorkspaceId}
-                  matchTriggerWidth={false}
-                />
-              </span>
-            )}
-            <span className="composer-pill">
-              <Select
-                size="small"
-                variant="borderless"
-                showArrow={false}
-                value={shownMode}
-                onValueChange={(v) => {
-                  if (v === null) return;
-                  if (live) {
-                    configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] });
-                  } else {
-                    modeSeedState.current = dirtyContextSeed(modelContextKey);
-                    setMode(v);
-                  }
-                }}
-                options={MODE_OPTIONS.map((m) => {
-                  // A mode this ENGINE cannot honor is still offered, and never disabled: it is the
-                  // user's stored intent, and it starts being enforced the moment the session moves
-                  // to an engine that can — it just must not read as a guarantee it isn't, so the
-                  // option carries the caveat. The wording comes from the shared table rather than
-                  // being rebuilt here: a picker that re-derives it is a picker that can contradict
-                  // what dispatch will do.
-                  //
-                  // A mode this RUNNER cannot run is the one exception, and disabled rather than
-                  // annotated, because the premise above does not hold for it: a session cannot move
-                  // to another machine, so Bypass on a root runner is not a mode awaiting its moment
-                  // — claude exits during startup and the session never produces anything. Disabled
-                  // and not hidden, so the reason is visible instead of the option silently missing.
-                  //
-                  // A mode the RUNTIME refuses outright (DeepSeek Harness outside Default, Auto and
-                  // Don't Ask) is disabled for the same reason: the server rejects the session rather
-                  // than run it as something else, so it is not an intent that can wait.
-                  const semantics = permissionSemanticsFor(m);
-                  const runnable =
-                    permissionModeAvailableOnRunner(MODE_TO_PERMISSION[m], runner.runsAsRoot) &&
-                    permissionModeSupported(MODE_TO_PERMISSION[m], shownEngine);
-                  const shortNote = semantics?.shortNote;
-                  return {
-                    value: m,
-                    label: shortNote ? `${m} — ${shortNote}` : m,
-                    disabled: !runnable,
-                  };
-                })}
-                disabled={!configEditable}
-                matchTriggerWidth={false}
-              />
-            </span>
-            <span className="composer-pill-spacer" />
-            {/* Provider, model, effort and — on a model with a fast lane — speed are one control, the
-                way a reference composer writes "model · effort" as one button: the model in the
-                label's colour, the effort after it in the secondary one. The menu behind it
-                (`modelMenuItems`) keeps each field's own rules. */}
-            {/* No model to show where a first session cannot start yet: the managed default
-                workspace before its runner was ever ready (`managedDraftBlocked`). */}
-            {!managedDraftBlocked && (
-              <span className="composer-pill composer-model-pill">
-                <Menu
-                  side="top"
-                  align="end"
-                  disabled={!configEditable}
-                  open={modelMenuOpen}
-                  onOpenChange={(open) => {
-                    setModelMenuOpen(open);
-                    if (!open) setProviderMenuOpen(false);
-                  }}
-                  // Rows that open a level down open on hover where the pointer can hover, the way
-                  // the browser's own menus do — and on a tap where it cannot, because a phone has
-                  // no hover to give: one row, two gestures, decided by the pointer.
-                  // They open to the right — and on a phone, where the control sits near the
-                  // right edge, there is no right: shift the level back inside the screen rather
-                  // than let it hang off the edge (and widen the page with it).
-                  submenuOverflow="slide"
-                  popupClassName="composer-model-menu"
-                  items={modelMenuItems}
-                  trigger={
-                    <button
-                      type="button"
-                      className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
-                      disabled={!configEditable}
-                      aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
-                        smartRoute ? ', picked by smart selection' : ''
-                      }`}
-                    >
-                      {smartRoute && (
-                        <span className="composer-model-spark" aria-hidden="true">
-                          ✦
-                        </span>
-                      )}
-                      <span className="composer-model-name">{shownModelLabel}</span>
-                      {/* Auto on Cursor CLI has no effort to name; a Cursor model names its context and fast
-                          lane after it ("Claude Opus 5.5 High · 1M · Fast", board Web 5 ⑤). */}
-                      {!cursorAuto && (
-                        <span className="composer-model-effort">
-                          {fastModeUsable && shownFastMode
-                            ? `${shownEffortLabel} · Fast`
-                            : [shownEffortLabel, ...cursorChipSettings(cursorSettings)].join(' · ')}
-                        </span>
-                      )}
-                    </button>
-                  }
-                />
-              </span>
-            )}
-            {shownPool && shownPoolAccount && (
-              <Tooltip content={poolAccountHelp(shownPool, shownPoolAccount)}>
-                <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
-                  <span className="composer-account-name">{shownPoolAccount.member.label}</span>
-                </span>
-              </Tooltip>
-            )}
-            {shownPlanUsage && (
-              <PlanUsageIndicator
-                usage={shownPlanUsage}
-                // The pill's number is the quota the model the control names spends, not another model's.
-                model={shownModel}
-                // Which of the runner's Codex, Claude, Antigravity or Kimi accounts this quota is, named
-                // inside the popover rather than beside the gauge, where a phone's toolbar has no room for
-                // an email. A draft names the one it would start on.
-                account={
-                  shownAccountEngine && shownAccountLabel
-                    ? {
-                        label: shownAccountLabel,
-                        ...(!selectedId &&
-                        !draftAccountOf(shownAccountEngine) &&
-                        automaticOfferedOn(shownAccountEngine, pickedWorkspace)
-                          ? { note: 'Automatic — the account whose quota resets soonest' }
-                          : selectedId && sessionAutomatic && accountsOffered
-                            ? { note: 'Automatic — moves to another account when this one hits its limit' }
-                            : {}),
-                      }
-                    : undefined
-                }
-                // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
-                // the built-in Codex runtime is offered them — on Default, whose quota this then is;
-                // the create route judges the workspace.
-                reset={
-                  shownProvider === 'codex' && shownCodexAccount === 'default'
-                    ? { runner, workspaceId: shownWorkspaceId }
-                    : undefined
-                }
-              />
-            )}
-            {/* Context stays visible even before the first turn reports tokens — a New Session reads
-                "—". Rightmost pill, to the right of plan usage. */}
-            {!(shownEngine === AgentProvider.OPENCODE && shownModel === '') && (
-              <ContextWindowIndicator
-                tokens={contextTokens}
-                reportedWindow={reportedContextWindow}
-                model={shownModel}
-                provider={shownProvider}
-                modelCatalog={runner.modelCatalog}
-                configured={configuredProviders}
-                unavailable={shownEngine === AgentProvider.CURSOR ? CURSOR_CONTEXT_UNAVAILABLE : undefined}
-              />
-            )}
-            {showStop ? (
-              <Button
-                className="composer-send"
-                variant="primary"
-                icon={<StopSquareIcon />}
-                onClick={() => selected && control.mutate(selected.id)}
-                aria-label="Stop"
-              />
-            ) : (
-              <span className="composer-send-hold">
-                <Button
-                  className="composer-send"
-                  variant="primary"
-                  icon={<ArrowUpOutlined />}
-                  disabled={!canSend}
-                  loading={send.isPending}
-                  onClick={() => {
-                    // The press that opened the offer is not a send as well.
-                    if (sendHold.current?.fired) {
-                      sendHold.current = null;
-                      return;
-                    }
-                    onSend();
-                  }}
-                  onPointerDown={() => {
-                    sendHold.current = null;
-                    if (!queueOffered || !canSend) return;
-                    const hold = {
-                      fired: false,
-                      timer: setTimeout(() => {
-                        hold.fired = true;
-                        setQueueOffer(true);
-                      }, QUEUE_OFFER_HOLD_MS),
-                    };
-                    sendHold.current = hold;
-                  }}
-                  onPointerUp={releaseSendHold}
-                  onPointerLeave={releaseSendHold}
-                  onPointerCancel={releaseSendHold}
-                  onContextMenu={(e) => {
-                    if (queueOffered) e.preventDefault();
-                  }}
-                  aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
-                  title={
-                    queueOffered
-                      ? `Send into the current turn · ${IS_MAC ? '⌥' : 'Alt+'}Enter, or hold, to queue it for the next turn`
-                      : undefined
-                  }
-                />
-                {queueOffer && (
-                  <div ref={queueOfferRef} className="composer-queue-offer" role="menu" aria-label="Send">
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setQueueOffer(false);
-                        onSend('NEXT_TURN');
-                      }}
-                    >
-                      Queue for next turn
-                    </button>
-                  </div>
-                )}
-              </span>
-            )}
-          </div>
-        </div>
+              : undefined
+          }
+          // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
+          // the built-in Codex runtime is offered them — on Default, whose quota this then is;
+          // the create route judges the workspace.
+          planUsageReset={
+            shownProvider === 'codex' && shownCodexAccount === 'default'
+              ? { runner, workspaceId: shownWorkspaceId }
+              : undefined
+          }
+          contextTokens={contextTokens}
+          reportedContextWindow={reportedContextWindow}
+          shownProvider={shownProvider}
+          configuredProviders={configuredProviders}
+          showStop={showStop}
+          onStop={() => selected && control.mutate(selected.id)}
+          canSend={canSend}
+          sending={send.isPending}
+          onSend={onSend}
+          queueOffered={queueOffered}
+          defaultSendIntent={defaultSendIntent}
+        />
       </div>
         </>
         )}
@@ -12639,6 +10306,1750 @@ export function WorkspaceView({
       {confirmation}
     </div>
   );
+}
+
+/**
+ * The session page's composer, and the wiki chat panel's (docs/wiki-chat-design.md §4.1, board 43): the box a message
+ * is written in. Its attachment row, the words with their `/`, `#` and `@` menus and the engine's offered suggestion,
+ * and the toolbar under them: `+` (a file, a picture, the shell, a skill or a command), the workspace while a draft can
+ * still pick one, the mode, the model with its effort and speed, the quota and context gauges, and Send — which is
+ * Stop while a turn runs and nothing is typed. While a turn runs, a message goes into it, or, held or with ⌥Enter,
+ * waits for the next one.
+ *
+ * WHAT IT KEEPS AND WHAT IT IS GIVEN. It keeps what only the box reads: the menus' cursors, its dragged height, the
+ * hold on Send that offers the queue, the last tap on a touch screen. The draft — the words, their references, the
+ * history cursor and the staged files — is the page's, because the page stashes it per session, sends it and puts
+ * messages back into it; so is every fact the toolbar shows and every door a press goes through (`onSend`, `onStop`,
+ * `configMut`, `onDraftMode`).
+ *
+ * It lives in this module, not a file of its own, because tests on two clients read its words and its toolbar here —
+ * WorkspaceView.projectIntent.test.tsx, steerDeliveryParity.test.ts, and OrbitKit's ComposerMenuCopyParityTests and
+ * PromptSuggestionTests — and the session page's tests do not change with the move (C18).
+ */
+export interface SessionComposerProps {
+  text: string;
+  setText: Dispatch<SetStateAction<string>>;
+  composerRefs: ReferenceMap;
+  setComposerRefs: Dispatch<SetStateAction<ReferenceMap>>;
+  histIdx: number;
+  setHistIdx: Dispatch<SetStateAction<number>>;
+  histDraft: string;
+  setHistDraft: Dispatch<SetStateAction<string>>;
+  /** Whose sent messages Up and Down recall (`loadHistory`): a session's, or null for a new one. */
+  selectedId: string | null;
+  images: ComposerImage[];
+  readyImages: ComposerImage[];
+  addImage: (file: File) => Promise<void>;
+  removeImage: (uid: string) => void;
+  canAttach: boolean | undefined;
+  taRef: RefObject<HTMLTextAreaElement | null>;
+  /** Drawn first in the attachment row, before the staged pictures and files: a wiki chat's page and selection. */
+  attachmentsBefore?: ReactNode;
+  composerPlaceholder: string;
+  composerDisabled: boolean;
+  offeredSuggestion: string | null;
+  acceptSuggestion: () => void;
+  /** An armed reply (the session page's `replyTo`): no shell mode while one is, and Enter is this box's. */
+  replyTo: unknown;
+  slashItems: ComposerSlashItem[];
+  runner: Pick<Runner, 'online' | 'runsAsRoot' | 'modelCatalog'>;
+  /** The `@` menu's workspaces, and a draft's workspace picker's. */
+  workspacesForRunner: ReadonlyArray<{ id: string; name: string }>;
+  /** Whether a leading `!` makes the draft a shell command. A wiki chat opens with the owner's words, so its first
+   *  message is never one. */
+  shellOffered?: boolean;
+  /** Fit the empty field to its placeholder again when that changes (the wiki chat's: its draft's words replace the
+   *  first ones once a card loads). The session page keeps the field's own rule: a value or width change. */
+  measureOnPlaceholder?: boolean;
+  /** The `+` menu's Shell cannot run here now, and says so. */
+  shellUnavailable: boolean;
+  workspaceReadOnly: boolean;
+  shownWorkspaceId?: string;
+  setWorkspaceId: (id: string | undefined) => void;
+  lockedWorkspaceId?: string | null;
+  live: boolean;
+  shownMode: string;
+  /** A live session's config door (`PATCH /sessions/:id/config`); a draft keeps its mode by `onDraftMode`. */
+  configMut: { mutate: (config: { permissionMode: string }) => void };
+  onDraftMode: (mode: string) => void;
+  permissionSemanticsFor: (label: string) => { shortNote?: string } | null | undefined;
+  shownEngine: AgentProvider;
+  configEditable: boolean | undefined;
+  managedDraftBlocked: boolean | undefined;
+  modelMenuOpen: boolean;
+  setModelMenuOpen: (open: boolean) => void;
+  setProviderMenuOpen: (open: boolean) => void;
+  modelMenuItems: MenuItem[];
+  /** A task run's smart-selection pick, while the chip still shows it: the chip carries its ✦. */
+  smartRoute: object | null;
+  shownModelLabel: string;
+  shownEffortLabel: string;
+  cursorAuto: boolean;
+  fastModeUsable: boolean;
+  shownFastMode: boolean;
+  cursorSettings: Parameters<typeof cursorChipSettings>[0];
+  shownPool: Parameters<typeof poolAccountHelp>[0] | null;
+  shownPoolAccount: (Parameters<typeof poolAccountHelp>[1] & { member: { id: string } }) | null;
+  shownPlanUsage: ComponentProps<typeof PlanUsageIndicator>['usage'] | null;
+  shownModel: string;
+  planUsageAccount: ComponentProps<typeof PlanUsageIndicator>['account'];
+  planUsageReset: ComponentProps<typeof PlanUsageIndicator>['reset'];
+  contextTokens: number;
+  reportedContextWindow?: number;
+  shownProvider: string;
+  configuredProviders: ConfiguredProvider[];
+  showStop: boolean;
+  onStop: () => void;
+  canSend: boolean;
+  sending: boolean;
+  onSend: (intentOverride?: SessionTurnIntent) => void;
+  queueOffered: boolean;
+  defaultSendIntent: SessionTurnIntent;
+}
+
+export function SessionComposer({
+  text,
+  setText,
+  composerRefs,
+  setComposerRefs,
+  histIdx,
+  setHistIdx,
+  histDraft,
+  setHistDraft,
+  selectedId,
+  images,
+  readyImages,
+  addImage,
+  removeImage,
+  canAttach,
+  taRef,
+  attachmentsBefore,
+  composerPlaceholder,
+  composerDisabled,
+  offeredSuggestion,
+  acceptSuggestion,
+  replyTo,
+  slashItems,
+  runner,
+  workspacesForRunner,
+  shellOffered = true,
+  measureOnPlaceholder = false,
+  shellUnavailable,
+  workspaceReadOnly,
+  shownWorkspaceId,
+  setWorkspaceId,
+  lockedWorkspaceId,
+  live,
+  shownMode,
+  configMut,
+  onDraftMode,
+  permissionSemanticsFor,
+  shownEngine,
+  configEditable,
+  managedDraftBlocked,
+  modelMenuOpen,
+  setModelMenuOpen,
+  setProviderMenuOpen,
+  modelMenuItems,
+  smartRoute,
+  shownModelLabel,
+  shownEffortLabel,
+  cursorAuto,
+  fastModeUsable,
+  shownFastMode,
+  cursorSettings,
+  shownPool,
+  shownPoolAccount,
+  shownPlanUsage,
+  shownModel,
+  planUsageAccount,
+  planUsageReset,
+  contextTokens,
+  reportedContextWindow,
+  shownProvider,
+  configuredProviders,
+  showStop,
+  onStop,
+  canSend,
+  sending,
+  onSend,
+  queueOffered,
+  defaultSendIntent,
+}: SessionComposerProps) {
+  // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
+  // its auto-grow cap.
+  const [composerScroll, setComposerScroll] = useState(0);
+  const [queueOffer, setQueueOffer] = useState(false);
+  const queueOfferRef = useRef<HTMLDivElement>(null);
+  // The press now on Send, and whether it was held long enough to open the offer instead of sending.
+  const sendHold = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
+  const releaseSendHold = () => {
+    const hold = sendHold.current;
+    if (hold && !hold.fired) {
+      clearTimeout(hold.timer);
+      sendHold.current = null;
+    }
+  };
+  useEffect(() => {
+    if (!queueOffer) return undefined;
+    const close = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !queueOfferRef.current?.contains(event.target as Element | null)) {
+        setQueueOffer(false);
+      }
+    };
+    document.addEventListener('pointerdown', close, true);
+    document.addEventListener('keydown', close, true);
+    return () => {
+      document.removeEventListener('pointerdown', close, true);
+      document.removeEventListener('keydown', close, true);
+    };
+  }, [queueOffer]);
+  // Nothing to send that way any more (sent, emptied, the turn ended): the offer goes too.
+  useEffect(() => {
+    if (!queueOffered) setQueueOffer(false);
+  }, [queueOffered]);
+  const suggestionHintId = useId();
+  // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
+  // timer that hands a held first tap on as the box's focus.
+  const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
+  // drags the top handle, that height wins over autoSize until they double-click to reset.
+  const [composerHeight, setComposerHeight] = useState<number | null>(null);
+  // Drag the top handle to set an explicit composer height. Drag up = taller; the height is
+  // clamped so it can't collapse away or swallow the transcript.
+  const startComposerResize = useCallback((e: ReactMouseEvent): void => {
+    e.preventDefault();
+    const ta = taRef.current;
+    const startY = e.clientY;
+    const startH = ta?.offsetHeight ?? composerHeight ?? 120;
+    const onMove = (ev: MouseEvent): void => {
+      setComposerHeight(Math.min(Math.max(startH + (startY - ev.clientY), 44), 640));
+    };
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+    };
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [composerHeight]);
+  // The resize handle only earns its keep once auto-grow has hit its maxRows cap (the box is
+  // scrolling) or the user already dragged an explicit height — a short/empty box has nothing
+  // worth resizing, so we hide the handle until then. Re-measure whenever the text or the
+  // manual height changes (a double-click reset drops us back to auto-grow).
+  const [composerCapped, setComposerCapped] = useState(false);
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    // Measure on the next frame: the Textarea's autoSize pass has set this value's height before paint.
+    const id = requestAnimationFrame(() => {
+      setComposerCapped(ta.scrollHeight > ta.clientHeight + 1);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [text, composerHeight]);
+  // ── `/` command, skill, and local command autocomplete ─────────────────────
+  // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
+  // / runner.skills). Show them as a hint menu while the cursor sits on a `/token`
+  // at the start of input or right after whitespace/newline, like the Claude Code TUI;
+  // picking one replaces just that token with `/<name> ` (the trailing space drops the
+  // regex match, so the menu auto-hides).
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
+  // The `+` menu opens the picker scoped to one asset kind; null (manual `/` typing) shows both.
+  const [slashScope, setSlashScope] = useState<'command' | 'skill' | null>(null);
+  const slashToken = getSlashToken(text);
+  const slashMatches = useMemo(() => {
+    const items = runner.online ? slashItems : slashItems.filter((it) => it.type === 'local');
+    return getSlashMatches(items, slashToken, slashScope);
+  }, [slashItems, slashToken, slashScope, runner.online]);
+  useEffect(() => {
+    setSlashIndex(0);
+    if (slashToken === null) setSlashScope(null);
+  }, [slashToken]);
+  const showSlash =
+    slashToken !== null &&
+    slashToken !== slashDismissed &&
+    !composerDisabled &&
+    slashMatches.length > 0;
+  const slashIdx = slashMatches.length ? Math.min(slashIndex, slashMatches.length - 1) : 0;
+  const pickSlash = (name: string): void => {
+    // Replace only the trailing `/token` ($1 preserves the start-or-whitespace before
+    // it), so picking a command mid-message doesn't clobber text typed earlier.
+    setText(replaceSlashToken(text, name));
+    setSlashDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // ── `@` workspace-mention autocomplete ─────────────────────────────────────────
+  // Type `@` to reference another workspace on this runner; picking one inserts
+  // `@<name> ` as plain text. The in-session orchestrator reads the mention from
+  // the turn (sent verbatim) and can hand work off to that workspace via its session
+  // tools — so this is purely a composer convenience with no separate send path.
+  // Mirrors the `/` menu above and the task-comment mention menu (TaskDetailPanel).
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionDismissed, setMentionDismissed] = useState<string | null>(null);
+  const mentionToken = /(?:^|\s)@([^\s@]*)$/.exec(text)?.[1] ?? null;
+  const mentionMatches = useMemo(() => {
+    if (mentionToken === null) return [];
+    const q = mentionToken.toLowerCase();
+    return workspacesForRunner
+      .filter((a) => a.name.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const pa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+        const pb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+        return pa - pb || a.name.localeCompare(b.name);
+      })
+      .slice(0, 8);
+  }, [workspacesForRunner, mentionToken]);
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionToken]);
+  const showMention =
+    mentionToken !== null &&
+    mentionToken !== mentionDismissed &&
+    !composerDisabled &&
+    mentionMatches.length > 0;
+  const mentionIdx = mentionMatches.length ? Math.min(mentionIndex, mentionMatches.length - 1) : 0;
+  const pickMention = (name: string): void => {
+    // Replace only the trailing `@token` ($1 preserves the start-or-whitespace before it),
+    // so picking a workspace mid-message doesn't clobber text typed earlier.
+    setText(text.replace(/(^|\s)@([^\s@]*)$/, `$1@${name} `));
+    setMentionDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // ── `#` task / task-list references ────────────────────────────────────────────────────
+  // Type `#` to reference a list or task; picking one inserts `#<title>` as readable text and
+  // records which id that title meant. The full `[title](orbit-list:<id>)` link is materialised
+  // on send (see materializeReferences) and expanded by the server at delivery — the box never
+  // holds a uuid, because the chip layer that hides one cannot keep the caret aligned with it.
+  const [refIndex, setRefIndex] = useState(0);
+  const [refDismissed, setRefDismissed] = useState<string | null>(null);
+  const refToken = referenceToken(text);
+  const refListsQ = useQuery({
+    queryKey: ['task-lists'],
+    queryFn: () => api<Array<{ id: string; title: string }>>('/task-lists'),
+    // Only once the user reaches for the menu: most drafts never contain a reference, and the
+    // list index is not otherwise needed on this screen.
+    enabled: refToken !== null,
+    staleTime: 30_000,
+  });
+  const refTasksQ = useQuery({
+    queryKey: ['tasks', 'ref-picker', refToken],
+    queryFn: () =>
+      api<{ items: Array<{ id: string; title: string }> }>(
+        `/tasks/page?limit=8&counts=none&q=${encodeURIComponent(refToken ?? '')}`,
+      ).then((p) => p.items),
+    // A blank `#` lists lists only: every task in the deployment is not a useful first screen,
+    // and the search is what makes the task half navigable at 56k rows.
+    enabled: !!refToken,
+    staleTime: 10_000,
+  });
+  const refMatches = useMemo(() => {
+    if (refToken === null) return [];
+    const q = refToken.toLowerCase();
+    const lists = (refListsQ.data ?? [])
+      .filter((l) => l.title.toLowerCase().includes(q))
+      .slice(0, 5)
+      .map((l) => ({ kind: 'list' as const, id: l.id, title: l.title }));
+    const tasks = (refTasksQ.data ?? [])
+      .slice(0, 5)
+      .map((t) => ({ kind: 'task' as const, id: t.id, title: t.title }));
+    return [...lists, ...tasks];
+  }, [refToken, refListsQ.data, refTasksQ.data]);
+  useEffect(() => {
+    setRefIndex(0);
+  }, [refToken]);
+  const showRef =
+    refToken !== null &&
+    refToken !== refDismissed &&
+    !composerDisabled &&
+    refMatches.length > 0;
+  const refIdx = refMatches.length ? Math.min(refIndex, refMatches.length - 1) : 0;
+  const pickRef = (m: { kind: 'list' | 'task'; id: string; title: string }): void => {
+    const next = applyReferencePick(text, m.title, { kind: m.kind, id: m.id }, composerRefs);
+    setText(next.text);
+    setComposerRefs(next.refs);
+    setRefDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+
+  // Open the autocomplete from the `+` menu scoped to one asset kind: drop a `/` (prefixed
+  // with a space when mid-message) so slashToken matches and the menu pops.
+  const insertSlash = (scope: 'command' | 'skill'): void => {
+    setSlashScope(scope);
+    setText(openSlash);
+    setSlashDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // The draft is a `!cmd` shell command, not a message: onSend routes it raw to the runner,
+  // bypassing the workspace. Mirrors that branch's condition exactly (it reads the trimmed text,
+  // and a reply-to-question draft resolves an approval instead), so the composer only turns
+  // red when the send really would be a shell turn.
+  const shellMode = shellOffered && !replyTo && text.trim().startsWith('!');
+  // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
+  // shell command (run on the runner, bypassing claude). The user types the command after.
+  const insertShell = (): void => {
+    setText((t) => (t.startsWith('!') ? t : `!${t}`));
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // The exact inverse: drop the `!` so the draft goes back to being a message for the workspace.
+  // This is what the `❯` replacing the `+` does in shell mode — a mode you can enter needs a
+  // way out that isn't "select the character and delete it". Leading whitespace goes too,
+  // since shellMode reads the trimmed text (`  !ls` is shell mode just as much as `!ls`).
+  const exitShell = (): void => {
+    setText((t) => t.replace(/^\s*!/, ''));
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // A touch screen has no Tab: two taps on the box take the suggestion, as on the iPhone. The second
+  // tap is kept from the box, so it neither zooms the page nor drops the caret into the words it just
+  // received. The first is held too while the box is not focused yet: the keyboard it would raise
+  // lifts the page, and the second tap would land on the keyboard instead. A lone tap is handed on as
+  // the box's focus once the double-tap window passes (a timer this short keeps the tap's user
+  // activation, so the keyboard still comes up). A focused box keeps its first tap.
+  const onComposerTouchEnd = (e: ReactTouchEvent<HTMLTextAreaElement>): void => {
+    const touch = e.changedTouches[0];
+    const last = lastComposerTap.current;
+    if (!offeredSuggestion || !touch) {
+      lastComposerTap.current = null;
+      return;
+    }
+    const tap = { at: e.timeStamp, x: touch.clientX, y: touch.clientY };
+    if (
+      last &&
+      tap.at - last.at <= DOUBLE_TAP_MS &&
+      Math.hypot(tap.x - last.x, tap.y - last.y) <= DOUBLE_TAP_SLOP_PX
+    ) {
+      window.clearTimeout(last.held);
+      lastComposerTap.current = null;
+      e.preventDefault();
+      acceptSuggestion();
+      return;
+    }
+    const box = e.currentTarget;
+    let held: number | undefined;
+    if (document.activeElement !== box) {
+      e.preventDefault();
+      held = window.setTimeout(() => box.focus(), DOUBLE_TAP_MS);
+    }
+    lastComposerTap.current = { ...tap, held };
+  };
+
+  return (
+    <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
+      {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
+          Only shown once the box has hit its auto-grow cap or the user set a manual
+          height — an empty/short composer has nothing worth resizing. */}
+      {(composerHeight != null || composerCapped) && (
+        <div
+          className="composer-resize-handle"
+          onMouseDown={startComposerResize}
+          onDoubleClick={() => setComposerHeight(null)}
+          title="Drag to resize · double-click to reset"
+        />
+      )}
+      {showSlash && (
+        <div className="composer-slash-menu" role="listbox">
+          {slashMatches.map((it, i) => (
+            <div
+              key={`${it.type}:${it.name}`}
+              role="option"
+              aria-selected={i === slashIdx}
+              className={`composer-slash-item${i === slashIdx ? ' is-active' : ''}`}
+              // mousedown (not click) + preventDefault keeps focus in the textarea.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pickSlash(it.name);
+              }}
+              onMouseEnter={() => setSlashIndex(i)}
+            >
+              <span className="composer-slash-name">/{it.name}</span>
+              <span className="composer-slash-type">
+                {it.type === 'skill' ? 'skill' : it.type === 'local' ? 'local' : 'cmd'}
+              </span>
+              {it.workspaceId && <span className="composer-slash-type">project</span>}
+              {it.description && <span className="composer-slash-desc">{it.description}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {showRef && (
+        <div className="composer-slash-menu" role="listbox">
+          {refMatches.map((m, i) => (
+            <div
+              key={`${m.kind}:${m.id}`}
+              role="option"
+              aria-selected={i === refIdx}
+              className={`composer-slash-item${i === refIdx ? ' is-active' : ''}`}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pickRef(m);
+              }}
+              onMouseEnter={() => setRefIndex(i)}
+            >
+              <span className="composer-slash-name">#{m.title}</span>
+              <span className="composer-slash-type">{m.kind === 'list' ? 'list' : 'task'}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {showMention && (
+        <div className="composer-slash-menu" role="listbox">
+          {mentionMatches.map((a, i) => (
+            <div
+              key={a.id}
+              role="option"
+              aria-selected={i === mentionIdx}
+              className={`composer-slash-item${i === mentionIdx ? ' is-active' : ''}`}
+              // mousedown (not click) + preventDefault keeps focus in the textarea.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pickMention(a.name);
+              }}
+              onMouseEnter={() => setMentionIndex(i)}
+            >
+              <span className="composer-slash-name">@{a.name}</span>
+              <span className="composer-slash-type">workspace</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Hidden picker the `Image` menu item triggers; we upload via addImage
+          ourselves and reset value so re-picking the same file fires onChange again. */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        multiple
+        hidden
+        onChange={(e) => {
+          Array.from(e.target.files ?? []).forEach((f) => void addImage(f));
+          e.target.value = '';
+        }}
+      />
+      {/* Hidden picker for the `File` menu item — any type (the runner routes by
+          MIME: images/PDFs inline, everything else into the worktree). Same upload path. */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          Array.from(e.target.files ?? []).forEach((f) => void addImage(f));
+          e.target.value = '';
+        }}
+      />
+      {/* Staged attachments sit inside the card, above the text they go out with, so a
+          screenshot reads as part of the message you're about to send — not as one more strip
+          of the band above, separated from the text by the watch, tray and branch bars. */}
+      {(attachmentsBefore || images.length > 0) && (
+        <div className="composer-attachments">
+          {attachmentsBefore}
+          {images.map((im) =>
+            // An image picked here draws from its local object URL (instant); one handed back out
+            // of a sent message has no blob and draws from the bytes the control plane holds.
+            im.previewUrl || (im.id && im.mime.startsWith('image/')) ? (
+              <span key={im.uid} className="composer-pill composer-attach">
+                {im.previewUrl ? (
+                  <Image
+                    className="composer-attach-thumb"
+                    src={im.previewUrl}
+                    alt=""
+                    label={im.name || PREVIEW_IMAGE_LABEL}
+                    cover={<EyeOutlined className="composer-attach-eye" />}
+                  />
+                ) : (
+                  <AttachmentImage id={im.id as string} variant="chip" />
+                )}
+                {im.status === 'uploading' && (
+                  <span className="composer-attach-spin">
+                    <LoadingOutlined spin />
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="composer-attach-remove"
+                  onClick={() => removeImage(im.uid)}
+                  aria-label="Remove image"
+                >
+                  <CloseOutlined />
+                </button>
+              </span>
+            ) : (
+              <span key={im.uid} className="composer-pill composer-file">
+                {im.status === 'uploading' ? (
+                  <LoadingOutlined spin className="composer-file-icon" />
+                ) : (
+                  <PaperClipOutlined className="composer-file-icon" />
+                )}
+                <span className="composer-file-name" title={im.name}>
+                  {im.name}
+                </span>
+                {im.size !== undefined && (
+                  <span className="composer-file-size">{fmtBytes(im.size)}</span>
+                )}
+                <button
+                  type="button"
+                  className="composer-file-remove"
+                  onClick={() => removeImage(im.uid)}
+                  aria-label="Remove file"
+                >
+                  <CloseOutlined />
+                </button>
+              </span>
+            ),
+          )}
+        </div>
+      )}
+      <div className="composer-field">
+      {/* Behind the input, drawing its chips. Same characters, same metrics — see the
+          `.composer-field` block in index.css for why that is not negotiable. */}
+      <ComposerMirror text={text} refs={composerRefs} scrollTop={composerScroll} />
+      <Textarea
+        ref={taRef}
+        onScroll={(e) => setComposerScroll(e.currentTarget.scrollTop)}
+        onTouchEnd={onComposerTouchEnd}
+        className={shellMode ? 'composer-shell' : undefined}
+        variant="borderless"
+        // Auto-grow up to 12 rows, then scroll — unless the user has dragged the handle to
+        // a fixed height, which takes over (autoSize off + explicit height).
+        autoSize={composerHeight == null ? { minRows: 1, maxRows: 12 } : false}
+        style={composerHeight == null ? undefined : { height: composerHeight }}
+        // Hard-cap input length: an oversized prompt freezes the composer (autoSize
+        // remeasures the whole value on every keystroke) and the transcript. Pasting past
+        // the cap truncates; very large content should go through File instead.
+        maxLength={MAX_PROMPT_CHARS}
+        placeholder={offeredSuggestion ? '' : composerPlaceholder}
+        measureKey={measureOnPlaceholder ? composerPlaceholder : undefined}
+        aria-describedby={offeredSuggestion ? suggestionHintId : undefined}
+        value={text}
+        disabled={composerDisabled}
+        // Typing exits history recall: the next Up starts fresh from this draft.
+        onChange={(e) => {
+          setText(e.target.value);
+          if (histIdx !== -1) setHistIdx(-1);
+        }}
+        // Paste a file straight from the clipboard — a screenshot, or a file copied in the
+        // OS file manager (best-effort: only where the browser exposes it as a clipboard
+        // file). Only swallow the paste when it carries files, so pasting text is untouched.
+        onPaste={(e) => {
+          if (!canAttach) return;
+          const files = Array.from(e.clipboardData?.items ?? [])
+            .filter((it) => it.kind === 'file')
+            .map((it) => it.getAsFile())
+            .filter((f): f is File => !!f);
+          if (files.length) {
+            e.preventDefault();
+            files.forEach((f) => void addImage(f));
+          }
+        }}
+        // One keydown handler: drive the menu while open, else Up/Down recall
+        // history (when it doesn't fight cursor movement), Enter=send / Shift+Enter=newline.
+        onKeyDown={(e) => {
+          if (showRef && !e.nativeEvent.isComposing) {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setRefIndex((i) => (i + 1) % refMatches.length);
+              return;
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setRefIndex((i) => (i - 1 + refMatches.length) % refMatches.length);
+              return;
+            }
+            if (e.key === 'Enter' || e.key === 'Tab') {
+              e.preventDefault();
+              pickRef(refMatches[refIdx]);
+              return;
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setRefDismissed(refToken);
+              return;
+            }
+          }
+          if (showMention && !e.nativeEvent.isComposing) {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setMentionIndex((i) => (i + 1) % mentionMatches.length);
+              return;
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+              return;
+            }
+            if (e.key === 'Enter' || e.key === 'Tab') {
+              e.preventDefault();
+              pickMention(mentionMatches[mentionIdx].name);
+              return;
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setMentionDismissed(mentionToken);
+              return;
+            }
+          }
+          if (showSlash && !e.nativeEvent.isComposing) {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setSlashIndex((i) => (i + 1) % slashMatches.length);
+              return;
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setSlashIndex((i) => (i - 1 + slashMatches.length) % slashMatches.length);
+              return;
+            }
+            if (e.key === 'Enter' || e.key === 'Tab') {
+              e.preventDefault();
+              pickSlash(slashMatches[slashIdx].name);
+              return;
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setSlashDismissed(slashToken);
+              return;
+            }
+          }
+          // Tab takes the offered suggestion. An open menu above has already had the key, and
+          // with no suggestion on offer Tab moves focus as it always has.
+          if (
+            e.key === 'Tab' &&
+            offeredSuggestion &&
+            !e.shiftKey &&
+            !e.altKey &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.nativeEvent.isComposing
+          ) {
+            e.preventDefault();
+            acceptSuggestion();
+            return;
+          }
+          // Shell-style history recall. Up only fires on the first line and Down on
+          // the last line (with no text selected), so navigating within a multi-line
+          // draft still moves the caret normally. After recall the caret is parked at
+          // the start (Up) / end (Down) so a repeat keeps stepping through history.
+          if (
+            (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+            !e.nativeEvent.isComposing &&
+            !e.metaKey &&
+            !e.ctrlKey &&
+            !e.altKey &&
+            !e.shiftKey
+          ) {
+            const ta = e.currentTarget;
+            const noSelection = ta.selectionStart === ta.selectionEnd;
+            const onFirstLine = !ta.value.slice(0, ta.selectionStart).includes('\n');
+            const onLastLine = !ta.value.slice(ta.selectionEnd).includes('\n');
+            const setCaret = (pos: number): void => {
+              // setText re-renders the textarea; restore the caret on the next tick.
+              setTimeout(() => {
+                ta.selectionStart = ta.selectionEnd = pos;
+              }, 0);
+            };
+            if (e.key === 'ArrowUp' && noSelection && onFirstLine) {
+              const list = loadHistory(selectedId);
+              if (list.length) {
+                e.preventDefault();
+                if (histIdx === -1) setHistDraft(text);
+                const idx = histIdx === -1 ? list.length - 1 : Math.max(0, histIdx - 1);
+                setHistIdx(idx);
+                setText(list[idx]);
+                setCaret(0);
+                return;
+              }
+            }
+            if (e.key === 'ArrowDown' && noSelection && onLastLine && histIdx !== -1) {
+              e.preventDefault();
+              const list = loadHistory(selectedId);
+              if (histIdx < list.length - 1) {
+                const idx = histIdx + 1;
+                setHistIdx(idx);
+                setText(list[idx]);
+                setCaret(list[idx].length);
+              } else {
+                setHistIdx(-1);
+                setText(histDraft);
+                setCaret(histDraft.length);
+              }
+              return;
+            }
+          }
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            // An Enter with something to send is the send's alone. The send empties the box
+            // before the key reaches the window, where a waiting card answers Enter on an
+            // empty field (CardHotkey) — so the same press also started a project. An Enter on
+            // an empty box still goes on to the card.
+            //
+            // While a reply is armed the keys are this composer's, empty or not: the box is
+            // where that sentence is typed, and what the press would otherwise reach is either
+            // another card's door — on the chord, a READY candidate merges main
+            // (`ProjectPromotionCard`) — or the arming card's own, pressed from a box the
+            // reader is still composing in (the settlement card's Start the project, the
+            // confirmation card's Confirm done).
+            if (text.trim() || readyImages.length > 0 || replyTo) e.stopPropagation();
+            // ⌥Enter sends it the other way while a turn runs: queued for the next turn instead
+            // of into this one (decided 2026-10-16, docs/mocks/steer-tray).
+            onSend(e.altKey ? 'NEXT_TURN' : undefined);
+          }
+        }}
+      />
+      {offeredSuggestion && (
+        <div className="composer-suggestion">
+          {/* Drawn for the eye; a screen reader hears the box's description below instead. */}
+          <span className="composer-suggestion-text" title={offeredSuggestion} aria-hidden="true">
+            {offeredSuggestion}
+          </span>
+          {/* The grey line itself says how to take it, and there is no button to see: Tab with a
+              keyboard, a double-tap on the box on a touch screen. Which shows is CSS's call. Drawn in
+              docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
+          <kbd className="composer-suggestion-key" aria-hidden="true">
+            Tab
+          </kbd>
+          <span className="composer-suggestion-tap" aria-hidden="true">
+            Double-tap to use
+          </span>
+          {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
+              from the eye there, and gone with a keyboard, which has Tab. */}
+          <button
+            type="button"
+            className="composer-suggestion-use"
+            // Fill without blurring the box first: the click's focus change would land the
+            // caret somewhere before the text arrives.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={acceptSuggestion}
+            aria-label={`Use suggestion: ${offeredSuggestion}`}
+            title="Use this suggestion"
+          >
+            Use
+          </button>
+          <span id={suggestionHintId} className="sr-only">
+            Suggested reply: {offeredSuggestion}.
+            <span className="composer-suggestion-tab-hint"> Press Tab to use it.</span>
+          </span>
+        </div>
+      )}
+      </div>
+      <div className="composer-toolbar">
+        {/* In shell mode this stops being a menu: the `❯` below is a button on its own that leaves
+            shell mode, instead of opening the attachment menu. Nothing in that menu applies to a
+            raw command anyway — and a mode you can enter needs a visible way out. */}
+        {shellMode ? (
+          <Button
+            className="composer-attach-btn composer-shell-btn"
+            variant="text"
+            onClick={exitShell}
+            disabled={composerDisabled}
+            aria-label="Leave shell mode"
+            title="Leave shell mode"
+          >
+            ❯
+          </Button>
+        ) : (
+        <Menu
+          side="top"
+          align="start"
+          disabled={composerDisabled}
+          // On a phone it takes the native menu's density (`variant="attachment"`, ui/Floating.css).
+          variant="attachment"
+          popupClassName="composer-attach-menu"
+          // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
+          // array's last entry is the one beside the `+` — while the native menu
+          // (ComposerView.swift `addMenu`) hands its items to the system with the first one
+          // nearest the button and gets them back reversed. Hence the native source reads
+          // Command…File and this reads File…Command: both clients put Command under the
+          // thumb and File at the far end, and a divider between the two groups. Pinned by
+          // WorkspaceView.composerMenu.test.tsx, drawn in
+          // docs/mocks/composer-attach-menu-phone.html.
+          items={[
+              {
+                key: 'file',
+                icon: <PaperClipOutlined />,
+                label: 'File',
+                onSelect: () => fileInputRef.current?.click(),
+              },
+              {
+                key: 'image',
+                icon: <PictureOutlined />,
+                // One word per action, the way the native composer's `+` menu writes them
+                // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
+                // upload can't work in says so on pick, rather than greying the item out.
+                label: 'Image',
+                onSelect: () => imageInputRef.current?.click(),
+              },
+              { key: 'divider', type: 'separator' },
+              {
+                key: 'shell',
+                // The terminal box, as native Shell draws it — not `ConsoleSqlOutlined`, whose
+                // SQL monitor appeared in neither client.
+                icon: <CodeOutlined />,
+                // Works on a live session, a brand-new draft (sent as the first turn), and
+                // an ended-but-resumable session (sent as the revive turn — the runner
+                // --resumes claude, runs the command, and buffers its output for the next
+                // message). Only an unresumable ended session blocks it (never started, or
+                // its runner is offline) — there's no claude context to wake.
+                label:
+                  shellUnavailable
+                    ? 'Shell (session unavailable)'
+                    : 'Shell',
+                disabled: shellUnavailable,
+                onSelect: insertShell,
+              },
+              {
+                key: 'skill',
+                icon: <ThunderboltOutlined />,
+                label: 'Skill',
+                disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
+                onSelect: () => insertSlash('skill'),
+              },
+              {
+                key: 'command',
+                icon: <SlashCommandIcon />,
+                label: 'Command',
+                disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
+                onSelect: () => insertSlash('command'),
+              },
+            ]}
+          trigger={
+            <Button
+              className="composer-attach-btn"
+              variant="text"
+              icon={<PlusOutlined />}
+              disabled={composerDisabled}
+              aria-label="Add attachment"
+            />
+          }
+        />
+        )}
+        {/* The workspace is only a Select when it can actually be picked (new, unlocked
+            session); once read-only it shows as a static pill left of Model below. */}
+        {!workspaceReadOnly && (
+          <span className="composer-pill composer-pill-workspace">
+            <Select
+              size="small"
+              variant="borderless"
+              showArrow={false}
+              value={shownWorkspaceId ?? null}
+              onValueChange={(v) => setWorkspaceId(v ?? undefined)}
+              options={workspacesForRunner.map((a) => ({ value: a.id, label: a.name }))}
+              placeholder="Default"
+              disabled={live || !!lockedWorkspaceId}
+              matchTriggerWidth={false}
+            />
+          </span>
+        )}
+        <span className="composer-pill">
+          <Select
+            size="small"
+            variant="borderless"
+            showArrow={false}
+            value={shownMode}
+            onValueChange={(v) => {
+              if (v === null) return;
+              if (live) {
+                configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] });
+              } else {
+                onDraftMode(v);
+              }
+            }}
+            options={MODE_OPTIONS.map((m) => {
+              // A mode this ENGINE cannot honor is still offered, and never disabled: it is the
+              // user's stored intent, and it starts being enforced the moment the session moves
+              // to an engine that can — it just must not read as a guarantee it isn't, so the
+              // option carries the caveat. The wording comes from the shared table rather than
+              // being rebuilt here: a picker that re-derives it is a picker that can contradict
+              // what dispatch will do.
+              //
+              // A mode this RUNNER cannot run is the one exception, and disabled rather than
+              // annotated, because the premise above does not hold for it: a session cannot move
+              // to another machine, so Bypass on a root runner is not a mode awaiting its moment
+              // — claude exits during startup and the session never produces anything. Disabled
+              // and not hidden, so the reason is visible instead of the option silently missing.
+              //
+              // A mode the RUNTIME refuses outright (DeepSeek Harness outside Default, Auto and
+              // Don't Ask) is disabled for the same reason: the server rejects the session rather
+              // than run it as something else, so it is not an intent that can wait.
+              const semantics = permissionSemanticsFor(m);
+              const runnable =
+                permissionModeAvailableOnRunner(MODE_TO_PERMISSION[m], runner.runsAsRoot) &&
+                permissionModeSupported(MODE_TO_PERMISSION[m], shownEngine);
+              const shortNote = semantics?.shortNote;
+              return {
+                value: m,
+                label: shortNote ? `${m} — ${shortNote}` : m,
+                disabled: !runnable,
+              };
+            })}
+            disabled={!configEditable}
+            matchTriggerWidth={false}
+          />
+        </span>
+        <span className="composer-pill-spacer" />
+        {/* Provider, model, effort and — on a model with a fast lane — speed are one control, the
+            way a reference composer writes "model · effort" as one button: the model in the
+            label's colour, the effort after it in the secondary one. The menu behind it
+            (`modelMenuItems`) keeps each field's own rules. */}
+        {/* No model to show where a first session cannot start yet: the managed default
+            workspace before its runner was ever ready (`managedDraftBlocked`). */}
+        {!managedDraftBlocked && (
+          <span className="composer-pill composer-model-pill">
+            <Menu
+              side="top"
+              align="end"
+              disabled={!configEditable}
+              open={modelMenuOpen}
+              onOpenChange={(open) => {
+                setModelMenuOpen(open);
+                if (!open) setProviderMenuOpen(false);
+              }}
+              // Rows that open a level down open on hover where the pointer can hover, the way
+              // the browser's own menus do — and on a tap where it cannot, because a phone has
+              // no hover to give: one row, two gestures, decided by the pointer.
+              // They open to the right — and on a phone, where the control sits near the
+              // right edge, there is no right: shift the level back inside the screen rather
+              // than let it hang off the edge (and widen the page with it).
+              submenuOverflow="slide"
+              popupClassName="composer-model-menu"
+              items={modelMenuItems}
+              trigger={
+                <button
+                  type="button"
+                  className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+                  disabled={!configEditable}
+                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
+                    smartRoute ? ', picked by smart selection' : ''
+                  }`}
+                >
+                  {smartRoute && (
+                    <span className="composer-model-spark" aria-hidden="true">
+                      ✦
+                    </span>
+                  )}
+                  <span className="composer-model-name">{shownModelLabel}</span>
+                  {/* Auto on Cursor CLI has no effort to name; a Cursor model names its context and fast
+                      lane after it ("Claude Opus 5.5 High · 1M · Fast", board Web 5 ⑤). */}
+                  {!cursorAuto && (
+                    <span className="composer-model-effort">
+                      {fastModeUsable && shownFastMode
+                        ? `${shownEffortLabel} · Fast`
+                        : [shownEffortLabel, ...cursorChipSettings(cursorSettings)].join(' · ')}
+                    </span>
+                  )}
+                </button>
+              }
+            />
+          </span>
+        )}
+        {shownPool && shownPoolAccount && (
+          <Tooltip content={poolAccountHelp(shownPool, shownPoolAccount)}>
+            <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
+              <span className="composer-account-name">{shownPoolAccount.member.label}</span>
+            </span>
+          </Tooltip>
+        )}
+        {shownPlanUsage && (
+          <PlanUsageIndicator
+            usage={shownPlanUsage}
+            // The pill's number is the quota the model the control names spends, not another model's.
+            model={shownModel}
+            account={planUsageAccount}
+            reset={planUsageReset}
+          />
+        )}
+        {/* Context stays visible even before the first turn reports tokens — a New Session reads
+            "—". Rightmost pill, to the right of plan usage. */}
+        {!(shownEngine === AgentProvider.OPENCODE && shownModel === '') && (
+          <ContextWindowIndicator
+            tokens={contextTokens}
+            reportedWindow={reportedContextWindow}
+            model={shownModel}
+            provider={shownProvider}
+            modelCatalog={runner.modelCatalog}
+            configured={configuredProviders}
+            unavailable={shownEngine === AgentProvider.CURSOR ? CURSOR_CONTEXT_UNAVAILABLE : undefined}
+          />
+        )}
+        {showStop ? (
+          <Button
+            className="composer-send"
+            variant="primary"
+            icon={<StopSquareIcon />}
+            onClick={onStop}
+            aria-label="Stop"
+          />
+        ) : (
+          <span className="composer-send-hold">
+            <Button
+              className="composer-send"
+              variant="primary"
+              icon={<ArrowUpOutlined />}
+              disabled={!canSend}
+              loading={sending}
+              onClick={() => {
+                // The press that opened the offer is not a send as well.
+                if (sendHold.current?.fired) {
+                  sendHold.current = null;
+                  return;
+                }
+                onSend();
+              }}
+              onPointerDown={() => {
+                sendHold.current = null;
+                if (!queueOffered || !canSend) return;
+                const hold = {
+                  fired: false,
+                  timer: setTimeout(() => {
+                    hold.fired = true;
+                    setQueueOffer(true);
+                  }, QUEUE_OFFER_HOLD_MS),
+                };
+                sendHold.current = hold;
+              }}
+              onPointerUp={releaseSendHold}
+              onPointerLeave={releaseSendHold}
+              onPointerCancel={releaseSendHold}
+              onContextMenu={(e) => {
+                if (queueOffered) e.preventDefault();
+              }}
+              aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+              title={
+                queueOffered
+                  ? `Send into the current turn · ${IS_MAC ? '⌥' : 'Alt+'}Enter, or hold, to queue it for the next turn`
+                  : undefined
+              }
+            />
+            {queueOffer && (
+              <div ref={queueOfferRef} className="composer-queue-offer" role="menu" aria-label="Send">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setQueueOffer(false);
+                    onSend('NEXT_TURN');
+                  }}
+                >
+                  Queue for next turn
+                </button>
+              </div>
+            )}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What the composer's `/` menu offers (`SessionComposer`): Orbit's own local commands, then — on an engine with a
+ * runner slash registry — the runner's commands and skills for that engine, host-level ones and the composer's
+ * workspace's own.
+ */
+export function composerSlashItems(
+  commands: Runner['commands'],
+  skills: Runner['skills'],
+  codexComposer: boolean,
+  shownEngine: AgentProvider,
+  composerWorkspaceId: string | undefined,
+): ComposerSlashItem[] {
+  return [
+    ...LOCAL_SLASH_ITEMS,
+    ...(codexComposer ? [] : [
+      ...(commands ?? []).map((c) => ({
+        name: c.name,
+        description: c.description,
+        type: 'command' as const,
+        provider: c.provider,
+        workspaceId: c.agentId,
+        builtin: c.builtin,
+      })),
+      ...(skills ?? []).map((s) => ({
+        name: s.name,
+        description: s.description,
+        type: 'skill' as const,
+        provider: s.provider,
+        workspaceId: s.agentId,
+        builtin: s.builtin,
+      })),
+    ].filter(
+      (it) =>
+        slashAssetMatchesEngine(it.provider, shownEngine) &&
+        (!it.workspaceId || it.workspaceId === composerWorkspaceId),
+    )),
+  ];
+}
+
+/**
+ * The model chip's menu (`SessionComposer`): the engine it runs on as its title, the provider's models and Effort — and,
+ * where they apply, the Provider row and its accounts above them, a Cursor model's own settings and Speed below, and a
+ * task run's smart-selection note. Every pick is the caller's: the session page's moves a draft, a live session or an
+ * ended one (`pickModel`, `pickEffort`, …); the wiki chat panel's a new chat, or the chat's session.
+ */
+export function composerModelMenuItems({
+  shownEngine,
+  engineTitle,
+  smartRoute,
+  providerSwitchable,
+  providerMenuOpen,
+  setProviderMenuOpen,
+  shownKeyGone,
+  shownProviderValue,
+  providerMenuGroups,
+  shownModelOptions,
+  shownProviderCapabilitiesResolved,
+  shownModelName,
+  pickModel,
+  cursorAuto,
+  shownEffortLabel,
+  shownEffortOptions,
+  shownEffort,
+  pickEffort,
+  cursorSettings,
+  pickCursorSetting,
+  fastModeUsable,
+  shownFastMode,
+  pickFastMode,
+  openTask,
+}: {
+  shownEngine: AgentProvider;
+  /** The menu's title: the engine the session runs on (`engineTitleFor`). */
+  engineTitle: ReturnType<typeof engineTitleFor>;
+  smartRoute: Pick<TaskRunRoute, 'level' | 'reasons'> | null;
+  /** Another credential the session's engine runs, or another of the runner's accounts, to switch to. */
+  providerSwitchable: boolean;
+  providerMenuOpen?: boolean;
+  setProviderMenuOpen?: (open: boolean) => void;
+  shownKeyGone: { status: string } | null;
+  shownProviderValue: string;
+  providerMenuGroups: MenuItem[];
+  shownModelOptions: ReadonlyArray<{ value: string; label: string }>;
+  shownProviderCapabilitiesResolved: boolean;
+  shownModelName: string;
+  pickModel: (model: string) => void;
+  cursorAuto: boolean;
+  shownEffortLabel: string;
+  shownEffortOptions: ReadonlyArray<{ value: string; label: string }>;
+  shownEffort: string;
+  pickEffort: (effort: string) => void;
+  cursorSettings: ReturnType<typeof cursorSettingRows>;
+  pickCursorSetting: (id: string, value: string) => void;
+  fastModeUsable: boolean;
+  shownFastMode: boolean;
+  pickFastMode: (fast: boolean) => void;
+  openTask: () => void;
+}): MenuItem[] {
+  const engineTitleGlyph = engineTitle.glyphKey ? PROVIDER_GLYPHS[engineTitle.glyphKey] : undefined;
+  const modelMenuItems: MenuItem[] = [
+    // The menu's own title, and not a control: the one fact none of the rows below states is which
+    // CLI executes at all. It is never picked here — a run keeps its engine for its whole life, and
+    // moving it is the Provider row's job — so the row carries no onClick, no chevron, and the
+    // class drops the item's pointer and hover fill.
+    {
+      key: 'engine-title',
+      className: 'composer-engine-title',
+      label: (
+        <span className="composer-engine-title-row">
+          {/* In the brand's colour — except Cursor's, which is black and would vanish on a dark menu:
+              the text's own colour carries its cube. */}
+          <span
+            className="composer-engine-title-glyph"
+            style={{ color: shownEngine === AgentProvider.CURSOR ? 'var(--text-1)' : engineTitle.brand.from }}
+          >
+            {engineTitleGlyph ? (
+              <svg
+                viewBox="0 0 24 24"
+                width={14}
+                height={14}
+                fill="currentColor"
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: engineTitleGlyph }}
+              />
+            ) : (
+              <span className="composer-engine-title-mono">{engineTitle.brand.mono}</span>
+            )}
+          </span>
+          <span className="composer-engine-title-name">{engineTitle.name}</span>
+        </span>
+      ),
+    },
+    ...(smartRoute
+      ? [
+          {
+            key: 'smart-route',
+            type: 'group' as const,
+            label: (
+              <div className="composer-route-note">
+                <div className="composer-route-head">
+                  <span className="composer-model-spark">✦</span>
+                  Picked by smart selection · tier {smartRoute.level}
+                </div>
+                {smartRoute.reasons[0] && <div className="composer-route-reason">{smartRoute.reasons[0]}</div>}
+                <div className="composer-route-reason">
+                  Changing the model here applies to this run only. To fix the model for every run, set it on the
+                  task.
+                </div>
+              </div>
+            ),
+          },
+          { key: 'smart-route-divider', type: 'separator' as const },
+        ]
+      : []),
+    // Only when there is somewhere to go: another credential the session's engine runs — a key, a
+    // pool, its own sign-in — or another of the runner's accounts. One entry means no switch is
+    // possible, and the row is left out rather than shown inert — the common case, one Claude sign-in
+    // and no keys.
+    ...(providerSwitchable
+      ? [
+          {
+            key: 'provider',
+            // Opened by the region card's Use another provider, as well as by hover and press.
+            open: providerMenuOpen,
+            onOpenChange: setProviderMenuOpen,
+            label: (
+              <span className="scope-menu-row">
+                Provider
+                {shownKeyGone ? (
+                  <span className="scope-menu-value is-warning">
+                    <span className="scope-menu-value-text">{shownKeyGone.status}</span>
+                  </span>
+                ) : (
+                  menuValue(shownProviderValue)
+                )}
+              </span>
+            ),
+            children: providerMenuGroups,
+          },
+          { key: 'provider-divider', type: 'separator' as const },
+        ]
+      : []),
+    ...shownModelOptions.map((option) => ({
+      key: `model:${option.value}`,
+      disabled: !shownProviderCapabilitiesResolved,
+      label: (
+        <span className="scope-menu-row">
+          {option.label}
+          {checkSlot(option.value === shownModelName)}
+        </span>
+      ),
+      onSelect: () => pickModel(option.value),
+    })),
+    { key: 'effort-divider', type: 'separator' as const },
+    // Cursor CLI's Auto takes no parameters (contract §10): no Effort to offer, and a line on what it
+    // does instead. Every other Cursor model offers the efforts it takes, by their own values.
+    ...(cursorAuto
+      ? [
+          {
+            key: 'cursor-auto-note',
+            type: 'group' as const,
+            label: (
+              <div className="composer-route-note">
+                <div className="composer-route-reason">{CURSOR_AUTO_NOTE}</div>
+              </div>
+            ),
+          },
+        ]
+      : [
+          {
+            key: 'effort',
+            label: (
+              <span className="scope-menu-row">
+                Effort
+                {menuValue(shownEffortLabel)}
+              </span>
+            ),
+            children: shownEffortOptions.map((option) => ({
+              key: `effort:${option.value}`,
+              label: (
+                <span className="scope-menu-row">
+                  {option.label}
+                  {checkSlot(option.value === shownEffort)}
+                </span>
+              ),
+              onSelect: () => pickEffort(option.value),
+            })),
+          },
+        ]),
+    // A Cursor model's own settings (board Web 5 ① ③ ④): its context size, and Speed, its fast lane —
+    // a setting of the model, unlike the engine-level fast mode below, which Cursor CLI does not have.
+    // Each row offers the values the runner's catalogue lists for the model, under their own names.
+    ...cursorSettings.map((setting) => ({
+      key: `cursor-setting:${setting.id}`,
+      label: (
+        <span className="scope-menu-row">
+          {setting.title}
+          {menuValue(setting.label)}
+        </span>
+      ),
+      children: setting.values.map((option) => ({
+        key: `cursor-setting:${setting.id}:${option.value}`,
+        label: (
+          <span className="scope-menu-row">
+            {option.label}
+            {checkSlot(option.value === setting.value)}
+          </span>
+        ),
+        onSelect: () => pickCursorSetting(setting.id, option.value),
+      })),
+    })),
+    // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast" tier
+    // both exist on some models and not others. A row offered to a session that cannot have it
+    // would be a control whose only outcome is being ignored — the server clamps it at dispatch
+    // either way. A session that stored `true` and then moved to a model without a fast lane keeps
+    // the stored value while the row is away, so going back to a model that has one restores what
+    // was asked for rather than silently dropping it.
+    ...(fastModeUsable
+      ? [
+          {
+            key: 'speed',
+            label: (
+              <span className="scope-menu-row">
+                Speed
+                {menuValue(shownFastMode ? 'Fast' : 'Standard')}
+              </span>
+            ),
+            children: [
+              { value: false, label: 'Standard' },
+              { value: true, label: 'Fast' },
+            ].map((option) => ({
+              key: `speed:${option.value ? 'fast' : 'standard'}`,
+              label: (
+                <span className="scope-menu-row">
+                  {option.label}
+                  {checkSlot(option.value === shownFastMode)}
+                </span>
+              ),
+              onSelect: () => pickFastMode(option.value),
+            })),
+          },
+        ]
+      : []),
+    ...(smartRoute
+      ? [
+          { key: 'smart-route-open-divider', type: 'separator' as const },
+          {
+            key: 'open-task',
+            label: <span className="composer-route-open">Open task ›</span>,
+            onSelect: openTask,
+          },
+        ]
+      : []),
+  ];
+  return modelMenuItems;
+}
+
+// Selection reads on the trailing edge, not in a leading icon column. The tag names already
+// need a swatch in front of them, and a leading check on top of that pushed every label so
+// far off the left edge that the menu read as right-heavy. Always rendered (blank when off)
+// so a row's width doesn't change as the selection moves.
+function checkSlot(on: boolean): ReactNode {
+  return <span className="scope-menu-check">{on ? <CheckOutlined /> : null}</span>;
+}
+
+/** A menu row's current value, at its trailing edge. */
+function menuValue(value: string): ReactNode {
+  return (
+    <span className="scope-menu-value">
+      <span className="scope-menu-value-text">{value}</span>
+    </span>
+  );
+}
+
+/**
+ * The tray above the composer (`PendingTray`), and what its rows and the conversation's steers offer: the reader's
+ * messages nothing has read yet — sent into the running turn, or queued for the next — each with Withdraw, a queued one
+ * with Steer while a turn runs. The session page and the wiki chat panel each draw it over their own composer.
+ */
+export function usePendingTray({
+  selectedId,
+  selectedTrashed,
+  selectedMissing,
+  queued,
+  setQueued,
+  visibleQueuedTurns,
+  transcriptEvents,
+  turnImages,
+  restoreUndelivered,
+  shownEngine,
+  steerOffered,
+}: {
+  selectedId: string | null;
+  selectedTrashed: boolean;
+  selectedMissing: boolean;
+  queued: QueuedTurn[];
+  setQueued: Dispatch<SetStateAction<QueuedTurn[]>>;
+  visibleQueuedTurns: QueuedTurn[];
+  transcriptEvents: RunEvent[];
+  turnImages: Record<string, TurnImage[]>;
+  restoreUndelivered: ((text: string, attachments?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[]) => void) | null;
+  shownEngine: AgentProvider;
+  steerOffered: boolean;
+}) {
+  const message = useToast();
+  // The reader's steers the engine has not read yet: the transcript leaves them out, and the tray
+  // above the composer holds them (Transcript `UnreadSteer`).
+  const unreadSteers = useMemo(
+    () => unreadSteersOf(transcriptEvents, turnImages),
+    [transcriptEvents, turnImages],
+  );
+  // Withdraw a queued message. Optimistically remove it; if the runner already leased
+  // it (it's no longer cancellable) it'll arrive in the transcript via its `user` event.
+  const cancelQueued = async (turnId: string): Promise<void> => {
+    if (!selectedId) return;
+    const withdrawn = queued.find((x) => x.turnId === turnId);
+    setQueued((q) => q.filter((x) => x.turnId !== turnId));
+    try {
+      await cancelQueuedTurn(selectedId, turnId);
+      // Withdrawing shouldn't silently eat what the user typed (interrupt parity): fold the
+      // message back into the composer so it can be edited and resent. Only restored once the
+      // DELETE succeeds — a rejected withdraw means the runner already leased it, so it lands
+      // in the transcript and restoring would duplicate it. Withdrawn from the tray it comes back
+      // as a withdrawn steer does (decided 2026-10-16, docs/mocks/steer-tray): an explicit press,
+      // so a draft keeps its place above the words rather than losing them to it. Nor does a turn
+      // nobody typed come back (`returnsToComposer`).
+      const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
+      if (body) restoreUndelivered?.(withdrawn?.shell ? `!${body}` : body, withdrawn?.attachments);
+    } catch {
+      message.info('This message is already being processed and cannot be withdrawn');
+    }
+  };
+  // Steers asked for back and not yet answered — drawn "Withdrawing…" — and those the server has
+  // confirmed, hidden before the runner's own `withdrawn` delivery reaches the transcript.
+  const [withdrawingSteers, setWithdrawingSteers] = useState<ReadonlySet<string>>(() => new Set());
+  const [withdrawnSteers, setWithdrawnSteers] = useState<ReadonlySet<string>>(() => new Set());
+  // Take back a message sent into the running turn while nothing has read it (lib/steerDelivery).
+  // Only the engine's word that it dropped the message unread removes it, so nothing is hidden or
+  // handed back until the server says so. Then the words and their files go back into the composer
+  // the way "Put back in the composer" puts them: an explicit press, so a draft keeps its place
+  // above them instead of winning over them.
+  const withdrawSteer = async (
+    turnId: string,
+    text: string,
+    attachments?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[],
+  ): Promise<void> => {
+    const sessionId = selectedId;
+    if (!sessionId || withdrawingSteers.has(turnId)) return;
+    setWithdrawingSteers((s) => new Set(s).add(turnId));
+    try {
+      await cancelQueuedTurn(sessionId, turnId);
+      setWithdrawnSteers((s) => new Set(s).add(turnId));
+      setQueued((q) => q.filter((x) => x.turnId !== turnId));
+      restoreUndelivered?.(text, attachments);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === STEER_WITHDRAW_ERRORS.ALREADY_READ) {
+        // Said in the reader's terms; the server's longer sentence is for the API's own callers.
+        const reader =
+          shownEngine === AgentProvider.CODEX ? 'Codex' : shownEngine === AgentProvider.CLAUDE ? 'Claude' : 'The agent';
+        message.info('Too late to withdraw', `${reader} has already read it.`);
+      } else {
+        message.error("Couldn't withdraw the message", e instanceof Error ? e.message : undefined);
+      }
+    } finally {
+      setWithdrawingSteers((s) => {
+        const next = new Set(s);
+        next.delete(turnId);
+        return next;
+      });
+    }
+  };
+  const withdrawSteerRef = useRef(withdrawSteer);
+  withdrawSteerRef.current = withdrawSteer;
+  // What the transcript's steers offer (SteerWithdrawCtx). Kept stable between the sets' changes, so
+  // a streaming reply does not redraw every bubble; nothing to take back where nothing can be sent.
+  const steerWithdrawal: SteerWithdrawHandle | null = useMemo(
+    () =>
+      selectedTrashed || selectedMissing
+        ? null
+        : {
+            withdraw: (turnId, text, attachments) => void withdrawSteerRef.current(turnId, text, attachments),
+            withdrawing: withdrawingSteers,
+            withdrawn: withdrawnSteers,
+          },
+    [selectedTrashed, selectedMissing, withdrawingSteers, withdrawnSteers],
+  );
+  // Queued messages a Steer is out for: drawn as on their way into the turn until the server answers.
+  const [steeringTurns, setSteeringTurns] = useState<ReadonlySet<string>>(() => new Set());
+  // The tray's Steer: send a message queued for the next turn into the one running now. The server
+  // makes it the steer it would have been (POST …/steer), and the row moves on from there as a steer
+  // does; with no turn left to join it stays queued, and is told so.
+  const steerQueued = async (turnId: string): Promise<void> => {
+    const sessionId = selectedId;
+    if (!sessionId || steeringTurns.has(turnId)) return;
+    setSteeringTurns((s) => new Set(s).add(turnId));
+    try {
+      const res = await steerQueuedTurn(sessionId, turnId);
+      setQueued((current) =>
+        current.map((turn) =>
+          turn.turnId === turnId
+            ? { ...turn, placement: 'steer', ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}) }
+            : turn,
+        ),
+      );
+    } catch (e) {
+      if (isCurrentWorkUnavailable(e)) {
+        const reason = e instanceof ApiError ? e.body?.reason : undefined;
+        message.info(
+          "Couldn't send it into this turn",
+          reason === 'STEER_UNSUPPORTED'
+            ? "This agent can't take a message mid-turn. It stays queued for the next turn."
+            : 'The turn is over or being stopped. It stays queued for the next turn.',
+        );
+      } else {
+        message.error("Couldn't send it into this turn", e instanceof Error ? e.message : undefined);
+      }
+    } finally {
+      setSteeringTurns((s) => {
+        const next = new Set(s);
+        next.delete(turnId);
+        return next;
+      });
+    }
+  };
+  // The tray's rows, in the order they were sent: the reader's steers nothing has read (from the
+  // transcript's events) and their messages still on the queue (`inPendingTray`).
+  const pendingTrayRows = ((): PendingTrayRow[] => {
+    if (selectedTrashed || selectedMissing) return [];
+    const steerRow = (steer: UnreadSteer): PendingTrayRow => {
+      // Missed the turn it was aimed at and handed back to run as the next turn: queued now, and
+      // shortly the message that opens that turn.
+      const requeued = steer.delivery === 'requeued';
+      const withdrawing = withdrawingSteers.has(steer.turnId);
+      return {
+        key: steer.turnId,
+        heading: requeued ? 'next' : 'current',
+        text: steer.text,
+        ...trayPictures(steer.images, steer.attachmentRefs),
+        state: withdrawing ? 'Withdrawing…' : requeued ? 'Queued for next turn' : steerDeliveryState(steer.delivery).label,
+        busy: withdrawing,
+        onWithdraw:
+          !requeued && steerWithdrawal && offersSteerWithdraw(steer.delivery, steer.withdrawable)
+            ? () => steerWithdrawal.withdraw(steer.turnId, steer.text, steer.attachmentRefs)
+            : undefined,
+      };
+    };
+    const queuedRow = (turn: QueuedTurn): PendingTrayRow => {
+      const steering = steeringTurns.has(turn.turnId);
+      const intoTurn = turn.placement === 'steer' || steering;
+      const withdrawing = withdrawingSteers.has(turn.turnId);
+      const refs: TurnAttachmentRef[] | undefined = turn.attachments?.map((a) => ({ id: a.id, mime: a.mimeType || undefined }));
+      return {
+        key: turn.turnId,
+        heading: intoTurn ? 'current' : 'next',
+        text: turn.content,
+        shell: turn.shell,
+        ...trayPictures(turnImages[turn.turnId], refs),
+        state: withdrawing ? 'Withdrawing…' : intoTurn ? steerDeliveryState(undefined).label : 'Queued for next turn',
+        busy: withdrawing || steering,
+        // Not handed to a runner yet, either way: the server takes it back alone.
+        onWithdraw: turn.placement === 'steer'
+          ? steerWithdrawal ? () => steerWithdrawal.withdraw(turn.turnId, turn.content, refs) : undefined
+          : () => void cancelQueued(turn.turnId),
+        onSteer: !intoTurn && !turn.shell && steerOffered ? () => void steerQueued(turn.turnId) : undefined,
+      };
+    };
+    return [
+      ...unreadSteers
+        .filter((steer) => !withdrawnSteers.has(steer.turnId))
+        .map((steer) => ({ at: steer.ts, row: steerRow(steer) })),
+      ...visibleQueuedTurns.filter(inPendingTray).map((turn) => ({ at: turn.createdAt, row: queuedRow(turn) })),
+    ]
+      // A row this tab just sent has no receipt time yet: it is the newest.
+      .sort((a, b) => (a.at ?? '\uffff').localeCompare(b.at ?? '\uffff'))
+      .map(({ row }) => row);
+  })();
+  return { cancelQueued, steerWithdrawal, pendingTrayRows };
+}
+
+/**
+ * The composer's pictures and files (`SessionComposer`'s attachment row): checked, uploaded at once as staged chips —
+ * to the session when there is one, unscoped for a message that makes one — and handed back out of a sent message by
+ * their ids. The session page and the wiki chat panel each stage into a list of their own.
+ */
+export function useComposerImages(
+  canAttach: boolean | undefined,
+  sessionId: string | undefined,
+  setImages: Dispatch<SetStateAction<ComposerImage[]>>,
+) {
+  const message = useToast();
+  const imageUid = useRef(0);
+  // Validate, then upload an attachment as a staged chip. Uploaded eagerly (not on send) so
+  // the turn carries only the id and a slow upload doesn't block typing. When composing
+  // there's no session yet, so it's uploaded unscoped; create scopes it to the new session.
+  // An inline-image type gets a thumbnail preview and the tighter image cap; any other type
+  // is a generic file (no preview, 25MB cap) that the runner drops into the worktree.
+  const addImage = useCallback(
+    async (file: File): Promise<void> => {
+      if (!canAttach) {
+        message.error('Attachments need a live session and an online runner');
+        return;
+      }
+      const isInlineImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+      const cap = isInlineImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
+      if (file.size <= 0) {
+        message.error(`${file.name || 'File'} is empty`);
+        return;
+      }
+      if (file.size > cap) {
+        message.error(isInlineImage ? 'Image exceeds the 5MB limit' : 'File exceeds the 25MB limit');
+        return;
+      }
+      const uid = `att-${imageUid.current++}`;
+      const previewUrl = isInlineImage ? URL.createObjectURL(file) : undefined;
+      setImages((prev) => [
+        ...prev,
+        { uid, file, name: file.name, mime: file.type, size: file.size, previewUrl, status: 'uploading' },
+      ]);
+      try {
+        const { id } = await uploadAttachment(file, sessionId);
+        setImages((prev) => prev.map((im) => (im.uid === uid ? { ...im, status: 'done', id } : im)));
+      } catch (e) {
+        // Drop the failed chip and free its preview; the toast explains why.
+        setImages((prev) => prev.filter((im) => im.uid !== uid));
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        message.error(
+          isInlineImage ? "Couldn't upload the image" : "Couldn't upload the file",
+          (e as Error).message,
+        );
+      }
+    },
+    [canAttach, sessionId, setImages, message],
+  );
+  // Hand attachments already on the control plane back to the composer as staged chips. There is no
+  // blob to make and none is wanted: the bytes are under `id`, which is all a send references, so a
+  // message put back carries its files without the reader finding them a second time. A queue
+  // snapshot reports id and mime only, so a file chip drawn from one shows no size and an image is
+  // drawn from the stored bytes rather than a local object URL.
+  const composerImagesFromRefs = (
+    refs: readonly { id: string; mime?: string; mimeType?: string; name?: string }[],
+  ): ComposerImage[] =>
+    refs.map((ref) => ({
+      uid: `att-${imageUid.current++}`,
+      name: ref.name ?? 'Attachment',
+      mime: ref.mime ?? ref.mimeType ?? '',
+      status: 'done' as const,
+      id: ref.id,
+    }));
+  // Appended, never replacing: put-back is explicitly user-initiated and must not discard chips
+  // already staged for the message being typed. Anything already staged by id stays once.
+  const stageRestored = (
+    refs: readonly { id: string; mime?: string; mimeType?: string; name?: string }[] | undefined,
+  ): void => {
+    if (!refs?.length) return;
+    setImages((prev) => {
+      const held = new Set(prev.map((im) => im.id).filter(Boolean));
+      return [...prev, ...composerImagesFromRefs(refs.filter((ref) => !held.has(ref.id)))];
+    });
+  };
+  const removeImage = (uid: string): void => {
+    setImages((prev) => {
+      const target = prev.find((im) => im.uid === uid);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((im) => im.uid !== uid);
+    });
+  };
+  return { addImage, stageRestored, removeImage };
 }
 
 /** What the no-branch notice needs from the session's workspace row: the folder, whether the runner

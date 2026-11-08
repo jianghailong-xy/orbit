@@ -23,6 +23,9 @@ final class RunnersModel {
     var errorText: String?
 
     private let api: APIClient
+    /// Told every list `load` reads: the app's runner snapshot takes it, so a page polling the runners
+    /// and the app's tick do not each read `/runners` (`AppModel.adoptRunnerRows`).
+    @ObservationIgnored var onRead: (([Runner]) -> Void)?
 
     init(baseURL: URL, tokenStore: TokenStore) {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
@@ -40,6 +43,7 @@ final class RunnersModel {
         loadState.begin()
         do {
             runners = try await api.runners()
+            onRead?(runners)
             agents = (try? await api.agents()) ?? agents
             loadState.succeed()
         } catch {

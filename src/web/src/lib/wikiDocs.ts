@@ -37,7 +37,7 @@ import {
   shortSha,
   type WikiEntry,
 } from './wiki';
-import { wikiArticleCount, wikiCount, wikiIndexInitial, wikiPinyinCollator, WIKI_INDEX_LETTERS } from './wikiArticles';
+import { wikiArticleCount, wikiCount, wikiIndexInitial, wikiPinyinCollator, wikiPlainWords, WIKI_INDEX_LETTERS } from './wikiArticles';
 import { wikiMonthDay } from './wikiReviewMode';
 
 export type {
@@ -57,6 +57,17 @@ export type {
 export const wikiDocPath = (spaceSlug: string, slug: string): string => `${WIKI_PATH}/${spaceSlug}/d/${slug}`;
 /** A section's place on its document's page, which the directory's section rows link to. */
 export const wikiDocSectionAnchor = (key: string): string => `sec-${key}`;
+/** The section an address's hash lands on (`#sec-<key>`, as the page decodes it), or null for any other hash. */
+export function wikiDocSectionOfAnchor(hash: string): string | null {
+  const prefix = wikiDocSectionAnchor('');
+  let id: string;
+  try {
+    id = decodeURIComponent(hash.replace(/^#/u, ''));
+  } catch {
+    return null;
+  }
+  return id.startsWith(prefix) && id.length > prefix.length ? id.slice(prefix.length) : null;
+}
 export const wikiDocSectionPath = (spaceSlug: string, slug: string, key: string): string =>
   `${wikiDocPath(spaceSlug, slug)}#${wikiDocSectionAnchor(key)}`;
 
@@ -748,7 +759,7 @@ export function wikiDocDirectoryGroups(directory: WikiDocsDirectory): WikiDocDir
         sections: doc.sections.map((section) => ({
           key: section.key,
           number: section.number,
-          title: section.title,
+          title: wikiPlainWords(section.title),
           written: section.written,
           stale: section.stale,
         })),
@@ -820,7 +831,7 @@ export interface WikiDocsIndexGroup {
 /** Every title under its letter (`wikiIndexInitial`), the letters in the bar's order, each group by pinyin. */
 export function wikiDocsIndexGroups(items: readonly WikiDocsIndexItem[]): WikiDocsIndexGroup[] {
   const compare = wikiPinyinCollator().compare;
-  const sorted = [...items].sort(
+  const sorted = items.map((item) => ({ ...item, title: wikiPlainWords(item.title) })).sort(
     (a, b) =>
       compare(a.title, b.title)
       || (a.kind === b.kind ? 0 : a.kind === 'doc' ? -1 : 1)
@@ -848,9 +859,6 @@ export const wikiDocsWritten = (total: number, written: number): string =>
   `${plural(total, 'document', 'documents')} · ${wikiCount(written)} written`;
 /** The same line while there is nothing to read: no plan confirmed and no topic article. */
 export const WIKI_NO_DOCUMENTS = 'No documents yet';
-/** A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_PLAN_SET_UP`). */
-export const WIKI_NO_DOCUMENTS_NOTE =
-  'This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.';
 /** A category's documents not written yet, folded into one row under its written ones: `+3 not written yet`. */
 export const wikiNotWrittenYet = (count: number): string => `+${wikiCount(count)} not written yet`;
 /** A category none of whose documents is written yet, as its one row: `3 documents · Not written yet`. */

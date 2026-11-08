@@ -1,3 +1,4 @@
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -49,6 +50,7 @@ import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * An exception item through its coordinator's handling (`docs/project-integration-line-contract.md`
@@ -454,6 +456,7 @@ async function failedLanding(stack: Stack, w: World, label: string) {
   assert.equal(answer.accepted, true);
   const [item] = await itemsWhere(stack.db, { taskId: task.taskId });
   assert.ok(item, 'the red landing opened an item');
+  await receiveOpenItem(stack.db, item.id);
   return { ...task, firstJobId: landing.jobId, itemId: item.id };
 }
 
@@ -479,6 +482,7 @@ async function blockedCandidate(stack: Stack, w: World) {
   assert.equal(items.length, 1, `the red check opened one item — ${JSON.stringify(items)}`);
   assert.equal(items[0]!.taskId, null, 'about the candidate, and about no task');
   assert.equal(failed.openItemId, items[0]!.id);
+  await receiveOpenItem(stack.db, items[0]!.id);
   return { taskId: task.taskId, promotionId: promotion.id, checkJobId: check.jobId, itemId: items[0]!.id };
 }
 
@@ -692,7 +696,8 @@ test('task landing, rerun fails again: the item ends SUPERSEDED / RETRIED pointi
       assert.match(told[0]!, /This is generation 2 of this task’s landing, rerun at the coordinator session’s request/);
 
       const read = await stack.openItems.list(w.ownerId, w.projectId);
-      assert.deepEqual(read.withCoordinator.map((r) => r.itemId), [second.id]);
+      assert.deepEqual(read.withCoordinator.map((r) => r.itemId), [],
+        "the new failure stays queued until its own delivery is received");
       assert.equal(read.settled.find((r) => r.itemId === red.itemId)?.outcome?.supersededByItemId, second.id);
     } finally {
       await stack.db.$disconnect();
@@ -1141,6 +1146,7 @@ test('escalated merge into main: the owner\'s card offers "Ask the coordinator a
       assert.equal(fresh.length, 1, 'the hand-back is a fresh turn on the coordinator');
       assert.match(fresh[0]!.content ?? '', /integration_retry/);
       assert.match(fresh[0]!.content ?? '', new RegExp(`promotionId: ${uuidToBase62(blocked.promotionId)}`));
+      await receiveOpenItem(stack.db, blocked.itemId);
       read = await stack.openItems.list(w.ownerId, w.projectId);
       assert.equal(read.needsYou.some((row) => row.itemId === blocked.itemId), false);
       assert.deepEqual(read.withCoordinator.find((row) => row.itemId === blocked.itemId)?.actions,

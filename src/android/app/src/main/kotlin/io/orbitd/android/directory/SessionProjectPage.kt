@@ -5,9 +5,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -55,10 +57,14 @@ import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.projects.StartSheetLoad
 import io.orbitd.android.projects.failureReason
 import io.orbitd.android.reader.LandingSessionCopy
+import io.orbitd.android.realtime.PagePoll
+import io.orbitd.android.realtime.PagePolls
 import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.taskprojects.writable
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.PageBar
+import io.orbitd.android.watch.WatchStore
+import io.orbitd.android.watch.watchKey
 import io.orbitd.android.wiki.WikiDate
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
@@ -66,45 +72,44 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonObject
 
 // A05-6's row and A05-7's page (iOS SessionProjectPage.swift): a project in its coordinator's place in a workspace's list, and the
 // project's own sessions page that row opens.
 
-/** The project in its coordinator's place, with a session row's two lines (iOS `SessionProjectRowView`): its name, what its sessions
- * are doing — waiting on you, running, a background job — and when; then its progress and what the row says. A tap opens the
- * project's sessions; ⋯ the row's menu. */
+/** The project in its coordinator's place, with a session row's two lines and padding (iOS `SessionProjectRowView`): its name, what its
+ * sessions are doing — waiting on you, running, a background job — and when; then its progress and what the row says. A tap opens the
+ * project's sessions; a long press the row's menu. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, onOptions: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val words = SessionProjectCopy.statusWords(row)
-    ListItem(
-        headlineContent = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                ProjectIndicator(row.indicator)
-                // An instant this clock cannot read draws no time at all.
-                (row.lastTurnAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
-                    Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
-                }
+    Column(Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${row.title}", onLongClick = onOptions, onClick = onOpen)
+        .semantics { stateDescription = words }.testTag("project-row:${row.projectId}").padding(horizontal = 16.dp, vertical = 11.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+            ProjectIndicator(row.indicator)
+            // An instant this clock cannot read draws no time at all.
+            (row.lastTurnAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
+                Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
             }
-        },
-        supportingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
-                // The line, the sentence alone (iOS `SessionProjectRowView`, the web's project row).
-                Text(row.line.text,
-                    Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
-            }
-        },
-        trailingContent = { IconButton(onOptions) { Icon(painterResource(R.drawable.ic_more), "Options for ${row.title}") } },
-        modifier = Modifier.clickable(role = Role.Button, onClick = onOpen).semantics { stateDescription = words }.testTag("project-row:${row.projectId}"))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
+            // The line, the sentence alone (iOS `SessionProjectRowView`, the web's project row).
+            Text(row.line.text, Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
+        }
+    }
 }
 
 @Composable
-private fun lineColor(tone: SessionLine.Tone): Color = when (tone) {
+internal fun lineColor(tone: SessionLine.Tone): Color = when (tone) {
     SessionLine.Tone.APPROVAL, SessionLine.Tone.WARNING -> LocalOrbitColors.current.needsYou
     SessionLine.Tone.RUNNING -> MaterialTheme.colorScheme.primary
     else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -117,12 +122,16 @@ private fun ProjectIndicator(indicator: SessionProjectRow.Indicator?) {
     when (indicator) {
         SessionProjectRow.Indicator.NEEDS_YOU -> Box(Modifier.size(7.dp).background(LocalOrbitColors.current.needsYou, CircleShape).testTag("project-row-needs-you"))
         SessionProjectRow.Indicator.RUNNING -> CircularProgressIndicator(Modifier.size(12.dp).testTag("project-row-running"), color = muted, strokeWidth = 1.5.dp)
-        SessionProjectRow.Indicator.JOBS -> {
-            val breath by rememberInfiniteTransition(label = "jobs").animateFloat(0.35f, 1f, infiniteRepeatable(tween(1_100), RepeatMode.Reverse), label = "jobs")
-            Icon(painterResource(R.drawable.ic_terminal), null, Modifier.size(14.dp).alpha(breath).testTag("project-row-jobs"), tint = muted)
-        }
+        SessionProjectRow.Indicator.JOBS -> BreathingTerminal(Modifier.testTag("project-row-jobs"))
         null -> Unit
     }
+}
+
+/** iOS `BreathingGlyph`: the one mark that moves without spinning. Work is happening here without the agent generating. */
+@Composable
+internal fun BreathingTerminal(modifier: Modifier = Modifier) {
+    val breath by rememberInfiniteTransition(label = "jobs").animateFloat(0.35f, 1f, infiniteRepeatable(tween(1_100), RepeatMode.Reverse), label = "jobs")
+    Icon(painterResource(R.drawable.ic_terminal), null, modifier.size(14.dp).alpha(breath), tint = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** The progress chip at the head of the second line: the mini bar and "done/total", or — for a project the sidebar did not list —
@@ -135,6 +144,16 @@ internal fun ProjectProgressChip(counts: ProjectTaskCounts?, running: Int, statu
         if (counts != null) ProjectProgressBar(counts, running, Modifier.width(26.dp))
         Text(counts?.let { SessionProjectCopy.progress(it.done, it.total) } ?: SessionProjectCopy.statusLabel(status),
             style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1, softWrap = false)
+    }
+}
+
+/** The project's progress leading the second line of a member's own row, where its project has no row (owner 2026-11-07,
+ * docs/mocks/project-rows-by-workspace, option A; iOS `SessionProjectMarkChip`): the project row's own chip. A phone does not press it on
+ * its own — the long press has Sessions — so a screen reader hears it as the web's hover, beside the progress it shows. */
+@Composable
+internal fun SessionProjectMarkChip(mark: SessionProjectMark) {
+    Box(Modifier.testTag("session-project-mark:${mark.projectId}").semantics { contentDescription = SessionProjectCopy.markHint(mark.title) }) {
+        ProjectProgressChip(mark.taskCounts, mark.runningCount, mark.status)
     }
 }
 
@@ -152,14 +171,20 @@ internal fun ProjectProgressBar(counts: ProjectTaskCounts, running: Int, modifie
 }
 
 /** A project row's menu (iOS `SessionProjectRowActions`): the session its line speaks for, the project's sessions, its page — then
- * Pin and Move, which act on its coordinator. A project has no completion, sharing or deletion of its own. */
+ * Pin and Move, which act on its coordinator. An OPEN project has no completion, sharing or deletion of its own; a finished one in
+ * Open leads with Complete and a divider, which moves all its open sessions to Completed (§4.3, owner 2026-11-07). */
 @Composable
-internal fun ProjectRowMenu(row: SessionProjectRow, fresh: Boolean, close: () -> Unit, openSession: (String) -> Unit, openSessions: () -> Unit,
-    openProject: () -> Unit, pin: (DirectorySession) -> Unit, move: (DirectorySession) -> Unit) {
+internal fun ProjectRowMenu(row: SessionProjectRow, fresh: Boolean, view: SessionView, close: () -> Unit, complete: () -> Unit,
+    openSession: (String) -> Unit, openSessions: () -> Unit, openProject: () -> Unit, pin: (DirectorySession) -> Unit,
+    move: (DirectorySession) -> Unit) {
     AlertDialog(onDismissRequest = close, title = { Text(row.title) }, modifier = Modifier.testTag("project-row-menu"),
         confirmButton = { TextButton(onClick = close) { Text("Close") } },
         text = {
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (row.offersComplete(view)) {
+                    ActionButton(SessionProjectCopy.complete, fresh) { close(); complete() }
+                    HorizontalDivider()
+                }
                 val session = (row.target as? SessionProjectRow.Target.Session)?.id
                 ActionButton(SessionProjectCopy.openSession, session != null) { close(); session?.let(openSession) }
                 ActionButton(SessionProjectCopy.sessions, true) { close(); openSessions() }
@@ -195,31 +220,38 @@ private class ProjectSessionsState(initial: List<DirectorySession>) {
 
 private enum class StartSheet { ASKED, OWN }
 
+/** How often the landing and the merge are read while the line has a job in flight: a running landing's own cadence (§2.7a). */
+private const val LANDING_READ_MS = 4_000L
+
 /**
  * A project's sessions (iOS `SessionProjectPage`, A05-7), pushed over the list it was opened from, or the root of the drawer's project
  * row: its progress — with the start while nobody has started the project — then the landing in flight as a card of its own (A11-11),
  * then the merge into main (A11-9) while there is one to show, then its coordinator, then the one Landings row that opens the project's
  * Landings window (owner 2026-10-27), then every other member by recency, Open and Completed together. No search and no Pinned: it
  * lists one project's sessions. A member opens over this page, and the workspace the page was entered from stays the one beneath it.
- * Members, the landing, the merge and the start are each read every 4 s; the progress comes from `GET /projects/sidebar`.
+ * Its reads follow the account stream as every page's do ([PagePoll]); the landing and the merge, which no event announces, are read
+ * every 4 s while the line has a job in flight. The progress comes from `GET /projects/sidebar`.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
-    revision: Long, open: (OrbitRoute) -> Unit) {
+    open: (OrbitRoute) -> Unit) {
     val projectId = route.id ?: return
     val projects = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
-    // A new page opens on what the app already holds of the project — every workspace's Open and Completed rows — and its read
-    // replaces them when it answers.
-    val state = remember(handle, projectId) {
-        ProjectSessionsState(SessionProjectMembers.members(projectId, data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()))
-    }
+    // A new page opens on what the app already holds of the project — every workspace's Open rows — and its read replaces them when
+    // it answers.
+    val state = remember(handle, projectId) { ProjectSessionsState(SessionProjectMembers.members(projectId, data.sessions["open"].orEmpty())) }
     val trashing = app.trashing
     val hidden by trashing.ids.collectAsState()
-    val sidebar by rememberProjectSidebar(api, revision)
+    val watches by remember(handle) { WatchStore.of(app.session, handle, app.processScope).state }.collectAsState()
+    val sidebar by rememberProjectSidebar(app, handle, api)
     val project = sidebar.firstOrNull { it.text("id")?.let(SessionProjectGrouping::key) == SessionProjectGrouping.key(projectId) }
     val currentData by rememberUpdatedState(data)
     val currentProject by rememberUpdatedState(project)
+    // What the sidebar's row said — Open, and started — when the start and the ending were last read by it: a poll that ran before
+    // the row arrived read them by no row. Null until the first of those reads.
+    val gate = project?.let { it.text("status") to ProjectDoc.started(it) }
+    var gateRead by remember(handle, projectId) { mutableStateOf<List<Pair<String?, Boolean?>?>?>(null) }
     val scope = rememberCoroutineScope()
     var now by remember { mutableStateOf(Instant.now()) }
     var refreshing by remember { mutableStateOf(false) }
@@ -230,6 +262,8 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     val merge = remember(handle, projectId) { ProjectMergeModel(projects, projectId) }
     // Hosted here rather than by the card, so a poll redrawing it cannot dismiss what the owner is reading.
     var promotionReview by remember(projectId) { mutableStateOf<String?>(null) }
+    // One member poll at a time: the page's poll and the Open list landing can both ask for one.
+    val memberPolls = remember(handle, projectId) { Mutex() }
 
     // `includeLanding=1` (LS6): the page's read carries the project's LANDING rows beside its conversations, which is what the
     // Landings row counts. No other list asks for them, so no other list grows a row it cannot place.
@@ -257,7 +291,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     /** One poll that asks for neither list again unless something moved: the Open members are the app's Open list's, kept current by
      * its control stream; the Completed ones are read again when an Open member left that list, or a minute after the last read. A
      * Completed read that a release overlapped is dropped, and the next poll reads again. */
-    suspend fun pollMembers() {
+    suspend fun pollMembersLocked() {
         val readAt = state.readAt
         if (state.error != null || readAt == null || !currentData.ready) return loadMembers()
         val openList = currentData.sessions["open"].orEmpty()
@@ -279,6 +313,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         } catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { state.error = CodexSignInText.sentence(failureReason(failure)) }
     }
+    suspend fun pollMembers() = memberPolls.withLock { pollMembersLocked() }
     /** The landing line's read; a read that fails keeps the last answer and says it is stale. */
     suspend fun loadIntegration() {
         val view = try { projects.integration(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
@@ -292,6 +327,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     /** The start row's read, while the sidebar says nobody has started the project. A read that fails keeps the last answer. */
     suspend fun loadStart() {
         val row = currentProject
+        gateRead = listOf(row?.let { it.text("status") to ProjectDoc.started(it) })
         if (row?.text("status") != "OPEN" || ProjectDoc.started(row) != false) { state.openItems = null; return }
         val items = try { projects.openItems(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (items != null) state.openItems = items
@@ -319,13 +355,30 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                 }
             }
         }
-        launch { loadMembers(); while (true) { delay(4_000); pollMembers() } }
-        launch { while (true) { loadIntegration(); delay(4_000) } }
-        launch { while (true) { merge.load(); delay(4_000) } }
-        launch { while (true) { loadStart(); delay(4_000) } }
-        launch { while (true) { loadDone(); delay(4_000) } }
         launch { while (true) { delay(1_000); now = Instant.now() } }
     }
+    // The page's reads follow the account stream (docs/list-freshness-design.md R6): a project's or its tasks' events and each connect
+    // read them, a minute without one reads them once, the stream being down reads them on a backoff, and a stopped Activity reads
+    // nothing. The members are read whole once; after that the Open ones are the app's Open list's and only Completed is read again.
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, projectId) {
+        coroutineScope { launch { pollMembers() }; launch { loadStart() }; launch { loadDone() } }
+    }
+    // The row came after the page's read, or moved since: the start and the ending are read again by what it says now, once, rather
+    // than a minute later by the next poll.
+    LaunchedEffect(gate) {
+        val read = gateRead ?: return@LaunchedEffect
+        if (read.single() != gate) coroutineScope { launch { loadStart() }; launch { loadDone() } }
+    }
+    // The landing card and the merge into main. A landing publishes no event (§2.9 LS6): while the line says a job is in flight they
+    // are read every 4 s, as a running landing's page reads it (§2.7a); with none, as the rest of the page.
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, projectId,
+        inFlightMs = { if (ProjectPage.landingInFlight(state.integration)) LANDING_READ_MS else null }) {
+        coroutineScope { launch { loadIntegration() }; launch { merge.load() } }
+    }
+    // Between the page's reads the Open members move with the app's Open list as the store reads it: no read of their own, but
+    // Completed's when one of them has left the list.
+    val openRows = data.sessions["open"]
+    LaunchedEffect(openRows) { if (state.readAt != null && state.error == null && data.ready) pollMembers() }
     fun refresh() = scope.launch {
         refreshing = true
         try { coroutineScope { launch { loadMembers() }; launch { loadIntegration() }; launch { merge.load(force = true) }; launch { loadStart() }; launch { loadDone() } } }
@@ -358,7 +411,8 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     @Composable
     fun MemberRow(session: DirectorySession) {
         val view = if (session.effectiveLifecycleState == "COMPLETED") SessionView.COMPLETED else SessionView.OPEN
-        SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) }) {
+        SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) },
+            watching = watches.summaries[watchKey(session.id)]) {
             action = DirectoryDialog.SessionMenu(session, view)
         }
     }
@@ -450,7 +504,8 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         }
     }
     action?.let { dialog ->
-        DirectoryActionDialog(dialog, api, data, setDialog = { action = it }) { app.realtime.refreshDirectory(); scope.launch { loadMembers() } }
+        // A row's menu does not wait for a read (iOS), as on the session list.
+        DirectoryActionDialog(dialog, api, data.copy(fresh = true), setDialog = { action = it }) { app.realtime.refreshDirectory(); scope.launch { loadMembers() } }
     }
     // The start card over this page, read afresh as it opens: this page holds none of the criteria, the plan or the line it is set from.
     val live by app.realtime.state.collectAsState()

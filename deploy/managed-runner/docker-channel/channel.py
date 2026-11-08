@@ -937,6 +937,8 @@ class Channel:
             "generation": int(generation) if generation.isdigit() else None,
             "volumeUid": labels.get(VOLUME_UID_LABEL),
             "volume": next((m.get("Name") for m in found.get("Mounts") or [] if m.get("Destination") == DATA_MOUNT), None),
+            # The image ID it was made from: the configured one, or a previous one after an upgrade.
+            "image": found.get("Image"),
             "node": self.host_name,
             "status": status,
             "running": status == "running",

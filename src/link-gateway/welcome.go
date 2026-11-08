@@ -8,8 +8,8 @@ import (
 	"orbit/link-gateway/linkpb"
 )
 
-// Welcome's sessions and release (docs/runner-link-design.md §5.3, §5.4, §5.8, §7). Before a MODE_LINK connection's
-// Welcome is written, the gateway asks the apiserver's welcome route (POST /runner/link/welcome,
+// Welcome's sessions and release (docs/runner-link-design.md §5.3, §5.4, §5.8, §7). Before a connection's Welcome is
+// written, the gateway asks the apiserver's welcome route (POST /runner/link/welcome,
 // src/apiserver/src/runner-api/runner-link-welcome.ts) where each session the Hello names stands, how far its events
 // are stored and whether this process still holds it, and which release the runner is assigned. The route decides
 // both; the gateway copies what it says.

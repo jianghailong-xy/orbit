@@ -42,7 +42,7 @@ export function routesNamingSession(
  *  did not have). */
 export const ENGINE_SESSION_USER_ROUTES = routesNamingSession(TENANT_ISOLATION_CASES, '/sessions');
 
-/** The runner door: 30 routes today (naming, a turn suggestion, the Cursor key check and a job's alert included). */
+/** The runner door: 32 routes today (naming, a turn suggestion, the Cursor key check, a job's alert and the two file doors included). */
 export const ENGINE_SESSION_RUNNER_ROUTES = routesNamingSession(RUNNER_ISOLATION_CASES, '/runner/sessions');
 
 /**
@@ -158,6 +158,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: "assertEngineSessionRow(session);\n    if (session.isolationStatus !== 'worktree' || !session.branch) {",
     note: 'POST /commit',
   },
+  'SessionsService.discardCheckout': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "async discardCheckout(ownerId: string, id: string) {\n    return this.queueCheckoutAction(ownerId, id, 'discard');",
+    note: 'POST /checkout/discard — the same engine-session assertion as POST /commit, made inside the shared queueCheckoutAction before anything is written',
+  },
   'SessionsService.adoptWorktreeBranch': {
     file: 'sessions/sessions.service.ts',
     snippet: "assertEngineSessionRow(session);\n      if (session.isolationStatus !== 'worktree') {",
@@ -251,6 +256,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// Before the ownership answer, but only for a row of this runner\'s own account: another',
     note: 'POST /runner/sessions/:id/cursor-key-check (RunnerApiController, which leaves the check to the service)',
   },
+  'RunnerFilesController.hostedSession': {
+    file: 'runner-api/runner-files.controller.ts',
+    snippet: 'if (session) assertEngineSession(session);',
+    note: 'a folder bundle is written into a session the way an upload is, and a pin acts for the session that asks',
+  },
   'RunnerApiController.assertSessionOwnership': {
     file: 'runner-api/runner-api.controller.ts',
     snippet: 'if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSessionRow(session);',
@@ -289,6 +299,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/merge-repair': 'SessionsService.startMergeRepair',
   'POST /sessions/:id/merge-receipts': 'MergeReceiptService.record',
   'POST /sessions/:id/commit': 'SessionsService.commitWorktree',
+  'POST /sessions/:id/checkout/discard': 'SessionsService.discardCheckout',
   'POST /sessions/:id/adopt-branch': 'SessionsService.adoptWorktreeBranch',
   'POST /sessions/:id/retry-message': 'AutoRetryService.resendRetryMessage',
   'POST /sessions/:id/auto-retry': 'SessionsService.armAutoRetry',
@@ -305,13 +316,17 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'PUT /sessions/:id/share': 'ShareLinksService.put',
   'DELETE /sessions/:id/share': 'ShareLinksService.turnOff',
 
-  // ── the runner door (30) ──────────────────────────────────────────────────────────────────────
+  // ── the runner door (32) ──────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/:id/source/pin': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/takeover-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/activate-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/release-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/orchestration-credential': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/attachments': 'RunnerApiController.assertSessionOwnership',
+  'POST /runner/sessions/:id/files': 'RunnerApiController.assertSessionOwnership',
+  'POST /runner/sessions/:id/file-bundles': 'RunnerFilesController.hostedSession',
+  'PUT /runner/sessions/:id/files/:fileId/pin': 'RunnerFilesController.hostedSession',
+  'DELETE /runner/sessions/:id/files/:fileId/pin': 'RunnerFilesController.hostedSession',
   'POST /runner/sessions/:id/artifacts/result': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/approvals': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/background-wake': 'RunnerApiController.assertSessionOwnership',
@@ -323,7 +338,6 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/turn-complete': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/events': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/finalize': 'RunnerApiController.assertEngineSessionById',
-  'POST /runner/sessions/:id/complete': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/import-result': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/merge-result': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/commit-result': 'RunnerApiController.assertEngineSessionById',

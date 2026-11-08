@@ -253,7 +253,7 @@ async function integrationItem(
   fields: { taskId?: string; promotionId?: string; integrationJobId?: string; kind?: string } = {},
 ): Promise<void> {
   const now = new Date();
-  await w.h.db.projectOpenItem.create({
+  const item = await w.h.db.projectOpenItem.create({
     data: {
       projectId: w.project.id, ownerId: w.ownerId,
       kind: fields.kind ?? 'INTEGRATION_CONFLICT', state: 'OPEN',
@@ -263,6 +263,15 @@ async function integrationItem(
       dedupeKey: `membership:${randomUUID()}`, title: 'Resolve the integration conflict', payload: {},
       waitingSince: now, assignedAt: now,
     },
+  });
+  // A historical delivery must not add an ordinary session to the open/completed membership reads.
+  const sessionId = await session(w, { archivedAt: now });
+  const clientTurnId = `project-open-item:v1:${item.id}:fixture`;
+  await w.h.db.conversationTurn.create({
+    data: { sessionId, seq: 1, clientTurnId, kind: 'message', deliveredAt: now },
+  });
+  await w.h.db.projectOpenItemDelivery.create({
+    data: { itemId: item.id, projectId: w.project.id, sessionId, clientTurnId, purpose: 'ITEM' },
   });
 }
 

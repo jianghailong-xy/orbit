@@ -17,7 +17,8 @@ import XCTest
 ///  - the body reads the ROW, through `EvidenceDecisions`;
 ///  - the console reads the queue in every conversation — with the ruler's reads, and on its own in
 ///    one that coordinates nothing — delivers `cardRows` as questions, and presses the door with the
-///    request `EvidenceDecisions.request` builds;
+///    request `EvidenceDecisions.request` builds, whichever of the queue and the project comes back
+///    first;
 ///  - a version waiting for a paused coordinator gets the same card, drawn folded, whose Decide it
 ///    myself opens this card in the review sheet, and one handed over is drawn as one line — and
 ///    neither is counted by the bar;
@@ -158,7 +159,7 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         let console = try source(Self.consolePath)
         let refresh = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
                                   to: "/// Answer one revision of a task's evidence at the decision door")
-        XCTAssertTrue(refresh.contains("guard !isDraft, !loadingEvidence else { return }"),
+        XCTAssertTrue(refresh.contains("guard !isDraft else { return }"),
                       "every conversation reads it, not only a coordinator: a task a session "
                           + "dispatched outside any project has its card in a session that coordinates nothing")
         XCTAssertTrue(refresh.contains("api.pendingEvidenceDecisions(decidingSessionID: sessionID)"),
@@ -178,6 +179,96 @@ final class EvidenceDecisionWiringTests: XCTestCase {
                       "the bar stops counting a card that went stale, by OrbitKit's rule")
         XCTAssertTrue(console.contains("EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, sessionId: sessionID,"),
                       "and a card's standing is re-derived through the same filter, for this conversation")
+    }
+
+    /// A console opened cold learns what its cards are drawn from by two reads, and either can come
+    /// back first: the queue, kicked when the composer adopts the list row, and the project, from
+    /// `loadContext`. When the queue won, its rows were dropped and nothing read them again: 7 of 10
+    /// launches on the iPhone simulator drew no card (T7's probe, run 41509823402).
+    ///
+    /// `ConsoleModel` does not compile here, so this walks that order through its source and
+    /// OrbitKit's own filter, one step at a time, with no other event after the project lands. Steps
+    /// 1 to 3 pin the order itself; step 4 is what the order needs from the console.
+    func testAQueueReadThatBeatsTheProjectStillDrawsItsCard() throws {
+        let console = try source(Self.consolePath)
+        let project = "34JdnRJOxuG05yi0TpLq4"
+        let here = "34JbyLO3TvHgOmBBHLgZu"
+        let row = EvidenceDecisionRow(
+            taskId: "34LMiluvx0jK63cj8arWl", title: "P4.3", projectId: project, ownerCard: nil,
+            criterion: nil, evidenceRevision: "2", ageSeconds: 300, claim: "Done.", gaps: [], citations: [],
+            decidability: EvidenceDecisionDecidability(decidable: true, refusal: nil),
+            independence: EvidenceDecisionIndependence(independent: true, disqualification: nil))
+        let queue = EvidenceDecisionQueue(decidingSessionId: here, count: 1, pending: [row])
+
+        // 1. The list row's count kicks the read, before anything here knows the project.
+        let adopt = try section(console, from: "func adoptServerSnapshot(_ session: Session?) {",
+                                to: "private func runMoment(")
+        XCTAssertTrue(adopt.contains("Task { [weak self] in await self?.refreshEvidenceDecisions(force: true) }"),
+                      "a row whose count moved, in a console that knows no project yet, reads the queue")
+
+        // 2. It comes back first: the queue is kept, and with no project its row draws nothing.
+        let read = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
+                               to: "/// Answer one revision of a task's evidence at the decision door")
+        XCTAssertTrue(read.contains("evidenceDecisions = queue"), "the read keeps what it was told")
+        XCTAssertTrue(read.contains("lastEvidenceRead = Date()"), "and starts the throttle")
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: queue, projectId: nil, sessionId: here).isEmpty,
+                      "a row of a project this console does not know yet gets no card")
+
+        // 3. The project lands. The read it kicks is not forced, so the throttle skips it: no request
+        // can bring the row back, and a landing that forced one would spend a read on every open.
+        let landing = try section(console, from: "projectID = s.projectId", to: "taskID = s.taskId")
+        XCTAssertTrue(landing.contains("if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }"),
+                      "the read the project's landing kicks")
+        XCTAssertFalse(landing.contains("force: true"), "and it stays subject to the throttle")
+
+        // 4. So the landing draws the queue the read left, and now the row is this console's card.
+        XCTAssertTrue(landing.contains("adoptEvidenceQueue(evidenceDecisions)"),
+                      "with the project known, the queue a read already brought back has to be drawn: "
+                          + "nothing else re-reads it until a reconnect or the row's count moves")
+        XCTAssertTrue(read.contains("private func adoptEvidenceQueue(_ queue: EvidenceDecisionQueue) {"),
+                      "one adoption, for a read and for the landing alike")
+        XCTAssertEqual(EvidenceDecisions.cardRows(queue: queue, projectId: project, sessionId: here), [row],
+                       "the same queue, once the project is known, is this conversation's card")
+    }
+
+    /// A forced read means something just moved, and the read on its way may have been answered before
+    /// it did. Dropped, the card waited for the next event, which may not come. `ConsoleModel` does not
+    /// compile here, so this walks the order through its source: the moved row's force finds a read on
+    /// its way, is owed, and is read when that read is back.
+    func testAForcedEvidenceReadIsOwedWhileAnotherIsOnItsWay() throws {
+        let console = try source(Self.consolePath)
+        let read = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
+                               to: "/// Draw what a read of the queue lists for this conversation.")
+        let inFlight = try XCTUnwrap(read.range(of: "if loadingEvidence {"), "a read on its way is what is asked about")
+        let owed = try XCTUnwrap(read.range(of: "if force { evidenceReadOwed = true }"), "and a force is remembered")
+        XCTAssertLessThan(inFlight.lowerBound, owed.lowerBound)
+        let throttle = try XCTUnwrap(read.range(of: "if !force, Date().timeIntervalSince(lastEvidenceRead)"))
+        XCTAssertLessThan(owed.lowerBound, throttle.lowerBound,
+                          "and that comes before the throttle, which a forced read does not answer to")
+        let loop = try section(read, from: "repeat {", to: "} while evidenceReadOwed && !Task.isCancelled")
+        XCTAssertTrue(loop.contains("evidenceReadOwed = false"), "each read pays what was owed before it asks")
+        XCTAssertTrue(loop.contains("api.pendingEvidenceDecisions(decidingSessionID: sessionID)"),
+                      "and the read that is owed is the same read")
+        XCTAssertTrue(loop.contains("adoptEvidenceQueue(queue)"), "drawn the same way")
+    }
+
+    /// The row names the project and the task, and `loadContext` reads it once. A first read that did not
+    /// come back left both nil, so no project card and no owner confirmation, until the console was
+    /// restarted: a reconnect re-read everything but the row.
+    func testARowThatWasNotReadIsReadAgainOnAReconnectAndOnTheMinute() throws {
+        let console = try source(Self.consolePath)
+        let load = try section(console, from: "private func loadContext() async {", to: "adoptServerSnapshot(s)")
+        let read = try XCTUnwrap(load.range(of: "guard let s = try? await api.session(sessionID) else { return }"))
+        let marked = try XCTUnwrap(load.range(of: "contextLoaded = true"), "only a read that came back counts")
+        XCTAssertLessThan(read.lowerBound, marked.lowerBound)
+        XCTAssertTrue(load.contains("guard !loadingContext else { return }"), "and one read at a time")
+        let again = try section(console, from: "private func loadContextIfUnread() async {",
+                                to: "/// List seeds and the later detail read")
+        XCTAssertTrue(again.contains("if !contextLoaded { await loadContext() }"), "read again until it is known")
+        let run = try section(console, from: "func run() async {", to: "isReconnect = true")
+        XCTAssertTrue(run.contains("await self?.loadContextIfUnread()"), "on a reconnect")
+        let minute = try section(console, from: "runnerPollTask = Task { [weak self] in", to: "evidencePollTask = Task")
+        XCTAssertTrue(minute.contains("await self.loadContextIfUnread()"), "and on the minute: the stream may never drop")
     }
 
     /// The arming half of the handoff, on the console's side: the press hands the ROW over and
@@ -249,107 +340,6 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         XCTAssertFalse(card.contains("confirmButton"),
                        "and no button that would send a second decision to the door")
     }
-
-    // MARK: while the coordinator is paused
-
-    /// One card per version, wherever its version is: the card draws a version handed to the
-    /// coordinator as its one line, and one waiting for it folded — in the conversation; in the
-    /// review sheet it is the card itself, with why it waits on top while it still does.
-    func testTheCardDrawsAWaitingVersionFoldedAndASentOneAsALine() throws {
-        let card = try card()
-        let body = try section(card, from: "var body: some View {", to: "/// The card in the conversation.")
-        XCTAssertTrue(body.contains("case .sent(let sent) where !inReview:\n            SentToCoordinatorLine(sent: sent)"),
-                      "a version handed to the coordinator is one line where its card was")
-        XCTAssertTrue(body.contains("case .waiting(let row) where !inReview:\n            QueuedEvidenceCard(console: console, row: row)"),
-                      "a version waiting for it is the folded card")
-        XCTAssertTrue(body.contains("if inReview { review(standing) } else { card(standing) }"),
-                      "and anything else is the card — in the review sheet, its scrolling form")
-
-        let review = try section(card, from: "private func review(", to: "private func facts(")
-        XCTAssertTrue(review.contains("if standing.waitsForCoordinator {"),
-                      "the notice is there while the version waits, and only then")
-        XCTAssertTrue(review.contains("CoordinatorPauseStatus(pause: console.coordinatorPause)"),
-                      "why it waits, read off this conversation's own row")
-        XCTAssertTrue(review.contains("Text(EvidenceDecisions.queuedOpenNote)"),
-                      "and what deciding here means")
-        XCTAssertTrue(review.contains("confirmButton(standing)") && review.contains("sendBackButton(standing)"),
-                      "pressed with today's two answers, under the same rule")
-        XCTAssertTrue(review.contains("EvidenceDecisions.queuedHeading"),
-                      "the sheet's title is the folded card's while it waits")
-
-        let sendBack = try section(card, from: "private func sendBackButton", to: "/// The press re-checks")
-        XCTAssertTrue(sendBack.contains("dismissReview()\n            console.startEvidenceSendBackReply(row)"),
-                      "pressed in the sheet, the sheet makes way for the composer it arms")
-    }
-
-    /// The folded card says what waits, for which task, why, and what that means, and offers one
-    /// way in — no answer of its own. Its words are OrbitKit's, held to the web card's.
-    func testTheFoldedCardOffersOnlyDecideItMyself() throws {
-        let file = try source(Self.cardPath)
-        let folded = try section(file, from: "private struct QueuedEvidenceCard: View",
-                                 to: "private struct CoordinatorPauseStatus: View")
-        for reading in ["Text(EvidenceDecisions.queuedHeading)",
-                        "EvidenceDecisions.receiptTime(submitted)",
-                        "Text(row.title)",
-                        "CoordinatorPauseStatus(pause: console.coordinatorPause)",
-                        "Text(EvidenceDecisions.queuedNote)",
-                        "Text(EvidenceDecisions.decideMyselfAction)",
-                        ".approvalChrome(.gray)"] {
-            XCTAssertTrue(folded.contains(reading), "the folded card must read \(reading)")
-        }
-        XCTAssertTrue(folded.contains("console.openedEvidence(row.taskId, row.evidenceRevision)\n                if let target { openReview(target) }"),
-                      "Decide it myself opens the review sheet on this card, and the console keeps it")
-        for gone in ["decideEvidence", "confirmButton", "ApprovalActions", "startEvidenceSendBackReply"] {
-            XCTAssertFalse(folded.contains(gone), "the folded card answers nothing itself: \(gone)")
-        }
-
-        let pause = try section(file, from: "private struct CoordinatorPauseStatus: View",
-                                to: "private struct SentToCoordinatorLine: View")
-        XCTAssertTrue(pause.contains("Text(EvidenceDecisions.pauseLine(pause))"))
-        let line = try section(file, from: "private struct SentToCoordinatorLine: View",
-                               to: "// MARK: - the owner's confirmation")
-        XCTAssertTrue(line.contains("Text(EvidenceDecisions.sentLine(sent.deliveredAt))"))
-        XCTAssertFalse(line.contains("Button"), "the line has nothing to press")
-    }
-
-    /// The console puts the coordinator's two groups in the evidence card's slot — delivered as the
-    /// same card, anchored the same way — lets go of a version that only ever waited once the read
-    /// stops listing it, keeps a reason typed against a waiting version, knows why its coordinator
-    /// is paused from its own row, and re-reads the queue while it can move.
-    func testTheConsoleDeliversTheCoordinatorsQueueInTheEvidenceSlot() throws {
-        let console = try source(Self.consolePath)
-        let refresh = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
-                                  to: "/// Answer one revision of a task's evidence at the decision door")
-        XCTAssertTrue(refresh.contains("for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {\n                deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))"),
-                      "a version handed to the coordinator is delivered as the evidence card")
-        XCTAssertTrue(refresh.contains("for row in EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: projectID,"),
-                      "and so is one waiting for it, under the card filter's own rule")
-        XCTAssertTrue(refresh.contains("EvidenceDecisions.letsGo(evidenceStanding(taskID, evidenceRevision),"),
-                      "a version that only ever waited is let go of once the read stops listing it")
-        XCTAssertTrue(refresh.contains("engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)"),
-                      "a question asked here is remembered as one")
-
-        let adopt = try section(console, from: "func adoptServerSnapshot(_ session: Session?) {",
-                                to: "private func runMoment(")
-        XCTAssertTrue(adopt.contains("coordinatorPause = EvidenceDecisions.coordinatorPause(session)"),
-                      "why its coordinator is paused is read off this conversation's own row")
-
-        let reconcile = try section(console, from: "private func reconcileReplyContext() {",
-                                    to: "// MARK: - scroll-up history paging")
-        XCTAssertTrue(reconcile.contains("if !EvidenceDecisions.holdsReply(standing) { replyContext = nil }"),
-                      "a reason typed against a version waiting for the coordinator is kept")
-
-        let start = try section(console, from: "func startStreaming() {", to: "func stopStreaming() {")
-        XCTAssertTrue(start.contains("if EvidenceDecisions.rereadsQueue(self.evidenceDecisions, coordinates: self.projectID != nil,"),
-                      "the queue is re-read on a timer exactly while it can move")
-        XCTAssertTrue(start.contains("try? await Task.sleep(nanoseconds: 20_000_000_000)"),
-                      "every 20 s, the browser's interval for the same read")
-        let stop = try section(console, from: "func stopStreaming() {", to: "func run() async {")
-        XCTAssertTrue(stop.contains("evidencePollTask?.cancel()"), "and stops with the stream")
-        XCTAssertFalse(start.contains("async let"), "no side-by-side async let: iOS 27 aborts on it")
-    }
-
-    // MARK: one entry for one question
 
     func testAnAskUserQuestionIsTheOrdinaryFormAndTheCardIsADeliveredOne() throws {
         let file = try source(Self.cardPath)

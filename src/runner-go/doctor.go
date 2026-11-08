@@ -211,6 +211,8 @@ type engineHealth struct {
 	// Claude Code only: doctor's region check found Claude's connection to Anthropic in a region Anthropic does
 	// not offer Claude in (doctorRegion). Its line says so, and doctor suggests no sign-in for it.
 	regionBlocked bool
+	// Whether rg resolves in the shell this engine runs a session's commands in (doctor_rg.go). Doctor's alone.
+	rg engineRg
 }
 
 // serviceLoginPath reconstructs the PATH the background service runs with, the
@@ -693,6 +695,7 @@ func runDoctor(proxyVars []envVar, anthropicBlocked bool) []engineHealth {
 	check := func(spec engineSpec, servicePath string) engineHealth {
 		h := checkEngine(spec, servicePath)
 		h.regionBlocked = anthropicBlocked && spec.bin == providerClaude
+		h.rg = checkEngineRg(h, servicePath)
 		return h
 	}
 	servicePath := serviceLoginPath()
@@ -736,6 +739,7 @@ func runDoctor(proxyVars []envVar, anthropicBlocked bool) []engineHealth {
 		}
 	}
 
+	printEngineRg(healths)
 	printEngineHints(healths)
 	return healths
 }
@@ -787,10 +791,11 @@ func formatEngineLine(h engineHealth) string {
 func printEngineHints(healths []engineHealth) {
 	var missing, signedOut, unverified, pathIssue []engineHealth
 	// Claude Code where Anthropic does not offer Claude is not all set, and gets no sign-in hint: the Claude
-	// region section after these says why.
-	regionBlocked := false
+	// region section after these says why. Nor is an engine without rg: the search section said what to do.
+	regionBlocked, rgMissing := false, false
 	for _, h := range healths {
 		regionBlocked = regionBlocked || h.regionBlocked
+		rgMissing = rgMissing || (h.rg.checked && h.rg.path == "")
 		if !h.installed {
 			missing = append(missing, h)
 			continue
@@ -807,7 +812,7 @@ func printEngineHints(healths []engineHealth) {
 		}
 	}
 	if len(missing)+len(signedOut)+len(unverified)+len(pathIssue) == 0 {
-		if !regionBlocked {
+		if !regionBlocked && !rgMissing {
 			fmt.Println("\nAll set — every engine is installed, signed in, and reachable.")
 		}
 		return

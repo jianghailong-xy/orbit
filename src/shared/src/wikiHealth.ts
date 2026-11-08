@@ -18,6 +18,13 @@ export type WikiMaintenanceLook = (typeof WIKI_MAINTENANCE_LOOKS)[number];
 export const WIKI_MAINTENANCE_HEALTH = {
   /** The consecutive failures at which the owner is told, once for the streak (`notify`). */
   notifyAfterFailures: 3,
+  /**
+   * The runs in a row, and the Claude sessions each read at least, with no write to a memory file among them, at which
+   * the owner is told, once for the streak: Claude's memory has probably stopped reaching the session's events
+   * (docs/wiki-memory-claims-design.md section 8).
+   */
+  notifyNoNotesAfterRuns: 3,
+  notifyNoNotesMinSessions: 20,
 } as const;
 
 /** A space's maintenance run, as the status line reads it. */

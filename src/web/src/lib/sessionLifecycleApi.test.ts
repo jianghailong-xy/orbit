@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { completeSession } from '../api';
+import { completeProjectSessions, completeSession } from '../api';
 import { workspaceSessionCountsQuery, sessionsQuery } from './queries';
 
 const apiMock = vi.hoisted(() => vi.fn());
@@ -25,7 +25,8 @@ describe('canonical session lifecycle API', () => {
 
       expect(query.queryKey).toEqual(['sessions', 'runner-1', null, view, null, null]);
       await (query.queryFn as () => Promise<unknown>)();
-      expect(apiMock).toHaveBeenCalledWith(`/sessions?runnerId=runner-1&view=${view}`);
+      // The whole Open list is read as a delta (lib/openListDelta); a first read asks with `since=`.
+      expect(apiMock).toHaveBeenCalledWith(`/sessions?runnerId=runner-1&view=${view}${view === 'open' ? '&since=' : ''}`);
     },
   );
 
@@ -94,6 +95,38 @@ describe('canonical session lifecycle API', () => {
       '/api/sessions/session-1/complete',
       '/api/sessions/session-1/archive',
     ]);
+  });
+
+  it("posts a finished project's Complete to its sessions door and answers how many moved", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ completed: 3 }), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+
+    await expect(completeProjectSessions('project-1')).resolves.toEqual({ completed: 3 });
+    expect(fetchMock.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
+      ['/api/projects/project-1/sessions/complete', 'POST'],
+    ]);
+  });
+
+  it("surfaces an OPEN project's refusal by its code", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: 'PROJECT_STILL_OPEN', message: 'This project is OPEN' }),
+      { status: 409 },
+    )));
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+
+    await expect(completeProjectSessions('project-1')).rejects.toMatchObject({
+      status: 409,
+      code: 'PROJECT_STILL_OPEN',
+    });
   });
 
   it('retries a silently unsupported Completed view through its legacy alias', async () => {

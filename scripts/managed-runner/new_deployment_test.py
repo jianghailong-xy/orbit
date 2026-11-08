@@ -34,7 +34,8 @@ import unittest
 REPO = Path(__file__).resolve().parents[2]
 INSTALL = "scripts/install-server.sh"
 UPGRADES = [".claude/skills/upgrade/upgrade.sh", ".agents/skills/upgrade/scripts/upgrade.sh"]
-COPIED = [INSTALL, *UPGRADES, ".env.example", ".gitignore", "docker-compose.yml"]
+COPIED = [INSTALL, *UPGRADES, ".env.example", ".gitignore", "docker-compose.yml", "gateway/nginx.conf", "scripts/pg-backup.sh",
+          "scripts/runner-link/door-check.js", "deploy/runner-link/behind-web-gateway.env"]
 IMAGE_ID = "sha256:" + "ab" * 32
 GATEWAY = "172.30.0.1"
 SWITCH_LINES = [
@@ -51,9 +52,9 @@ FIREWALL_IMAGE = "orbit-managed-runner-firewall:local"
 # .env switches their profiles on, as Compose does, and `compose config docker-channel` then binds this checkout's
 # data/managed-runners into it as Compose prints a bind; a network exists once created; an image is found by any
 # name. The apiserver's container is replaced by a `compose up` that recreates it: one forced, or any naming it when
-# FAKE_APISERVER_IMAGE_CHANGED says its image changed. Docker's own facts (FAKE_SECURITY, FAKE_FIREWALL_DRIVER,
-# FAKE_IPV6) and the firewall program's answers (FAKE_FIREWALL_BACKEND for its preflight, FAKE_DNS) are the test's to
-# set. A call matching FAKE_FAIL fails.
+# FAKE_APISERVER_IMAGE_CHANGED says its image changed. The deployment runs from this checkout, and pgbackup on its script.
+# Docker's own facts (FAKE_SECURITY, FAKE_FIREWALL_DRIVER, FAKE_IPV6) and the firewall program's answers
+# (FAKE_FIREWALL_BACKEND for its preflight, FAKE_DNS) are the test's to set. A call matching FAKE_FAIL fails.
 FAKE_DOCKER = r"""#!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FAKE_DOCKER_LOG"
 if [ -n "${FAKE_FAIL:-}" ] && [[ "$*" == $FAKE_FAIL ]]; then echo "fake docker: failing $*" >&2; exit 1; fi
@@ -65,6 +66,7 @@ case "$*" in
     echo postgres; echo apiserver; echo wiki-worker
     grep -Eq '^COMPOSE_PROFILES=(.*,)?managed-runners-docker(,|$)' .env 2>/dev/null && echo docker-channel
     grep -Eq '^COMPOSE_PROFILES=(.*,)?managed-runner-firewall(,|$)' .env 2>/dev/null && echo managed-runner-firewall
+    grep -Eq '^COMPOSE_PROFILES=(.*,)?runner-link(,|$)' .env 2>/dev/null && { echo nats; echo link-gateway; }
     echo web; echo gateway; echo pgbackup ;;
   "compose config docker-channel")
     grep -Eq '^COMPOSE_PROFILES=(.*,)?managed-runners-docker(,|$)' .env 2>/dev/null || exit 1
@@ -73,6 +75,20 @@ case "$*" in
       '          create_host_path: true' '      - type: bind' "        source: $PWD/data/managed-runners" \
       '        target: /var/lib/orbit-managed-runners' '        bind:' '          create_host_path: true' ;;
   "compose ps -q apiserver") cat "$FAKE_DOCKER_LOG.apiserver" 2>/dev/null || echo apiserver-0 ;;
+  "compose ps -q pgbackup") echo pgbackup-0 ;;
+  "compose ps -q gateway") echo gateway-0 ;;
+  "exec gateway-0 cat /etc/nginx/conf.d/default.conf") cat gateway/nginx.conf ;;
+  "compose ps -q link-gateway") echo link-gateway-0 ;;
+  "inspect -f {{with index .State \"Health\"}}{{.Status}}{{end}} link-gateway-0") echo healthy ;;
+  "build --help") echo '      --provenance string' ;;
+  "run --rm --network none "*" orbit-link-gateway:local secrets")
+    for name in SIGNING_KEY PUBLIC_KEY GATEWAY_TOKEN NATS_APISERVER_SEED NATS_APISERVER_KEY NATS_GATEWAY_SEED NATS_GATEWAY_KEY; do
+      echo "RUNNER_LINK_$name=\"fixture-$name\""
+    done ;;
+  "compose run --rm --no-deps -T apiserver node - "*) echo "401 UNAUTHENTICATED" ;;
+  "compose config postgres") echo '    container_name: orbit-postgres' ;;
+  "inspect --format {{range .Mounts}}"*" orbit-postgres") echo "$PWD/data/pg-archive" ;;
+  "exec pgbackup-0 cat /usr/local/bin/pg-backup.sh") cat scripts/pg-backup.sh ;;
   "compose up "*--force-recreate*apiserver*) apiserver_recreated ;;
   "compose up "*apiserver*) [ -n "${FAKE_APISERVER_IMAGE_CHANGED:-}" ] && apiserver_recreated ;;
   "compose logs apiserver") echo "[ManagedRunners] managed runners are enabled in orbit-fixture (Docker instance orbit-fixture)" ;;
@@ -206,15 +222,19 @@ class NewDeploymentTest(unittest.TestCase):
         # Built, the database up, its migrations applied, then the stack: the apiserver's first boot has none left.
         started = [c for c in calls if c.startswith(("compose build", "compose up", "compose run"))]
         self.assertEqual([c.split(" sh -c ")[0] for c in started], [
-            "compose build",
+            "compose build postgres apiserver wiki-worker docker-channel managed-runner-firewall nats web gateway pgbackup",
             "compose up -d --wait --wait-timeout 300 postgres",
             "compose run --rm --no-deps apiserver",
             "compose up -d --wait --wait-timeout 900",
+            "compose run --rm --no-deps -T apiserver node - http://gateway/runner-link",
         ])
         self.assertIn("migrate deploy", started[2])
-        # The image named is used as it is; only the firewall's own image is built, and nothing is pushed anywhere.
+        # The image named is used as it is; only the firewall's and the link gateway's own images are built, and nothing is
+        # pushed anywhere.
         self.assertFalse([c for c in calls if c.startswith(("build", "push", "image push", "login"))
-                          and c != f"build -f deploy/managed-runner/firewall/Dockerfile -t {FIREWALL_IMAGE} ."], calls)
+                          and c != f"build -f deploy/managed-runner/firewall/Dockerfile -t {FIREWALL_IMAGE} ."
+                          and c != "build --help"
+                          and not re.fullmatch(r"build --provenance=false --build-arg ORBIT_SOURCE_SHA=\S* -t orbit-link-gateway:local src/link-gateway", c)], calls)
 
     def test_a_fresh_install_builds_the_managed_runner_image_here_and_pushes_nothing(self):
         run = self.run_script(INSTALL, "--no-start")
@@ -233,9 +253,12 @@ class NewDeploymentTest(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         live = self.live_lines((self.checkout / ".env").read_text())
         self.assertIn("ORBIT_MANAGED_RUNNERS_ENABLED=false", live)
-        self.assertFalse([line for line in live if line.startswith(("ORBIT_MANAGED_RUNNERS_DIR=", "COMPOSE_PROFILES="))])
+        self.assertFalse([line for line in live if line.startswith("ORBIT_MANAGED_RUNNERS_DIR=")
+                          or (line.startswith("COMPOSE_PROFILES=") and line != "COMPOSE_PROFILES=runner-link")])
         self.assertFalse((self.checkout / "data/managed-runners").exists())
-        self.assertEqual([c for c in self.calls() if not c.startswith("compose version")], [])
+        # Nothing of managed runners: the runner link's own image is test/upgrade-runner-link.test.mjs's.
+        self.assertEqual([c for c in self.calls() if not c.startswith("compose version")
+                          and "orbit-link-gateway" not in c and c != "build --help"], [])
 
     def test_an_install_never_touches_an_existing_deployment(self):
         existing = 'JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\n'
@@ -278,6 +301,51 @@ class NewDeploymentTest(unittest.TestCase):
         # The apiserver is recreated from the image it runs: switching managed runners on deploys nothing else.
         self.assertFalse([c for c in calls if c.startswith(("compose up -d --build", "compose build apiserver"))], calls)
 
+    def test_switching_on_adds_to_the_compose_profiles_the_deployment_already_lists(self):
+        # A deployment that runs another Compose profile (runner-link, say): its line is kept and the managed
+        # runners' profiles are added to it, never written as a second COMPOSE_PROFILES line that would drop it.
+        existing = ('JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\n'
+                    'PUBLIC_ORIGIN="https://orbit.example.com"\nCOMPOSE_PROFILES=runner-link\n'
+                    "ORBIT_MANAGED_RUNNERS_ENABLED=false\n")
+        for args, profiles in (([], "runner-link,managed-runners-docker,managed-runner-firewall"),
+                               (["--no-managed-runner-firewall"], "runner-link,managed-runners-docker")):
+            with self.subTest(args=args):
+                (self.checkout / ".env").write_text(existing)
+                shutil.rmtree(self.checkout / "data", ignore_errors=True)
+                run = self.run_script(INSTALL, "--enable-managed-runners", *args,
+                                      "--managed-runner-image", "orbit-managed-runner:fixture")
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                live = self.live_lines((self.checkout / ".env").read_text())
+                self.assertEqual([line for line in live if line.startswith("COMPOSE_PROFILES=")],
+                                 [f"COMPOSE_PROFILES={profiles}"])
+                # Every other line is where it was; the switch lines follow them.
+                self.assertEqual(live[:3], ['JWT_SECRET="kept"', 'PROVIDER_SECRET_KEY="kept too"',
+                                            'PUBLIC_ORIGIN="https://orbit.example.com"'])
+                self.assertEqual(live[4:], SWITCH_LINES[:2])
+                self.assertTrue((self.checkout / "data/managed-runners/profile.json").exists())
+                self.assertIn("compose build docker-channel", self.calls())
+
+    def test_switching_on_cleans_a_quoted_or_repeated_profile_line(self):
+        existing = ('JWT_SECRET="kept"\nCOMPOSE_PROFILES="managed-runners-docker, runner-link "\n')
+        (self.checkout / ".env").write_text(existing)
+        run = self.run_script(INSTALL, "--enable-managed-runners",
+                              "--managed-runner-image", "orbit-managed-runner:fixture")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        live = self.live_lines((self.checkout / ".env").read_text())
+        self.assertEqual([line for line in live if line.startswith("COMPOSE_PROFILES=")],
+                         ["COMPOSE_PROFILES=managed-runners-docker,runner-link,managed-runner-firewall"])
+
+    def test_switching_on_keeps_the_legacy_firewalls_lock_line_when_it_merges_profiles(self):
+        if not Path("/run/xtables.lock").is_file():
+            self.skipTest("needs /run/xtables.lock, as the legacy iptables backend does")
+        (self.checkout / ".env").write_text('JWT_SECRET="kept"\nCOMPOSE_PROFILES=runner-link\n')
+        run = self.run_script(INSTALL, "--enable-managed-runners", "--managed-runner-image", "orbit-managed-runner:fixture",
+                              FAKE_FIREWALL_BACKEND="legacy")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        live = self.live_lines((self.checkout / ".env").read_text())
+        self.assertIn("ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK=/run/xtables.lock", live)
+        self.assertIn("COMPOSE_PROFILES=runner-link,managed-runners-docker,managed-runner-firewall", live)
+
     def test_switching_on_refuses_where_there_is_no_deployment_or_it_was_prepared_already(self):
         run = self.run_script(INSTALL, "--enable-managed-runners")
         self.assertNotEqual(run.returncode, 0)
@@ -294,30 +362,63 @@ class NewDeploymentTest(unittest.TestCase):
     # ── the upgrade ───────────────────────────────────────────────────────────────────────────
 
     # What each copy of /upgrade asked of Docker for a deployment without managed runners before it kept their
-    # image current (both copies at c16d115b3, run exactly as below): that path is unchanged, call for call.
+    # image current (both copies at c16d115b3, run exactly as below): that path is unchanged, call for call, but for
+    # where the deployment runs from, asked first, and pgbackup, after the other services (2026-11-02, Orbit Files' T10).
+    DEPLOYMENT_PREFLIGHT = [
+        "compose config postgres",
+        "inspect --format {{range .Mounts}}{{if eq .Destination \"/archive\"}}{{.Source}}{{end}}{{end}} orbit-postgres",
+    ]
+    PGBACKUP_UP = [
+        "compose ps -q pgbackup",
+        "exec pgbackup-0 cat /usr/local/bin/pg-backup.sh",
+        "compose up -d --wait --no-deps pgbackup",
+    ]
+    # And since the runner link's upgrade (task 34sREuYT2DCEXiW6qZuOh): its own link looked at, read-only, and the web gateway's
+    # nginx.conf compared with this checkout's, before anything is recreated. Neither the link gateway nor NATS is named again.
+    LINK_LOOKED_AT = [
+        "compose ps -q link-gateway",
+        "inspect -f {{with index .State \"Health\"}}{{.Status}}{{end}} link-gateway-0",
+    ]
+    WEB_GATEWAY_COMPARED = [
+        "compose ps -q gateway",
+        "exec gateway-0 cat /etc/nginx/conf.d/default.conf",
+    ]
     BEFORE_IMAGE_UPGRADES = {
         ".claude/skills/upgrade/upgrade.sh": [
             "compose version",
+            *DEPLOYMENT_PREFLIGHT,
+            *LINK_LOOKED_AT,
             "inspect --format {{.Image}} orbit-web",
             "compose config --services",
             "compose build apiserver wiki-worker web",
+            *WEB_GATEWAY_COMPARED,
             "compose up -d --wait apiserver wiki-worker web gateway",
+            *PGBACKUP_UP,
             "compose ps",
         ],
         ".agents/skills/upgrade/scripts/upgrade.sh": [
             "compose version",
+            *DEPLOYMENT_PREFLIGHT,
+            *LINK_LOOKED_AT,
             "compose config --services",
             "compose build apiserver wiki-worker web",
+            *WEB_GATEWAY_COMPARED,
             "compose run --rm --no-deps apiserver /bin/sh -c cd src/apiserver && node "
             "\"$(node -p 'require.resolve(\"prisma/build/index.js\")')\" migrate deploy",
             "compose up -d --wait --no-deps apiserver wiki-worker web gateway",
+            *PGBACKUP_UP,
             "compose ps",
         ],
     }
 
     def test_an_upgrade_does_for_an_existing_deployment_exactly_what_it_did(self):
-        # A deployment installed before managed runners, as orbitd.io was: .env.example's lines, nothing about them.
-        existing = 'JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\nPUBLIC_ORIGIN="http://localhost:2086"\n'
+        # A deployment installed before managed runners, as orbitd.io was, with a runner link of its own, as orbitd.io has
+        # (a deployment with none gains one: test/upgrade-runner-link.test.mjs). .env.example's lines, nothing about them.
+        existing = ('JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\nPUBLIC_ORIGIN="http://localhost:2086"\n'
+                    'COMPOSE_PROFILES=runner-link\nRUNNER_LINK_URL="wss://link.example.test"\n'
+                    + "".join(f'RUNNER_LINK_{name}="kept"\n' for name in (
+                        "SIGNING_KEY", "PUBLIC_KEY", "GATEWAY_TOKEN", "NATS_APISERVER_SEED", "NATS_APISERVER_KEY",
+                        "NATS_GATEWAY_SEED", "NATS_GATEWAY_KEY")))
         for upgrade in UPGRADES:
             with self.subTest(upgrade=upgrade):
                 (self.checkout / ".env").write_text(existing)
@@ -348,7 +449,11 @@ class NewDeploymentTest(unittest.TestCase):
         return {path.name: path.read_bytes() for path in sorted(directory.iterdir()) if path.is_file()}
 
     def ups(self):
-        return [c for c in self.calls() if c.startswith("compose up")]
+        # pgbackup's follows these, with nothing of the order they keep: the upgrade's own test holds it
+        # (test/upgrade-source-sha.test.mjs).
+        # So do the runner link's, which come before these: test/upgrade-runner-link.test.mjs holds them.
+        return [c for c in self.calls() if c.startswith("compose up") and not re.search(r"--no-deps .*pgbackup$", c)
+                and not c.endswith("--no-deps nats link-gateway")]
 
     def test_an_upgrade_rebuilds_the_managed_runner_image_and_names_its_id_in_both_files(self):
         for upgrade in UPGRADES:
@@ -454,7 +559,11 @@ class NewDeploymentTest(unittest.TestCase):
                     self.assertEqual(ups[0], "compose up -d --wait postgres apiserver wiki-worker web gateway pgbackup")
 
     def test_an_upgrade_refuses_before_building_where_the_managed_runners_files_are_not_right(self):
-        installed = 'JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\n' + "\n".join(SWITCH_LINES) + "\n"
+        # With the runner link an install or an upgrade set up, as every deployment that can run this build has: one with
+        # no link gets its lines first, as Compose cannot render this build's file without them (test/upgrade-runner-link.test.mjs).
+        installed = ('JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\n' + "\n".join(SWITCH_LINES) + "\n"
+                     + "RUNNER_LINK_URL=same-origin\nRUNNER_LINK_SIGNING_KEY=\"kept\"\n"
+                     + "COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall,runner-link\n")
         twice = {"schemaVersion": 1, "image": IMAGE_ID, "runner": {"image": IMAGE_ID}}
         for upgrade in UPGRADES:
             for case in ("no directory", "a file naming two images"):
@@ -648,13 +757,15 @@ class NewDeploymentTest(unittest.TestCase):
         run = self.run_script(INSTALL, "--enable-managed-runner-firewall")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         after = (self.checkout / ".env").read_text()
-        # One line changed, and the note that said the firewall was off went: every other line is as it was.
+        # The profile lines changed, the runner link's beside the managed runners', and the note that said the firewall was
+        # off went: every other line is as it was.
         self.assertEqual([line for line in after.splitlines() if line not in before.splitlines()],
-                         ["COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall"])
+                         ["COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall",
+                          "COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall,runner-link"])
         self.assertEqual([line for line in before.splitlines() if line not in after.splitlines()],
                          [line for line in before.splitlines() if line.startswith(("# The managed runners' host firewall is OFF",
                                                                                   "# can reach every service", "# \"Isolation and its limits\""))]
-                         + ["COMPOSE_PROFILES=managed-runners-docker"])
+                         + ["COMPOSE_PROFILES=managed-runners-docker", "COMPOSE_PROFILES=managed-runners-docker,runner-link"])
         self.assertEqual(stat.S_IMODE((self.checkout / ".env").stat().st_mode), 0o600)
         self.assertEqual(self.managed_files(), files, "the channel's and the apiserver's files are untouched")
         self.assertEqual(json.loads((self.checkout / self.FIREWALL_CONFIG).read_text())["gateway"], GATEWAY)
