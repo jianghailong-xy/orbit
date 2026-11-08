@@ -173,6 +173,11 @@ type cursorPermissionBridge struct {
 	wg      sync.WaitGroup
 	// bypassNoted: the notice that Bypass is asking anyway went out in this process.
 	bypassNoted bool
+	// Prepared before ACP starts; the shell launcher and Auto policy share this result.
+	sandbox        *cursorSandbox
+	sandboxInForce bool
+	sandboxReason  string
+	sandboxNoted   bool
 	// mode is the policy requests are answered for, set by the session loop (setPolicy): a reload can move
 	// the session between modes that keep the process.
 	mode cursorPermissionPolicy
@@ -216,7 +221,16 @@ func (b *cursorPermissionBridge) setPolicy(policy cursorPermissionPolicy) {
 func (b *cursorPermissionBridge) begin(turnID string) {
 	b.mu.Lock()
 	b.open, b.turnID = true, turnID
+	note := b.mode.Answer == cursorAnswerReview && !b.sandboxInForce && b.sandboxReason != "" && !b.sandboxNoted
+	if note {
+		b.sandboxNoted = true
+	}
+	reason := b.sandboxReason
 	b.mu.Unlock()
+	if note {
+		b.emit(turnID, evSystem, map[string]interface{}{"noticeKind": "cursor-sandbox-unavailable", "provider": providerCursor,
+			"notice": "Cursor Auto asks for approval for inline scripts because the command sandbox is unavailable: " + reason})
+	}
 }
 
 // close answers nothing but cancelled from here on, and withdraws every card still open: the turn was

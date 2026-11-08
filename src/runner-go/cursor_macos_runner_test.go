@@ -613,6 +613,10 @@ func cursorCLIStartSites(t *testing.T) []string {
 				return true
 			}
 			args := string(src[fset.Position(call.Lparen).Offset:fset.Position(call.Rparen).Offset])
+			// The bubblewrap installer starts a package manager, not Cursor CLI.
+			if name == "cursor_sandbox_install.go" && enclosing(call.Pos()) == "installCursorBubblewrap" {
+				return true
+			}
 			// The sandbox availability trial starts a shell, not Cursor CLI.
 			if name == "cursor_sandbox.go" && enclosing(call.Pos()) == "detectCursorSandbox" && sel.Sel.Name == "CommandContext" && len(call.Args) > 1 {
 				if binary, ok := call.Args[1].(*ast.BasicLit); ok && binary.Value == `"/bin/sh"` {
