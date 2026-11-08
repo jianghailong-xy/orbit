@@ -140,12 +140,12 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "==> provisioning $CONTAINER ($IMAGE, disposable PGDATA volume)"
+# Pin an available host port explicitly: Docker can reassign an automatic port on restart.
+PORT="$("$NODE" -e 'const s = require("node:net").createServer(); s.listen(0, "127.0.0.1", () => { console.log(s.address().port); s.close(); });')" || die "could not select a host port"
 docker run -d --name "$CONTAINER" \
   -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
   -e PGDATA=/pgdata -v /pgdata \
-  -p 127.0.0.1::5432 "$IMAGE" >/dev/null || die "docker run failed"
-PORT="$(docker port "$CONTAINER" 5432/tcp | head -1 | sed 's/.*://')"
-[ -n "$PORT" ] || die "docker did not publish a host port"
+  -p "127.0.0.1:$PORT:5432" "$IMAGE" >/dev/null || die "docker run failed"
 
 psql_db() {
   docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
