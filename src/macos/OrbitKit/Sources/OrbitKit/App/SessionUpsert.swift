@@ -211,6 +211,7 @@ public extension Session {
                 // Who sent it, always beside it: an event carries neither, so the row keeps the pair.
                 lastUserFrom: lastUserFrom,
                 lastUserFromOrbit: lastUserFromOrbit,
+                lastUserFromExternal: lastUserFromExternal,
                 recapText: recapText ?? self.recapText,
                 recapAt: recapAt ?? self.recapAt,
                 runningBgCount: runningBgCount,

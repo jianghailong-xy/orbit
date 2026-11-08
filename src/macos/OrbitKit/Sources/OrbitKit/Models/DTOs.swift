@@ -526,6 +526,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// plane, which does not send it. Written and cleared with `lastUserText`, and kept beside it as
     /// `lastUserFrom` is (`SessionUpsert`).
     public let lastUserFromOrbit: OrbitMessageFrom?
+    /// Who sent `lastUserText` when somebody outside Orbit did — a connected Feishu group's member
+    /// (docs/feishu-bot-design.md §8.2): the row says `From Feishu · <name>` instead of "You"
+    /// (`SessionLine.sender`). Nil for anybody else, and from an older control plane. Written and
+    /// cleared with `lastUserText`, as `lastUserFrom` is.
+    public let lastUserFromExternal: ExternalMessageFrom?
     /// The rolling recap the server wrote about this session (0418) and when it wrote it — the
     /// sentence the list prefers to `lastAssistantText`. Both nil on a session no pass has recapped
     /// yet, and on a server writing no recaps (ORBIT_RECAP_ENABLED=0): exactly what the row falls
@@ -714,6 +719,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         lastUserFrom = try? values.decodeIfPresent(SessionMessageFrom.self, forKey: .lastUserFrom)
         // The same for Orbit's mark: a value this build cannot read is none, and the row says "You".
         lastUserFromOrbit = try? values.decodeIfPresent(OrbitMessageFrom.self, forKey: .lastUserFromOrbit)
+        // The same for somebody outside Orbit: a source this build does not know is no sender.
+        lastUserFromExternal = try? values.decodeIfPresent(ExternalMessageFrom.self, forKey: .lastUserFromExternal)
         recapText = try values.decodeIfPresent(String.self, forKey: .recapText)
         recapAt = try values.decodeIfPresent(String.self, forKey: .recapAt)
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
@@ -753,6 +760,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 lastToolUse: String? = nil, lastUserText: String? = nil,
                 lastUserFrom: SessionMessageFrom? = nil,
                 lastUserFromOrbit: OrbitMessageFrom? = nil,
+                lastUserFromExternal: ExternalMessageFrom? = nil,
                 recapText: String? = nil, recapAt: String? = nil,
                 runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
@@ -830,6 +838,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastUserText = lastUserText
         self.lastUserFrom = lastUserFrom
         self.lastUserFromOrbit = lastUserFromOrbit
+        self.lastUserFromExternal = lastUserFromExternal
         self.recapText = recapText
         self.recapAt = recapAt
         self.runningBgCount = runningBgCount
@@ -1190,6 +1199,11 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// sent, and from a server that predates the field.
     public let sessionMessage: JSONValue?
     public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
+    /// Who outside Orbit sent this turn — a connected Feishu group's member (`externalSender`) — held raw
+    /// for `ExternalSender.parse`, the reader the echo's payload is read by. Nil on every other turn, and
+    /// from a server that predates the field.
+    public let externalSender: JSONValue?
+    public var externalSenderFrom: ExternalMessageFrom? { ExternalSender.parse(externalSender) }
     /// The outcomes a reply turn hands back (`sessionReplies`) — held raw for `SessionReply.parse`,
     /// the reader the echo's payload is read by, so the queue draws the reply cards the echo will be
     /// drawn as. Nil on every other turn, and from a server that predates the field.
@@ -1212,7 +1226,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     public var cards: TurnCards {
         TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswerCard, coordinatorDelivery: coordinatorDeliveryCard,
                   taskStart: taskStartCard, startedCard: startedCard,
-                  sessionMessage: senderCard, sessionReplies: replyCards,
+                  sessionMessage: senderCard, externalSender: externalSenderFrom, sessionReplies: replyCards,
                   reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
     }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
@@ -1224,6 +1238,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
                 ownerAnswer: JSONValue? = nil, coordinatorDelivery: JSONValue? = nil, taskStart: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
+                externalSender: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
                 confirmationReturn: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
@@ -1244,6 +1259,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.taskStart = taskStart
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage
+        self.externalSender = externalSender
         self.sessionReplies = sessionReplies
         self.authoredByOrbit = authoredByOrbit
         self.confirmationReviewRequest = confirmationReviewRequest
