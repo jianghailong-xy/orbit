@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
+import { AUTO_ALLOWED_MESSAGE } from '../common/permission-rules';
+import { AUTOMATIC_COORDINATOR_DECIDES_MESSAGE, START_CARD_REVIEWS_MESSAGE } from './unstarted-project-create';
 
 // A runtime that takes no allowlist (Codex, Kimi) asks the control plane about every gated call.
 // Where the workspace already has a standing grant for that call, the answer is settled and the
@@ -20,7 +22,7 @@ type SessionRow = {
   workspaceId?: string | null;
 };
 
-function harness(session: SessionRow, rules: { toolName: string; ruleContent: string }[], decidedById?: string) {
+function harness(session: SessionRow, rules: { toolName: string; ruleContent: string }[], decidedById?: string, pollRow: Record<string, unknown> = {}) {
   const created: Record<string, unknown>[] = [];
   const published: unknown[] = [];
   const pushed: unknown[] = [];
@@ -36,7 +38,7 @@ function harness(session: SessionRow, rules: { toolName: string; ruleContent: st
       }),
     },
     approval: {
-      findFirst: async () => ({ id: 'approval-1', status: 'ALLOWED', decidedById: decidedById ?? null }),
+      findFirst: async () => ({ id: 'approval-1', status: 'ALLOWED', ...created[0], decidedById: decidedById ?? null, ...pollRow }),
       findUnique: async () => null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         created.push(data);
@@ -84,6 +86,29 @@ test('the approval poll identifies human answers and leaves standing grants with
     const decision = await h.controller.pollApproval(runner, SESSION, 'approval-1');
     assert.equal(decision.decidedById, decider);
     assert.equal(Object.hasOwn(decision, 'decidedById'), decider !== undefined);
+    assert.equal(Object.hasOwn(decision, 'standingGrant'), false);
+  }
+});
+
+test('only an allowed standing workspace rule carries the escape marker', async () => {
+  const h = harness({ provider: AgentProvider.CURSOR }, NPM_TEST);
+  await h.controller.createApproval(runner, SESSION, askAbout('npm test'));
+  const decision = await h.controller.pollApproval(runner, SESSION, 'approval-1');
+  assert.equal(decision.standingGrant, true);
+  assert.equal(Object.hasOwn(decision, 'decidedById'), false);
+
+  for (const message of [START_CARD_REVIEWS_MESSAGE, AUTOMATIC_COORDINATOR_DECIDES_MESSAGE, undefined]) {
+    const other = harness({ provider: AgentProvider.CURSOR }, [], undefined, { message });
+    const answer = await other.controller.pollApproval(runner, SESSION, 'approval-1');
+    assert.equal(Object.hasOwn(answer, 'standingGrant'), false);
+  }
+  for (const row of [
+    { status: 'DENIED', message: AUTO_ALLOWED_MESSAGE },
+    { decidedById: OWNER, message: AUTO_ALLOWED_MESSAGE },
+  ]) {
+    const other = harness({ provider: AgentProvider.CURSOR }, [], undefined, row);
+    const answer = await other.controller.pollApproval(runner, SESSION, 'approval-1');
+    assert.equal(Object.hasOwn(answer, 'standingGrant'), false);
   }
 });
 

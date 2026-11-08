@@ -1800,11 +1800,12 @@ type PermissionRule struct {
 // ApprovalDecisionResponse mirrors @orbit/shared: the resolved decision returned by
 // the approval long-poll. Status "PENDING" means the window elapsed undecided.
 type ApprovalDecisionResponse struct {
-	DecidedByID string `json:"decidedById,omitempty"`
-	ID          string `json:"id"`
-	Status      string `json:"status"`
-	Behavior    string `json:"behavior,omitempty"`
-	Message     string `json:"message,omitempty"`
+	DecidedByID   string `json:"decidedById,omitempty"`
+	StandingGrant bool   `json:"standingGrant,omitempty"`
+	ID            string `json:"id"`
+	Status        string `json:"status"`
+	Behavior      string `json:"behavior,omitempty"`
+	Message       string `json:"message,omitempty"`
 	// AskUserQuestion only: the human's picks, keyed by question text -> selected
 	// option labels. Fed back to claude as the tool's updatedInput.answers.
 	Answers map[string][]string `json:"answers,omitempty"`

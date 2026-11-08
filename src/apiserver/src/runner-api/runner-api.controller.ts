@@ -5792,6 +5792,10 @@ export class RunnerApiController {
           answers: (a.answers as QuestionAnswers | null) ?? undefined,
           ...normalizeStoredRememberRules(a.rememberRule),
           ...(a.decidedById ? { decidedById: a.decidedById } : {}),
+          // This exact stored message identifies workspace rules, unlike coordinator create allows.
+          ...(a.status === 'ALLOWED' && !a.decidedById && a.message === AUTO_ALLOWED_MESSAGE
+            ? { standingGrant: true }
+            : {}),
           // Only when the owner chose it, so every other answer reads exactly as it did before.
           ...(a.startAfterCreate ? { startAfterCreate: true } : {}),
         };
