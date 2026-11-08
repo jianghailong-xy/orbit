@@ -48,17 +48,45 @@ type fakeSystem struct {
 	executable bool
 	checkErr   error
 	exes       map[string]string // /proc/<pid>/exe, by pid
+	// units is what systemd knows of the older runner units a test plants, by unit name:
+	// `systemctl show <unit> -p User -p UnitFileState -p ActiveState` answers from it, and a
+	// stop or disable that does not fail changes it, as systemd would — unless the unit is
+	// one a test keeps up (stuck).
+	units map[string]*fakeUnit
+	// onRun, when set, is called with each command run for effect, before it runs.
+	onRun func(argv []string)
+}
+
+type fakeUnit struct {
+	user, unitFileState, activeState string
+	stuck                            bool
 }
 
 func (f *fakeSystem) run(name string, args ...string) (string, error) {
 	argv := append([]string{name}, args...)
 	f.ran = append(f.ran, argv)
-	return f.answer(argv)
+	if f.onRun != nil {
+		f.onRun(argv)
+	}
+	out, err := f.answer(argv)
+	if u := f.units[argv[len(argv)-1]]; u != nil && err == nil && len(argv) == 3 && !u.stuck {
+		switch argv[1] {
+		case "stop":
+			u.activeState = "inactive"
+		case "disable":
+			u.unitFileState = "disabled"
+		}
+	}
+	return out, err
 }
 
 func (f *fakeSystem) query(name string, args ...string) (string, error) {
 	argv := append([]string{name}, args...)
 	f.asked = append(f.asked, argv)
+	if key := strings.Join(argv, " "); len(argv) > 2 && key == instanceQuery(argv[2]) && f.fail[key] == nil && f.units[argv[2]] != nil {
+		u := f.units[argv[2]]
+		return "User=" + u.user + "\nUnitFileState=" + u.unitFileState + "\nActiveState=" + u.activeState + "\n", nil
+	}
 	return f.answer(argv)
 }
 
@@ -96,7 +124,7 @@ func newUidLayoutSystem(t *testing.T) (*fakeSystem, hostdSystem) {
 
 func newFakeSystemWithTemplate(t *testing.T, template string) (*fakeSystem, hostdSystem) {
 	t.Helper()
-	f := &fakeSystem{stdout: map[string]string{}, fail: map[string]error{}, executable: true, exes: map[string]string{}}
+	f := &fakeSystem{stdout: map[string]string{}, fail: map[string]error{}, executable: true, exes: map[string]string{}, units: map[string]*fakeUnit{}}
 	sys := hostdSystem{
 		run:        f.run,
 		query:      f.query,
@@ -160,8 +188,9 @@ func fakeLookupUID(users map[string]string) func(string) (*user.User, error) {
 	}
 }
 
-// writeLegacyUnit plants a pre-template unit file and teaches the fake systemctl what
-// `show -p User` says about it — the two facts unitRunsAsUserIn consults.
+// writeLegacyUnit plants a pre-template unit file, enabled and running as runAs, and
+// teaches the fake systemctl what `show -p User` says about it — the two facts
+// unitRunsAsUserIn consults — and what hostd's own question about it answers.
 func writeLegacyUnit(t *testing.T, f *fakeSystem, sys hostdSystem, svc, runAs string) string {
 	t.Helper()
 	path := filepath.Join(sys.unitDir, svc+".service")
@@ -169,17 +198,25 @@ func writeLegacyUnit(t *testing.T, f *fakeSystem, sys hostdSystem, svc, runAs st
 		t.Fatal(err)
 	}
 	f.stdout["systemctl show "+svc+".service -p User --value"] = runAs + "\n"
+	f.units[svc+".service"] = &fakeUnit{user: runAs, unitFileState: "enabled", activeState: "active"}
 	return path
 }
 
-// instanceQuery is how hostd asks systemd about the caller's orbit-runner@<uid> instance,
-// which has no unit file of its own; setInstance teaches the fake systemctl the answer.
+// instanceQuery is how hostd asks systemd about an older runner unit — the caller's
+// orbit-runner@<uid> instance, which has no unit file of its own, or a legacy unit;
+// setInstance teaches the fake systemctl the answer for an instance.
 func instanceQuery(unit string) string {
 	return "systemctl show " + unit + " -p User -p UnitFileState -p ActiveState"
 }
 
 func setInstance(f *fakeSystem, unit, runAs, unitFileState, activeState string) {
-	f.stdout[instanceQuery(unit)] = "User=" + runAs + "\nUnitFileState=" + unitFileState + "\nActiveState=" + activeState + "\n"
+	f.units[unit] = &fakeUnit{user: runAs, unitFileState: unitFileState, activeState: activeState}
+}
+
+// takenDown is how hostd takes one older runner unit down: stopped, then disabled, each
+// confirmed by asking systemd.
+func takenDown(unit string) [][]string {
+	return [][]string{{"systemctl", "stop", unit}, {"systemctl", "disable", unit}}
 }
 
 func assertArgv(t *testing.T, got [][]string, want ...[]string) {
@@ -250,7 +287,8 @@ func TestHostdEnableMigratesThenEnablesAndRestarts(t *testing.T) {
 			name:   "the caller's own per-user unit",
 			legacy: map[string]string{perUser: testUser},
 			wantRan: [][]string{
-				{"systemctl", "disable", "--now", perUser + ".service"},
+				{"systemctl", "stop", perUser + ".service"},
+				{"systemctl", "disable", perUser + ".service"},
 				{"systemctl", "daemon-reload"},
 			},
 			wantRemoved: []string{perUser},
@@ -259,7 +297,8 @@ func TestHostdEnableMigratesThenEnablesAndRestarts(t *testing.T) {
 			name:   "the caller's own bare pre-naming unit",
 			legacy: map[string]string{systemdService: testUser},
 			wantRan: [][]string{
-				{"systemctl", "disable", "--now", systemdService + ".service"},
+				{"systemctl", "stop", systemdService + ".service"},
+				{"systemctl", "disable", systemdService + ".service"},
 				{"systemctl", "daemon-reload"},
 			},
 			wantRemoved: []string{systemdService},
@@ -270,8 +309,10 @@ func TestHostdEnableMigratesThenEnablesAndRestarts(t *testing.T) {
 			name:   "both generations of the caller's unit",
 			legacy: map[string]string{perUser: testUser, systemdService: testUser},
 			wantRan: [][]string{
-				{"systemctl", "disable", "--now", perUser + ".service"},
-				{"systemctl", "disable", "--now", systemdService + ".service"},
+				{"systemctl", "stop", perUser + ".service"},
+				{"systemctl", "disable", perUser + ".service"},
+				{"systemctl", "stop", systemdService + ".service"},
+				{"systemctl", "disable", systemdService + ".service"},
 				{"systemctl", "daemon-reload"},
 			},
 			wantRemoved: []string{perUser, systemdService},
@@ -281,7 +322,8 @@ func TestHostdEnableMigratesThenEnablesAndRestarts(t *testing.T) {
 			name:   "a per-user unit whose User= is the caller's uid",
 			legacy: map[string]string{perUser: strconv.Itoa(testUID)},
 			wantRan: [][]string{
-				{"systemctl", "disable", "--now", perUser + ".service"},
+				{"systemctl", "stop", perUser + ".service"},
+				{"systemctl", "disable", perUser + ".service"},
 				{"systemctl", "daemon-reload"},
 			},
 			wantRemoved: []string{perUser},
@@ -290,7 +332,8 @@ func TestHostdEnableMigratesThenEnablesAndRestarts(t *testing.T) {
 			name:   "a bare unit whose User= is the caller's uid",
 			legacy: map[string]string{systemdService: strconv.Itoa(testUID)},
 			wantRan: [][]string{
-				{"systemctl", "disable", "--now", systemdService + ".service"},
+				{"systemctl", "stop", systemdService + ".service"},
+				{"systemctl", "disable", systemdService + ".service"},
 				{"systemctl", "daemon-reload"},
 			},
 			wantRemoved: []string{systemdService},
@@ -316,18 +359,18 @@ func TestHostdEnableMigratesThenEnablesAndRestarts(t *testing.T) {
 			// accounts: stopped first, and nothing to remove, since an instance has no file.
 			name:        "the caller's orbit-runner@<uid>, running",
 			uidInstance: &instance{strconv.Itoa(testUID), "enabled", "active"},
-			wantRan:     [][]string{{"systemctl", "disable", "--now", testUidUnit}},
+			wantRan:     takenDown(testUidUnit),
 		},
 		{
 			name:        "the caller's orbit-runner@<uid>, enabled but stopped",
 			uidInstance: &instance{strconv.Itoa(testUID), "enabled", "inactive"},
-			wantRan:     [][]string{{"systemctl", "disable", "--now", testUidUnit}},
+			wantRan:     takenDown(testUidUnit),
 		},
 		{
 			// Waiting out RestartSec= is not stopped: it comes back on its own.
 			name:        "the caller's orbit-runner@<uid>, disabled but restarting",
 			uidInstance: &instance{strconv.Itoa(testUID), "disabled", "activating"},
-			wantRan:     [][]string{{"systemctl", "disable", "--now", testUidUnit}},
+			wantRan:     takenDown(testUidUnit),
 		},
 		{
 			name:        "the caller's orbit-runner@<uid>, neither enabled nor running",
@@ -347,9 +390,12 @@ func TestHostdEnableMigratesThenEnablesAndRestarts(t *testing.T) {
 			legacy:      map[string]string{perUser: testUser, systemdService: strconv.Itoa(testUID)},
 			uidInstance: &instance{strconv.Itoa(testUID), "enabled", "active"},
 			wantRan: [][]string{
-				{"systemctl", "disable", "--now", testUidUnit},
-				{"systemctl", "disable", "--now", perUser + ".service"},
-				{"systemctl", "disable", "--now", systemdService + ".service"},
+				{"systemctl", "stop", testUidUnit},
+				{"systemctl", "disable", testUidUnit},
+				{"systemctl", "stop", perUser + ".service"},
+				{"systemctl", "disable", perUser + ".service"},
+				{"systemctl", "stop", systemdService + ".service"},
+				{"systemctl", "disable", systemdService + ".service"},
 				{"systemctl", "daemon-reload"},
 			},
 			wantRemoved: []string{perUser, systemdService},
@@ -409,15 +455,17 @@ func TestHostdEnableOnTheUidTemplateIsTodaysEnable(t *testing.T) {
 		t.Fatalf("enable failed: %s", resp.Error)
 	}
 	assertArgv(t, f.ran,
-		[]string{"systemctl", "disable", "--now", perUser + ".service"},
+		[]string{"systemctl", "stop", perUser + ".service"},
+		[]string{"systemctl", "disable", perUser + ".service"},
 		[]string{"systemctl", "daemon-reload"},
 		[]string{"systemctl", "enable", testUidUnit},
 		[]string{"systemctl", "restart", testUidUnit},
 	)
-	assertArgv(t, f.asked,
-		[]string{"systemctl", "show", perUser + ".service", "-p", "User", "--value"},
-		[]string{"systemctl", "show", systemdService + ".service", "-p", "User", "--value"},
-	)
+	// Both units are asked about before either is touched; the one that is alice's is
+	// confirmed down after its stop and again after its disable.
+	asked := func(unit string) []string { return strings.Fields(instanceQuery(unit)) }
+	assertArgv(t, f.asked, asked(perUser+".service"), asked(systemdService+".service"),
+		asked(perUser+".service"), asked(perUser+".service"))
 	if got := resp.Data["unit"]; got != testUidUnit {
 		t.Errorf("response unit = %v, want %v", got, testUidUnit)
 	}
@@ -499,7 +547,8 @@ func TestHostdDisableAlsoRemovesTheCallersLegacyUnits(t *testing.T) {
 				legacy: map[string]string{perUser: testUser},
 				wantRan: [][]string{
 					disableInstance,
-					{"systemctl", "disable", "--now", perUser + ".service"},
+					{"systemctl", "stop", perUser + ".service"},
+					{"systemctl", "disable", perUser + ".service"},
 					{"systemctl", "daemon-reload"},
 				},
 				wantRemoved: []string{perUser},
@@ -509,7 +558,8 @@ func TestHostdDisableAlsoRemovesTheCallersLegacyUnits(t *testing.T) {
 				legacy: map[string]string{systemdService: testUser},
 				wantRan: [][]string{
 					disableInstance,
-					{"systemctl", "disable", "--now", systemdService + ".service"},
+					{"systemctl", "stop", systemdService + ".service"},
+					{"systemctl", "disable", systemdService + ".service"},
 					{"systemctl", "daemon-reload"},
 				},
 				wantRemoved: []string{systemdService},
@@ -519,8 +569,10 @@ func TestHostdDisableAlsoRemovesTheCallersLegacyUnits(t *testing.T) {
 				legacy: map[string]string{perUser: testUser, systemdService: testUser},
 				wantRan: [][]string{
 					disableInstance,
-					{"systemctl", "disable", "--now", perUser + ".service"},
-					{"systemctl", "disable", "--now", systemdService + ".service"},
+					{"systemctl", "stop", perUser + ".service"},
+					{"systemctl", "disable", perUser + ".service"},
+					{"systemctl", "stop", systemdService + ".service"},
+					{"systemctl", "disable", systemdService + ".service"},
 					{"systemctl", "daemon-reload"},
 				},
 				wantRemoved: []string{perUser, systemdService},
@@ -530,7 +582,8 @@ func TestHostdDisableAlsoRemovesTheCallersLegacyUnits(t *testing.T) {
 				legacy: map[string]string{perUser: strconv.Itoa(testUID)},
 				wantRan: [][]string{
 					disableInstance,
-					{"systemctl", "disable", "--now", perUser + ".service"},
+					{"systemctl", "stop", perUser + ".service"},
+					{"systemctl", "disable", perUser + ".service"},
 					{"systemctl", "daemon-reload"},
 				},
 				wantRemoved:      []string{perUser},
@@ -599,7 +652,8 @@ func TestHostdDisableAlsoTakesDownTheCallersUidInstance(t *testing.T) {
 	}
 	assertArgv(t, f.ran,
 		[]string{"systemctl", "disable", "--now", testUnit},
-		[]string{"systemctl", "disable", "--now", testUidUnit},
+		[]string{"systemctl", "stop", testUidUnit},
+		[]string{"systemctl", "disable", testUidUnit},
 	)
 
 	// On the uid template that instance *is* the caller's, and it is disabled once.
@@ -972,28 +1026,272 @@ func TestHostdEnableSurfacesASystemctlFailure(t *testing.T) {
 	assertArgv(t, f.ran, []string{"systemctl", "enable", testUnit})
 }
 
-// The migration is best-effort by design: it must not cost the caller the new instance,
-// which is the thing that actually supersedes whatever it failed to clean up.
-func TestHostdEnableStillProceedsWhenTheMigrationFails(t *testing.T) {
-	svc := systemdServiceFor(testUser)
+// enable starts the account's instance only once every older runner unit of the account
+// is confirmed down — stopped, then reported inactive or failed and not enabled. Anything
+// short of that is a refusal before anything is enabled or started: the account keeps the
+// runner it had, its legacy unit file stays where it was, and the refusal names the unit
+// and systemd's answer. This replaces the best-effort migration that started the instance
+// whatever happened, which left V1's account with two live runners.
+func TestHostdEnableRefusesWhileAnOlderUnitIsNotConfirmedDown(t *testing.T) {
+	perUser := systemdServiceFor(testUser) + ".service"
+	refusedStop := errors.New("exit status 4")
+	const refusedSays = "Failed to stop %s: Operation refused, unit %s may be requested by dependency only (it is configured to refuse manual start/stop).\n"
+
+	for _, tc := range []struct {
+		name string
+		// arrange plants the account's older unit and makes it misbehave; it returns that
+		// unit and its file ("" for an instance).
+		arrange func(f *fakeSystem, sys hostdSystem) (unit, file string)
+		wantRan [][]string
+		want    []string
+		// stopped: the stop itself went through, and only what follows it failed.
+		stopped bool
+	}{{
+		name: "the uid instance refuses to stop",
+		arrange: func(f *fakeSystem, _ hostdSystem) (string, string) {
+			setInstance(f, testUidUnit, strconv.Itoa(testUID), "enabled", "active")
+			f.fail["systemctl stop "+testUidUnit] = refusedStop
+			f.stdout["systemctl stop "+testUidUnit] = fmt.Sprintf(refusedSays, testUidUnit, testUidUnit)
+			return testUidUnit, ""
+		},
+		wantRan: [][]string{{"systemctl", "stop", testUidUnit}},
+		want: []string{
+			"refusing to enable " + testUnit + ": alice's older runner " + testUidUnit + " could not be stopped: systemctl stop " + testUidUnit + " failed: exit status 4: Failed to stop " + testUidUnit + ": Operation refused",
+			"It is still alice's runner, so " + testUnit + " was neither enabled nor started. Once it can be stopped, run `orbit register` again.",
+		},
+	}, {
+		name: "a legacy unit refuses to stop",
+		arrange: func(f *fakeSystem, sys hostdSystem) (string, string) {
+			file := writeLegacyUnit(t, f, sys, systemdServiceFor(testUser), testUser)
+			f.fail["systemctl stop "+perUser] = refusedStop
+			f.stdout["systemctl stop "+perUser] = fmt.Sprintf(refusedSays, perUser, perUser)
+			return perUser, file
+		},
+		wantRan: [][]string{{"systemctl", "stop", perUser}},
+		want:    []string{"alice's older runner " + perUser + " could not be stopped: systemctl stop " + perUser + " failed: exit status 4: Failed to stop " + perUser + ": Operation refused"},
+	}, {
+		// systemctl stop exits 0, and systemd still has the unit up: something brought it
+		// back, or the stop never reached it.
+		name: "a legacy unit stays active after a stop that succeeded",
+		arrange: func(f *fakeSystem, sys hostdSystem) (string, string) {
+			file := writeLegacyUnit(t, f, sys, systemdServiceFor(testUser), testUser)
+			f.units[perUser].stuck = true
+			return perUser, file
+		},
+		wantRan: [][]string{{"systemctl", "stop", perUser}},
+		want:    []string{"alice's older runner " + perUser + " is still up after systemctl stop: systemd reports ActiveState=active"},
+	}, {
+		name: "the uid instance stays active after a stop that succeeded",
+		arrange: func(f *fakeSystem, _ hostdSystem) (string, string) {
+			setInstance(f, testUidUnit, strconv.Itoa(testUID), "enabled", "activating")
+			f.units[testUidUnit].stuck = true
+			return testUidUnit, ""
+		},
+		wantRan: [][]string{{"systemctl", "stop", testUidUnit}},
+		want:    []string{"alice's older runner " + testUidUnit + " is still up after systemctl stop: systemd reports ActiveState=activating"},
+	}, {
+		// Down, and still enabled after a disable that succeeded: it would be back at boot.
+		name: "a legacy unit stays enabled after a disable that succeeded",
+		arrange: func(f *fakeSystem, sys hostdSystem) (string, string) {
+			file := writeLegacyUnit(t, f, sys, systemdServiceFor(testUser), testUser)
+			f.units[perUser].activeState, f.units[perUser].stuck = "inactive", true
+			return perUser, file
+		},
+		wantRan: takenDown(perUser),
+		want:    []string{"alice's older runner " + perUser + " is not down after systemctl stop and disable: systemd reports ActiveState=inactive, UnitFileState=enabled"},
+	}, {
+		name: "systemd cannot be asked about the uid instance",
+		arrange: func(f *fakeSystem, _ hostdSystem) (string, string) {
+			setInstance(f, testUidUnit, strconv.Itoa(testUID), "enabled", "active")
+			f.fail[instanceQuery(testUidUnit)] = errors.New("exit status 1")
+			return testUidUnit, ""
+		},
+		want: []string{"hostd could not ask systemd whether " + testUidUnit + " is an older runner of alice's: systemctl show " + testUidUnit + " failed: exit status 1"},
+	}, {
+		name: "systemd cannot be asked about a legacy unit",
+		arrange: func(f *fakeSystem, sys hostdSystem) (string, string) {
+			file := writeLegacyUnit(t, f, sys, systemdServiceFor(testUser), testUser)
+			f.fail[instanceQuery(perUser)] = errors.New("exit status 1")
+			return perUser, file
+		},
+		want: []string{"hostd could not ask systemd whether " + perUser + " is an older runner of alice's: systemctl show " + perUser + " failed: exit status 1"},
+	}, {
+		// The stop went through, and the question that would confirm it did not.
+		name: "systemd cannot be asked after the stop",
+		arrange: func(f *fakeSystem, sys hostdSystem) (string, string) {
+			file := writeLegacyUnit(t, f, sys, systemdServiceFor(testUser), testUser)
+			f.onRun = func(argv []string) {
+				if strings.Join(argv, " ") == "systemctl stop "+perUser {
+					f.fail[instanceQuery(perUser)] = errors.New("exit status 1")
+				}
+			}
+			return perUser, file
+		},
+		wantRan: [][]string{{"systemctl", "stop", perUser}},
+		stopped: true,
+		want:    []string{"alice's older runner " + perUser + " was stopped, but systemd could not be asked whether it is down: systemctl show " + perUser + " failed: exit status 1"},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, sys := newFakeSystem(t)
+			unit, file := tc.arrange(f, sys)
+			before := *f.units[unit]
+
+			resp := sys.verbs()["enable"](testPeer, hostdRequest{V: 1, Verb: "enable"})
+			if resp.OK {
+				t.Fatalf("enable started %s while %s was not confirmed down", testUnit, unit)
+			}
+			if resp.Code != hostdRefusedOlderRunner {
+				t.Errorf("code = %q, want %q", resp.Code, hostdRefusedOlderRunner)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(resp.Error, want) {
+					t.Errorf("refusal must say %q, got:\n%s", want, resp.Error)
+				}
+			}
+			// Nothing enabled, started or reloaded: the commands stop at the unit that
+			// would not go down.
+			assertArgv(t, f.ran, tc.wantRan...)
+			// The old runner stays the only one: as up as it was unless the stop itself
+			// went through, and as enabled as it was.
+			if !tc.stopped && f.units[unit].activeState != before.activeState {
+				t.Errorf("%s went from %s to %s", unit, before.activeState, f.units[unit].activeState)
+			}
+			if f.units[unit].unitFileState != before.unitFileState {
+				t.Errorf("%s was disabled although it was never confirmed down", unit)
+			}
+			if file != "" {
+				if _, err := os.Stat(file); err != nil {
+					t.Errorf("the unit file of %s, which is not confirmed down, was removed: %v", unit, err)
+				}
+			}
+		})
+	}
+}
+
+// A legacy unit's file goes only after its unit is confirmed down, and systemd is asked
+// to re-read the directory only after that.
+func TestHostdEnableRemovesALegacyUnitFileOnlyOnceItsUnitIsDown(t *testing.T) {
+	perUser := systemdServiceFor(testUser) + ".service"
 	f, sys := newFakeSystem(t)
-	writeLegacyUnit(t, f, sys, svc, testUser)
-	f.fail["systemctl disable --now "+svc+".service"] = errors.New("exit status 1")
+	file := writeLegacyUnit(t, f, sys, systemdServiceFor(testUser), testUser)
+	var at []string // each command run once the file was gone
+	f.onRun = func(argv []string) {
+		if _, err := os.Stat(file); err != nil {
+			at = append(at, strings.Join(argv, " ")+": gone")
+		}
+	}
 
 	if resp := sys.verbs()["enable"](testPeer, hostdRequest{V: 1, Verb: "enable"}); !resp.OK {
-		t.Fatalf("a failed migration blocked the new instance: %s", resp.Error)
+		t.Fatalf("enable failed: %s", resp.Error)
 	}
-	assertArgv(t, f.ran,
-		[]string{"systemctl", "disable", "--now", svc + ".service"},
+	assertArgv(t, f.ran, append(takenDown(perUser),
 		[]string{"systemctl", "daemon-reload"},
 		[]string{"systemctl", "enable", testUnit},
-		[]string{"systemctl", "restart", testUnit},
-	)
+		[]string{"systemctl", "restart", testUnit})...)
+	// The file was still there for the stop and the disable, and gone by the reload.
+	if want := []string{"systemctl daemon-reload: gone", "systemctl enable " + testUnit + ": gone", "systemctl restart " + testUnit + ": gone"}; strings.Join(at, "\n") != strings.Join(want, "\n") {
+		t.Errorf("the unit file was gone at %q, want only from the reload on %q", at, want)
+	}
+	// And it was removed after systemd confirmed the unit down and disabled.
+	asked := strings.Fields(instanceQuery(perUser))
+	assertArgv(t, f.asked, strings.Fields(instanceQuery(testUidUnit)), asked, asked, asked)
+	if u := f.units[perUser]; u.activeState != "inactive" || u.unitFileState != "disabled" {
+		t.Errorf("%s is %s/%s", perUser, u.activeState, u.unitFileState)
+	}
+}
+
+// Of two older units, the first taken down stays down and its file removed, and systemd
+// re-reads the directory for it; the second, which will not stop, is the refusal and keeps
+// its file. Nothing is enabled or started.
+func TestHostdEnableStopsAtTheFirstOlderUnitThatWillNotGoDown(t *testing.T) {
+	perUser, bare := systemdServiceFor(testUser)+".service", systemdService+".service"
+	f, sys := newFakeSystem(t)
+	first := writeLegacyUnit(t, f, sys, systemdServiceFor(testUser), testUser)
+	second := writeLegacyUnit(t, f, sys, systemdService, testUser)
+	f.fail["systemctl stop "+bare] = errors.New("exit status 4")
+
+	resp := sys.verbs()["enable"](testPeer, hostdRequest{V: 1, Verb: "enable"})
+	if resp.OK || resp.Code != hostdRefusedOlderRunner || !strings.Contains(resp.Error, bare+" could not be stopped") {
+		t.Fatalf("enable = %+v, want the refusal naming %s", resp, bare)
+	}
+	assertArgv(t, f.ran, append(takenDown(perUser),
+		[]string{"systemctl", "stop", bare},
+		[]string{"systemctl", "daemon-reload"})...)
+	if _, err := os.Stat(first); !os.IsNotExist(err) {
+		t.Errorf("%s is down and its file must go: %v", perUser, err)
+	}
+	if _, err := os.Stat(second); err != nil {
+		t.Errorf("%s never stopped and its file must stay: %v", bare, err)
+	}
+}
+
+// disable reports an older unit it could not take down instead of answering success: the
+// account still has that runner. Its own instance is disabled first, as before.
+func TestHostdDisableReportsAnOlderUnitItCouldNotTakeDown(t *testing.T) {
+	perUser := systemdServiceFor(testUser) + ".service"
+	for _, tc := range []struct {
+		name    string
+		arrange func(f *fakeSystem, sys hostdSystem) string
+		wantRan [][]string
+		want    string
+	}{{
+		name: "the uid instance refuses to stop",
+		arrange: func(f *fakeSystem, _ hostdSystem) string {
+			setInstance(f, testUidUnit, strconv.Itoa(testUID), "enabled", "active")
+			f.fail["systemctl stop "+testUidUnit] = errors.New("exit status 4")
+			return ""
+		},
+		wantRan: [][]string{{"systemctl", "stop", testUidUnit}},
+		want:    "alice's older runner " + testUidUnit + " could not be stopped: systemctl stop " + testUidUnit + " failed: exit status 4",
+	}, {
+		name: "a legacy unit stays active",
+		arrange: func(f *fakeSystem, sys hostdSystem) string {
+			file := writeLegacyUnit(t, f, sys, systemdServiceFor(testUser), testUser)
+			f.units[perUser].stuck = true
+			return file
+		},
+		wantRan: [][]string{{"systemctl", "stop", perUser}},
+		want:    "alice's older runner " + perUser + " is still up after systemctl stop: systemd reports ActiveState=active",
+	}, {
+		name: "systemd cannot be asked",
+		arrange: func(f *fakeSystem, sys hostdSystem) string {
+			file := writeLegacyUnit(t, f, sys, systemdServiceFor(testUser), testUser)
+			f.fail[instanceQuery(perUser)] = errors.New("exit status 1")
+			return file
+		},
+		want: "hostd could not ask systemd whether " + perUser + " is an older runner of alice's: systemctl show " + perUser + " failed: exit status 1",
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, sys := newFakeSystem(t)
+			file := tc.arrange(f, sys)
+			resp := sys.verbs()["disable"](testPeer, hostdRequest{V: 1, Verb: "disable"})
+			if resp.OK {
+				t.Fatal("disable answered success while an older runner of the account is still up")
+			}
+			if resp.Code != hostdRefusedOlderRunner {
+				t.Errorf("code = %q, want %q", resp.Code, hostdRefusedOlderRunner)
+			}
+			for _, want := range []string{"disabled " + testUnit + ", but " + tc.want, "It is still running as alice. Once it can be stopped, run `orbit unregister` again."} {
+				if !strings.Contains(resp.Error, want) {
+					t.Errorf("report must say %q, got:\n%s", want, resp.Error)
+				}
+			}
+			if got := resp.Data["unit"]; got != testUnit {
+				t.Errorf("report unit = %v, want %v", got, testUnit)
+			}
+			assertArgv(t, f.ran, append([][]string{{"systemctl", "disable", "--now", testUnit}}, tc.wantRan...)...)
+			if file != "" {
+				if _, err := os.Stat(file); err != nil {
+					t.Errorf("the unit file of a unit that is not down was removed: %v", err)
+				}
+			}
+		})
+	}
 }
 
 // The instance comes first and its failure is the answer: a systemctl that cannot take
 // down the unit the caller asked about is not a tear-down to report success for, and the
-// best-effort legacy sweep is not a consolation prize to run in its place.
+// sweep of the older units is not a consolation prize to run in its place.
 func TestHostdDisableSurfacesASystemctlFailureBeforeSweepingLegacyUnits(t *testing.T) {
 	svc := systemdServiceFor(testUser)
 	f, sys := newFakeSystem(t)
