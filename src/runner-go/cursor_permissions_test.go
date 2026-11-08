@@ -205,7 +205,25 @@ func TestCursorPermissionModes(t *testing.T) {
 			if !cursorJSONEqual(t, cards, tc.want.cards) {
 				t.Errorf("cards = %q, want %q", cards, tc.want.cards)
 			}
-			if notices := cursorNoticeKinds(run); !cursorJSONEqual(t, notices, tc.want.notices) {
+			notices := cursorNoticeKinds(run)
+			// Auto may explain an unavailable host sandbox once per CLI process.
+			// Dedicated sandbox tests assert its reason and once-only delivery.
+			if tc.mode == "auto" {
+				var remaining []string
+				sandboxNotices := 0
+				for _, notice := range notices {
+					if notice == "cursor-sandbox-unavailable" {
+						sandboxNotices++
+					} else {
+						remaining = append(remaining, notice)
+					}
+				}
+				if sandboxNotices > 1 {
+					t.Errorf("sandbox notices = %d, want at most one", sandboxNotices)
+				}
+				notices = remaining
+			}
+			if !cursorJSONEqual(t, notices, tc.want.notices) {
 				t.Errorf("notices = %q, want %q", notices, tc.want.notices)
 			}
 			// The session runs in the Cursor mode its permission mode keeps: plan only for Plan.

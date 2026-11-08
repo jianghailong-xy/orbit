@@ -173,6 +173,11 @@ type cursorPermissionBridge struct {
 	wg      sync.WaitGroup
 	// bypassNoted: the notice that Bypass is asking anyway went out in this process.
 	bypassNoted bool
+	// Prepared before ACP starts; the shell launcher and Auto policy share this result.
+	sandbox        *cursorSandbox
+	sandboxInForce bool
+	sandboxReason  string
+	sandboxNoted   bool
 	// mode is the policy requests are answered for, set by the session loop (setPolicy): a reload can move
 	// the session between modes that keep the process.
 	mode cursorPermissionPolicy
@@ -189,6 +194,7 @@ type cursorPermissionBridge struct {
 	emit        emitTurnFn
 	// workspace is the session's checkout, the one place a routine command in Auto may touch.
 	workspace string
+	grants    *cursorGrantBroker
 }
 
 func newCursorPermissionBridge(policy cursorPermissionPolicy, ask func(map[string]interface{}) (cursorPermissionAsk, bool),
@@ -209,6 +215,9 @@ func (b *cursorPermissionBridge) policy() cursorPermissionPolicy {
 func (b *cursorPermissionBridge) setPolicy(policy cursorPermissionPolicy) {
 	b.mu.Lock()
 	b.mode = policy
+	if b.grants != nil {
+		b.grants.revoke()
+	}
 	b.mu.Unlock()
 }
 
@@ -216,7 +225,16 @@ func (b *cursorPermissionBridge) setPolicy(policy cursorPermissionPolicy) {
 func (b *cursorPermissionBridge) begin(turnID string) {
 	b.mu.Lock()
 	b.open, b.turnID = true, turnID
+	note := b.mode.Answer == cursorAnswerReview && !b.sandboxInForce && b.sandboxReason != "" && !b.sandboxNoted
+	if note {
+		b.sandboxNoted = true
+	}
+	reason := b.sandboxReason
 	b.mu.Unlock()
+	if note {
+		b.emit(turnID, evSystem, map[string]interface{}{"noticeKind": "cursor-sandbox-unavailable", "provider": providerCursor,
+			"notice": "Cursor Auto asks for approval for inline scripts because the command sandbox is unavailable: " + reason})
+	}
 }
 
 // close answers nothing but cancelled from here on, and withdraws every card still open: the turn was
@@ -225,6 +243,9 @@ func (b *cursorPermissionBridge) begin(turnID string) {
 func (b *cursorPermissionBridge) close() {
 	b.mu.Lock()
 	b.open = false
+	if b.grants != nil {
+		b.grants.revoke()
+	}
 	for key, waiting := range b.pending {
 		waiting.cancel()
 		if waiting.card != "" {
@@ -280,7 +301,7 @@ func (b *cursorPermissionBridge) answerClosed(id interface{}, card string) {
 
 // later answers once decide has, on a goroutine of its own, so the reader never waits on a person; with
 // cancelled if decide gives no answer or the bridge closed first.
-func (b *cursorPermissionBridge) later(id interface{}, card string, decide func(ctx context.Context) map[string]interface{}) {
+func (b *cursorPermissionBridge) later(id interface{}, card string, decide func(ctx context.Context) map[string]interface{}, beforeReply ...func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	b.mu.Lock()
 	if !b.open {
@@ -308,6 +329,11 @@ func (b *cursorPermissionBridge) later(id interface{}, card string, decide func(
 		}
 		delete(b.pending, key)
 		cancel()
+		if !withdrawn && firstString(mapValue(result["outcome"]), "optionId") == cursorAllowOnce {
+			for _, commit := range beforeReply {
+				commit()
+			}
+		}
 		b.reply(id, result)
 	}()
 }
@@ -367,6 +393,8 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 		if policy.Mode == "bypassPermissions" {
 			b.noteBypass(ask.TurnID)
 		}
+		personApproved := false
+		approvalID := ""
 		b.later(id, ask.ToolUseID, func(ctx context.Context) map[string]interface{} {
 			decision, err := b.card(ctx, ask.Name, ask.Input, ask.ToolUseID)
 			if err != nil {
@@ -374,12 +402,18 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 			}
 			switch decision.Status {
 			case "ALLOWED":
+				personApproved = decision.DecidedByID != "" && decision.ID != ""
+				approvalID = decision.ID
 				// Once, even for "always": the standing grant answers the next card of its kind.
 				return cursorSelected(cursorAllowOnce)
 			case "DENIED":
 				return cursorSelected(cursorRejectOnce)
 			}
 			return nil
+		}, func() {
+			if personApproved && b.grants != nil && b.mode.Mode == "auto" && ask.Name == "Bash" {
+				b.grants.add(approvalID, cursorGrantKey{firstString(params, "sessionId"), b.workspace, firstString(mapValue(ask.Input), "command")})
+			}
 		})
 	}
 }

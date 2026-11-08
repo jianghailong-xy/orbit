@@ -121,6 +121,7 @@ func (c cursorTestCard) released() bool { return c.Withdrawn || c.Polls == 0 }
 // cursorTestDecision is how the stub control plane answers a card: Status ALLOWED or DENIED, with what a
 // question card or a refusal carries; "" holds the card open until the runner stops reading it.
 type cursorTestDecision struct {
+	DecidedByID   string
 	Status        string
 	Message       string
 	Answers       map[string][]string
@@ -324,7 +325,7 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 				mu.Unlock()
 				return
 			}
-			_ = json.NewEncoder(w).Encode(ApprovalDecisionResponse{ID: id, Status: decision.Status, Message: decision.Message,
+			_ = json.NewEncoder(w).Encode(ApprovalDecisionResponse{ID: id, Status: decision.Status, Message: decision.Message, DecidedByID: decision.DecidedByID,
 				Answers: decision.Answers, RememberRules: decision.RememberRules})
 		case r.Method == http.MethodPost && r.URL.Path == prefix+"naming":
 			var naming SessionNamingRequest

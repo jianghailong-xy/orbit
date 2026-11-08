@@ -18,6 +18,10 @@ type cursorSandbox struct {
 	binary   string
 	platform string
 	roots    []string
+	sealed   []string
+	hidden   []string
+	locked   []string
+	reopened []string
 }
 
 func detectCursorSandbox(ctx context.Context, job *ClaimedSession, workspace string) (*cursorSandbox, string) {
@@ -82,11 +86,26 @@ func (s *cursorSandbox) wrap(cmd *exec.Cmd) {
 		for _, root := range s.roots {
 			args = append(args, "--bind", root, root)
 		}
+		for _, path := range s.locked {
+			args = append(args, "--ro-bind", path, path)
+		}
+		for _, path := range s.reopened {
+			args = append(args, "--bind", path, path)
+		}
+		for _, path := range s.sealed {
+			args = append(args, "--ro-bind", path, path)
+		}
+		for _, path := range s.hidden {
+			args = append(args, "--tmpfs", path, "--remount-ro", path)
+		}
 		// bwrap inherits the descriptors supplied through cmd.ExtraFiles.
 	} else {
 		profile := "(version 1)\n(allow default)\n(deny file-write*)\n"
 		for _, root := range s.roots {
 			profile += "(allow file-write* (subpath " + strconv.Quote(root) + "))\n"
+		}
+		for _, path := range append(append([]string{}, s.sealed...), s.hidden...) {
+			profile += "(deny file-write* (subpath " + strconv.Quote(path) + "))\n"
 		}
 		profile += "(allow file-write* (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/tty\"))\n"
 		args = []string{"-p", profile}
