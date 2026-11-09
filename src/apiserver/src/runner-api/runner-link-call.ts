@@ -64,6 +64,11 @@ export const LINK_GATEWAY_ID_HEADER = 'x-orbit-link-gateway-id';
 export interface RunnerLinkContext {
   /** The process the link token was minted for: the `leaseOwner` its heartbeats carry. */
   leaseOwner: string;
+  /**
+   * When the link token was minted (its `iat`, epoch seconds). The welcome reads a connection opened with a token minted
+   * moments ago, by a process still heard, as a renewal (runner-presence.ts#recordRunnerLinkOpened).
+   */
+  tokenMintedAt?: number;
   /** Rpc.request_id; null when the gateway forwarded none. */
   requestId: string | null;
   /** Rpc.session_id and Rpc.after_seq; null when the call depends on no session's events. */
