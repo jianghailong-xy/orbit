@@ -275,7 +275,8 @@ describe('Cursor CLI on a machine’s card', () => {
     const row = cursorRow(page);
     expect(tags(row)).toEqual(['Signed out']);
     expect(text(row.querySelector('.re-quota'))).toBe('Sign in to see quota');
-    expect(buttons(row)).toEqual(expect.arrayContaining(['Add account', 'Sign in']));
+    // No Add account until a first account is in: the way to one is the row's own Sign in.
+    expect(buttons(row)).toEqual(['Sign in']);
     expect(text(row.querySelector('.re-dup'))).toBe('Sessions on this runner can’t use Cursor CLI until you sign in again.');
     // And the head says so with an amber chip of its own.
     expect(machineChipsOf(r).find((chip) => chip.engine === 'cursor')).toEqual({ engine: 'cursor', logins: 0, accounts: 0, signedOut: true });

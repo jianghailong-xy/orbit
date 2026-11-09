@@ -52,6 +52,7 @@ func setupService(orbitHome string, proxyVars []envVar) (*runnerService, error) 
 
 	switch runtime.GOOS {
 	case "linux":
+		placeOwnCopyForBroker(serviceBrokerSocket, exe)
 		return setupServiceLinux(serviceBrokerSocket, proxyVars, func() (*runnerService, error) {
 			return installSystemd(exe, orbitHome, systemdService, proxyVars)
 		})
@@ -66,10 +67,12 @@ func setupService(orbitHome string, proxyVars []envVar) (*runnerService, error) 
 // `orbit host setup` done, that is the machine broker: enabling this user's instance is
 // a socket call that needs no root at all. Anything else — no broker, or a broker that
 // will not answer — installs a unit of our own through sudo, so a host that was never
-// set up (or was set up badly) still ends a registration with a live runner. Except one
-// answer: a broker that refuses because this account has no copy of its own for its
-// instance to run (hostdOwnCopyRefusal) ends the registration's service step with its
-// reason and command, since the sudo path's unit would run another binary instead.
+// set up (or was set up badly) still ends a registration with a live runner. Except the
+// answers in hostdStopsRegister (hostdRegisterRefusal): this account has no copy of its
+// own for its instance to run, an older runner unit of the account could not be taken
+// down, or the broker took the request and is still working on it. Each ends the
+// registration's service step with the broker's reason, since the sudo path's unit would
+// be a second runner.
 func setupServiceLinux(socketPath string, proxyVars []envVar, installLegacy func() (*runnerService, error)) (*runnerService, error) {
 	unit, err := registerViaHostd(socketPath, proxyVars)
 	switch {

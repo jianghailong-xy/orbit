@@ -134,6 +134,9 @@ func runnerOn(t *testing.T, ver string) (exe string, restarts *atomic.Int32) {
 	}
 	setTestVersion(t, ver)
 	t.Setenv("ORBIT_NO_SELFUPDATE", "")
+	// No host broker unless a test stands one up: a runner that installs a release asks the
+	// one at hostdRunnerSocket, and the machine running the tests may have one.
+	pointRunnerAtBroker(t, filepath.Join(t.TempDir(), "absent.sock"))
 	exe = installedBinary(t)
 	setTestInstallable(t, filepath.Dir(exe), true)
 	oldTarget, oldRestart := selfUpdateTarget, restartIntoUpdate

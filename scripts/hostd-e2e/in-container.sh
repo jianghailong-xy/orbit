@@ -32,3 +32,30 @@ unit_of() { sed -n 's|^0::.*/||p' "/proc/$1/cgroup"; }
 has_sudo() {
   command -v sudo >/dev/null 2>&1 || [ -e /usr/bin/sudo ] || [ -e /usr/sbin/sudo ] || [ -e /bin/sudo ] || [ -e /sbin/sudo ]
 }
+
+# runner_pids_all — every `orbit run` process on the machine, whoever it runs as.
+runner_pids_all() {
+  local d cmd
+  for d in /proc/[0-9]*; do
+    cmd=$(tr '\0' ' ' <"$d/cmdline" 2>/dev/null) || continue
+    case "$cmd" in /*/orbit" run ") echo "${d#/proc/}" ;; esac
+  done
+}
+
+# live_units UNIT... — those of UNIT... that systemd reports neither inactive nor failed (active,
+# activating, deactivating or reloading), one per line.
+live_units() {
+  local u st
+  for u; do
+    st=$(systemctl show -p ActiveState --value "$u" 2>/dev/null)
+    case "$st" in inactive | failed | "") ;; *) echo "$u" ;; esac
+  done
+}
+
+# account_runners UID UNIT... — one sample of an account: its `orbit run` processes and which of
+# UNIT... are live, as "pids=<pid,...> units=<unit,...>".
+account_runners() {
+  local uid=$1
+  shift
+  echo "pids=$(runner_pids "$uid" | paste -sd, -) units=$(live_units "$@" | paste -sd, -)"
+}

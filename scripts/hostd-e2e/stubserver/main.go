@@ -1,7 +1,9 @@
 // Command stubserver is the control plane scripts/hostd-e2e.sh runs inside its systemd
 // container. It answers the least of the runner API that `orbit register`, `orbit unregister` and
 // a registered `orbit run` need — register waits until /runner/me reports a heartbeat from the
-// service it started — and serves the /dl release directory hostd's update installs from.
+// service it started — and serves the /dl release directory hostd's update installs from. A runner
+// beats, and makes its daemon calls, only over the runner link, so the stub is its link gateway too
+// (link.go).
 //
 // It models nothing beyond that: every answer is the smallest one the runner accepts, there is
 // never a session to claim, and nothing survives a restart. What it does keep is what the
@@ -41,6 +43,7 @@ type runner struct {
 	id, token, name string
 	deleted         bool
 	beats           int
+	linkBeats       int    // of beats, those that came over the runner link (link.go)
 	version         string // as the newest heartbeat reported it
 	selfUpdate      string // the self-update state and reason the newest heartbeat reported
 	lastBeat        time.Time
@@ -54,6 +57,10 @@ type stub struct {
 	seq     int
 	runners []*runner          // in registration order
 	byToken map[string]*runner // credential -> runner
+	// linkTokens are the connection tokens POST /api/runner/link-token issued, each to its runner.
+	linkTokens map[string]*runner
+	// handler is routes(), which the link's tunnelled calls are answered by too.
+	handler http.Handler
 	devices map[string]*device // deviceCode -> pending or approved device registration
 }
 
@@ -77,9 +84,13 @@ func main() {
 		if *dl == "" {
 			log.Fatal("serve needs -dl")
 		}
-		s := &stub{dl: *dl, byToken: map[string]*runner{}, devices: map[string]*device{}}
-		log.Printf("stub control plane on http://%s, releases from %s", *addr, *dl)
-		log.Fatal(http.ListenAndServe(*addr, s.routes()))
+		s := &stub{dl: *dl, byToken: map[string]*runner{}, devices: map[string]*device{}, linkTokens: map[string]*runner{}}
+		s.handler = s.routes()
+		log.Printf("stub control plane on http://%s, its runner link on ws://%s/link, releases from %s", *addr, *addr, *dl)
+		log.Fatal(http.ListenAndServe(*addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Header.Del(viaLinkHeader) // set only by the link's own forwarding (link.go serve)
+			s.handler.ServeHTTP(w, r)
+		})))
 	case "get":
 		if len(os.Args) != 3 {
 			fmt.Fprintln(os.Stderr, "usage: stubserver get URL")
@@ -128,9 +139,11 @@ func (s *stub) routes() http.Handler {
 	mux.HandleFunc("GET /api/runner/sessions/claim", s.authed(s.claim))
 	mux.HandleFunc("GET /api/runner/sessions/reclaim", s.authed(s.reclaim))
 	mux.HandleFunc("POST /api/runner/deregister", s.authed(s.deregister))
+	mux.HandleFunc("POST /api/runner/link-token", s.authed(s.linkToken))
+	mux.HandleFunc("GET /link", s.link)
 	mux.HandleFunc("GET /stub/runners", s.listRunners)
-	// Everything else the runner may ask — the wake long-poll, the release assignment, the link,
-	// its workspaces — it does without, as it does against a control plane that has no such route.
+	// Everything else the runner may ask — the wake long-poll, the release assignment, its
+	// workspaces — it does without, as it does against a control plane that has no such route.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not served by the e2e stub"})
 	})
@@ -237,6 +250,9 @@ func (s *stub) heartbeat(w http.ResponseWriter, r *http.Request, rn *runner) {
 	}
 	s.mu.Lock()
 	rn.beats++
+	if r.Header.Get(viaLinkHeader) != "" {
+		rn.linkBeats++
+	}
 	rn.version = req.Version
 	rn.lastBeat = time.Now()
 	reported := selfUpdate != "" && selfUpdate != rn.selfUpdate
@@ -315,7 +331,7 @@ func (s *stub) deregister(w http.ResponseWriter, _ *http.Request, rn *runner) {
 
 // listRunners is for the script, one runner per line:
 //
-//	<name> <id> <live|deleted> <heartbeats> <last reported version or -> <seconds since the last beat or ->
+//	<name> <id> <live|deleted> <heartbeats> <last reported version or -> <seconds since the last beat or -> <heartbeats over the runner link>
 func (s *stub) listRunners(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -331,7 +347,7 @@ func (s *stub) listRunners(w http.ResponseWriter, _ *http.Request) {
 		if !rn.lastBeat.IsZero() {
 			age = fmt.Sprintf("%d", int(time.Since(rn.lastBeat).Seconds()))
 		}
-		fmt.Fprintf(w, "%s %s %s %d %s %s\n", rn.name, rn.id, state, rn.beats, version, age)
+		fmt.Fprintf(w, "%s %s %s %d %s %s %d\n", rn.name, rn.id, state, rn.beats, version, age, rn.linkBeats)
 	}
 }
 
@@ -358,6 +374,9 @@ func (r *statusRecorder) WriteHeader(status int) {
 	r.status = status
 	r.ResponseWriter.WriteHeader(status)
 }
+
+// Unwrap lets the link's upgrade reach the connection underneath (http.Hijacker).
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
 // logRequests writes one journal line per request, so a failed run shows what the runners and
 // hostd actually asked for. The script's own polling of /stub/ is left out.
