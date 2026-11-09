@@ -621,12 +621,31 @@ unit_running orbit-runner-alice.service && [ "$(main_pid orbit-runner-alice.serv
   fail 4 "orbit-runner-alice.service is not still running pid $legacy_pid, enabled, with its unit file in place" orbit-runner-alice.service
 [ "$(unit_prop "$UNIT_A" ActiveState)" = inactive ] && [ "$(unit_prop "$UNIT_A" UnitFileState)" = disabled ] ||
   fail 4 "$UNIT_A is $(unit_prop "$UNIT_A" ActiveState) and $(unit_prop "$UNIT_A" UnitFileState); hostd must neither enable nor start it" "$UNIT_A"
+# docs: "Register each account's runner" — the refusal's `systemctl status orbit-runner-alice.service`,
+# run by alice: the older unit is still her running runner.
+out=$(as alice "systemctl status orbit-runner-alice.service" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] && grep -qF "orbit-runner-alice.service - Orbit runner (alice)" <<<"$out" &&
+  grep -qF "Active: active (running)" <<<"$out" && grep -qF "Main PID: $legacy_pid " <<<"$out" ||
+  fail 4 "alice's systemctl status orbit-runner-alice.service does not show it active (running) as pid $legacy_pid" orbit-runner-alice.service
+# docs: "Register each account's runner" (and runner-troubleshooting.md G) — `systemctl status
+# orbit-hostd.service`, where to look whether the broker is still carrying a request out: it shows
+# the broker's unit and whether it is running (it exits after 30 quiet seconds, status then 3).
+out=$(as alice "systemctl status orbit-hostd.service" 2>&1)
+rc=$?
+show "$out"
+{ [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]; } && grep -qF "orbit-hostd.service - Orbit host broker" <<<"$out" &&
+  grep -qF "Loaded: loaded (/etc/systemd/system/orbit-hostd.service;" <<<"$out" && grep -qE "Active: (active|inactive)" <<<"$out" ||
+  fail 4 "alice's systemctl status orbit-hostd.service exited $rc without showing the broker's unit and its state" orbit-hostd.service
 check_no_sudo "after alice's refused registration"
 blocked_samples=$samples
 # docs: "Migrating from per-user units" — the unit can stop again, and the next registration retires it.
 cx rm -rf "$REFUSE_DIR" && cx systemctl daemon-reload || harness_fail "cannot let orbit-runner-alice.service stop again"
 [ "$(unit_prop orbit-runner-alice.service RefuseManualStop)" = no ] || fail 4 "orbit-runner-alice.service still refuses to stop" orbit-runner-alice.service
 # docs: "Migrating from per-user units" — the account's next registration retires its legacy unit.
+# docs: "Register each account's runner" (and runner-troubleshooting.md G) — once the old unit can
+# stop, the account runs its `orbit register` command again, with the flags it registers with.
 # docs: "Known limitations" — and --proxy, which the shared template does not carry.
 out=$(as alice "orbit register --server $SERVER --token e2e-enroll-alice --name alice-e2e --force --proxy $PROXY" 2>&1)
 rc=$?
@@ -716,6 +735,14 @@ grep -qF "$UNIT_T - Orbit runner (test.user)" <<<"$out" && grep -qF "Active: act
   fail 5 "test.user's systemctl status \"orbit-runner@\$(systemd-escape \"\$(id -un)\")\" does not show $UNIT_T active (running)" "$UNIT_T"
 wait_until 15 own_journal_has test.user "runner \"test-user-e2e\" online -> $SERVER" ||
   fail 5 "test.user's journalctl -u \"orbit-runner@\$(systemd-escape \"\$(id -un)\")\" does not show its runner coming online" "$UNIT_T"
+# docs: "Register each account's runner" — `orbit status`, from the receipt's last line: the
+# account's runner, its server, and online.
+out=$(as test.user "orbit status" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] && grep -qxF "runner:  test-user-e2e ($ID_T)" <<<"$out" && grep -qxF "server:  $SERVER" <<<"$out" &&
+  grep -qF "status:  online (last heartbeat " <<<"$out" ||
+  fail 5 "test.user's orbit status exited $rc without showing test-user-e2e ($ID_T) on $SERVER, online" "$UNIT_T"
 check_machine_binary 5 "$SHA_V1"
 check_no_sudo "after test.user registered"
 pass 5 "test.user: orbit register exit 0 without root, having put test.user's own copy at /home/test.user/.orbit/bin/orbit (test.user's, mode 0755, the $V1 build, under a ~/.orbit of mode 0700); $UNIT_T (named by systemd-escape, which leaves 'test.user' as it is) enabled and active as euid $UID_T from /home/test.user/.orbit/bin/orbit beside $UNIT_A — separate processes ($PID_A, $PID_T) in separate cgroups, separate credentials ($ID_A, $ID_T), each heartbeating the control plane on its own, every beat over the runner link; test.user reads its runner's status (active (running)) and log itself"
@@ -754,7 +781,9 @@ copy_inode=$(cx stat -c %i /home/test-user/.orbit/bin/orbit)
 # exists.
 found=$(as test-user 'command -v orbit' 2>&1)
 [ "$found" = /home/test-user/.local/bin/orbit ] || fail 6 "a login shell of test-user finds orbit at '$found', want its launcher /home/test-user/.local/bin/orbit"
-out=$(as test-user "orbit register --server $SERVER --token e2e-enroll-dash --name dash-user-e2e" 2>&1)
+# docs: "Register each account's runner" (and runner-troubleshooting.md G) — register from the
+# account's own copy by typing its launcher's path, ~/.local/bin/orbit.
+out=$(as test-user "~/.local/bin/orbit register --server $SERVER --token e2e-enroll-dash --name dash-user-e2e" 2>&1)
 rc=$?
 show "$out"
 check_user_command 6 "$out" "$rc" "Background service started as test-user"
@@ -1009,6 +1038,14 @@ pass 9 "/usr/local/bin root:staff 2775: each runner installed $V3 into its own c
 
 echo "==> 10. alice: orbit unregister"
 beats_t=$(stub_field test-user-e2e 4)
+# docs: "Register each account's runner" — `orbit unregister`, as the receipt names it, without
+# --yes: with no terminal to ask on, it prints `aborted` and changes nothing.
+out=$(as alice "orbit unregister" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] && grep -qxF "aborted" <<<"$out" && unit_running "$UNIT_A" && [ "$(main_pid "$UNIT_A")" = "$PID_A" ] &&
+  [ "$(stub_field alice-e2e 3)" = live ] && cx test -e /home/alice/.orbit/config.json ||
+  fail 10 "alice's orbit unregister without --yes exited $rc and did not abort leaving $UNIT_A (pid $PID_A), alice-e2e and her config as they were" "$UNIT_A"
 # docs: "Register each account's runner" — `orbit unregister --yes`.
 out=$(as alice "orbit unregister --yes" 2>&1)
 rc=$?

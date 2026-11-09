@@ -425,7 +425,8 @@ journalctl -u "orbit-runner@$(systemd-escape "$(id -un)")"
 **`orbit register` stops at "refusing to enable … could not be stopped".** An older runner unit of the account, its
 `orbit-runner-<user>.service`, bare `orbit-runner.service` or `orbit-runner@<uid>.service`, did not stop. The broker
 neither enabled nor started the new instance and did not fall back to sudo, so the account still has exactly the one
-runner it had. The answer quotes systemd's reason. Once root has let that unit stop, run `orbit register` again.
+runner it had. The answer quotes systemd's reason. Once root has let that unit stop, run your `orbit register`
+command again, with the flags you registered with.
 
 **`orbit register` says it is waiting for the machine broker.** The broker is draining an older runner of the
 account, which takes up to three minutes, the unit's `TimeoutStopSec=180`. Let it finish. After 15 minutes without an
@@ -446,7 +447,7 @@ the release its assignment offers either way.
 **An account's runner is still `orbit-runner@<uid>.service`.** The machine was set up by an earlier release, and
 running setup again left the account: it had no `~/.orbit/bin/orbit` it could execute, and setup listed it with the
 command to run. Its runner keeps its process until it next starts, which then fails without that copy
-(`systemctl status` shows it restarting). The account runs the command setup gave it:
+(systemd keeps restarting it). The account runs the command setup gave it:
 
 ```bash
 /usr/local/bin/orbit register
