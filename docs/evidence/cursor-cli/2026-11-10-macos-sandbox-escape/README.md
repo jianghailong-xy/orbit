@@ -14,10 +14,10 @@ forwarded to the real Orbit server for this task session. No approval identity
 is invented by the fixture. The test passes the server's actual decision back
 to the production permission bridge.
 
-`events.json` is the runner's real CLI session transcript, including exact tool
-inputs, outputs and completion events. `launch-and-approval.json` records the
+`abandoned-attempt/events.json` is the runner's real CLI session transcript, including exact tool
+inputs, outputs and completion events. `abandoned-attempt/launch-and-approval.json` records the
 CLI launch and server approval response without serializing credential-bearing
-environment variables. `verification.txt` records the disk checks and test result.
+environment variables. `abandoned-attempt/verification.txt` records the disk checks and test result.
 
 ## Reproduce
 
@@ -47,9 +47,23 @@ found no blocked file. Both approval cards in that attempt were for Case B,
 not Case A. Case B was abandoned at conversation-turn settlement, before the
 harness carried its background-job identity. No approved write occurred.
 
-The replacement run carries `backgroundJobId` on the real approval and is
-pending its answer. No successful approved escape or complete acceptance is
-claimed by this partial recording.
+The replacement run `bgj_62d7ad305e15` carried `backgroundJobId` on the real
+approval, keeping it answerable between conversation turns. It ended after
+901.34 seconds with no owner decision received:
+
+```text
+REAL_OWNER_CARD 01a1c289-f6ed-74e8-851a-9254a7e5da1a
+real card answer: ... context deadline exceeded
+the session did not finish on its own: context deadline exceeded
+--- FAIL: TestCursorRealMacOSSandboxEscape (901.34s)
+```
+
+`owner-approval-timeout.txt` preserves that job's output. That timeout prevented
+the helper from returning its final event snapshot; no completed transcript for
+that attempt is claimed. The completed earlier attempt above supplies Case A.
+No successful approved escape or complete acceptance is claimed. This task
+requires another live run with a person available to approve Case B. The missing
+approval is not evidence that the broker's approved execution path failed.
 
 Checks already completed on the Mac:
 
