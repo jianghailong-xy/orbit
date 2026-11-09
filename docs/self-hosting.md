@@ -1565,6 +1565,9 @@ The broker enables and starts the account's instance, nothing asks for a passwor
     orbit status · orbit doctor · orbit unregister
 ```
 
+Of the commands this receipt names, hostd-e2e runs `orbit status` and `orbit unregister`, but not `orbit doctor`,
+which checks the machine's coding engines and their sign-in: its test machine has none installed and no network.
+
 Before it starts the instance, the broker takes down every older runner unit of the account (see
 [Migrating from per-user units](#migrating-from-per-user-units)), each drained on stop and confirmed down by systemd,
 so the account never runs two runners. Taking one down can take up to three minutes, the unit's drain. The command
@@ -1583,10 +1586,11 @@ See system logs and 'systemctl status orbit-runner-alice.service' for details.
 It is still alice's runner, so orbit-runner@alice.service was neither enabled nor started. Once it can be stopped, run `orbit register` again.
 ```
 
-The runner is registered by then. Once root has let the old unit stop, the account runs `orbit register` again. A
-broker that has not answered after 15 minutes stops the command the same way, naming
-`systemctl status orbit-hostd.service` to look at, since it may still be carrying the request out. The broker also
-refuses an account with no home directory, or with no `~/.orbit/bin/orbit` it can execute, and says what to run.
+The runner is registered by then. Once root has let the old unit stop, the account runs its `orbit register` command
+again, with the flags it registers with (`--server`, `--name` and any others). A broker that has not answered after
+15 minutes stops the command the same way, naming `systemctl status orbit-hostd.service` to look at, since it may
+still be carrying the request out. The broker also refuses an account with no home directory, or with no
+`~/.orbit/bin/orbit` it can execute, and says what to run.
 
 The account reads its runner's state and log itself:
 
@@ -1605,9 +1609,9 @@ To remove the runner:
 orbit unregister --yes
 ```
 
-Without `--yes` it asks first. The broker stops and disables the account's instance, the runner is deleted from the
-control plane and the account's runner config is removed. Its own copy of orbit stays. Every other account's runner
-keeps running:
+Without `--yes` it asks first, and with no terminal to ask on it prints `aborted` and changes nothing. The broker
+stops and disables the account's instance, the runner is deleted from the control plane and the account's runner
+config is removed. Its own copy of orbit stays. Every other account's runner keeps running:
 
 ```text
 ✓ removed the orbit-runner@alice.service runner service
@@ -1619,7 +1623,7 @@ keeps running:
 
 Machines set up by an earlier release run each account's runner as `orbit-runner@<uid>.service`, on the shared
 `/usr/local/bin/orbit`. To move one, root puts the new release in place of the broker's binary, as under
-[Set up the machine once](#set-up-the-machine-once), from root's own copy that install.sh or `orbit upgrade` brought:
+[Set up the machine once](#set-up-the-machine-once), from root's own copy of the new release, where install.sh puts it:
 
 ```bash
 sudo install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit /usr/local/bin/orbit
@@ -1651,7 +1655,7 @@ left, each with the one command that account runs:
 
 An account without a copy is left on its uid instance, which keeps running the process it had. That process is still
 the earlier release's, whose file root has replaced. The instance now reads the new template, though, so the next time
-it starts, after a crash, a reboot or a `systemctl restart`, it starts `~/.orbit/bin/orbit`, and without that file it
+it starts, after a crash, a reboot or a restart, it starts `~/.orbit/bin/orbit`, and without that file it
 keeps failing to start. So the account runs the command setup gave it, as itself, before then:
 
 ```bash
@@ -1736,12 +1740,14 @@ update stands:
 [orbit-runner 2026-11-01T02:54:42.491Z] installed orbit 0.1.250 into this runner's own copy; asked the host broker at /run/orbit/host.sock to update its own binary: it declined: refusing to update /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775), and root writes nothing it downloaded where another account can reach
 ```
 
-An administrator makes the directory root's alone, after which members of `staff` need root to install there too.
-The broker installs the next release itself, or `sudo /usr/local/bin/orbit upgrade` installs this one:
+An administrator makes the directory root's alone:
 
 ```bash
 sudo chmod g-w /usr/local/bin
 ```
+
+Members of `staff` then need root to install there too. The broker installs the next release itself, or
+`sudo /usr/local/bin/orbit upgrade` installs this one.
 
 ### Without the broker
 
