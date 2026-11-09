@@ -39,10 +39,16 @@ func testHostEnv(t *testing.T, euid int) (hostSetupEnv, *fakeHostRunner, string)
 		out:        io.Discard,
 		// The files this test creates are its own; they stand for root's.
 		rootUID: uint32(os.Geteuid()),
-		// A host with no runner instance to move: systemd lists none.
+		// A host with no broker running and no runner instance to move: systemd reports
+		// orbit-hostd.service inactive and lists no instance.
 		sys: hostdSystem{
-			run:     func(string, ...string) (string, error) { return "", nil },
-			query:   func(string, ...string) (string, error) { return "", nil },
+			run: func(string, ...string) (string, error) { return "", nil },
+			query: func(name string, args ...string) (string, error) {
+				if strings.Join(append([]string{name}, args...), " ") == instanceQuery(hostdServiceUnit) {
+					return "UnitFileState=static\nActiveState=inactive\n", nil
+				}
+				return "", nil
+			},
 			unitDir: filepath.Join(root, systemdUnitDir),
 		},
 	}, cmds, root
