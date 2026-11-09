@@ -112,6 +112,34 @@ func TestHostSetupRootMoveRefusesChangedConfiguration(t *testing.T) {
 	}
 }
 
+func TestHostSetupRootMoveAllowsPathAndCPUWeightDropIns(t *testing.T) {
+	h, _ := rootMoveHost(t, "Environment=PATH=/usr/local/bin:/usr/bin:/opt/node-v26/bin\nCPUWeight=50\n")
+	drops := map[string]string{
+		"/etc/systemd/system/orbit-runner-root.service.d/10-node26-path.conf":       "[Service]\nEnvironment=PATH=/usr/local/bin:/usr/bin:/opt/node-v26/bin\n",
+		"/etc/systemd/system.control/orbit-runner-root.service.d/50-CPUWeight.conf": "[Service]\nCPUWeight=50\n",
+	}
+	for path, content := range drops {
+		if err := os.MkdirAll(filepath.Dir(h.env.path(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(h.env.path(path), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := hostSetup(h.env, "https://orbit.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	out := h.env.out.(*strings.Builder).String()
+	for path := range drops {
+		if !strings.Contains(out, "Not carried over: "+path) {
+			t.Errorf("missing notice for %s", path)
+		}
+	}
+	if h.f.units[unitForAccount("root")].activeState != "active" || h.f.units[rootLegacyUnit].activeState != "inactive" {
+		t.Fatal("legacy runner did not move")
+	}
+}
+
 func TestHostSetupRootCopyMissingPresentAndNonExecutable(t *testing.T) {
 	for _, mode := range []os.FileMode{0, 0o755, 0o644} {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
