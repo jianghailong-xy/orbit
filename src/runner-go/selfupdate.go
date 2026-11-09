@@ -165,24 +165,44 @@ func delegateUpdateToHostd(remote, dir string) (string, bool) {
 		return "", false
 	}
 	resp, err := hostdCall(hostdRunnerSocket, "update")
-	var answer string
-	switch {
-	case err != nil:
-		answer = "it did not answer: " + err.Error()
-	case !resp.OK:
-		answer = "it declined: " + resp.Error
-	case resp.Data["accepted"] == true:
-		answer = fmt.Sprintf("it is installing orbit %v for every runner on this machine", resp.Data["version"])
-	case resp.Data["skipped"] == true:
-		answer = fmt.Sprintf("it skipped the request (%v)", resp.Data["reason"])
-	default:
-		answer = fmt.Sprintf("it reports orbit %v installed, the latest release published to every runner", resp.Data["version"])
-	}
+	answer := hostdUpdateAnswer(resp, err, "for every runner on this machine")
 	reason := "delegated to the host broker at " + hostdRunnerSocket + ": " + answer
 	selfUpdateDelegatedOnce.Do(func() {
 		logln(fmt.Sprintf("orbit %s available for %s, which only the host can replace; %s", remote, dir, reason))
 	})
 	return reason, true
+}
+
+// askHostdToFollow is what a runner that just installed a release into its own copy does about the
+// host broker's binary, on a host that has one: it asks the broker's update verb once, so that
+// hostd's own /usr/local/bin/orbit follows the release. Its own update was never the broker's —
+// this runner has already installed it — and the broker restarts no runner on a host whose
+// instances run each account's own copy. Whatever it answers, or if it does not, is logged and
+// nothing more: hostd's binary is not this runner's to keep, and the update it just installed
+// stands either way.
+func askHostdToFollow(remote string) {
+	if _, err := os.Stat(hostdRunnerSocket); err != nil {
+		return
+	}
+	resp, err := hostdCall(hostdRunnerSocket, "update")
+	answer := hostdUpdateAnswer(resp, err, "as its own binary")
+	logln(fmt.Sprintf("installed orbit %s into this runner's own copy; asked the host broker at %s to update its own binary: %s", remote, hostdRunnerSocket, answer))
+}
+
+// hostdUpdateAnswer puts the broker's answer to the update verb in words; accepted says what an
+// accepted install is for.
+func hostdUpdateAnswer(resp hostdResponse, err error, accepted string) string {
+	switch {
+	case err != nil:
+		return "it did not answer: " + err.Error()
+	case !resp.OK:
+		return "it declined: " + resp.Error
+	case resp.Data["accepted"] == true:
+		return fmt.Sprintf("it is installing orbit %v %s", resp.Data["version"], accepted)
+	case resp.Data["skipped"] == true:
+		return fmt.Sprintf("it skipped the request (%v)", resp.Data["reason"])
+	}
+	return fmt.Sprintf("it reports orbit %v installed, the latest release published to every runner", resp.Data["version"])
 }
 
 // writable reports whether we can create files in dir (i.e. swap the binary there).
@@ -781,6 +801,7 @@ func selfUpdate(server string) {
 	}
 	fmt.Printf("orbit updated to %s; restarting...\n", remote)
 	recordSelfUpdate(version, remote, time.Now())
+	askHostdToFollow(remote)
 	if err := restartIntoUpdate(); err != nil {
 		noteSelfUpdate(selfUpdateStateFailed, "installed "+remote+" but could not restart into it: "+err.Error(), "")
 	}
