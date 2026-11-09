@@ -1,0 +1,276 @@
+<!-- DESIGN MOCK (2026-11-10). Task 34ugU32krhXotXkNdcR90, docs/owner-confirmation-review-contract.md §13–§16.
+     The owner-confirmation card in an Automatic project, web and iPhone: raised by the coordinator (§13 A3) and
+     handed over by the fallback (§16 F5). Demo data throughout: the task, the times, the coordinator's words.
+     Render (needs a Latin + CJK font; see the board's PNG):
+       chrome --headless=new --disable-gpu --no-sandbox --hide-scrollbars --force-device-scale-factor=1.5 \
+         --window-size=1760,2440 --screenshot=raised-and-fallback.png file://$PWD/raised-and-fallback.html -->
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>Automatic 项目：协调者呈上的确认卡与兜底卡</title>
+<style>
+  :root { --tint:#3B6CF2; --label:#111; --l2:rgba(60,60,67,.62); --sep:rgba(60,60,67,.18);
+          --green:#248A3D; --orange:#C2610C; --wash:#EEF3FE; --wash-line:rgba(59,108,242,.24); --box:#E3E9F3; --amber:#FFF3E0; --amber-line:#F2C28B; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 44px; width:1760px; background:#ececef; color:#16161a;
+         font:15px/1.55 -apple-system,"SF Pro Text","Inter","Noto Sans SC","WenQuanYi Zen Hei",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:26px; margin:0 0 6px; letter-spacing:-.01em; }
+  .lede { color:#55555e; margin:0; max-width:1500px; }
+  h2 { font-size:18px; margin:32px 0 14px; }
+  .row { display:flex; gap:36px; align-items:flex-start; }
+  .tag { display:inline-block; font:600 12px/1 "DejaVu Sans Mono",monospace; padding:4px 8px; border-radius:6px; margin-bottom:10px; background:#e3ebff; color:#2346c4; }
+  .notes { width:520px; flex:none; font-size:14px; color:#44444c; line-height:1.7; }
+  .notes h3 { margin:0 0 6px; font-size:15px; color:#16161a; }
+  .notes ol, .notes ul { margin:4px 0 0; padding-left:20px; } .notes li { margin-top:6px; }
+  .notes b { color:#16161a; } code { font:12.5px "DejaVu Sans Mono",monospace; background:#e0e0e6; border-radius:4px; padding:1px 5px; }
+  .mono { font-family:"DejaVu Sans Mono",ui-monospace,monospace; }
+
+  /* the card, shared by web and phone */
+  .card { background:var(--wash); border:1px solid var(--wash-line); border-radius:20px; padding:0 13px 14px; color:var(--label); }
+  .ch { display:flex; align-items:center; gap:8px; padding-top:14px; }
+  .seal { width:22px; height:22px; border-radius:50%; background:var(--tint); flex:none; display:grid; place-items:center; color:#fff; font-size:13px; font-weight:700; }
+  .ch .h { font-size:17px; font-weight:600; }
+  .prov { font-size:13px; color:var(--l2); margin-top:8px; }
+  .ld1 { font-size:17px; line-height:22px; font-weight:700; margin-top:6px; }
+  .ld2 { font-size:13px; line-height:18px; color:var(--l2); margin-top:3px; }
+  .qb { background:var(--box); border-radius:16px; padding:12px 14px 13px; margin-top:12px; }
+  .qh { font:500 12.5px/16px "DejaVu Sans Mono",monospace; letter-spacing:.03em; color:var(--l2); text-transform:uppercase; display:flex; }
+  .qh .sha { margin-left:auto; text-transform:none; }
+  .concl { margin-top:9px; font-size:17px; line-height:23px; font-weight:600; } .concl::before { content:"“"; } .concl::after { content:"”"; }
+  .point { margin-top:13px; padding-top:12px; border-top:1px solid rgba(60,60,67,.14); }
+  .ask { font-size:15px; line-height:20px; color:var(--orange); font-weight:600; }
+  .opt { display:flex; gap:9px; align-items:flex-start; margin-top:9px; }
+  .opt .r { width:18px; height:18px; border-radius:50%; border:1.5px solid rgba(60,60,67,.35); flex:none; margin-top:2px; display:grid; place-items:center; background:#fff; }
+  .opt.on .r { border-color:var(--tint); } .opt.on .r::after { content:""; width:10px; height:10px; border-radius:50%; background:var(--tint); }
+  .opt .a { font-size:15px; line-height:20px; } .opt .d { font-size:13px; line-height:17px; color:var(--l2); }
+  .rec { font-size:11px; line-height:14px; color:var(--tint); border:1px solid var(--wash-line); border-radius:4px; padding:0 4px; margin-left:6px; }
+  .sent { margin-top:10px; font-size:13px; color:var(--l2); }
+  .sum { margin-top:11px; font-size:13px; color:var(--l2); display:flex; justify-content:space-between; }
+  .fold { background:var(--box); border-radius:14px; height:42px; display:flex; align-items:center; padding:0 14px; margin-top:10px;
+          font:500 12px/1 "DejaVu Sans Mono",monospace; letter-spacing:.03em; color:var(--l2); text-transform:uppercase; }
+  .fold .n { margin-left:auto; text-transform:none; letter-spacing:0; }
+  .qt { font-size:15px; line-height:20px; margin-top:8px; } .more { margin-top:8px; font-size:14px; }
+  .nr { background:var(--amber); border:1px solid var(--amber-line); }
+  .nr .qh { color:#8a5300; } .nrt { font-size:17px; line-height:22px; font-weight:700; margin-top:8px; color:#8a5300; }
+  .nrs { font-size:15px; line-height:20px; color:#6b4a13; margin-top:3px; }
+  .fx { background:#fff; border:1px solid rgba(60,60,67,.14); border-radius:16px; margin-top:12px; padding:10px 14px 12px; }
+  .fh { font:500 12.5px/16px "DejaVu Sans Mono",monospace; letter-spacing:.03em; color:var(--l2); text-transform:uppercase; }
+  .fa { font-size:15px; line-height:20px; font-weight:600; margin-top:8px; } .fb { font-size:13px; line-height:17px; color:var(--l2); }
+  .b1 { margin-top:12px; height:36px; border-radius:18px; background:var(--tint); color:#fff; font-size:16px; font-weight:500; display:grid; place-items:center; }
+  .b2 { margin-top:10px; height:36px; border-radius:18px; background:#E4E6EB; color:var(--tint); font-size:16px; display:grid; place-items:center; }
+  .btns { display:flex; gap:10px; } .btns .b1, .btns .b2 { flex:1; }
+  .hint { margin-top:11px; font-size:13px; line-height:18px; color:var(--l2); }
+
+  /* web frame */
+  .web { width:680px; flex:none; background:#fff; border-radius:14px; box-shadow:0 10px 34px rgba(0,0,0,.14); overflow:hidden; }
+  .web .bar { height:42px; border-bottom:1px solid var(--sep); display:flex; align-items:center; padding:0 16px; font-size:13px; color:var(--l2); gap:8px; }
+  .web .bar b { color:#16161a; font-weight:600; }
+  .dot { width:8px; height:8px; border-radius:50%; background:#e5372b; display:inline-block; }
+  .web .in { padding:16px 18px 18px; }
+  .prior { font-size:14px; color:#44444c; margin-bottom:12px; }
+
+  /* phone frame */
+  .phone { width:393px; flex:none; border-radius:44px; overflow:hidden; background:#fff; box-shadow:0 14px 44px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08); }
+  .sb { height:50px; display:flex; justify-content:space-between; align-items:center; padding:6px 32px 0 42px; font-size:16px; font-weight:700; color:#111; }
+  .nav { padding:0 16px 8px; text-align:center; border-bottom:1px solid var(--sep); }
+  .nav .t { font-size:16px; font-weight:600; color:#111; }
+  .nav .s { font-size:12px; color:var(--orange); }
+  .banner { background:#FFF4E5; color:#8a5300; font-size:13px; font-weight:600; text-align:center; padding:8px; border-bottom:1px solid var(--amber-line); }
+  .scroll { padding:12px 14px 16px; }
+
+  /* snippets */
+  .snip { width:393px; background:#fff; border-radius:18px; padding:14px; box-shadow:0 8px 24px rgba(0,0,0,.1); flex:none; }
+  .sl { font:600 11.5px/1 "DejaVu Sans Mono",monospace; color:#8a8a93; letter-spacing:.04em; margin:0 0 10px 2px; text-transform:uppercase; }
+  .held { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--l2); background:#F2F3F7; border-radius:12px; padding:10px 12px; }
+  .label { font-size:12.5px; font-weight:600; color:#8a5300; background:var(--amber); border:1px solid var(--amber-line); border-radius:8px; padding:4px 8px; display:inline-block; margin-bottom:6px; }
+</style>
+
+<h1>Automatic 项目：协调者呈上的确认卡与兜底卡</h1>
+<p class="lede">持有期间 owner 这边什么都没有。下面两张卡只在持有结束后才出现：协调者呈上，或者兜底交给 owner。界面文字是英文，批注是中文；任务、时间和协调者的话都是演示数据。规则见 <code>docs/owner-confirmation-review-contract.md</code> §13–§16。</p>
+
+<h2>① 协调者呈上（§13 A3）：结论和要你决定的点排在最前面</h2>
+<div class="row">
+  <div>
+    <span class="tag">WEB · 任务的会话</span>
+    <div class="web">
+      <div class="bar"><span class="dot"></span><b>Publish per-account runners as 0.1.251</b> · Waiting for your confirmation</div>
+      <div class="in">
+        <div class="card">
+          <div class="ch"><span class="seal">✓</span><span class="h">Confirm this task is done?</span></div>
+          <div class="prov">From Orbit</div>
+          <div class="ld1">Publish per-account runners as 0.1.251</div>
+          <div class="ld2">You decide when this is done</div>
+          <div class="qb">
+            <div class="qh">Coordinator · 15:12<span class="sha">5fbf2ba</span></div>
+            <div class="concl">Ready to confirm: the rollout is at 100% and every runner reported in. One decision is yours.</div>
+            <div class="point">
+              <div class="ask">Keep the 0.1.250 package available for one more day?</div>
+              <div class="opt on"><span class="r"></span><div><div class="a">Keep it for 24 hours<span class="rec">Recommended</span></div><div class="d">A runner that missed the rollout can still fetch it.</div></div></div>
+              <div class="opt"><span class="r"></span><div><div class="a">Remove it now</div><div class="d">Frees the slot; any straggler has to update first.</div></div></div>
+              <div class="opt"><span class="r"></span><div><div class="a">Other — say it in my own words</div></div></div>
+              <div class="sent">Your answers are sent with Confirm done.</div>
+            </div>
+            <div class="sum"><span>6 checked · 1 not checked · 0 left open</span><span>Show ⌄</span></div>
+          </div>
+          <div class="fold">What counts as done<span class="n">⌄</span></div>
+          <div class="fold">What the agent said · 14:54<span class="n">⌄</span></div>
+          <div class="fx"><div class="fh">If you confirm</div><div class="fa">Starts 2 tasks waiting on this one</div><div class="fb">F server, I1 server</div></div>
+          <div class="btns"><div class="b1">Confirm done</div><div class="b2">Chat about this</div></div>
+          <div class="hint">Your next message goes to this agent. The task stays open.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <span class="tag">IPHONE</span>
+    <div class="phone">
+      <div class="sb"><span>3:12</span><span class="mono">5G ▮</span></div>
+      <div class="nav"><div class="t">Publish per-account runners…</div><div class="s">Waiting for your confirmation · now</div></div>
+      <div class="banner">1 open question below</div>
+      <div class="scroll">
+        <div class="card">
+          <div class="ch"><span class="seal">✓</span><span class="h">Confirm this task is done?</span></div>
+          <div class="prov">From Orbit</div>
+          <div class="ld1">Publish per-account runners as 0.1.251</div>
+          <div class="qb">
+            <div class="qh">Coordinator · 15:12<span class="sha">5fbf2ba</span></div>
+            <div class="concl">Ready to confirm: the rollout is at 100% and every runner reported in. One decision is yours.</div>
+            <div class="point">
+              <div class="ask">Keep the 0.1.250 package available for one more day?</div>
+              <div class="opt on"><span class="r"></span><div><div class="a">Keep it for 24 hours<span class="rec">Recommended</span></div><div class="d">A runner that missed the rollout can still fetch it.</div></div></div>
+              <div class="opt"><span class="r"></span><div><div class="a">Remove it now</div></div></div>
+              <div class="opt"><span class="r"></span><div><div class="a">Other — say it in my own words</div></div></div>
+              <div class="sent">Your answers are sent with Confirm done.</div>
+            </div>
+            <div class="sum"><span>6 checked · 1 not checked</span><span>Show ⌄</span></div>
+          </div>
+          <div class="fold">What counts as done<span class="n">⌄</span></div>
+          <div class="fold">What the agent said · 14:54<span class="n">⌄</span></div>
+          <div class="fx"><div class="fh">If you confirm</div><div class="fa">Starts 2 tasks waiting on this one</div></div>
+          <div class="b1">Confirm done</div>
+          <div class="b2">Chat about this</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <h3>这张卡和今天的不同</h3>
+    <ol>
+      <li><b>开头块在最前面</b>：协调者的结论（<code>judgment</code> 原文），接着是它要你决定的点（<code>needsYou</code>），带选项和推荐项。</li>
+      <li>框上写明作者 <code>Coordinator</code>，这是它的话，不是 Orbit 的话。</li>
+      <li><b>执行会话的证据折叠着</b>：What counts as done、What the agent said，仍由 Orbit 从行里取，点开就看。</li>
+      <li><b>按钮不变</b>：只有你能按，不预选，不禁用。</li>
+      <li>呈上时手机响一次（§13 A6），正文只有 Orbit 的话，不带协调者写的字。</li>
+      <li>没有要决定的点时，开头块写 <code>Nothing else needs your decision.</code></li>
+    </ol>
+  </div>
+</div>
+
+<h2>② 兜底（§16）：协调者没接住，事项直接给你，并标明没审过</h2>
+<div class="row">
+  <div>
+    <span class="tag">WEB · 任务的会话</span>
+    <div class="web">
+      <div class="bar"><span class="dot"></span><b>Publish per-account runners as 0.1.251</b> · Waiting for your confirmation</div>
+      <div class="in">
+        <div class="card">
+          <div class="ch"><span class="seal">✓</span><span class="h">Confirm this task is done?</span></div>
+          <div class="prov">From Orbit</div>
+          <div class="ld1">Publish per-account runners as 0.1.251</div>
+          <div class="ld2">You decide when this is done</div>
+          <div class="fold">What counts as done<span class="n">⌄</span></div>
+          <div class="qb">
+            <div class="qh">What the agent said · 14:54</div>
+            <div class="qt">The rollout reached 100% and the per-account runners are published as 0.1.251.</div>
+            <div class="more">Show all ⌄</div>
+          </div>
+          <div class="qb nr">
+            <div class="qh">Coordinator</div>
+            <div class="nrt">Not reviewed by the coordinator</div>
+            <div class="nrs">No answer within 2 h. Only the agent that did the work has checked this.</div>
+          </div>
+          <div class="fx"><div class="fh">If you confirm</div><div class="fa">Starts 2 tasks waiting on this one</div><div class="fb">F server, I1 server</div></div>
+          <div class="btns"><div class="b1">Confirm done</div><div class="b2">Chat about this</div></div>
+          <div class="hint">Your next message goes to this agent. The task stays open.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <span class="tag">IPHONE</span>
+    <div class="phone">
+      <div class="sb"><span>5:02</span><span class="mono">5G ▮</span></div>
+      <div class="nav"><div class="t">Publish per-account runners…</div><div class="s">Waiting for your confirmation · now</div></div>
+      <div class="banner">1 open question below</div>
+      <div class="scroll">
+        <div class="card">
+          <div class="ch"><span class="seal">✓</span><span class="h">Confirm this task is done?</span></div>
+          <div class="prov">From Orbit</div>
+          <div class="ld1">Publish per-account runners as 0.1.251</div>
+          <div class="fold">What counts as done<span class="n">⌄</span></div>
+          <div class="qb">
+            <div class="qh">What the agent said · 14:54</div>
+            <div class="qt">The rollout reached 100% and the per-account runners are published as 0.1.251.</div>
+            <div class="more">Show all ⌄</div>
+          </div>
+          <div class="qb nr">
+            <div class="qh">Coordinator</div>
+            <div class="nrt">Not reviewed by the coordinator</div>
+            <div class="nrs">No answer within 2 h. Only the agent that did the work has checked this.</div>
+          </div>
+          <div class="fx"><div class="fh">If you confirm</div><div class="fa">Starts 2 tasks waiting on this one</div></div>
+          <div class="b1">Confirm done</div>
+          <div class="b2">Chat about this</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <h3>兜底卡</h3>
+    <ol>
+      <li>标签 <code>Not reviewed by the coordinator</code> 用琥珀色，比普通信息醒目。下一行写原因，全部是 Orbit 的话：
+        <ul>
+          <li>No answer within 2 h.</li>
+          <li>The coordinator’s session ended before it answered.</li>
+          <li>The coordinator stopped without answering.</li>
+          <li>This project has no coordinator conversation.</li>
+          <li>Automatic was switched off for this project.</li>
+          <li>This project’s coordinator is paused.</li>
+          <li>The coordinator could not be reached.</li>
+        </ul>
+      </li>
+      <li>这张卡沿用原有的顺序：执行会话的证据在前，因为没有协调者的判断可看。</li>
+      <li>兜底的确认卡不响手机，出现在 needs-you 里（§5 N6）。</li>
+      <li>之后协调者补交了记录，这张卡就地变成上面那张（§13 A7），不再响。</li>
+    </ol>
+  </div>
+</div>
+
+<h2>③ 同一套标签用在问题上（§14）</h2>
+<div class="row">
+  <div class="snip">
+    <div class="sl">持有中 · 执行会话页（只读，不计 needs-you）</div>
+    <div class="held">🕒 Asking the coordinator · since 14:57</div>
+    <div class="sl" style="margin-top:14px">协调者答过之后 · 转录里的问题记录</div>
+    <div class="held" style="display:block"><div style="font-weight:600;color:#111">Which region should the rollout start in?</div><div>Answered by the coordinator: eu-west</div></div>
+  </div>
+  <div class="snip">
+    <div class="sl">兜底 · 执行会话的问题卡</div>
+    <span class="label">Not reviewed by the coordinator</span>
+    <div style="font-size:13px;color:#6b4a13;margin-bottom:8px">The coordinator stopped without answering.</div>
+    <div style="font-size:15px;font-weight:600">Which region should the rollout start in?</div>
+    <div class="opt on"><span class="r"></span><div class="a">eu-west</div></div>
+    <div class="opt"><span class="r"></span><div class="a">us-east</div></div>
+    <div class="b1">Send</div>
+  </div>
+  <div class="notes" style="width:900px">
+    <h3>持有和兜底怎么读出来</h3>
+    <ul>
+      <li>工具权限审批不走这里，照旧直接到你面前（§18 U1）。</li>
+      <li>持有中的问题不亮、不响、没有飞书卡；协调者用 <code>session_reply</code> 回答，答案直接回到 run 卡着的那次工具调用。</li>
+      <li>协调者答不了时用 <code>ask_owner</code> 带上推荐项问你，你看到的是协调者的问题卡，不是这张。</li>
+      <li>notify 没有卡片；兜底时推送正文开头是 <code>Not reviewed by the coordinator · </code>。</li>
+      <li>持有和兜底都在读的时候算（§16 F1），没有新的定时任务。</li>
+    </ul>
+  </div>
+</div>
