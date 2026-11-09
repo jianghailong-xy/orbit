@@ -20,7 +20,7 @@ test('R4 migration, R10/M6 once-only ring across passes and replicas, R11 close,
   const ownerId = randomUUID();
   const now = new Date();
   try {
-    const migration = await sql.query(`SELECT migration_name FROM _prisma_migrations WHERE migration_name = '0504_run_item_requests' AND finished_at IS NOT NULL`);
+    const migration = await sql.query(`SELECT migration_name FROM _prisma_migrations WHERE migration_name = '0505_run_item_requests' AND finished_at IS NOT NULL`);
     assert.equal(migration.rowCount, 1, 'the R4 migration was applied by the spec harness');
     const constraints = await sql.query(`
       SELECT conname, convalidated FROM pg_constraint
