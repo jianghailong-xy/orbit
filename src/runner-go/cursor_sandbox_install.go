@@ -12,9 +12,8 @@ import (
 
 const cursorSandboxInstallTimeout = 2 * time.Minute
 
-// cursorEscapeAuthNotice says why Auto keeps asking where cursorEscapeAuthSupported is false. Cursor CLI
-// runs only on Linux and macOS (cursorArtifacts), so macOS is the one platform that reaches it.
-const cursorEscapeAuthNotice = "Cursor Auto asks about inline scripts on macOS because commands you approve cannot leave the command sandbox here yet."
+// cursorEscapeAuthNotice explains the fail-closed gate on unsupported platforms.
+const cursorEscapeAuthNotice = "Cursor Auto asks about inline scripts because this platform cannot authenticate commands leaving the command sandbox."
 
 // Only the installation outcome is process-wide; availability and writable roots
 // must be probed again for each session.
