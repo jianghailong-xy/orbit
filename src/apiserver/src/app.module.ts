@@ -18,6 +18,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { TaskListsModule } from './task-lists/task-lists.module';
 import { LinkPreviewsModule } from './link-previews/link-previews.module';
 import { WatchesModule } from './watches/watches.module';
+import { OwnerRequestsModule } from './owner-requests/owner-requests.module';
 import { ProjectsModule } from './projects/projects.module';
 import { RunnersModule } from './runners/runners.module';
 import { RunnerApiModule } from './runner-api/runner-api.module';
@@ -59,6 +60,7 @@ import { FeishuActionsModule } from './feishu/feishu-actions.module';
     TaskListsModule,
     LinkPreviewsModule,
     WatchesModule,
+    OwnerRequestsModule,
     ProjectsModule,
     RunnersModule,
     RunnerApiModule,

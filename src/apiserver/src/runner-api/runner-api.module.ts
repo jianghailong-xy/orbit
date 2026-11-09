@@ -21,6 +21,7 @@ import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
+import { RunnerOwnerRequestsController } from './runner-owner-requests.controller';
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
@@ -49,6 +50,7 @@ import { IntegrationJobRelay } from './integration-job-relay';
 import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
 import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
 import { WatchesModule } from '../watches/watches.module';
+import { OwnerRequestsModule } from '../owner-requests/owner-requests.module';
 import { WikiModule } from '../wiki/wiki.module';
 import { RunnerWikiController } from './runner-wiki.controller';
 import { AdminRoleGuard } from '../users/admin-role.guard';
@@ -75,6 +77,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     OutcomeReconcilerModule,
     // RunnerWatchesController reads and writes through the one WatchesService the user door uses.
     WatchesModule,
+    // RunnerOwnerRequestsController files through the one OwnerRequestsService the owner's door reads.
+    OwnerRequestsModule,
     // And RunnerWikiController through the one WikiService the user door writes with: one entry point
     // underneath both doors is what makes "there is one write path" true rather than intended.
     WikiModule,
@@ -105,6 +109,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerFilesController,
     RunnerProjectsController,
     RunnerWatchesController,
+    RunnerOwnerRequestsController,
     // Which runner release each runner is to run (runner-release.ts).
     RunnerReleaseController,
     RunnerWikiController,

@@ -694,6 +694,10 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
 
 /** Runner-gate routes the census cannot stand up, each with why and the reading that proves it. */
 export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  'GET /runner/owner-requests/:id':
+    'read by (id, the runner\'s owner) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
+  'POST /runner/owner-requests/:id/withdraw':
+    'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:66), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
   'POST /runner/tasks/:taskId/owner-confirmation':
     'refused 403 to every caller — the owner\'s own machine included — before the task or anything else is read: only '
     + 'the account owner confirms, through the app (task-owner-confirmation.service.ts:205 → '
@@ -1310,6 +1314,19 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── owner requests (0503) ─────────────────────────────────────────────────────────────────────────
+  'POST /runner/owner-requests body blocksTaskIds[]':
+    'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',
+  'POST /runner/owner-requests body secretSpec.runnerId':
+    'counted among the runner owner\'s own runners before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:136); owner-requests.pg.spec.ts (f) sends another account\'s',
+  'POST /runner/owner-requests body clientRequestId':
+    'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts:169); it names nothing of anybody else\'s',
+  'POST /runner/owner-requests body projectId':
+    'counted among the runner owner\'s own projects before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:132); owner-requests.pg.spec.ts (f) sends another account\'s',
+  'POST /runner/owner-requests header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66); owner-requests.pg.spec.ts (f) sends another account\'s',
+  'POST /runner/owner-requests/:id/withdraw header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:66), and must be the session that filed the request (owner-requests/owner-requests.service.ts:233)',
   // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
   'POST /runner/wiki/spaces/:id/import-jobs body id':
     'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '

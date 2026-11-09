@@ -2862,7 +2862,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // tries, then validates both CHECKs. Neither is a preserved relation, no column any preserved trigger reads is
       // touched, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
       // fence. No INSERT, UPDATE or DELETE: every stored turn and session reads NULL in all five.
-      '0502_conversation_turn_external_sender'],
+      '0502_conversation_turn_external_sender',
+      // 0503 is one new table, `owner_request` (an agent session asking the account owner to act: a decision, a secret,
+      // a manual step or a confirmation), with its primary key, a unique index on (asked_by_session_id,
+      // client_request_id), an index on (owner_id, state, created_at), a partial index on expires_at, four CHECKs and a
+      // foreign key to `user` (ON DELETE CASCADE). It is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: the table starts empty.
+      '0503_owner_request'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
