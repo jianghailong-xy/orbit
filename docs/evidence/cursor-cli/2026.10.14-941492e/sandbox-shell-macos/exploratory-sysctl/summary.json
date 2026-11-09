@@ -1,0 +1,345 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": [
+    {
+      "input": {
+        "command": "python3 -c 'print(424242)'"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_2>-2\nfc_<UUID_3>_2",
+      "withdrawn": false
+    }
+  ],
+  "checks": null,
+  "completions": [
+    {
+      "error": "",
+      "result": "Running the three Shell commands as separate foreground calls.\n\nAll three finished:\n\n- `ls` → `README.md`\n- `touch auto-allowed.txt` → ok\n- `python3 -c 'print(424242)'` → `424242`",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    },
+    {
+      "error": "",
+      "result": "Starting the background sleep, then running the foreground printf.\n\nBackground `sleep 4; printf background` started; `printf foreground` printed `foreground`.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-2"
+    },
+    {
+      "error": "",
+      "result": "Both background Shell calls started: `sleep 3; printf concurrent-A` and `sleep 3; printf concurrent-B`.\n\nThe background command finished successfully and printed `background`.\n\nBoth concurrent background commands finished successfully: one printed `concurrent-A`, the other `concurrent-B`.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-3"
+    },
+    {
+      "error": "",
+      "result": "Both duplicate background Shell calls started with `sleep 3; printf identical`.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-4"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "notice": "Cursor Auto asks for approval for inline scripts because the command sandbox is unavailable: Cursor sandbox writable root is unavailable: lstat /private<RUN>/home/.orbit/caches: no such file or directory",
+        "noticeKind": "cursor-sandbox-unavailable",
+        "provider": "cursor"
+      },
+      "turn": "turn-1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "ls"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-1\nfc_<UUID_3>_1",
+        "input": {
+          "command": "touch auto-allowed.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-2\nfc_<UUID_3>_2",
+        "input": {
+          "command": "python3 -c 'print(424242)'"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_2>-1\nfc_<UUID_3>_1"
+      },
+      "turn": "turn-1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-1\nfc_<UUID_3>_1"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "content": "README.md",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "content": "424242",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-2\nfc_<UUID_3>_2"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-3\nfc_<UUID_5>_0",
+        "input": {
+          "command": "sleep 4; printf background"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-2",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_4>-3\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-2",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_4>-3\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-2",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-4\nfc_<UUID_5>_1",
+        "input": {
+          "command": "printf foreground"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-2",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_4>-4\nfc_<UUID_5>_1"
+      },
+      "turn": "turn-2",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "foreground",
+        "isError": false,
+        "toolUseId": "call-<UUID_4>-4\nfc_<UUID_5>_1"
+      },
+      "turn": "turn-2",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_6>-5\nfc_<UUID_7>_0",
+        "input": {
+          "command": "sleep 3; printf concurrent-A"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-3",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_6>-5\nfc_<UUID_7>_0"
+      },
+      "turn": "turn-3",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_6>-5\nfc_<UUID_7>_0"
+      },
+      "turn": "turn-3",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_6>-6\nfc_<UUID_7>_1",
+        "input": {
+          "command": "sleep 3; printf concurrent-B"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-3",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_6>-6\nfc_<UUID_7>_1"
+      },
+      "turn": "turn-3",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_6>-6\nfc_<UUID_7>_1"
+      },
+      "turn": "turn-3",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_8>-7\nfc_<UUID_9>_0",
+        "input": {
+          "command": "sleep 3; printf identical"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-4",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_8>-7\nfc_<UUID_9>_0"
+      },
+      "turn": "turn-4",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_8>-7\nfc_<UUID_9>_0"
+      },
+      "turn": "turn-4",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_8>-8\nfc_<UUID_9>_1",
+        "input": {
+          "command": "sleep 3; printf identical"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-4",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_8>-8\nfc_<UUID_9>_1"
+      },
+      "turn": "turn-4",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_8>-8\nfc_<UUID_9>_1"
+      },
+      "turn": "turn-4",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "approval_source": "Controlled harness returns ALLOWED through the runner card path; not a human UI click.",
+    "kernel": "macOS; real pinned CLI; temporary shell instrumentation only"
+  },
+  "mode": "auto",
+  "process": "process",
+  "processes": null,
+  "prompts": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "scenario": "sandbox-shell-macos",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

@@ -1,4 +1,4 @@
-//go:build cursor_real && linux
+//go:build cursor_real && (linux || darwin)
 
 package main
 
