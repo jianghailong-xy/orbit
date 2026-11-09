@@ -25,6 +25,15 @@ var cursorShellCLIDir = filepath.Dir
 // Kept byte-for-byte: an unknown loader never gets an escape grant.
 const cursorCommandLoader = `IFS= builtin read -r -d '' __cursor_command <&5 2>/dev/null || { builtin printf '%s\n' 'The command did not run: a shell startup file ($BASH_ENV or .zshenv) closed or replaced file descriptor 5, which carries the command. Run it again; this shell now passes commands as arguments.' >&2; builtin exit 126; }; exec 5<&-; builtin set -- "$__cursor_command"; builtin unset __cursor_command; snap=$(command cat <&3) && builtin shopt -s extglob && builtin eval -- "$snap" && { builtin set +u 2>/dev/null || true; builtin eval "${__CURSOR_SANDBOX_ENV_RESTORE:-}" 2>/dev/null; builtin eval "${__CURSOR_SANDBOX_TEMP_RESTORE:-}" 2>/dev/null; builtin export PWD="$(builtin pwd)"; builtin shopt -s expand_aliases 2>/dev/null; builtin eval "$1" < /dev/null; }; COMMAND_EXIT_CODE=$?; dump_bash_state >&4; builtin exit $COMMAND_EXIT_CODE`
 
+// cursorEscapeAuthPlatform is what cursorEscapeAuthSupported reads; only tests move it.
+var cursorEscapeAuthPlatform = runtime.GOOS
+
+// cursorEscapeAuthSupported says whether this platform can authenticate the grant broker's caller from
+// the kernel (cursorShellPeer, §8.5). It is the one check that decides whether Auto's sandbox is in force
+// and whether an approved command may leave it: a sandbox an approved command cannot escape would break
+// every approved write outside the workspace, so without this the session keeps the unsandboxed shell.
+func cursorEscapeAuthSupported() bool { return cursorEscapeAuthPlatform == "linux" }
+
 type cursorShellConfig struct {
 	Binary, Platform, Socket, Helper string
 	Roots, Sealed, Hidden            []string
@@ -146,7 +155,7 @@ func (b *cursorGrantBroker) serve() {
 }
 
 func prepareCursorShellSandbox(job *ClaimedSession, spec *CursorLaunchSpec, dir string) error {
-	if job.Agent.PermissionMode != "auto" {
+	if job.Agent.PermissionMode != "auto" || !cursorEscapeAuthSupported() {
 		return nil
 	}
 	sandbox, _ := detectCursorSandbox(context.Background(), job, spec.Cwd)
@@ -263,9 +272,9 @@ func runCursorShell(configPath string, args []string) int {
 			}
 			_ = conn.Close()
 		}
-		// Only Linux has a verified peer/process authentication backend. Refuse
-		// escapes on other platforms even if a substituted broker answers true.
-		if allowed && runtime.GOOS == "linux" {
+		// Refuse escapes without a verified peer/process authentication backend,
+		// even if a substituted broker answers true.
+		if allowed && cursorEscapeAuthSupported() {
 			return runCursorFreshCommand(key.Command, cwd)
 		}
 	}
