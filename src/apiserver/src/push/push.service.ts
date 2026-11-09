@@ -12,6 +12,7 @@ import { openItemsNoLongerOwed } from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
+import { ownerRequestAlert, type OwnerRequestKind } from '../owner-requests/owner-request';
 import { settleAlert } from './settle-alert';
 import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
@@ -80,6 +81,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'engine-signed-out': 'Engine signed out',
   'claude-region-blocked': 'Claude is not available on this runner',
   'confirmation-problems': 'Problems found after you confirmed',
+  'owner-request': 'Request for you',
   'watch-matched': 'Watch matched',
   'loop-missed': 'Wakeup loop missed',
   'wakeup-dropped': 'Scheduled wakeup dropped',
@@ -731,6 +733,44 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', `owner-item-${itemId}`);
     } catch (err) {
       this.log.warn(`owner item notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * A session filed an owner request (`OwnerRequestsService.file`). Sent once, after the row commits,
+   * and only while it is still PENDING. The banner is the kind ("Decision needed") over the request's
+   * own title, cut to a lock-screen line; collapsed on the request, so a replay never stacks a second
+   * one. The tap opens the session that asked. Best-effort: a failure is logged, never thrown.
+   */
+  async notifyOwnerRequest(requestId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const request = await this.prisma.ownerRequest.findUnique({
+        where: { id: requestId },
+        select: { kind: true, state: true, title: true, ownerId: true, askedBySessionId: true, projectId: true },
+      });
+      if (!request || request.state !== 'PENDING') return;
+      const { tokens, feishu } = await this.channels(request.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = ownerRequestAlert(request.kind as OwnerRequestKind, request.title);
+      const body = JSON.stringify({
+        aps: {
+          alert,
+          sound: 'default',
+          'thread-id': `owner-request-${request.askedBySessionId}`,
+        },
+        kind: 'owner-request',
+        sessionID: request.askedBySessionId,
+        ...(request.projectId ? { projectID: request.projectId } : {}),
+        ownerRequestID: requestId,
+      });
+      this.background(this.feishuOther(feishu, {
+        kind: 'owner-request', ...alert, collapseId: `owner-request-${requestId}`,
+        sessionId: request.askedBySessionId, projectId: request.projectId,
+      }));
+      await this.deliver(tokens, body, 'alert', '10', `owner-request-${requestId}`);
+    } catch (err) {
+      this.log.warn(`owner request notify failed: ${(err as Error).message}`);
     }
   }
 
