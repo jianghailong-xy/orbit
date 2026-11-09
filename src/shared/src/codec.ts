@@ -452,6 +452,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // response bodies, so they follow the same rule (see the `@IsPublicId({ each: true })` DTOs).
   'tagIds',
   'taskIds',
+  // `owner_request.blocks_task_ids` (0503): the tasks an owner request blocks — task addresses like `taskIds`.
+  'blocksTaskIds',
   'dependsOnTaskIds',
   'anchorTaskId',
   'attachmentIds',

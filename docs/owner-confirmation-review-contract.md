@@ -1,10 +1,10 @@
 # 确认卡的审查：审查方、先审后呈与审查记录（契约）
 
-**状态**：草案，待 owner 在 app 里确认（任务 `34Z35urx0kEB2qZaLeikc`，项目 `34Z2usxH1u0wBMagUPqlM`「确认卡：审查意见、确认后果与少打扰」）。确认后冻结为 v1。服务端（任务 `34Z35uusJWkeA99O23btE`）与三端（任务 `34Z35v1nS4l48MjxDIDXX`）都按本文实现，不另造表、状态、错误码或界面用词。实现中要偏离本文，先改本文、在附录 B 写修订记录，再改代码。
+**状态**：草案，待 owner 在 app 里确认（任务 `34Z35urx0kEB2qZaLeikc`，项目 `34Z2usxH1u0wBMagUPqlM`「确认卡：审查意见、确认后果与少打扰」）。**修订 3**（任务 `34ugU32krhXotXkNdcR90`，项目 `34ugEgaBTN55G7DKcU8jD`，待 owner 在 app 里确认）把 Automatic 项目从「卡片立刻显示、多一栏审查」改成「先持有、再呈上」，并把执行会话的提问和 `notify` 一起纳入：见 §13–§19。确认后冻结为 v1。服务端（任务 `34Z35uusJWkeA99O23btE`）与三端（任务 `34Z35v1nS4l48MjxDIDXX`）都按本文实现，不另造表、状态、错误码或界面用词。实现中要偏离本文，先改本文、在附录 B 写修订记录，再改代码。
 
 **依据**：效果图 `docs/mocks/owner-confirmation-review-ios.html` 第③④台手机与第二排（整页截图 `owner-confirmation-review-ios.png`，第④台单独一张 `owner-confirmation-review-ios-4.png`），以及项目说明里写好的默认决定：首行用方案 B；超时在项目内沿用 `exceptionEscalationSeconds`、项目外 30 分钟；审查方可以退回，这项新权限由 owner 批准。
 
-**范围**：只管 OWNER_CONFIRMED 任务确认卡上新加的「审查方先审」这一步。
+**范围**：OWNER_CONFIRMED 任务确认卡上的「审查方先审」，以及 Automatic 项目里执行会话走向 owner 的三条路：确认请求（§0.1、§13）、提问（§14）、`notify`（§15）。工具权限审批不在范围内，照旧直达 owner（§18 U1）。
 - 卡片上的「If you confirm」、以及报告改取声明完成那一轮，归任务 `34Z35udELdL3GuuzpZJDQ` / `34Z35ujH0aejOiDNxcONf`。本文只规定审查栏夹在它们之间（§6 H1）。
 - 「机器能验的工作由审查方结案」（B 线，任务 `34Z35v5J1Oftbjf8vazKr`）不在本文范围内。本文不给审查方任何结案的权力（§10 G9）。
 
@@ -16,14 +16,20 @@
 
 ### 0.1 一句话
 
-执行会话声明完成并停下时，Orbit 记下确认请求，同时把它交给审查方。审查期间卡片照常显示、按钮照常能按，只是不计入 needs-you。审查方交回一份署名的结构化记录，或者把请求退回执行会话。卡片的首行由 Orbit 从记录的条目推出。能按确认的仍然只有 owner。
+执行会话声明完成并停下时，Orbit 记下确认请求，同时把它交给审查方。之后按审查方是谁分两种：
+
+- **Automatic 项目（审查方是项目协调会话）：先持有，再呈上。** 协调会话持有期间，owner 这边什么都没有：没有卡片、不计 needs-you、不推送、没有飞书卡。协调会话三选一：呈上（`task_confirmation_review`，它的结论和要 owner 决定的点成为卡片的开头）、退回执行会话（`task_confirmation_return`），或者不作为，由 §16 的兜底把卡片交给 owner，并标明 `Not reviewed by the coordinator`。持有判定在读的时候算，不加定时任务。
+- **项目外（审查方是派活的会话）：与修订 3 之前相同。** 审查期间卡片照常显示、按钮照常能按，只是不计入 needs-you。
+
+能按确认的仍然只有 owner。
 
 ### 0.2 不变的事
 
 - **G1 只有 owner 能确认。** 决定「谁能确认」的三处一个字不改：`task-owner-confirmation.ts#ownerConfirmationPrincipalRefusal`；`task_owner_decision` 的 CHECK（`decided_by_type = 'USER' AND decided_by_id = owner_id`）；0267 在 DONE fence 里那条 lane。审查相关的表不进 fence，`evaluateTaskCompletion` 不读它们。同一个文件里要改的只有两处，见 G2。
-- **G2 审查不锁门。** 审查中、未经审查、已过期这几种状态下，Confirm done 和 Chat about this 都照常可按：不预选，不禁用，不改顺序。审查对确认门只改两处：
+- **G2 持有挡的是呈现，不是门。** Automatic 项目里，协调会话持有期间卡片不呈现（§13 A2），这是唯一的变化：确认门照常受理 owner 的决定，任务面板上的 Confirm done 也照常可用（§13 A4），agent 写的任何东西都拦不住 owner 确认。项目外的审查不隐藏卡片。卡片一旦呈现，在审查中（仅项目外）、已审、未经审查、已过期这几种状态下，Confirm done 和 Chat about this 都照常可按：不预选，不禁用，不改顺序。审查对确认门只改三处：
   1. 当前那份审查里有「要你判断」的条目时，认识审查的客户端要带上逐条答案（§7）。答案由 owner 自己填，默认项已经选好，所以随时可以一按就确认；不认识审查的旧客户端照旧受理，不会因为审查被拒。
   2. 被审查方退回的请求，视同已被回答（§8 B3）。
+  3. 持有期间在任务面板上确认（`requestId` 为空）视同回答被持有的那份请求（§13 A4）。
   
   agent 写的任何东西都拦不住 owner 确认。
 - **G3 读时推导，不加定时任务。** 状态由已提交的行和读的时刻算出，做法照 `pending-evidence-judgments.ts#coordinatorHolds`。不加 `setInterval`、worker、sweep，也不在启动时扫描。本文所有写入都挂在已提交的事实上：`turnComplete`、工具调用、owner 按键，以及审查方会话结束的那条语句（§3.1 的触发器）。时钟只在读里出现一次，即比较 `now >= due_at`。
@@ -42,6 +48,9 @@
 | 窗口 | 审查方先审的时长，`due_at = requested_at + window_seconds` |
 | 审查栏 | 卡片上画审查的那一块，即效果图里的 REVIEW 框 |
 | 首行 | 审查栏里由 Orbit 从条目推出的那一行（方案 B） |
+| 持有 | 审查方是项目协调会话、审查状态是 `UNDER_REVIEW` 的请求（§13 A1）；提问与 `notify` 的同类状态见 §14、§15。持有期间 owner 什么都看不到 |
+| 呈上 | 协调会话交回 REVIEW 记录，让持有结束、卡片出现（§13 A3） |
+| 兜底 | 持有因为没有协调者、协调者结束或超时而结束，事项直接交给 owner，并标明未经协调者审查（§16） |
 
 ### 0.4 与效果图的不同
 
@@ -53,7 +62,7 @@
 
 ### 0.5 条款编号
 
-各节前缀：S 审查方、D 投递、C 审查记录、T 状态、N needs-you 与超时、H 审查栏与首行、Q 要你判断、B 退回、L 后到的审查、G 与现有规则的关系、I 实现切分。实现任务在 spec 和评论里引用条款号。
+各节前缀：S 审查方、D 投递、C 审查记录、T 状态、N needs-you 与超时、H 审查栏与首行、Q 要你判断、B 退回、L 后到的审查、G 与现有规则的关系、I 实现切分；修订 3 新增 A 持有与呈上、R 提问、M notify、F 兜底、W 简报与工具描述、U 不变的情况、O 待 owner 定的问题。实现任务在 spec 和评论里引用条款号。
 
 ---
 
@@ -63,12 +72,12 @@
 
 **S2（解析顺序）**：在同一事务里读请求所属任务的行，依次判断：
 
-1. `task.creator_session_id` 为空：**没有审查方**，不写审查行，项目内外都一样。owner 在 app 里建的任务就是这一种：用户 API（`TasksController.create`）从不写这一列。不在会话里建的任务（用不带会话头的 CLI 建的）、建它的会话后来被删掉的任务（外键 SET NULL），也都是这一种：没有可以请来审的会话。
-   
-   不按 `creator_type` 判断。runner 门在请求不带 `X-Orbit-Agent-Id` 时也会记成 `USER`，在会话里建的任务可能因此带着会话却记成 `USER`；`creator_session_id` 才是「有没有派活的会话」本身。
-2. 任务在项目里（`task.project_id` 非空）时：
+1. 任务在项目里（`task.project_id` 非空）时：
    - `project.coordinator_enabled = false`：**没有审查方**，不写审查行。先例是证据投给协调者：`CompletionEvidenceProducer` 只在 Automatic 开着时投递，`coordinatorHolds` 在开关关掉时把卡片还给 owner。开关关着，就由 owner 自己审。
-   - 否则审查方是**项目的协调会话**：`reviewer_kind = 'PROJECT_COORDINATOR'`，`reviewer_session_id = project.coordinator_session_id`，这个值可能为空（见 S4）。
+   - 否则审查方是**项目的协调会话**：`reviewer_kind = 'PROJECT_COORDINATOR'`，`reviewer_session_id = project.coordinator_session_id`，这个值可能为空（见 S4）。**任务是谁建的不影响这一条**（修订 3）：Automatic 项目里 owner 在 app 里建的任务，也由协调会话持有。今天的 `resolveReviewer` 先判 `creator_session_id` 为空就返回，这样的任务会绕过协调者，I1 要把这条判断挪到项目分支之后。
+2. 任务不在项目里且 `task.creator_session_id` 为空：**没有审查方**，不写审查行。owner 在 app 里建的任务（用户 API `TasksController.create` 从不写这一列）、用不带会话头的 CLI 建的任务、建它的会话后来被删掉的任务（外键 SET NULL）都是这一种：没有可以请来审的会话。
+
+   不按 `creator_type` 判断。runner 门在请求不带 `X-Orbit-Agent-Id` 时也会记成 `USER`，在会话里建的任务可能因此带着会话却记成 `USER`；`creator_session_id` 才是「有没有派活的会话」本身。
 3. 任务不在项目里时，审查方是**派活的会话**：`reviewer_kind = 'TASK_CREATOR'`，`reviewer_session_id = task.creator_session_id`。
 
 **S3（审查方不能是执行会话）**：执行会话是为这个任务开的会话（`session.task_id = task.id`）。建任务的会话在任务出现之前就已存在，跑的是别的任务或者不跑任务，所以它不可能是执行会话。协调会话也不跑任务。本文仍把这一点写成规则：解析出的会话如果 `task_id = task.id`，投递以 `REVIEWER_IS_THE_RUN` 被拒（§2 D4）。判定条件与 `task-evidence-decision.ts#decidingSessionDisqualification` 的第一条相同。
@@ -76,8 +85,11 @@
 **S4（找不到审查方，或审查方已结束）**：审查行照写，状态直接就是「未经审查」（§4）。
 - Automatic 项目没有协调会话（`reviewer_session_id` 为空）：D1 直接写 `delivery = 'REFUSED'`、拒绝码 `NO_COORDINATOR`，不做 D2。
 - 审查方会话已结束（`sessionHasEnded`，与 `coordinator-delivery.service.ts#bindQueuedDelivery` 用同一个判定）：由 D2 以 `REVIEWER_ENDED` 拒绝。之后审查方的会话行如果被删掉，T1 读不到它，也按「已结束」处理。
+- 审查方是 `PROJECT_COORDINATOR` 时，「已结束」改用 `conversationIsOver`，暂停的协调会话不算结束（§16 F3）。
 
-**S5（审查方的名字）**：卡片和列表上显示审查方会话**当前**的标题，读的时候取。会话行已删除、取不到标题时，客户端写 `Reviewer`。
+**S5（审查方的名字）**：项目外，卡片和列表上显示审查方会话**当前**的标题，读的时候取；会话行已删除、取不到标题时，客户端写 `Reviewer`。`PROJECT_COORDINATOR` 一律写 `Coordinator`，不取会话标题：协调会话的标题常常就是项目标题，放在署名位置读不出是谁。
+
+**S6（审查方是协调会话时，审查就是持有）**：`PROJECT_COORDINATOR` 的审查行同时是 §13 的持有记录，不另建表。它的 `UNDER_REVIEW` 读作持有，`REVIEWED` 读作已呈上，`RETURNED` 读作退回，`NOT_REVIEWED` 读作兜底。`TASK_CREATOR` 的语义不变。
 
 ---
 
@@ -111,6 +123,7 @@ SessionsService.createTurn(ownerId, reviewerSessionId,
   6. 仅 `PROJECT_COORDINATOR`：项目没有进行中的暂停段（`project-fuse.ts#openFuseEpisodeId`），否则 `COORDINATOR_PAUSED`。
   
   全部成立，就把审查行改成 `DELIVERED`，写上 `delivery_turn_client_id` 和 `delivered_at`。
+- `PROJECT_COORDINATOR` 且协调会话暂停时（`conversationIsPaused`）：不算拒绝，这一行留在 `PENDING`，等它回来后由 D5 投递（§16 F3）。第 6 条的 `COORDINATOR_PAUSED` 指项目熔断，不是这种暂停。
 - 拒绝码怎么写下：钩子抛一个带码的类型化错误（新类 `ReviewDeliveryRefused`，继承 `ConflictException`，带 `refusalCode`），这一轮随 `createTurn` 的事务回滚。`deliver` 接住它，在回滚之后另用一条条件更新写 `delivery = 'REFUSED', delivery_refusal = <码> WHERE delivery = 'PENDING'`。`createTurn` 自己的普通拒绝（Not Found / Conflict / Forbidden / Bad Request）一律记 `SESSION_UNAVAILABLE`，与 `CoordinatorDeliveryService.enqueue` 把它们折成一个码是同一个道理。`enqueue` 并不区分钩子里的各种拒绝，所以分码要靠这个新错误类。
 - owner 已经**确认**了这份请求，也照样投递：后到的审查正是 §9 的安全网。
 - 审查方本身可能是另一个 OWNER_CONFIRMED 任务的执行会话（它在执行时派了这个活）。排队的审查轮次会让它晚一点停下（`runStoppedWorking`），它自己那张确认卡也随之晚到。它的卡片报告取的是声明那一轮的最后一条消息（「If you confirm」任务的改动，见 §11.3），不会变成审查时的对话。
@@ -122,10 +135,11 @@ SessionsService.createTurn(ownerId, reviewerSessionId,
 - 一份请求至多一行审查行（`request_id` 唯一）。
 - `delivery` 只从 `PENDING` 变一次，变成 `DELIVERED` 或 `REFUSED`（条件更新）。
 - 这一轮的键由审查行 id 派生。`createTurn` 遇到同键、同内容只会重放，不会写第二条。
+- D5 的重投不改 `delivery`，只把 `delivery_turn_client_id` 指向新轮次。
 - **被拒就是终局。** `REFUSED` 写下拒绝码，状态立刻变成「未经审查」，卡片交给 owner。不释放、不重投，也不改投给后来的协调会话：审查有时限，重投只会让 owner 的卡片等得更久。
 - 故障（即上面这些普通拒绝之外的异常）照样抛出。这一行留在 `PENDING`，由 D5 补投。
 
-**D5（补偿点）**：进程可能死在事务提交和 D2 之间（ILC G2）。补偿点是：审查方会话每一次 `turnComplete` 提交之后，对 `reviewer_session_id` 是它、仍为 `PENDING` 的审查行逐个调 `deliver`。如果审查方一直没有轮次结束，这一行就停在 `PENDING`，读作「审查中」，到 `due_at` 时按「未经审查」交给 owner（§4）。最坏情况是 owner 多等一个窗口，卡片不会卡死。
+**D5（补偿点）**：进程可能死在事务提交和 D2 之间（ILC G2）。补偿点是：审查方会话每一次 `turnComplete` 提交之后，对 `reviewer_session_id` 是它、仍为 `PENDING` 的审查行逐个调 `deliver`。如果审查方一直没有轮次结束，这一行就停在 `PENDING`，读作「审查中」，到 `due_at` 时按「未经审查」交给 owner（§4）。最坏情况是 owner 多等一个窗口，卡片不会卡死。同一个补偿点还负责重投（§16 F3）：`PROJECT_COORDINATOR`、`delivery = 'DELIVERED'`、没有记录、投递轮次没被读到就被收掉（T1 的同一判定）、协调会话没有结束的行，用 `owner-confirmation-review:v1:<reviewId>:retry:<uuid>` 重投。重投的 `onTurnWritten` 里做条件更新 `SET delivery_turn_client_id = <新键>, delivered_at = now() WHERE id = … AND delivery = 'DELIVERED' AND delivery_turn_client_id = <旧键>`，没命中就抛错，这一轮回滚，所以并发时只有一条。不加新的调用点。
 
 **D6（审查方看到什么）**：inbox 交出轮次的地方（`runner-api.controller.ts`，`appendSessionRepliesContext` 旁边），遇到 `owner-confirmation-review:v1:` 前缀的轮次时调 `appendOwnerConfirmationReviewContext`，把审查块写进去，并记成控制面注记（`control-plane-note.ts`）。
 - 这一步不是 best-effort：这一块就是这一轮的全部内容，失败就回滚领取，轮次留在队列里。
@@ -138,6 +152,9 @@ SessionsService.createTurn(ownerId, reviewerSessionId,
 A run of the task “<title>” declared its work finished and is waiting for the account owner to
 confirm it (OWNER_CONFIRMED). You are its reviewer. Until due-at the owner is not asked; after that,
 or as soon as you record a review, the owner's card asks them.
+[PROJECT_COORDINATOR only, replacing the last sentence:] The owner sees nothing while you hold this.
+Recording a review raises it: your judgment leads the owner's card, followed by what you put in
+needsYou. If you do neither by due-at, Orbit asks the owner directly and says you did not review it.
 
 What settles it (the task's acceptance criteria, first 2000 characters): …
 What the run reported (the report the owner's card shows, first 2000 characters): …
@@ -146,7 +163,8 @@ Check the work on <branch> at <sha>. Then do exactly one of:
 - task_confirmation_review: record what you checked, what you could not check and why, what only
   the owner can decide (each with options and the one you recommend), and what is left open, each
   line with the evidence it rests on. Orbit writes the card's first line from these lists; your
-  one-sentence judgment is shown last, quoted.
+  one-sentence judgment is shown last, quoted. [PROJECT_COORDINATOR only: your judgment is the
+  card's lead, so write the conclusion the owner should read first.]
 - task_confirmation_return: send it back to the run with the reason, when something must change
   before the owner looks. The reason becomes the run's next message; the owner is not asked.
 You cannot confirm or send back for the owner. If you end your turn without doing either and nothing
@@ -462,7 +480,7 @@ export interface OwnerConfirmationAnswer {
 | 7 | 字段合法：长度和个数符合 §3.4；`whyNotProven` / `coordinatorChecked` 只出现在 notChecked；`options` / `recommendedOption` 只出现在 needsYou；请求有 `branch_sha` 时 `reviewedSha` 必填，且为 40 位小写十六进制；请求没有 `branch_sha` 时 `reviewedSha` 必须不给 | 400 |
 | 8 | owner 已经对这份请求做了决定时，`needsYou` 必须为空 | 400 `CONFIRMATION_REVIEW_NEEDS_YOU_AFTER_DECISION`，requiredAction `RETURN_IT_IF_SOMETHING_MUST_CHANGE` |
 
-项目在审查期间关掉了 Automatic，审查方照样可以交记录：开关只管新请求有没有审查方（S2）和退回（§8 B5），已经开始的审查照常走完（T1）。
+项目在审查期间关掉了 Automatic，审查方照样可以交记录：开关只管新请求有没有审查方（S2）和退回（§8 B5）。卡片这一侧，持有立即结束、按兜底显示（§16 F2）；协调者之后补交的记录按 §13 A7 处理。
 
 - 全部通过后，在任务行锁（rank 50）下插入 REVIEW 记录，`recorded_at` 取拿锁后的 `clock_timestamp()`。`reviewed_sha` 照收，不要求等于请求或分支当前的提交；不相等就是 §4 的「已过期」。
 - 提交后发 `TASK_CHANGED`（该任务）和 `publishSessionUpdated(执行会话)`，让卡片和列表行重读。
@@ -487,10 +505,12 @@ export interface OwnerConfirmationAnswer {
 | 4 | `NOT_REVIEWED` 未经审查 | 满足下列任一：`delivery = 'REFUSED'`；`reviewer_ended_at` 不为空，或审查方的会话行已不存在（§3.1 的触发器）；`abandoned_at` 不为空（T5）；已投递的那一轮没被 engine 读到就被收掉了，即按 `(reviewer_session_id, delivery_turn_client_id)` 在 `conversation_turn` 里找不到它（打断、撤回会删掉它），或者它是 `ANSWERED` 而 `delivered_at` 为空（失败时的排空、`transitionEnd`、打断受保护目标时会这样收掉它）；`now >= due_at` |
 | 5 | `UNDER_REVIEW` 审查中 | 其余情况，包括 `PENDING` 和 `DELIVERED` |
 
-第 4 行的每一个条件都只增不减：一旦成立，以后的任何写入都不会让它再不成立。所以一份请求一旦变成「未经审查」，就不会退回「审查中」、再从 needs-you 里消失。能把它变走的只有审查方补交的记录（第 1–3 行）。项目在审查期间关掉 Automatic，不算这里的条件：已经开始的审查照常走完（§3.5 末段）。
+第 4 行的每一个条件都只增不减：一旦成立，以后的任何写入都不会让它再不成立。所以一份请求一旦变成「未经审查」，就不会退回「审查中」、再从 needs-you 里消失。能把它变走的只有审查方补交的记录（第 1–3 行）。
+
+**以上是 `TASK_CREATOR` 的读法。`PROJECT_COORDINATOR` 的第 4 行按 §16 F2 读**，有三处不同：不读 `reviewer_ended_at`，协调会话是否结束读 `conversationIsOver`，暂停不算结束；Automatic 被关掉立即兜底；投递轮次没被读到时看协调会话是否暂停。第 1–3 行不变，有记录时不进第 4 行。owner 自己把 Automatic 重新打开或恢复协调会话时，持有可能恢复；这是 owner 的动作，不是系统的反复。
 
 **T2（未经审查的原因）**：`notReviewedReason` 按下面的顺序，取第一个成立的：
-1. 投递被拒（`REFUSED`），按拒绝码映射：`NO_COORDINATOR`、`REVIEWER_ENDED`、`AUTOMATIC_OFF`、`COORDINATOR_PAUSED` 原样保留；`REVIEWER_IS_THE_RUN`、`SESSION_UNAVAILABLE`、`SUPERSEDED`、`SENT_BACK` 记为 `UNREACHABLE`。其中 `SUPERSEDED` 和 `SENT_BACK` 两种请求已经不在 owner 面前，不会被画出来。`AUTOMATIC_OFF` 与 `COORDINATOR_PAUSED` 只会来自投递那一刻（D2 第 5、6 条）。
+1. 投递被拒（`REFUSED`），按拒绝码映射：`NO_COORDINATOR`、`REVIEWER_ENDED`、`AUTOMATIC_OFF`、`COORDINATOR_PAUSED` 原样保留；`REVIEWER_IS_THE_RUN`、`SESSION_UNAVAILABLE`、`SUPERSEDED`、`SENT_BACK` 记为 `UNREACHABLE`。其中 `SUPERSEDED` 和 `SENT_BACK` 两种请求已经不在 owner 面前，不会被画出来。`COORDINATOR_PAUSED` 只会来自投递那一刻（D2 第 6 条，指项目熔断）。`AUTOMATIC_OFF` 来自投递那一刻（D2 第 5 条），`PROJECT_COORDINATOR` 还会来自读的时刻（§16 F2）。
 2. `REVIEWER_ENDED`：`reviewer_ended_at` 不为空，或审查方的会话行已不存在。
 3. `REVIEWER_STOPPED`：`abandoned_at` 不为空，或已投递的那一轮没被读到就被收掉了。
 4. `TIMED_OUT`：窗口已到。
@@ -539,6 +559,8 @@ export interface OwnerConfirmationAnswer {
 
 这沿用 owner decision 10：还在别人手里的事，不来叫你。
 
+`PROJECT_COORDINATOR` 的持有比这更进一步：连卡片也不画（§13 A2）。`TASK_CREATOR` 的卡片在审查中照常画。
+
 **N2（离开审查中之后）**：
 - `REVIEWED`、`NOT_REVIEWED`、`OUTDATED` 状态的等待请求照今天的方式计数：`kind = 'OWNER_CONFIRMATION'`，行上写 `Waiting for your confirmation`。
 - `RETURNED` 的请求已经不在等待（§8 B3），不计数，什么都不亮。
@@ -551,6 +573,7 @@ export interface OwnerConfirmationAnswer {
 confirmationUnderReview?: {
   requestId: string;
   taskId: string;
+  reviewerKind: 'PROJECT_COORDINATOR' | 'TASK_CREATOR';  // revision 3: S5 draws `Coordinator` from it
   reviewerSessionId: string | null;
   reviewerTitle: string | null;
   since: string;   // the request's requestedAt
@@ -574,7 +597,7 @@ confirmationUnderReview?: {
 - 审查方会话结束、或审查轮次被打断撤回时，发出的是审查方会话自己的更新（触发器不发事件）。客户端收到某个会话的更新，而这个会话正是某一行 `confirmationUnderReview.reviewerSessionId` 时，重读那一行（以及开着的那张卡）。
 - 客户端在前台持有一张审查中的卡片或一行 Under review 时，自己在 `dueAt` 之后 1 秒重读一次那一行和那张卡；回到前台或启动时照常重读。这是客户端的本地计时，不是服务端的定时任务。
 
-**N6（推送规则不变）**：今天确认卡不推送，`PushService.needsYouSessions` 也不数它，本文不改这两点。唯一新增的推送是 §9 L5。
+**N6（推送）**：确认卡出现时不推送，`PushService.needsYouSessions` 也不数它，修订 3 不改第二点，兜底的卡片也不响。新增的推送只有两条，都由已提交的事实触发、只响一次：§9 L5，以及协调会话呈上时的 §13 A6。持有期间什么都不推。
 
 ---
 
@@ -591,6 +614,17 @@ confirmationUnderReview?: {
 
 没有审查行时就没有审查栏，卡片和今天一样。
 
+**协调会话呈上的卡片（修订 3）**：`PROJECT_COORDINATOR` 且 `REVIEWED` 时，顺序改成：
+1. 标题区；
+2. **开头块**（§13 A3）：协调者的结论、要 owner 决定的点及选项、检查摘要；
+3. What counts as done（折叠成一行）；
+4. What the agent said（折叠成一行，这是附上的执行会话证据）；
+5. If you confirm；
+6. Confirm done / Chat about this；
+7. 提示行。
+
+项目外的审查、未经审查（兜底）的卡片仍按上面的顺序。
+
 **H2（首行，方案 B）**：首行由服务端从记录的条目算出，作为数据下发（§3.4 的 `ConfirmationReviewHeadline`）。措辞由三端各自的文案表负责，文案逐字一致（§12）。三种取值的算法：
 - `NEEDS_YOU`：`text = needsYou[0].text`，`more = needsYou.length − 1`；
 - `NOTHING_NEEDS_YOU`：`notChecked = notChecked.length`；
@@ -603,6 +637,7 @@ confirmationUnderReview?: {
 - 有 PROBLEMS 时（只出现在回执下，见 §9）写 `1 problem found after you confirmed` 或 `<N> problems found after you confirmed`，用橙色。
 - 首行只占一行，放不下就截断，完整的文字在下面的条目里。
 - 审查方的 `judgment` 不进首行。首行是哪一种，只由 needsYou 与 notChecked 的条数（回执下还有 problems 的条数）决定，审查方没有任何字段能左右它。
+- 协调会话呈上的卡片不画这一行，改画开头块（§13 A3）：结论是署名原文，放在写明作者的框里，不是 Orbit 的话（G3）。旧客户端不认识开头块，继续画这一行。
 
 **H3（各状态下的审查栏）**：标题行一律是 `REVIEW · <审查方标题>`，取不到标题时写 `Reviewer`。
 
@@ -612,7 +647,7 @@ confirmationUnderReview?: {
   2. needsYou 的作答块（§7 Q2）：第一条的问题文字就是首行，紧接着画它的选项，其余各条依次画在下面；
   3. `Checked`、`Not checked`、`Left open` 三行：每行把该类条目的文字用 ` · ` 连起来，最多两行；点开后就地展开成逐条列表，带证据引用；没有条目的那一类不画；
   4. 最后一行是审查方的 `judgment`，加引号。
-- `NOT_REVIEWED`：横线图标 + `Not reviewed`。下一行按原因（T2）写一句话，后面再接 ` Only the agent that did the work has checked this.`。各原因的句子：
+- `NOT_REVIEWED`：横线图标 + `Not reviewed`（`PROJECT_COORDINATOR` 写 `Not reviewed by the coordinator`，§16 F5）。下一行按原因（T2）写一句话，后面再接 ` Only the agent that did the work has checked this.`。各原因的句子（`PROJECT_COORDINATOR` 用 F5 的表）：
   - `TIMED_OUT`：`No answer within <窗口>.`，窗口写成 `30 min`、`2 h`、`1 h 30 min` 这样
   - `REVIEWER_ENDED`：`The reviewer’s session ended before it answered.`
   - `REVIEWER_STOPPED`：`The reviewer stopped without answering.`
@@ -624,6 +659,8 @@ confirmationUnderReview?: {
   之后审查方如果补交了记录，审查栏就变成 `REVIEWED`。
 - `OUTDATED`：提交号加删除线，下面用橙色写 `Outdated`。再下一行，`BRANCH_MOVED` 时写 `Written for <旧提交前 7 位>. The branch is at <新提交前 7 位> now, so this says nothing about the last commit.`；`NEWER_REPORT` 时写 `Written for an earlier report.`。最后是折叠的 `Show the old review`，点开是那份记录原样（没有作答控件，§7 Q3）。
 - `RETURNED`：见 §8 B6。
+
+- 持有中的卡片不存在，所以 `UNDER_REVIEW` 这一项对 `PROJECT_COORDINATOR` 只出现在回执下（§9 L3，owner 在持有期间从面板确认过）。
 
 **H4（按钮不随审查变化）**：任何状态下，按钮都不预选、不禁用、不改顺序、不改文字（G2）。唯一的例外来自 owner 自己的输入：某条 needsYou 选了 `Other`、却还没写字时，Confirm done 禁用。这时按下去必然被 400 拒绝，而「必然失败的动作必须 disabled」。
 
@@ -800,13 +837,14 @@ answers?: Array<{ key: string; option?: number | null; text?: string | null }>;
 
 **G1（OWNER_CONFIRMED 仍只由 owner 本人确认）**：`task-owner-confirmation.ts#ownerConfirmationPrincipalRefusal` 不改。审查方会话无论走 runner 门，还是带着会话头走用户门，都会以 `OWNER_CONFIRMATION_REQUIRES_ACCOUNT_OWNER` 被 403，一行都不写。审查记录、退回、答案都不是决定行，0267 的 fence lane 只读 `task_owner_decision`。
 
-本文对确认门只改两处（§0.2 G2）：
+本文对确认门只改三处（§0.2 G2）：
 - §7 Q3：owner 自己的答案；
 - §8 B3：有 RETURN 记录就当作已回答。这要改同一文件里的 `waitingOwnerConfirmation` 与 `staleReason`，会让卡片上的旧按键变成 STALE，但 owner 在任务面板上照样能确认。
+- §13 A4：持有期间的面板确认视同回答被持有的请求。
 
-两处都不能让 agent 确认，也不能让 agent 拦住 owner 确认：旧客户端从不因审查被拒；认识审查的客户端遇到 409，重读后就能作答。
+三处都不能让 agent 确认，也不能让 agent 拦住 owner 确认：旧客户端从不因审查被拒；认识审查的客户端遇到 409，重读后就能作答。
 
-**G2（Automatic 项目里的委托规则）**：`owner-confirmed-automatic-delegation.ts` 不改。Automatic 项目里，agent 只能为写着 OWNER_CONFIRMED 的判据声明这类任务。这些任务现在先由协调会话审，再交给 owner。
+**G2（Automatic 项目里的委托规则）**：`owner-confirmed-automatic-delegation.ts` 不改。Automatic 项目里，agent 只能为写着 OWNER_CONFIRMED 的判据声明这类任务。这些任务现在由协调会话持有，呈上后才到 owner 面前（§13）。
 
 **G3（From Orbit 署名的含义）**：卡片上的 From Orbit 表示：这张卡由 Orbit 从行里组出来，按钮由 Orbit 授权、直接打到确认门，中间不经过任何 agent。agent 写的字只能以一种方式出现在卡上：放在写明作者的框里，原样显示。今天的 `WHAT THE AGENT SAID · <时间>` 是一例，审查栏 `REVIEW · <审查方> · <时间> · <提交>` 是第二例。agent 的字不会出现在这些地方：卡片标题、From Orbit 那一行、首行的计数与措辞、按钮、If you confirm，以及 Orbit 自己的任何句子。首行是 Orbit 推出来的；它引用的 needsYou 问题文字位于同一个署名框里，原样照录，不改写。
 
@@ -817,21 +855,23 @@ owner 确认卡的署名提示改为 `Orbit composed this card and authorised it
 - 审查方写不进 Orbit 的任何一行，也没有哪个 LLM 替 owner 概括这张卡。
 - 授权的决定仍是 owner 在卡上做的。审查方的话以署名原文出现，是 owner 做决定时的一份参考，地位与 What the agent said 相同。
 
-**G5（owner decision 10）**：审查中不计数，与「还在协调会话手里的待办不计数」（`ownerItemKind`）、`coordinatorHolds` 遵循同一条规矩。
+**G5（owner decision 10）**：持有期间什么都不呈现（§13），项目外审查中不计数，与「还在协调会话手里的待办不计数」（`ownerItemKind`）、`coordinatorHolds` 遵循同一条规矩。
 
-**G6（ILC 的 G3 / G5 / G6 / G7）**：三个新前缀加进 ILC §0.3 G6 的表，以及 G7 表里「平台投递」那一行，由实现任务同时修改 ILC：
+**G6（ILC 的 G3 / G5 / G6 / G7）**：下面五个新前缀加进 ILC §0.3 G6 的表，以及 G7 表里「平台投递」那一行，由实现任务同时修改 ILC：
 
 | `clientTurnId` 前缀 | 发给谁 | 定义在 |
 |---|---|---|
 | `owner-confirmation-review:v1:<reviewId>` | 审查方会话 | 本文 D2 |
 | `confirmation-return:v1:<recordId>` | 执行会话（由 Orbit 转交审查方的话） | 本文 B3 |
 | `owner-confirmation-answers:v1:<decisionId>` | 审查方会话 | 本文 Q5 |
+| `run-question:v1:<approvalId>` | 协调会话 | 本文 R5 |
+| `run-notify:v1:<requestId>` | 协调会话 | 本文 M3 |
 
-三个前缀都加进 `watch-turn-key.ts` 的 `RESERVED_TURN_KEY_PREFIXES`，客户端的入口一律拒收。时钟（ILC G3）、唤醒事件与 blocker 的闭集（ILC G5）都不增加。
+五个前缀都加进 `watch-turn-key.ts` 的 `RESERVED_TURN_KEY_PREFIXES`，客户端的入口一律拒收。时钟（ILC G3）、唤醒事件与 blocker 的闭集（ILC G5）都不增加。
 
-**G7（SRR）**：审查不是会话间请求，退回也不是会话间消息。三种平台轮次都不填 `sender_session_id`，所以 SRR §2.1「只有三个入口填它」不变。它们也不调 `session-message.ts#chargeSessionMessage`，不计入 SRR §2.4 的每小时上限。退回每份请求至多一次，另有 B5 的上限。退回把审查方的话交给一个 run 一轮，所以它走 SRR §2.5 的表和复核任务的规则（B8 第 14 条），块上写 `from-session`、`from-mode`（SRR §2.2）。
+**G7（SRR）**：审查不是会话间请求，退回也不是会话间消息。这些平台轮次都不填 `sender_session_id`，所以 SRR §2.1「只有三个入口填它」不变。它们也不调 `session-message.ts#chargeSessionMessage`，不计入 SRR §2.4 的每小时上限。退回每份请求至多一次，另有 B5 的上限。退回把审查方的话交给一个 run 一轮，所以它走 SRR §2.5 的表和复核任务的规则（B8 第 14 条），块上写 `from-session`、`from-mode`（SRR §2.2）。
 
-**G8（CIR 与 coordinatorHolds）**：两者是同一种「读时 hold」：hold 从投递行和时钟读出来，结束时不需要写任何东西去收回。
+**G8（CIR 与 coordinatorHolds）**：两者是同一种「读时 hold」：hold 从投递行和时钟读出来，结束时不需要写任何东西去收回。三条路径共用的读法见 §16，与 `coordinatorHolds` 只有一处不同：窗口从事项产生时起算（§16 F4、§19 O1）。
 
 **G9（B 线）**：本文不给审查方结案的权力。哪些任务可以由审查方结案、owner 只管合入 main，由 B 线任务根据量化报告另行决定。本文的记录已经为它留好了可以原样搬用的形状：notChecked 就是 AcceptedGap。
 
@@ -858,13 +898,13 @@ owner 确认卡的署名提示改为 `Orbit composed this card and authorised it
 
 **pg spec 清单**（新文件 `tasks/owner-confirmation-review.pg.spec.ts`，每条注明对应条款）：
 
-1. 解析审查方：`creator_session_id` 为空的任务（owner 在 app 里建的、不带会话建的）在项目内外都没有审查行；在会话里建、却因缺 `X-Orbit-Agent-Id` 记成 `USER` 的任务照样有审查方；Automatic 项目 → 协调会话；非 Automatic 项目 → 没有审查行；项目外 → 建任务的会话；Automatic 项目没有协调会话 → `NO_COORDINATOR`；审查方已结束 → `REVIEWER_ENDED`；暂停中 → `COORDINATOR_PAUSED`。（S2、S4、D2）
+1. 解析审查方（修订 3：项目外才是这样，Automatic 项目里按 S2 仍由协调会话持有）：`creator_session_id` 为空的任务（owner 在 app 里建的、不带会话建的）没有审查行；在会话里建、却因缺 `X-Orbit-Agent-Id` 记成 `USER` 的任务照样有审查方；Automatic 项目 → 协调会话；非 Automatic 项目 → 没有审查行；项目外 → 建任务的会话；Automatic 项目没有协调会话 → `NO_COORDINATOR`；审查方已结束 → `REVIEWER_ENDED`；暂停中 → `COORDINATOR_PAUSED`。（S2、S4、D2）
 2. 同一事务：`turnComplete` 之后第一次读，就是 `UNDER_REVIEW`，执行会话的 needs-you 为 0，`confirmationUnderReview` 非空，任务行 `awaitingOwnerConfirmation = false`、`confirmationUnderReview = true`。（D1、N1、N3）
 3. 只投一次：`deliver` 调两次只得到一条轮次；被拒之后不再重投，拒绝码按 `ReviewDeliveryRefused` 的码写下；D5 能补投 `PENDING` 的行。（D2、D4、D5）
 4. 项目外：派活的会话收到 `owner-confirmation-review:v1:` 轮次；排队时队列里显示审查块；交出时内容里带审查块；这一轮失败时 auto-retry 重发的是它自己。（D2、D3、D6）
 5. 窗口：`readAt >= due_at` → `NOT_REVIEWED / TIMED_OUT` 并计数；项目内取冻结的 `exceptionEscalationSeconds`，事后改设置不影响；项目外为 1800。（N4、T1）
 6. 空闲：审查方收到审查轮次、结束这一轮时没交记录，又没有唤醒源 → 立刻 `REVIEWER_STOPPED`；有一个在跑的后台作业时仍是 `UNDER_REVIEW`。（T5）
-7. 不回头：审查方会话失败（没有排上重试）→ 触发器写 `reviewer_ended_at`，状态 `NOT_REVIEWED`；之后它被人叫醒、重新跑起来，状态仍是 `NOT_REVIEWED`。排上重试的失败不写；重试放弃时才写。审查轮次被打断删掉，或在排空时被收成 `ANSWERED` 而 `delivered_at` 为空 → `REVIEWER_STOPPED`。审查期间关掉 Automatic，状态不变，审查方仍能交记录。（§3.1、T1）
+7. 不回头：审查方会话失败（没有排上重试）→ 触发器写 `reviewer_ended_at`，状态 `NOT_REVIEWED`；之后它被人叫醒、重新跑起来，状态仍是 `NOT_REVIEWED`。排上重试的失败不写；重试放弃时才写。审查轮次被打断删掉，或在排空时被收成 `ANSWERED` 而 `delivered_at` 为空 → `REVIEWER_STOPPED`。审查期间关掉 Automatic，`TASK_CREATOR` 不适用，`PROJECT_COORDINATOR` 按 F2 立即兜底，审查方仍能交记录。（§3.1、T1、F2）
 8. 交回 REVIEW → `REVIEWED` 并计数；首行三种都覆盖；`judgment` 不出现在首行。（§3.5、H2）
 9. 已过期：`session.branch_sha` 移动 → `OUTDATED / BRANCH_MOVED`；有了新请求 → 旧记录 `OUTDATED / NEWER_REPORT`。（T1、T3）
 10. 工具门：非审查方 403；一轮之外 409；被顶替 409；重复记录 409；同一轮重试即使请求已被顶替也返回已有记录；`reviewedSha` 必填或必须不给；owner 决定后交 needsYou → 400。（§3.5）
@@ -933,6 +973,12 @@ owner 确认卡的署名提示改为 `Orbit composed this card and authorised it
 | `1 problem found after you confirmed` / `<N> problems found after you confirmed` | 回执首行、推送正文 | 新 |
 | `Review requested`、`Due <HH:MM>` | 审查方会话里的卡片 | 新 |
 | `Orbit composed this card and authorised its buttons. Anything an agent wrote is shown in a box that names who wrote it.` | 确认卡的署名提示 | 新 |
+| `Coordinator` | 呈上卡片开头块的署名；`PROJECT_COORDINATOR` 的 `Reviewer` 位置 | 新（修订 3） |
+| `Nothing else needs your decision.`、`<N> checked · <N> not checked · <N> left open` | 开头块 | 新（修订 3） |
+| `Not reviewed by the coordinator` 及 §16 F5 的七句 | 三条路径的兜底标签 | 新（修订 3） |
+| `Coordinator raised this for your decision · <N> to decide`、`Coordinator raised this for your confirmation` | 呈上时的推送正文（A6） | 新（修订 3） |
+| `Asking the coordinator · since <HH:MM>` | 持有中的问题在执行会话页的提示 | 新（修订 3） |
+| `Answered by the coordinator` | 转录里协调者答过的问题记录 | 新（修订 3） |
 | `Recommended`、`Other — say it in my own words` | needsYou 作答块 | 沿用（提问卡） |
 | `Open task session` | 审查方会话里的卡片 | 沿用（例外待办卡） |
 | `Reopen task` 及其确认对话框 | 回执 | 沿用（`TaskReopenCopy`） |
@@ -940,12 +986,346 @@ owner 确认卡的署名提示改为 `Orbit composed this card and authorised it
 
 ---
 
+## 13. Automatic 项目：先持有、再呈上（A）
+
+修订 3 的主体。今天的问题是：Automatic 项目里，执行会话一声明完成，确认卡就出现在 owner 面前，协调者只是在卡上多一栏。改完之后，执行会话只跟协调者说话，owner 面前只出现协调者带着判断呈上来的事，或者协调者没接住、由兜底直接交来的事。
+
+**A1（什么是持有）**：一份确认请求被持有，当且仅当它的审查行 `reviewer_kind = 'PROJECT_COORDINATOR'`，并且 §4 算出的状态是 `UNDER_REVIEW`。判定只在 `owner-confirmation-review.ts#confirmationReviewStates` 一处（T6），不另存「已持有」字段。
+
+**A2（持有期间 owner 看不到什么）**：下面每一处都读同一个判定，持有期间都不出现：
+
+| 面 | 持有期间 | 依据 |
+|---|---|---|
+| 确认卡 | 不画。`GET /tasks/:id/owner-confirmation` 的 `waiting` 与 `ifConfirmed` 为 null | `readOwnerConfirmation` |
+| 会话行与工作区的 needs-you | 不计。`readWaitingOwnerConfirmations` 已经排除 `UNDER_REVIEW`（N1），不用改 | `owner-decision-signal.ts` |
+| 顶部提示条、DecisionRail 指向行 | 不出现 | N1 |
+| APNs/FCM 推送、飞书卡 | 没有 | 持有期间没有任何调用点；呈上时见 A6 |
+
+只留下一处被动显示，不算打扰：会话行和任务行仍写 `Under review`（N3），用次要文字色，不进 needs-you 分组。这样 owner 自己打开会话时，看得出这个任务没有卡死。执行会话里的回执（§8 B6 的退回记录、§9 的回执）也照常显示，不亮、不响。
+
+**A3（呈上记录与卡片开头）**：呈上就是协调会话调用现有的 `task_confirmation_review`，写一条 REVIEW 记录（§3.2）。**不加新表，不加新工具**：这条记录已经带着呈上需要的全部内容。
+
+| 协调者写的 | 在记录里 | 在卡片上 |
+|---|---|---|
+| 结论（必填，1–500 字符） | `judgment` | 开头块第一段，原文加引号，框的抬头写 `Coordinator · <HH:MM> · <提交前 7 位>` |
+| 要 owner 决定的点（0–10 条，每条带选项和推荐项） | `needsYou[]` | 紧接结论，按顺序逐条画成作答块（§7 Q2） |
+| 查过什么 / 没查什么 / 还留着什么 | `checked[]` / `notChecked[]` / `leftOpen[]` | 开头块最后一行摘要 `<N> checked · <N> not checked · <N> left open`，点开逐条 |
+| 审查的提交 | `reviewed_sha` | 框抬头；分支移动后按 T3 读作已过期 |
+
+读面在 `OwnerConfirmationReviewView` 上加一个字段：
+
+```ts
+/** Set exactly when reviewer.kind is PROJECT_COORDINATOR and state is REVIEWED: what the raised card leads with. */
+lead: {
+  conclusion: string;                  // the REVIEW record's judgment, verbatim
+  points: ConfirmationNeedsYouItem[];  // its needsYou, in order
+  checks: { checked: number; notChecked: number; leftOpen: number };
+} | null;
+```
+
+没有 needsYou 时，开头块在结论下面写一行 `Nothing else needs your decision.`。结论是协调者的话，放在写明作者的框里，地位与 What the agent said 相同（G3）；Orbit 不据此预选、禁用或改写按钮（H4）。What counts as done 和 What the agent said 仍由 Orbit 从行里直接取，折叠在开头块下面，这就是附上的执行会话证据。
+
+**A4（门）**：持有不改变谁能决定。`ownerConfirmationPrincipalRefusal` 与 `task_owner_decision` 的 CHECK 一个字不动，协调会话调确认门照旧得到 `OWNER_CONFIRMATION_REQUIRES_ACCOUNT_OWNER`。持有期间 `waiting` 为 null，任务面板会照常显示 Confirm done，并以 `requestId = null` 提交；`TaskOwnerConfirmationService.confirm` 在调 `ownerDecisionRefusal` 之前、任务行锁之下，读到最新请求处于持有状态且提交的 `requestId` 为 null 时，把 `answering` 换成这份请求的 id，后面的 `reviewOfDecision` 和写决定都用它（决定行写这份请求的 id，`review_state = 'UNDER_REVIEW'`）。否则 `ownerDecisionRefusal` 会判 STALE，owner 反而被一个看不见的请求挡住，违反 G2。`SEND_BACK` 不做这个替换。协调者之后才交的记录按 §9 处理。
+
+`readOwnerConfirmation` 里读审查的 `reviewsOf` 今天失败时吞掉错误、把 `review` 读成 null。持有依赖这次读，吞掉就等于把持有的卡露出来，所以改成抛出，这次读失败，客户端重读。
+
+**A5（退回）**：照 §8 不变，退回用 `task_confirmation_return`。owner 没被问过，不亮、不响，卡片也没出现过，所以只在执行会话里留一条 B6 的记录。B5 的上限（owner 两次决定之间最多 3 次）用完后，协调者必须呈上，把剩下的问题写进 needsYou 或 notChecked。
+
+**A6（呈上时响一次）**：REVIEW 记录提交后，如果写入之前的状态是 `UNDER_REVIEW`（持有因这条记录结束）、任务没有结算、owner 还没决定，调 `PushService.notifyConfirmationRaised(recordId)`，APNs/FCM 和飞书各发一次，折叠键由记录 id 派生。标题是任务标题，正文只有 Orbit 的话：有要决定的点时写 `Coordinator raised this for your decision · <N> to decide`，没有时写 `Coordinator raised this for your confirmation`。卡片本身按 N2 计入 needs-you。不改角标口径（N6）。这是新增行为，见 §19 O2。
+
+**A7（持有结束后才到的呈上）**：兜底卡片已经出现之后，协调会话仍可以交 REVIEW 记录（T1 第 3 行优先于第 4 行），卡片就地变成呈上的卡片，抬头不再带 `Not reviewed by the coordinator`。此时不再响（A6 要求写入之前的状态是 `UNDER_REVIEW`）。
+
+---
+
+## 14. 执行会话的提问（R）
+
+**R1（什么算提问）**：`approval.tool_name = 'AskUserQuestion'`。各引擎的提问都已经归一成这个名字：Claude 自带的工具，Cursor 的 `cursor/ask_question`（`cursor_permissions.go`），OpenCode 的 `question`（`opencode.go`），Kimi 的问题型权限请求（`kimi_acp.go`）。Codex 和 DSH 目前没有提问工具，以后加的也要归一成这个名字。Orbit 工具里，执行会话能问人的只有 `session_send` / `project_send` 带 `expectReply`，目标本来就是另一个会话，不用改；`ask_owner` 只有协调会话能调。
+
+下面这些**不是**提问，照旧走 §18 U1：`ExitPlanMode`（它批准的是把执行会话放到更宽的权限，属于权限边界）、任何工具权限审批、工作区写入卡、`orbit_task_create` 这类卡片。
+
+**R2（哪些会话被持有）**：提问会话是任务的 run（`session.task_id` 非空），任务在项目里，项目 `coordinator_enabled = true`。解析协调会话用 `project.coordinator_session_id` 当下的值。下面任一情况不持有，直接按 §16 兜底：没有协调会话、协调会话已结束（`sessionHasEnded`）、协调会话暂停（`conversationIsPaused`：`createTurn` 总是写 `retryAt: null`，往排了重试的会话里写一轮会撤掉它的重试）、协调会话就是提问的会话本身、账号关了 Session orchestration（协调会话没有 `session_reply`）、项目在熔断暂停段里。
+
+**R3（复用什么）**：两样现成的东西，加一个新种类，不造新通道：
+
+| 需要 | 复用 | 差别 |
+|---|---|---|
+| 把问题交给协调会话 | 证据审查的平台轮次（`evidence-review:v1`，`docs/task-completion-criteria.md`）：空正文、`NEXT_TURN`、交出时渲染块 | 键是 `run-question:v1:<approvalId>`，块是 `<orbit-run-question>`（R5） |
+| 等回答、记结局 | SRR 的 `session_request` 行与 `session_reply` | 行上多 `kind` 与 `approval_id`（R4），结局写到审批上，不写回信 turn（R6） |
+| 把答案交给 run | 现有审批轮询（`awaitApprovalDecision`）与 `updatedInput.answers` | 不变；runner-go 的提问处理不用改 |
+
+问题的载体仍是 `approval` 这一行，因为 run 正卡在一次工具调用里等它。回信 turn 叫不醒一个正在等工具结果的 run，这是不能直接用 `session_send(expectReply)` 的原因。
+
+**R4（数据）**：一条迁移，号在落地时取：
+
+```sql
+ALTER TABLE "session_request"
+  ADD COLUMN "kind" text NOT NULL DEFAULT 'MESSAGE',  -- MESSAGE | RUN_QUESTION | RUN_NOTIFY
+  ADD COLUMN "approval_id" uuid,                      -- RUN_QUESTION only; no FK, like approval.turn_id
+  ADD COLUMN "escalated_item_id" uuid,                -- the ask_owner item it was escalated to (R8)
+  ADD COLUMN "owner_alerted_at" timestamptz(3);       -- when the fallback rang, once (R10, M6)
+CREATE UNIQUE INDEX "session_request_approval_key" ON "session_request"("approval_id") WHERE "approval_id" IS NOT NULL;
+-- session_request_state_chk (0350) is replaced to allow two more values, for the new kinds only:
+--   OWNER_ANSWERED (the owner answered the approval, R7) and READ (§15 M4).
+
+ALTER TABLE "approval" ADD COLUMN "coordinator_fallback" text;  -- R5: why this question was never held
+```
+
+`approval_decided_via_chk` 允许的取值加 `COORDINATOR`。
+
+**R5（写下和投递）**：`createApproval` 里，R1、R2 都成立时，不再先写审批。改为一次 `createTurn(ownerId, coordinatorSessionId, { clientTurnId: 'run-question:v1:<approvalId>', content: '', intent: 'NEXT_TURN' }, { participateSendTransaction })`，`participateSendTransaction` 里插入审批行，`onTurnWritten(tx, turn)` 里插入 `session_request` 行（前者跑的时候轮次行还没有，而 `turn_id` 是 NOT NULL）。`session_request` 的 `kind = 'RUN_QUESTION'`，`from_session_id` 是 run，`to_session_id` 是协调会话，`reply_by = created_at + exceptionEscalationSeconds`，`request_preview` 取第一个问题的前 200 字，`options` 为 NULL（选项在审批的 `input` 里，按问题分开）。审批行 id 先生成，轮次键由它派生。同一个事务，所以读不到「审批有了、持有还没写」的中间状态，needs-you 不会亮一下。这个事务提交时不发 `approval_request` 帧，不调 `notifyApprovalRequest`。
+
+`createTurn` 拒绝（协调会话刚好结束等），或 R2 判定不持有时：回退成今天的写法，只插审批行，并写 `approval.coordinator_fallback`（§16 F5 的 reason）。这条路径没有 `session_request` 行，标签就读这一列；发 `approval_request` 帧，走普通的 `notifyApprovalRequest`，都带标签。列为空的审批是修订 3 之前或不在这条路径上的审批，不带标签。
+
+协调会话收到的块在交出时按行渲染，英文：
+
+```
+<orbit-run-question task="<task publicId>" run-session="<publicId>" request-id="<id>" reply-by="…" from-mode="default">
+A run of the task “<title>” asked a question meant for a person and is blocked until it is answered.
+The account owner has not been asked.
+
+Question 1 (one of): <question text>
+  0. <label>: <description>
+  1. <label>: <description>
+Question 2 (any of): …
+
+Answer with session_reply(requestId="<id>", answers=[{question: 0, option: 1}, …]); use text instead of
+option for your own words. If the decision is the owner's, call ask_owner with your recommendation and
+forRunQuestion="<id>", then answer here once they have told you. If you do neither by reply-by, or stop
+without answering, Orbit asks the owner directly and says you did not review it.
+</orbit-run-question>
+```
+
+交出时请求已结案，块只说明是哪一种情况，再加一句 `Nothing to answer; end your turn.`（同 D6）。
+
+`from-mode` 与 SRR §2.2 同一段代码（`readBlockSender`），执行会话比协调会话窄时加同一句话。回显入库时挂结构化读数 `runQuestion`，三端在协调会话里画成只读卡片（同 D7）。这一轮是平台投递：不写 `sender_session_id`，不计 SRR §2.4 的上限，接进 `isPlatformContentTurn`、`queuedWakeContent`、auto-retry 回溯和 `RESERVED_TURN_KEY_PREFIXES`（G6）。
+
+**R6（回答）**：`session_reply` 加一个可选参数，其余规则（只有接收方能回答、已结案 409 `REQUEST_CLOSED`）不变：
+
+```
+session_reply({ requestId, message?, option?, answers? })
+answers: [{ question: number, option?: number, options?: number[], text?: string }]
+```
+
+- `answers` 只用于 `RUN_QUESTION`，其他种类给了就 400。
+- 每个问题恰好一条。`option`、`options`（多选题用）、`text` 三选一。问题只有一个时，也可以照旧用 `option` 或 `message`。
+- 回答走新方法 `answerRunQuestion`，不走 `SessionRequestService.reply`（后者不在一个事务里，还会交回信）。一个事务做两件事：把 `session_request` 从 `OPEN` 改成 `REPLIED`，`reply_text` 存渲染好的文字（`session_request_replied_chk` 要求），`reply_option` 留空（`options` 为 NULL，`session_request_reply_option_chk` 不允许有值），`closed_at` 同时写；把审批从 `PENDING` 改成 `ALLOWED`，并写 `answers`（问题文字 → 选中的 label 或原话，形状不变）、`decided_credential_kind = 'COORDINATOR'`、`decided_by_id` 留空。
+- 请求还 `OPEN` 但审批已不是 `PENDING` 时，按 R7、R11 结案，提交这次结案，再答 409 `REQUEST_CLOSED`。
+- 不写 `session-reply:` 回信 turn。发 `approval_resolved` 帧，run 的轮询就此拿到答案。
+- CLI 是 `orbit session reply <id> --answers-json <文件|->`。`mcp.go` 现在要求 `message` 或 `option` 至少一个，要放行只给 `answers` 的调用。
+- `decided_by_id` 留空，所以 `wiki.service.ts` 不会把协调者的回答当成 owner 的原话。
+
+**R7（owner 直接回答）**：持有期间问题不显示，但 `decideApproval` 这个门不关，也不用改。审批被 owner 决定之后，请求由 R11 的那一轮结案成 `OWNER_ANSWERED`，协调者之后的回答得到 `REQUEST_CLOSED`。
+
+**R8（协调者答不了）**：`ask_owner` 加一个可选参数 `forRunQuestion: <requestId>`，协调者带着自己的推荐项把问题提给 owner，走现有的问题卡。`ProjectOpenItemService.askOwner` 在建待办的事务里校验：这个请求是发给调用方的、`kind = 'RUN_QUESTION'`、还是 `OPEN`，否则 409 `RUN_QUESTION_NOT_OPEN`；通过后写 `session_request.escalated_item_id = 待办 id`，`reply_by = now + 30 天`（SRR 的上限），表示事情已经在 owner 面前，不再计时。owner 回答时，`answerOpenItem` 在同一事务里把 `escalated_item_id` 指向它的请求的 `reply_by` 改成 `answered_at + exceptionEscalationSeconds`。协调者收到回答后用 `session_reply` 转给 run。答案要协调者转一手，是因为 run 的问题可能有多条，owner 回答的是协调者重新提炼过的问题，平台对不上。这段时间 run 一直卡着，协调者有未关闭的 `ask_owner`（SRR §4.1 第 5 条），不会判 `NO_REPLY`。
+
+**R9（持有期间的显示）**：问题的持有判定（§16 F2）在这些地方排除持有的审批：`PushService.needsYouSessions`、会话行的 `pendingApprovals`、工作区计数、`listApprovals`、飞书审批卡，以及 `claimApprovalAlert` 的 NOT EXISTS 和飞书的审批串（否则一条持有中的问题会让同一会话后来的工具审批不响，违反 U1）。会话行加一个字段，取值约定与 N3 相同（`null` 表示清掉）：
+
+```ts
+/** The questions this run has with its coordinator: the row and the run's page say so, nothing counts them. */
+questionWithCoordinator?: { count: number; since: string; dueAt: string } | null;
+```
+
+执行会话页在问题的位置画一行只读提示 `Asking the coordinator · since <HH:MM>`，没有按钮，客户端按 N5 的规则在 `dueAt` 后重读。答完之后，转录里的问题记录写 `Answered by the coordinator`：`toApprovalInfo` 加 `answeredBy: 'COORDINATOR' | null`，由 `decided_credential_kind` 算出。
+
+**R10（兜底时响一次）**：问题的结局由现有路径写下：`NO_REPLY`（协调会话的 `turnComplete`）、`RECIPIENT_ENDED`（0350 触发器）、`UNDELIVERED`、`EXPIRED`（现有 `SessionRequestWorker`，5 秒一轮）。读的一侧不等这些写入：到了 `reply_by` 就按兜底显示（§16 F2）。**响铃**放在现有 worker 的那一轮里，加一个查询，不加新的定时器：`kind = 'RUN_QUESTION'`、结局不是 `REPLIED`/`OWNER_ANSWERED`、审批仍是 `PENDING`、`owner_alerted_at` 为空的行，发 `approval_request` 帧，发推送（正文前面加 `Not reviewed by the coordinator · `，飞书卡加同样的标签），写 `owner_alerted_at`。这里**不走** `claimApprovalAlert`：持有期间同一会话的工具审批可能已经响过，这条迟到的问题会被它判成不是新的一段；只响一次由 `owner_alerted_at` 的条件更新保证，多副本也一样。Automatic 被 owner 关掉时持有立刻读作兜底，但没有结局可写，不响：是 owner 自己的动作，他在 app 里。
+
+**R11（run 不等了）**：审批被收成 `ABANDONED` 的路有四条（`abandoned-approvals.ts` 的 `reapApprovalsOfEndedTurns`、`reapApprovalsOfReturnedCalls`、`reapApprovalsOfReturnedCallsIn`、`reapApprovalsOfReplacedSupervisor`），不逐条改。持有判定只认 `PENDING` 的审批，所以读的一侧立刻正确；结案放在现有 worker 的同一轮：`kind = 'RUN_QUESTION'`、`state = 'OPEN'`、审批已不是 `PENDING` 的行，审批是 `decided_by_id` 非空就写 `OWNER_ANSWERED`，否则写 `UNDELIVERED`（`close_reason = 'QUESTION_ABANDONED'`）。worker 的响铃查询要求审批仍是 `PENDING`，所以不响。
+
+**R12（SRR 的其余规则怎么对待新种类）**：
+
+| SRR 规则 | `RUN_QUESTION` / `RUN_NOTIFY` |
+|---|---|
+| §2.4 每对 5 分钟 60 条、§3.1 50 个 OPEN 上限 | 不计，这不是会话发起的 |
+| §2.5 谁能给谁发 | 不问，这是平台投递。块里带 `from-mode`（R5） |
+| §4.1 第 4 条（自己发出的请求算唤醒源） | 不算。run 本来就卡在工具调用里；`notify` 不等回答 |
+| §4.2 回信 turn | 不写 |
+| §4.3 发送方已结束时写任务评论 | 不写 |
+| §6 客户端回复关系 | `readOpenRequestPeers` 不读这两种，会话行不显示 owes reply |
+| 代码里要加 `kind = 'MESSAGE'` 过滤的地方 | `session-request.worker.ts` 的交回查询（放在查询里，放进 `handOff` 会占满每轮 25 行的额度）；`hasPendingWakeSource` 的 `asked` 与 `onItsWay`；`chargeOpenRequest` 的计数 |
+
+协调会话这一侧的 `NO_REPLY`（§4.1）和 `RECIPIENT_ENDED` 判定照旧，只是结局的去处换成 §16。
+
+---
+
+## 15. 执行会话的 notify（M）
+
+**M1（决定：投递给协调者，不拒绝）**：Automatic 项目里，任务的 run 调 `notify`，交给项目的协调会话，不响 owner 的设备。理由：
+
+1. `notify` 的用途是「我需要人来做点什么」或者「他在等的事做完了」。拒绝等于把这句话丢回给模型，指望它换一个工具再说一遍；Session orchestration 关着时，run 连 `project_send` 都没有，这句话就只留在转录里，没有人会看到。
+2. 项目目标写的是「执行会话要放到 owner 面前的东西，先给协调者」。投递正好做到这一点：协调者能结合项目状态判断，要不要用 `ask_owner` 带着判断告诉 owner。
+3. 成本有界：现有的每会话每分钟一次限制照旧（M3）。
+4. 对 run 来说语义清楚：结果说明谁收到了（M5），它不会以为 owner 看到了。
+
+**M2（路径）**：`RunnerNotifyController` 不变，判断放在 `PushService.notifyAgentMessage` 之前的一层，`input.sessionId` 对应的会话是 Automatic 项目的 run 时进入这一节。协调会话可达（有、没结束、没暂停、不是调用者自己、项目不在熔断里）就走投递，否则按 M6 兜底。R2 的 orchestration 条件不适用：`notify` 不需要协调者有 `session_reply`。没有 `sessionId` 的 headless `orbit notify`、非 run 的会话不变。协调会话自己的 `notify` 不变：它就是把事情带给 owner 的那一方。
+
+**M3（投递）**：先走一次 `claimAgentNotify` 的每分钟限制，这条规则不变，投递和 M6 的兜底都不再 claim 第二次。然后 `createTurn(ownerId, coordinatorSessionId, { clientTurnId: 'run-notify:v1:<requestId>', content: '', intent: 'NEXT_TURN' }, { onTurnWritten })`，`onTurnWritten` 里插 `session_request` 行：`kind = 'RUN_NOTIFY'`，`request_preview` 取消息前 200 字（兜底推送就用这一段，与锁屏截断的长度相同），`options` 为 NULL，`reply_by = now + exceptionEscalationSeconds`。账号的 `notifyAgentMessage` 偏好不适用，它管的是 owner 的设备。接线（平台轮次、块、保留前缀、`from-mode`）与 R5 相同。协调会话收到：
+
+```
+<orbit-run-notice task="<task publicId>" run-session="<publicId>" from-mode="default">
+A run of the task “<title>” used notify. It did not reach the account owner.
+Message: <message>
+Nothing is waiting for your reply. If the owner should know or decide, use ask_owner with your recommendation.
+</orbit-run-notice>
+```
+
+**M4（结案）**：这一轮交给 engine 的时候（`conversation_turn.delivered_at` 写下），`session_request` 在同一事务里改成 `READ`，写 `closed_at`。协调者读到了就算接住了，后面是否告诉 owner 由它判断，不再计时。
+
+**M5（结果）**：工具结果加 `recipient`：
+
+```jsonc
+{ "delivered": true, "recipient": "coordinator", "recipientSessionId": "…", "placement": "queued" }   // 投递给协调者
+{ "delivered": true, "recipient": "owner", "fallback": "NO_COORDINATOR", "devices": 2 }               // 兜底
+{ "delivered": false, "reason": "rate limited — try again in 41s" }                                   // 与今天相同
+```
+
+**M6（兜底）**：§16 列出的情况发生时：
+- 调用那一刻就不可达（没有协调会话、已结束、暂停、熔断、`createTurn` 拒绝）：走今天的 `notifyAgentMessage` 的发送部分（M3 已经 claim 过），正文前面加 `Not reviewed by the coordinator · `，结果带 `fallback`。
+- 投递之后、engine 读到之前，轮次被收掉（`UNDELIVERED`）或协调会话结束（`RECIPIENT_ENDED`）或到了 `reply_by`（`EXPIRED`）：R10 的现有 worker 那一轮发一次，同样带标签，正文用 `request_preview`，写 `owner_alerted_at`，不受每分钟限制（这条已经被限制过一次）。此时 run 早已收到 `delivered: true, recipient: coordinator`，这次兜底只影响 owner。
+
+---
+
+## 16. 三条路径的兜底（F）
+
+**F1（一处定义）**：新模块 `projects/run-item-hold.ts`，一个纯函数，三条路径都用它，读法照 `coordinatorHolds`：
+
+```ts
+export type RunItemHold =
+  | { place: 'ANSWERED' }   // raised, sent back, replied or read: not a hold and not a fallback
+  | { place: 'HELD'; coordinatorSessionId: string; dueAt: Date }
+  | { place: 'FALLBACK'; reason: OwnerConfirmationNotReviewedReason };
+
+/** Pure over the facts already on the rows, so the card, the counts, the push and the tool doors cannot disagree. */
+export function runItemHold(facts: RunItemFacts, readAt: Date): RunItemHold;
+```
+
+`RunItemFacts`：Automatic 是否开着（按事项产生时的项目）；协调会话（无 / 已结束 / 暂停 / 活着）；投递状态（未写下、已写下未读、已读、被拒及其码）；事项的结局（仅 `session_request`）；到期时刻。不加 `setInterval`、worker、sweep，不写「已兜底」字段。R10 和 M6 只在现有 `SessionRequestWorker` 里多一个查询，确认卡的兜底不需要任何写入。
+
+**F2（判定表，从上往下，先命中先得）**：
+
+| # | 条件 | 确认请求 | 提问 | notify |
+|---|---|---|---|---|
+| 1 | 协调者答过 | `ANSWERED`：有 REVIEW 或 RETURN 记录，后面几行都不看（T1 第 1–3 行） | `ANSWERED`：`REPLIED` | `ANSWERED`：`READ` |
+| 2 | Automatic 被关掉（读的时刻） | 兜底 `AUTOMATIC_OFF` | 同左 | 不判：投递后不再看开关 |
+| 3 | 没有协调会话 | 兜底 `NO_COORDINATOR`（D1 写 `REFUSED`） | 不持有，`approval.coordinator_fallback = NO_COORDINATOR` | 调用时兜底 |
+| 4 | 协调会话已结束 | 兜底 `REVIEWER_ENDED`（`conversationIsOver`，或会话行已删；不读 `reviewer_ended_at`） | 兜底 `REVIEWER_ENDED`（SRR `RECIPIENT_ENDED`） | 调用时兜底；投递后未读时由结局兜底 |
+| 5 | 投递被拒 | 兜底，按 T2 映射 | 不持有，`coordinator_fallback` 写当时的原因，读不出原因时写 `UNREACHABLE` | 调用时兜底 |
+| 6 | 协调者读过、停下、没有唤醒源 | 兜底 `REVIEWER_STOPPED`（T5） | 兜底 `REVIEWER_STOPPED`（SRR `NO_REPLY`） | 不适用：读到即结案 |
+| 7 | 投递轮次没被读到就被收掉 | 协调会话暂停：这一行不算，往下看第 8 行，回来后重投（D5）；否则兜底 `REVIEWER_STOPPED` | 兜底 `REVIEWER_STOPPED`（SRR `UNDELIVERED`） | 同左 |
+| 8 | 到期（`now >= 到期时刻`） | 兜底 `TIMED_OUT` | 同左 | 同左 |
+| 9 | 其余 | 持有 | 持有 | 持有 |
+
+`kind` 和项目条件不满足（非 Automatic、不在项目里）时根本不进这张表（§18）。
+
+**F3（协调会话暂停时）**：协调会话因额度、429、登录失效等失败而停下、还没结束（`conversationIsPaused`）时：
+
+- **确认请求**继续持有，不算结束，不写 `REFUSED`（D2），也不因为投递轮次被收掉而兜底（F2 第 7 行）。这是 owner 2026-11-08 对证据和例外待办定的规则（`docs/evidence-waits-for-coordinator-design.md`），唯一的不同是 F4：等待有上限。`PROJECT_COORDINATOR` 因此不读 `reviewer_ended_at`（§3.1 的触发器照 0350，失败且没有重试就会写它），只读 `conversationIsOver`。
+- **提问和 notify** 不等：提问时协调会话已暂停就不持有（R2），持有之后协调会话失败且没有重试时 SRR 判 `RECIPIENT_ENDED`，同样兜底。提问是因为 run 正卡着占着 runner 名额，宁可早点问 owner（§19 O5）；notify 是因为 run 不等，owner 应该及时知道。
+
+**F4（时钟）**：到期时刻 = 事项产生时刻 + 项目的 `exceptionEscalationSeconds`，在事项产生时冻结（确认请求沿用 N4 的 `due_at`）。与 `coordinatorHolds` 不同，这里不从协调者取走时起算：项目的不变量是「Nothing waits forever」，从取走时起算的话，协调会话一直不可用就会一直等。见 §19 O1。
+
+**F5（标签）**：所有兜底事项都写 `Not reviewed by the coordinator`，下一行写原因，全部是 Orbit 的话：
+
+| `reason` | 句子 |
+|---|---|
+| `TIMED_OUT` | `No answer within <窗口>.` |
+| `REVIEWER_ENDED` | `The coordinator’s session ended before it answered.` |
+| `REVIEWER_STOPPED` | `The coordinator stopped without answering.` |
+| `COORDINATOR_PAUSED` | `This project’s coordinator is paused.` |
+| `AUTOMATIC_OFF` | `Automatic was switched off for this project.` |
+| `NO_COORDINATOR` | `This project has no coordinator conversation.` |
+| `UNREACHABLE` | `The coordinator could not be reached.` |
+
+三种事项的画法：确认卡的审查栏（H3，后接 ` Only the agent that did the work has checked this.`）；问题卡（审批卡顶部一行标签 + 原因）；notify（推送正文和飞书卡的前缀，只带标签，不带原因，锁屏放不下）。
+
+**F6（不丢、不重）**：持有判定只读行，事项本身一直在（请求行、审批行、会话转录），所以进程重启不影响。owner 不会被同一件事响两次：`A6` 只在第一条 REVIEW 响，R10/M6 靠 `owner_alerted_at`。协调者答完的事项不再兜底，状态写在同一个事务里。
+
+---
+
+## 17. 简报与工具描述（W）
+
+**W1（`task-execution-prompt.ts`）**：`buildTaskExecutionPrompt` 的 `project` 入参加 `coordinatorEnabled?: boolean`，`TASK_DELIVERY_SELECT` 同步选这一列。`coordinatorEnabled !== true` 时一个字节都不变。为 true 时做两处改动：
+
+1. 紧接交付句之后（「Follow these steps」之前，这个标题是 `wiki-dossier.ts` 的切分点，不能动）加一段，所有 Automatic 项目的 run 都有：
+
+   > This project is Automatic: its coordinator is your channel to the account owner. A question you ask (AskUserQuestion) is answered by the coordinator, and notify reaches the coordinator, not the owner's devices. Tool permission prompts still go to the owner.
+
+2. OWNER_CONFIRMED 的第 3 步，把「Only that declaration puts a confirmation card in front of the account owner…」到「…and declare again once you are done again.」整段换成：
+
+   > Your declaration goes to this project's coordinator first: the account owner sees nothing until the coordinator raises it, and if the coordinator does not answer in time Orbit asks the owner directly. It reaches the coordinator only when the turn in which this run has really stopped ends (an empty queue, no background job in flight, no wake you scheduled yourself). The coordinator may send it back to you; the reason arrives in this session as the next message. This task's completion criterion is OWNER_CONFIRMED: only the account owner confirms it in the Orbit app, and no agent session (the coordinator included) can confirm it for them; if the owner sends it back, the reason arrives the same way. When it does, carry on as it says, and declare again once you are done again.
+
+   后面的「Do not call task_evidence_submit, and do not write status.」不变。
+
+要跟着动的钉子：`task-list-instructions.spec.ts` 的字节比对；`task-start-card.ts` 重建简报用的 select（要同样带 `coordinatorEnabled`）。Automatic 开关在 run 开始之后被翻动时，重建结果和当时发出的不一样，卡片退化成普通气泡，这与部署前派发的简报是同一种已知退化，不处理。
+
+**W2（协调会话的开场）**：`projects/coordinator-opening.ts` 的说明加两句：收到 `<orbit-confirmation-review>` 要么 `task_confirmation_review` 呈上，要么 `task_confirmation_return` 退回；收到 `<orbit-run-question>` 用 `session_reply` 回答，只有 owner 能定的事用 `ask_owner` 带 `forRunQuestion` 和推荐项。
+
+**W3（runner-go 工具描述）**，每条都由 `cli_mcp_parity_test` 和描述测试钉住：
+
+| 工具 | 改动 |
+|---|---|
+| `notify`（`mcp.go`，以及 `notify_cli.go` 的 help 与 capability） | 句首加：`In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices.`；结果说明加：`Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back.` |
+| `task_request_confirmation` | 末句换成：`In an Automatic project the request goes to the coordinator first and the owner sees nothing until it raises it, or until Orbit falls back to the owner. Outside a project, if the task has a reviewer, Orbit asks it first and the owner's card waits until the review is in.` |
+| `task_confirmation_review` | 加：`In an Automatic project this raises the request: your judgment leads the owner's card, then needsYou.` |
+| `session_reply` | 加 `answers` 参数及说明（R6） |
+| `ask_owner` | 加 `forRunQuestion` 参数及说明（R8） |
+
+`AskUserQuestion` 是引擎自带的工具，描述改不了，靠 W1 的简报说明。
+
+---
+
+## 18. 不变的情况（U）
+
+**U1（工具权限审批）**：`AskUserQuestion` 之外的审批，一行都不改：`notifyApprovalRequest`、`needsYouSessions`、会话行计数、飞书审批卡照旧直达 owner，同一个会话里的问题被持有时也一样。这是安全边界，一个 agent 不能给另一个 agent 授权。`ExitPlanMode` 归这一类。
+
+**U2（Automatic 关着的项目）**：没有审查行（S2），确认卡、提问、`notify` 与今天相同。`runItemHold` 不进入。
+
+**U3（不在项目里的任务）**：确认请求的审查按 §1–§9 不变：卡片照常显示，`TASK_CREATOR` 审查，不隐藏。提问、`notify` 与今天相同。
+
+**U4（协调会话自己和非 run 的会话）**：协调会话的提问、`notify`、`ask_owner` 照旧到 owner，它就是负责带话的一方。`session.task_id` 为空的自由会话不变。
+
+**U5（只有 owner 能做的事）**：确认 OWNER_CONFIRMED 任务、改验收标准、记录项目完成，都没有变（G1）。
+
+---
+
+## 19. 实现切分与待 owner 定的问题
+
+### 19.1 切分
+
+本项目的任务按下表做，每个任务在 spec 和评论里引用条款号。F 先做，I1/I2/I3 依赖 F，C 依赖三者的读面，W 最后。
+
+| 任务 | 内容 | 条款 |
+|---|---|---|
+| **F** | `projects/run-item-hold.ts` 与表驱动 spec；R4 的迁移（`session_request` 四列、状态 CHECK、`approval.coordinator_fallback`、`approval_decided_via_chk`）；`SessionRequestWorker` 的兜底响铃与结案查询、交回查询的 `kind` 过滤 | F1–F6，R4，R10、R11、R12（worker 部分），M6（worker 部分） |
+| **I1** | `resolveReviewer` 改序（S2）；`PROJECT_COORDINATOR` 的 `confirmationReviewStates` 改读 `runItemHold`；暂停时 `deliver` 留在 `PENDING`，D5 重投；`readOwnerConfirmation` 持有时 `waiting = null`；开头块读面 `lead`；确认门 A4；`notifyConfirmationRaised` | S2、S4、S5、S6，D2、D4、D5、D6，T1 末段、T2，N1、N3、N6，H1、H2、H3，G1、G2，A1–A7 |
+| **I2** | `createApproval` 的持有分支；`run-question:v1` 轮次及块；`answerRunQuestion`；`ask_owner` 的 `forRunQuestion`；needs-you / 列表 / 计数 / 飞书 / `claimApprovalAlert` 排除持有的问题；`questionWithCoordinator`；runner-go `session_reply`、`ask_owner` 及 CLI | R1–R3，R5–R9，R12（请求侧），W3 第 4、5 行 |
+| **I3** | `notify` 路由与 `run-notify:v1` 轮次；`recipient` 结果；runner-go `notify` 描述与 CLI | M1–M6，W3 第 1 行 |
+| **C** | web、OrbitKit（iOS/macOS）、Android：开头块、兜底标签、`Under review` 与 `Coordinator` 署名、`Asking the coordinator`、`Answered by the coordinator`、`runQuestion` 只读卡片；对照 `docs/mocks/coordinator-raised-confirmation/` | H1、H3，S5（画法），A3，F5，R5（卡片），R9，§12 新增文案 |
+| **W** | 简报、协调会话开场、其余工具描述；修订 ILC §0.3（G6 的五个前缀）与 `docs/completion-input-routing.md` 的相关段落；`docs/task-completion-criteria.md`；全量套件 | W1、W2、W3 第 2、3 行，G6，U1–U5 的回归 |
+
+要一并更新的旧钉子（开工前按 grep 为准）：`owner-confirmation-review.pg.spec.ts` 里「审查期间关 Automatic，审查照常走完」的用例（F2 第 2 行改了它）；`task-owner-confirmation.pg.spec.ts` 夹具的「没有 `creatorSessionId` 就没有审查方」（S2 在 Automatic 项目里改了它）；`task-list-instructions.spec.ts`（W1）。
+
+### 19.2 待 owner 定的问题
+
+下面每条都已经按「推荐」写进了上面的规则。不同意哪一条，在确认卡上用 Send back 写明。
+
+| # | 问题 | 推荐 | 另一种做法 |
+|---|---|---|---|
+| **O1** | 持有的时钟从什么时候起算？ | 从事项产生时起算，到点兜底（F4）。项目的不变量是「Nothing waits forever」。代价：协调会话长时间忙时，事项可能在它读到之前就交给了你 | 照 11-08 对证据的规则，从协调者取走时起算，协调者不可用时不设上限。代价：协调者一直不可用时，run 的问题会一直卡着 |
+| **O2** | 协调者呈上时要响手机吗？ | 响一次（A6）。这是你要看的事，呈上已经过滤过了。兜底的确认卡不响（N6，和今天一样），问题和 notify 的兜底响 | 都不响，卡片只出现在 needs-you 里，和今天的确认卡一样 |
+| **O3** | 呈上的卡片画在哪里？ | 画在任务自己的会话里（和今天相同），needs-you 指向那里（A2、§13）。上下文、报告、改动都在这一页，实现最小 | 画在协调会话里，和 owner item 放一起。三端都要新做一个列表读面，回执的位置也要重定 |
+| **O4** | 卡片开头是结论加「一个点」，还是「所有点」？ | 结论 + 全部要决定的点，第一条最靠前（A3）。项目目标写的是 one point，任务说明写的是 points；有几条问题就要几条答案，只露一条会重演 2026-09-29 一次确认吞掉 7 个决定的事 | 只露第一条，其余折叠在 `+N more` 里 |
+| **O5** | 协调会话因额度等原因暂停时，run 的问题怎么办？ | 问题立即兜底给你（F3），因为 run 卡着占着名额；确认请求继续持有到窗口 | 问题也持有到窗口，和确认请求一致 |
+| **O6** | 任务 run 结束时的「Finished / Failed」推送（`notifySessionSettled`）要不要也归协调者？ | 这次不动：它是平台事实，不是 run 主动说的话，也不在项目列的三条路里。要改另开任务 | 在 Automatic 项目里也静音 |
+| **O7** | run 派生的子会话（`parent_session_id` 非空、`task_id` 为空）提问怎么办？ | 这次不动，按 U4 仍到 owner。先看实际有多少，再决定 | 沿派生树找到 run，同样持有 |
+
+---
+
 ## 附录 A　本文替 owner 做的决定（可以推翻）
 
 下面每一条都已写成具体规则。owner 不同意哪一条，在确认卡上用 Send back 写明，改完再确认。
 
-1. **Automatic 关着的项目没有审查方**（S2），与证据投给协调者只在 Automatic 开着时投递是同一条线。另一种做法是照样由协调会话审。审查期间关掉 Automatic，已经开始的审查照常走完，只是不能再退回（§3.5 末段、B5）。
-2. **没有派活会话的任务没有审查方**：owner 在 app 里建的任务都属于这一种，不带会话建的任务也是，项目内外都一样（S2）。判据是 `creator_session_id` 为空，不看 `creator_type`。
+1. **Automatic 关着的项目没有审查方**（S2），与证据投给协调者只在 Automatic 开着时投递是同一条线。另一种做法是照样由协调会话审。审查期间关掉 Automatic，持有立即结束，卡片按兜底显示（§16 F2）；协调者仍可补交记录，但不能再退回（§3.5 末段、B5）。
+2. **不在项目里、又没有派活会话的任务没有审查方**：owner 在 app 里建的任务都属于这一种，不带会话建的任务也是（S2）。判据是 `creator_session_id` 为空，不看 `creator_type`。Automatic 项目里，这样的任务也由协调会话持有（修订 3）。
 3. **审查方读过、空闲下来、又没有唤醒源，就提前结束审查**（T5）。项目里的窗口默认两小时，不提前结束的话，忘了调工具的审查会让卡片白等两小时。
 4. **「未经审查」只进不退**（T1、§3.1 的触发器）：审查方结束后又被叫醒，卡片也不会回到「审查中」。
 5. **投递被拒即终局**，不重投，也不改投给后来的协调会话（D4）。
@@ -955,6 +1335,11 @@ owner 确认卡的署名提示改为 `Orbit composed this card and authorised it
 9. **owner 确认之后发现的问题会推送**，正文只有 Orbit 的话；只是后到的 REVIEW 不推送（L5）。
 10. **窗口在请求那一刻冻结**，并且从请求时起算，不从投递时起算（N4）。
 11. **效果图说明里写的 expectReply 改为平台投递**（§2.1）。
+12. **呈上不加新表、新工具**：REVIEW 记录已经带着结论和要决定的点（A3）。
+13. **owner 在持有期间仍可以从任务面板确认**（A4）。
+14. **`notify` 投递给协调者，不拒绝**（M1）。
+15. **持有的问题不显示卡片，但 `decideApproval` 的门不关**（R7）。
+16. §19.2 O1–O7 的推荐项。
 
 ## 附录 B　修订记录
 
@@ -963,4 +1348,6 @@ owner 确认卡的署名提示改为 `Orbit composed this card and authorised it
 | 初稿 | 2026-10-02 | 按任务 `34Z35urx0kEB2qZaLeikc` 的 1–11 条写成 |
 | 初稿修订 | 2026-10-02 | 送 owner 前，对照代码独立审读一遍后改了这些：<br>- 审查方按 `creator_session_id` 判，不按 `creator_type`；<br>- `requestId` 沿用原始 UUID；<br>- 旧客户端不因审查被拒（`NOT_SHOWN`）；<br>- 「未经审查」只进不退（触发器、排空的判定）；<br>- 审查期间关 Automatic 不打断审查；<br>- 退回改由 Orbit 转交，并按记录 id 派生轮次键；<br>- 空正文平台轮次接进队列显示与 auto-retry；<br>- 任务行的 Under review；<br>- 读面类型写全；<br>- 答案评论与决定同一个事务；<br>- 工具门把重试放在顶替之前；<br>- `branch_sha` 的三处上报与看不到的边界；<br>- 审查方本身是执行会话时的顺序 |
 | 修订 2 | 2026-11-04 | 所有者 2026-11-03 决定：确认退回按 SRR §2.5 判。<br>- B2、B8 加第 14 条，排在表里其他每一行之后，第 4 条的重试和第 8 条的 PROBLEMS 不问；<br>- B3 的块加 `from-session`、`from-mode`，审查方更窄时加 SRR §2.2 那句话；<br>- §2.1、G7 相应改；<br>- 被拒的审查方用 `task_confirmation_review`，那个门不变 |
+| 修订 3 | 2026-11-10 | 任务 `34ugU32krhXotXkNdcR90`：Automatic 项目从「卡片立刻显示、多一栏审查」改为「先持有、再呈上」。<br>- §0.1、G2、S2（项目分支先于 `creator_session_id`）、S4、S5、S6、D2、D5、D6、T1 末段、T2、N1、N6、H1–H3、G5、G8、§12 相应改；<br>- 新增 §13 持有与呈上（A）、§14 提问（R）、§15 notify（M）、§16 兜底（F）、§17 简报与工具描述（W）、§18 不变的情况（U）、§19 切分与待定问题（O）；<br>- 效果图 `docs/mocks/coordinator-raised-confirmation/`；<br>- 实现按 §19.1 拆给任务 F、I1、I2、I3、C、W |
+| 修订 3 审读 | 2026-11-10 | 送 owner 前，对照代码独立审读一遍后改了这些：<br>- R5 的 `session_request` 行改在 `onTurnWritten` 写（`turn_id` NOT NULL），R4 补状态 CHECK 与 `reply_text`；<br>- 回答走 `answerRunQuestion`，不走 `reply`；worker、`hasPendingWakeSource`、`chargeOpenRequest` 按 `kind` 过滤；<br>- 暂停的协调会话不持有问题（`createTurn` 会撤掉重试）；<br>- 兜底响铃绕过 `claimApprovalAlert`，后者排除持有的问题；<br>- F2 把「已答」提到第一行、加 `ANSWERED`，暂停不再越过到期；<br>- `PROJECT_COORDINATOR` 不读 `reviewer_ended_at`；D5 重投用条件更新改指新轮次；<br>- 不持有的问题把原因存在 `approval.coordinator_fallback`；<br>- notify 只 claim 一次；<br>- R8 用 `escalated_item_id` 连到待办，`answerOpenItem` 改 `reply_by`；<br>- R11 不改四个 reaper，由 worker 结案；<br>- A6 与 A7 的条件、W1 的替换范围、G6 的前缀、切分归属 |
 | 实现修订 1 | 2026-10-03 | 服务端实现（任务 `34Z35uusJWkeA99O23btE`）落下的细节，规则本身不变：<br>- 迁移号取 `0370_owner_confirmation_review`（写的时候是 0365；落地前 main 先后用了 0365、0366、0369、0367，0368 又被项目「项目收尾重做」的 `0368_open_item_coordinator_handling` 先占了，所以改成 0370）；外键照 0267 带 `ON UPDATE CASCADE`（Prisma 的默认），§3.1 的 DDL 没写这一句；<br>- CLI 的输入写作 `orbit task confirmation-review [task-id] (--input JSON \| --input-file -) [--json]`（`confirmation-return` 同），不是 `--json <文件\|->`：每条 CLI 命令的 `--json` 都是「输出紧凑 JSON」，不能在这两条上改作输入；`[task-id]` 可代替输入里的 `taskId`，两者都给时必须一致，不取 `ORBIT_TASK_ID`；<br>- §3.5 第 7 条与 Q3 的 400 不带新码，只有说明哪个字段错了的 message，与确认门对自身畸形请求体的回答一样；<br>- 本文没指定的 requiredAction 取值：`CALL_FROM_THE_REVIEWER_SESSION`（`CONFIRMATION_REVIEW_REQUIRES_SESSION`）、`LEAVE_IT_TO_ITS_REVIEWER`（`…_NOT_THE_REVIEWER`）、`CALL_FROM_INSIDE_A_TURN`（`…_OUTSIDE_TURN`）、`REVIEW_THE_NEWEST_REQUEST`（`…_SUPERSEDED`，另带 `latestRequestId`）、`END_YOUR_TURN`（`…_ALREADY_RECORDED`）、`USE_SESSION_SEND_TO_ADD_TO_IT`（`CONFIRMATION_RETURN_ALREADY_SENT_BACK`）、`REOPEN_THE_TASK_FIRST`（`CONFIRMATION_RETURN_TASK_SETTLED`）；`COORDINATOR_DISABLED` 与 `PROJECT_FUSE_PAUSED` 用 `RECORD_A_REVIEW_FOR_THE_OWNER`；`OWNER_CONFIRMATION_ANSWERS_REQUIRED` 另带 `missingKeys`；<br>- B8 第 11 条也覆盖 `createTurn` 自己因执行会话已结束或在 Trash 而拒绝的情况，同样答 409 `CONFIRMATION_RETURN_RUN_ENDED`；<br>- D2 的「auto-retry 重发它自己」：失败的审查轮次与退回轮次由 sweep 以 `owner-confirmation-review:v1:<reviewId>:retry:<uuid>`、`confirmation-return:v1:<recordId>:retry:<uuid>` 重发，正文仍为空，交出时照行重新渲染；审查行的 `delivery_turn_client_id` 仍指原轮次（它已被读到，T1 不因此判「未经审查」）；<br>- Q5 第 2 条的提醒轮次正文写成 `<orbit-confirmation-answers task=\"…\">` 块；<br>- 三个前缀同时登记进 `orbit-authored-turn.ts#isOrbitAuthoredTurn`：没有人打过这些字，撤回时不还给输入框；<br>- 共享类型另加 `ConfirmationUnderReview`（N3 的形状）、`ConfirmationReviewRequestCard`（D7）、`ConfirmationReturnCard`（B3），都在 `src/shared/src/owner-confirmation-review.ts` |
