@@ -8,9 +8,11 @@ for your deployment, and keep [CLI automation](runner-cli.md) and [self-hosting]
 
 `orbit status` reports registration, the configured server, and the heartbeat age; it also prints
 private identifiers and paths, so sanitize it before sharing. On Linux, registration prints the
-installed service name. Depending on whether the host broker is installed, it is
-`orbit-runner@<uid>.service` or `orbit-runner-<user>.service`; older installs may use `orbit-runner.service`.
-Use the name registration printed:
+installed service name. On a machine set up with `orbit host setup`, it is
+`orbit-runner@<user name>.service`, the user name escaped by `systemd-escape` (`orbit-runner@test\x2duser.service`
+for `test-user`), or `orbit-runner@<uid>.service` on a machine set up by an earlier release
+([G](#g-a-machine-set-up-with-orbit-host-setup)). Otherwise it is `orbit-runner-<user>.service`; older installs may
+use `orbit-runner.service`. Use the name registration printed:
 
 ```bash
 # Linux/systemd; replace the placeholder with the installed service name.
@@ -407,6 +409,65 @@ A sparse checkout changes a few things in the repository:
   `git worktree add` runs it.
 - git 2.34.x takes `--no-cone` in `git sparse-checkout set --no-cone` as one more pattern (the option arrived in
   2.35). The checkout is still sparse and works.
+
+## G. A machine set up with `orbit host setup`
+
+On a machine set up with `orbit host setup`, each account's runner is `orbit-runner@<user name>.service` and runs the
+account's own `~/.orbit/bin/orbit`; the host broker starts and stops it and runs only `/usr/local/bin/orbit`
+([Multi-user Linux machines](self-hosting.md#multi-user-linux-machines)). An account reads its own runner without
+root:
+
+```bash
+systemctl status "orbit-runner@$(systemd-escape "$(id -un)")"
+journalctl -u "orbit-runner@$(systemd-escape "$(id -un)")"
+```
+
+**`orbit register` stops at "refusing to enable … could not be stopped".** An older runner unit of the account, its
+`orbit-runner-<user>.service`, bare `orbit-runner.service` or `orbit-runner@<uid>.service`, did not stop. The broker
+neither enabled nor started the new instance and did not fall back to sudo, so the account still has exactly the one
+runner it had. The answer quotes systemd's reason. Once root has let that unit stop, run `orbit register` again.
+
+**`orbit register` says it is waiting for the machine broker.** The broker is draining an older runner of the
+account, which takes up to three minutes, the unit's `TimeoutStopSec=180`. Let it finish. After 15 minutes without an
+answer, the command stops and names `systemctl status orbit-hostd.service`; the broker may still be carrying the
+request out, so look there before running it again.
+
+**`orbit register` copied a different build over the account's copy.** Registration puts the binary it runs from at
+`~/.orbit/bin/orbit`. Where `/usr/local/bin` comes before `~/.local/bin` on PATH, a bare `orbit` is the broker's
+binary. See which one the shell finds:
+
+```bash
+command -v orbit
+```
+
+and register from the account's own copy by its launcher's path, `~/.local/bin/orbit`. The runner updates itself to
+the release its assignment offers either way.
+
+**An account's runner is still `orbit-runner@<uid>.service`.** The machine was set up by an earlier release, and
+running setup again left the account: it had no `~/.orbit/bin/orbit` it could execute, and setup listed it with the
+command to run. Its runner keeps its process until it next starts, which then fails without that copy
+(`systemctl status` shows it restarting). The account runs the command setup gave it:
+
+```bash
+/usr/local/bin/orbit register
+```
+
+which puts its own copy in place and moves the runner to `orbit-runner@<user name>.service`.
+
+**The runners are on a newer release than `/usr/local/bin/orbit`.** Each runner updates its own copy and then asks
+the broker once to update its binary. A runner whose copy came from a release before this layout does not ask, and a
+broker whose directory its group can write declines, and the runner logs why. The broker's binary follows with the
+next release, or at once when root installs it:
+
+```bash
+sudo /usr/local/bin/orbit upgrade
+```
+
+No runner restarts for it: none runs that file. A `/usr/local/bin` that its group can write is made root's alone with:
+
+```bash
+sudo chmod g-w /usr/local/bin
+```
 
 ## Before opening a public issue
 
