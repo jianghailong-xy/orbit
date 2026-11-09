@@ -729,13 +729,15 @@ function EngineRow({
     (account) => !runsOnEnvKey(health, account) && accountKindOf(account) === 'unknown',
   ).length;
   // "Add account" is how a machine gets from one account to two, so it is not the group's to hold:
-  // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
-  // or not. An Antigravity account is a Google sign-in, which only some runners can add, and a Kimi
-  // account only a runner that keeps them apart can; OpenCode keeps no accounts at all, and has no
-  // sign-in to add one with.
+  // the Codex row offers it whether it heads a group yet or not — but only once a first account is
+  // signed in. A signed-out row's way to the first is its own Sign in, and an unanswered check may
+  // still be one, so both of those keep their rows to it. An Antigravity account is a Google
+  // sign-in, which only some runners can add, and a Kimi account only a runner that keeps them
+  // apart can; OpenCode keeps no accounts at all, and has no sign-in to add one with.
+  const anyAccountIn = (health?.accounts ?? []).some((account) => account.auth === 'yes');
   const addAccountTo: LoginEngine | null =
     !regionBlocked && loginEngine !== null && engineKeepsAccounts(loginEngine) &&
-    (kind === 'in' || kind === 'out' || kind === 'unknown') &&
+    (kind === 'in' || kind === 'unknown' || anyAccountIn) &&
     (loginEngine !== 'antigravity' || addsAntigravityAccounts(runner)) &&
     (loginEngine !== 'kimi' || addsKimiAccounts(runner)) &&
     (loginEngine !== 'cursor' || (addsCursorAccounts(runner) && cursorState !== 'updateRunner' && cursorState !== 'unsupportedPlatform'))
