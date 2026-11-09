@@ -56,6 +56,8 @@ func newMoveHost(t *testing.T, accounts ...moveAccount) *moveHost {
 	for _, a := range accounts {
 		h.users[strconv.Itoa(a.uid)] = a
 	}
+	// No broker running: setup has none to stop (TestHostSetupStopsARunningBrokerBeforeItMovesAnything).
+	setInstance(h.f, hostdServiceUnit, "", "static", "inactive")
 	env.sys = hostdSystem{
 		run:   h.run,
 		query: h.f.query,
@@ -548,6 +550,170 @@ func TestPrintMovesFooterCoversOnlyInstancesLeftAsTheyWere(t *testing.T) {
 			}
 			if tc.footer == "" && strings.Contains(out, "keeps its current process") {
 				t.Errorf("printMoves says an instance keeps its process while none was left as it was:\n%s", out)
+			}
+		})
+	}
+}
+
+// brokerLog records, in one sequence, every command setup runs for itself and every command
+// and question it puts to systemd for the moves, so their order can be asserted across both.
+func (h *moveHost) brokerLog() *[]string {
+	var log []string
+	h.env.run = func(name string, args ...string) error {
+		log = append(log, strings.Join(append([]string{name}, args...), " "))
+		return nil
+	}
+	run, query := h.env.sys.run, h.env.sys.query
+	h.env.sys.run = func(name string, args ...string) (string, error) {
+		log = append(log, strings.Join(append([]string{name}, args...), " "))
+		return run(name, args...)
+	}
+	h.env.sys.query = func(name string, args ...string) (string, error) {
+		log = append(log, "? "+strings.Join(append([]string{name}, args...), " "))
+		return query(name, args...)
+	}
+	return &log
+}
+
+// A broker still running when setup is run again may be the earlier release's, which would enable
+// an account's uid instance or restart every runner on the layout setup is changing. Setup stops
+// it, and confirms it down, after writing the units, reloading systemd and enabling the socket,
+// and before it moves anything.
+func TestHostSetupStopsARunningBrokerBeforeItMovesAnything(t *testing.T) {
+	const from, to = "orbit-runner@1000.service", "orbit-runner@alice.service"
+	h := newMoveHost(t, moveAccount{1000, "alice", "/home/alice", true})
+	h.instance(1000, "enabled", "active", true)
+	setInstance(h.f, hostdServiceUnit, "", "static", "active")
+	log := h.brokerLog()
+
+	out := h.setup()
+
+	want := []string{
+		"systemd-tmpfiles --create " + filepath.Join(h.root, hostdTmpfilesPath),
+		"systemctl daemon-reload",
+		"systemctl enable --now orbit-hostd.socket",
+		"? " + instanceQuery(hostdServiceUnit),
+		"systemctl stop orbit-hostd.service",
+		"? " + instanceQuery(hostdServiceUnit),
+		"? " + listUidInstances,
+		"? " + instanceQuery(from),
+		"systemctl stop " + from,
+		"? " + instanceQuery(from),
+		"systemctl disable " + from,
+		"? " + instanceQuery(from),
+		"systemctl enable " + to,
+		"systemctl start " + to,
+	}
+	if got := strings.Join(*log, "\n"); got != strings.Join(want, "\n") {
+		t.Errorf("setup's commands, in order:\ngot:\n  %s\nwant:\n  %s", strings.ReplaceAll(got, "\n", "\n  "), strings.Join(want, "\n  "))
+	}
+	if u := h.f.units[hostdServiceUnit]; u.activeState != "inactive" {
+		t.Errorf("%s is %s after setup, want inactive", hostdServiceUnit, u.activeState)
+	}
+	for _, argv := range h.f.ran {
+		if strings.Contains(strings.Join(argv, " "), "orbit-hostd.socket") {
+			t.Errorf("setup touched the socket through the broker's system: %v", argv)
+		}
+	}
+	if !strings.Contains(out, "    "+from+" → "+to+" (alice)\n") {
+		t.Errorf("setup did not report the move:\n%s", out)
+	}
+}
+
+// A broker that cannot be stopped, or confirmed down, could still be the earlier release's acting
+// on the old layout, so setup moves nothing: it says why and what to run, and exits non-zero. The
+// units are written already, so running setup again finishes the job.
+func TestHostSetupMovesNothingWhenTheBrokerCannotBeConfirmedDown(t *testing.T) {
+	const from = "orbit-runner@1000.service"
+	const stop = "systemctl stop orbit-hostd.service"
+	for _, tc := range []struct {
+		name    string
+		arrange func(h *moveHost)
+		why     string
+	}{{
+		name:    "the stop fails",
+		arrange: func(h *moveHost) { h.f.fail[stop] = errors.New("exit status 1") },
+		why:     "systemctl stop orbit-hostd.service failed: exit status 1",
+	}, {
+		name:    "it stays up after the stop",
+		arrange: func(h *moveHost) { h.f.units[hostdServiceUnit].stuck = true },
+		why:     "orbit-hostd.service is still up after systemctl stop: systemd reports ActiveState=active",
+	}, {
+		name: "it is deactivating after the stop",
+		arrange: func(h *moveHost) {
+			h.f.units[hostdServiceUnit].activeState = "deactivating"
+			h.f.units[hostdServiceUnit].stuck = true
+		},
+		why: "orbit-hostd.service is still up after systemctl stop: systemd reports ActiveState=deactivating",
+	}, {
+		name:    "systemd cannot be asked",
+		arrange: func(h *moveHost) { h.f.fail[instanceQuery(hostdServiceUnit)] = errors.New("exit status 1") },
+		why:     "orbit-hostd.service was stopped, but systemd could not be asked whether it is down: systemctl show orbit-hostd.service failed: exit status 1",
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newMoveHost(t, moveAccount{1000, "alice", "/home/alice", true})
+			h.instance(1000, "enabled", "active", true)
+			setInstance(h.f, hostdServiceUnit, "", "static", "active")
+			tc.arrange(h)
+			log := h.brokerLog()
+
+			err := hostSetup(h.env, "https://orbit.example.com")
+			if err == nil {
+				t.Fatal("setup succeeded with a broker it could not confirm down")
+			}
+			for _, part := range []string{
+				"setup wrote the units but moved no runner: the host broker that was running could not be confirmed down: " + tc.why + ".\n",
+				"It may be an earlier release's, which would act on the old layout while setup moves runners.",
+				"once `systemctl is-active orbit-hostd.service` says inactive, set the host up again; that run finishes the job:\n" +
+					"  sudo systemctl stop orbit-hostd.service\n" +
+					"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+			} {
+				if !strings.Contains(err.Error(), part) {
+					t.Errorf("error lacks %q:\n%v", part, err)
+				}
+			}
+			// The units are written, systemd reloaded and the socket enabled: a second run finishes.
+			if _, err := os.Stat(filepath.Join(h.root, hostRunnerTemplatePath)); err != nil {
+				t.Errorf("the runner template was not written: %v", err)
+			}
+			for _, entry := range *log {
+				if strings.Contains(entry, "orbit-runner@") {
+					t.Errorf("setup reached a runner instance with the broker not confirmed down: %s", entry)
+				}
+			}
+			assertArgv(t, h.f.ran, []string{"systemctl", "stop", hostdServiceUnit})
+			if u := h.f.units[from]; u.activeState != "active" || u.unitFileState != "enabled" {
+				t.Errorf("%s is %s/%s, want it as it was: active/enabled", from, u.activeState, u.unitFileState)
+			}
+			if out := h.env.out.(*strings.Builder).String(); strings.Contains(out, "set up for Orbit runners") || strings.Contains(out, "Moved") {
+				t.Errorf("setup reported success or a move:\n%s", out)
+			}
+		})
+	}
+}
+
+// A host with no broker running — inactive, or failed — has none to stop: setup asks systemd once
+// and goes on to the moves exactly as before.
+func TestHostSetupWithNoBrokerRunningStopsNothing(t *testing.T) {
+	const from, to = "orbit-runner@1000.service", "orbit-runner@alice.service"
+	for _, state := range []string{"inactive", "failed"} {
+		t.Run(state, func(t *testing.T) {
+			h := newMoveHost(t, moveAccount{1000, "alice", "/home/alice", true})
+			h.instance(1000, "enabled", "active", true)
+			setInstance(h.f, hostdServiceUnit, "", "static", state)
+			log := h.brokerLog()
+
+			h.setup()
+
+			assertArgv(t, h.f.ran, moved(from, to)...)
+			asked := 0
+			for _, entry := range *log {
+				if strings.Contains(entry, hostdServiceUnit) {
+					asked++
+				}
+			}
+			if asked != 1 {
+				t.Errorf("setup reached %s %d times, want once, to ask about it:\n  %s", hostdServiceUnit, asked, strings.Join(*log, "\n  "))
 			}
 		})
 	}
