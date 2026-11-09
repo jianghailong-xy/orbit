@@ -1,0 +1,9 @@
+diff --git a/src/runner-go/cursor_permissions_real_test.go b/src/runner-go/cursor_permissions_real_test.go
+index d7dc83a42..37b4f8f06 100644
+--- a/src/runner-go/cursor_permissions_real_test.go
++++ b/src/runner-go/cursor_permissions_real_test.go
+@@ -1 +1 @@
+-//go:build cursor_real && linux
++//go:build cursor_real && (linux || darwin)
+@@ -65,0 +66 @@ func runRealCursorRecorder(dir, exe string) int {
++	sandboxProbeInstrument(dir)
