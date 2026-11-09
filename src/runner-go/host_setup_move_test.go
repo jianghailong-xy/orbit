@@ -287,7 +287,21 @@ func TestHostSetupLeavesAnAccountWhoseMoveFailsWithExactlyOneRunner(t *testing.T
 	}, {
 		name:    "the name instance will not start",
 		arrange: func(h *moveHost) { h.f.fail["systemctl start "+to] = errors.New("exit status 1") },
-		wantRan: append(moved(from, to), []string{"systemctl", "disable", "--now", to}, []string{"systemctl", "enable", from}, []string{"systemctl", "start", from}),
+		wantRan: append(moved(from, to), []string{"systemctl", "stop", to}, []string{"systemctl", "disable", to}, []string{"systemctl", "enable", from}, []string{"systemctl", "start", from}),
+		why:     "the move failed: systemctl start " + to + " failed: exit status 1; it is put back as it was.",
+	}, {
+		// systemd started the name instance and only its reply was lost: the cleanup takes it
+		// down and confirms it down, and only then is the uid instance put back.
+		name: "the name instance's start reports an error while systemd started it, and the cleanup confirms it down",
+		arrange: func(h *moveHost) {
+			h.f.fail["systemctl start "+to] = errors.New("exit status 1")
+			h.f.onRun = func(argv []string) {
+				if strings.Join(argv, " ") == "systemctl start "+to {
+					h.f.units[to].activeState = "active"
+				}
+			}
+		},
+		wantRan: append(moved(from, to), []string{"systemctl", "stop", to}, []string{"systemctl", "disable", to}, []string{"systemctl", "enable", from}, []string{"systemctl", "start", from}),
 		why:     "the move failed: systemctl start " + to + " failed: exit status 1; it is put back as it was.",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -370,6 +384,170 @@ func TestHostSetupWaitsForAMidTurnRunnerToDrainBeforeItMoves(t *testing.T) {
 			}
 			if !tc.moved && !strings.Contains(out, "alice ("+from+"): the move failed: alice's older runner "+from+" could not be stopped") {
 				t.Errorf("setup did not name alice as left:\n%s", out)
+			}
+		})
+	}
+}
+
+// V2's case: the name instance's enable or start reports an error while systemd did enable or
+// start it, and the cleanup after it fails. The name instance may still be running, so the uid
+// instance is not started again: the account has at most one runner, and setup names the unit
+// that may still run and what settles it, rather than saying it is put back as it was.
+func TestHostSetupKeepsTheUidInstanceDownWhenTheNameInstanceCannotBeConfirmedDown(t *testing.T) {
+	const from, to = "orbit-runner@1000.service", "orbit-runner@alice.service"
+	startedAnyway := func(h *moveHost, verb string) {
+		h.f.fail["systemctl "+verb+" "+to] = errors.New("exit status 1")
+		h.f.onRun = func(argv []string) {
+			if strings.Join(argv, " ") == "systemctl "+verb+" "+to {
+				if verb == "start" {
+					h.f.units[to].activeState = "active"
+				} else {
+					h.f.units[to].unitFileState = "enabled"
+				}
+			}
+		}
+	}
+	for _, tc := range []struct {
+		name    string
+		arrange func(h *moveHost)
+		wantRan [][]string
+		// toActive and toEnabled are the name instance's state at the end.
+		toActive, toEnabled string
+		downErr             string
+	}{{
+		name: "start reports an error while systemd started it, and its stop fails",
+		arrange: func(h *moveHost) {
+			startedAnyway(h, "start")
+			h.f.fail["systemctl stop "+to] = errors.New("exit status 1")
+		},
+		wantRan:   append(moved(from, to), []string{"systemctl", "stop", to}),
+		toActive:  "active",
+		toEnabled: "enabled",
+		downErr:   to + " could not be stopped: systemctl stop " + to + " failed: exit status 1",
+	}, {
+		name: "start reports an error while systemd started it, and its stop leaves it up",
+		arrange: func(h *moveHost) {
+			startedAnyway(h, "start")
+			started := h.f.onRun
+			h.f.onRun = func(argv []string) {
+				started(argv)
+				if strings.Join(argv, " ") == "systemctl start "+to {
+					h.f.units[to].stuck = true // from here on, systemctl stop leaves it up
+				}
+			}
+		},
+		wantRan:   append(moved(from, to), []string{"systemctl", "stop", to}),
+		toActive:  "active",
+		toEnabled: "enabled",
+		downErr:   to + " is still up after systemctl stop: systemd reports ActiveState=active",
+	}, {
+		name: "enable reports an error while systemd enabled it, and its disable fails",
+		arrange: func(h *moveHost) {
+			startedAnyway(h, "enable")
+			h.f.fail["systemctl disable "+to] = errors.New("exit status 1")
+		},
+		wantRan:   [][]string{{"systemctl", "stop", from}, {"systemctl", "disable", from}, {"systemctl", "enable", to}, {"systemctl", "stop", to}, {"systemctl", "disable", to}},
+		toActive:  "inactive",
+		toEnabled: "enabled",
+		downErr:   to + " was stopped but could not be disabled: systemctl disable " + to + " failed: exit status 1",
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newMoveHost(t, moveAccount{1000, "alice", "/home/alice", true})
+			h.instance(1000, "enabled", "active", true)
+			tc.arrange(h)
+
+			out := h.setup()
+			t.Logf("setup printed:\n%s", out)
+
+			assertArgv(t, h.f.ran, tc.wantRan...)
+			for _, argv := range h.f.ran {
+				if argv[len(argv)-1] == from && (argv[1] == "start" || argv[1] == "enable") {
+					t.Errorf("ran %v while %s could not be confirmed down", argv, to)
+				}
+			}
+			if u := h.f.units[from]; u.activeState != "inactive" || u.unitFileState != "disabled" {
+				t.Errorf("%s is %s/%s, want it left down: inactive/disabled", from, u.activeState, u.unitFileState)
+			}
+			if u := h.f.units[to]; u.activeState != tc.toActive || u.unitFileState != tc.toEnabled {
+				t.Errorf("%s is %s/%s, want %s/%s", to, u.activeState, u.unitFileState, tc.toActive, tc.toEnabled)
+			}
+			live := 0
+			for _, unit := range []string{from, to} {
+				if (hostdUnitState{"ActiveState": h.f.units[unit].activeState}).up() {
+					live++
+				}
+			}
+			if live > 1 {
+				t.Errorf("alice has %d live runners, want at most one", live)
+			}
+			fail := "systemctl start " + to + " failed: exit status 1"
+			if strings.HasPrefix(tc.name, "enable") {
+				fail = "systemctl enable " + to + " failed: exit status 1"
+			}
+			why := "    alice (" + from + "): the move failed: " + fail + "; and " + tc.downErr + ". " +
+				to + " may still be running, so " + from + " is not started again and alice has at most one runner. " +
+				"To settle it, root runs `systemctl disable --now " + to + "` and, once `systemctl is-active " + to + "` says inactive, `systemctl enable --now " + from + "`; " +
+				"or alice runs the command below, which finishes the move.\n"
+			// The output ends with alice's lines: no footer saying her uid instance keeps its
+			// process, which it does not.
+			tail := "\n  Left on their orbit-runner@<uid> instance (1):\n" + why + "      alice runs:  /usr/local/bin/orbit register\n"
+			if !strings.HasSuffix(out, "without root.\n"+tail) {
+				t.Errorf("setup output does not end with %q:\n%s", tail, out)
+			}
+			if strings.Contains(out, "put back as it was") {
+				t.Errorf("setup says the uid instance is put back as it was, while it is left down:\n%s", out)
+			}
+		})
+	}
+}
+
+// A uid instance that could not be put back after a failed move is not as it was, so setup prints
+// no footer saying it keeps its process.
+func TestHostSetupPrintsNoKeptProcessFooterForAUidInstanceItCouldNotPutBack(t *testing.T) {
+	const from, to = "orbit-runner@1000.service", "orbit-runner@alice.service"
+	h := newMoveHost(t, moveAccount{1000, "alice", "/home/alice", true})
+	h.instance(1000, "enabled", "active", true)
+	h.f.fail["systemctl start "+to] = errors.New("exit status 1")
+	h.f.fail["systemctl start "+from] = errors.New("exit status 1")
+
+	out := h.setup()
+
+	tail := "\n  Left on their orbit-runner@<uid> instance (1):\n" +
+		"    alice (" + from + "): the move failed: systemctl start " + to + " failed: exit status 1; and it could not be put back: systemctl start " + from + " failed: exit status 1.\n" +
+		"      alice runs:  /usr/local/bin/orbit register\n"
+	if !strings.HasSuffix(out, "without root.\n"+tail) {
+		t.Errorf("setup output does not end with %q:\n%s", tail, out)
+	}
+}
+
+// The footer under the accounts left covers only the instances left as they were, and says so
+// when some were not.
+func TestPrintMovesFooterCoversOnlyInstancesLeftAsTheyWere(t *testing.T) {
+	kept := hostInstanceMove{from: "orbit-runner@1001.service", uid: 1001, account: "bob", why: "/home/bob/.orbit/bin/orbit is missing or bob cannot execute it", command: hostLeftCommand}
+	down := hostInstanceMove{from: "orbit-runner@1000.service", uid: 1000, account: "alice", why: "the move failed: …", command: hostLeftCommand, notAsItWas: true}
+	const rest = " keeps its current process. At its next restart it runs its account's own\n" +
+		"  ~/.orbit/bin/orbit, so it needs that copy by then: the command above puts it in place and\n" +
+		"  moves the runner to orbit-runner@<user name>.\n"
+	for _, tc := range []struct {
+		name   string
+		moves  []hostInstanceMove
+		footer string
+	}{
+		{"every instance left as it was", []hostInstanceMove{kept}, "  An instance left" + rest},
+		{"some left as they were, some not", []hostInstanceMove{down, kept}, "  An instance left as it was" + rest},
+		{"none left as it was", []hostInstanceMove{down}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var b strings.Builder
+			printMoves(&b, tc.moves, nil)
+			out := b.String()
+			last := tc.moves[len(tc.moves)-1]
+			want := "      " + last.account + " runs:  " + hostLeftCommand + "\n" + tc.footer
+			if !strings.HasSuffix(out, want) {
+				t.Errorf("printMoves output does not end with %q:\n%s", want, out)
+			}
+			if tc.footer == "" && strings.Contains(out, "keeps its current process") {
+				t.Errorf("printMoves says an instance keeps its process while none was left as it was:\n%s", out)
 			}
 		})
 	}

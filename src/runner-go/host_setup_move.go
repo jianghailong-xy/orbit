@@ -28,6 +28,9 @@ type hostInstanceMove struct {
 	why string
 	// command is the one command its account runs; "" when there is no account to run it.
 	command string
+	// notAsItWas says a move that failed could not leave the uid instance as it was: it stays
+	// down because the name instance could not be confirmed down, or it could not be put back.
+	notAsItWas bool
 }
 
 // hostLeftCommand is what an account left on its uid instance runs: register, as the account,
@@ -90,8 +93,9 @@ func (env hostSetupEnv) uidInstances() ([]string, error) {
 }
 
 // moveUidInstance moves one uid instance, or says why it is left; false when it is no runner at
-// all. A move that fails part way leaves the account with exactly one runner: the uid instance,
-// put back as it was, and the name instance down and disabled.
+// all. A move that fails part way leaves the account with at most one runner: the uid instance,
+// put back as it was once the name instance is confirmed down and disabled, or, when the name
+// instance cannot be confirmed down, the uid instance left down and both units named.
 func (env hostSetupEnv) moveUidInstance(from string) (hostInstanceMove, bool) {
 	sys := env.sys
 	uid64, _ := strconv.ParseUint(strings.TrimSuffix(strings.TrimPrefix(from, "orbit-runner@"), ".service"), 10, 32)
@@ -134,7 +138,8 @@ func (env hostSetupEnv) moveUidInstance(from string) (hostInstanceMove, bool) {
 	// The uid instance down first, confirmed down and disabled. One that will not go down keeps
 	// running as it was; one that went down and then failed a later step is put back.
 	if err := sys.takeDown(from, t); err != nil {
-		m.why = "the move failed: " + err.Error() + env.restore(from, st)
+		restored, ok := env.restore(from, st)
+		m.why, m.notAsItWas = "the move failed: "+err.Error()+restored, !ok
 		return m, true
 	}
 	to := t.unit
@@ -143,18 +148,57 @@ func (env hostSetupEnv) moveUidInstance(from string) (hostInstanceMove, bool) {
 		err = sys.systemctl("start", to)
 	}
 	if err != nil {
-		_ = sys.systemctl("disable", "--now", to)
-		m.why = "the move failed: " + err.Error() + env.restore(from, st)
+		// systemd may have enabled or started the name instance even though systemctl reported
+		// an error (its reply lost, say), so it is taken down and confirmed down before the uid
+		// instance is put back. One that cannot be confirmed down may still be running: the uid
+		// instance then stays down, and the account has at most one runner.
+		if downErr := takeDownNameInstance(sys, to); downErr != nil {
+			m.why = fmt.Sprintf("the move failed: %v; and %v. %s may still be running, so %s is not started again and %s has at most one runner. "+
+				"To settle it, root runs `systemctl disable --now %s` and, once `systemctl is-active %s` says inactive, `systemctl enable --now %s`; "+
+				"or %s runs the command below, which finishes the move",
+				err, downErr, to, from, t.username, to, to, from, t.username)
+			m.notAsItWas = true
+			return m, true
+		}
+		restored, ok := env.restore(from, st)
+		m.why, m.notAsItWas = "the move failed: "+err.Error()+restored, !ok
 		return m, true
 	}
 	m.to = to
 	return m, true
 }
 
+// takeDownNameInstance takes down a name instance whose enable or start reported an error, as
+// takeDown does an older runner: stopped, confirmed down, disabled, and confirmed down and not
+// enabled, each by asking systemd rather than trusting systemctl's exit status.
+func takeDownNameInstance(sys hostdSystem, unit string) error {
+	if err := sys.systemctl("stop", unit); err != nil {
+		return fmt.Errorf("%s could not be stopped: %v", unit, err)
+	}
+	st, err := sys.unitState(unit)
+	if err != nil {
+		return fmt.Errorf("%s was stopped, but systemd could not be asked whether it is down: %v", unit, err)
+	}
+	if !st.down() {
+		return fmt.Errorf("%s is still up after systemctl stop: systemd reports ActiveState=%s", unit, st["ActiveState"])
+	}
+	if err := sys.systemctl("disable", unit); err != nil {
+		return fmt.Errorf("%s was stopped but could not be disabled: %v", unit, err)
+	}
+	if st, err = sys.unitState(unit); err != nil {
+		return fmt.Errorf("%s was stopped and disabled, but systemd could not be asked whether it stayed down: %v", unit, err)
+	}
+	if !st.down() || st.enabled() {
+		return fmt.Errorf("%s is not down after systemctl stop and disable: systemd reports ActiveState=%s, UnitFileState=%s", unit, st["ActiveState"], st["UnitFileState"])
+	}
+	return nil
+}
+
 // restore puts a uid instance whose move failed back as it was before — enabled if it was, and
 // started if it was up — and says what could not be. Only what the move changed is put back: a
-// uid instance that would not stop is still running, enabled, as it was.
-func (env hostSetupEnv) restore(from string, was hostdUnitState) string {
+// uid instance that would not stop is still running, enabled, as it was. ok is false when it
+// could not be put back.
+func (env hostSetupEnv) restore(from string, was hostdUnitState) (said string, ok bool) {
 	now, err := env.sys.unitState(from)
 	if err != nil {
 		now = hostdUnitState{}
@@ -171,9 +215,9 @@ func (env hostSetupEnv) restore(from string, was hostdUnitState) string {
 		}
 	}
 	if len(failed) > 0 {
-		return "; and it could not be put back: " + strings.Join(failed, "; ")
+		return "; and it could not be put back: " + strings.Join(failed, "; "), false
 	}
-	return "; it is put back as it was"
+	return "; it is put back as it was", true
 }
 
 // printMoves reports what setup did with the uid instances it found: each one moved, then every
@@ -200,6 +244,12 @@ func printMoves(w io.Writer, moves []hostInstanceMove, listErr error) {
 	if len(left) == 0 {
 		return
 	}
+	asItWas := 0
+	for _, m := range left {
+		if !m.notAsItWas {
+			asItWas++
+		}
+	}
 	fmt.Fprintf(w, "\n  Left on their orbit-runner@<uid> instance (%d):\n", len(left))
 	for _, m := range left {
 		who := fmt.Sprintf("uid %d", m.uid)
@@ -211,7 +261,16 @@ func printMoves(w io.Writer, moves []hostInstanceMove, listErr error) {
 			fmt.Fprintf(w, "      %s runs:  %s\n", m.account, m.command)
 		}
 	}
-	fmt.Fprintln(w, "  An instance left keeps its current process. At its next restart it runs its account's own\n"+
+	// What follows holds only for an instance left as it was; one a failed move could not leave
+	// so has its own line above saying what became of it.
+	if asItWas == 0 {
+		return
+	}
+	who := "An instance left"
+	if asItWas < len(left) {
+		who = "An instance left as it was"
+	}
+	fmt.Fprintln(w, "  "+who+" keeps its current process. At its next restart it runs its account's own\n"+
 		"  ~/.orbit/bin/orbit, so it needs that copy by then: the command above puts it in place and\n"+
 		"  moves the runner to orbit-runner@<user name>.")
 }
