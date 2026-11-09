@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -39,7 +40,7 @@ import (
 //   - It is checked by the one chain every install passes (installRelease): the manifest's
 //     sha256, then the version and the write contract the download reports.
 //   - The download is never run as root. Reporting its version and its contract means executing
-//     it, so every one of those execs is dropped to the uid that asked (SysProcAttr.Credential).
+//     it, so every exec drops to the asking uid, or nobody for uid 0 (SysProcAttr.Credential).
 //
 // And only the machine's own binary is replaced: the file orbit-hostd.service's ExecStart= names,
 // when it is a regular file only root can write, in directories only root can write all the way up
@@ -75,6 +76,7 @@ var hostdUpdateMu sync.Mutex
 // an httptest release server. The zero value means production defaults.
 type hostdUpdate struct {
 	sys             hostdSystem
+	lookupUser      func(string) (*user.User, error)
 	configPath      string // "" → hostConfigPath
 	serviceUnitPath string // "" → hostdServiceUnitPath
 	stampPath       string // "" → hostdUpdateStampPath
@@ -95,6 +97,9 @@ type hostdUpdate struct {
 }
 
 func (u hostdUpdate) withDefaults() hostdUpdate {
+	if u.lookupUser == nil {
+		u.lookupUser = user.Lookup
+	}
 	if u.configPath == "" {
 		u.configPath = hostConfigPath
 	}
@@ -248,15 +253,14 @@ func (u hostdUpdate) runnerUnits() []string {
 	return units
 }
 
-// hostdProbeCred is who the download's probes run as: never root, always the account that asked
-// for the update.
+// hostdProbeCred is who the download's probes run as: the asking account, or nobody for root.
 type hostdProbeCred struct {
 	uid, gid uint32
 	username string
 }
 
 // probeCredential decides who will execute the downloaded file, or returns the refusal to send
-// back instead. Both refusals are one rule seen from two sides — the probe runs as a real,
+// back instead. The probe runs as a real,
 // unprivileged account, or it does not run.
 func (u hostdUpdate) probeCredential(peer hostdPeer) (hostdProbeCred, hostdResponse, bool) {
 	uid := strconv.FormatUint(uint64(peer.UID), 10)
@@ -264,18 +268,26 @@ func (u hostdUpdate) probeCredential(peer hostdPeer) (hostdProbeCred, hostdRespo
 	if err != nil {
 		return hostdProbeCred{}, hostdFail("uid %s has no account on this machine: %v", uid, err), false
 	}
+	if peer.UID == 0 {
+		acct, err = u.lookupUser("nobody")
+		if err != nil {
+			return hostdProbeCred{}, hostdFail("cannot check root's update as nobody: %v", err), false
+		}
+		n, err := strconv.ParseUint(acct.Uid, 10, 32)
+		if err != nil || n == 0 {
+			return hostdProbeCred{}, hostdFail("refusing root's update: nobody must have a non-root uid (got %q)", acct.Uid), false
+		}
+		peer.UID = uint32(n)
+	}
 	gid, err := strconv.ParseUint(acct.Gid, 10, 32)
 	if err != nil {
-		return hostdProbeCred{}, hostdFail("cannot read the primary group of uid %s: %v", uid, err), false
-	}
-	if u.geteuid() == 0 && peer.UID == 0 {
-		return hostdProbeCred{}, hostdFail("refusing to update on behalf of uid 0: verifying a download means running it, and dropping root to root drops nothing. Ask from the unprivileged account whose runner needs the new binary — root can still run `orbit upgrade` itself."), false
+		return hostdProbeCred{}, hostdFail("cannot read the primary group of uid %s: %v", acct.Uid, err), false
 	}
 	return hostdProbeCred{uid: peer.UID, gid: uint32(gid), username: acct.Username}, hostdResponse{}, true
 }
 
 // probeAs is the releaseProbe hostd checks a download with: installRelease decides what to ask the
-// download, and every exec of it that asking takes is the caller's, never this daemon's.
+// download, and every exec is unprivileged, never this daemon's.
 func (u hostdUpdate) probeAs(cred hostdProbeCred) releaseProbe {
 	return func(path string, args ...string) ([]byte, error) {
 		cmd, err := u.probeCmd(cred, path, args...)

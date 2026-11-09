@@ -349,6 +349,7 @@ model User {
 
   /// Persistent observations this account is keeping (migration 0259).
   watches          Watch[]
+  ownerRequests    OwnerRequest[]
 
   /// Public links this account made, ended ones included (migration 0306).
   shareLinks       ShareLink[]
@@ -7242,6 +7243,46 @@ model CodexRateLimitResetOperation {
 /// The database is the fact source. Real-time events only ever schedule an evaluation earlier, so
 /// liveness is `nextEvaluateAt` plus a leased sweep — there is deliberately no event table, no
 /// outbox and no hint queue here (contract §8).
+/// An agent session asking the account owner to act (migration 0503): a decision, a secret, a step only a person can
+/// do, or a yes/no. PENDING, then exactly one of DONE | DECLINED | EXPIRED | WITHDRAWN, which is final
+/// (`owner-requests/owner-request.ts`). The asking session and the project are history, not foreign keys.
+model OwnerRequest {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  ownerId             String    @map("owner_id") @db.Uuid
+  owner               User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  askedBySessionId    String    @map("asked_by_session_id") @db.Uuid
+  projectId           String?   @map("project_id") @db.Uuid
+  kind                String
+  state               String    @default("PENDING")
+  title               String
+  why                 String
+  blocksTaskIds       String[]  @default([]) @map("blocks_task_ids") @db.Uuid
+  ifUnanswered        String?   @map("if_unanswered")
+  /// DECISION: `[{ label, description? }]`.
+  options             Json?
+  recommendedOption   Int?      @map("recommended_option")
+  /// MANUAL_STEP: `[{ text, command?, link? }]`.
+  steps               Json?
+  /// SECRET: `{ name, runnerId, envVar? , filePath? }` — never the value.
+  secretSpec          Json?     @map("secret_spec")
+  verifyHint          String?   @map("verify_hint")
+  expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
+  clientRequestId     String?   @map("client_request_id")
+  resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolvedByUserId    String?   @map("resolved_by_user_id") @db.Uuid
+  resolvedBySessionId String?   @map("resolved_by_session_id") @db.Uuid
+  /// Why it was declined (required) or withdrawn.
+  resolutionNote      String?   @map("resolution_note")
+  /// What the owner chose or said when marking it done: `{ option?, text? }`.
+  answer              Json?
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([askedBySessionId, clientRequestId], map: "owner_request_session_client_key")
+  @@index([ownerId, state, createdAt], map: "owner_request_owner_state_idx")
+  @@map("owner_request")
+}
+
 model Watch {
   id      String @id @default(uuid(7)) @db.Uuid
   ownerId String @map("owner_id") @db.Uuid

@@ -13,12 +13,11 @@ import (
 // and the account can execute it, and never writes into a home.
 
 // placeOwnCopyForBroker is register's copy step on a host whose broker it is about to ask: when the
-// socket is there and this process is an account's (root's runner is no broker instance, and keeps
-// the path it always had), the running binary is put at the account's ~/.orbit/bin/orbit. A copy
+// socket is there, the running binary is put at the account's ~/.orbit/bin/orbit. A copy
 // that cannot be put there is said and is not the end of the registration: the broker has the
 // last word, and its refusal says what is missing and what to run.
 func placeOwnCopyForBroker(socketPath, exe string) {
-	if _, err := os.Stat(socketPath); err != nil || processEUID() == 0 {
+	if _, err := os.Stat(socketPath); err != nil {
 		return
 	}
 	u, err := currentUser()

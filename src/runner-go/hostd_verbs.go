@@ -126,15 +126,8 @@ func (t hostdTarget) data(extra map[string]any) map[string]any {
 	return d
 }
 
-// hostdBringsUnitUp names the verbs that can leave a unit running, and so the ones uid 0
-// is refused. restart belongs on this list: against a stopped unit it *is* start, so
-// guarding enable and start while leaving restart open would be a lock with the key
-// hanging next to it. Tear-down and read-only verbs stay open to uid 0 on purpose — a
-// root runner that predates this rule has to remain stoppable.
-var hostdBringsUnitUp = map[string]bool{"enable": true, "start": true, "restart": true}
-
 // target resolves the peer to the instance a verb may act on, or returns the refusal to
-// send back instead. Three rules live here:
+// send back instead. Two rules live here:
 //
 //   - A uid with no account is not somebody hostd will touch a unit for. The template's
 //     User= could not resolve at activation anyway, and a uid arriving from a user
@@ -142,10 +135,6 @@ var hostdBringsUnitUp = map[string]bool{"enable": true, "start": true, "restart"
 //   - A name made of digits alone names no instance: systemd reads User=%I of
 //     orbit-runner@1000 as uid 1000 whoever is called "1000", and of orbit-runner@0 as
 //     root.
-//   - uid 0 gets no runner brought up. A root runner owns every file its agents write
-//     and reads root's own engine logins, which is why the control plane carries a
-//     runsAsRoot risk flag at all (see runs_as_root_test.go) — hostd's job is to make
-//     that flag unnecessary, not to hand out new reasons for it.
 func (s hostdSystem) target(peer hostdPeer, verb string) (hostdTarget, hostdResponse, bool) {
 	uid := strconv.FormatUint(uint64(peer.UID), 10)
 	u, err := s.lookupUID(uid)
@@ -158,9 +147,6 @@ func (s hostdSystem) target(peer hostdPeer, verb string) (hostdTarget, hostdResp
 		if strings.Trim(u.Username, "0123456789") == "" {
 			return hostdTarget{}, hostdFail("refusing to %s %s: the user name %q is all digits, which systemd reads as uid %s rather than as this account (uid %s)", verb, t.unit, u.Username, u.Username, uid), false
 		}
-	}
-	if peer.UID == 0 && hostdBringsUnitUp[verb] {
-		return hostdTarget{}, hostdFail("refusing to %s %s: the runner must not run as root — it would own every file its agents write and read root's own engine logins. Ask from the unprivileged account the runner should belong to instead.", verb, t.unit), false
 	}
 	return t, hostdResponse{}, true
 }
@@ -411,6 +397,10 @@ func (s hostdSystem) status(peer hostdPeer, _ hostdRequest) hostdResponse {
 // unit's file is removed only once its unit is confirmed down. hostd runs as root, so
 // unlike the sudo path in service.go there is nothing to elevate through.
 func (s hostdSystem) takeDownOlderUnits(t hostdTarget) error {
+	return s.takeDownOlderUnitsRemovingFiles(t, true)
+}
+
+func (s hostdSystem) takeDownOlderUnitsRemovingFiles(t hostdTarget, removeFiles bool) error {
 	type older struct {
 		unit string
 		file string // the legacy unit's file, removed once it is down; "" for an instance
@@ -463,7 +453,7 @@ func (s hostdSystem) takeDownOlderUnits(t hostdTarget) error {
 		if err := s.takeDown(o.unit, t); err != nil {
 			return err
 		}
-		if o.file != "" && os.Remove(o.file) == nil {
+		if removeFiles && o.file != "" && os.Remove(o.file) == nil {
 			removed = true
 		}
 	}
