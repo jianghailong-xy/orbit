@@ -22,6 +22,17 @@ test('R4 migration, R10/M6 once-only ring across passes and replicas, R11 close,
   try {
     const migration = await sql.query(`SELECT migration_name FROM _prisma_migrations WHERE migration_name = '0504_run_item_requests' AND finished_at IS NOT NULL`);
     assert.equal(migration.rowCount, 1, 'the R4 migration was applied by the spec harness');
+    const constraints = await sql.query(`
+      SELECT conname, convalidated FROM pg_constraint
+      WHERE (conrelid = 'session_request'::regclass AND conname IN ('session_request_kind_chk', 'session_request_state_chk'))
+         OR (conrelid = 'approval'::regclass AND conname = 'approval_decided_via_chk')
+      ORDER BY conname
+    `);
+    assert.deepEqual(constraints.rows, [
+      { conname: 'approval_decided_via_chk', convalidated: true },
+      { conname: 'session_request_kind_chk', convalidated: true },
+      { conname: 'session_request_state_chk', convalidated: true },
+    ], 'all three CHECKs are present and validated after migration');
     await db.user.create({ data: { id: ownerId, email: `${ownerId}@fallback.invalid`, name: 'Fallback', passwordHash: 'x' } });
     const from = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Run', provider: 'codex', status: 'RUNNING' } });
     const to = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', status: 'AWAITING_INPUT' } });
