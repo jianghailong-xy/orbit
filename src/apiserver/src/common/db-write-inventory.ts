@@ -103,6 +103,28 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'owner-requests/owner-requests.service.ts#settle',
+    shape: 'TX_RETRIED',
+    locks: "The owner_request row by id and owner, through the UPDATE predicated on state = 'PENDING' and the deadline not yet passed; then, only when that matched, one watch_delivery INSERT (enqueueResolutions), whose foreign key takes the same owner_request row FOR KEY SHARE, already held by the UPDATE. No trigger, and no other row.",
+    identity: "The request id and its PENDING state: the first ending wins, and every later one (or a re-run after a commit) matches nothing and writes no delivery. `watch_delivery_owner_request_key` holds the request to one delivery.",
+    isolation: '',
+    attempts: 4,
+    replay: 'The compare-and-set is re-run against the committed row, and the delivery is written only when it matched in this attempt; a rollback discards both.',
+    effects: 'After commit only: a kick of the Watch delivery worker, which also finds the row on its own poll. The read that answers the caller follows the commit.',
+    answer: 'Typed 503 after retry exhaustion; the owner or the session ends the request again, and a request already ended is refused as such.',
+  },
+  {
+    at: 'owner-requests/owner-requests.service.ts#expireDue',
+    shape: 'TX_RETRIED',
+    locks: "Every PENDING owner_request row whose expires_at has passed, through one UPDATE; then one watch_delivery INSERT of a row per expired request (enqueueResolutions), whose foreign keys take those owner_request rows FOR KEY SHARE, already held. No trigger, and no other row.",
+    identity: "The state = 'PENDING' predicate: two replicas sweeping at once expire each request once between them, and a re-run after a commit matches nothing. `watch_delivery_owner_request_key` holds each request to one delivery.",
+    isolation: '',
+    attempts: 4,
+    replay: 'The sweep is re-run against the committed rows and writes a delivery for exactly the rows its own UPDATE moved; a rollback discards both.',
+    effects: 'After commit only: a kick of the Watch delivery worker.',
+    answer: 'The sweep logs it and the next tick, a minute later, expires those requests.',
+  },
+  {
     at: 'runner-api/runner-api.controller.ts#artifactResult',
     shape: 'TX_RETRIED',
     locks: 'conversation_turn by request id, then attachment by id. Attachment foreign keys only take FOR KEY SHARE on the session and the already locked turn.',
@@ -2344,6 +2366,8 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  // An owner request's ending delivered to the session that asked (migration 0504): its watch_delivery row.
+  { at: 'owner-requests/owner-requests.service.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue' },
   // The owner's direct messages to their Feishu bot (docs/feishu-bot-design.md §7.3, migration 0499): a message chain
   // made a session's, and the FEISHU activity row. Run inside the receipt's transaction, and inside createTurn's
   // through its onTurnWritten hook, which a replay of the turn's clientTurnId never reaches.
@@ -2886,8 +2910,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   // question is the coordinator's own call, and the answer is the owner's.
   { at: "projects/project-open-item.service.ts#askOwner", class: "INSERT", statements: 1, note: "The question itself: one createManyAndReturn with skipDuplicates against the partial unique index on (project, dedupe key) for OPEN items, so a tool call retried after a lost response files one question rather than asking the owner the same thing twice. The key is the caller's own `clientQuestionId`, or a fresh one when it sent none — one call, one question. Losing the race returns the row that won; a key held by a question that has since been ANSWERED matches neither and is refused, because filing nothing and reporting success is how a coordinator ends up waiting on an answer nobody was asked for." },
   { at: "owner-requests/owner-requests.service.ts#file", class: "INSERT", statements: 1, note: "A session filing an owner request (migration 0503): one createManyAndReturn with skipDuplicates against the unique (asked_by_session_id, client_request_id), so a call retried after a lost response files one request; losing that race reads back the row that won, in whatever state it is now. Its one foreign key takes the user row FOR KEY SHARE and nothing else; the asking session and the project are history columns, not keys. The push is sent after the statement, never inside it." },
-  { at: "owner-requests/owner-requests.service.ts#settle", class: "ONE_ROW_CAS", statements: 1, note: "Every ending an owner request gets by hand — the owner's done or decline, the asking session's withdraw: one UPDATE by id and owner predicated on state = 'PENDING' and the deadline not yet passed. The first ending wins and every later one matches nothing and is refused with the state already written, which is what makes terminal states final. No trigger and no key moves, so it locks its one row." },
-  { at: "owner-requests/owner-requests.service.ts#expireDue", class: "MANY_ROWS", statements: 1, note: "The expiry sweep, every minute on every apiserver: one UPDATE of every PENDING request whose expires_at has passed to EXPIRED. Its own compare-and-set, so two replicas sweeping at once expire each request once between them; it races a hand ending only on the state predicate both carry, and whichever commits first wins. A conflict it loses is retried by the next tick." },
   { at: "projects/project-open-item.service.ts#answerOpenItem", class: "ONE_ROW_CAS", statements: 1, note: "The owner's answer, and the end of the question in the same statement: an UPDATE whose predicate is the item and `state = 'OPEN'`, writing RESOLVED/ANSWERED with the answer beside it. A question gets one answer — a second press, or one racing another window, matches no row and is told so rather than replacing an answer the coordinator may already have acted on. The delivery that follows is `deliverAnswer`, after this has committed, because who is coordinating the project is read after the answer is a fact." },
   { at: "projects/project-open-item.service.ts#returnToCoordinator", class: "ONE_ROW_CAS", statements: 1, note: "The owner handing an escalated item back (§4.7), and the restart of its clock in the same statement: an UPDATE whose predicate is the item, `state = 'OPEN'` and the assignment the press was read from, writing COORDINATOR/DEFAULT with `assigned_at`, `waiting_since` and `escalate_at` moved together. A second press, or one racing the coordinator's own recovery on the same row, matches nothing and is told to read the project again rather than reporting a hand-back it did not make. The delivery that follows is `deliver`, after this has committed — and across the two reads the project's coordinator is resolved twice on purpose: the refusal in front of the write asks whether there is a conversation to hand the item TO, and the delivery asks which one it is NOW, which a rotation between them can have changed." },
   { at: "projects/project-open-item.service.ts#acceptOpenItem", class: "ONE_ROW_CAS", statements: 1, note: "The owner's Accept of work that reached the branch without their confirmation (§10.8): one conditional UPDATE whose predicate is the item in its project and account, the LANDED_WITHOUT_CONFIRMATION kind, `state = 'OPEN'` and `openItemOwed`, writing RESOLVED / ACCEPTED by the USER with the owner's id. A request from a session is refused before any read; a second press, or a task cancelled or replaced meanwhile, matches nothing and is told the item is no longer open, and the row's terminal guard refuses a rewrite either way." },

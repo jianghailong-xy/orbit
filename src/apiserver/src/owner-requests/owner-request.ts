@@ -202,3 +202,80 @@ export function ownerRequestAlert(kind: OwnerRequestKind, title: string): { titl
     : `${line.slice(0, OWNER_REQUEST_ALERT_BODY_MAX - 1).trimEnd()}…`;
   return { title: ALERT_TITLES[kind], body };
 }
+
+/**
+ * The turn key an ending is queued under on the asking session. A request ends once, so one key per request; the
+ * Watch delivery worker writes it, and `createTurn` replays a retry under it instead of queuing a second turn.
+ */
+export function ownerRequestTurnClientId(requestId: string): string {
+  return `owner-request:${requestId}:resolved`;
+}
+
+/** An ended request as the resolution turn reads it: columns that never change once the request has ended. */
+export interface EndedOwnerRequest {
+  id: string;
+  kind: string;
+  state: string;
+  title: string;
+  options: unknown;
+  secretSpec: unknown;
+  answer: unknown;
+  resolutionNote: string | null;
+  resolvedAt: Date | null;
+}
+
+/** What each ending means, in the turn's first line. */
+const ENDING_MEANING: Readonly<Record<Exclude<OwnerRequestState, 'PENDING'>, string>> = {
+  DONE: 'the owner did what was asked',
+  DECLINED: 'the owner declined it; their reason is in the payload',
+  EXPIRED: 'its deadline passed before the owner answered',
+  WITHDRAWN: 'this session withdrew it',
+};
+
+/**
+ * The structured payload a resolution turn carries: the request's id, kind and outcome, the reason the owner or the
+ * session gave, and per kind what was asked for. A DECISION carries the option the owner chose (and their words, if
+ * any). A SECRET carries only where the secret goes — its name and the env var or file path — and nothing the owner
+ * typed: no value reaches a turn, and neither does a free-text answer the value could have been pasted into.
+ */
+export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Record<string, unknown> {
+  const answer = (request.answer ?? {}) as { option?: number; text?: string };
+  const payload: Record<string, unknown> = {
+    requestId: request.id,
+    kind: request.kind,
+    outcome: request.state,
+    title: request.title,
+    resolvedAt: request.resolvedAt?.toISOString() ?? null,
+    reason: request.resolutionNote,
+  };
+  if (request.kind === 'SECRET') {
+    const spec = (request.secretSpec ?? {}) as Partial<OwnerRequestSecretSpec>;
+    payload.secret = {
+      name: spec.name,
+      ...(spec.envVar ? { envVar: spec.envVar } : {}),
+      ...(spec.filePath ? { filePath: spec.filePath } : {}),
+    };
+    return payload;
+  }
+  if (request.kind === 'DECISION' && answer.option !== undefined) {
+    const options = (request.options ?? []) as OwnerRequestOption[];
+    payload.chosenOption = { index: answer.option, label: options[answer.option]?.label ?? null };
+  }
+  if (answer.text !== undefined) payload.answerText = answer.text;
+  return payload;
+}
+
+/**
+ * The message the asking session is woken with when its request ends: one line naming the request and how it ended,
+ * then the structured payload as JSON. Built only from columns an ended request never changes, so every attempt at one
+ * delivery writes the same bytes and a retry replays the turn already queued.
+ */
+export function ownerRequestResolutionTurn(request: EndedOwnerRequest): string {
+  const meaning = ENDING_MEANING[request.state as Exclude<OwnerRequestState, 'PENDING'>] ?? 'it ended';
+  const header = [
+    `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}: ${meaning}.`,
+    '',
+    'This turn was queued by Orbit when the request ended, not typed by a person. The request is final and will not wake this session again.',
+  ].join('\n');
+  return `${header}\n\n\`\`\`json\n${JSON.stringify(ownerRequestResolutionPayload(request), null, 2)}\n\`\`\``;
+}
