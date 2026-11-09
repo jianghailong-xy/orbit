@@ -61,6 +61,10 @@ type hostSetupEnv struct {
 	// belong to: root, the zero value. A field because a test cannot create files root
 	// owns, so it names the uid that stands for root's instead.
 	rootUID uint32
+	// sys is how setup asks systemd, the passwd database and an account about the uid
+	// instances it moves (moveUidInstances): hostd's own, with its unit directory under
+	// prefix. Zero means production's.
+	sys hostdSystem
 }
 
 func (env hostSetupEnv) withDefaults() hostSetupEnv {
@@ -84,6 +88,10 @@ func (env hostSetupEnv) withDefaults() hostSetupEnv {
 	if env.out == nil {
 		env.out = os.Stdout
 	}
+	if env.sys.run == nil {
+		env.sys = hostdSystemDefaults()
+		env.sys.unitDir = env.path(systemdUnitDir)
+	}
 	return env
 }
 
@@ -105,7 +113,8 @@ func (env hostSetupEnv) sudoName() string {
 
 // hostSetup installs the machine broker and the per-user runner template, then reloads
 // systemd and starts the broker's socket. Idempotent: re-running it overwrites the same
-// five files and re-issues the same three commands.
+// five files and re-issues the same three commands. Then it moves each orbit-runner@<uid>
+// left from before instances were named after accounts (moveUidInstances).
 func hostSetup(env hostSetupEnv, server string) error {
 	env = env.withDefaults()
 
@@ -157,6 +166,11 @@ func hostSetup(env hostSetupEnv, server string) error {
 		"  Server:  %s\n\n"+
 		"  Every user on this host can now run `orbit register` without root.\n",
 		hostdSocketUnit, hostdSocketPath, exe, server)
+
+	// After the template is written and systemd has read it: a host set up before instances
+	// were named after accounts still runs orbit-runner@<uid>, and each is moved now.
+	moves, err := env.moveUidInstances()
+	printMoves(env.out, moves, err)
 	return nil
 }
 
@@ -351,7 +365,11 @@ there. This is the only Orbit command that needs root, and it is run once per
 machine: after it, every Linux user on this host registers, restarts and updates
 their own runner with no sudo anywhere.
 
-Re-running it is safe — the same files are rewritten and systemd reloaded.
+Re-running it is safe — the same files are rewritten and systemd reloaded. On a
+host set up before runners were named after accounts, it also moves each
+runner instance named by a uid, whose account has its own ~/.orbit/bin/orbit, to
+orbit-runner@<user name>, one at a time, and lists every account it left with the
+one command that account runs.
 
 Options:
   --server <url>           Control plane base URL this host's runners register against (required)

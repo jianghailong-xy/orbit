@@ -39,6 +39,12 @@ func testHostEnv(t *testing.T, euid int) (hostSetupEnv, *fakeHostRunner, string)
 		out:        io.Discard,
 		// The files this test creates are its own; they stand for root's.
 		rootUID: uint32(os.Geteuid()),
+		// A host with no runner instance to move: systemd lists none.
+		sys: hostdSystem{
+			run:     func(string, ...string) (string, error) { return "", nil },
+			query:   func(string, ...string) (string, error) { return "", nil },
+			unitDir: filepath.Join(root, systemdUnitDir),
+		},
 	}, cmds, root
 }
 

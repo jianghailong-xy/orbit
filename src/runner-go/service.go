@@ -52,6 +52,7 @@ func setupService(orbitHome string, proxyVars []envVar) (*runnerService, error) 
 
 	switch runtime.GOOS {
 	case "linux":
+		placeOwnCopyForBroker(serviceBrokerSocket, exe)
 		return setupServiceLinux(serviceBrokerSocket, proxyVars, func() (*runnerService, error) {
 			return installSystemd(exe, orbitHome, systemdService, proxyVars)
 		})
