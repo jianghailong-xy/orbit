@@ -36,23 +36,27 @@ import { readExecuteTarget, TASK_RUN_ACTION } from '../tasks/task-run-receipt';
  *   - to the engine, as a block appended AFTER the message at delivery (`appendSessionMessageContext`),
  *     so `controlPlaneNoteOf` records it as the control plane's note and not as the sender's words;
  *   - to the clients, as the card stored beside the runner's echo (`readSessionMessageCard`).
- * The limit counts what one session sent another in the last hour from a record of its own, written as
- * each message is sent (`chargeSessionMessage`).
+ * The limit counts what one session sent another in the last five minutes from a record of its own,
+ * written as each message is sent (`chargeSessionMessage`).
  */
 
 /**
- * §2.4: the most messages one session may send ONE other session in any rolling hour — ordinary
- * messages and, once they exist, requests together.
+ * §2.4: the most messages one session may send ONE other session in any rolling five minutes —
+ * ordinary messages, requests and message-carrying interrupts together. The budget belongs to the
+ * ordered pair: A→B and B→A are counted apart, and what A sends any other session is not counted here.
  *
- * A constant, not a setting. An agent's turn takes minutes, so collaboration does not come near 20
- * in an hour; the loop this exists for — "how is it going" / "still working" — goes round in a minute
- * or two. Before it, nothing bounded a free session talking to another: `maxCoordinatorSteers` only
- * charges a session that runs a task attempt (`SessionAttemptService#chargeSteer`).
+ * A constant, not a setting. It is a burst and loop limiter, not a pacing rule: sixty in five minutes
+ * is twelve a minute sustained, far above what two collaborating sessions exchange even in a dense
+ * handoff, so legitimate traffic does not meet it. What does meet it is a tight loop — a session
+ * polling another with "how is it going", or two sessions answering each other turn after turn — and
+ * it stops that within minutes. Before it, nothing bounded a free session talking to another:
+ * `maxCoordinatorSteers` only charges a session that runs a task attempt
+ * (`SessionAttemptService#chargeSteer`).
  */
-export const SESSION_MESSAGES_PER_PAIR_PER_HOUR = 20;
+export const SESSION_MESSAGES_PER_PAIR_PER_WINDOW = 60;
 
-/** The rolling hour §2.4 counts over. */
-const SESSION_MESSAGE_WINDOW_MS = 60 * 60 * 1000;
+/** The rolling five minutes §2.4 counts over. */
+export const SESSION_MESSAGE_WINDOW_MS = 5 * 60 * 1000;
 
 export const SESSION_MESSAGE_RATE_LIMITED_CODE = 'SESSION_MESSAGE_RATE_LIMITED';
 
@@ -61,7 +65,7 @@ export const SESSION_MESSAGE_RATE_LIMITED_CODE = 'SESSION_MESSAGE_RATE_LIMITED';
 export class SessionMessageRateLimited extends ConflictException {}
 
 /**
- * Charge one NEW message from `fromSessionId` to `toSessionId` against §2.4's hourly limit, or
+ * Charge one NEW message from `fromSessionId` to `toSessionId` against §2.4's per-pair limit, or
  * refuse it.
  *
  * Called from `createTurn`'s `participateSendTransaction` — under the recipient's Session lock, after
@@ -73,10 +77,10 @@ export class SessionMessageRateLimited extends ConflictException {}
  *
  * What is counted is what was SENT: a `session_message_charge` row written here for every message
  * admitted (migration 0351), and not the recipient's turns. A turn still queued is deleted when an
- * interrupt drops the queue or the owner withdraws it, and counted off the turns the hour went down
+ * interrupt drops the queue or the owner withdraws it, and counted off the turns the window went down
  * with it — queue a few messages, drop them with an interrupt that carries one more, and the pair
  * starts again. A row here is untouched by whatever happens to its message afterwards. The pair's rows
- * whose hour is over are dropped as it counts, so within the window the count only grows.
+ * whose window is over are dropped as it counts, so within the window the count only grows.
  *
  * Only the three session-to-session doors call it. A person's message, a headless credential's and the
  * platform's own deliveries carry no sender, are not counted, and are never refused here. Nor is a
@@ -89,13 +93,13 @@ export async function chargeSessionMessage(
   fromSessionId: string,
   toSessionId: string,
 ): Promise<void> {
-  // Counted the way the spawn-rate window counts its hour (`SessionsService` SPAWN_RATE_WINDOW_MS): a
-  // Prisma DateTime against the column Prisma wrote.
+  // Counted the way the spawn-rate window counts (`SessionsService` SPAWN_RATE_WINDOW_MS): a Prisma
+  // DateTime against the column Prisma wrote.
   const windowStart = new Date(Date.now() - SESSION_MESSAGE_WINDOW_MS);
   const pair = { toSessionId, fromSessionId };
   await tx.sessionMessageCharge.deleteMany({ where: { ...pair, createdAt: { lte: windowStart } } });
   const sent = await tx.sessionMessageCharge.count({ where: pair });
-  if (sent < SESSION_MESSAGES_PER_PAIR_PER_HOUR) {
+  if (sent < SESSION_MESSAGES_PER_PAIR_PER_WINDOW) {
     await tx.sessionMessageCharge.create({ data: pair });
     return;
   }
@@ -105,9 +109,11 @@ export async function chargeSessionMessage(
     code: SESSION_MESSAGE_RATE_LIMITED_CODE,
     message:
       `this session has already sent session ${uuidToBase62(toSessionId)} ${sent} messages in the `
-      + `last hour, the most one session may send another. Asking it again will not make it finish `
-      + `sooner: to wait for that session to finish its work, call session_await on it and end your `
-      + `turn — you are woken when it is done`,
+      + `last 5 minutes, the most one session may send one other session in any rolling 5 minutes. `
+      + `The limit is for this pair only: sending to any other session is unaffected, and this one `
+      + `accepts messages from you again as the window rolls on. Asking it again will not make it `
+      + `finish sooner: to wait for that session to finish its work, call session_await on it and `
+      + `end your turn — you are woken when it is done`,
     retryable: false,
   });
 }

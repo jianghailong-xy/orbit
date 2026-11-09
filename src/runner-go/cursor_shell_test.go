@@ -136,6 +136,10 @@ func TestCursorFreshShell(t *testing.T) {
 		os.Exit(runCursorFreshCommand(os.Getenv("ORBIT_TEST_FRESH_COMMAND"), cwd))
 	}
 	work := t.TempDir()
+	work, err := filepath.EvalSymlinks(work)
+	if err != nil {
+		t.Fatal(err)
+	}
 	outside := filepath.Join(t.TempDir(), "outside-file")
 	marker := filepath.Join(work, "poisoned")
 	snapshot := []byte("printf() { touch " + shellQuote(marker) + "; builtin printf \"$@\"; }; alias touch='false'; export SNAPSHOT_ONLY=poison; cd /;\n")
@@ -212,7 +216,12 @@ func TestCursorShellSandboxAndUnknownCaller(t *testing.T) {
 	var config cursorShellConfig
 	data, _ := os.ReadFile(spec.shellConfig)
 	_ = json.Unmarshal(data, &config)
-	conn, err := net.Dial("unix", config.Socket)
+	socketPath, release, err := cursorShellSocketPath(config.Socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.Dial("unix", socketPath)
+	release()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4724,7 +4724,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_send",
-				"description": "Send a message to a session you started (e.g. correct a sub-agent that's going off track, or answer one that is waiting for you). The server decides where it lands and reports it in `placement`: `steer` writes it into the turn already running, which gets no independent reply and cannot be withdrawn, while `accepted`/`queued` files it as that session's next turn. A session that has ended refuses the message unless you pass resumeIfEnded. Reuse clientTurnId after an uncertain response. Pass expectReply to make it a request: the call still returns at once (with `requestId` and `replyBy`), and the answer — or why there is none — comes back to you later as a turn of its own.",
+				"description": "Send a message to a session you started (e.g. correct a sub-agent that's going off track, or answer one that is waiting for you). The server decides where it lands and reports it in `placement`: `steer` writes it into the turn already running, which gets no independent reply and cannot be withdrawn, while `accepted`/`queued` files it as that session's next turn. A session that has ended refuses the message unless you pass resumeIfEnded. Reuse clientTurnId after an uncertain response. Pass expectReply to make it a request: the call still returns at once (with `requestId` and `replyBy`), and the answer — or why there is none — comes back to you later as a turn of its own. An ordered pair of sessions may exchange at most 60 messages in any rolling 5 minutes (requests, project_send and message-carrying interrupts included); a send over that is refused with SESSION_MESSAGE_RATE_LIMITED and is not retryable — wait for the window or call session_await on the recipient. Sending to other sessions is unaffected.",
 				"inputSchema": obj(withSessionRequestProps(map[string]interface{}{
 					"sessionId":     sessionIDProp,
 					"message":       str,
@@ -4737,7 +4737,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			sessionReplyDescriptor(obj),
 			map[string]interface{}{
 				"name":        "session_interrupt",
-				"description": "Interrupt a session's current turn (the process stays alive; you can session_send afterward). Interrupting DROPS whatever was queued behind that turn — stopping means stop. To stop the turn and redirect it, pass `message`: that files the follow-up in the same operation, after the drop, so it survives and runs as the next turn. Accepting this is not a promise the engine stopped; the session's transcript carries an `interrupt` event when it actually did.",
+				"description": "Interrupt a session's current turn (the process stays alive; you can session_send afterward). Interrupting DROPS whatever was queued behind that turn — stopping means stop. To stop the turn and redirect it, pass `message`: that files the follow-up in the same operation, after the drop, so it survives and runs as the next turn. Accepting this is not a promise the engine stopped; the session's transcript carries an `interrupt` event when it actually did. A `message` counts against the same per-pair cap as session_send (60 in any rolling 5 minutes; over it, SESSION_MESSAGE_RATE_LIMITED and nothing is dropped).",
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId":    sessionIDProp,
 					"message":      map[string]interface{}{"type": "string", "description": "What to do instead, sent atomically with the stop. Omitted → a plain interrupt, and anything queued behind the running turn is dropped with nothing put in its place."},
@@ -4928,7 +4928,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"clientTurnId after an uncertain response. With expectReply the message is a " +
 					"request to the coordinator it was DELIVERED to: the answer comes back to you as a " +
 					"turn, and if that conversation is rotated out first the outcome is RECIPIENT_ENDED " +
-					"— ask again and it reaches the new one.",
+					"— ask again and it reaches the new one. It counts against session_send's cap on " +
+					"the pair (you → the coordinator): 60 messages in any rolling 5 minutes, then " +
+					"SESSION_MESSAGE_RATE_LIMITED, not retryable.",
 				"inputSchema": obj(withSessionRequestProps(map[string]interface{}{
 					"projectId": map[string]interface{}{
 						"type":        "string",

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -166,11 +167,19 @@ func prepareCursorShellSandbox(job *ClaimedSession, spec *CursorLaunchSpec, dir 
 	}
 	configPath := filepath.Join(dir, "bin", "sandbox.json")
 	sandbox.sealed = []string{filepath.Join(dir, "bin"), filepath.Dir(helper), cursorShellCLIDir(spec.Executable)}
+	workspace, err := filepath.EvalSymlinks(spec.Cwd)
+	if err != nil {
+		return err
+	}
 	// Seal the topmost directory below a writable root too: otherwise a command
 	// could rename a writable ancestor and replace the protected launch files.
 	for i, path := range sandbox.sealed {
+		path, err = filepath.EvalSymlinks(path)
+		if err != nil {
+			return err
+		}
 		original := path
-		rel, _ := filepath.Rel(spec.Cwd, path)
+		rel, _ := filepath.Rel(workspace, path)
 		if rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
 			return fmt.Errorf("Auto sandbox launch files must be outside the workspace")
 		}
@@ -180,7 +189,7 @@ func prepareCursorShellSandbox(job *ClaimedSession, spec *CursorLaunchSpec, dir 
 				path = filepath.Join(root, strings.Split(rel, string(filepath.Separator))[0])
 			}
 		}
-		rel, _ = filepath.Rel(original, spec.Cwd)
+		rel, _ = filepath.Rel(original, workspace)
 		if rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
 			return fmt.Errorf("Auto sandbox launch files must be outside the workspace")
 		}
@@ -254,7 +263,9 @@ func runCursorShell(configPath string, args []string) int {
 			}
 			_ = conn.Close()
 		}
-		if allowed {
+		// Only Linux has a verified peer/process authentication backend. Refuse
+		// escapes on other platforms even if a substituted broker answers true.
+		if allowed && runtime.GOOS == "linux" {
 			return runCursorFreshCommand(key.Command, cwd)
 		}
 	}

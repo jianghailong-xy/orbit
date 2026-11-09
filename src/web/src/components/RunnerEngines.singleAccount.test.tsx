@@ -16,7 +16,9 @@ import type { Runner } from './TasksSidePanel';
  * every machine had before accounts, so none of that may show for it: the card keeps one row per
  * engine, and the Codex row keeps its name, sub-line, status tag, quota and button. What it adds is
  * `Add account`, ahead of that button — without it a machine with Default alone could never get to
- * two. A runner too old to report accounts has one account, not none, and reads the same.
+ * two. It waits for Default to be signed in: signed out, the row's own Sign in is the way to the
+ * first account, and the only one it offers. A runner too old to report accounts has one account,
+ * not none, and reads the same.
  *
  * Every ROW value is that engine row for the same fixture, held less `Add account`, which has a test
  * of its own. It was first the page before accounts existed (RunnerEngines.tsx at 864cad31c); since
@@ -281,11 +283,18 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
   );
 
   it.each(ROW)(
-    '$state: Add account leads the Codex row, and opens the name for a second account',
+    '$state: Add account leads the Codex row once an account is in, and opens the name for a second',
     async ({ auth, over, codex }) => {
       const page = mount([runner({ auth, ...accountsOf(auth) }, over)]);
       const row = codexRowOf(page);
       const offline = over?.online === false;
+
+      // Signed out, the way to the first account is the row's own Sign in: a second is only
+      // something to add once one is in.
+      if (auth === 'no') {
+        expect(addAccount(row)).toBeUndefined();
+        return;
+      }
 
       // The group head's button, ahead of the row's own — and, like that one, not pressable while
       // the machine is offline.

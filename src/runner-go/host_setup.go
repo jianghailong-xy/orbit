@@ -33,7 +33,8 @@ const (
 	// somewhere it — and every uid — can find it.
 	hostConfigPath = "/etc/orbit/config.json"
 
-	hostdSocketUnit = "orbit-hostd.socket"
+	hostdSocketUnit  = "orbit-hostd.socket"
+	hostdServiceUnit = "orbit-hostd.service"
 )
 
 // hostFile is one file setup installs.
@@ -61,6 +62,10 @@ type hostSetupEnv struct {
 	// belong to: root, the zero value. A field because a test cannot create files root
 	// owns, so it names the uid that stands for root's instead.
 	rootUID uint32
+	// sys is how setup asks systemd, the passwd database and an account about the uid
+	// instances it moves (moveUidInstances): hostd's own, with its unit directory under
+	// prefix. Zero means production's.
+	sys hostdSystem
 }
 
 func (env hostSetupEnv) withDefaults() hostSetupEnv {
@@ -84,6 +89,10 @@ func (env hostSetupEnv) withDefaults() hostSetupEnv {
 	if env.out == nil {
 		env.out = os.Stdout
 	}
+	if env.sys.run == nil {
+		env.sys = hostdSystemDefaults()
+		env.sys.unitDir = env.path(systemdUnitDir)
+	}
 	return env
 }
 
@@ -105,7 +114,9 @@ func (env hostSetupEnv) sudoName() string {
 
 // hostSetup installs the machine broker and the per-user runner template, then reloads
 // systemd and starts the broker's socket. Idempotent: re-running it overwrites the same
-// five files and re-issues the same three commands.
+// five files and re-issues the same three commands. Then it stops a broker still running
+// from before (stopBroker) and moves each orbit-runner@<uid> left from before instances were
+// named after accounts (moveUidInstances).
 func hostSetup(env hostSetupEnv, server string) error {
 	env = env.withDefaults()
 
@@ -149,6 +160,11 @@ func hostSetup(env hostSetupEnv, server string) error {
 	if err := env.run("systemctl", "enable", "--now", hostdSocketUnit); err != nil {
 		return fmt.Errorf("systemctl enable --now %s failed: %w", hostdSocketUnit, err)
 	}
+	// Before any move: a broker that is still running may be the earlier release's, which
+	// would enable a uid instance or restart every runner on the layout setup is changing.
+	if err := env.stopBroker(exe, server); err != nil {
+		return err
+	}
 
 	fmt.Fprintf(env.out, "\n✓ this host is set up for Orbit runners.\n"+
 		"  Broker:  %s (socket-activated; %s), running %s\n"+
@@ -157,7 +173,41 @@ func hostSetup(env hostSetupEnv, server string) error {
 		"  Server:  %s\n\n"+
 		"  Every user on this host can now run `orbit register` without root.\n",
 		hostdSocketUnit, hostdSocketPath, exe, server)
+
+	// After the template is written and systemd has read it: a host set up before instances
+	// were named after accounts still runs orbit-runner@<uid>, and each is moved now.
+	moves, err := env.moveUidInstances()
+	printMoves(env.out, moves, err)
 	return nil
+}
+
+// stopBroker stops a running orbit-hostd.service and confirms it down, so no broker started
+// before this run — of the earlier release, say — is left serving the socket while setup moves
+// runners: its enable would start an account's orbit-runner@<uid> again, and its update would
+// restart every orbit-runner@* systemd lists. The socket stays enabled, so the next connection
+// starts the binary the unit setup just wrote names. A broker systemd already reports down is
+// left alone. One that cannot be stopped, or confirmed down, stops setup before it moves
+// anything; the units are written, so running setup again finishes the job.
+func (env hostSetupEnv) stopBroker(exe, server string) error {
+	if st, err := env.sys.unitState(hostdServiceUnit); err == nil && st.down() {
+		return nil
+	}
+	err := env.sys.systemctl("stop", hostdServiceUnit)
+	if err == nil {
+		var st hostdUnitState
+		if st, err = env.sys.unitState(hostdServiceUnit); err != nil {
+			err = fmt.Errorf("%s was stopped, but systemd could not be asked whether it is down: %v", hostdServiceUnit, err)
+		} else if !st.down() {
+			err = fmt.Errorf("%s is still up after systemctl stop: systemd reports ActiveState=%s", hostdServiceUnit, st["ActiveState"])
+		}
+	}
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("setup wrote the units but moved no runner: the host broker that was running could not be confirmed down: %v.\n"+
+		"It may be an earlier release's, which would act on the old layout while setup moves runners. "+
+		"Stop it, and once `systemctl is-active %s` says inactive, set the host up again; that run finishes the job:\n  sudo systemctl stop %s\n  sudo %s host setup --server %s",
+		err, hostdServiceUnit, hostdServiceUnit, exe, server)
 }
 
 // machineBinaryPath is the one binary the host broker runs, as root, and where setup tells
@@ -351,7 +401,11 @@ there. This is the only Orbit command that needs root, and it is run once per
 machine: after it, every Linux user on this host registers, restarts and updates
 their own runner with no sudo anywhere.
 
-Re-running it is safe — the same files are rewritten and systemd reloaded.
+Re-running it is safe — the same files are rewritten and systemd reloaded. On a
+host set up before runners were named after accounts, it also moves each
+runner instance named by a uid, whose account has its own ~/.orbit/bin/orbit, to
+orbit-runner@<user name>, one at a time, and lists every account it left with the
+one command that account runs.
 
 Options:
   --server <url>           Control plane base URL this host's runners register against (required)

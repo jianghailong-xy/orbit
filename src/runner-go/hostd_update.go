@@ -23,7 +23,9 @@ import (
 // user's runner execs it too. A runner that cannot install a release where it runs from (selfupdate.go's
 // warnSelfUpdateBlocked) asks the broker — the one process on the machine that *can* write that file
 // — to install it once and roll the instances, so a host with ten such users updates once rather
-// than ten times or never. A runner on its account's own ~/.orbit/bin/orbit updates itself.
+// than ten times or never. A runner on its account's own ~/.orbit/bin/orbit updates itself, and
+// then asks once too (askHostdToFollow), so that hostd's own binary follows the release; on a host
+// whose instances run those copies, the verb restarts no runner.
 //
 // Four rules shape the whole file:
 //
@@ -187,13 +189,22 @@ func (u hostdUpdate) verb(peer hostdPeer, _ hostdRequest) hostdResponse {
 }
 
 // install is the part that runs once the caller has its answer: download, check and swap in the
-// release through installRelease — executing the download only as the caller — then roll the
-// runners. Nothing is left to return an error to, so every way out of here says why in the
+// release through installRelease — executing the download only as the caller — then, on a host
+// still on the uid template (setup not run again since instances were named after accounts),
+// whose instances all run this binary, roll the runners. On a host whose instances run each
+// account's own copy, no runner is restarted. Nothing is left to return an error to, so every way out of here says why in the
 // journal.
 func (u hostdUpdate) install(server, key string, m Manifest, target string, cred hostdProbeCred) {
 	logf := func(s string) { hostdLogf("update to orbit %s: %s", m.Version, strings.TrimSpace(s)) }
 	if !installRelease(server, key, m, target, u.probeAs(cred), logf) {
 		hostdLogf("update to orbit %s failed; %s is unchanged and no runner was restarted", m.Version, target)
+		return
+	}
+	if u.sys.namesInstances() {
+		// Every instance runs its account's own ~/.orbit/bin/orbit, which that account's runner
+		// updates itself: the file just replaced is hostd's alone, and the next connection
+		// activates hostd from it. A restart here would tear live sessions down for nothing.
+		hostdLogf("installed orbit %s at %s (verified as uid %d); no runner restarted: each runs its account's own copy", m.Version, target, cred.uid)
 		return
 	}
 	hostdLogf("installed orbit %s at %s (verified as uid %d); restarting this machine's runners", m.Version, target, cred.uid)

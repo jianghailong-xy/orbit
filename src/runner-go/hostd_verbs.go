@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/user"
@@ -196,8 +197,13 @@ func (s hostdSystem) enable(peer hostdPeer, _ hostdRequest) hostdResponse {
 	}
 	// Before the instance is enabled, not after: the older units this account may still
 	// carry run the very same `orbit run`, and two live runners for one account fight over
-	// one lease. Each is stopped before the instance starts.
-	s.migrateLegacyUnits(t)
+	// one lease. Each is confirmed down before the instance is enabled or started, and one
+	// that is not is a refusal: the account keeps the runner it had, and only that one.
+	if err := s.takeDownOlderUnits(t); err != nil {
+		resp := hostdFail("refusing to enable %s: %v\nIt is still %s's runner, so %s was neither enabled nor started. Once it can be stopped, run `orbit register` again.", t.unit, err, t.username, t.unit)
+		resp.Code = hostdRefusedOlderRunner
+		return resp
+	}
 	if err := s.systemctl("enable", t.unit); err != nil {
 		return hostdFail("%v", err)
 	}
@@ -216,6 +222,11 @@ func (s hostdSystem) enable(peer hostdPeer, _ hostdRequest) hostdResponse {
 // own for its instance to run (ownCopy). `orbit register` stops at it rather than falling
 // back to the sudo path, whose unit would run another binary beside the template.
 const hostdRefusedOwnCopy = "own-copy"
+
+// hostdRefusedOlderRunner is the code on enable's refusal, and disable's report, of an
+// older runner unit of the account that could not be taken down (takeDownOlderUnits).
+// `orbit register` stops at it too: the sudo path would install yet another unit beside it.
+const hostdRefusedOlderRunner = "older-runner"
 
 // hostdOwnCopyCommand is what an account with no copy of its own runs before registering
 // again: the machine's binary copied into its own ~/.orbit/bin, under a ~/.orbit made
@@ -323,7 +334,9 @@ func accountCanExecute(account *user.User, path string) (bool, error) {
 //
 // After the instance, not before: the instance is what the caller asked about and what
 // the response reports on, so a systemctl that cannot even do that is the failure worth
-// returning — the legacy sweep that follows is best-effort in the same way enable's is.
+// returning first. An older unit that cannot be taken down after it is reported too, with
+// the code enable's refusal carries, rather than answered as success: the account still
+// has that runner.
 func (s hostdSystem) disable(peer hostdPeer, _ hostdRequest) hostdResponse {
 	t, refusal, ok := s.target(peer, "disable")
 	if !ok {
@@ -332,7 +345,11 @@ func (s hostdSystem) disable(peer hostdPeer, _ hostdRequest) hostdResponse {
 	if err := s.systemctl("disable", "--now", t.unit); err != nil {
 		return hostdFail("%v", err)
 	}
-	s.migrateLegacyUnits(t)
+	if err := s.takeDownOlderUnits(t); err != nil {
+		resp := hostdFail("disabled %s, but %v\nIt is still running as %s. Once it can be stopped, run `orbit unregister` again.", t.unit, err, t.username)
+		resp.Code, resp.Data = hostdRefusedOlderRunner, t.data(nil)
+		return resp
+	}
 	return hostdOK(t.data(nil))
 }
 
@@ -367,7 +384,7 @@ func (s hostdSystem) status(peer hostdPeer, _ hostdRequest) hostdResponse {
 	return hostdOK(t.data(extra))
 }
 
-// migrateLegacyUnits takes down every other runner unit this account has: on a host
+// takeDownOlderUnits takes down every other runner unit this account has: on a host
 // whose instances are named after accounts, its orbit-runner@<uid> instance from before
 // that; and on any host, the per-user orbit-runner-<username> and, older still, the bare
 // orbit-runner, which the sudo path wrote. Each runs the same `orbit run`, so leaving one
@@ -376,8 +393,9 @@ func (s hostdSystem) status(peer hostdPeer, _ hostdRequest) hostdResponse {
 // loudly.
 //
 // Both halves of the lifecycle call it, for that same second reason: enable, before the
-// instance starts, so it is the account's only runner at every moment, and disable, so
-// unregister does not leave one behind holding a credential that no longer exists.
+// instance is enabled or started, so it is the account's only runner at every moment, and
+// disable, so unregister does not leave one behind holding a credential that no longer
+// exists.
 //
 // Ownership is decided by the unit's own User=, never by its name: the account's name,
 // or — on a host whose instances are named after accounts — its uid in digits, which
@@ -387,53 +405,134 @@ func (s hostdSystem) status(peer hostdPeer, _ hostdRequest) hostdResponse {
 // tell "alice.b" and "alice_b" apart — systemdServiceFor maps both to
 // orbit-runner-alice_b.
 //
-// Best-effort: a migration that cannot be finished must not stop the caller from getting
-// the new instance, which is the thing that actually supersedes the old one. hostd runs
-// as root, so unlike the sudo path in service.go there is nothing to elevate through.
-func (s hostdSystem) migrateLegacyUnits(t hostdTarget) {
-	users := []string{t.username}
-	if t.byName {
-		if inst := unitForUid(t.uid); s.instanceUpAs(inst, t) {
-			// A template instance has no unit file of its own to remove: disabling it is
-			// all there is.
-			_ = s.systemctl("disable", "--now", inst)
-		}
-		users = append(users, strconv.FormatUint(uint64(t.uid), 10))
+// Not best-effort: every unit of the account is found first, then each is stopped and
+// confirmed down (takeDown) before the next, and the first that cannot be — or a systemd
+// that cannot be asked — is the error, naming the unit and systemd's answer. A legacy
+// unit's file is removed only once its unit is confirmed down. hostd runs as root, so
+// unlike the sudo path in service.go there is nothing to elevate through.
+func (s hostdSystem) takeDownOlderUnits(t hostdTarget) error {
+	type older struct {
+		unit string
+		file string // the legacy unit's file, removed once it is down; "" for an instance
 	}
-	removed := false
-	for _, svc := range []string{systemdServiceFor(t.username), systemdService} {
-		if !unitRunsAsUserIn(s.unitDir, s.query, svc, users...) {
-			continue
+	var units []older
+	owners := []string{t.username}
+	if t.byName {
+		inst := unitForUid(t.uid)
+		st, err := s.unitState(inst)
+		if err != nil {
+			return fmt.Errorf("hostd could not ask systemd whether %s is an older runner of %s's: %v", inst, t.username, err)
 		}
-		_ = s.systemctl("disable", "--now", svc+".service")
-		if err := os.Remove(filepath.Join(s.unitDir, svc+".service")); err == nil {
+		// A template instance that is neither enabled nor on its way up is no runner, and
+		// has no unit file of its own to remove.
+		if t.isAccount(st["User"]) && (st.up() || st.enabled()) {
+			units = append(units, older{unit: inst})
+		}
+		owners = append(owners, strconv.FormatUint(uint64(t.uid), 10))
+	}
+	for _, svc := range []string{systemdServiceFor(t.username), systemdService} {
+		unit := svc + ".service"
+		file := filepath.Join(s.unitDir, unit)
+		if _, err := os.Stat(file); errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return fmt.Errorf("hostd could not tell whether %s is an older runner of %s's: %v", unit, t.username, err)
+		}
+		st, err := s.unitState(unit)
+		if err != nil {
+			return fmt.Errorf("hostd could not ask systemd whether %s is an older runner of %s's: %v", unit, t.username, err)
+		}
+		for _, owner := range owners {
+			if st["User"] == owner {
+				units = append(units, older{unit: unit, file: file})
+				break
+			}
+		}
+	}
+
+	removed := false
+	// Only when a unit file actually went away — daemon-reload exists to make systemd
+	// re-read the directory, and there is nothing to re-read otherwise. Also after a later
+	// unit failed: the files already removed are gone either way.
+	defer func() {
+		if removed {
+			_ = s.systemctl("daemon-reload")
+		}
+	}()
+	for _, o := range units {
+		if err := s.takeDown(o.unit, t); err != nil {
+			return err
+		}
+		if o.file != "" && os.Remove(o.file) == nil {
 			removed = true
 		}
 	}
-	// Only when a unit file actually went away — daemon-reload exists to make systemd
-	// re-read the directory, and there is nothing to re-read otherwise.
-	if removed {
-		_ = s.systemctl("daemon-reload")
-	}
+	return nil
 }
 
-// instanceUpAs reports whether systemd has the template instance unit enabled, or not
-// yet stopped for good (active, activating, restarting), and running as t's account. An
-// instance has no unit file of its own to look for, so systemd is the one asked.
-func (s hostdSystem) instanceUpAs(unit string, t hostdTarget) bool {
+// takeDown stops one older runner unit of t's account and disables it, in that order, so
+// a unit that will not stop keeps running enabled, as it was. Each step is confirmed by
+// asking systemd afterwards rather than trusted from systemctl's exit status alone: a stop
+// that "succeeds" can leave a unit up, restarted or kept by something else.
+func (s hostdSystem) takeDown(unit string, t hostdTarget) error {
+	older := fmt.Sprintf("%s's older runner %s", t.username, unit)
+	if err := s.systemctl("stop", unit); err != nil {
+		return fmt.Errorf("%s could not be stopped: %v", older, err)
+	}
+	st, err := s.unitState(unit)
+	if err != nil {
+		return fmt.Errorf("%s was stopped, but systemd could not be asked whether it is down: %v", older, err)
+	}
+	if !st.down() {
+		return fmt.Errorf("%s is still up after systemctl stop: systemd reports ActiveState=%s", older, st["ActiveState"])
+	}
+	if err := s.systemctl("disable", unit); err != nil {
+		return fmt.Errorf("%s was stopped but could not be disabled: %v", older, err)
+	}
+	if st, err = s.unitState(unit); err != nil {
+		return fmt.Errorf("%s was stopped and disabled, but systemd could not be asked whether it stayed down: %v", older, err)
+	}
+	if !st.down() || st.enabled() {
+		return fmt.Errorf("%s is not down after systemctl stop and disable: systemd reports ActiveState=%s, UnitFileState=%s", older, st["ActiveState"], st["UnitFileState"])
+	}
+	return nil
+}
+
+// hostdUnitState is what `systemctl show` says about one unit: its User=, UnitFileState
+// and ActiveState.
+type hostdUnitState map[string]string
+
+// unitState asks systemd about a unit. A unit with no file of its own, a template
+// instance, is answered from its template, so systemd is the one asked.
+func (s hostdSystem) unitState(unit string) (hostdUnitState, error) {
 	out, err := s.query("systemctl", "show", unit, "-p", "User", "-p", "UnitFileState", "-p", "ActiveState")
 	if err != nil {
-		return false
+		return nil, fmt.Errorf("systemctl show %s failed: %v", unit, err)
 	}
-	props := hostdShowProperties(out)
-	if !t.isAccount(props["User"]) {
-		return false
-	}
-	switch props["ActiveState"] {
+	return hostdUnitState(hostdShowProperties(out)), nil
+}
+
+// up reports a unit not yet stopped for good: active, activating, reloading,
+// deactivating, or waiting out RestartSec= — which comes back on its own.
+func (st hostdUnitState) up() bool {
+	switch st["ActiveState"] {
 	case "", "inactive", "failed":
-		return props["UnitFileState"] == "enabled"
+		return false
 	}
 	return true
+}
+
+// down reports a unit systemd says is stopped: inactive or failed, and nothing else — an
+// answer without an ActiveState confirms nothing.
+func (st hostdUnitState) down() bool {
+	a := st["ActiveState"]
+	return a == "inactive" || a == "failed"
+}
+
+// enabled reports a unit that would be started again at boot.
+func (st hostdUnitState) enabled() bool {
+	f := st["UnitFileState"]
+	return f == "enabled" || f == "enabled-runtime"
 }
 
 // systemctl runs one invocation and folds systemd's own complaint into the error, so a

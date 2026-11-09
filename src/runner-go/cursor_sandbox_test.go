@@ -126,7 +126,7 @@ func TestCursorSandboxConfinement(t *testing.T) {
 	python.Env = append(cmd.Env, "SANDBOX_OUTSIDE_NAME="+name)
 	sandbox.wrap(python)
 	output, err := python.CombinedOutput()
-	if err == nil || (!strings.Contains(string(output), "Read-only file system") && !strings.Contains(string(output), "Permission denied")) {
+	if err == nil || (!strings.Contains(string(output), "Read-only file system") && !strings.Contains(string(output), "Permission denied") && !strings.Contains(string(output), "Operation not permitted")) {
 		t.Fatalf("Python HOME write did not fail with a filesystem denial: %v\n%s", err, output)
 	}
 	if _, err := os.Stat(filepath.Join(outside, name)); !os.IsNotExist(err) {

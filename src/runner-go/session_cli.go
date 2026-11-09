@@ -183,6 +183,10 @@ RECIPIENT_ENDED, EXPIRED or UNDELIVERED. Exactly one, exactly once; do not poll 
 --reply-options offers 2-4 answers to choose from, as a JSON array of {label, description}
 objects; --reply-within-seconds sets the deadline (60-2592000, default 86400). Requests need
 a calling session: a reply needs a conversation to come back to.
+
+One session may send one other session at most 60 messages in any rolling 5 minutes (requests,
+project sends and message-carrying interrupts included); over that the send is refused with
+SESSION_MESSAGE_RATE_LIMITED and is not retryable. Sending to other sessions is unaffected.
 `,
 	"reply": `orbit session reply — answer a request another session sent you
 
