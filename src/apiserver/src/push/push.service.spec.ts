@@ -391,6 +391,34 @@ function agentNotifyHarness(opts: {
 
 const agentInput = { ownerId: 'owner-1', sessionId: 's-1', fallbackTitle: 'runner-a', message: 'x' };
 
+test('M6 delayed fallback bypasses the already-consumed notify rate limit', async () => {
+  const { service, sent, rang } = agentNotifyHarness();
+  rang.sessions.set('s-1', new Date());
+  rang.beforeClaim = () => { assert.fail('a delayed fallback must not claim twice'); };
+  assert.equal((await service.notifyAgentMessage({
+    ...agentInput, message: 'Not reviewed by the coordinator · Please decide',
+  }, true)).delivered, true);
+  assert.equal(sent.length, 1);
+  assert.match(JSON.parse(sent[0]).aps.alert.body, /^Not reviewed by the coordinator · /);
+});
+
+test('R10 delayed question bypasses the approval stretch claim and labels push and Feishu', async () => {
+  const bodies: string[] = [];
+  const cards: unknown[][] = [];
+  const feishu = {
+    approvalCard: (...args: unknown[]) => { cards.push(args); return {}; },
+    post: async () => true,
+  };
+  const service = new PushService({ session: { findFirst: async () => ({ title: 'Run', ownerId: 'owner-1' }) } } as any, enabledConfig(), feishu as any);
+  (service as any).needsYouSessions = async () => ['s-1'];
+  (service as any).channels = async () => ({ tokens: [], feishu: { ownerId: 'owner-1' } });
+  (service as any).claimApprovalAlert = () => { assert.fail('fallback is claimed by owner_alerted_at'); };
+  (service as any).deliver = async (_tokens: unknown, body: string) => { bodies.push(body); };
+  await service.notifyApprovalRequest('s-1', 'question-1', 'AskUserQuestion', true);
+  assert.match(JSON.parse(bodies[0]).aps.alert.body, /^Not reviewed by the coordinator · /);
+  assert.equal(cards[0][3], true, 'Feishu card gets the fallback label as well');
+});
+
 test("an agent's message is titled with its session and replyable from the banner", async () => {
   const { service, sent } = agentNotifyHarness();
 

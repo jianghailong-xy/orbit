@@ -15,6 +15,23 @@ const facts: RunItemFacts = {
   stoppedWithoutAnswer: false, dueAt,
 };
 
+// F2 in contract order. Each earlier row is exercised with a later fallback also true.
+for (const [row, change, expected] of [
+  [1, { answered: true }, { place: 'ANSWERED' }],
+  [2, { project: { automatic: true, coordinatorEnabled: false }, coordinatorSessionId: null }, { place: 'FALLBACK', reason: 'AUTOMATIC_OFF' }],
+  [3, { coordinatorSessionId: null, coordinatorSession: null }, { place: 'FALLBACK', reason: 'NO_COORDINATOR' }],
+  [4, { coordinatorSession: null, delivery: 'REFUSED', deliveryRefusal: 'COORDINATOR_PAUSED' }, { place: 'FALLBACK', reason: 'REVIEWER_ENDED' }],
+  [5, { delivery: 'REFUSED', deliveryRefusal: 'COORDINATOR_PAUSED', stoppedWithoutAnswer: true }, { place: 'FALLBACK', reason: 'COORDINATOR_PAUSED' }],
+  [6, { stoppedWithoutAnswer: true }, { place: 'FALLBACK', reason: 'REVIEWER_STOPPED' }],
+  [7, { delivery: 'DELIVERED', deliveredTurn: null }, { place: 'FALLBACK', reason: 'REVIEWER_STOPPED' }],
+  [8, {}, { place: 'FALLBACK', reason: 'TIMED_OUT' }],
+  [9, {}, { place: 'HELD', coordinatorSessionId: 'coordinator', dueAt }],
+] as const) {
+  test(`F2 row ${row}: first matching condition wins`, () => {
+    assert.deepEqual(runItemHold({ ...facts, ...change }, row === 9 ? readAt : dueAt), expected);
+  });
+}
+
 test('F2 precedence: answered items never fall back; switched-off routing precedes missing coordinator', () => {
   const off = { ...facts, project: { automatic: true, coordinatorEnabled: false }, coordinatorSessionId: null };
   assert.deepEqual(runItemHold({ ...off, answered: true }, dueAt), { place: 'ANSWERED' });
