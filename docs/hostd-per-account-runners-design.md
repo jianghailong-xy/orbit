@@ -154,17 +154,25 @@ not set up keep the legacy path. The register receipt stays unchanged.
 **a. Move through setup, preserving registration.** Re-running `/usr/local/bin/orbit host setup`
 moves root's legacy `orbit-runner-root.service`, using the migration machinery in
 `host_setup_move.go` and `takeDownOlderUnits`. Setup resolves uid 0 through passwd and derives
-the destination through systemd escaping, verifies the legacy unit's `User=`, and does not call
+the destination through systemd escaping, verifies the legacy unit's effective `User=`, environment
+(including `HOME` and every `ORBIT_*` override), environment files and working directory before
+stopping it, and does not call
 register or change the saved runner configuration or credential. The instance reads the same
 configuration from root's home, so its runner id and credential survive without browser approval.
 Root's subsequent `orbit register` uses hostd on a set-up host, just like any account; registration
-is not the procedure for preserving an existing runner's identity during this move.
+is not the procedure for preserving an existing runner's identity during this move. Settings that
+change configuration storage cause an English refusal naming the setting, leaving the legacy
+runner running. Setup conservatively refuses environment files, passed/unset manager environment
+and alternate filesystem roots when it cannot establish equivalence to the template.
 
 **b. Setup installs a missing root copy.** The move cannot assume root has `~/.orbit/bin/orbit`:
 the legacy runner may run and update only `/usr/local/bin/orbit`. Setup, running as root from the
 machine binary already held to `checkMachineBinary`, atomically copies that binary into root's
 passwd home at `~/.orbit/bin/orbit` when the executable copy is missing, before taking the old
-runner down. It preserves an existing executable copy and never changes registration storage.
+runner down. Setup creates missing `~/.orbit/bin` with root ownership and mode 0755, writes a
+temporary file there and renames it, then verifies its SHA-256 equals the checked machine binary
+before proceeding. It replaces a non-executable copy, preserves an existing executable root-owned
+copy, checks that only root can write the copy and its home directories, and never changes registration storage.
 A failed copy leaves the legacy runner in place. This is setup's operation, never hostd's:
 hostd still never executes, reads or writes files in a home, and only checks the copy is executable.
 There is no download or execution of a downloaded candidate in this operation.
@@ -174,14 +182,22 @@ to update `/usr/local/bin/orbit`, as every account's runner does. For a request 
 uid 0, hostd resolves `nobody` from passwd and runs every downloaded candidate probe with that
 unprivileged uid and primary gid, refusing if it cannot establish a non-root credential. Other
 accounts' probes keep their own uid and primary gid. The checked machine binary remains hostd's
-only executable, and updating it restarts no runner. Root never executes a downloaded candidate.
+only executable, and updating it restarts no runner. Hostd never executes a downloaded candidate as root.
+
+Here, "Root never executes a downloaded file" means hostd's verification of a candidate for
+`/usr/local/bin/orbit`. Root's runner updating its own `~/.orbit/bin/orbit` probes as itself, like
+every account's runner and like the legacy root runner already did. This change neither widens
+nor narrows that. A missing `nobody` account or one resolving to uid 0 refuses hostd's update with
+an English error and no fallback uid.
 
 **d. Drain, confirm down, then start; report drop-ins.** Setup first stops the old broker and
 confirms it down, as today. For root it uses the existing stop/drain, confirm-down, disable and
 confirm-down-and-disabled sequence for every older unit before enabling and starting the name
 instance. Failure to confirm any older runner down prevents the new start. If a new start fails,
 the old runner must not be restored unless the new instance is confirmed down; uncertainty leaves
-the old runner stopped. At most one runner is live throughout the handover.
+the old runner stopped. At most one runner is live throughout the handover. Only after the
+instance is confirmed active does setup remove `/etc/systemd/system/orbit-runner-root.service`
+and reload systemd; the legacy unit file is no longer installed. Drop-in files remain in place.
 
 Legacy drop-ins are not copied: they can override `User=` or `ExecStart=`. Before removing a legacy
 unit, collect every drop-in path systemd reports for it (`DropInPaths`), including control, runtime,

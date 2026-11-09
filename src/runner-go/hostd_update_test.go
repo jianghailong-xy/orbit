@@ -638,23 +638,23 @@ func TestHostdUpdateRateLimitHoldsForCallersArrivingTogether(t *testing.T) {
 	}
 }
 
-// The ironclad rule, from the side where dropping privileges cannot work: root asking a root
-// daemon leaves nothing to drop to, so there is no way to verify the download without running it
-// as root — and so it is not done at all.
-func TestHostdUpdateRefusesToVerifyADownloadAsRoot(t *testing.T) {
-	h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
-	before := h.sideEffects()
-
-	resp := h.ask(0)
-	if resp.OK {
-		t.Fatal("hostd accepted an update on behalf of uid 0")
-	}
-	if !strings.Contains(resp.Error, "uid 0") {
-		t.Errorf("error = %q, want it to name the refusal", resp.Error)
-	}
-	h.assertNoSideEffects(before)
-	if _, err := os.Stat(h.stampPath); err == nil {
-		t.Error("a refused update consumed the rate-limit window")
+func TestHostdUpdateRefusesMissingOrRootNobody(t *testing.T) {
+	for _, uid := range []string{"missing", "0", "invalid"} {
+		t.Run(uid, func(t *testing.T) {
+			h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
+			h.update.lookupUser = func(string) (*user.User, error) {
+				if uid == "missing" {
+					return nil, fmt.Errorf("no nobody")
+				}
+				return &user.User{Uid: uid, Gid: "65534", Username: "nobody"}, nil
+			}
+			before := h.sideEffects()
+			resp := h.ask(0)
+			if resp.OK || !strings.Contains(resp.Error, "nobody") {
+				t.Fatalf("response: %+v", resp)
+			}
+			h.assertNoSideEffects(before)
+		})
 	}
 }
 

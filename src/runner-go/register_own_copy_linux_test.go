@@ -217,15 +217,14 @@ func TestRegisterFromTheAccountsOwnCopyWritesNothing(t *testing.T) {
 }
 
 // Hosts that are not set up are unchanged: with no broker socket, register puts no copy anywhere.
-// Nor does root, whose runner is no broker instance.
-func TestRegisterPutsNoCopyWithoutABrokerOrAsRoot(t *testing.T) {
+func TestRegisterPutsNoCopyWithoutABroker(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		euid int
 		sock func(h *ownCopyHost) string
 	}{
 		{"a host not set up", 4242, func(h *ownCopyHost) string { return filepath.Join(h.unitDir, "absent.sock") }},
-		{"root", 0, func(h *ownCopyHost) string { return serviceBrokerSocket }},
+		{"root without setup", 0, func(h *ownCopyHost) string { return filepath.Join(h.unitDir, "absent.sock") }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newOwnCopyHost(t)
@@ -252,5 +251,14 @@ func TestRegisterSaysWhenItCannotPutTheCopyInPlace(t *testing.T) {
 	}
 	if !slices.Equal(h.asked, []string{"enable"}) {
 		t.Errorf("the broker was asked %v, want [enable]", h.asked)
+	}
+}
+
+func TestRootRegisterPlacesOwnCopyOnSetUpHost(t *testing.T) {
+	h := newOwnCopyHost(t)
+	processEUID = func() int { return 0 }
+	placeOwnCopyForBroker(serviceBrokerSocket, h.exe)
+	if got := fileBytes(t, userBinPath(h.home)); string(got) != string(h.release) {
+		t.Fatal("root copy missing or different")
 	}
 }
