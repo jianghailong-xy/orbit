@@ -2870,7 +2870,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger
       // or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: the table starts empty.
-      '0503_owner_request'],
+      '0503_owner_request',
+      // 0504 adds one nullable column to `watch_delivery` (`owner_request_id`, a foreign key to `owner_request` ON DELETE
+      // CASCADE), rewrites `watch_delivery_kind_chk` and `watch_delivery_kind_shape_chk` whole with an OWNER_REQUEST kind
+      // added and nothing removed, adds one CHECK tying that kind to the column and one partial unique index on it. Neither
+      // table is a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
+      // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0504_owner_request_delivery'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

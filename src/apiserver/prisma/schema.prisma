@@ -7277,6 +7277,8 @@ model OwnerRequest {
   answer              Json?
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// The one delivery of its ending to the asking session (migration 0504), written with the ending.
+  deliveries          WatchDelivery[]
 
   @@unique([askedBySessionId, clientRequestId], map: "owner_request_session_client_key")
   @@index([ownerId, state, createdAt], map: "owner_request_owner_state_idx")
@@ -7424,7 +7426,8 @@ model WatchMatch {
 model WatchDelivery {
   id String @id @default(uuid(7)) @db.Uuid
 
-  /// `MATCH` | `EXPIRY` (migration 0261) | `REVOKED` | `UNRESOLVABLE` (0263). A CHECK holds each row
+  /// `MATCH` | `EXPIRY` (migration 0261) | `REVOKED` | `UNRESOLVABLE` (0263) | `OWNER_REQUEST` (0504: an owner
+  /// request's ending, delivered as one turn to the session that asked). A CHECK holds each row
   /// to the one thing its kind is about: a MATCH row names its Match; the other three name a
   /// RESUME_SESSION watch that ended that way unmatched, and only an EXPIRY row carries the snapshot
   /// its evaluation took (contract §5). A REVOKED row says nothing about the targets (§7).
@@ -7435,6 +7438,10 @@ model WatchDelivery {
   /// index): one end delivery per watch, whichever way it ended.
   watchId String?     @map("watch_id") @db.Uuid
   watch   Watch?      @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  /// Set only on an OWNER_REQUEST row (migration 0504), and unique among those rows (a partial index): a
+  /// request ends once, so its ending is delivered to the session that asked at most once.
+  ownerRequestId String?       @map("owner_request_id") @db.Uuid
+  ownerRequest   OwnerRequest? @relation(fields: [ownerRequestId], references: [id], onDelete: Cascade)
   /// An EXPIRY row's structured snapshot, and NULL on every other kind. It is written in the same
   /// transaction as the EXPIRED state and never changes, so every attempt builds the same turn.
   expirySnapshot Json? @map("expiry_snapshot")

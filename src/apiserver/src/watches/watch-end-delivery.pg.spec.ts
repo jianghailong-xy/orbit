@@ -449,7 +449,8 @@ test('0263: a REVOKED or UNRESOLVABLE delivery names its watch, is RESUME_SESSIO
   const { rows: [{ def }] } = await sql.query<{ def: string }>(
     `SELECT pg_get_constraintdef("oid") AS "def" FROM "pg_constraint" WHERE "conname" = 'watch_delivery_kind_chk'`,
   );
-  assert.deepEqual([...def.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]).sort(), ['EXPIRY', 'MATCH', 'REVOKED', 'UNRESOLVABLE'], def);
+  // 0504 added OWNER_REQUEST (an owner request's ending), which names neither a watch nor a Match.
+  assert.deepEqual([...def.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]).sort(), ['EXPIRY', 'MATCH', 'OWNER_REQUEST', 'REVOKED', 'UNRESOLVABLE'], def);
 
   const matched = await watches.create(owner, {
     predicateVersion: 1,
