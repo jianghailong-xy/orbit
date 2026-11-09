@@ -179,7 +179,8 @@ describe('an engine on its machine’s page', () => {
   it('signs in from its own row, and the page stays where it is', async () => {
     const { sent } = await mount(machine());
     const claude = row('claude');
-    expect(actions(claude)).toEqual(['Add account', 'Sign in']);
+    // Signed out with no account in: the row's Sign in is the way to the first, so no Add account.
+    expect(actions(claude)).toEqual(['Sign in']);
 
     await click(button('Sign in', claude));
     // Its sign-in opens under the row, on this page.
