@@ -46,7 +46,7 @@ func TestSelfUpdateWaitsForAnAcceptanceCommandInFlight(t *testing.T) {
 		return "0.1.186", true
 	}
 	reason, remote := waitForRunLoopStop(context.Background(), nil, "https://control.example", interval,
-		updateWhenNoTurnInFlight(published, pool, noOperations, interval), nil)
+		updateWhenNoTurnInFlight(published, pool, noOperations, interval, selfUpdateDeferralLimit), nil)
 	settledBeforeTheUpdate := s.settledTurn("accept-1") != nil
 	stopLoop(errRunnerSelfUpdate)
 
@@ -83,7 +83,7 @@ func TestAnUpdateWaitsForTheTurnInFlightAndNoLonger(t *testing.T) {
 	s := registerPoolSession(t, p, "a", true)
 	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 		return "0.1.186", true
-	}, p, noOperations, time.Minute)
+	}, p, noOperations, time.Minute, selfUpdateDeferralLimit)
 
 	if remote, ok := check(context.Background(), "https://control.example"); ok || remote != "" {
 		t.Fatalf("check with a turn in flight = %q, %v; want it deferred", remote, ok)
@@ -109,7 +109,7 @@ func TestAnUpdateWaitsForTheHeartbeatOperationsInFlight(t *testing.T) {
 	ops.Add(1)
 	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 		return "0.1.186", true
-	}, p, ops.inFlight, time.Minute)
+	}, p, ops.inFlight, time.Minute, selfUpdateDeferralLimit)
 
 	if remote, ok := check(context.Background(), "https://control.example"); ok || remote != "" {
 		t.Fatalf("check with a landing in flight = %q, %v; want it deferred", remote, ok)
@@ -128,7 +128,7 @@ func TestAnUpdateWaitsForTheHeartbeatOperationsInFlight(t *testing.T) {
 // No release, no closing: an idle runner that checks and finds nothing new goes on taking turns.
 func TestACheckThatFindsNoReleaseLeavesThePoolOpen(t *testing.T) {
 	p := newSessionPool(1)
-	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) { return "", false }, p, noOperations, time.Minute)
+	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) { return "", false }, p, noOperations, time.Minute, selfUpdateDeferralLimit)
 	if remote, ok := check(context.Background(), "https://control.example"); ok || remote != "" {
 		t.Fatalf("check = %q, %v; want nothing to update to", remote, ok)
 	}
@@ -203,7 +203,7 @@ func TestTheRunLoopOnlyUpdatesThroughTheTurnGate(t *testing.T) {
 	}
 	body := string(src)
 	body = body[strings.Index(body, "func runLoop("):]
-	gated := strings.Count(body, "updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval)")
+	gated := strings.Count(body, "updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit)")
 	if gated != 1 || strings.Count(body, "availableSelfUpdate") != gated {
 		t.Fatal("runLoop checks for a release without updateWhenNoTurnInFlight: an update can stop the runner mid-turn")
 	}

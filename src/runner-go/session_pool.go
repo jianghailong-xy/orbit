@@ -84,6 +84,11 @@ type liveSession struct {
 	// of the prior turn while active is still true locally. A late ack may release
 	// only the exact permit generation under which its turn ran.
 	permitGeneration uint64
+	// heldForUpdate: this session's turn ended while the pool drained for an update, and the
+	// control plane handed its permit straight to a queued follow-up (holdFollowUpForUpdate). The
+	// follow-up does not start here (waitActive) and is not a turn in flight: it stays RUNNING for
+	// the updated runner to reclaim, as a claim that races closeForUpdate does.
+	heldForUpdate bool
 
 	resident         bool // an engine is starting/running/being reaped
 	engineGeneration uint64
@@ -193,6 +198,10 @@ type sessionPool struct {
 	// closedForUpdate is set once, by closeForUpdate, when this runner has decided to re-execute
 	// into a newer release; from then on no turn begins here (waitActive).
 	closedForUpdate bool
+	// drainingForUpdate is set by drainForUpdate once a release has waited out
+	// selfUpdateDeferralLimit: this runner claims nothing more (admissionIdleCapacity) and tells
+	// the control plane it is draining, so the turns in flight run out and the update can follow.
+	drainingForUpdate bool
 }
 
 func newSessionPool(max int) *sessionPool {
@@ -315,6 +324,9 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 func (p *sessionPool) admissionIdleCapacity() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.drainingForUpdate {
+		return 0
+	}
 	occupied := make(map[string]bool, len(p.sessions))
 	for sessionID := range p.backgroundJobCountsLocked() {
 		occupied[sessionID] = true
@@ -652,7 +664,7 @@ func (p *sessionPool) activeCountLocked() int {
 func (p *sessionPool) turnsInFlightLocked() int {
 	n := 0
 	for _, s := range p.sessions {
-		if s.active || s.selfDrivenTurn {
+		if (s.active && !s.heldForUpdate) || s.selfDrivenTurn {
 			n++
 		}
 	}
@@ -704,6 +716,38 @@ func (p *sessionPool) closeForUpdate() (turnsInFlight int) {
 	}
 	p.closedForUpdate = true
 	return 0
+}
+
+// drainForUpdate stops this runner taking new work so that the turns in flight can run out: from
+// now on admissionIdleCapacity is 0, which the claim loop reads before every claim, and the
+// heartbeat says it is draining, which keeps the control plane's merges, commits, landings and
+// repository operations for later. Nothing running is touched, and nothing takes it back: the
+// drain ends in the update's stop.
+func (p *sessionPool) drainForUpdate() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.drainingForUpdate = true
+}
+
+// holdFollowUpForUpdate is what a turn's completion does instead of parking when the control plane
+// kept its permit for a queued follow-up (retainsTurnPermit): while the pool drains for an update,
+// the follow-up is held back (heldForUpdate), so that a session with a message queued at the end of
+// every turn cannot keep the drain going for ever. Otherwise, and for any permit but the one the
+// turn ran under, it changes nothing.
+func (p *sessionPool) holdFollowUpForUpdate(s *liveSession, expectedPermit uint64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.drainingForUpdate || p.sessions[s.id] != s || !s.active || s.permitGeneration != expectedPermit {
+		return
+	}
+	s.heldForUpdate = true
+}
+
+// isDrainingForUpdate is whether drainForUpdate is in force, for the heartbeat's draining flag.
+func (p *sessionPool) isDrainingForUpdate() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.drainingForUpdate
 }
 
 func (p *sessionPool) residentCountLocked() int {
@@ -1237,7 +1281,7 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			p.mu.Unlock()
 			return false
 		}
-		if s.active && !p.closedForUpdate {
+		if s.active && !p.closedForUpdate && !s.heldForUpdate {
 			p.mu.Unlock()
 			return true
 		}

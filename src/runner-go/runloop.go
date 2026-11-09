@@ -39,6 +39,17 @@ const (
 	modelCatalogRefreshHeartbeatTicks = 120 // ~1 hour
 )
 
+const (
+	// How long a release may wait for a busy runner before the runner stops taking new work so that
+	// it runs out (updateWhenNoTurnInFlight). Six check intervals: a runner idle at any of six checks
+	// updates without draining, and one that never is gets the release within the hour plus the
+	// longest turn it was running when the limit came (docs/runner-link-design.md §15.14).
+	selfUpdateDeferralLimit = time.Hour
+	// How often a draining runner looks again whether its turns have run out: the drain holds work
+	// back, so it should not outlast them by a whole check interval.
+	selfUpdateDrainCheckInterval = 15 * time.Second
+)
+
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
 // to this long for in-flight turns to finish + ack before exiting. Idle sessions detach
 // immediately; only a mid-turn session consumes any of this budget. The service manager's
@@ -98,32 +109,92 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // updateWhenNoTurnInFlight reports an update check's release only once the pool has closed for it,
 // which it does only while no turn is in flight (closeForUpdate). While any turn runs, the check
 // reports nothing and logs one line, and the next tick asks again: the release stays published, so
-// waiting loses nothing. There is no deadline after which the update stops waiting — a runner busy
-// at every check stays on its release until a check finds it idle. The heartbeat reports the wait
-// as waitingForIdle.
+// waiting loses nothing. The heartbeat reports the wait as waitingForIdle.
 //
 // The work the heartbeat started is waited out the same way (operations): a landing's checks can run
 // for an hour, and the stop an update makes would give them only its operations budget before
 // stopping them and handing the landing back to be run again (shutdownSequence).
-func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operations func() int, interval time.Duration) selfUpdateChecker {
+//
+// The wait is bounded (limit, selfUpdateDeferralLimit in runLoop). A runner that is busy at every
+// check used to stay on its release for as long as it stayed busy — workstation-gpu sat on 0.1.246
+// for days, without the link heartbeat fix 0.1.248 shipped. Once a release has been deferred for
+// limit, measured on the pool's clock from the first check that found it wanted and the runner busy,
+// the pool drains for it (drainForUpdate): this runner claims no new session or turn and the
+// heartbeat says it is draining, so the control plane hands it no merge, commit, landing or
+// repository operation either, and a follow-up the control plane hands a session's permit to as its
+// turn ends does not start (holdFollowUpForUpdate). Nothing running is stopped — the drain waits for the turns and
+// operations in flight to end by themselves, and the first check that finds none takes the update.
+// Draining, a check does not read the release again: one that failed would otherwise reopen the
+// pool, and the install that follows the stop reads the assigned release anyway (selfUpdate). The
+// clock is not restarted by a check that finds nothing, a failed one included: the runner has been
+// behind a release since it started.
+func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit time.Duration) selfUpdateChecker {
+	var mu sync.Mutex
+	var deferredSince time.Time
+	var draining string
 	return func(ctx context.Context, server string) (string, bool) {
-		remote, ok := check(ctx, server)
-		if !ok {
+		mu.Lock()
+		defer mu.Unlock()
+		remote := draining
+		if remote == "" {
+			var ok bool
+			if remote, ok = check(ctx, server); !ok {
+				return "", false
+			}
+		}
+		ops := operations()
+		turns := 0
+		if ops == 0 {
+			turns = pool.closeForUpdate()
+		}
+		if ops == 0 && turns == 0 {
+			return remote, true
+		}
+		now := pool.clock.Now()
+		if deferredSince.IsZero() {
+			deferredSince = now
+		}
+		busy := fmt.Sprintf("%d turn(s)", turns)
+		if ops > 0 {
+			busy = fmt.Sprintf("%d heartbeat operation(s)", ops)
+		}
+		if draining == "" && now.Sub(deferredSince) >= limit {
+			draining = remote
+			pool.drainForUpdate()
+			logln(fmt.Sprintf("orbit %s update deferred for %s; taking no new work until the %s in flight end, then updating",
+				remote, now.Sub(deferredSince).Round(time.Second), busy))
+		}
+		if draining != "" {
+			noteSelfUpdate(selfUpdateStateWaitingForIdle,
+				fmt.Sprintf("deferred for %s, the limit; taking no new work until the %s in flight end",
+					now.Sub(deferredSince).Round(time.Second), busy), "")
 			return "", false
 		}
-		if n := operations(); n > 0 {
-			logln(fmt.Sprintf("orbit %s update available; deferred — %d heartbeat operation(s) in flight, checking again in %s",
-				remote, n, interval))
-			noteSelfUpdate(selfUpdateStateWaitingForIdle, "", "")
-			return "", false
+		logln(fmt.Sprintf("orbit %s update available; deferred — %s in flight, checking again in %s",
+			remote, busy, interval))
+		noteSelfUpdate(selfUpdateStateWaitingForIdle, "", "")
+		return "", false
+	}
+}
+
+// nudgeWhileDrainingForUpdate asks for an update check every interval while the pool drains for an
+// update, so the update follows the last turn in flight within interval rather than within a whole
+// check interval. A check already owed is not asked for twice.
+func nudgeWhileDrainingForUpdate(ctx context.Context, pool *sessionPool, interval time.Duration, checkNow chan<- struct{}) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 		}
-		if n := pool.closeForUpdate(); n > 0 {
-			logln(fmt.Sprintf("orbit %s update available; deferred — %d turn(s) in flight, checking again in %s",
-				remote, n, interval))
-			noteSelfUpdate(selfUpdateStateWaitingForIdle, "", "")
-			return "", false
+		if pool.isDrainingForUpdate() {
+			select {
+			case checkNow <- struct{}{}:
+			default:
+			}
 		}
-		return remote, true
 	}
 }
 
@@ -1069,7 +1140,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	defer stopHandBacks()
 	var check selfUpdateChecker
 	if selfUpdateEnabled() {
-		gated := updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval)
+		gated := updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit)
 		check = func(ctx context.Context, server string) (string, bool) {
 			remote, ok := gated(ctx, server)
 			// What the check found rides a beat now rather than up to half a minute from now: after
@@ -1077,6 +1148,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			beatNow()
 			return remote, ok
 		}
+	}
+	if check != nil {
+		go nudgeWhileDrainingForUpdate(monitorCtx, pool, selfUpdateDrainCheckInterval, checkSelfUpdateNow)
 	}
 	go func() {
 		defer close(monitorDone)
@@ -1386,7 +1460,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// single credentials file, so it guards itself rather than keying off a request id.
 		beat := func() {
 			beatTaken = false
-			draining := loopCtx.Err() != nil
+			// Draining for an update (drainForUpdate) is said too: the control plane then hands this
+			// process no merge, commit, landing or repository operation to hold the update up.
+			draining := loopCtx.Err() != nil || pool.isDrainingForUpdate()
 			assetMu.Lock()
 			cmds, skills := hbCommands, hbSkills
 			assetMu.Unlock()

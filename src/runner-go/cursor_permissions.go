@@ -177,7 +177,7 @@ type cursorPermissionBridge struct {
 	// Prepared before ACP starts; the shell launcher and Auto policy share this result.
 	sandbox        *cursorSandbox
 	sandboxInForce bool
-	sandboxReason  string
+	sandboxNotice  string
 	sandboxNoted   bool
 	// mode is the policy requests are answered for, set by the session loop (setPolicy): a reload can move
 	// the session between modes that keep the process.
@@ -226,15 +226,14 @@ func (b *cursorPermissionBridge) setPolicy(policy cursorPermissionPolicy) {
 func (b *cursorPermissionBridge) begin(turnID string) {
 	b.mu.Lock()
 	b.open, b.turnID = true, turnID
-	note := b.mode.Answer == cursorAnswerReview && !b.sandboxInForce && b.sandboxReason != "" && !b.sandboxNoted
+	note := b.mode.Answer == cursorAnswerReview && !b.sandboxInForce && b.sandboxNotice != "" && !b.sandboxNoted
 	if note {
 		b.sandboxNoted = true
 	}
-	reason := b.sandboxReason
+	notice := b.sandboxNotice
 	b.mu.Unlock()
 	if note {
-		b.emit(turnID, evSystem, map[string]interface{}{"noticeKind": "cursor-sandbox-unavailable", "provider": providerCursor,
-			"notice": "Cursor Auto asks for approval for inline scripts because the command sandbox is unavailable: " + reason})
+		b.emit(turnID, evSystem, map[string]interface{}{"noticeKind": "cursor-sandbox-unavailable", "provider": providerCursor, "notice": notice})
 	}
 }
 
