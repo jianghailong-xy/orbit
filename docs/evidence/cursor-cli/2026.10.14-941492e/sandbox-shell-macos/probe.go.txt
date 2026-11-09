@@ -1,0 +1,156 @@
+//go:build cursor_real && darwin
+
+package main
+
+import (
+ "encoding/json"
+ "os"
+ "path/filepath"
+ "strconv"
+ "strings"
+ "testing"
+ "os/exec"
+ "context"
+ "fmt"
+ "time"
+ "runtime"
+)
+
+func sandboxProbeInstrument(dir string) {
+ shell := os.Getenv("SHELL")
+ body, err := os.ReadFile(shell)
+ if err != nil { panic(err) }
+ logger := `import os,sys,json,time,ctypes,base64,socket
+p=int(sys.argv[2])
+with open(sys.argv[1]+'/entry-env-%s.bin'%p,'rb') as f: raw=f.read()
+os.unlink(sys.argv[1]+'/entry-env-%s.bin'%p)
+env=dict(v.decode().split('=',1) for v in raw.split(b'\0') if v)
+for k in list(env):
+ if any(x in k.upper() for x in ['KEY','TOKEN','PASSWORD','SECRET']): env[k]='<REDACTED>'
+record=dict(at_ns=time.time_ns(),pid=p,ppid=int(sys.argv[3]),argv=sys.argv[4:],cwd=os.getcwd(),env=env,env_source='native wrapper main environ, before any shell or Python startup')
+try:
+ sock=socket.socket(fileno=os.dup(5))
+ sock.settimeout(2)
+ data=sock.recv(1048576,socket.MSG_PEEK)
+ record['fd5_sockname']=str(sock.getsockname())
+ record['fd5_peername']=str(sock.getpeername())
+ sock.close()
+ record['fd5_base64']=base64.b64encode(data).decode()
+ record['fd5_text']=data.decode()
+except OSError as e: record['fd5_error']=str(e)
+with open(sys.argv[1]+'/shell-%s.json'%p,'x') as f: json.dump(record,f,indent=2)
+
+`
+ script := filepath.Join(dir,"shell-record.py")
+ if err := os.WriteFile(script, []byte(logger),0600); err != nil { panic(err) }
+ original := filepath.Join(dir,"original-orbit-bash")
+ if err:=os.WriteFile(original,body,0700);err!=nil{panic(err)}
+ source:=`#include <unistd.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+extern char **environ;
+int main(int argc,char **argv) {
+ char path[4096],pid[32],ppid[32];
+ snprintf(pid,sizeof(pid),"%d",getpid());
+ snprintf(ppid,sizeof(ppid),"%d",getppid());
+ snprintf(path,sizeof(path),"%s/entry-env-%s.bin",PROBE_DIR,pid);
+ int fd=open(path,O_WRONLY|O_CREAT|O_EXCL,0600); if(fd<0)return 120;
+ for(char **e=environ;*e;e++) if(write(fd,*e,strlen(*e)+1)!=(ssize_t)strlen(*e)+1)return 121;
+ close(fd);
+ char **args=calloc(argc+6,sizeof(char*));
+ args[0]="/usr/bin/python3";args[1]=PROBE_SCRIPT;args[2]=PROBE_DIR;args[3]=pid;args[4]=ppid;
+ for(int i=0;i<argc;i++)args[i+5]=argv[i];
+ pid_t child=fork(); if(child==0){execv(args[0],args);_exit(122);}
+ int status; if(child<0||waitpid(child,&status,0)<0||!WIFEXITED(status)||WEXITSTATUS(status))return 123;
+ char **shell=calloc(argc+2,sizeof(char*));shell[0]="/bin/sh";shell[1]=ORIGINAL;
+ for(int i=1;i<argc;i++)shell[i+1]=argv[i];
+ execv(shell[0],shell);return 124;
+}
+`
+ sourcePath:=filepath.Join(dir,"probe.c")
+ if err:=os.WriteFile(sourcePath,[]byte(source),0600);err!=nil{panic(err)}
+ args:=[]string{"-DPROBE_DIR="+strconv.Quote(dir),"-DPROBE_SCRIPT="+strconv.Quote(script),"-DORIGINAL="+strconv.Quote(original),sourcePath,"-o",shell}
+ if out,err:=exec.Command("/usr/bin/cc",args...).CombinedOutput();err!=nil{panic(string(out)+err.Error())}
+
+}
+
+func TestCursorSandboxProbe(t *testing.T) {
+ r:=realCursorEnv(t)
+ prompts:=[]string{
+  "Shell invocation measurement. Use only the Shell tool, no edits, no other tools. First run exactly `ls`. Then run exactly `touch auto-allowed.txt`. Then run exactly `python3 -c 'print(424242)'`. Run all three as separate foreground tool calls. Do not combine or alter commands. Stop after these.",
+  "Shell invocation measurement. Run exactly `sleep 4; printf background` using the Shell tool with block_until_ms: 0 so it continues in the background. Do not wait for it in the command. Then run exactly `printf foreground`. No other tools or commands.",
+  "Shell invocation measurement. Issue two Shell tool calls together in parallel, not one combined shell command: `sleep 3; printf concurrent-A` and `sleep 3; printf concurrent-B`. Both block_until_ms: 0. No other commands.",
+  "Shell invocation measurement. Issue TWO separate Shell tool calls together in parallel with IDENTICAL command text `sleep 3; printf identical`, both block_until_ms: 0. This deliberately tests duplicate invocations; do not deduplicate, combine, sequence or change the command text. No other commands.",
+ }
+ run:=r.run(t,realScenario{name:"sandbox-shell-macos",mode:"auto",prompts:prompts,approve:func(card cursorTestCard)cursorTestDecision{return cursorTestDecision{Status:"ALLOWED"}}})
+ report:=newRealReport(t)
+ report.facts["approval_source"]="Controlled harness returns ALLOWED through the runner card path; not a human UI click."
+ report.facts["kernel"]="macOS; real pinned CLI; temporary shell instrumentation only"
+ r.save(t,"sandbox-shell-macos","process",run,report)
+ red:=newRealRedactor(r.key,run)
+ files,_:=filepath.Glob(filepath.Join(run.raw,"shell-*.json"))
+ var records []json.RawMessage
+ for _,f:=range files { b,_:=os.ReadFile(f); records=append(records,json.RawMessage(red.text(string(b)))) }
+ for _,name:=range []string{"stdin.jsonl","stdout.jsonl","stderr.txt","timeline.jsonl","exit.json"} {
+ raw,err:=os.ReadFile(filepath.Join(run.raw,name)); if err==nil { os.WriteFile(filepath.Join(r.out,"sandbox-shell-macos","process",name),[]byte(red.text(string(raw))),0644) }
+ }
+ b,_:=json.MarshalIndent(records,"","  ")
+ if err:=os.WriteFile(filepath.Join(r.out,"sandbox-shell-macos","shell.json"),b,0644);err!=nil{t.Fatal(err)}
+ if len(files)==0{t.Fatal("no shell recordings")}
+}
+
+func TestCursorMacSandboxDetectionProbe(t *testing.T) {
+ work,_:=os.Getwd()
+ sandbox,reason:=detectCursorSandbox(context.Background(),nil,work)
+ binary,err:=exec.LookPath("sandbox-exec");if err!=nil{t.Fatal(err)}
+ roots:=[]string{work,"/tmp",os.TempDir(),runnerCacheRoot()}
+ for i,root:=range roots { roots[i],err=filepath.EvalSymlinks(root);if err!=nil{t.Fatal(err)} }
+ trialSandbox:=&cursorSandbox{binary:binary,platform:runtime.GOOS,roots:roots}
+ cmd:=exec.Command("/bin/sh","-c","exit 0");cmd.Dir=work;trialSandbox.wrap(cmd)
+ out,trialErr:=cmd.CombinedOutput()
+ record:=map[string]interface{}{"platform":runtime.GOOS,"detectionAvailable":sandbox!=nil,"detectionReason":reason,"argv":cmd.Args,"cwd":cmd.Dir,"trialOutput":string(out),"trialError":fmt.Sprint(trialErr),"peerStartIdentity":cursorShellStartIdentity(os.Getpid())}
+ // Diagnostic only: no product change; remove the Linux-style separator.
+ corrected:=append([]string{},cmd.Args[1:3]...);corrected=append(corrected,cmd.Args[4:]...)
+ retry:=exec.Command(binary,corrected...);retry.Dir=work
+ retryOut,retryErr:=retry.CombinedOutput()
+ record["withoutSeparatorArgv"]=retry.Args;record["withoutSeparatorOutput"]=string(retryOut);record["withoutSeparatorError"]=fmt.Sprint(retryErr)
+ for _,tool:=range []string{"/usr/bin/sw_vers","/usr/bin/uname"} {args:=[]string{};if strings.HasSuffix(tool,"uname"){args=[]string{"-a"}};info,_:=exec.Command(tool,args...).CombinedOutput();record[tool]=string(info)}
+ b,_:=json.MarshalIndent(record,"","  ")
+ if err:=os.WriteFile(filepath.Join(os.Getenv("ORBIT_CURSOR_REAL_OUT"),"detection.json"),b,0644);err!=nil{t.Fatal(err)}
+ t.Log(string(b))
+}
+
+var macRecordingJobID = os.Getenv(envBgJobID)
+
+func TestCursorMacPersonCard(t *testing.T) {
+ r:=realCursorEnv(t)
+ cfg:=loadConfig();if cfg==nil{t.Fatal("No runner config")}
+ transport:=newCallerTransport(cfg.ServerURL,cfg.RunnerToken,runnerCallerMCP)
+ session:=os.Getenv("ORBIT_MAC_RECORD_SESSION");if session==""{t.Fatal("No live Orbit session")}
+ var decision *ApprovalDecisionResponse
+ run:=r.run(t,realScenario{name:"macos-person-card",mode:"auto",prompts:[]string{"Use only the Shell tool. Run exactly `python3 -c 'print(424242)'` once in the foreground, then stop. This harmless command is an invocation measurement."},approve:func(card cursorTestCard)cursorTestDecision{
+  body:=map[string]interface{}{"toolName":"CursorShellRecording","toolUseId":"macos-invocation-person-explicit-"+card.ToolUseID,"input":map[string]interface{}{"command":firstString(mapValue(card.Input),"command"),"description":"Approve this harmless Cursor invocation recording: print 424242. The real CLI is paused until you answer; no sandbox implementation is changed."},"backgroundJobId":macRecordingJobID}
+  id,err:=transport.createApproval(context.Background(),session,body);if err!=nil{t.Error(err);return cursorTestDecision{Status:"DENIED"}}
+  t.Logf("Waiting for the person's approval card %s, background reader %s",id,macRecordingJobID)
+  ctx,cancel:=context.WithTimeout(context.Background(),5*time.Minute);defer cancel()
+  decision,err=awaitApprovalDecision(ctx,transport,session,id)
+  if err!=nil{t.Error(err);return cursorTestDecision{Status:"DENIED"}}
+  return cursorTestDecision{Status:decision.Status,DecidedByID:decision.DecidedByID}
+ }})
+ report:=newRealReport(t)
+ report.facts["approvalSource"]="Real production Orbit approval relayed from the controlled CLI harness; no decision is fabricated."
+ report.facts["productionDecision"]=decision
+ report.check("person-approved",decision!=nil&&decision.Status=="ALLOWED"&&decision.DecidedByID!="","production decision has ALLOWED and a person decider")
+ r.save(t,"macos-person-card","process",run,report)
+ red:=newRealRedactor(r.key,run)
+ files,_:=filepath.Glob(filepath.Join(run.raw,"shell-*.json"))
+ var records []json.RawMessage
+ for _,f:=range files { b,_:=os.ReadFile(f);records=append(records,json.RawMessage(red.text(string(b)))) }
+ for _,name:=range []string{"stdin.jsonl","stdout.jsonl","stderr.txt","timeline.jsonl","exit.json","original-orbit-bash"} {
+  raw,err:=os.ReadFile(filepath.Join(run.raw,name));if err==nil{os.WriteFile(filepath.Join(r.out,"macos-person-card","process",name),[]byte(red.text(string(raw))),0644)}
+ }
+ b,_:=json.MarshalIndent(records,"","  ");if err:=os.WriteFile(filepath.Join(r.out,"macos-person-card","shell.json"),b,0644);err!=nil{t.Fatal(err)}
+}

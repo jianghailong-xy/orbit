@@ -956,6 +956,90 @@ macOS peer/process authentication is not implemented: its helper refuses every
 escape, pending the separate macOS work. Other permission modes retain their
 existing wrappers; entering or leaving Auto restarts the CLI process.
 
+
+#### 8.5.2 macOS invocation matrix and escalation verdict (2026-11-09)
+
+Recorded on `longdeMac-mini.local`, macOS 27.2 / Darwin arm64, with the same
+pinned Cursor CLI `2026.10.14-941492e`. The [recording README](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/README.md)
+contains reproduction steps, probe limitations and redaction rules; the
+[native probe source](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/probe.go.txt)
+and [offline assertions](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/check.py)
+are retained. This measures wrapper entry, before HOME restoration and credential
+removal. No product sandbox code was changed.
+
+| Case | macOS recording | Observed invocation |
+|---|---|---|
+| Environment snapshot | [00](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/00-snapshot.json) | `orbit-bash -O extglob -ilc <4793-byte script>`; 34 environment entries; no request/conversation ID or fd 5 |
+| Unasked `ls` | [01](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/01-unasked-ls.json) | `orbit-bash -O extglob -c <loader> --`; 39 environment entries |
+| Orbit Auto allows `touch auto-allowed.txt` | [02](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/02-auto-allowed-touch.json) | Same argv, cwd and environment as 01; different fd-5 command |
+| Foreground Python through controlled card path | [03](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/03-harness-card-python.json) | Same argv, cwd and environment as 01/02; harness supplies ALLOWED; this row alone is not a person click |
+| Background requested with `block_until_ms: 0`, then foreground | [04](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/04-background.json), [05](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/05-foreground.json) | `sleep 4; printf background`, then `printf foreground`; same request ID and entry environment |
+| Two different concurrent commands | [06 B](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/06-concurrent-b.json), [07 A](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/07-concurrent-a.json) | Separate PIDs; identical argv/cwd/env; distinct fd-5 text; wrapper entries less than three seconds apart |
+| Two identical concurrent commands | [08](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/08-identical-a.json), [09](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/09-identical-b.json) | Separate PIDs; identical argv/cwd/env/payload; entries 0.044 ms apart, for two three-second sleeps |
+| Actual person approves a card | Pending production `CursorShellRecording` approval | The harmless Python command is paused in the real CLI harness. No person decision or executed command recording is claimed yet. |
+
+All ten primary entries have the same `<RUN>/work` cwd. The native entry probe
+records every environment key/value and the complete argv, plus non-consuming
+`MSG_PEEK` of the fd-5 Unix socket. Credentials are masked and temporary paths/UUIDs
+use stable placeholders. macOS has no recorded Linux socket inode; distinct wrapper
+PIDs and entry times establish the two invocations. The only environment-key
+platform difference from the Linux snapshot is `__CF_USER_TEXT_ENCODING` replacing
+`LANG`; values such as PATH and TMPDIR are host-specific. The command environment
+adds the same five keys as Linux: `CURSOR_AGENT`, `CURSOR_CONVERSATION_ID`,
+`CURSOR_REQUEST_ID`, `AGENT_TRANSCRIPTS`, `__CURSOR_SANDBOX_ENV_RESTORE`.
+
+The [primary ACP stdout](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/process/stdout.jsonl),
+[stdin](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/process/stdin.jsonl),
+[timeline](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/process/timeline.jsonl)
+and [runner summary](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/summary.json)
+show no permission request for `ls`, eight `allow-once` replies, and one controlled
+Python card; the other seven requests are Orbit Auto allows. Background numerical
+`block_until_ms` arguments are requested in the retained prompts but not independently
+exposed by ACP rawInput. Each sleep reports completion with empty stdout before its
+sleep duration, while foreground printf returns output. Entry wall-clock times and
+ACP relative times are separate time bases.
+
+The first production relay matched the workspace's standing grant:
+[decision and shell recording](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/standing-grant/summary.json)
+records `standingGrant: true` and no person decider. The pending explicit-person run uses a
+separate, honestly labeled recording tool name so that the existing Bash standing
+rule does not answer it. A production card decision is still required; the existing
+standing-grant recording does not establish that a person clicked.
+
+**Verdict: the exact-command, counted-grant design carries over; the Linux
+implementation cannot be used unchanged.** The recorded loader and fd-5 NUL framing
+match Linux. Request IDs are shared within a turn, and argv/env contain neither
+an approval flag nor the ACP toolCallId. Thus approval must still be recorded before
+`allow-once`, matched against the complete conversation/cwd/command key, and consumed
+atomically once; unasked and classifier-approved commands receive no escape grant.
+Identical concurrent commands still require count semantics rather than PID attribution.
+The fresh-Bash approved path in §8.5.1 must remain independent of Cursor's persisted
+snapshot. This is an input-compatibility finding, not a successful macOS broker test.
+
+macOS needs a trusted peer/process authentication backend in place of Linux's
+`/proc` and kernel-peer checks. The [host diagnostic](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/detection.json)
+records an empty `cursorShellStartIdentity` result; `cursor_shell_other.go` currently
+refuses every escape. A macOS backend must establish peer PID/UID, executable identity,
+parent CLI identity/generation, live session ancestry, cwd and command context without
+trusting client-supplied JSON. UID alone remains insufficient. Until that exists,
+no macOS escape should be granted. This task does not implement it.
+
+**Sandbox detection depends on execution context.** The same host diagnostic calls
+`detectCursorSandbox` and records the exact Seatbelt profile/argv: available, empty
+reason, and successful `/bin/sh -c 'exit 0'` trial. Removing `--` also succeeds;
+this recording does not support blaming that separator. The
+[same trial inside Codex's sandbox](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/engine-sandbox-trial.json)
+exits 71 with `sandbox-exec: sandbox_apply: Operation not permitted`. Run availability
+checks on the runner host, not inside an already confined engine. This distinguishes
+the task-history failure report from the successful host trial observed now.
+The primary controlled CLI fixture's summary records another explicit fallback:
+its temporary ORBIT_HOME has no `caches` directory, so writable-root resolution
+fails before a Seatbelt trial. The
+[original wrapper from the standing-grant run](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/standing-grant/process/original-orbit-bash)
+therefore execs Bash directly. These recordings establish invocation compatibility
+and detection diagnostics, not write confinement or successful macOS escalation;
+those remain the macOS sandbox verification task's responsibility.
+
 ---
 
 ## 9. 登录、API key 与 token（覆盖要求 7）
