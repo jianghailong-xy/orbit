@@ -97,6 +97,27 @@ func TestMCPOrchestrationToolsGated(t *testing.T) {
 	}
 }
 
+// The three session-to-session doors are charged against one per-pair cap (contract §2.4), and an
+// agent should learn it from the tool rather than by hitting it.
+func TestSessionMessageDoorsAdvertiseThePerPairCap(t *testing.T) {
+	descriptions := map[string]string{}
+	for _, tool := range toolDescriptors(false, true) {
+		name, _ := tool["name"].(string)
+		descriptions[name], _ = tool["description"].(string)
+	}
+	for _, name := range []string{"session_send", "session_interrupt", "project_send"} {
+		text := descriptions[name]
+		for _, want := range []string{"60", "rolling 5 minutes", "SESSION_MESSAGE_RATE_LIMITED"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s description does not state the per-pair cap (%q missing): %q", name, want, text)
+			}
+		}
+	}
+	if !strings.Contains(descriptions["session_send"], "session_await") {
+		t.Errorf("session_send description does not say what to do instead of sending again")
+	}
+}
+
 // session_send no longer hard-codes CURRENT_WORK (0225): the server decides between joining the
 // running turn and filing the next one, and a description that still promised an explicit refusal
 // would send a caller looking for an error it can no longer get — the very reason a coordinator
