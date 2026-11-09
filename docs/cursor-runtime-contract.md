@@ -959,6 +959,19 @@ existing wrappers; entering or leaving Auto restarts the CLI process.
 
 #### 8.5.2 macOS invocation matrix and escalation verdict (2026-11-09)
 
+Follow-up verification: the [Seatbelt recording](evidence/cursor-cli/2026.10.14-941492e/sandbox-macos-verification/README.md)
+shows a real Auto-allowed Python heredoc denied writing `$HOME/outside-file`, with
+the English sandbox message, zero cards and an independent file-absence check
+(`bgj_3edf5266b5ca`). Runner-hosted Mac tests pass unskipped, including writable
+roots, network, inherited descriptors, shell replay and launch-file protection
+(`bgj_87694540ac51`). The profile now protects sealed ancestors against rename;
+launch paths use canonical paths and long Darwin broker socket paths use short,
+temporary private aliases. Detection still uses the unchanged real Seatbelt trial.
+**macOS escapes are explicitly refused**, including after a forged positive broker
+reply: there is no verified macOS peer/process identity backend. A person-approved
+outside write therefore remains confined. The recording documents this limitation
+and a real-helper refusal regression; no successful Mac escape is claimed.
+
 Recorded on `longdeMac-mini.local`, macOS 27.2 / Darwin arm64, with the same
 pinned Cursor CLI `2026.10.14-941492e`. The [recording README](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/README.md)
 contains reproduction steps, probe limitations and redaction rules; the
