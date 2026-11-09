@@ -70,7 +70,8 @@ these fixed, non-secret command strings without redaction.
 Use a private scratch directory and the runner-hosted job service, outside an
 existing engine sandbox. An installed, signed-in Codex and pinned Cursor CLI are
 prerequisites; the real Cursor harness uses the configured API key file, without
-printing it. Temporarily apply `harness.patch` and copy `probe.go.txt` to
+printing it. Temporarily apply `harness.patch` with `git apply --unidiff-zero`
+(the saved patch omits context lines), and copy `probe.go.txt` to
 `src/runner-go/cursor_sandbox_probe_test.go`. From `src/runner-go`:
 
 ```sh
