@@ -109,3 +109,20 @@ Orbit control plane. This task does not run or change the known failing macOS
 Cursor sign-in/install tests (`TestCursorAddAccountRelaysTheSignInLink`,
 `TestCursorMacSignInSavesUnderHome`, `TestCursorInstall*`), DSH Linux-path tests,
 or unrelated long Unix socket paths. The full macOS suite is not claimed.
+
+## Linux regression verification
+
+`bgj_f4550f91fb81` passes `cd src/runner-go && go test -timeout 45m ./...`
+on Linux x64, using the committed source mounted into Docker, Go 1.26.10 and
+Git 2.47.3 (`golang:1.26-trixie`). The full runner package took 2402.492 seconds.
+Docker uses `--init` to reap process-lifecycle test children, `--privileged` for
+bubblewrap, and `TMPDIR=/t` to keep test Unix socket addresses short.
+The final Linux sandbox/shell regression selection also passes in
+`bgj_c28e7c7a3a70` on native Linux ARM64 with real bubblewrap confinement.
+
+The earlier full-suite attempt `bgj_fe488bdb1e9f` used Go 1.23 and Linux ARM64:
+it failed Go-1.24-required file previews/uploads, x64-only installer tests,
+Git timestamp expectations and long socket paths. Those tests were not changed
+or excluded; the full x64 run above passes. Two still earlier runs without an
+init reaper were stopped after accumulating zombies. None of those attempts is
+cited as a passing full-suite check.
