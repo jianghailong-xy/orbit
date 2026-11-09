@@ -2877,7 +2877,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // table is a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
       // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is
       // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
-      '0504_owner_request_delivery'],
+      '0504_owner_request_delivery',
+      // 0505 adds run-item request columns/index and widens request/approval CHECKs only.
+      // No completion ledger, DONE fence, preserved trigger or function is changed.
+      '0505_run_item_requests'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

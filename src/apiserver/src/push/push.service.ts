@@ -210,7 +210,7 @@ export class PushService {
    * Tell the session's owner a tool approval is pending. Fire-and-forget: callers `void` this so a
    * slow/failed APNs round-trip never blocks the runner request that created the approval.
    */
-  async notifyApprovalRequest(sessionId: string, approvalId: string, toolName: string): Promise<void> {
+  async notifyApprovalRequest(sessionId: string, approvalId: string, toolName: string, coordinatorFallback = false): Promise<void> {
     if (!this.enabled) return;
     try {
       const session = await this.prisma.session.findFirst({
@@ -242,7 +242,7 @@ export class PushService {
       // phone once per tool. Alert on the session's 0 → pending edge, which is the transition the
       // clients notify on too (SessionDelta.diff). Decided on the session row, not in this process's
       // memory: the approvals of one turn can reach different apiservers, and each used to ring once.
-      if (!(await this.claimApprovalAlert(sessionId, approvalId))) {
+      if (!coordinatorFallback && !(await this.claimApprovalAlert(sessionId, approvalId))) {
         // Feishu shows the stretch on one card, each approval with its own buttons (§6.2): one that did not open the
         // stretch is added to the card the opening one sent, rather than sending a second.
         if (feishu && this.feishu) this.background(this.feishu.joinApprovalStretch(feishu, sessionId, approvalId));
@@ -252,7 +252,7 @@ export class PushService {
 
       const body = JSON.stringify({
         aps: {
-          alert: { title: session.title || 'Orbit', body: `Needs your reply · ${toolName}` },
+          alert: { title: session.title || 'Orbit', body: `${coordinatorFallback ? 'Not reviewed by the coordinator · ' : ''}Needs your reply · ${toolName}` },
           sound: 'default',
           badge,
           category: 'ORBIT_APPROVAL', // matches OrbitKit Notifications.approvalCategory
@@ -262,7 +262,7 @@ export class PushService {
         kind: 'approval',
       });
 
-      this.background(feishu && this.feishu ? this.feishu.post(feishu, this.feishu.approvalCard(feishu, sessionId, approvalId)) : null);
+      this.background(feishu && this.feishu ? this.feishu.post(feishu, this.feishu.approvalCard(feishu, sessionId, approvalId, coordinatorFallback)) : null);
 
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
@@ -524,7 +524,7 @@ export class PushService {
     /** Alert title when there is no session to take it from (the runner's name). */
     fallbackTitle: string;
     message: string;
-  }): Promise<AgentNotifyResult> {
+  }, alreadyClaimed = false): Promise<AgentNotifyResult> {
     const alert = agentAlert(input.message);
     if (!alert) return { delivered: false, reason: 'message is empty' };
     if (!this.enabled) return { delivered: false, reason: 'push is not configured on this server' };
@@ -555,7 +555,7 @@ export class PushService {
 
       const now = new Date();
       const wait = agentNotifyWait(rang, now);
-      if (wait !== null) return { delivered: false, reason: `rate limited — try again in ${wait}s` };
+      if (!alreadyClaimed && wait !== null) return { delivered: false, reason: `rate limited — try again in ${wait}s` };
 
       const { tokens, feishu } = await this.channels(input.ownerId);
       if (tokens.length === 0 && !feishu) {
@@ -586,7 +586,7 @@ export class PushService {
       // Recorded before the round-trip: an APNs call that is slow or fails still consumed this
       // session's turn to interrupt, and retrying it in a tight loop is exactly what the limit is for.
       // A call another apiserver recorded since the read above wins, and this one is refused.
-      const taken = await this.claimAgentNotify(input, now);
+      const taken = alreadyClaimed ? null : await this.claimAgentNotify(input, now);
       if (taken !== null) {
         return { delivered: false, reason: `rate limited — try again in ${agentNotifyWait(taken, now) ?? 1}s` };
       }

@@ -2540,6 +2540,7 @@ model SessionFolder {
 // process from the runner's seq-owning session loop, so persisting it as an event
 // would race the runner's monotonic seq. Idempotent on (sessionId, toolUseId).
 model Approval {
+  coordinatorFallback String? @map("coordinator_fallback")
   id           String    @id @default(uuid(7)) @db.Uuid
   sessionId    String    @map("session_id") @db.Uuid
   session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -2577,7 +2578,7 @@ model Approval {
   startAfterCreate Boolean @default(false) @map("start_after_create")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById  String?   @map("decided_by_id") @db.Uuid
-  /// The credential the decider used (0500): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` — a click on a Feishu card
+  /// The credential the decider used (0500, 0505): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` | `COORDINATOR` — a click on a Feishu card
   /// (docs/feishu-bot-design.md §7.2). NULL on a row nobody decided and on every row decided before 0500.
   decidedCredentialKind String? @map("decided_credential_kind")
   /// The clicker's open_id and the card's message_id when `decidedCredentialKind` is `FEISHU`, and only then
@@ -2856,6 +2857,10 @@ model SessionWakeupLoop {
 /// is not one: the request is written under the RECIPIENT's row lock, and a key to the asker would
 /// take that row too. The partial indexes the workers and reads use live in migration 0350.
 model SessionRequest {
+  kind              String    @default("MESSAGE")
+  approvalId        String?   @map("approval_id") @db.Uuid
+  escalatedItemId   String?   @map("escalated_item_id") @db.Uuid
+  ownerAlertedAt    DateTime? @map("owner_alerted_at") @db.Timestamptz(3)
   id                String    @id @default(uuid(7)) @db.Uuid
   ownerId           String    @map("owner_id") @db.Uuid
   fromSessionId     String    @map("from_session_id") @db.Uuid
@@ -2869,7 +2874,7 @@ model SessionRequest {
   /// `[{ label, description? }]`, two to four of them, or null.
   options           Json?
   replyBy           DateTime  @map("reply_by") @db.Timestamptz(3)
-  /// OPEN | REPLIED | NO_REPLY | RECIPIENT_ENDED | EXPIRED | UNDELIVERED
+  /// OPEN | REPLIED | NO_REPLY | RECIPIENT_ENDED | EXPIRED | UNDELIVERED | OWNER_ANSWERED | READ
   state             String    @default("OPEN")
   replyText         String?   @map("reply_text")
   replyOption       Int?      @map("reply_option")

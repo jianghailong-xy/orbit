@@ -132,6 +132,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'deliveredSessionId',
   'confirmedByUserId',
   'openItemId',
+  'escalatedItemId',
   'receiptIds',
   // The same pause, named by the rows that hang off it rather than by the card that points at it:
   // a held action's `episodeId`, and the `:episodeId` the resume door is addressed by (0280).
