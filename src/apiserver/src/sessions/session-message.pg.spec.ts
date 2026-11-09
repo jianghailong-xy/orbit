@@ -9,26 +9,26 @@
  *   2. The engine is handed the words and then the `<orbit-session-message>` block, what ingest
  *      records beside the runner's echo is exactly that block, and the `user` event carries the card
  *      a client draws "From [that session]" from.
- *   4. The 21st message one session sends another inside an hour is refused with 409
+ *   4. The message over the limit (60) one session sends another inside 5 minutes is refused with 409
  *      SESSION_MESSAGE_RATE_LIMITED — `project_send` counting against the coordinator it resolves —
  *      while a retry of a counted message is not another one, and nobody but a session is counted.
  *  11. The auto-retry sweep re-sends another session's message as that session's — the sender kept
  *      on the new turn, the block delivered with it, the card stored beside its echo — on the live
  *      path and on the revive alike; and as the platform's re-send it is charged to nobody: neither
- *      the pair's hour nor a steer.
+ *      the pair's window nor a steer.
  *  12. (the server's half) A message another session sent carries its card on both projections of
  *      the queue while it waits, the request it is included — the card its echo will carry.
  *  13. `session_interrupt`'s message is signed with the calling session and delivered as its
- *      message, and counts with that session's other messages against the pair's hour: the 21st is
- *      refused and leaves the queue as it found it, while a retry of a counted one and a bodyless
+ *      message, and counts with that session's other messages against the pair's window: the one
+ *      over the limit is refused and leaves the queue as it found it, while a retry of a counted one and a bodyless
  *      interrupt are not messages at all.
  *  15. (the server's half) The failure card's Retry of another session's message asks the server to
  *      re-send it, through `POST /sessions/:id/retry-message`: the new turn keeps the sender and the
  *      request the message was, the engine reads the block again, and nobody is charged — not the
- *      pair's hour, not a steer. A replay of the click is its receipt.
- *  16. What one session sent another counts for the hour it was sent in, whatever happens to it next:
- *      queued messages an interrupt drops, or the owner withdraws, still count, and so do the ones a
- *      session drops itself with an interrupt that carries one more — the 21st is refused.
+ *      pair's window, not a steer. A replay of the click is its receipt.
+ *  16. What one session sent another counts for the window it was sent in, whatever happens to it
+ *      next: queued messages an interrupt drops, or the owner withdraws, still count, and so do the ones
+ *      a session drops itself with an interrupt that carries one more — the one over the limit is refused.
  *  22. (the server's half) The Retry door's key follows the failure the session is stopped on: a re-send
  *      that fails before its echo — refused by the runtime before it was written, with only the runner's
  *      receipt to show for it — is re-sent by the next press, and only once however often it is pressed;
@@ -90,7 +90,8 @@ import { SessionRequestService } from './session-request.service';
 import { SessionsController } from './sessions.controller';
 import {
   SESSION_MESSAGE_RATE_LIMITED_CODE,
-  SESSION_MESSAGES_PER_PAIR_PER_HOUR,
+  SESSION_MESSAGE_WINDOW_MS,
+  SESSION_MESSAGES_PER_PAIR_PER_WINDOW,
   sessionMessageBlock,
 } from './session-message';
 import { SessionsService } from './sessions.service';
@@ -197,7 +198,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     new JwtService({ secret: 'session-message-pg' }),
   );
   // The orchestration send is budgeted as a steer. Recorded rather than stubbed away, so a change
-  // that dropped the steer charge when it added the hourly one fails here.
+  // that dropped the steer charge when it added the per-pair one fails here.
   const steers: string[] = [];
   const attempts = {
     chargeSteer: async (_owner: string, sessionId: string) => {
@@ -504,48 +505,51 @@ test('one session’s message to another is signed, delivered as such, and bound
 
   // ── 4. how often ──────────────────────────────────────────────────────────────────────────────
 
-  await t.test('the 21st message from one session to another inside an hour is refused', async () => {
+  await t.test('the message over the limit from one session to another inside 5 minutes is refused', async () => {
     const chatty = await session('Worker: asks how it is going');
     const busy = await session('the session being asked');
-    let twentieth: { turnId?: string } = {};
-    for (let i = 1; i <= SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
-      twentieth = await sessionSend(chatty, busy, `how is it going? (${i})`, `rate-${i}`) as { turnId?: string };
+    let last: { turnId?: string } = {};
+    for (let i = 1; i <= SESSION_MESSAGES_PER_PAIR_PER_WINDOW; i++) {
+      last = await sessionSend(chatty, busy, `how is it going? (${i})`, `rate-${i}`) as { turnId?: string };
     }
-    assert.equal(SESSION_MESSAGES_PER_PAIR_PER_HOUR, 20);
+    assert.equal(SESSION_MESSAGES_PER_PAIR_PER_WINDOW, 60);
+    assert.equal(SESSION_MESSAGE_WINDOW_MS, 5 * 60 * 1000);
 
-    await assert.rejects(() => sessionSend(chatty, busy, 'how is it going? (21)', 'rate-21'), (error: unknown) => {
+    await assert.rejects(() => sessionSend(chatty, busy, `how is it going? (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1})`, `rate-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), (error: unknown) => {
       const refusal = refusalOf(error);
       assert.equal((error as { getStatus?: () => number }).getStatus?.(), 409);
       assert.equal(refusal.code, SESSION_MESSAGE_RATE_LIMITED_CODE);
       assert.equal(refusal.retryable, false);
       assert.match(String(refusal.message), /session_await/, 'the refusal does not say what to do instead');
+      assert.match(String(refusal.message), /5 minutes/, 'the refusal does not name its window');
+      assert.match(String(refusal.message), /any other session is unaffected/, 'the refusal does not say it is this pair only');
       return true;
     });
     const written = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
-    assert.equal(written.length, 20, 'a refused message was written anyway');
+    assert.equal(written.length, SESSION_MESSAGES_PER_PAIR_PER_WINDOW, 'a refused message was written anyway');
 
-    // A retry of a counted message is that message, not a 21st one: its receipt, and nothing new.
-    const retried = await sessionSend(chatty, busy, 'how is it going? (20)', 'rate-20') as { turnId?: string };
-    assert.ok(twentieth.turnId, `the send answered no turn: ${JSON.stringify(twentieth)}`);
-    assert.equal(retried.turnId, twentieth.turnId, 'a retry of the 20th message was not its receipt');
-    assert.equal((await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty).length, 20);
+    // A retry of a counted message is that message, not one more: its receipt, and nothing new.
+    const retried = await sessionSend(chatty, busy, `how is it going? (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW})`, `rate-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW}`) as { turnId?: string };
+    assert.ok(last.turnId, `the send answered no turn: ${JSON.stringify(last)}`);
+    assert.equal(retried.turnId, last.turnId, 'a retry of the last counted message was not its receipt');
+    assert.equal((await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty).length, SESSION_MESSAGES_PER_PAIR_PER_WINDOW);
 
     // The pair is ORDERED, and it is a pair: the other direction and another recipient are their own.
     await sessionSend(busy, chatty, 'still working — I will tell you', 'reply-1');
     const elsewhere = await session('a third conversation');
     await sessionSend(chatty, elsewhere, 'a different question', 'elsewhere-1');
 
-    // Rolling, not a fixed hour: once the oldest message is more than an hour old, one more fits.
+    // Rolling, not a fixed window: once the oldest message is more than 5 minutes old, one more fits.
     // What ages is what was SENT (migration 0351's record), not the turn it was sent as.
     await sql.query(
-      `UPDATE "session_message_charge" SET "created_at" = "created_at" - interval '61 minutes'
+      `UPDATE "session_message_charge" SET "created_at" = "created_at" - interval '6 minutes'
         WHERE "id" = (SELECT "id" FROM "session_message_charge"
                        WHERE "to_session_id" = $1::uuid AND "from_session_id" = $2::uuid
                        ORDER BY "created_at", "id" LIMIT 1)`,
       [busy, chatty],
     );
-    await sessionSend(chatty, busy, 'how is it going? (21, an hour on)', 'rate-21-later');
-    await assert.rejects(() => sessionSend(chatty, busy, 'and again', 'rate-22'), (error: unknown) => {
+    await sessionSend(chatty, busy, `how is it going? (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}, 5 minutes on)`, `rate-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}-later`);
+    await assert.rejects(() => sessionSend(chatty, busy, 'and again', `rate-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 2}`), (error: unknown) => {
       assert.equal(refusalOf(error).code, SESSION_MESSAGE_RATE_LIMITED_CODE);
       return true;
     });
@@ -557,10 +561,10 @@ test('one session’s message to another is signed, delivered as such, and bound
     // Thirty messages nobody's session sent, before and after the limit is reached.
     for (let i = 0; i < 25; i++) await ownerSend(busy, `the owner, ${i}`);
     for (let i = 0; i < 5; i++) await sessionSend(null, busy, `a bridge, ${i}`);
-    for (let i = 1; i <= SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+    for (let i = 1; i <= SESSION_MESSAGES_PER_PAIR_PER_WINDOW; i++) {
       await sessionSend(chatty, busy, `message ${i}`);
     }
-    await assert.rejects(() => sessionSend(chatty, busy, 'message 21'), (error: unknown) => {
+    await assert.rejects(() => sessionSend(chatty, busy, `message ${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), (error: unknown) => {
       assert.equal(refusalOf(error).code, SESSION_MESSAGE_RATE_LIMITED_CODE);
       return true;
     });
@@ -568,30 +572,30 @@ test('one session’s message to another is signed, delivered as such, and bound
     await sessionSend(null, busy, 'a bridge, after the session was refused');
     const turns = await turnsOf(busy);
     assert.equal(turns.filter((turn) => turn.senderSessionId === null).length, 32);
-    assert.equal(turns.filter((turn) => turn.senderSessionId === chatty).length, 20);
+    assert.equal(turns.filter((turn) => turn.senderSessionId === chatty).length, SESSION_MESSAGES_PER_PAIR_PER_WINDOW);
   });
 
   await t.test('project_send counts against the coordinator it resolves, and says so as itself', async () => {
     const worker = await session('Worker: reports to its coordinator');
     const { projectId, coordinatorSessionId } = await project('counted');
-    // Nineteen addressed to the session, one to the project: the same pair, so twenty.
-    for (let i = 1; i < SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+    // All but one addressed to the session, the last to the project: the same pair, so the limit.
+    for (let i = 1; i < SESSION_MESSAGES_PER_PAIR_PER_WINDOW; i++) {
       await sessionSend(worker, coordinatorSessionId, `report ${i}`);
     }
-    await projectSend(worker, projectId, 'report 20');
-    await assert.rejects(() => projectSend(worker, projectId, 'report 21'), (error: unknown) => {
+    await projectSend(worker, projectId, `report ${SESSION_MESSAGES_PER_PAIR_PER_WINDOW}`);
+    await assert.rejects(() => projectSend(worker, projectId, `report ${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), (error: unknown) => {
       const refusal = refusalOf(error);
       // Not COORDINATOR_MESSAGE_UNDELIVERED: what to do next is to wait, not to try the delivery again.
       assert.equal(refusal.code, SESSION_MESSAGE_RATE_LIMITED_CODE);
       assert.equal(refusal.retryable, false);
       return true;
     });
-    await assert.rejects(() => sessionSend(worker, coordinatorSessionId, 'report 21, by session'), (error: unknown) => {
+    await assert.rejects(() => sessionSend(worker, coordinatorSessionId, `report ${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}, by session`), (error: unknown) => {
       assert.equal(refusalOf(error).code, SESSION_MESSAGE_RATE_LIMITED_CODE);
       return true;
     });
     const counted = (await turnsOf(coordinatorSessionId)).filter((turn) => turn.senderSessionId === worker);
-    assert.equal(counted.length, 20);
+    assert.equal(counted.length, SESSION_MESSAGES_PER_PAIR_PER_WINDOW);
   });
 
   // ── 11. what the auto-retry sweep re-sends ────────────────────────────────────────────────────
@@ -688,23 +692,23 @@ test('one session’s message to another is signed, delivered as such, and bound
     assert.equal(resent.senderSessionId, worker, 'the revive dropped the sender');
   });
 
-  await t.test('the re-send is not one more message from that session in the pair’s hour', async () => {
+  await t.test('the re-send is not one more message from that session in the pair’s window', async () => {
     const chatty = await session('Worker: whose message failed once');
     const busy = await session('the session it writes to');
     await sessionSend(chatty, busy, 'message 1', 'counted-1');
     await autoRetry.sweep(await failAndArm(busy, RunStatus.AWAITING_INPUT));
     assert.equal((await resentOn(busy)).length, 1, 'the sweep re-sent nothing');
 
-    // Nineteen more fit: the one it sent and the nineteen make twenty, and the re-send is none of them.
-    for (let i = 2; i <= SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+    // The rest of the limit fits: the one it sent and the rest make the limit, and the re-send is none of them.
+    for (let i = 2; i <= SESSION_MESSAGES_PER_PAIR_PER_WINDOW; i++) {
       await sessionSend(chatty, busy, `message ${i}`, `counted-${i}`);
     }
-    await assert.rejects(() => sessionSend(chatty, busy, 'message 21', 'counted-21'), (error: unknown) => {
+    await assert.rejects(() => sessionSend(chatty, busy, `message ${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`, `counted-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), (error: unknown) => {
       assert.equal(refusalOf(error).code, SESSION_MESSAGE_RATE_LIMITED_CODE);
       return true;
     });
     const signed = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
-    assert.equal(signed.length, SESSION_MESSAGES_PER_PAIR_PER_HOUR + 1, 'twenty messages and the one re-send');
+    assert.equal(signed.length, SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1, 'the limit’s messages and the one re-send');
   });
 
   await t.test('the owner’s own message is re-sent as the owner’s, and the platform’s key is nobody else’s', async () => {
@@ -783,7 +787,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     const control = (await turnsOf(recipient)).filter((turn) => turn.kind === 'interrupt');
     assert.equal(control.length, 1);
     assert.equal(control[0].senderSessionId, null);
-    // Charged as a steer as before: the hourly limit came in beside that charge, not instead of it.
+    // Charged as a steer as before: the per-pair limit came in beside that charge, not instead of it.
     assert.ok(steers.includes(recipient), 'the steer was no longer charged');
 
     // While it waits for the interrupt to land, the queue draws it as the worker's.
@@ -806,10 +810,10 @@ test('one session’s message to another is signed, delivered as such, and bound
     });
   });
 
-  await t.test('an interrupt’s message counts against the pair’s hour, and the 21st is refused', async () => {
+  await t.test('an interrupt’s message counts against the pair’s window, and the one over the limit is refused', async () => {
     const chatty = await session('Worker: keeps redirecting');
     const busy = await session('the session it keeps redirecting');
-    for (let i = 1; i < SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+    for (let i = 1; i < SESSION_MESSAGES_PER_PAIR_PER_WINDOW; i++) {
       await sessionSend(chatty, busy, `message ${i}`, `sent-${i}`);
     }
     // Read and answered, so the interrupt below has nothing of the worker's left to drop: what is
@@ -817,38 +821,38 @@ test('one session’s message to another is signed, delivered as such, and bound
     await prisma.conversationTurn.updateMany({ where: { sessionId: busy }, data: { status: 'ANSWERED', answeredAt: new Date() } });
     await prisma.session.update({ where: { id: busy }, data: { status: RunStatus.AWAITING_INPUT } });
 
-    // The twentieth is an interrupt's, counted with the nineteen sends.
-    const twentieth = await sessionInterrupt(chatty, busy, 'stop and do this instead (20)', 'interrupt-20');
-    assert.equal(await senderOf(busy, 'interrupt-20'), chatty);
+    // The last within the limit is an interrupt's, counted with the sends before it.
+    const last = await sessionInterrupt(chatty, busy, `stop and do this instead (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW})`, `interrupt-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW}`);
+    assert.equal(await senderOf(busy, `interrupt-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW}`), chatty);
     // The runner takes it, so the session is live again and the next interrupt is judged on the count
     // alone: one aimed at a session still waiting to be claimed is refused as ended before that.
     await claimToMessage(busy);
 
     const before = await turnsOf(busy);
-    await assert.rejects(() => sessionInterrupt(chatty, busy, 'and this (21)', 'interrupt-21'), (error: unknown) => {
+    await assert.rejects(() => sessionInterrupt(chatty, busy, `and this (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1})`, `interrupt-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), (error: unknown) => {
       const refusal = refusalOf(error);
       assert.equal((error as { getStatus?: () => number }).getStatus?.(), 409);
       assert.equal(refusal.code, SESSION_MESSAGE_RATE_LIMITED_CODE);
       assert.equal(refusal.retryable, false);
       return true;
     });
-    // Refused before anything was dropped: the twentieth still waits, and no second interrupt was filed.
+    // Refused before anything was dropped: the last counted one still waits, and no second interrupt was filed.
     const after = await turnsOf(busy);
     assert.deepEqual(after.map((turn) => [turn.id, turn.status]), before.map((turn) => [turn.id, turn.status]));
     // ...and the same pair's ordinary send is refused by the same count.
-    await assert.rejects(() => sessionSend(chatty, busy, 'or this (21)', 'sent-21'), (error: unknown) => {
+    await assert.rejects(() => sessionSend(chatty, busy, `or this (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1})`, `sent-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), (error: unknown) => {
       assert.equal(refusalOf(error).code, SESSION_MESSAGE_RATE_LIMITED_CODE);
       return true;
     });
 
-    // A retry of the counted interrupt is its receipt, not a 21st message.
-    const replayed = await sessionInterrupt(chatty, busy, 'stop and do this instead (20)', 'interrupt-20');
-    assert.ok('turnId' in twentieth && 'turnId' in replayed);
-    assert.equal(replayed.turnId, twentieth.turnId, 'a retry of the counted interrupt was not its receipt');
+    // A retry of the counted interrupt is its receipt, not one more message.
+    const replayed = await sessionInterrupt(chatty, busy, `stop and do this instead (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW})`, `interrupt-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW}`);
+    assert.ok('turnId' in last && 'turnId' in replayed);
+    assert.equal(replayed.turnId, last.turnId, 'a retry of the counted interrupt was not its receipt');
     // A bodyless interrupt carries no message: the limit is not its business.
     assert.deepEqual(await sessionInterrupt(chatty, busy), { ok: true });
     const signed = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
-    assert.equal(signed.length, SESSION_MESSAGES_PER_PAIR_PER_HOUR);
+    assert.equal(signed.length, SESSION_MESSAGES_PER_PAIR_PER_WINDOW);
   });
 
   // ── 16. what was sent stays sent ───────────────────────────────────────────────────────────────
@@ -860,56 +864,56 @@ test('one session’s message to another is signed, delivered as such, and bound
     await claimAndPoll(busy);
   }
 
-  /** Twenty messages from `chatty`, each still waiting in `busy`'s queue, none of them read. */
-  async function twentyQueued(chatty: string, busy: string, label: string): Promise<string[]> {
-    for (let i = 1; i <= SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+  /** The limit's worth of messages from `chatty`, each still waiting in `busy`'s queue, none of them read. */
+  async function limitQueued(chatty: string, busy: string, label: string): Promise<string[]> {
+    for (let i = 1; i <= SESSION_MESSAGES_PER_PAIR_PER_WINDOW; i++) {
       await sessionSend(chatty, busy, `${label} (${i})`, `${label}-${i}`);
     }
     const queued = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
-    assert.equal(queued.length, SESSION_MESSAGES_PER_PAIR_PER_HOUR);
+    assert.equal(queued.length, SESSION_MESSAGES_PER_PAIR_PER_WINDOW);
     assert.ok(queued.every((turn) => turn.status === 'PENDING'), 'a message was read before it could be dropped');
     return queued.map((turn) => turn.id);
   }
 
-  const refusedAsTheTwentyFirst = (error: unknown) => {
+  const refusedAsOverTheLimit = (error: unknown) => {
     assert.equal(refusalOf(error).code, SESSION_MESSAGE_RATE_LIMITED_CODE);
     return true;
   };
 
-  await t.test('messages an interrupt drops from the queue still count for their hour', async () => {
+  await t.test('messages an interrupt drops from the queue still count for their window', async () => {
     const chatty = await session('Worker: fills a queue');
     const busy = await session('the session whose queue the owner drops');
     await midTurn(busy);
-    await twentyQueued(chatty, busy, 'dropped');
+    await limitQueued(chatty, busy, 'dropped');
     await sessions.interrupt(ownerId, busy);
     assert.equal((await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty).length, 0,
       'the interrupt dropped nothing, so this proves nothing');
-    await assert.rejects(() => sessionSend(chatty, busy, 'dropped (21)', 'dropped-21'), refusedAsTheTwentyFirst);
+    await assert.rejects(() => sessionSend(chatty, busy, `dropped (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1})`, `dropped-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), refusedAsOverTheLimit);
   });
 
-  await t.test('messages the owner withdraws from the queue still count for their hour', async () => {
+  await t.test('messages the owner withdraws from the queue still count for their window', async () => {
     const chatty = await session('Worker: fills a queue the owner empties');
     const busy = await session('the session whose owner withdraws them');
-    for (const turnId of await twentyQueued(chatty, busy, 'withdrawn')) {
+    for (const turnId of await limitQueued(chatty, busy, 'withdrawn')) {
       await sessions.cancelQueuedTurn(ownerId, busy, turnId);
     }
     assert.equal((await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty).length, 0);
-    await assert.rejects(() => sessionSend(chatty, busy, 'withdrawn (21)', 'withdrawn-21'), refusedAsTheTwentyFirst);
+    await assert.rejects(() => sessionSend(chatty, busy, `withdrawn (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1})`, `withdrawn-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), refusedAsOverTheLimit);
   });
 
   await t.test('a session cannot clear its own count by dropping its queued messages with an interrupt', async () => {
     const chatty = await session('Worker: queues, then interrupts its own queue');
     const busy = await session('the session it floods');
     await midTurn(busy);
-    for (let i = 1; i < SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+    for (let i = 1; i < SESSION_MESSAGES_PER_PAIR_PER_WINDOW; i++) {
       await sessionSend(chatty, busy, `queued (${i})`, `own-${i}`);
     }
-    // The twentieth is an interrupt's, which drops the nineteen before it.
-    await sessionInterrupt(chatty, busy, 'never mind those — do this (20)', 'own-interrupt-20');
+    // The last within the limit is an interrupt's, which drops the ones queued before it.
+    await sessionInterrupt(chatty, busy, `never mind those — do this (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW})`, `own-interrupt-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW}`);
     const left = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
-    assert.deepEqual(left.map((turn) => turn.clientTurnId), ['own-interrupt-20'], 'the interrupt dropped nothing');
-    await assert.rejects(() => sessionSend(chatty, busy, 'and again (21)', 'own-21'), refusedAsTheTwentyFirst);
-    await assert.rejects(() => sessionInterrupt(chatty, busy, 'and again (21)', 'own-interrupt-21'), refusedAsTheTwentyFirst);
+    assert.deepEqual(left.map((turn) => turn.clientTurnId), [`own-interrupt-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW}`], 'the interrupt dropped nothing');
+    await assert.rejects(() => sessionSend(chatty, busy, `and again (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1})`, `own-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), refusedAsOverTheLimit);
+    await assert.rejects(() => sessionInterrupt(chatty, busy, `and again (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1})`, `own-interrupt-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), refusedAsOverTheLimit);
   });
 
   // ── 15. the failure card's Retry, for another session's message ───────────────────────────────
@@ -990,12 +994,12 @@ test('one session’s message to another is signed, delivered as such, and bound
       assert.equal((await turnsOf(recipient)).filter((turn) => turn.content === words).length, 2,
         'the failed turn and its one re-send');
 
-      // Charged to nobody's hour: with the request, nineteen more from the worker make twenty, and the
-      // next is refused — the re-send is none of them.
-      for (let i = 2; i <= SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+      // Charged to nobody's window: with the request, the rest of the limit from the worker fits, and
+      // the next is refused — the re-send is none of them.
+      for (let i = 2; i <= SESSION_MESSAGES_PER_PAIR_PER_WINDOW; i++) {
         await sessionSend(worker, recipient, `and ${i}`, `card-retry-${i}`);
       }
-      await assert.rejects(() => sessionSend(worker, recipient, 'and 21', 'card-retry-21'), refusedAsTheTwentyFirst);
+      await assert.rejects(() => sessionSend(worker, recipient, `and ${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`, `card-retry-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW + 1}`), refusedAsOverTheLimit);
     }
 
     // The provider failed the run: the Retry revives it, and the re-send is the worker's all the same.
