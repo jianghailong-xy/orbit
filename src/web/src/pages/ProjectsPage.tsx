@@ -20,6 +20,7 @@ import {
 } from '../components/ProjectAcceptanceCard';
 import { ProjectBlockersCard, type ProjectBlockers } from '../components/ProjectBlockers';
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
+import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
@@ -2537,6 +2538,7 @@ function ProjectTaskRow({
                     {task.title}
                   </ProjectTaskLink>{' '}
                   <Badge tone={tagTone(TASK_STATUS_COLOR[task.status] ?? 'default')}>{task.status}</Badge>
+                  <WaitingOnYouTaskBadge taskId={task.id} />
                   {workLabel ? (
                     <Badge data-testid="project-task-work-state" tone={tagTone(workLabel.color)}>
                       {workLabel.text}

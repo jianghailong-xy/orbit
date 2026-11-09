@@ -25,6 +25,7 @@ import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-route
 import { api, openTaskListConsole } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
+import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { reportTaskRunConflict } from '../components/TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
 import { TaskStatusPill } from '../components/TaskStatusPill';
@@ -1194,6 +1195,7 @@ export function TaskListView() {
           <span className="task-title" title={r.title}>
             {r.title ?? ''}
           </span>
+          <WaitingOnYouTaskBadge taskId={r.id} />
           {r.blocked ? (
             <Tooltip
               content={r.dependencyState === 'BLOCKED_FAILED' ? 'Prerequisite cancelled — resolve it' : 'Waiting for prerequisites'}
