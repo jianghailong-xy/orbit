@@ -1403,10 +1403,10 @@ volumes up, restore them, and handle a full disk, a memory limit, a channel or a
 ## Multi-user Linux machines
 
 A Linux machine that several people use can carry a runner for each of their accounts. Each runner is a process of
-its own account, with its own credential, heartbeat and sessions, and drains on its own when it stops. Root is needed
-once, to set the machine up. From then on, every account registers, checks and removes its own runner without sudo,
-and the machine's binary is updated for all of them. A machine that is not set up keeps the single-account flow of
-[Register a runner](#4-register-a-runner), and macOS is not affected.
+its own account, with its own credential, heartbeat and sessions, runs that account's own copy of orbit, updates that
+copy itself, and drains on its own when it stops. Root is needed once, to set the machine up. From then on, every
+account registers, checks and removes its own runner without sudo. A machine that is not set up keeps the
+single-account flow of [Register a runner](#4-register-a-runner), and macOS is not affected.
 
 [scripts/hostd-e2e.sh](../scripts/hostd-e2e.sh) runs every command in this section, with the same arguments, on a
 real systemd with no sudo installed (root runs the ones shown with `sudo` itself), and marks each one with the
@@ -1414,16 +1414,14 @@ heading it comes from.
 
 ### Set up the machine once
 
-Every account's runner runs one binary, and the host broker runs it as root, so it has to be the machine's own: a
-regular file root owns and only root can write, in directories only root can write all the way up to `/`, such as
-`/usr/local/bin/orbit`. Every account has to be able to execute it, too: the file and each of those directories need
-execute permission for others. Setup writes the binary it runs from, links resolved, into the units, and refuses any
-other before it writes or runs anything (see below).
+The machine runs a host broker, hostd, as root. It is what starts and stops each account's runner, so that no account
+needs sudo for it. The broker runs one binary, `/usr/local/bin/orbit`, and no other: a regular file root owns and only
+root can write, in directories only root can write all the way up to `/`. The accounts' runners do not run it. Each
+runs its account's own `~/.orbit/bin/orbit`.
 
-[install.sh](../src/web/public/install.sh) does not put that copy in place: on a machine that is not set up, it
-installs into `~/.orbit/bin/orbit` of whichever account runs it, root included. An account's copy there is the
-account's to replace, and root's is in a home no other account can enter. So first, as the account that ran
-install.sh, put a machine-level copy in place:
+[install.sh](../src/web/public/install.sh) does not put the broker's copy in place: it installs into
+`~/.orbit/bin/orbit` of whichever account runs it, root included, with a `~/.local/bin/orbit` launcher linked to it.
+So first, as the account that ran install.sh, put a root-owned copy at `/usr/local/bin/orbit`:
 
 ```bash
 sudo install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit /usr/local/bin/orbit
@@ -1435,21 +1433,24 @@ Then, once, set the machine up from that copy:
 sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
-`--server` is the deployment's `PUBLIC_ORIGIN`. After these two commands, no account needs root to register, check or
-remove its runner, or to have it updated. Setup writes five files, each one whole every time it runs, so running it
-again is safe:
+`--server` is the deployment's `PUBLIC_ORIGIN`. After these two commands, no account needs root to register, check,
+remove or update its runner. Setup writes five files, each one whole every time it runs, so running it again is safe:
 
 - `/etc/systemd/system/orbit-runner@.service`: the template every account's runner is an instance of,
-  `orbit-runner@<uid>.service`. An instance is named by its account's uid and runs as that account (`User=%i`), so no
-  user name ever has to become a unit name. `Restart=always` brings a runner back when it exits, and `KillMode=mixed`
-  with `TimeoutStopSec=180` lets it drain when it stops.
+  `orbit-runner@<user name>.service`. The instance name is the account's user name escaped by systemd's own rule,
+  the one `systemd-escape` prints, which can be undone, so no two accounts share a unit: `alice` and `test.user` stay
+  as they are, and `test-user` becomes `test\x2duser`, its runner `orbit-runner@test\x2duser.service`. The instance
+  runs as that account (`User=%I`) and starts the account's own copy
+  (`ExecStart=/bin/sh -c 'exec "$HOME/.orbit/bin/orbit" run'`, with `$HOME` from the passwd database).
+  `Restart=always` brings a runner back when it exits, and `KillMode=mixed` with `TimeoutStopSec=180` lets it drain
+  when it stops.
 - `/etc/systemd/system/orbit-hostd.socket`: the host broker's socket, `/run/orbit/host.sock`, mode 0666. Setup
   enables and starts it.
-- `/etc/systemd/system/orbit-hostd.service`: the host broker, run as root. The socket starts it when an account's
-  `orbit` connects, and it exits after 30 quiet seconds.
+- `/etc/systemd/system/orbit-hostd.service`: the host broker, `/usr/local/bin/orbit hostd`, run as root. The socket
+  starts it when an account's `orbit` connects, and it exits after 30 quiet seconds.
 - `/usr/lib/tmpfiles.d/orbit-hostd.conf`: recreates `/run/orbit` at every boot, for the socket to listen in.
 - `/etc/orbit/config.json`: the control plane the machine belongs to, `{"server":"https://orbit.example.com"}`. The
-  broker installs updates from this server and from no other.
+  broker installs updates of its own binary from this server and from no other.
 
 It then creates `/run/orbit`, reloads systemd and starts the socket:
 
@@ -1457,8 +1458,9 @@ It then creates `/run/orbit`, reloads systemd and starts the socket:
 Created symlink /etc/systemd/system/sockets.target.wants/orbit-hostd.socket → /etc/systemd/system/orbit-hostd.socket.
 
 ✓ this host is set up for Orbit runners.
-  Broker:  orbit-hostd.socket (socket-activated; /run/orbit/host.sock)
-  Runners: orbit-runner@<uid>.service, one instance per Linux user
+  Broker:  orbit-hostd.socket (socket-activated; /run/orbit/host.sock), running /usr/local/bin/orbit
+  Runners: orbit-runner@<user>.service, one instance per Linux user,
+           each running that user's own ~/.orbit/bin/orbit
   Server:  https://orbit.example.com
 
   Every user on this host can now run `orbit register` without root.
@@ -1470,26 +1472,24 @@ Run without root, it changes nothing and says what to run instead:
 orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
-In the same way, it refuses a binary that other accounts cannot execute, since each account's runner runs it as that
-account. Root's own copy is one: install.sh puts it in `/root/.orbit`, which it makes mode 0700, inside `/root`, which
-is normally 0700 too:
+Setup refuses any binary other than `/usr/local/bin/orbit` before it writes or runs anything. Root's own copy, where
+install.sh puts it, is one:
 
 ```text
-orbit host: refusing to set this host up with /root/.orbit/bin/orbit: /root/.orbit, a directory above it, cannot be entered by others (mode 0700); /root, a directory above it, cannot be entered by others (mode 0700).
-Every account's runner would run this binary as that account, so every account has to be able to execute it: it needs execute permission for others, and so does every directory from its own up to /, or systemd cannot start their runners (status=203/EXEC).
+orbit host: refusing to set this host up with /root/.orbit/bin/orbit: the host broker runs only /usr/local/bin/orbit.
+It runs as root, so it runs one binary, the root-owned copy at /usr/local/bin/orbit that hostd's updates replace; every account's runner runs that account's own ~/.orbit/bin/orbit instead.
 Put a root-owned copy in place, then set the host up from it:
   sudo install -o 0 -g 0 -m 0755 /root/.orbit/bin/orbit /usr/local/bin/orbit
   sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
-It also refuses a binary that an account could change: every account's runner would run what that account put there,
-and the broker would run it as root. An account's own copy is one, which the account, or any agent it runs, can
-replace, whether setup runs from it or through the link to it that earlier releases of install.sh made
-`/usr/local/bin/orbit`:
+It also refuses a binary an account could change, since the broker would run it as root. An account's own copy is
+one, which the account, or any agent it runs, can replace, whether setup runs from it or through the link to it that
+earlier releases of install.sh made `/usr/local/bin/orbit`:
 
 ```text
 orbit host: refusing to set this host up with /home/alice/.orbit/bin/orbit: it belongs to uid 1000 rather than root.
-Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
+The host broker would run this binary as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
 Put a root-owned copy in place, then set the host up from it:
   sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
   sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
@@ -1502,7 +1502,7 @@ another binary in place, so setup names every such directory (the mode it report
 
 ```text
 orbit host: refusing to set this host up with /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775); /usr/local, a directory above it, is not root's alone (owned by uid 0, mode 0775).
-Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
+The host broker would run this binary as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
 Take that write access back, then set the host up again:
   sudo chmod g-w /usr/local/bin /usr/local
   sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
@@ -1510,6 +1510,9 @@ Take that write access back, then set the host up again:
 
 Members of `staff` then need root to install there too. Whatever setup refuses, it names what is wrong and the
 commands that put it right.
+
+A machine set up by an earlier release, whose runners are `orbit-runner@<uid>`, is moved by running setup again:
+[Moving a machine set up by an earlier release](#moving-a-machine-set-up-by-an-earlier-release).
 
 ### Register each account's runner
 
@@ -1523,12 +1526,33 @@ orbit register --server https://orbit.example.com --name build-01-alice
 defaults to the machine's host name, the same for every account. Where one Orbit account registers runners for
 several of a machine's accounts, give each its own `--name`: registering under a name the Orbit account already has
 re-issues that runner's credential instead of adding a runner. Approval is as under
-[Register a runner](#4-register-a-runner), but run `orbit register` itself rather than the install command **Add a
-runner** generates: on a machine that is set up, that command replaces the machine's binary, which needs sudo. The
-broker enables and starts the account's instance, nothing asks for a password, and the command ends with:
+[Register a runner](#4-register-a-runner).
+
+An account can install orbit first, the way it does on a machine that is not set up: the install command **Add a
+runner** generates, run as the account itself, puts the account's own copy in `~/.orbit/bin/orbit` with the
+`~/.local/bin/orbit` launcher, asks for no sudo and never writes `/usr/local/bin/orbit`. It does not edit `~/.bashrc`
+or `~/.zshrc`: where `~/.local/bin` is not on the account's PATH, it prints the line that adds it. Registration needs
+no install of its own, though. Run from any orbit, `/usr/local/bin/orbit` included, `orbit register` first puts the
+binary it runs from at the account's `~/.orbit/bin/orbit`, as the account: `~/.orbit` made mode 0700 if it is not
+there, then a new file renamed over the old one. When it already runs from that file, through the launcher or not, it
+copies nothing.
+
+So which `orbit` a shell finds matters. Debian's `~/.profile` puts `~/.local/bin` first on PATH once it exists, so a
+login shell finds the launcher:
+
+```bash
+command -v orbit
+```
+
+Where `/usr/local/bin` comes before `~/.local/bin` on PATH, a bare `orbit` is the broker's binary instead, and
+`orbit register` copies that build over the account's own copy. Type the launcher's path, `~/.local/bin/orbit`, to
+register from the account's own copy there.
+
+The broker enables and starts the account's instance, nothing asks for a password, and the command ends with:
 
 ```text
     ✓ Approved — build-01-alice is now a runner.
+    ✓ Put this account's own copy of orbit at /home/alice/.orbit/bin/orbit, which its runner runs and updates.
     Waiting for the runner to reach https://orbit.example.com (up to 2m0s)…
     ✓ Background service started as alice (runs at boot).
       Stop or remove it later with `orbit unregister`.
@@ -1541,6 +1565,29 @@ broker enables and starts the account's instance, nothing asks for a password, a
     orbit status · orbit doctor · orbit unregister
 ```
 
+Before it starts the instance, the broker takes down every older runner unit of the account (see
+[Migrating from per-user units](#migrating-from-per-user-units)), each drained on stop and confirmed down by systemd,
+so the account never runs two runners. Taking one down can take up to three minutes, the unit's drain. The command
+says when it is waiting for that, and waits; it never goes around a broker that is still working:
+
+```text
+    Waiting for the machine broker to finish "enable" — it may be draining an older runner, which takes up to 3 minutes (giving up after 15m0s)…
+```
+
+When an older runner will not stop, the broker neither enables nor starts the instance, and `orbit register` stops
+there with the broker's answer and systemd's, without falling back to sudo. The older runner keeps running as it did:
+
+```text
+✗ Could not start the background service: refusing to enable orbit-runner@alice.service: alice's older runner orbit-runner-alice.service could not be stopped: systemctl stop orbit-runner-alice.service failed: exit status 4: Failed to stop orbit-runner-alice.service: Operation refused, unit orbit-runner-alice.service may be requested by dependency only (it is configured to refuse manual start/stop).
+See system logs and 'systemctl status orbit-runner-alice.service' for details.
+It is still alice's runner, so orbit-runner@alice.service was neither enabled nor started. Once it can be stopped, run `orbit register` again.
+```
+
+The runner is registered by then. Once root has let the old unit stop, the account runs `orbit register` again. A
+broker that has not answered after 15 minutes stops the command the same way, naming
+`systemctl status orbit-hostd.service` to look at, since it may still be carrying the request out. The broker also
+refuses an account with no home directory, or with no `~/.orbit/bin/orbit` it can execute, and says what to run.
+
 The account reads its runner's state and log itself:
 
 ```bash
@@ -1548,9 +1595,9 @@ systemctl status "orbit-runner@$(systemd-escape "$(id -un)")"
 journalctl -u "orbit-runner@$(systemd-escape "$(id -un)")"
 ```
 
-`journalctl` shows an account what its own runner logged when the journal is persistent (`/var/log/journal`
-exists). systemd's own lines about the unit, and other accounts' runners, need root or the `adm` or
-`systemd-journal` group.
+`systemd-escape` gives the account's instance name, `test\x2duser` for `test-user`. `journalctl` shows an account what
+its own runner logged when the journal is persistent (`/var/log/journal` exists). systemd's own lines about the unit,
+and other accounts' runners, need root or the `adm` or `systemd-journal` group.
 
 To remove the runner:
 
@@ -1559,52 +1606,142 @@ orbit unregister --yes
 ```
 
 Without `--yes` it asks first. The broker stops and disables the account's instance, the runner is deleted from the
-control plane and the account's runner config is removed. Every other account's runner keeps running:
+control plane and the account's runner config is removed. Its own copy of orbit stays. Every other account's runner
+keeps running:
 
 ```text
-✓ removed the orbit-runner@1000.service runner service
+✓ removed the orbit-runner@alice.service runner service
 ✓ deleted "build-01-alice" from the control plane
 ✓ unregistered "build-01-alice"
 ```
+
+### Moving a machine set up by an earlier release
+
+Machines set up by an earlier release run each account's runner as `orbit-runner@<uid>.service`, on the shared
+`/usr/local/bin/orbit`. To move one, root puts the new release in place of the broker's binary, as under
+[Set up the machine once](#set-up-the-machine-once), from root's own copy that install.sh or `orbit upgrade` brought:
+
+```bash
+sudo install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit /usr/local/bin/orbit
+```
+
+and runs setup again:
+
+```bash
+sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+Setup writes the new template, then moves each `orbit-runner@<uid>` whose account has its own `~/.orbit/bin/orbit`
+that it can execute, one account at a time: the uid instance is stopped, draining as it does, and disabled, each
+confirmed by systemd, and only then is `orbit-runner@<user name>` enabled and started on the account's copy. No
+account has two runners at any point. A move that fails is put back, and named. Setup then lists every account it
+left, each with the one command that account runs:
+
+```text
+  Moved to instances named after their accounts:
+    orbit-runner@1000.service → orbit-runner@alice.service (alice)
+
+  Left on their orbit-runner@<uid> instance (1):
+    bob (orbit-runner@1001.service): /home/bob/.orbit/bin/orbit is missing or bob cannot execute it.
+      bob runs:  /usr/local/bin/orbit register
+  An instance left keeps its current process. At its next restart it runs its account's own
+  ~/.orbit/bin/orbit, so it needs that copy by then: the command above puts it in place and
+  moves the runner to orbit-runner@<user name>.
+```
+
+An account without a copy is left on its uid instance, which keeps running the process it had. That process is still
+the earlier release's, whose file root has replaced. The instance now reads the new template, though, so the next time
+it starts, after a crash, a reboot or a `systemctl restart`, it starts `~/.orbit/bin/orbit`, and without that file it
+keeps failing to start. So the account runs the command setup gave it, as itself, before then:
+
+```bash
+/usr/local/bin/orbit register
+```
+
+Registration puts the account's own copy in place and has the broker move its runner, taking the uid instance down
+first, as above. Without arguments it asks the browser approval of [Register a runner](#4-register-a-runner) again and
+takes the machine's host name; add `--name` and the other flags it was registered with to keep them.
+
+Root's own runner, `orbit-runner-root.service`, is left as it is: the broker starts no runner for root, and setup does
+not touch it. If it runs `/usr/local/bin/orbit`, it runs the new file from its next restart, and its own updates keep
+the broker's binary current too. Both files are root's, so nothing crosses an account boundary.
 
 ### Migrating from per-user units
 
 An account that registered before the machine was set up has a unit of its own that root wrote:
 `orbit-runner-<user>.service`, or `orbit-runner.service` from older releases. Nothing has to be done about it by hand:
 
-- The account's next `orbit register` has the broker stop, disable and delete that unit before it starts
-  `orbit-runner@<uid>.service`, so the account never runs two runners.
+- The account's next `orbit register` has the broker stop, disable and delete that unit, and the account's
+  `orbit-runner@<uid>` if it has one, before it starts `orbit-runner@<user name>.service`, so the account never runs
+  two runners.
 - `orbit unregister` has the broker take the same units down after the instance, so none is left behind on a
   credential the control plane has deleted.
 
-A unit is the account's by its `User=`, never by its name, so another account's unit is left alone. Until an account
-registers again, its old unit keeps running as it did, and the broker's updates, which restart only
-`orbit-runner@<uid>` instances, do not restart it.
+A unit is the account's by its `User=`, never by its name, so another account's unit is left alone. A numeric
+`User=` is that uid. Until an account registers again, its old unit keeps running as it did.
 
 ### Updates
 
-Every instance runs the machine's binary, which no account can replace, so no runner updates itself. A runner offered
-a newer release asks the broker instead, and logs it once:
+Each account's runner updates its own copy, as on a machine that is not set up: offered a newer release, it installs
+it into its `~/.orbit/bin/orbit` and re-executes into it, without root and without asking the broker. Then it asks the
+broker once to bring its own binary along, and logs the answer:
 
 ```text
-[orbit-runner 2026-11-01T02:48:12.402Z] orbit 0.1.250 available for /usr/local/bin, which only the host can replace; delegated to the host broker at /run/orbit/host.sock: it is installing orbit 0.1.250 for every runner on this machine
+[orbit-runner 2026-11-01T02:48:12.402Z] installed orbit 0.1.250 into this runner's own copy; asked the host broker at /run/orbit/host.sock to update its own binary: it is installing orbit 0.1.250 as its own binary
 ```
 
 The request names nothing: no server, release or account. The broker reads the server from `/etc/orbit/config.json`
 and the release from its `/dl/version.json` as anybody reads it, without a runner's credential, and installs only a
-release newer than the binary on disk, checked as every install is: the manifest's SHA-256, then the version and
-write contract the download reports. It swaps the binary in place and restarts the machine's `orbit-runner@<uid>`
-instances one at a time, each draining as it stops. Its journal, `orbit-hostd.service`, records it:
+release newer than its binary, checked as every install is: the manifest's SHA-256, then the version and write
+contract the download reports, each run as the account that asked. It replaces only the binary
+`orbit-hostd.service` names, `/usr/local/bin/orbit`, and restarts no runner. Its journal, `orbit-hostd.service`,
+records it:
 
 ```text
-[orbit-runner 2026-11-01T02:48:43.188Z] installed orbit 0.1.250 at /usr/local/bin/orbit (verified as uid 1000); restarting this machine's runners
+[orbit-runner 2026-11-01T02:48:43.188Z] installed orbit 0.1.250 at /usr/local/bin/orbit (verified as uid 1000); no runner restarted: each runs its account's own copy
 ```
 
-It runs one update per five minutes; runners asking meanwhile are told that one just ran. The broker installs only
-what `/dl` publishes to everyone and takes no part in staged rollouts or rollbacks, which are per runner
-([Runner rollout and rollback](release-process.md#runner-rollout-and-rollback)). A runner asks when its own
-assignment offers it another release, and the broker installs only a newer one: the machine moves when the first of
-its runners is offered a newer release, all its runners with it, and a rollback does not move it back.
+It runs one update per five minutes; runners asking meanwhile are told that one just ran, and one asking after the
+install is told the release is already there. The broker installs only what `/dl` publishes to everyone and takes no
+part in staged rollouts or rollbacks, which are per runner
+([Runner rollout and rollback](release-process.md#runner-rollout-and-rollback)). Each runner moves when its own
+assignment offers it another release, and the broker's binary moves when the first runner that installed a newer one
+asks.
+
+An account's copy from a release before this layout, 0.1.243 say, updates itself just the same, but does not ask the
+broker afterwards. The broker's binary then follows from the next release, which that runner, by then on the new code,
+installs and asks about, or at once if root installs it:
+
+```bash
+sudo /usr/local/bin/orbit upgrade
+```
+
+`orbit upgrade` replaces `/usr/local/bin/orbit` where it is and restarts no runner, which none of the accounts' runners
+needs, since none runs that file:
+
+```text
+checking https://orbit.example.com for updates...
+updating 0.1.249 -> 0.1.250...
+✓ orbit is now 0.1.250
+```
+
+The broker holds its binary to the rule setup does every time it replaces it: a regular file root owns and only root
+can write, in directories only root can write all the way up to `/`. A directory that its group can write after setup,
+such as `/usr/local/bin` changed to `root:staff` with mode 2775 as older Debian installs have it, would let any member
+of the group replace what the broker runs as root, so the broker refuses to update its binary there. It fails closed:
+the binary stays as it is, and the runner that asked logs why (the mode it reports leaves out the setgid bit). Its own
+update stands:
+
+```text
+[orbit-runner 2026-11-01T02:54:42.491Z] installed orbit 0.1.250 into this runner's own copy; asked the host broker at /run/orbit/host.sock to update its own binary: it declined: refusing to update /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775), and root writes nothing it downloaded where another account can reach
+```
+
+An administrator makes the directory root's alone, after which members of `staff` need root to install there too.
+The broker installs the next release itself, or `sudo /usr/local/bin/orbit upgrade` installs this one:
+
+```bash
+sudo chmod g-w /usr/local/bin
+```
 
 ### Without the broker
 
@@ -1612,7 +1749,8 @@ its runners is offered a newer release, all its runners with it, and a rollback 
 machine that was never set up or whose socket is gone, they work as they did before the broker existed: on the
 account's own `orbit-runner-<user>.service`, written or removed through sudo
 ([Register a runner](#4-register-a-runner)), with nothing said about a broker. A socket that is there with nothing
-answering it, or a broker that refuses, is reported before the same fallback:
+answering it, or a broker that refuses for any reason other than an older runner of the account that will not stop,
+is reported before the same fallback:
 
 ```text
 note: the machine broker at /run/orbit/host.sock did not answer "enable" (dial unix /run/orbit/host.sock: connect: connection refused) — falling back to the sudo path.
@@ -1621,14 +1759,19 @@ note: the machine broker at /run/orbit/host.sock did not answer "enable" (dial u
 ### Security model
 
 - **Anyone may connect, and nobody gains anything by it.** The socket is mode 0666, but every verb acts on the
-  caller's own runner: hostd takes the caller's uid from the kernel (`SO_PEERCRED`), never from the request, and
-  refuses a request that names a user or any other target.
-- **hostd never runs a download as root.** Checking a release means running it, to read its version and write
-  contract, and each of those runs is dropped to the uid of the account that asked.
-- **hostd never starts a runner as root.** Each instance runs as its account (`User=%i`) and hostd refuses to enable,
-  start or restart uid 0's, so every runner it starts heartbeats `runsAsRoot=false`. Root's own `orbit register` is
-  refused by the broker and falls back to the legacy path, which runs a root runner and warns that its agents have
-  root access.
+  caller's own runner: hostd takes the caller's uid from the kernel (`SO_PEERCRED`) and its name from the passwd
+  database, never from the request, and refuses a request that names a user or any other target. A user name
+  becomes a unit name only through systemd's own escaping, which can be undone, so no account can name another's
+  unit.
+- **Root runs one binary, and never one an account can change or a download.** hostd runs only
+  `/usr/local/bin/orbit`, held to the rule above. It never executes, reads or writes a file in an account's home:
+  whether an account's `~/.orbit/bin/orbit` is there and executable is asked as that account. Checking a release
+  means running it, to read its version and write contract, and each of those runs is dropped to the uid of the
+  account that asked.
+- **hostd never starts a runner as root.** Each instance runs as its account (`User=%I`), from that account's own
+  file, and hostd refuses to enable, start or restart uid 0's, so every runner it starts heartbeats
+  `runsAsRoot=false`. Root's own `orbit register` is refused by the broker and falls back to the legacy path, which
+  runs a root runner and warns that its agents have root access.
 
 ### Known limitations
 
@@ -1639,51 +1782,13 @@ the template is shared by every account and has no per-account environment. So o
 ```text
 the runner will use HTTP proxy http://proxy.example.com:3128 for claude
 …
-note: --proxy is not carried into orbit-runner@1000.service — the machine's shared runner template has no per-user proxy environment.
+note: --proxy is not carried into orbit-runner@alice.service — the machine's shared runner template has no per-user proxy environment.
 ```
 
 The runner comes online, but its coding engines get no proxy settings: where the model APIs are reachable only
 through the proxy, they cannot reach them. Until a later release carries the proxy, do not set up a machine whose
 runners need one. Register its accounts the single-account way instead, whose sudo step writes the proxy into each
 account's own unit ([Register a runner](#4-register-a-runner)).
-
-**The binary and its directories must stay root's alone.** Setup refuses a binary that is not
-([Set up the machine once](#set-up-the-machine-once)), and the broker holds the binary to the same rule every time it
-replaces it: a regular file root owns and only root can write, in directories only root can write all the way up to
-`/`. A directory that its group can write after setup, such as `/usr/local/bin` changed to `root:staff` with mode 2775
-as older Debian installs have it, would let any member of the group replace what every account runs, so the broker
-refuses to update the binary there. It fails closed: the binary stays as it is, and each runner logs once why (the mode
-it reports leaves out the setgid bit):
-
-```text
-[orbit-runner 2026-11-01T02:54:42.491Z] orbit 0.1.250 available for /usr/local/bin, which only the host can replace; delegated to the host broker at /run/orbit/host.sock: it declined: refusing to update /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775), and root writes nothing it downloaded where another account can reach
-```
-
-An administrator does one of two things:
-
-- Makes the directory root's alone. Members of `staff` then need root to install there too. The runners' next update
-  check, within 10 minutes, goes through the broker:
-
-  ```bash
-  sudo chmod g-w /usr/local/bin
-  ```
-
-- Or installs each release as root. On such a machine `orbit upgrade` replaces the binary where it is, checks the
-  download by running it as root, and restarts no runner, so the runners are restarted after it:
-
-  ```bash
-  sudo /usr/local/bin/orbit upgrade
-  sudo systemctl restart 'orbit-runner@*'
-  ```
-
-  `orbit upgrade` says that it keeps the shared binary where it is:
-
-  ```text
-  checking https://orbit.example.com for updates...
-  updating 0.1.249 -> 0.1.250...
-  note: /usr/local/bin/orbit is run by services of more than one account (/etc/systemd/system/orbit-hostd.service as root, /etc/systemd/system/orbit-runner@.service as %i), so it stays where it is.
-  ✓ orbit is now 0.1.250
-  ```
 
 ## Upgrading
 
