@@ -106,6 +106,11 @@ func (s *cursorSandbox) wrap(cmd *exec.Cmd) {
 		}
 		for _, path := range append(append([]string{}, s.sealed...), s.hidden...) {
 			profile += "(deny file-write* (subpath " + strconv.Quote(path) + "))\n"
+			// Denying a subtree does not stop renaming its writable ancestors.
+			// Protect the directory entries too, while leaving sibling roots writable.
+			for parent := filepath.Dir(path); parent != "/"; parent = filepath.Dir(parent) {
+				profile += "(deny file-write* (literal " + strconv.Quote(parent) + "))\n"
+			}
 		}
 		profile += "(allow file-write* (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/tty\"))\n"
 		args = []string{"-p", profile}
