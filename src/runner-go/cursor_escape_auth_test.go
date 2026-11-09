@@ -21,8 +21,8 @@ func useCursorEscapeAuthPlatform(t *testing.T, goos string) {
 	t.Cleanup(func() { cursorEscapeAuthPlatform = previous })
 }
 
-func TestCursorEscapeAuthSupportedOnlyOnLinux(t *testing.T) {
-	for goos, want := range map[string]bool{"linux": true, "darwin": false, "windows": false, "freebsd": false} {
+func TestCursorEscapeAuthSupportedOnLinuxAndMacOS(t *testing.T) {
+	for goos, want := range map[string]bool{"linux": true, "darwin": true, "windows": false, "freebsd": false} {
 		useCursorEscapeAuthPlatform(t, goos)
 		if got := cursorEscapeAuthSupported(); got != want {
 			t.Errorf("%s: supported = %v, want %v", goos, got, want)
@@ -63,10 +63,10 @@ func askGateCommand(t *testing.T, rig *cursorBridgeRig, command string) {
 	rig.bridge.wait()
 }
 
-// The Mac runner's bridge: no sandbox in force whatever the backend says, the heredoc goes on a card, the
+// An unsupported platform's bridge: no sandbox in force whatever the backend says, the heredoc goes on a card, the
 // approved command is answered, and the notice says why, once per process.
-func TestCursorAutoOnMacOSHoldsTheSandbox(t *testing.T) {
-	useCursorEscapeAuthPlatform(t, "darwin")
+func TestCursorAutoOnUnsupportedPlatformHoldsTheSandbox(t *testing.T) {
+	useCursorEscapeAuthPlatform(t, "freebsd")
 	rig := newCursorBridgeRig("auto", nil)
 	detected, installed := prepareGateBridge(t, rig)
 	if rig.bridge.sandboxInForce || rig.bridge.sandbox != nil {
@@ -86,16 +86,16 @@ func TestCursorAutoOnMacOSHoldsTheSandbox(t *testing.T) {
 	if len(rig.notes) != 1 {
 		t.Fatalf("notices = %v, want one per process", rig.notes)
 	}
-	want := "Cursor Auto asks about inline scripts on macOS because commands you approve cannot leave the command sandbox here yet."
+	want := "Cursor Auto asks about inline scripts because this platform cannot authenticate commands leaving the command sandbox."
 	if rig.notes[0]["notice"] != want || rig.notes[0]["noticeKind"] != "cursor-sandbox-unavailable" {
 		t.Fatalf("notice = %v", rig.notes[0])
 	}
 }
 
-// The Mac runner's launch: the wrapper any other mode gets, no launcher config for a grant broker to start
+// An unsupported platform's launch: the wrapper any other mode gets, no launcher config for a grant broker to start
 // from, and a command that writes outside the workspace as it always did.
-func TestCursorAutoOnMacOSLaunchesTheOldShell(t *testing.T) {
-	useCursorEscapeAuthPlatform(t, "darwin")
+func TestCursorAutoOnUnsupportedPlatformLaunchesTheOldShell(t *testing.T) {
+	useCursorEscapeAuthPlatform(t, "freebsd")
 	realHome, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
@@ -153,68 +153,79 @@ func TestCursorAutoOnMacOSLaunchesTheOldShell(t *testing.T) {
 	}
 }
 
-// Linux is what it was: the backend's sandbox is in force, Auto may run a sandboxed heredoc unasked, and
-// nothing needs explaining.
-func TestCursorAutoOnLinuxKeepsTheSandbox(t *testing.T) {
-	useCursorEscapeAuthPlatform(t, "linux")
-	rig := newCursorBridgeRig("auto", nil)
-	detected, _ := prepareGateBridge(t, rig)
-	if *detected != 1 || !rig.bridge.sandboxInForce || rig.bridge.sandbox == nil {
-		t.Fatalf("detected %d, in force = %v, sandbox = %v", *detected, rig.bridge.sandboxInForce, rig.bridge.sandbox)
-	}
-	askGateCommand(t, rig, cursorGateHeredoc)
-	if len(rig.cards) != 0 {
-		t.Fatalf("sandboxed heredoc carded: %v", rig.cards)
-	}
-	for _, note := range rig.notes {
-		if note["noticeKind"] == "cursor-sandbox-unavailable" {
-			t.Fatalf("sandbox notice in force: %v", note)
-		}
-	}
-}
-
-// A Linux runner whose backend is missing still says the old sentence, reason included.
-func TestCursorAutoOnLinuxExplainsAnUnavailableSandbox(t *testing.T) {
-	useCursorEscapeAuthPlatform(t, "linux")
-	rig := newCursorBridgeRig("auto", nil)
-	var installer cursorSandboxInstaller
-	rig.bridge.prepareSandbox(context.Background(), nil, &installer,
-		func(context.Context, *ClaimedSession, string) (*cursorSandbox, string) { return nil, "no backend" },
-		func(context.Context) error { return nil })
-	rig.bridge.begin("turn")
-	if len(rig.notes) != 1 || !strings.HasPrefix(rig.notes[0]["notice"].(string),
-		"Cursor Auto asks for approval for inline scripts because the command sandbox is unavailable: no backend") {
-		t.Fatalf("notices = %v", rig.notes)
+// Both supported platforms sandbox Auto heredocs without a card or unavailable notice.
+func TestCursorAutoOnSupportedPlatformsKeepsTheSandbox(t *testing.T) {
+	for _, platform := range []string{"linux", "darwin"} {
+		t.Run(platform, func(t *testing.T) {
+			useCursorEscapeAuthPlatform(t, platform)
+			rig := newCursorBridgeRig("auto", nil)
+			detected, _ := prepareGateBridge(t, rig)
+			if *detected != 1 || !rig.bridge.sandboxInForce || rig.bridge.sandbox == nil {
+				t.Fatalf("detected %d, in force = %v, sandbox = %v", *detected, rig.bridge.sandboxInForce, rig.bridge.sandbox)
+			}
+			askGateCommand(t, rig, cursorGateHeredoc)
+			if len(rig.cards) != 0 {
+				t.Fatalf("sandboxed heredoc carded: %v", rig.cards)
+			}
+			for _, note := range rig.notes {
+				if note["noticeKind"] == "cursor-sandbox-unavailable" {
+					t.Fatalf("sandbox notice in force: %v", note)
+				}
+			}
+		})
 	}
 }
 
-// With the capability, a Linux Auto launch goes through the sandbox launcher.
-func TestCursorAutoOnLinuxLaunchesTheSandboxShell(t *testing.T) {
-	useCursorEscapeAuthPlatform(t, "linux")
-	useCursorRealHome(t)
-	if err := os.MkdirAll(runnerCacheRoot(), 0700); err != nil {
-		t.Fatal(err)
+// Supported platforms explain an unavailable backend, including the detection reason.
+func TestCursorAutoOnSupportedPlatformsExplainsAnUnavailableSandbox(t *testing.T) {
+	for _, platform := range []string{"linux", "darwin"} {
+		t.Run(platform, func(t *testing.T) {
+			useCursorEscapeAuthPlatform(t, platform)
+			rig := newCursorBridgeRig("auto", nil)
+			var installer cursorSandboxInstaller
+			rig.bridge.prepareSandbox(context.Background(), nil, &installer,
+				func(context.Context, *ClaimedSession, string) (*cursorSandbox, string) { return nil, "no backend" },
+				func(context.Context) error { return nil })
+			rig.bridge.begin("turn")
+			if len(rig.notes) != 1 || !strings.HasPrefix(rig.notes[0]["notice"].(string),
+				"Cursor Auto asks for approval for inline scripts because the command sandbox is unavailable: no backend") {
+				t.Fatalf("notices = %v", rig.notes)
+			}
+		})
 	}
-	dir := filepath.Join(t.TempDir(), "cursor")
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sandbox, reason := detectCursorSandbox(context.Background(), nil, t.TempDir()); sandbox == nil {
-		t.Skip("OS sandbox unavailable: " + reason)
-	}
-	spec, err := prepareCursorLaunch(&ClaimedSession{Agent: AgentExecConfig{PermissionMode: "auto"}}, t.TempDir(), exe, dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if spec.shellConfig == "" {
-		t.Fatal("sandbox launcher was not configured")
-	}
-	shell, err := os.ReadFile(filepath.Join(dir, "bin", "orbit-bash"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(shell), cursorShellCommand) {
-		t.Fatalf("orbit-bash does not go through the launcher:\n%s", shell)
+}
+
+// Both supported platforms configure the sandbox launcher.
+func TestCursorAutoOnSupportedPlatformsLaunchesTheSandboxShell(t *testing.T) {
+	for _, platform := range []string{"linux", "darwin"} {
+		t.Run(platform, func(t *testing.T) {
+			useCursorEscapeAuthPlatform(t, platform)
+			useCursorRealHome(t)
+			if err := os.MkdirAll(runnerCacheRoot(), 0700); err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(t.TempDir(), "cursor")
+			exe, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sandbox, reason := detectCursorSandbox(context.Background(), nil, t.TempDir()); sandbox == nil {
+				t.Skip("OS sandbox unavailable: " + reason)
+			}
+			spec, err := prepareCursorLaunch(&ClaimedSession{Agent: AgentExecConfig{PermissionMode: "auto"}}, t.TempDir(), exe, dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if spec.shellConfig == "" {
+				t.Fatal("sandbox launcher was not configured")
+			}
+			shell, err := os.ReadFile(filepath.Join(dir, "bin", "orbit-bash"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(shell), cursorShellCommand) {
+				t.Fatalf("orbit-bash does not go through the launcher:\n%s", shell)
+			}
+		})
 	}
 }
