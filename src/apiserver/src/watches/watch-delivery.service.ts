@@ -22,6 +22,7 @@ import {
   watchDeadLetterCodeOf,
 } from '@orbit/shared';
 
+import { ownerRequestResolutionTurn, ownerRequestTurnClientId } from '../owner-requests/owner-request';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -93,6 +94,15 @@ import { currentWatchRollout, watchWorkersRun, type WatchRollout } from './watch
  * that brings `attempts` to the contract's `maxDeliveryAttempts` makes the row a DEAD_LETTER, and so
  * does a refusal no retry can change. Both keep `last_error`, and the watch's own read lists every
  * delivery with its state, so a dead letter is something a client reads, not a line a log once said.
+ *
+ * OWNER REQUESTS
+ * An owner request's ending (migration 0504) is a RESUME_SESSION delivery of kind OWNER_REQUEST, written in the
+ * transaction that ends the request and naming it rather than a watch. Its turn goes to the session that asked, by the
+ * same `createTurn` path, lease, retry and dead letter as a watch's end, under `owner-request:<requestId>:resolved` —
+ * a request ends once — and is built from columns an ended request never changes. The wake guards below are a watch's:
+ * a resolution is paced by a person, not by a condition that can loop, so neither the storm limit nor the daily budget
+ * counts or refuses it, and there are no targets to recheck. An asking session whose life is over is refused exactly as
+ * an observer's is.
  *
  * GUARDS
  * Every attempt is checked again when it is made (contract `deliveryGuards`, docs/watch-operations.md).
@@ -432,9 +442,16 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         },
         watch: { select: { id: true, ownerId: true, observerSessionId: true, mode: true, expiresAt: true } },
         expirySnapshot: true,
+        ownerRequest: {
+          select: {
+            id: true, ownerId: true, askedBySessionId: true, kind: true, state: true, title: true,
+            options: true, secretSpec: true, answer: true, resolutionNote: true, resolvedAt: true,
+          },
+        },
       },
     });
     if (!delivery) return 'LEASE_LOST';
+    if (delivery.ownerRequest) return this.attemptOwnerRequest(claim, delivery.ownerRequest);
     const { match, watch } = delivery;
     // Whose watch this delivery is for, and which one: a Match's delivery names it through the
     // Match, an end's names it directly. `watch_delivery_kind_shape_chk` guarantees one of the two.
@@ -489,12 +506,28 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     return 'DELIVERED';
   }
 
+  /** An owner request's ending, delivered to the session that asked it (OWNER REQUESTS above). */
+  private async attemptOwnerRequest(
+    claim: ClaimedWatchDelivery,
+    request: Parameters<typeof ownerRequestResolutionTurn>[0] & { ownerId: string; askedBySessionId: string },
+  ): Promise<WatchDeliveryOutcome> {
+    const asker: DeliveredWatch = { id: request.id, ownerId: request.ownerId, observerSessionId: request.askedBySessionId, mode: 'ONE_SHOT' };
+    try {
+      await this.resumeObserver(claim, asker, ownerRequestTurnClientId(request.id), ownerRequestResolutionTurn(request), false, false);
+    } catch (error) {
+      if (error instanceof DeliveryLeaseLost) return 'LEASE_LOST';
+      return this.fail(claim, error);
+    }
+    return 'DELIVERED';
+  }
+
   private async resumeObserver(
     claim: ClaimedWatchDelivery,
     watch: DeliveredWatch,
     clientTurnId: string,
     content: string,
     spaced = false,
+    guarded = true,
   ): Promise<void> {
     const sessionId = watch.observerSessionId;
     if (!sessionId) throw new DeliveryRefused('OBSERVER_SESSION_GONE', 'the watch names no observer session');
@@ -513,7 +546,7 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
             const refusal = observerRefusal(await readObserver(tx, sessionId));
             if (refusal) throw refusal;
             if (spaced) await this.spaceContinuous(tx, watch);
-            await this.guardWake(tx, watch, sessionId);
+            if (guarded) await this.guardWake(tx, watch, sessionId);
             if (!(await acknowledgeDelivery(tx, claim))) throw new DeliveryLeaseLost();
             queued = true;
           },
