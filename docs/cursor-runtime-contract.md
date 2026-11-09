@@ -976,7 +976,7 @@ removal. No product sandbox code was changed.
 | Background requested with `block_until_ms: 0`, then foreground | [04](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/04-background.json), [05](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/05-foreground.json) | `sleep 4; printf background`, then `printf foreground`; same request ID and entry environment |
 | Two different concurrent commands | [06 B](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/06-concurrent-b.json), [07 A](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/07-concurrent-a.json) | Separate PIDs; identical argv/cwd/env; distinct fd-5 text; wrapper entries less than three seconds apart |
 | Two identical concurrent commands | [08](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/08-identical-a.json), [09](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/09-identical-b.json) | Separate PIDs; identical argv/cwd/env/payload; entries 0.044 ms apart, for two three-second sleeps |
-| Actual person approves a card | Pending production `CursorShellRecording` approval | The harmless Python command is paused in the real CLI harness. No person decision or executed command recording is claimed yet. |
+| Actual person approves a card | [shell entries](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/person-card/shell.json), [decision and checks](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/person-card/summary.json) | Separate real-CLI session; Python's loader argv and environment key set match 03. The harness relays the pending command to a production Orbit `CursorShellRecording` card, waits for ALLOWED with `decidedById`, then releases ACP `allow-once` |
 
 All ten primary entries have the same `<RUN>/work` cwd. The native entry probe
 records every environment key/value and the complete argv, plus non-consuming
@@ -1001,10 +1001,10 @@ ACP relative times are separate time bases.
 
 The first production relay matched the workspace's standing grant:
 [decision and shell recording](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/standing-grant/summary.json)
-records `standingGrant: true` and no person decider. The pending explicit-person run uses a
+records `standingGrant: true` and no person decider. The explicit-person run uses a
 separate, honestly labeled recording tool name so that the existing Bash standing
-rule does not answer it. A production card decision is still required; the existing
-standing-grant recording does not establish that a person clicked.
+rule does not answer it. This is a production card decision relayed by a test harness,
+not an ordinary production Cursor session; the CLI, wrapper and ACP execution are real.
 
 **Verdict: the exact-command, counted-grant design carries over; the Linux
 implementation cannot be used unchanged.** The recorded loader and fd-5 NUL framing
@@ -1034,8 +1034,8 @@ checks on the runner host, not inside an already confined engine. This distingui
 the task-history failure report from the successful host trial observed now.
 The primary controlled CLI fixture's summary records another explicit fallback:
 its temporary ORBIT_HOME has no `caches` directory, so writable-root resolution
-fails before a Seatbelt trial. The
-[original wrapper from the standing-grant run](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/standing-grant/process/original-orbit-bash)
+fails before a Seatbelt trial. Its
+[original wrapper](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/person-card/process/original-orbit-bash)
 therefore execs Bash directly. These recordings establish invocation compatibility
 and detection diagnostics, not write confinement or successful macOS escalation;
 those remain the macOS sandbox verification task's responsibility.

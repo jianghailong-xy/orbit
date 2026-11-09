@@ -15,11 +15,15 @@ Cursor CLI `2026.10.14-941492e`, longdeMac-mini.local, macOS 27.2 / Darwin arm64
 - `summary.json`: runner cards, Auto permission decisions, turn completions and
   explicit missing-cache fallback notice. Its UUID placeholder mapping is separate
   from the mapping shared by numbered entries and primary protocol files.
-- Explicit-person recording: **pending**, not yet present. A separate real CLI invocation is paused at the harness's card callback.
+- `person-card/`: separate real CLI invocation paused at the harness's card callback.
   The callback creates a production Orbit `CursorShellRecording` approval, naming
   the exact harmless Python command. It waits for the actual decision and forwards
   its status and decider provenance through the runner's controlled card response.
-  The custom tool name avoids the workspace's existing Bash standing rule. No person decision is claimed until that card is answered and recorded.
+  The custom tool name avoids the workspace's existing Bash standing rule. This is
+  a relayed real person decision, not an ordinary production Cursor session.
+  Job `bgj_6a62ff82e7a1` passed after receiving ALLOWED with a person decider.
+  The owner also selected remember; that standing rule is returned in the decision,
+  while this first answer has `decidedById` and is not a standing-grant auto-answer.
 - `standing-grant/`: the earlier relay under `Bash`, answered by the workspace's
   existing standing rule. The summary records ALLOWED/standingGrant and no decider.
   Its `person-approved` check intentionally fails; this attempt was not a person
