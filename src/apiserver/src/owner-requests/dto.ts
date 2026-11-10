@@ -38,10 +38,13 @@ export class OwnerRequestStepDto {
   @IsOptional() @IsString() @MaxLength(2_000) link?: string;
 }
 
-/** Where a secret goes. The value itself is refused here: it never travels with the request. */
+/**
+ * Where a secret goes. The value itself is refused here: it never travels with the request. The runner is the asking
+ * session's own (design §4.1); `runnerId` is accepted only as a stale caller's assertion of that one.
+ */
 export class OwnerRequestSecretSpecDto {
   @IsString() @MinLength(1) @MaxLength(200) name!: string;
-  @IsPublicId() runnerId!: string;
+  @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() @MaxLength(200) envVar?: string;
   @IsOptional() @IsString() @MaxLength(1_000) filePath?: string;
   @IsEmpty({ message: 'a secret request never carries the secret value; the owner provides it' })
@@ -83,4 +86,33 @@ export class DeclineOwnerRequestDto {
 /** The asking session withdrawing its own request. */
 export class WithdrawOwnerRequestDto {
   @IsOptional() @IsString() @MaxLength(MAX_OWNER_REQUEST_NOTE) reason?: string;
+}
+
+/**
+ * The owner entering a SECRET request's value (`POST /owner-requests/:id/secret`): the value, optionally saved under a
+ * label, or a saved secret's id. Validation messages here never quote what was sent.
+ */
+export class SubmitOwnerSecretDto {
+  @IsOptional() @IsString({ message: 'value must be a string' }) @MaxLength(16_384, { message: 'the key may be at most 16384 characters' })
+  value?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(100) saveAs?: string;
+  @IsOptional() @IsPublicId() savedSecretId?: string;
+}
+
+/** Replacing a saved secret's value (`PUT /account-secrets/:id`). */
+export class ReplaceAccountSecretDto {
+  @IsString({ message: 'value must be a string' }) @MaxLength(16_384, { message: 'the key may be at most 16384 characters' })
+  value!: string;
+}
+
+/** The runner's word on a delivery (`POST /runner/secret-grants/:id/ack`). Never carries the value. */
+export class SecretGrantAckDto {
+  @IsIn(['DELIVERED', 'FAILED']) outcome!: 'DELIVERED' | 'FAILED';
+  @IsOptional() @IsString() @MaxLength(100) code?: string;
+  @IsOptional() @IsString() @MaxLength(500) message?: string;
+}
+
+/** The runner's word that its copy is gone (`POST /runner/secret-grants/:id/removed`). */
+export class SecretGrantRemovedDto {
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
 }

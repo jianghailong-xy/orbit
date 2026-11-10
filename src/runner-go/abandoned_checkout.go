@@ -200,6 +200,8 @@ func discardWorktree(req CommitCommand) commitOutcome {
 	if _, err := git(wtPath, addAllArgs(wtPath)...); err != nil {
 		return commitOutcome{Status: "error", Message: "could not stage the work before discarding it: " + err.Error()}
 	}
+	// The ref is a commit like any other: a file holding an owner-request secret is not recorded in it.
+	unstageHeldSecrets(wtPath, nil, req.SessionID)
 	discardedRef := "refs/orbit-discarded/" + decodeSessionID(req.SessionID)
 	tree, err := git(wtPath, "write-tree")
 	if err == nil {

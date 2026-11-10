@@ -156,6 +156,22 @@
   gap: 6px;
   color: var(--text-2);
 }
+.owner-request-saved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-weight: 400;
+}
+.owner-request-saved .owner-request-chip {
+  font: inherit;
+  cursor: pointer;
+}
+.owner-request-delivery {
+  margin: 0;
+  color: var(--text-1);
+}
 .owner-request-notice,
 .owner-request-hint {
   margin: 0;
@@ -249,6 +265,10 @@
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.owner-request-resolved-error {
+  color: var(--error);
+  font-size: 12px;
 }
 .owner-request-resolved-by {
   display: flex;

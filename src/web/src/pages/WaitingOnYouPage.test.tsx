@@ -21,7 +21,7 @@ const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 function request(over: Partial<OwnerRequest>): OwnerRequest {
   return {
     id: 'r', kind: 'CONFIRM', state: 'PENDING', title: 'T', why: 'W', blocksTaskIds: [], ifUnanswered: null,
-    options: null, recommendedOption: null, steps: null, secretSpec: null, verifyHint: null, expiresAt: null,
+    options: null, recommendedOption: null, steps: null, secretSpec: null, secretGrant: null, verifyHint: null, expiresAt: null,
     askedBySessionId: 's', projectId: null, resolvedAt: null, resolvedByUserId: null, resolvedBySessionId: null,
     resolutionNote: null, answer: null, createdAt: ago(2 * MINUTE), ...over,
   };

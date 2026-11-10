@@ -1262,6 +1262,14 @@ export interface RunnerHeartbeatResponse {
    *  /runner/region-check, and only to a process that declared `claude-region/v1`. Absent otherwise,
    *  so every other runner sees the response shape it always had. */
   regionCheckRequest?: ClaudeRegionCheckRequest;
+  /**
+   * Owner-entered secrets this runner may hold (docs/design/owner-request-secrets.md §6.3): every grant of the runner
+   * awaiting delivery or delivered whose scope is live, by id and expiry — never a value. Only a PRESENT list states
+   * anything: absent (an older server, a runner without owner-secret/v1) removes nothing, `[]` means hold nothing.
+   */
+  secretGrants?: Array<{ id: string; expiresAt: string }>;
+  /** Grants of this runner being removed: remove the copy if held, then confirm with /removed either way. */
+  secretGrantsRemoving?: string[];
 }
 
 // ── Claude region check (docs/claude-region-check-contract.md) ──
