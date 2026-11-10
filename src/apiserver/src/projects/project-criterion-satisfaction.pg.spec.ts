@@ -204,8 +204,8 @@ const PUBLIC_PROJECT = 'src/apiserver/src/share-links/public-project.ts';
  * of the project-closing redesign, project 34Y7My8sqhKLWtmCQYv1l, and its criterion 2) that the
  * coordinator asks for a project to be closed, behind a check that refuses while a criterion is not
  * met — `project-done-request.pg.spec.ts` holds that refusal. What it stands between is the
- * coordinator and the owner's card, not the owner and the record: `recordProjectDone` reads the
- * answer only to tell whether a request it is answering has gone stale, so the owner can still
+ * coordinator and the owner's card, not the owner and the record: `recordProjectDone` records the
+ * findings as accepted gaps when no request is being answered, so the owner can still
  * record a project done over a criterion that is not met. The case below holds the refusal to the
  * coordinator's door.
  */
@@ -690,18 +690,14 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
       'the projection refuses nobody: it recomputes the column from committed rows and stores the '
         + 'answer, so there is no write for it to turn away');
 
-    // The one gate, held to the door it was decided for. `doneReadiness` is where a criterion that
-    // is not met becomes a REFUSE, and the coordinator's `project_request_done` is the only door
-    // that asks it: the same call from the owner's `recordProjectDone`, or from any other write,
-    // would leave every sentence above intact while turning a check on a request into a gate on
-    // the record. Comments are stripped for the reason given above.
+    // The coordinator gates its request; the owner reads and records findings without refusing.
     const askers = sourceFiles(path.join(REPO_ROOT, 'src/apiserver/src'))
       .map((file) => path.relative(REPO_ROOT, file))
       .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts') && file !== DONE_REQUEST)
       .filter((file) => /\bdoneReadiness\s*\(/u.test(readFileSync(path.join(REPO_ROOT, file), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^\s*\/\/.*$/gmu, '')))
       .sort();
-    assert.deepEqual(askers, [DONE_REQUEST_DOOR],
+    assert.deepEqual(askers, ['src/apiserver/src/projects/project-acceptance.service.ts', DONE_REQUEST_DOOR].sort(),
       'only the coordinator’s done request is refused on `doneReadiness`, and no write of the '
         + 'owner’s is');
   });
