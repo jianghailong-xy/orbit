@@ -466,6 +466,7 @@ cx grep -qxF "$EXEC_START" "$TEMPLATE" || fail 1 "$TEMPLATE does not run each ac
 cx grep -qxF "ExecStart=$BIN hostd" /etc/systemd/system/orbit-hostd.service || fail 1 "orbit-hostd.service does not run $BIN"
 [ "$(unit_prop orbit-hostd.socket ActiveState)" = active ] || fail 1 "orbit-hostd.socket is not active" orbit-hostd.socket
 TEMPLATE_SHA=$(cx sha256sum "$TEMPLATE" | cut -d' ' -f1)
+# docs: "Root's runner and its legacy unit" — root registers with the same arguments as an account.
 # Root uses the broker and the same template as every account.
 out=$(csh "orbit register --server $SERVER --token e2e-enroll-root --name root-e2e --force </dev/null" 2>&1)
 rc=$?
@@ -772,6 +773,11 @@ show "$out"
 [ "$rc" -eq 0 ] && grep -qxF "runner:  test-user-e2e ($ID_T)" <<<"$out" && grep -qxF "server:  $SERVER" <<<"$out" &&
   grep -qF "status:  online (last heartbeat " <<<"$out" ||
   fail 5 "test.user's orbit status exited $rc without showing test-user-e2e ($ID_T) on $SERVER, online" "$UNIT_T"
+# docs: "Register each account's runner" — the receipt's doctor reports the fixture's missing engines.
+out=$(as test.user "orbit doctor" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 1 ] || fail 5 "orbit doctor should report no installed coding engines, exited $rc"
 check_machine_binary 5 "$SHA_V1"
 check_no_sudo "after test.user registered"
 pass 5 "test.user: orbit register exit 0 without root, having put test.user's own copy at /home/test.user/.orbit/bin/orbit (test.user's, mode 0755, the $V1 build, under a ~/.orbit of mode 0700); $UNIT_T (named by systemd-escape, which leaves 'test.user' as it is) enabled and active as euid $UID_T from /home/test.user/.orbit/bin/orbit beside $UNIT_A — separate processes ($PID_A, $PID_T) in separate cgroups, separate credentials ($ID_A, $ID_T), each heartbeating the control plane on its own, every beat over the runner link; test.user reads its runner's status (active (running)) and log itself"
@@ -988,7 +994,7 @@ check_hostd_binary 8 "$V2" "$SHA_V2"
 [ "$(main_pid "$UNIT_A")" = "$PID_A" ] && [ "$(main_pid "$UNIT_T")" = "$PID_T" ] && [ "$(main_pid "$UNIT_D")" = "$PID_D" ] &&
   [ "$(invocations)" = "$before" ] || fail 8 "orbit upgrade restarted a runner instance" "$UNIT_A" "$UNIT_T" "$UNIT_D"
 each_runner copy_is "$SHA_V2" || fail 8 "orbit upgrade changed an account's own copy"
-# ...and `systemctl restart 'orbit-runner@*'` brings each runner back, on its own copy still.
+# docs: "Updates" — `systemctl restart 'orbit-runner@*'` brings each runner back, on its own copy still.
 cx systemctl restart 'orbit-runner@*' || fail 8 "systemctl restart 'orbit-runner@*' failed" "$UNIT_A" "$UNIT_T" "$UNIT_D"
 wait_until 30 restarted "$UNIT_A" "$PID_A" && wait_until 30 restarted "$UNIT_T" "$PID_T" && wait_until 30 restarted "$UNIT_D" "$PID_D" ||
   fail 8 "the runner instances did not come back after systemctl restart" "$UNIT_A" "$UNIT_T" "$UNIT_D"
@@ -1019,7 +1025,10 @@ publish "$V2"
 wait_until 150 reports_version root-update-e2e "$V2" && wait_until 150 machine_version_is "$V2" ||
   fail 8 "root's runner or hostd did not update to $V2" orbit-runner@root.service orbit-hostd.service
 [ "$(asked_hostd orbit-runner@root.service "$V2")" = 1 ] || fail 8 "root's runner did not ask hostd exactly once"
-cx journalctl -u orbit-runner@root.service -o cat --no-pager | grep -qF "to update its own binary: it is installing orbit $V2 as its own binary" ||
+root_update_accepted() {
+  cx journalctl -u orbit-runner@root.service -o cat --no-pager | grep -F "to update its own binary: it is installing orbit $V2 as its own binary" >/dev/null
+}
+wait_until 15 root_update_accepted ||
   fail 8 "hostd did not accept root's update request"
 check_root_runner 8
 check_hostd_binary 8 "$V2" "$SHA_V2"
@@ -1411,7 +1420,7 @@ printf '%s\n' "$out"
 exit "$rc"
 EOF
 cx chmod 0755 /usr/local/bin/systemctl || harness_fail "cannot install systemctl observer"
-# docs: design §3.9 — root runs the checked machine binary's setup again, without register.
+# docs: "Root's runner and its legacy unit" (and runner-troubleshooting.md G) — root runs the checked machine binary's setup again, without register.
 cx "$BIN" host setup --server "$SERVER" >"$WORK/root-move-setup.out" 2>&1 &
 job=$!
 samples=0
@@ -1457,8 +1466,22 @@ wait_until 30 beats_since legacy-root-e2e "$root_beats" || fail 13b "moved root 
 [ -n "$root_id" ] && [ "$(stub_field legacy-root-e2e 2)" = "$root_id" ] &&
   [ "$(stub_runners | wc -l)" = 1 ] && [ "$(root_requests)" = "$root_requests_before" ] &&
   [ "$(cx sha256sum /root/.orbit/config.json)" = "$root_config_hash" ] || fail 13b "root identity/configuration changed or stub saw registration/approval"
+# docs: "Root's runner and its legacy unit" (and runner-troubleshooting.md G) — recreate reviewed settings.
+cx mkdir -p /etc/systemd/system/orbit-runner@root.service.d || fail 13b "cannot create instance drop-in directory"
+csh "printf '%s\\n' '[Service]' 'Environment=PATH=/opt/node-v26/bin:/usr/local/bin:/usr/bin:/bin' > /etc/systemd/system/orbit-runner@root.service.d/path.conf" ||
+  fail 13b "cannot recreate PATH drop-in"
+cx systemctl daemon-reload || fail 13b "cannot reload instance drop-in"
+cx systemctl set-property orbit-runner@root.service CPUWeight=200 || fail 13b "cannot recreate CPUWeight"
+cx systemctl restart orbit-runner@root.service || fail 13b "cannot restart root instance"
+[ "$(unit_prop orbit-runner@root.service CPUWeight)" = 200 ] &&
+  [[ "$(unit_prop orbit-runner@root.service Environment)" == *"PATH=/opt/node-v26/bin:/usr/local/bin:/usr/bin:/bin"* ]] ||
+  fail 13b "instance PATH or CPUWeight differs"
+# docs: "Root's runner and its legacy unit" — remove the reviewed legacy drop-in directories by hand.
+cx rm -r /etc/systemd/system/orbit-runner-root.service.d /etc/systemd/system.control/orbit-runner-root.service.d ||
+  fail 13b "cannot remove old drop-in directories"
+check_one_runner 13b 0 orbit-runner@root.service
 check_no_sudo "after root's legacy move"
-pass 13b "root $root_id moved by $BIN host setup --server $SERVER: legacy pid $root_old_pid on $BIN, no home binary; PATH and set-property CPUWeight drop-ins named and left intact, unit file and enablement removed; legacy drained and confirmed inactive/disabled before instance start (systemctl audit); $samples one-second samples, none with two processes or live units, $root_none with no runner; orbit-runner@root.service euid 0 exe $HOME_COPY; same configuration and runner id, fresh heartbeat, no new registration or approval"
+pass 13b "root $root_id moved by $BIN host setup --server $SERVER: legacy pid $root_old_pid on $BIN, no home binary; PATH and set-property CPUWeight drop-ins named and left intact, unit file and enablement removed; legacy drained and confirmed inactive/disabled before instance start (systemctl audit); $samples one-second samples, none with two processes or live units, $root_none with no runner; orbit-runner@root.service euid 0 exe $HOME_COPY; same configuration and runner id, fresh heartbeat, no new registration or approval; recreated instance PATH and CPUWeight=200 verified, old drop-in directories removed"
 
 # --- 14. no sudo, throughout ----------------------------------------------------------------------
 
