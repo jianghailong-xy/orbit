@@ -73,6 +73,7 @@ export const OPEN_ITEM_TURN_KEY_PREFIX = 'open-item:v1:';
 
 /** Every prefix a caller's own `clientTurnId` may not start with. */
 const RESERVED_TURN_KEY_PREFIXES = [
+  'run-notify:v1:',
   WATCH_TURN_KEY_PREFIX,
   SESSION_REPLY_TURN_KEY_PREFIX,
   AUTO_RETRY_TURN_KEY_PREFIX,
