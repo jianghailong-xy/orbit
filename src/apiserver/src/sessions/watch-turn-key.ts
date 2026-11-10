@@ -1,3 +1,4 @@
+import { RUN_QUESTION_PREFIX } from './run-question';
 import { BadRequestException } from '@nestjs/common';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 
@@ -73,6 +74,7 @@ export const OPEN_ITEM_TURN_KEY_PREFIX = 'open-item:v1:';
 
 /** Every prefix a caller's own `clientTurnId` may not start with. */
 const RESERVED_TURN_KEY_PREFIXES = [
+  RUN_QUESTION_PREFIX,
   'run-notify:v1:',
   WATCH_TURN_KEY_PREFIX,
   SESSION_REPLY_TURN_KEY_PREFIX,

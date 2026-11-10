@@ -1,3 +1,4 @@
+import { RUN_QUESTION_PREFIX } from './run-question';
 import { isDerivedUuid } from '../projects/project-dispatch-identity';
 import { OPEN_ITEM_TURN_PREFIX, OWNER_ANSWER_TURN_PREFIX } from '../projects/project-open-item';
 import { PROJECT_STARTED_TURN_PREFIX } from '../projects/project-started';
@@ -38,6 +39,7 @@ export function isOrbitAuthoredTurn(clientTurnId: string | null | undefined): bo
   // Listed at the call rather than at load: `project-started` imports the sessions service, which
   // imports this, and a constant read mid-cycle is `undefined`.
   const prefixes = [
+    RUN_QUESTION_PREFIX,
     'run-notify:v1:',
     WATCH_TURN_KEY_PREFIX,
     BACKGROUND_WAKE_TURN_PREFIX,

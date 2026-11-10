@@ -1461,6 +1461,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'POST /runner/projects/:id/acceptance/merge-evidence body requirementId':
     'a name the evidence is filed under, matched only within the project the path names, which is locked under its '
     + 'owner first (project-acceptance.service.ts:868)',
+  'POST /runner/projects/:id/owner-questions body forRunQuestion':
+    'matches ownerId, toSessionId against the project coordinator, kind RUN_QUESTION and state OPEN before linking the request in the item transaction (project-open-item.service.ts:897)',
   'POST /runner/projects/:id/owner-questions body clientQuestionId':
     'the coordinator\'s own key for one question, a dedupe key within the project the path names '
     + '(project-open-item.service.ts:686)',

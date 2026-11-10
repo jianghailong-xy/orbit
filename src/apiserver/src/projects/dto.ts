@@ -678,6 +678,7 @@ export class AskOwnerOptionDto {
  * service, which is where both doors meet.
  */
 export class AskOwnerDto {
+  @IsOptional() @IsPublicId() forRunQuestion?: string;
   @IsString() @MinLength(1) @MaxLength(MAX_QUESTION_CHARS) question!: string;
   @IsOptional() @IsArray() @ArrayMaxSize(4)
   @ValidateNested({ each: true }) @Type(() => AskOwnerOptionDto)
