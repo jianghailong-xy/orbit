@@ -355,7 +355,7 @@ final class BackgroundTaskCardTests: XCTestCase {
                                           card("w", "Workflow"),
                                           card("r1", "Read"), card("r2", "Read"), card("r3", "Read")])
         XCTAssertEqual(rows.map(\.id), ["a", "b", "c", "w", "r1"], "the three Reads fold, the rest stand alone")
-        guard case .toolGroup(let reads) = rows[4] else { return XCTFail("\(rows)") }
+        guard case .steps(let reads) = rows[4] else { return XCTFail("\(rows)") }
         XCTAssertEqual(reads.map(\.id), ["r1", "r2", "r3"])
     }
 }

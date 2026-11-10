@@ -324,6 +324,10 @@ struct ConsoleView: View {
                     focusID: sessionID)
             } else if let console = registry.peek(sessionID) {
                 transcriptAndBand(console, navTitleWidth: navTitleWidth)
+                // The owner requests this conversation filed, each drawn where it was asked.
+                .onChange(of: appModel.ownerRequests?.forSession(sessionID), initial: true) { _, requests in
+                    console.adoptOwnerRequests(requests ?? [])
+                }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
                 // The tasks this conversation filed, which a watch's wake line names its targets by.
@@ -1192,10 +1196,10 @@ struct TranscriptView: View {
         case .item(let item):
             TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
                 .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
-        case .toolGroup(let cards):
-            // No `AnchorRow`: a folded run of tool calls is never the "Your question" the sticky
-            // header names, so it has no business moving that anchor.
-            ToolGroupCardView(cards: cards, fullPayload: console.fullPayload)
+        case .steps(let items):
+            // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
+            // so it has no business moving that anchor.
+            StepsRowView(items: items, fullPayload: console.fullPayload)
         case .statusCard(let card):
             SessionStatusCardView(card: card)
         case .decisionCard(let card):

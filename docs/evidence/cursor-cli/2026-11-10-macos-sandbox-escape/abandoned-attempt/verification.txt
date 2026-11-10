@@ -1,0 +1,22 @@
+=== RUN   TestCursorRealMacOSSandboxEscape
+    cursor_sandbox_macos_live_test.go:80: REAL_OWNER_CARD 01a1c285-ff99-703a-9d2c-d81254d5ff75 command=printf approved > "$HOME/.orbit-macos-sandbox-escape-1794264900153935000-approved"
+[orbit-runner 2026-11-09T22:55:54.332Z] inbox poll failed for 31111111-2222-4333-8444-666666666666: Get "http://127.0.0.1:55478/api/runner/sessions/31111111-2222-4333-8444-666666666666/inbox?acceptsSteer=1": context deadline exceeded; fetching again in 149ms
+    cursor_sandbox_macos_live_test.go:91: REAL_OWNER_DECISION id=01a1c285-ff99-703a-9d2c-d81254d5ff75 status=ABANDONED decidedById=
+    cursor_sandbox_macos_live_test.go:80: REAL_OWNER_CARD 01a1c285-ff99-703a-9d2c-d81254d5ff75 command=printf approved > "$HOME/.orbit-macos-sandbox-escape-1794264900153935000-approved"
+    cursor_sandbox_macos_live_test.go:91: REAL_OWNER_DECISION id=01a1c285-ff99-703a-9d2c-d81254d5ff75 status=ABANDONED decidedById=
+    cursor_sandbox_macos_live_test.go:80: REAL_OWNER_CARD 01a1c285-ff99-703a-9d2c-d81254d5ff75 command=printf approved > "$HOME/.orbit-macos-sandbox-escape-1794264900153935000-approved"
+    cursor_sandbox_macos_live_test.go:91: REAL_OWNER_DECISION id=01a1c285-ff99-703a-9d2c-d81254d5ff75 status=ABANDONED decidedById=
+    cursor_sandbox_macos_live_test.go:121: got 2 cards, want only Case B
+    cursor_sandbox_macos_live_test.go:124: no real person approval
+    cursor_sandbox_macos_live_test.go:132: ls -l /Users/long/.orbit-macos-sandbox-escape-1794264900153935000-blocked
+        ls: /Users/long/.orbit-macos-sandbox-escape-1794264900153935000-blocked: No such file or directory
+        (exit error: exit status 1)
+    cursor_sandbox_macos_live_test.go:132: ls -l /Users/long/.orbit-macos-sandbox-escape-1794264900153935000-approved
+        ls: /Users/long/.orbit-macos-sandbox-escape-1794264900153935000-approved: No such file or directory
+        (exit error: exit status 1)
+    cursor_sandbox_macos_live_test.go:141: Case B content="" error=open /Users/long/.orbit-macos-sandbox-escape-1794264900153935000-approved: no such file or directory
+    cursor_sandbox_macos_live_test.go:149: remove /Users/long/.orbit-macos-sandbox-escape-1794264900153935000-approved: no such file or directory
+--- FAIL: TestCursorRealMacOSSandboxEscape (71.10s)
+FAIL
+FAIL	orbit	71.665s
+FAIL

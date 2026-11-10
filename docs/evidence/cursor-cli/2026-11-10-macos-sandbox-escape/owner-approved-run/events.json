@@ -1,0 +1,2554 @@
+[
+  {
+    "payload": {
+      "cliVersion": "2026.10.14-941492e",
+      "provider": "cursor",
+      "resumed": false,
+      "runtime": "acp",
+      "sessionId": "bbaa2004-80ce-49f1-9e9f-65599505a317",
+      "subtype": "init"
+    },
+    "turn": "",
+    "type": "system"
+  },
+  {
+    "payload": {
+      "text": "Use only the Shell tool. Run this exact command once without changing or retrying it. Report stderr and stop:\npython3 - \u003c\u003c'PY'\nfrom pathlib import Path\n(Path.home() / '.orbit-macos-sandbox-escape-1794276990652915000-blocked').write_text('blocked')\nPY"
+    },
+    "turn": "case-a",
+    "type": "user"
+  },
+  {
+    "payload": {
+      "text": "Running"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " the"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " exact"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " command"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " once"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " and"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " reporting"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " stderr"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Running the exact command once and reporting stderr."
+    },
+    "turn": "case-a",
+    "type": "assistant"
+  },
+  {
+    "payload": {
+      "id": "call-389690d1-2965-4a8e-a057-14c0f6067570-0\nfc_e7015da5-cd5f-9d7e-8daf-87ff4f92ea22_0",
+      "input": {
+        "command": "python3 - \u003c\u003c'PY'\nfrom pathlib import Path\n(Path.home() / '.orbit-macos-sandbox-escape-1794276990652915000-blocked').write_text('blocked')\nPY"
+      },
+      "name": "Bash"
+    },
+    "turn": "case-a",
+    "type": "tool_use"
+  },
+  {
+    "payload": {
+      "name": "Bash",
+      "provider": "cursor",
+      "reason": "Auto allows a routine command in the workspace",
+      "subtype": "permission_auto_allowed",
+      "toolUseId": "call-389690d1-2965-4a8e-a057-14c0f6067570-0\nfc_e7015da5-cd5f-9d7e-8daf-87ff4f92ea22_0"
+    },
+    "turn": "case-a",
+    "type": "system"
+  },
+  {
+    "payload": {
+      "content": "Traceback (most recent call last):\n  File \"\u003cstdin\u003e\", line 2, in \u003cmodule\u003e\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1275, in write_text\n    with self.open(mode='w', encoding=encoding, errors=errors) as f:\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1242, in open\n    return io.open(self, mode, buffering, encoding, errors, newline,\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1110, in _opener\n    return self._accessor.open(self, flags, mode)\nPermissionError: [Errno 1] Operation not permitted: '/Users/long/.orbit-macos-sandbox-escape-1794276990652915000-blocked'\nThis command ran in Orbit's Auto sandbox, which blocks writes outside the workspace and other writable roots. If this command needs an outside write, request approval in Orbit.\nExit code 1",
+      "isError": true,
+      "toolUseId": "call-389690d1-2965-4a8e-a057-14c0f6067570-0\nfc_e7015da5-cd5f-9d7e-8daf-87ff4f92ea22_0"
+    },
+    "turn": "case-a",
+    "type": "tool_result"
+  },
+  {
+    "payload": {
+      "text": "I"
+    },
+    "turn": "case-a",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": " will run the exact "
+    },
+    "turn": "case-a",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": "command"
+    },
+    "turn": "case-a",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": " once, report stderr"
+    },
+    "turn": "case-a",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": ", and stop."
+    },
+    "turn": "case-a",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": "I will run the exact command once, report stderr, and stop."
+    },
+    "turn": "case-a",
+    "type": "thinking"
+  },
+  {
+    "payload": {
+      "text": "**"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "stderr"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ":**"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "```"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Trace"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "back"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " ("
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "most"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " recent"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " call"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " last"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "):"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " File"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " \"\u003c"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "stdin"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\u003e\","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " line"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "2"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " in"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " \u003c"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "module"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\u003e\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " File"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " \"/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Library"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Developer"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Command"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Line"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Tools"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Library"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Framework"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "s"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Python"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "3"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "framework"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Versions"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "3"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "9"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "lib"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "python"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "3"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "9"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "path"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "lib"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ".py"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " line"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "127"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "5"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " in"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " write"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "_"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "text"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "   "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " with"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " self"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ".open"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "("
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "mode"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "='"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "w"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "',"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " encoding"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "="
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "encoding"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " errors"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "="
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "errors"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ")"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " as"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " f"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ":\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " File"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " \"/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Library"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Developer"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Command"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Line"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Tools"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Library"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Framework"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "s"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Python"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "3"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "framework"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Versions"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "3"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "9"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "lib"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "python"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "3"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "9"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "path"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "lib"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ".py"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " line"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "124"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "2"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " in"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " open"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "   "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " return"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " io"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ".open"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "("
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "self"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " mode"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " buffering"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " encoding"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " errors"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " newline"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ",\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " File"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " \"/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Library"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Developer"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Command"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Line"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Tools"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Library"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Framework"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "s"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Python"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "3"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "framework"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Versions"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "3"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "9"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "lib"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "python"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "3"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "9"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "path"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "lib"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ".py"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " line"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "111"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "0"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " in"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " _"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "op"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "ener"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "   "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " return"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " self"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "._"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "accessor"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ".open"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "("
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "self"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " flags"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " mode"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ")\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Permission"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Error"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ":"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " ["
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Errno"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "1"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "]"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " Operation"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " not"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " permitted"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ":"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " '/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Users"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "long"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "/."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "orbit"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "-"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "macos"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "-"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "sandbox"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "-"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "escape"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "-"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "179"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "427"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "699"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "065"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "291"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "500"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "0"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "-"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "blocked"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "'\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "This"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " command"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " ran"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " in"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " Orbit"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "'s"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " Auto"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " sandbox"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " which"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " blocks"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " writes"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " outside"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " the"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " workspace"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " and"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " other"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " writable"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " roots"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " If"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " this"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " command"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " needs"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " an"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " outside"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " write"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ","
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " request"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " approval"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " in"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " Orbit"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": ".\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "```"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "\n\n"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Stopped"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " as"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " requested"
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-a",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "**stderr:**\n```\nTraceback (most recent call last):\n  File \"\u003cstdin\u003e\", line 2, in \u003cmodule\u003e\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1275, in write_text\n    with self.open(mode='w', encoding=encoding, errors=errors) as f:\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1242, in open\n    return io.open(self, mode, buffering, encoding, errors, newline,\n  File \"/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/pathlib.py\", line 1110, in _opener\n    return self._accessor.open(self, flags, mode)\nPermissionError: [Errno 1] Operation not permitted: '/Users/long/.orbit-macos-sandbox-escape-1794276990652915000-blocked'\nThis command ran in Orbit's Auto sandbox, which blocks writes outside the workspace and other writable roots. If this command needs an outside write, request approval in Orbit.\n```\n\nStopped as requested."
+    },
+    "turn": "case-a",
+    "type": "assistant"
+  },
+  {
+    "payload": {
+      "numTurns": 1,
+      "stopReason": "end_turn",
+      "subtype": "completed"
+    },
+    "turn": "case-a",
+    "type": "turn_end"
+  },
+  {
+    "payload": {
+      "status": "SUCCEEDED"
+    },
+    "turn": "case-a",
+    "type": "completion"
+  },
+  {
+    "payload": {
+      "text": "Use only the Shell tool. Run this exact command once without changing or retrying it. Wait for the person's approval if needed, then stop:\nprintf approved \u003e \"$HOME/.orbit-macos-sandbox-escape-1794274214446201000-approved\""
+    },
+    "turn": "case-b",
+    "type": "user"
+  },
+  {
+    "payload": {
+      "text": "I"
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": " will run the exact "
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": "command"
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": " once using only the"
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": " Shell tool. I will "
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": "wait"
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": " for approval if needed"
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": ", then stop."
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": "I will run the exact command once using only the Shell tool. I will wait for approval if needed, then stop."
+    },
+    "turn": "case-b",
+    "type": "thinking"
+  },
+  {
+    "payload": {
+      "text": "Running"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " the"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " exact"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " command"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " once"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Running the exact command once."
+    },
+    "turn": "case-b",
+    "type": "assistant"
+  },
+  {
+    "payload": {
+      "id": "call-979926d9-d723-46e6-8f4b-3b750d7c14e4-1\nfc_7ce2da40-13ce-9d4f-9b5e-76cf92c1da9d_0",
+      "input": {
+        "command": "printf approved \u003e \"$HOME/.orbit-macos-sandbox-escape-1794274214446201000-approved\""
+      },
+      "name": "Bash"
+    },
+    "turn": "case-b",
+    "type": "tool_use"
+  },
+  {
+    "payload": {
+      "content": "",
+      "isError": false,
+      "toolUseId": "call-979926d9-d723-46e6-8f4b-3b750d7c14e4-1\nfc_7ce2da40-13ce-9d4f-9b5e-76cf92c1da9d_0"
+    },
+    "turn": "case-b",
+    "type": "tool_result"
+  },
+  {
+    "payload": {
+      "text": "The"
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": " command completed successfully"
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": " with exit code 0 and"
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": " produced no output."
+    },
+    "turn": "case-b",
+    "type": "thinking_delta"
+  },
+  {
+    "payload": {
+      "text": "The command completed successfully with exit code 0 and produced no output."
+    },
+    "turn": "case-b",
+    "type": "thinking"
+  },
+  {
+    "payload": {
+      "text": "Command"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " finished"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " with"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " exit"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " code"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " "
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "0"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " and"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " no"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " stderr"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " Stop"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "ped"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " as"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": " requested"
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "."
+    },
+    "turn": "case-b",
+    "type": "text_delta"
+  },
+  {
+    "payload": {
+      "text": "Command finished with exit code 0 and no stderr. Stopped as requested."
+    },
+    "turn": "case-b",
+    "type": "assistant"
+  },
+  {
+    "payload": {
+      "numTurns": 1,
+      "stopReason": "end_turn",
+      "subtype": "completed"
+    },
+    "turn": "case-b",
+    "type": "turn_end"
+  },
+  {
+    "payload": {
+      "status": "SUCCEEDED"
+    },
+    "turn": "case-b",
+    "type": "completion"
+  }
+]

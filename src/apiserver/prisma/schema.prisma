@@ -350,6 +350,8 @@ model User {
   /// Persistent observations this account is keeping (migration 0259).
   watches          Watch[]
   ownerRequests    OwnerRequest[]
+  ownerRequestSecrets OwnerRequestSecret[]
+  accountSecrets   AccountSecret[]
 
   /// Public links this account made, ended ones included (migration 0306).
   shareLinks       ShareLink[]
@@ -3093,6 +3095,9 @@ model Project {
   doneAt             DateTime? @map("done_at") @db.Timestamptz(3)
   /// The seal of the criteria the DONE was recorded against.
   doneCriteriaDigest String?   @map("done_criteria_digest") @db.Char(64)
+  /// Serving task lifecycle epochs captured by the owner DONE press (migration 0510).
+  /// Null on legacy records, which retain timestamp-based reopen detection.
+  doneTaskEpochs Json? @map("done_task_epochs")
   /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
   acceptedGaps       Json      @default("[]") @map("accepted_gaps")
 
@@ -7276,6 +7281,8 @@ model OwnerRequest {
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
   resolvedByUserId    String?   @map("resolved_by_user_id") @db.Uuid
   resolvedBySessionId String?   @map("resolved_by_session_id") @db.Uuid
+  /// The client the owner ended it from (`web`, `ios`, `macos`, `android`); null when withdrawn, expired or unknown.
+  resolvedClient      String?   @map("resolved_client")
   /// Why it was declined (required) or withdrawn.
   resolutionNote      String?   @map("resolution_note")
   /// What the owner chose or said when marking it done: `{ option?, text? }`.
@@ -7284,11 +7291,66 @@ model OwnerRequest {
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   /// The one delivery of its ending to the asking session (migration 0504), written with the ending.
   deliveries          WatchDelivery[]
+  /// SECRET: the value's grant to one runner (migration 0506), once the owner has entered one.
+  secretGrant         OwnerRequestSecret?
 
   @@unique([askedBySessionId, clientRequestId], map: "owner_request_session_client_key")
   @@index([ownerId, state, createdAt], map: "owner_request_owner_state_idx")
   @@map("owner_request")
 }
+
+/// The value an owner entered on a SECRET request, granted to one runner (migration 0506, design
+/// docs/design/owner-request-secrets.md §3.2). PENDING_DELIVERY → ACTIVE → REMOVING → REMOVED; `valueEnc` is the
+/// AES-256-GCM ciphertext (owner-requests/owner-secret-crypto.ts) and is NULL from REMOVING on. `runnerId` is a
+/// composite foreign key with `ownerId` in SQL, ON DELETE SET NULL (runner_id) — declared there rather than here,
+/// because Prisma cannot null half of a composite key — so a deleted runner leaves the grant to be ended
+/// RUNNER_DELETED. No length, prefix or hash of the value is stored.
+model OwnerRequestSecret {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  ownerId     String       @map("owner_id") @db.Uuid
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  requestId   String       @unique(map: "owner_request_secret_request_key") @map("request_id") @db.Uuid
+  request     OwnerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  runnerId    String?      @map("runner_id") @db.Uuid
+  sessionId   String       @map("session_id") @db.Uuid
+  taskId      String?      @map("task_id") @db.Uuid
+  /// The task's lifecycle epoch at submission (task_progress.lifecycle_epoch): a reopened task is a new epoch.
+  taskEpoch   Int?         @map("task_epoch")
+  /// The environment variable, for ENV; NULL for FILE.
+  name        String?
+  exposure    String
+  filePath    String?      @map("file_path")
+  valueEnc    String?      @map("value_enc")
+  state       String       @default("PENDING_DELIVERY")
+  endReason   String?      @map("end_reason")
+  expiresAt   DateTime     @map("expires_at") @db.Timestamptz(3)
+  /// When the runner first fetched the value: a grant ended before its ack is REMOVING once fetched (§2).
+  fetchedAt   DateTime?    @map("fetched_at") @db.Timestamptz(3)
+  deliveredAt DateTime?    @map("delivered_at") @db.Timestamptz(3)
+  removedAt   DateTime?    @map("removed_at") @db.Timestamptz(3)
+  removalNote String?      @map("removal_note")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([runnerId, state], map: "owner_request_secret_runner_state_idx")
+  @@map("owner_request_secret")
+}
+
+/// An owner's saved secret (migration 0506, design §3.4): write-only — no route returns `valueEnc` or anything
+/// derived from it. "Use saved" re-encrypts a copy into a new grant.
+model AccountSecret {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  label     String
+  valueEnc  String   @map("value_enc")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, label], map: "account_secret_owner_label_key")
+  @@map("account_secret")
+}
+
 
 model Watch {
   id      String @id @default(uuid(7)) @db.Uuid

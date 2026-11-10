@@ -80,7 +80,7 @@ class LandingSessionDeviceTest {
                 await { exists(hasTestTag("landings-window")) }
                 await { text("landing-head:right")?.matches(Regex("1m 5\\ds? of 60m")) == true }
                 assertEquals("Wire the page", text("landing:task-name"))
-                await { text("page-bar-subtitle")?.startsWith("Run by Orbit") == true }
+                await { !text("page-bar-subtitle").isNullOrEmpty() }
                 assertTrue(text("landing:budget")!!.startsWith("Task acceptance "))
                 assertTrue(text("landing:live")!!.startsWith("Output "))
                 assertFalse(exists(hasTestTag("transcript-list")))

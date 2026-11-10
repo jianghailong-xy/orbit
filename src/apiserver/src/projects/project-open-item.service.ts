@@ -147,6 +147,7 @@ import {
   DONE_REQUEST_DEDUPE_KEY,
   DONE_REQUEST_KIND,
   DONE_REQUEST_NOT_READY,
+  DONE_REQUEST_UNCHANGED_SINCE_DECLINE,
   DONE_REQUEST_NOT_OPEN,
   DONE_REQUEST_TITLE,
   MAX_DONE_REQUEST_DECLINE_NOTE,
@@ -500,6 +501,8 @@ export interface ProjectOpenItems {
   withCoordinator: OpenItemRow[];
   startRequest: OpenItemRow | null;
   doneRequest: OpenItemRow | null;
+  latestDoneRequestDecline: { note: string; declinedAt: Date } | null;
+  latestDoneRequestSuperseded: { reason: string; supersededAt: Date } | null;
   settled: OpenItemRow[];
   closedQuestions: ProjectClosedQuestion<Date>[];
   /** The main branch a row's merge into main goes into; null with no repository bound. */
@@ -1197,6 +1200,21 @@ export class ProjectOpenItemService {
           findings,
         };
         throw new ConflictException(notReady);
+      }
+      const declined = await tx.projectOpenItem.findFirst({
+        where: { projectId, kind: DONE_REQUEST_KIND, state: 'RESOLVED', resolution: 'DECLINED' },
+        orderBy: [{ resolvedAt: 'desc' }, { id: 'desc' }],
+        select: { payload: true, resolutionNote: true },
+      });
+      const declinedRequest = declined?.payload as unknown as DoneRequest | undefined;
+      if (declinedRequest?.stateDigest === state.stateDigest
+        && declinedRequest.criteriaDigest === state.criteriaDigest) {
+        throw new ConflictException({
+          code: DONE_REQUEST_UNCHANGED_SINCE_DECLINE,
+          message: `The owner said Not yet: "${declined!.resolutionNote}". `
+            + 'Do the missing work first, then ask again once the project has changed and settled.',
+          written: 0,
+        });
       }
       const request = {
         criteriaDigest: state.criteriaDigest,
@@ -3072,7 +3090,7 @@ export class ProjectOpenItemService {
     // And a done request about a project that has moved since — its criteria, its tasks or where
     // their work has landed — for the same reason (`project-done-request.ts`).
     await this.guarded('supersedeStaleDoneRequest', async () => {
-      await supersedeStaleDoneRequest(this.prisma, ownerId, projectId);
+      await supersedeStaleDoneRequest(this.prisma, ownerId, projectId, this.sessions);
     });
     // Whether there is a conversation to ask again — the SAME predicate `returnToCoordinator`
     // refuses on, minus the switch, which is not part of it: the press is the owner's own, so a
@@ -3408,7 +3426,21 @@ export class ProjectOpenItemService {
         }),
       };
     });
+    const latestRequest = await this.prisma.projectOpenItem.findFirst({
+      where: { projectId, kind: DONE_REQUEST_KIND },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { state: true, resolution: true, resolvedBy: true, resolutionNote: true, resolvedAt: true },
+    });
     return {
+      latestDoneRequestSuperseded: latestRequest?.state === 'SUPERSEDED'
+        && latestRequest.resolvedBy === 'PLATFORM' && latestRequest.resolvedAt
+        && latestRequest.resolvedAt.getTime() > Date.now() - 24 * 60 * 60 * 1000
+        ? { reason: latestRequest.resolutionNote!, supersededAt: latestRequest.resolvedAt }
+        : null,
+      latestDoneRequestDecline: latestRequest?.state === 'RESOLVED'
+        && latestRequest.resolution === 'DECLINED' && latestRequest.resolvedAt
+        ? { note: latestRequest.resolutionNote!, declinedAt: latestRequest.resolvedAt }
+        : null,
       needsYou: view.filter((row) => row.assignee === 'OWNER'
         && row.kind !== START_REQUEST_KIND && row.kind !== DONE_REQUEST_KIND),
       withCoordinator: view.filter((row) => row.assignee === 'COORDINATOR'),

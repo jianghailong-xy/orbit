@@ -339,9 +339,9 @@ describe('a landing in the window', () => {
     });
     await mount();
 
-    // The window's own head: Landings, run by Orbit for this project.
+    // The window's own head: Landings over the project's name (the footer says Orbit runs them).
     expect(page().querySelector('.landing-page-title')?.textContent).toBe('Landings');
-    expect(page().querySelector('.landing-page-sub')?.textContent).toBe('Run by Orbit · Wiki server');
+    expect(page().querySelector('.landing-page-sub')?.textContent).toBe('Wiki server');
     // The landing is a card under Now, with its task under the head.
     expect(page().querySelector('.landings-window-now .landings-window-day-head')?.textContent).toBe('Now');
     expect(page().querySelector('.landings-window-card-task')?.textContent).toBe('Ledger migration order');
@@ -371,14 +371,17 @@ describe('a landing in the window', () => {
       '≡:is-queued', '✗:is-failed',
       '↻:is-running', '↻:is-running', '↗:is-takeover', '↩:is-queued', '✓:is-ok',
     ]);
-    // The footer is the composer's card with nothing to type into: the sentence where the text would
-    // be, who decides, and the door to them in Send's place (board 01 b).
+    // The footer is one plain line with nothing to type into: a lock and the sentence's first half (the
+    // whole sentence for a screen reader), and the door to who decides at the end
+    // (docs/mocks/landings-ui-polish ③).
     const foot = page().querySelector('.landing-page-foot')!;
-    expect(foot.querySelector('.landing-page-foot-line')?.textContent).toBe('Orbit runs these landings — nothing to type here.');
-    expect(foot.querySelector('.landing-page-foot-line b')?.textContent).toBe('nothing to type here.');
-    expect(foot.querySelector('.landing-page-foot-bar')?.textContent).toBe('Decisions: the coordinatorOpen coordinator');
-    const door = foot.querySelector<HTMLButtonElement>('.landing-page-foot-bar button.landing-page-foot-open')!;
+    const line = foot.querySelector('.landing-page-foot-line')!;
+    expect(line.querySelector('.anticon-lock')).not.toBeNull();
+    expect(line.querySelector('.landing-page-foot-words')?.textContent).toBe('Orbit runs these landings');
+    expect(line.querySelector('.sr-only')?.textContent).toBe('Orbit runs these landings — nothing to type here.');
+    const door = foot.querySelector<HTMLButtonElement>('button.landing-page-foot-open')!;
     expect(door.textContent).toBe('Open coordinator');
+    expect(door.getAttribute('title')).toBe('Decisions: the coordinator');
     expect(door.querySelector('.anticon-user')).not.toBeNull();
     expect(foot.querySelector('input, textarea, [contenteditable]')).toBeNull();
     await click(door, 'Open coordinator');
@@ -800,18 +803,17 @@ describe('a settled merge round', () => {
     });
     mergedRows = [promo({ landingSessionId: SESSION })];
     await mount();
-    // One bubble, not a session's and a merge's: the record and the round, joined by landingSessionId.
-    // Its words are the message; under them the mark, the line and the time (board 01 b).
-    const rows = [...page().querySelectorAll<HTMLElement>('.landings-window-row')];
+    // One line, not a session's and a merge's: the record and the round, joined by landingSessionId.
+    // A merge is an event, not a bubble: the mark, the words, the line and the time on one centred line
+    // (docs/mocks/landings-ui-polish ②).
+    expect(page().querySelector('.landings-window-row')).toBeNull();
+    const rows = [...page().querySelectorAll<HTMLElement>('.landings-window-event')];
     expect(rows).toHaveLength(1);
-    expect(rows[0].querySelector('.landings-window-row-text')?.textContent).toBe('Merged into main');
-    const foot = rows[0].querySelector('.landings-window-row-foot')!;
-    expect([...foot.children].map((part) => part.className)).toEqual([
-      'landings-window-row-mark is-merge', 'landings-window-row-detail', 'landings-window-row-time',
+    expect(rows[0].parentElement?.classList.contains('is-event')).toBe(true);
+    expect([...rows[0].children].map((part) => part.className)).toEqual([
+      'landings-window-row-mark is-merge', 'landings-window-event-title', 'landings-window-row-detail', 'landings-window-row-time',
     ]);
-    expect(foot.querySelector('.landings-window-row-mark')?.textContent).toBe('⇢');
-    expect(foot.querySelector('.landings-window-row-detail')?.textContent).toBe('8ed0ea7 · 2 tasks · automatically');
-    expect(foot.querySelector('.landings-window-row-time')?.textContent).toBe(landingClockTime(at(9, 51)));
+    expect(rows[0].textContent).toBe(`⇢Merged into main · 8ed0ea7 · 2 tasks · automatically · ${landingClockTime(at(9, 51))}`);
     // Opened on it: the receipt over the round's own record, on a panel under the bubble, not in it.
     expect(rows[0].getAttribute('aria-expanded')).toBe('true');
     expect(rows[0].querySelector('.landings-window-record')).toBeNull();
@@ -899,7 +901,7 @@ describe('the window', () => {
       sha: '3f1c2a9000000000000000000000000000000000', at: at(9, 51), automatic: false, byUserId: 'u1',
     } })];
     await mount(windowOn(null));
-    const row = page().querySelector<HTMLElement>('[data-landing-entry="merge:promo-old"] .landings-window-row');
+    const row = page().querySelector<HTMLElement>('[data-landing-entry="merge:promo-old"] .landings-window-event');
     expect(row?.textContent).toContain('Merged into main');
     expect(row?.textContent).toContain('3f1c2a9 · 2 tasks · by you');
     await click(row, 'the old merge');
@@ -964,7 +966,7 @@ describe('the window', () => {
       .toEqual(['Open Coordinator', 'Open Project']);
   });
 
-  it('draws what Orbit sent close together as one group, its avatar once beside it, under the day’s chip', async () => {
+  it('draws what Orbit sent close together as one group, with no avatar, under the day’s chip', async () => {
     otherRows = [
       settledRow('t1', 'Land · T1 install.sh: keep one orbit binary per account', 'LANDED', yesterday(22, 11)),
       settledRow('round-1', 'Merge project/p1 → main · #1', 'MERGED', yesterday(22, 13), 'PROMOTION'),
@@ -973,11 +975,8 @@ describe('the window', () => {
     ];
     await mount(windowOn(null));
     const groups = (day: Element) => [...day.querySelectorAll(':scope > .landings-window-group')].map((group) => {
-      // The avatar first, then the column the messages stand in; one avatar a group.
-      expect([...group.children].map((part) => part.getAttribute('class'))).toEqual([
-        'landings-window-avatar', 'landings-window-column',
-      ]);
-      expect(group.querySelectorAll('.landings-window-avatar')).toHaveLength(1);
+      // Only the column the messages stand in: every message here is Orbit's, so no avatar.
+      expect([...group.children].map((part) => part.getAttribute('class'))).toEqual(['landings-window-column']);
       return [...group.querySelectorAll('[data-landing-entry]')].map((entry) => entry.getAttribute('data-landing-entry'));
     });
     const [yesterdaySection, todaySection, nowSection] = [...page().querySelectorAll('.landings-window-day')];
@@ -989,15 +988,7 @@ describe('the window', () => {
     expect(nowSection.querySelector('.landings-window-day-head')?.textContent).toBe('Now');
     expect(groups(nowSection)).toEqual([[SESSION]]);
     expect(nowSection.querySelector('.landings-window-column .landings-window-card')).not.toBeNull();
-    // The avatar is decoration, and each one's tile is its own.
-    const avatars = [...page().querySelectorAll('.landings-window-avatar')];
-    expect(avatars).toHaveLength(4);
-    expect(avatars.every((avatar) => avatar.getAttribute('aria-hidden') === 'true')).toBe(true);
-    const tiles = avatars.map((avatar) => avatar.querySelector('defs > [id]')?.id);
-    expect(new Set(tiles).size).toBe(4);
-    avatars.forEach((avatar, index) => {
-      expect(avatar.querySelector('rect')?.getAttribute('fill')).toBe(`url(#${tiles[index]})`);
-    });
+    expect(page().querySelector('.landings-window-avatar')).toBeNull();
     // A bubble's words are the task's whole name.
     expect(page().querySelector('[data-landing-entry="t3"] .landings-window-row-text')?.textContent)
       .toBe('T3 sudo hints name the binary’s real path');
@@ -1023,7 +1014,7 @@ describe('the window', () => {
     expect(note()).toBe('No landings yet');
     // The window's own head and footer stand around it.
     expect(page().querySelector('.landing-page-title')?.textContent).toBe('Landings');
-    expect(page().querySelector('.landing-page-foot-line')?.textContent).toBe('Orbit runs these landings — nothing to type here.');
+    expect(page().querySelector('.landing-page-foot-line .sr-only')?.textContent).toBe('Orbit runs these landings — nothing to type here.');
   });
 
   it('draws no such note beside a landing', async () => {
@@ -1036,15 +1027,15 @@ describe('the window', () => {
     coordinatorStatus = { coordination: null, readAt: at(14, 58) };
     await mount();
     const foot = page().querySelector('.landing-page-foot')!;
-    expect(foot.querySelector('.landing-page-foot-line')?.textContent).toBe('Orbit runs these landings — nothing to type here.');
-    expect(foot.querySelector('.landing-page-foot-bar')?.textContent).toBe('Decisions: the coordinator');
+    expect(foot.querySelector('.landing-page-foot-line .sr-only')?.textContent).toBe('Orbit runs these landings — nothing to type here.');
     expect(foot.querySelector('button')).toBeNull();
   });
 
   /**
    * What jsdom cannot lay out, read from the stylesheet (board 01 b, 03 e): the bubble hugs its words
    * up to a gutter on its right and never cuts them short, the record's panel is the one a person's
-   * bubble opens its note on, the outline is the bubble's, and the footer is the composer's card.
+   * bubble opens its note on, the outline is the bubble's, a merge is a centred line, and the footer is
+   * one plain line on the window's bottom edge (docs/mocks/landings-ui-polish).
    */
   it('draws the bubble, its record and the footer with the shapes the board gives them', () => {
     const found = ['src/index.css', 'src/web/src/index.css'].map((each) => resolve(process.cwd(), each)).find(existsSync);
@@ -1065,11 +1056,13 @@ describe('the window', () => {
     expect(value(rule('.landings-window-row-line .landings-window-row'), 'max-width')).toBe('calc(100% - 44px)');
     const words = rule('.landings-window-row-text');
     expect(words).not.toMatch(/nowrap|ellipsis|line-clamp/u);
-    // A card's task name is whole too: the column beside the avatar is narrower, and the board wraps it.
+    // A card's task name is whole too: the board wraps it.
     expect(rule('.landings-window-card-task')).not.toMatch(/nowrap|ellipsis|line-clamp/u);
     expect(value(rule('.landings-window-row-time'), 'font-variant-numeric')).toBe('tabular-nums');
     expect(value(rule('.landings-window-entry.is-outlined .landings-window-row'), 'box-shadow')).toBe('0 0 0 2px var(--brand)');
-    expect(value(rule('.landings-window-avatar'), 'width')).toBe('32px');
+    expect(css).not.toContain('.landings-window-avatar');
+    expect(value(rule('.landings-window-row-line.is-event'), 'justify-content')).toBe('center');
+    expect(value(rule('.landings-window-event'), 'background')).toBe('transparent');
 
     const panel = rule('.landings-window-record');
     const note = rule('.chat-user-wrap > .chat-injected-panel');
@@ -1079,9 +1072,8 @@ describe('the window', () => {
     expect(value(rule('.landings-window-now .landings-window-day-head'), 'color')).toBe('var(--brand)');
 
     const foot = rule('.landing-page-foot');
-    const composer = rule('.composer-box');
-    for (const property of ['border', 'border-radius', 'background', 'box-shadow']) {
-      expect(value(foot, property), property).toBe(value(composer, property));
-    }
+    expect(value(foot, 'border-top')).toBe('1px solid var(--border)');
+    expect(foot).not.toMatch(/border-radius|box-shadow/u);
+    expect(value(rule('.landing-page-foot-line'), 'white-space')).toBe('nowrap');
   });
 });

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -199,6 +201,9 @@ func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
 		if err == nil && !info.Mode().IsRegular() {
 			err = errors.New("not a regular file")
 		}
+		if err == nil {
+			err = refuseFileHoldingSecret(file, real)
+		}
 		if err != nil {
 			file.Close()
 			return nil, nil, err
@@ -257,4 +262,84 @@ func checkLocalSaveTarget(info os.FileInfo, err error) error {
 		return fmt.Errorf("%s: %w", info.Name(), errLocalPathChanged)
 	}
 	return nil
+}
+
+// errFileHoldsOwnerSecret refuses a file that holds the value of an owner-request secret this runner holds.
+var errFileHoldsOwnerSecret = errors.New("the file holds the value of a secret the owner delivered to this runner, so it is not sent")
+
+// refuseFileHoldingSecret scans a file inside the roots for every owner-request secret's value before it leaves this
+// machine (docs/design/owner-request-secrets.md §7.2), and leaves it read from the start again. The runner process
+// holds the values and scans the handle itself; `orbit mcp` holds none, and asks the runner over the session's socket.
+// A runner that cannot be asked, or is too old to know the question, does not stop the file: this check is the
+// accident net (level B), and a failure to reach the runner fails open.
+func refuseFileHoldingSecret(file *os.File, path string) error {
+	// After its grant has gone the value is not known here, but a file that was held back for holding it is: its blob
+	// id is recorded (secret_taint.go). Asked first, in the runner and in `orbit mcp` alike, which read the same record.
+	recorded, err := fileIsRecordedSecretBlob(file)
+	if _, seekErr := file.Seek(0, io.SeekStart); err == nil {
+		err = seekErr
+	}
+	if err != nil {
+		return err
+	}
+	if recorded {
+		return errFileHoldsOwnerSecret
+	}
+	if store := runnerSecrets(); store != nil {
+		holds, err := store.readerHolds(file)
+		if _, seekErr := file.Seek(0, io.SeekStart); err == nil {
+			err = seekErr
+		}
+		if err != nil {
+			return err
+		}
+		if holds {
+			return errFileHoldsOwnerSecret
+		}
+		return nil
+	}
+	socket, token := os.Getenv(envBgSocket), os.Getenv(envBgToken)
+	if socket == "" || token == "" {
+		return nil
+	}
+	raw, err := bgSocketCall(socket, token, "secret_scan", map[string]interface{}{"path": path})
+	if err != nil {
+		return nil
+	}
+	var answer struct {
+		Holds bool `json:"holds"`
+	}
+	if json.Unmarshal(raw, &answer) == nil && answer.Holds {
+		return errFileHoldsOwnerSecret
+	}
+	return nil
+}
+
+// fileIsRecordedSecretBlob reports whether file's content is a blob the taint record names, in either object format
+// git uses. A record that cannot be read, or that a removal has not finished writing, counts as naming every file.
+func fileIsRecordedSecretBlob(file *os.File) (bool, error) {
+	ids, readable := taintObjectsChecked("")
+	if !readable {
+		return true, nil
+	}
+	if len(ids) == 0 {
+		return false, nil
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return false, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > secretScanFileMax {
+		return false, nil
+	}
+	data, err := io.ReadAll(io.LimitReader(file, secretScanFileMax+1))
+	if err != nil {
+		return false, err
+	}
+	for _, id := range rawBlobIDsOf(data) {
+		if _, ok := ids[id]; ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }

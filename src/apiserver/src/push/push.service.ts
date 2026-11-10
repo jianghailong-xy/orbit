@@ -17,7 +17,7 @@ import { conversationIsOver, openItemsNoLongerOwed } from '../projects/project-o
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
-import { ownerRequestAlert, type OwnerRequestKind } from '../owner-requests/owner-request';
+import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
 import { settleAlert } from './settle-alert';
 import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
@@ -89,6 +89,7 @@ export interface AgentNotifyResult {
 const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'engine-signed-out': 'Engine signed out',
   'claude-region-blocked': 'Claude is not available on this runner',
+  'confirmation-raised': 'Coordinator raised this for your decision',
   'confirmation-problems': 'Problems found after you confirmed',
   'owner-request': 'Request for you',
   'watch-matched': 'Watch matched',
@@ -698,6 +699,28 @@ export class PushService {
     return holder?.agentNotifiedAt ?? now;
   }
 
+  /** The projection's successful OPEN → DONE edge, after its compare-and-set commits. */
+  async notifyProjectDone(input: {
+    ownerId: string; projectId: string; title: string;
+    criteriaCount: number;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    const { tokens } = await this.channels(input.ownerId);
+    const body = JSON.stringify({
+      aps: {
+        alert: {
+          title: `${input.title} is done`,
+          body: `Orbit recorded it: all ${input.criteriaCount} criteria met and on main.`,
+        },
+        sound: 'default',
+        'thread-id': input.projectId,
+      },
+      kind: 'project-done',
+      projectID: input.projectId,
+    });
+    await this.deliver(tokens, body, 'alert', '10');
+  }
+
   /**
    * Tell the account owner that one of the four things only they can answer is waiting
    * (`docs/project-integration-line-contract.md` §7.6 V12).
@@ -803,7 +826,7 @@ export class PushService {
    * A session filed an owner request (`OwnerRequestsService.file`). Sent once, after the row commits,
    * and only while it is still PENDING. The banner is the kind ("Decision needed") over the request's
    * own title, cut to a lock-screen line; collapsed on the request, so a replay never stacks a second
-   * one. The tap opens the session that asked. Best-effort: a failure is logged, never thrown.
+   * one. The tap opens the session that asked; the category's actions open the card itself. Best-effort: a failure is logged, never thrown.
    */
   async notifyOwnerRequest(requestId: string): Promise<void> {
     if (!this.enabled) return;
@@ -820,12 +843,15 @@ export class PushService {
         aps: {
           alert,
           sound: 'default',
+          // Per kind: the clients' actions open the card on its input, or put it off ("Later").
+          category: ownerRequestPushCategory(request.kind as OwnerRequestKind),
           'thread-id': `owner-request-${request.askedBySessionId}`,
         },
         kind: 'owner-request',
         sessionID: request.askedBySessionId,
         ...(request.projectId ? { projectID: request.projectId } : {}),
         ownerRequestID: requestId,
+        ownerRequestKind: request.kind,
       });
       this.background(this.feishuOther(feishu, {
         kind: 'owner-request', ...alert, collapseId: `owner-request-${requestId}`,
@@ -863,6 +889,37 @@ export class PushService {
    * problems — and none is the reviewer's. No badge: a settled task is not waiting on anybody.
    * The tap opens the run's session, where the receipt the problems hang under is drawn.
    */
+  /** §13 A6: only the first REVIEW ending a coordinator hold calls this, after commit. */
+  async notifyConfirmationRaised(recordId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const record = await this.prisma.taskOwnerConfirmationReviewRecord.findUnique({
+        where: { id: recordId },
+        select: { kind: true, ownerId: true, taskId: true, body: true,
+          task: { select: { title: true } },
+          review: { select: { request: { select: { sessionId: true } } } } },
+      });
+      if (!record || record.kind !== 'REVIEW') return;
+      const count = ((record.body ?? {}) as { needsYou?: unknown[] }).needsYou?.length ?? 0;
+      const { tokens, feishu } = await this.channels(record.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = { title: record.task.title, body: count
+        ? `Coordinator raised this for your decision · ${count} to decide`
+        : 'Coordinator raised this for your confirmation' };
+      const collapseId = `confirmation-raised-${recordId}`;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `task-${record.taskId}` },
+        kind: 'confirmation-raised', sessionID: record.review.request.sessionId,
+        taskID: record.taskId, recordID: recordId,
+      });
+      this.background(this.feishuOther(feishu, { kind: 'confirmation-raised', ...alert,
+        collapseId, sessionId: record.review.request.sessionId }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`confirmation raised notify failed: ${(err as Error).message}`);
+    }
+  }
+
   async notifyConfirmationProblems(recordId: string): Promise<void> {
     if (!this.enabled) return;
     try {

@@ -61,13 +61,19 @@ export interface OwnerRequestStep {
   link?: string;
 }
 
-/** Where a secret goes. Never its value: that travels by a door of its own. */
+/**
+ * Where a secret goes. Never its value: that travels by a door of its own. `runnerId` is not the caller's to choose
+ * (design §4.1): the server takes it from the asking session and stores it here, so a read names the machine.
+ */
 export interface OwnerRequestSecretSpec {
   name: string;
   runnerId: string;
   envVar?: string;
   filePath?: string;
 }
+
+/** A filing's secretSpec, as the caller sends it: `runnerId` only as an assertion of the session's own runner. */
+export type OwnerRequestSecretSpecFiling = Omit<OwnerRequestSecretSpec, 'runnerId'> & { runnerId?: string };
 
 /** A filing as the caller sent it, after DTO validation. */
 export interface OwnerRequestFiling {
@@ -79,7 +85,7 @@ export interface OwnerRequestFiling {
   options?: OwnerRequestOption[];
   recommendedOption?: number;
   steps?: OwnerRequestStep[];
-  secretSpec?: OwnerRequestSecretSpec;
+  secretSpec?: OwnerRequestSecretSpecFiling;
   verifyHint?: string;
   expiresAt?: string;
   clientRequestId?: string;
@@ -89,7 +95,32 @@ export interface OwnerRequestFiling {
 /** A filing this kind cannot carry; the door answers 400 with its message. */
 export class OwnerRequestNotFileable extends Error {}
 
-const ENV_VAR = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** A secret's environment variable (design §3.2). */
+export const SECRET_ENV_VAR = /^[A-Z][A-Z0-9_]{0,63}$/;
+
+/**
+ * Names a secret may not take (design §4.1): Orbit's own (`ORBIT_*`, which covers every name the runner's
+ * sessionContextEnvKey and userCredentialEnvKey match), and the ones that change how a program is found or loaded.
+ */
+export function reservedSecretEnvVar(name: string): boolean {
+  return /^(ORBIT_|LD_|DYLD_|PYTHON)/.test(name)
+    || ['PATH', 'HOME', 'BASH_ENV', 'ENV', 'NODE_OPTIONS'].includes(name);
+}
+
+/**
+ * The shape a secret's file path must have (design §5.2), as far as the server can tell without the machine: absolute
+ * or under `~/`, no `..` segment, no NUL. The rest — under the runner user's home, outside Orbit's and every
+ * workspace's directories, no symlink, not existing — is the runner's to check, at filing and again at delivery.
+ */
+export function secretFilePathShapeError(path: string): string | undefined {
+  if (path.includes('\0')) return 'secretSpec.filePath may not contain NUL';
+  if (!(path.startsWith('/') || path.startsWith('~/'))) return 'secretSpec.filePath must be absolute or start with ~/';
+  if (path.split('/').includes('..')) return 'secretSpec.filePath may not contain a .. segment';
+  return undefined;
+}
+
+/** The secret's grant record leaves this many days after the owner submits it, at most (design §3.2). */
+export const OWNER_SECRET_MAX_DAYS = 7;
 
 const trimmed = (value: string | undefined): string | undefined => {
   const t = value?.trim();
@@ -140,22 +171,33 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
     if (steps.length === 0) throw new OwnerRequestNotFileable('a MANUAL_STEP request needs at least one step');
   }
 
-  let secretSpec: OwnerRequestSecretSpec | undefined;
+  let secretSpec: OwnerRequestSecretSpecFiling | undefined;
   if (kind === 'SECRET') {
     const spec = filing.secretSpec;
     const name = trimmed(spec?.name);
-    if (!spec || !name || !spec.runnerId) {
-      throw new OwnerRequestNotFileable('a SECRET request needs secretSpec with a name and a target runnerId');
+    if (!spec || !name) {
+      throw new OwnerRequestNotFileable('a SECRET request needs secretSpec with a name');
     }
     const envVar = trimmed(spec.envVar);
     const filePath = trimmed(spec.filePath);
     if (Boolean(envVar) === Boolean(filePath)) {
       throw new OwnerRequestNotFileable('secretSpec names exactly one destination: envVar or filePath');
     }
-    if (envVar && !ENV_VAR.test(envVar)) {
-      throw new OwnerRequestNotFileable('secretSpec.envVar must be a valid environment variable name');
+    if (envVar && !SECRET_ENV_VAR.test(envVar)) {
+      throw new OwnerRequestNotFileable('secretSpec.envVar must match ^[A-Z][A-Z0-9_]{0,63}$');
     }
-    secretSpec = { name, runnerId: spec.runnerId, ...(envVar ? { envVar } : {}), ...(filePath ? { filePath } : {}) };
+    if (envVar && reservedSecretEnvVar(envVar)) {
+      throw new OwnerRequestNotFileable(`secretSpec.envVar ${envVar} is reserved; choose another name`);
+    }
+    const pathError = filePath ? secretFilePathShapeError(filePath) : undefined;
+    if (pathError) throw new OwnerRequestNotFileable(pathError);
+    const runnerId = trimmed(spec.runnerId);
+    secretSpec = {
+      name,
+      ...(runnerId ? { runnerId } : {}),
+      ...(envVar ? { envVar } : {}),
+      ...(filePath ? { filePath } : {}),
+    };
   }
 
   let expiresAtDate: Date | null = null;
@@ -204,6 +246,16 @@ export function ownerRequestAlert(kind: OwnerRequestKind, title: string): { titl
 }
 
 /**
+ * The alert's category, one per kind, which the clients register with two actions: open the card on its input
+ * ("Provide key", "Answer", "Mark done", "Review") and "Later". Neither answers the request from the notification:
+ * a SECRET has no reply path outside its card (secrets design §7.2), and the other kinds are read before they are
+ * answered.
+ */
+export function ownerRequestPushCategory(kind: OwnerRequestKind): string {
+  return `ORBIT_OWNER_REQUEST_${kind}`;
+}
+
+/**
  * The turn key an ending is queued under on the asking session. A request ends once, so one key per request; the
  * Watch delivery worker writes it, and `createTurn` replays a retry under it instead of queuing a second turn.
  */
@@ -222,6 +274,8 @@ export interface EndedOwnerRequest {
   answer: unknown;
   resolutionNote: string | null;
   resolvedAt: Date | null;
+  /** SECRET: the grant the owner's value became, if any. Only what never changes once it was delivered. */
+  secretGrant?: { exposure: string; expiresAt: Date } | null;
 }
 
 /** What each ending means, in the turn's first line. */
@@ -250,6 +304,23 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
   };
   if (request.kind === 'SECRET') {
     const spec = (request.secretSpec ?? {}) as Partial<OwnerRequestSecretSpec>;
+    const grant = request.state === 'DONE' ? request.secretGrant : null;
+    if (grant) {
+      // Delivered (design §7.2): where it is and until when, and how to use it. Never the value or anything of it.
+      payload.secret = {
+        state: 'ACTIVE',
+        name: spec.name,
+        exposure: grant.exposure,
+        ...(spec.envVar ? { envVar: spec.envVar } : {}),
+        ...(spec.filePath ? { path: spec.filePath } : {}),
+        runner: spec.runnerId,
+        expiresAt: grant.expiresAt.toISOString(),
+      };
+      payload.usage = spec.envVar
+        ? `Run the command that needs it as: orbit secret exec ${spec.envVar} -- <command>. It is not in your own environment.`
+        : `It is at ${spec.filePath} (mode 0600) until it is removed. Do not print or copy its contents.`;
+      return payload;
+    }
     payload.secret = {
       name: spec.name,
       ...(spec.envVar ? { envVar: spec.envVar } : {}),

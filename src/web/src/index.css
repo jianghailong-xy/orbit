@@ -7618,6 +7618,14 @@ button.toast--pill:focus-visible {
   font-size: 12px;
   color: var(--text-4);
 }
+/* The Claude weekly-reset reminder: a line of guidance, not a gauge, so it sits flush under them. */
+.cu-reset-hint {
+  margin-top: 0;
+  color: var(--text-3);
+}
+.cu-reset-hint a {
+  color: var(--brand);
+}
 /* Whose quota the windows below are, ruled off from them. Account names are often emails: the name
    gives way with an ellipsis, the label never does. */
 .cu-account {
@@ -10489,41 +10497,85 @@ button.chat-jump-start:hover {
 .chat-tool-task .chat-tool-row:hover {
   background: #f4eefe;
 }
-.chat-tool-group .chat-tool-row {
-  min-height: 32px;
+.chat-steps {
+  margin: 4px 0 10px;
+  padding: 0 12px;
 }
-.chat-tool-group:not(.is-open) .chat-tool-row {
-  background: transparent;
-}
-.chat-tool-group:not(.is-open) .chat-tool-row:hover {
-  background: var(--bg-sunken);
-}
-.chat-tool-group-lead {
+/* One muted line between two replies: no card, no icon. The caret shows only on hover (or while
+   open), so a turn of eight steps reads as eight quiet sentences. */
+.chat-steps-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 13px;
   color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
 }
-.chat-tool-group-lead.is-failed {
+.chat-steps-line:hover {
+  color: var(--text-2);
+}
+.chat-steps-caret {
+  font-size: 10px;
+  opacity: 0;
+}
+.chat-steps-line:hover .chat-steps-caret,
+.chat-steps.is-open .chat-steps-caret {
+  opacity: 1;
+}
+.chat-steps-failed {
   color: var(--error);
 }
-.chat-tool-group-lead .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+.chat-steps-detail {
+  margin: 6px 0 4px 2px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
 }
-/* The breakdown is what a settled group's folded row is really for, so give it room for the
-   usual two-or-three kinds — but never much past half the row, or a narrow window would let it
-   squeeze the counts (which have no fixed width of their own) out of the line entirely. */
-.chat-tool-group-breakdown {
-  max-width: min(420px, 55%);
+.chat-steps-live {
+  margin-top: 6px;
+  font-size: 13.5px;
+}
+.chat-steps-live-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.chat-steps-live-head > span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chat-tool-group-detail {
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-raised);
-  padding: 4px 8px 8px;
+.chat-steps-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: chat-steps-pulse 1.2s ease-in-out infinite;
 }
-.chat-tool-group-detail .chat-tool-card {
-  margin: 4px 0;
+@keyframes chat-steps-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-steps-dot {
+    animation: none;
+  }
+}
+.chat-steps-live-cmd {
+  padding-left: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-steps-elbow {
+  margin-right: 4px;
 }
 .chat-tool-detail {
   border-top: 1px solid var(--border-subtle);
@@ -12287,6 +12339,19 @@ button.chat-jump-start:hover {
   line-height: 1.5;
 }
 .project-done-not-yet-actions { display: flex; gap: 8px; margin-top: 9px; }
+/* Option A: the derived receipt names the confirmation and offers the owner's correction. */
+.project-why-not-done.is-derived,
+.project-why-not-done.is-derived .approval-head {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+.project-why-not-done.is-derived .criteria-provenance {
+  color: var(--success);
+  border-color: var(--success-border);
+}
+.project-done-derived-line { margin: 7px 0; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.project-done-derived-reopen { padding: 4px 0; color: var(--brand); background: transparent; }
+.project-done-derived-reopen:hover:not(:disabled) { text-decoration: underline; }
 .project-done-receipt-line { margin: 9px 0 0; font-size: 14px; font-weight: 600; color: var(--text-1); }
 .project-done-accepted { margin-top: 8px; font-size: 12.5px; }
 .project-done-accepted summary { color: var(--brand); cursor: pointer; }
@@ -20122,43 +20187,30 @@ div.landing-jobs-open {
   color: var(--error);
   font-size: 12px;
 }
-/* The Landings window's read-only footer (LS6), shaped like the conversation's composer card
-   (`.composer-box`: its 24px corners, raised surface, rim and shadow) with nothing to type into: the
-   sentence where the text would be, and the way to the coordinator in Send's place (board
-   docs/mocks/landings-chat-bubbles 01 b). */
+/* The Landings window's read-only footer (LS6): one plain line on the window's bottom edge — a lock
+   and "Orbit runs these landings", the coordinator's door at the end — so no landing runs on beneath
+   it (docs/mocks/landings-ui-polish ③). */
 .landing-page-foot {
-  flex: none;
-  margin-top: auto;
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  background: var(--bg-raised);
-  box-shadow:
-    0 2px 10px rgba(31, 35, 41, 0.05),
-    0 10px 30px rgba(31, 35, 41, 0.04);
-  color: var(--text-2);
-  font-size: 13px;
-}
-.landing-page-foot b {
-  color: var(--text-1);
-  font-weight: 600;
-}
-/* Where the composer's text stands: 1px of rim + 23 = 24px in, in its 15px type and line. */
-.landing-page-foot-line {
-  padding: 12px 23px 2px;
-  color: var(--text-2);
-  font-size: 15px;
-  line-height: 1.6;
-}
-/* The composer's toolbar row: who decides on the left, from the text's edge, and the door to them
-   on the right where Send stands. As tall with the door as without it. */
-.landing-page-foot-bar {
   display: flex;
+  flex: none;
   align-items: center;
-  gap: 8px;
-  min-height: 43px;
-  padding: 4px 13.43px 7px 23px;
-  color: var(--text-2);
+  gap: 10px;
+  min-height: 48px;
+  margin-top: auto;
+  padding: 6px 4px 6px 6px;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
   font-size: 13px;
+}
+.landing-page-foot-line {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .landing-page-foot-open.orbit-button {
   flex: none;
@@ -20207,10 +20259,8 @@ div.landing-jobs-open {
   background: var(--bg-hover);
   color: var(--text-1);
 }
-/* The window ends in a fade into its footer, as the conversation ends into its composer card
-   (`.workspace-scroll-wrap > .workspace-sessions`): a landing cut off at the bottom dissolves into
-   the card instead of being sliced through above it. The padding is the fade's room, and the
-   scrollbar's gutter keeps out of it. */
+/* The window ends in a fade above its footer: a landing cut off at the bottom dissolves instead of
+   being sliced through. The padding is the fade's room, and the scrollbar's gutter keeps out of it. */
 .landings-window-body {
   padding-top: 4px;
   padding-bottom: 20px;
@@ -20250,21 +20300,14 @@ div.landing-jobs-open {
   background: var(--brand-tint);
   color: var(--brand);
 }
-/* The landings Orbit reported close together (landingsWindowGroups): its avatar once, beside the
-   first message, and the messages in a column. */
+/* The landings Orbit reported close together (landingsWindowGroups): the messages in a column. No
+   avatar — every message here is Orbit's (docs/mocks/landings-ui-polish ①). */
 .landings-window-group {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
 }
 .landings-window-group + .landings-window-group {
   margin-top: 12px;
-}
-.landings-window-avatar {
-  display: block;
-  flex: none;
-  width: 32px;
-  height: 32px;
 }
 .landings-window-column {
   display: flex;
@@ -20323,6 +20366,44 @@ div.landing-jobs-open {
 }
 .landings-window-row:hover {
   background: color-mix(in srgb, var(--fill-muted), var(--text-1) 5%);
+}
+/* A merge into main is an event, not a message: one line centred across the column, as a chat draws
+   what happened in it (docs/mocks/landings-ui-polish ②). Its ⋯ keeps the bubble's place at the end. */
+.landings-window-row-line.is-event {
+  justify-content: center;
+  padding-left: 32px;
+}
+.landings-window-event {
+  min-width: 0;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.landings-window-event:hover {
+  background: var(--bg-hover);
+}
+.landings-window-event .landings-window-row-mark {
+  margin-right: 5px;
+}
+.landings-window-event-title {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.landings-window-event .landings-window-row-time {
+  margin-left: 0;
+  padding-left: 0;
+  color: inherit;
+}
+.landings-window-entry.is-outlined .landings-window-event {
+  box-shadow: 0 0 0 2px var(--brand);
 }
 .landings-window-row-text {
   font-size: 14px;
@@ -26706,7 +26787,7 @@ button.agent-progress-agent:hover {
   color: var(--text-3);
 }
 .ac-error {
-  color: var(--danger-solid, var(--danger));
+  color: var(--danger-solid, var(--error));
 }
 .ac-diff {
   max-height: 420px;
@@ -27003,3 +27084,14 @@ button.agent-progress-agent:hover {
   gap: 8px 16px;
   margin-top: 4px;
 }
+
+.project-done-findings {
+  padding: 10px 12px;
+  border: 1px solid var(--error);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  color: var(--error);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.project-done-findings ul { list-style: none; padding: 0; margin: 0; }

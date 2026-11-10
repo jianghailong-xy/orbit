@@ -37,6 +37,7 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/attachment_paths" />
         </provider>
         <receiver android:name=".update.UpdateInstallReceiver" android:exported="false" />
+        <receiver android:name=".push.OwnerRequestLaterReceiver" android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -61,6 +62,7 @@
                 <data android:host="list" />
                 <data android:host="runner" />
                 <data android:host="watch" />
+                <data android:host="owner-request" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

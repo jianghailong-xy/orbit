@@ -460,6 +460,16 @@ export class ProjectsController {
     return { ...started, coordinator };
   }
 
+  /** Read the owner's current project done check. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Get(':id/done-check')
+  doneCheck(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.acceptance.readProjectDoneCheck(user.userId, id);
+  }
+
   /**
    * Record as done: the account owner records the project DONE in person
    * (`ProjectAcceptanceService.recordProjectDone`). A request carrying an acting session is refused

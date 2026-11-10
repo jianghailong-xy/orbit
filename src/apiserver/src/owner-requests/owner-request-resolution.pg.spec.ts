@@ -40,6 +40,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import { ownerRequestTurnClientId, type OwnerRequestFiling } from './owner-request';
+import { OwnerSecretsService } from './owner-secrets.service';
 import { OwnerRequestsService } from './owner-requests.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -51,6 +52,7 @@ const ENDINGS: readonly Ending[] = ['DONE', 'DECLINED', 'EXPIRED', 'WITHDRAWN'];
 
 /** What only the owner holds. It must never reach a turn. */
 const SECRET_VALUE = 'sk_test_51NeverInATurn0123456789abcdef';
+process.env.PROVIDER_SECRET_KEY ??= 'owner-request-resolution-pg-spec-key';
 
 interface TurnRow {
   clientTurnId: string;
@@ -92,7 +94,8 @@ test('owner requests: an ending starts exactly one turn in the asking session', 
   };
 
   const db = pool();
-  const service = new OwnerRequestsService(db as unknown as PrismaService, push);
+  const secrets = new OwnerSecretsService(db as unknown as PrismaService);
+  const service = new OwnerRequestsService(db as unknown as PrismaService, secrets, push);
   const delivery = worker();
 
   const ownerId = randomUUID();
@@ -101,7 +104,7 @@ test('owner requests: an ending starts exactly one turn in the asking session', 
   const runnerId = randomUUID();
   await sql.query(
     `INSERT INTO "runner"("id","name","owner_id","token_hash","status","last_heartbeat_at","capabilities")
-     VALUES ($1,'owner requests',$2,'h','ONLINE',clock_timestamp(),'{}'::text[])`,
+     VALUES ($1,'owner requests',$2,'h','ONLINE',clock_timestamp(),'{owner-secret/v1}'::text[])`,
     [runnerId, ownerId],
   );
 
@@ -223,10 +226,21 @@ test('owner requests: an ending starts exactly one turn in the asking session', 
         const request = await file(asker, {
           kind: 'SECRET',
           title: 'Stripe test key',
-          secretSpec: { name: 'Stripe test key', runnerId, ...destination },
+          secretSpec: { name: 'Stripe test key', ...destination },
         });
-        // The owner pastes the value into the answer box: it must still not reach the turn.
-        await end(asker, request.id, ending, { text: `here it is: ${SECRET_VALUE}` });
+        // The owner enters the value on the card; it must still not reach the turn. DONE is the runner's ack.
+        await secrets.submit(ownerId, request.id, { value: SECRET_VALUE });
+        if (ending === 'DONE') {
+          const [{ id: grantId }] = await db.ownerRequestSecret.findMany({ where: { requestId: request.id }, select: { id: true } });
+          const fetched = await secrets.fetch({ id: runnerId, ownerId }, grantId);
+          assert.equal(fetched.value, SECRET_VALUE, 'the named runner fetches exactly the value');
+          await secrets.ack({ id: runnerId, ownerId }, grantId, 'DELIVERED', undefined, undefined);
+        } else {
+          await end(asker, request.id, ending);
+          const grant = await db.ownerRequestSecret.findFirst({ where: { requestId: request.id } });
+          assert.equal(grant?.valueEnc, null, `${ending}: the ciphertext goes with the request`);
+          assert.equal(grant?.state, 'REMOVED');
+        }
         await delivery.drain();
         const turn = await theOneTurn(asker, request.id);
         assert.equal((turn.content ?? '').includes(SECRET_VALUE), false, `${ending}: the secret value reached the turn`);
@@ -234,7 +248,16 @@ test('owner requests: an ending starts exactly one turn in the asking session', 
         const payload = payloadOf(turn.content);
         assert.equal(payload.kind, 'SECRET');
         assert.equal(payload.outcome, ending);
-        assert.deepEqual(payload.secret, { name: 'Stripe test key', ...destination });
+        if (ending === 'DONE') {
+          const { expiresAt, ...rest } = payload.secret as Record<string, unknown>;
+          assert.ok(typeof expiresAt === 'string');
+          assert.deepEqual(rest, {
+            state: 'ACTIVE', name: 'Stripe test key', runner: runnerId,
+            ...('envVar' in destination ? { exposure: 'ENV', envVar: destination.envVar } : { exposure: 'FILE', path: destination.filePath }),
+          });
+        } else {
+          assert.deepEqual(payload.secret, { name: 'Stripe test key', ...destination });
+        }
         assert.equal('answerText' in payload, false);
         assert.equal(payload.reason, REASONS[ending]);
       }
