@@ -967,7 +967,7 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 			wt.Session, len(files), maxChangedFiles))
 		return files[:maxChangedFiles], nil, nil
 	}
-	patchOut, _ := git(wt.Path, "diff", baseSha+"..HEAD")
+	patchOut, _ := git(wt.Path, "diff", "--full-index", baseSha+"..HEAD")
 	// The committed pictures are what the checkout holds now: their placeholders come from it.
 	return files, withoutSecretPatches(withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), wt.Session), nil
 }
@@ -986,7 +986,7 @@ func reportAbsentCheckout(wt *Worktree) ([]ChangedFile, []FilePatch, error) {
 	if len(files) > maxChangedFiles {
 		return files[:maxChangedFiles], nil, nil
 	}
-	patchOut, _ := git(wt.RepoDir, "diff", baseSha+".."+tip)
+	patchOut, _ := git(wt.RepoDir, "diff", "--full-index", baseSha+".."+tip)
 	return files, withoutSecretPatches(buildFilePatches(files, splitPatch(patchOut)), wt.Session), nil
 }
 
@@ -1189,7 +1189,7 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	}
 	// Same staged index → the full patch matches the numstat exactly. Best-effort: a patch
 	// failure just leaves the file list without diffs, the status bar still works.
-	patchOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", baseSha)
+	patchOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", "--full-index", baseSha)
 	// A patch that leaves this machine holds no owner-request secret (secret_wire.go).
 	return files, withoutSecretPatches(withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), wt.Session)
 }

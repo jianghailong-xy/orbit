@@ -134,6 +134,7 @@ func recordSecretTaint(dir, tip string, r *integrationOutputRedactor, exclude ..
 	}
 	kept := entries[:0]
 	changed := false
+	merged := false
 	for _, entry := range entries {
 		// An entry of objects alone (recordTaintObjects) stays: its blob may be gone from the object store and still
 		// be made again by the next `git add` of a file that holds it.
@@ -142,15 +143,17 @@ func recordSecretTaint(dir, tip string, r *integrationOutputRedactor, exclude ..
 			continue
 		}
 		if entry.Repo == repo && entry.Commit == commit {
-			if len(paths) == 0 {
+			// Only ever added to. A commit never changes, so a scan that finds nothing in it now means only that the
+			// value recorded earlier is no longer held — never that the commit stopped holding it. What this scan
+			// found (another grant's value, say) joins what was recorded before.
+			merged = true
+			if added := mergeTaintHits(&entry, paths, hits); added {
 				changed = true
-				continue
 			}
-			paths = nil // already recorded
 		}
 		kept = append(kept, entry)
 	}
-	if len(paths) > 0 {
+	if !merged && len(paths) > 0 {
 		objects := make([]secretTaintObject, 0, len(hits))
 		for _, hit := range hits {
 			objects = append(objects, secretTaintObject{ID: hit.id, Path: hit.path})
@@ -417,3 +420,31 @@ func taintObjects(repo string) map[string]string {
 
 // secretBeforeForget runs just before a grant's value is forgotten. A variable for the store's tests.
 var secretBeforeForget = taintAllCheckouts
+
+// mergeTaintHits adds to entry the paths and objects of hits it does not already hold, and reports whether it added any.
+func mergeTaintHits(entry *secretTaintEntry, paths []string, hits []objectHit) bool {
+	added := false
+	havePath := map[string]bool{}
+	for _, path := range entry.Paths {
+		havePath[path] = true
+	}
+	for _, path := range paths {
+		if !havePath[path] {
+			entry.Paths = append(entry.Paths, path)
+			havePath[path] = true
+			added = true
+		}
+	}
+	haveObject := map[string]bool{}
+	for _, object := range entry.Objects {
+		haveObject[object.ID] = true
+	}
+	for _, hit := range hits {
+		if !haveObject[hit.id] {
+			entry.Objects = append(entry.Objects, secretTaintObject{ID: hit.id, Path: hit.path})
+			haveObject[hit.id] = true
+			added = true
+		}
+	}
+	return added
+}

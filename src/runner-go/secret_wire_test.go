@@ -549,3 +549,34 @@ func TestRemovalRecordsUncommittedFilesHoldingTheValue(t *testing.T) {
 		t.Fatal("the record holds the value")
 	}
 }
+
+// Review 5, OPEN 1: a commit recorded for one value stays recorded when it is scanned again while only another value
+// is held. A commit never changes; finding nothing in it now means only that the first value is forgotten.
+func TestTaintOfACommitSurvivesARescanUnderAnotherValue(t *testing.T) {
+	wt := sessionWorktree(t, "sSecretRescan")
+	holdTestSecret(t, testSecretValue)
+	commitFile(t, wt.Path, "leak.env", "KEY="+testSecretValue+"\n", "add key")
+	liveDiff(wt)
+
+	// Grant A has ended; only grant B is held. A turn end scans the same commit with B's value alone.
+	other := "sk-other-value-0123456789abcdef"
+	storeB := newSecretStore(newFakeSecretAPI(), filepath.Join(t.TempDir(), "ledger.json"))
+	storeB.held["b"] = &heldSecret{id: "b", exposure: secretExposureEnv, name: "B_KEY", value: secretValue(other), fetched: true, acked: true, revoked: make(chan struct{})}
+	storeB.rebuildScrubLocked()
+	runnerSecretStore.Store(storeB)
+	liveDiff(wt)
+	recordSecretTaint(wt.Path, "HEAD", runnerSecrets().scrubber(), wt.baseSha())
+
+	// And then no grant at all.
+	runnerSecretStore.Store(nil)
+	if paths := taintedPaths(wt.Path, "HEAD", wt.baseSha()); strings.Join(paths, ",") != "leak.env" {
+		t.Fatalf("the rescan under another value dropped the record: tainted = %v", paths)
+	}
+	if refusal := secretPushRefusal(wt.Path, "HEAD", wt.baseSha()); refusal == "" {
+		t.Fatal("the branch holding the first value would be pushed")
+	}
+	raw, _ := os.ReadFile(secretTaintPath())
+	if strings.Contains(string(raw), testSecretValue) || strings.Contains(string(raw), other) {
+		t.Fatalf("the taint record holds a value: %s", raw)
+	}
+}
