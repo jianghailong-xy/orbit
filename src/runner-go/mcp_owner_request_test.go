@@ -74,7 +74,7 @@ func TestRequestOwnerActionMapsEveryKindOntoTheFilingRoute(t *testing.T) {
 		map[string]interface{}{"text": "Sign in", "link": "https://example.test/login"},
 		map[string]interface{}{"text": "Run the installer", "command": "make install"},
 	}
-	secretSpec := map[string]interface{}{"name": "Deploy key", "runnerId": "runner-1", "envVar": "DEPLOY_KEY"}
+	secretSpec := map[string]interface{}{"name": "Deploy key", "envVar": "DEPLOY_KEY"}
 
 	for _, tc := range []struct {
 		kind  string

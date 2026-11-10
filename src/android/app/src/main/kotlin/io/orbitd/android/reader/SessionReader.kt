@@ -64,6 +64,10 @@ import io.orbitd.android.cards.SessionRunStartCard
 import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.cards.LocalWatchTargetNames
 import io.orbitd.android.cards.watchTargetName
+import io.orbitd.android.cards.OwnerRequestInConversation
+import io.orbitd.android.cards.OwnerRequestStore
+import io.orbitd.android.cards.runnerNames
+import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.watch.rememberSessionTitles
 import io.orbitd.android.wiki.PageBar
@@ -214,6 +218,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val snapshotDetail = state.session?.snapshot?.detail
     // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
     val cards = rememberSessionCards(app, handle, route.id!!)
+    // What this conversation asked the owner to do (web `useSessionOwnerRequestInserts`): each request in the transcript where it was
+    // filed, read again behind each of the session's snapshot reads. Pending ones come from their own read as well.
+    val ownerStore = remember(handle) { OwnerRequestStore.of(app.session, handle, app.processScope) }
+    val ownerState by ownerStore.state.collectAsState()
+    LaunchedEffect(ownerStore, route.id, state.session?.snapshotReads) { ownerStore.load(OwnerRequestStore.OPEN, OwnerRequestStore.ALL) }
+    val ownerRequests = remember(ownerState.lists, route.id) {
+        OwnerRequests.forSession(route.id!!, ownerState.list(OwnerRequestStore.ALL), ownerState.open)
+    }
+    val ownerRunner = remember(data.runners) { runnerNames(data.runners) }
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
     // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
     // answered here stops counting with the press, not with the read after it (A08-13).
@@ -438,6 +451,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
                 val displayedRows = rows
                 val displayedWindow = state.window
+                // Inside the row it follows, so no list index moves: the reader's jumps count rows.
+                val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 val displayedLoading = state.loading
                 val targetSeq = state.targetSeq
@@ -453,6 +468,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
+                        else ownerPlaced[-1]?.let { asked -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            asked.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
+                        } }
                     }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
                         item(key = "created-workspace") {
@@ -484,8 +502,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             )
                         }
                     }
-                    items(displayedRows, key = { it.key }, contentType = { it.event.type }) { row ->
-                        TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))
+                    itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> it.event.type }) { index, row ->
+                        val asked = ownerPlaced[index]
+                        if (asked == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))
+                        else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))
+                            asked.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
+                        }
                     }
                     if (displayedWindow.seeded && displayedRows.isEmpty() && (live == null || accepted.isEmpty())) item(key = "empty") { Text("No messages yet") }
                     if (live != null) {

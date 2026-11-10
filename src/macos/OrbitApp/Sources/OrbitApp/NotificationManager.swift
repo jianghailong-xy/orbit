@@ -43,7 +43,21 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
                                               actions: [allow, deny, reply], intentIdentifiers: [], options: [])
         let session = UNNotificationCategory(identifier: Notifications.sessionCategory,
                                              actions: [reply], intentIdentifiers: [], options: [])
-        center.setNotificationCategories([approval, session])
+        // An owner request's alert, one category per kind: its first action opens the card on its input
+        // (foreground, so the app comes up on it), Later puts it off without opening anything. Neither
+        // answers the request, and a secret has no reply path outside its card (secrets design §7.2).
+        let later = UNNotificationAction(identifier: Notifications.actionOwnerRequestLater,
+                                         title: Notifications.ownerRequestLaterTitle, options: [])
+        let ownerRequests = OwnerRequestKind.allCases.map { kind in
+            UNNotificationCategory(
+                identifier: Notifications.ownerRequestCategory(kind),
+                actions: [UNNotificationAction(identifier: Notifications.actionOwnerRequestOpen,
+                                               title: Notifications.ownerRequestActionTitle(kind),
+                                               options: [.foreground, .authenticationRequired]),
+                          later],
+                intentIdentifiers: [], options: [])
+        }
+        center.setNotificationCategories(Set([approval, session] + ownerRequests))
         center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
@@ -58,6 +72,20 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         c.sound = .default
         // Stable identifier → re-posting the same kind for a session replaces, never stacks.
         center.add(UNNotificationRequest(identifier: content.identifier, content: c, trigger: nil))
+    }
+
+    /// The same as `post`, shown `seconds` from now: a reminder the owner asked for.
+    func schedule(_ content: NotificationContent, after seconds: TimeInterval) {
+        guard let center else { return }
+        let c = UNMutableNotificationContent()
+        c.title = content.title
+        c.body = content.body
+        c.categoryIdentifier = content.categoryIdentifier
+        c.threadIdentifier = content.threadIdentifier
+        c.userInfo = content.userInfo
+        c.sound = .default
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, seconds), repeats: false)
+        center.add(UNNotificationRequest(identifier: content.identifier, content: c, trigger: trigger))
     }
 
     func clear(identifier: String) {
@@ -114,6 +142,15 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             return (k, v)
         })
         let text = (response as? UNTextInputNotificationResponse)?.userText
+        // Later: the same alert comes back in an hour, on this device, where its actions still work.
+        if response.actionIdentifier == Notifications.actionOwnerRequestLater,
+           let request = strings[Notifications.keyOwnerRequest], let session = strings[Notifications.keySession],
+           let kind = strings["ownerRequestKind"].flatMap(OwnerRequestKind.init(rawValue:)) {
+            let reminder = Notifications.ownerRequestReminder(
+                requestID: request, kind: kind, title: response.notification.request.content.body,
+                sessionID: session)
+            await MainActor.run { self.schedule(reminder, after: OwnerRequests.laterSeconds) }
+        }
         guard let intent = Notifications.intent(actionId: response.actionIdentifier,
                                                 userInfo: strings, responseText: text) else { return }
         await MainActor.run { self.onIntent?(intent) }

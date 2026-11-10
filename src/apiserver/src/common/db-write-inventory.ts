@@ -114,6 +114,28 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 after retry exhaustion; the owner or the session ends the request again, and a request already ended is refused as such.',
   },
   {
+    at: 'owner-requests/owner-secrets.service.ts#submit',
+    shape: 'TX_RETRIED',
+    locks: "The owner_request row by id and owner, FOR UPDATE; then the asking session read; then the request's owner_request_secret row (unique on request_id), deleted when it still waits for delivery, and one INSERT of the new grant; then, with saveAs, the owner's account_secret row by (owner, label), updated or inserted. No trigger.",
+    identity: "The request's row lock and its PENDING state: two submits of one request take turns, and the second replaces the first's undelivered grant. A grant already delivered refuses the submit (SECRET_ALREADY_DELIVERED).",
+    isolation: '',
+    attempts: 4,
+    replay: 'Re-run from the locked read; the grant id and ciphertext are made again in the attempt, and a rollback discards both.',
+    effects: "After commit only: the runner is marked changed and hinted (RealtimeService.markRunnerChanged). The read that answers the caller follows the commit.",
+    answer: 'Typed 503 after retry exhaustion; the owner submits again.',
+  },
+  {
+    at: 'owner-requests/owner-secrets.service.ts#ack',
+    shape: 'TX_RETRIED',
+    locks: "The owner_request_secret row by (id, runner, owner); then its owner_request row FOR UPDATE; then the grant again FOR UPDATE under the live-scope predicate; then the grant UPDATE, the request's compare-and-set on PENDING, and when that matched one watch_delivery INSERT (enqueueResolutions). No trigger.",
+    identity: "The grant's PENDING_DELIVERY state and the request's PENDING state: a repeated ack finds the grant ACTIVE and writes nothing, and the request ends DONE once. A FAILED ack of an ACTIVE grant is one compare-and-set on ACTIVE to REMOVING, and writes nothing else.",
+    isolation: '',
+    attempts: 4,
+    replay: 'Re-run from the first read against the committed rows; a rollback discards the grant, the ending and the delivery together.',
+    effects: 'After commit only: a kick of the Watch delivery worker.',
+    answer: 'Typed 503 after retry exhaustion; the runner acknowledges again on its next reconcile.',
+  },
+  {
     at: 'owner-requests/owner-requests.service.ts#expireDue',
     shape: 'TX_RETRIED',
     locks: "Every PENDING owner_request row whose expires_at has passed, through one UPDATE; then one watch_delivery INSERT of a row per expired request (enqueueResolutions), whose foreign keys take those owner_request rows FOR KEY SHARE, already held. No trigger, and no other row.",
@@ -2367,7 +2389,11 @@ export interface TransactionParticipant {
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // An owner request's ending delivered to the session that asked (migration 0504): its watch_delivery row.
-  { at: 'owner-requests/owner-requests.service.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue' },
+  { at: 'owner-requests/owner-request-endings.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue, and owner-requests/owner-secrets.service.ts#ack' },
+  // A SECRET request's key that was never delivered, ended with the request (migration 0506): its grant row.
+  // "Save to my account secrets" on a submit: the owner's account_secret row by (owner, label), updated or inserted.
+  { at: 'owner-requests/owner-secrets.service.ts#saveInTx', under: 'owner-requests/owner-secrets.service.ts#submit' },
+  { at: 'owner-requests/owner-request-endings.ts#endUndeliveredGrants', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue' },
   // The owner's direct messages to their Feishu bot (docs/feishu-bot-design.md §7.3, migration 0499): a message chain
   // made a session's, and the FEISHU activity row. Run inside the receipt's transaction, and inside createTurn's
   // through its onTurnWritten hook, which a replay of the turn's clientTurnId never reaches.
@@ -2908,6 +2934,18 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   // each one statement outside any transaction, because neither is part of somebody else's fact: the
   // question is the coordinator's own call, and the answer is the owner's.
   { at: "projects/project-open-item.service.ts#askOwner", class: "INSERT", statements: 1, note: "The question itself: one createManyAndReturn with skipDuplicates against the partial unique index on (project, dedupe key) for OPEN items, so a tool call retried after a lost response files one question rather than asking the owner the same thing twice. The key is the caller's own `clientQuestionId`, or a fresh one when it sent none — one call, one question. Losing the race returns the row that won; a key held by a question that has since been ANSWERED matches neither and is refused, because filing nothing and reporting success is how a coordinator ends up waiting on an answer nobody was asked for." },
+  // Owner request secrets (migration 0506, docs/design/owner-request-secrets.md): single-statement grant writes. Each is
+  // a compare-and-set on the grant's state, so two replicas or a repeated call write once; owner_request_secret has no
+  // trigger and these UPDATEs move no key.
+  { at: 'owner-requests/owner-secrets.service.ts#cancel', class: 'ONE_ROW_CAS', statements: 2, note: "The owner's Cancel on a key not yet delivered: two UPDATEs of the request's one grant by (request, owner), each predicated on PENDING_DELIVERY and on whether the runner fetched it (fetched_at): to REMOVING when it did, which then waits for the runner, else to REMOVED, the ciphertext cleared either way. At most one of them matches the row, so they need no transaction. Twice is once. Then the runner is marked changed." },
+  { at: 'owner-requests/owner-secrets.service.ts#endUnreadable', class: 'ONE_ROW_CAS', statements: 1, note: 'A grant whose ciphertext the write door could not decrypt (the key rotated, the row tampered with): one UPDATE by id predicated on PENDING_DELIVERY or ACTIVE, ending it KEY_UNREADABLE (§3.3) with its ciphertext cleared, REMOVING when the runner may hold a copy. Then the runner is marked changed.' },
+  { at: 'owner-requests/owner-secrets.service.ts#revoke', class: 'ONE_ROW_CAS', statements: 1, note: "The owner's Revoke: one UPDATE of the request's grant by (request, owner), predicated on ACTIVE, to REMOVING with its ciphertext cleared (a key still awaiting delivery goes through #cancel). Twice is once." },
+  { at: 'owner-requests/owner-secrets.service.ts#release', class: 'ONE_ROW_CAS', statements: 1, note: 'The asking session releasing a delivered key it no longer needs: one UPDATE by (request, owner, asking session) predicated on ACTIVE, to REMOVING WITHDRAWN with its ciphertext cleared.' },
+  { at: 'owner-requests/owner-secrets.service.ts#fetch', class: 'ONE_ROW_CAS', statements: 3, note: "The read is itself one UPDATE ... RETURNING of the grant by (id, runner, owner), predicated on PENDING_DELIVERY or ACTIVE and the LIVE scope, stamping fetched_at once (COALESCE) under the row's lock, so an ending of the grant either precedes the fetch or sees it. Only when the ciphertext cannot be decrypted (the server key changed): the stamp this fetch made is taken back when no earlier fetch had handed the value out (the RETURNING subquery reads the row as it stood before), and endUnreadable ends the grant KEY_UNREADABLE." },
+  { at: 'owner-requests/owner-secrets.service.ts#removed', class: 'ONE_ROW_CAS', statements: 1, note: "The runner's word that its copy is gone: one UPDATE by id predicated on REMOVING, to REMOVED with its note. A repeat matches nothing." },
+  { at: 'owner-requests/owner-secrets.service.ts#sweep', class: 'MANY_ROWS', statements: 2, note: "The 30 s sweep (§6.2): one UPDATE of every PENDING_DELIVERY or ACTIVE grant whose scope the LIVE predicate no longer holds, to REMOVING or REMOVED with its end reason and its ciphertext cleared, predicated on the state it reads, so replicas sweeping at once end each grant once; then one UPDATE of REMOVING grants whose runner was deleted, to REMOVED. The two need not be atomic: the second only finishes what a deleted runner can no longer confirm. Each grant it ends marks its runner changed after the statements." },
+  { at: 'owner-requests/owner-secrets.service.ts#replaceSaved', class: 'ONE_ROW_BY_KEY', statements: 1, note: "Replacing a saved secret's value: one UPDATE by (id, owner) of its ciphertext." },
+  { at: 'owner-requests/owner-secrets.service.ts#deleteSaved', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'Deleting a saved secret: one DELETE by (id, owner). Grants made from it are copies and stay.' },
   { at: "owner-requests/owner-requests.service.ts#file", class: "INSERT", statements: 1, note: "A session filing an owner request (migration 0503): one createManyAndReturn with skipDuplicates against the unique (asked_by_session_id, client_request_id), so a call retried after a lost response files one request; losing that race reads back the row that won, in whatever state it is now. Its one foreign key takes the user row FOR KEY SHARE and nothing else; the asking session and the project are history columns, not keys. The push is sent after the statement, never inside it." },
   { at: "projects/project-open-item.service.ts#answerOpenItem", class: "ONE_ROW_CAS", statements: 1, note: "The owner's answer, and the end of the question in the same statement: an UPDATE whose predicate is the item and `state = 'OPEN'`, writing RESOLVED/ANSWERED with the answer beside it. A question gets one answer — a second press, or one racing another window, matches no row and is told so rather than replacing an answer the coordinator may already have acted on. The delivery that follows is `deliverAnswer`, after this has committed, because who is coordinating the project is read after the answer is a fact." },
   { at: "projects/project-open-item.service.ts#returnToCoordinator", class: "ONE_ROW_CAS", statements: 1, note: "The owner handing an escalated item back (§4.7), and the restart of its clock in the same statement: an UPDATE whose predicate is the item, `state = 'OPEN'` and the assignment the press was read from, writing COORDINATOR/DEFAULT with `assigned_at`, `waiting_since` and `escalate_at` moved together. A second press, or one racing the coordinator's own recovery on the same row, matches nothing and is told to read the project again rather than reporting a hand-back it did not make. The delivery that follows is `deliver`, after this has committed — and across the two reads the project's coordinator is resolved twice on purpose: the refusal in front of the write asks whether there is a conversation to hand the item TO, and the delivery asks which one it is NOW, which a rotation between them can have changed." },

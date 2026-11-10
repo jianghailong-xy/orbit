@@ -167,6 +167,21 @@ class PushController(
         }
     }
 
+    /** An owner request put off with Later is due: its notification comes back, as an alert, while the request still waits on the owner
+     * and its binding is this device's. */
+    suspend fun repost(data: Map<String, String>) {
+        if (!configured) return
+        session.restore()
+        registration.onAuthStateChanged()
+        work.withLock {
+            val message = PushMessage.parse(data)?.takeIf { it.payload.isOwnerRequest } ?: return
+            if (!registration.accepts(message.registrationKey)) return
+            val handle = (session.state.value as? AuthState.SignedIn)?.handle ?: return
+            if (PushAuthority(session, handle).check(message) == PushCheck.ACTIVE && registration.accepts(message.registrationKey))
+                notifications.show(message, data)
+        }
+    }
+
     suspend fun messagesDeleted(): Boolean {
         if (!configured) return true
         session.restore(); registration.onAuthStateChanged(); refreshBusiness()

@@ -1,4 +1,5 @@
 import { readMergeRecovery, mergeRecoveryReady, type MergeRecovery } from '@orbit/shared';
+import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
   BadRequestException,
   Body,
@@ -1585,6 +1586,12 @@ export class RunnerApiController {
      */
     @Optional() files?: FilesService,
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
+    /**
+     * The owner-entered secrets a runner may hold (owner-requests/owner-secrets.service.ts), stated on every full
+     * answer to a runner that declares owner-secret/v1. `@Optional()` for the same reason as the rest of this list;
+     * without it the answer leaves both fields out, which states nothing.
+     */
+    @Optional() private readonly ownerSecrets?: OwnerSecretsService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2495,6 +2502,12 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
+    // The secrets this runner may hold (design §6.3). A read that fails leaves both fields out, which the runner reads
+    // as "nothing stated" — never as "remove everything".
+    let secretReconcile: Awaited<ReturnType<OwnerSecretsService['reconcileFor']>> | undefined;
+    if (this.ownerSecrets && runnerSupportsCapability(capabilities, OWNER_SECRET_CAPABILITY)) {
+      secretReconcile = await this.ownerSecrets.reconcileFor(runner.id).catch(() => undefined);
+    }
     // Cursor API keys somebody is waiting on a check of (cursor-key-check-relay.ts), held in an apiserver
     // process's memory: handed over each once. A beat the link gateway forwarded may reach any process, and takes
     // them from whichever holds them.
@@ -2558,6 +2571,8 @@ export class RunnerApiController {
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
       // Only while the owner's Check again waits, and only to a process that declared claude-region/v1.
       ...(regionCheckRequest ? { regionCheckRequest } : {}),
+      // Only to a runner that declared owner-secret/v1: ids and expiries, never a value.
+      ...(secretReconcile ?? {}),
       // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
       ...(linkHints ? { linkHints } : {}),
     };
