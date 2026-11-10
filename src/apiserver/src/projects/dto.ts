@@ -794,6 +794,12 @@ export class ObserveIntegrationDto {
   reason?: unknown;
 }
 
+/** K7 reason validation belongs to the service so refusals carry the door's stable code. */
+export class RequestPromotionDto {
+  @Allow()
+  reason?: string;
+}
+
 export class SkipMergeCheckDto {
   @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_SKIP_REASON) reason!: string;
   /** The card's own id, in either spelling: the runner hands back the uuid its own create answered
