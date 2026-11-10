@@ -15,7 +15,7 @@
  *   (7) a reviewer that read it and stopped with nothing to wake it — unless something will (T5);
  *   (8) "not reviewed" never goes back: the reviewer's end is written by the trigger, a retry armed is
  *       not an end, and a review turn taken away unread stops it; Automatic switched off mid-review
- *       changes nothing (§3.1, T1);
+ *       falls back (§16 F2);
  *   (9) a recorded review is counted and drawn with Orbit's first line (§3.5, H2);
  *  (10) outdated: the branch moved, or a newer report came (T1, T3);
  *  (11) the review door's table (§3.5);
@@ -53,7 +53,8 @@ import {
 import { countOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
-import type { PushService } from '../push/push.service';
+import { PushService } from '../push/push.service';
+import { ConfigService } from '@nestjs/config';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
@@ -120,7 +121,19 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
   const sessions = new SessionsService(prisma, queue, realtime);
   const tasks = new TasksService(prisma, sessions, realtime);
   const pushed: string[] = [];
+  const raised: string[] = [];
+  const alerts: Array<{ payload: any; collapseId: string }> = [];
+  const feishuCards: any[] = [];
+  const raisedPush = new PushService(prisma, { get: () => undefined } as unknown as ConfigService, {
+    target: async () => ({ ownerId }),
+    post: async (_target: unknown, card: unknown) => { feishuCards.push(card); return true; },
+  } as never);
+  (raisedPush as any).deliver = async (_tokens: unknown, body: string, _type: string, _priority: string, collapseId: string) => {
+    alerts.push({ payload: JSON.parse(body), collapseId });
+  };
+  const badgePush = new PushService(prisma, { get: () => undefined } as unknown as ConfigService);
   const push = {
+    notifyConfirmationRaised: async (recordId: string) => { raised.push(recordId); await raisedPush.notifyConfirmationRaised(recordId); },
     notifyConfirmationProblems: async (recordId: string) => { pushed.push(recordId); },
   } as unknown as PushService;
   const reviews = new OwnerConfirmationReviewService(prisma, sessions, realtime, push);
@@ -361,6 +374,100 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
       ...over,
     };
   }
+
+  await t.test('§13 A1–A7: coordinator holds, raises once, sends back, and cannot confirm', async () => {
+    const coordinator = await conversation('confirmation coordinator');
+    const automatic = await project('held confirmations', { coordinatorEnabled: true, coordinatorSessionId: coordinator });
+    const run = await runOf('owner-created Automatic task', { projectId: automatic, creatorSessionId: null });
+    const requestId = await declare(run, 'Ready for review.');
+    assert.equal((await card(run.taskId)).waiting, null);
+    assert.equal(await waitingOn(run.sessionId), 0);
+    assert.ok(!(await badgePush.needsYouSessions(ownerId)).includes(run.sessionId));
+    assert.deepEqual(raised, []);
+    assert.equal(alerts.length, 0);
+    assert.equal(feishuCards.length, 0);
+    await handOut(coordinator);
+    const denied = await refusedWith(runnerDoor.decide(runner, run.taskId, coordinator,
+      decide({ decision: 'CONFIRM', requestId })), ForbiddenException);
+    assert.equal(denied.code, 'OWNER_CONFIRMATION_REQUIRES_ACCOUNT_OWNER');
+    const input = reviewInput(requestId);
+    const receipt = await runnerDoor.review(runner, run.taskId, coordinator, input);
+    const view = (await card(run.taskId)).waiting!;
+    assert.equal(view.review?.lead?.conclusion, input.judgment);
+    assert.deepEqual(view.review?.lead?.points, view.review?.review?.needsYou);
+    assert.equal(view.review?.reviewer.title, 'Coordinator');
+    assert.equal(await waitingOn(run.sessionId), 1);
+    assert.ok(!(await badgePush.needsYouSessions(ownerId)).includes(run.sessionId), 'N6: confirmation cards do not enter push badges');
+    assert.deepEqual(raised, [receipt.recordId]);
+    await raisedPush.feishuIdle();
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0].payload.aps.alert.body, 'Coordinator raised this for your decision · 1 to decide');
+    assert.equal(alerts[0].payload.sessionID, run.sessionId);
+    assert.equal(alerts[0].payload.aps.badge, undefined);
+    assert.equal(alerts[0].collapseId, `confirmation-raised-${receipt.recordId}`);
+    assert.equal(feishuCards.length, 1);
+    assert.equal((await feishuCards[0].render()).body, alerts[0].payload.aps.alert.body);
+    assert.equal(feishuCards[0].collapseKey, alerts[0].collapseId);
+    await runnerDoor.review(runner, run.taskId, coordinator, input);
+    assert.deepEqual(raised, [receipt.recordId], 'a retry cannot ring twice');
+    assert.equal(alerts.length, 1);
+    assert.equal(feishuCards.length, 1);
+
+    const back = await runOf('send the held request back', { projectId: automatic, creatorSessionId: null });
+    const backRequest = await declare(back, 'Done.');
+    assert.equal((await card(back.taskId)).waiting, null);
+    assert.equal(await waitingOn(back.sessionId), 0);
+    const returned = await runnerDoor.returnToRun(runner, back.taskId, coordinator, {
+      requestId: backRequest, reason: 'Add the missing migration.', problems: [{ text: 'Missing migration' }],
+    });
+    assert.equal(returned.state, 'RETURNED');
+    assert.equal((await card(back.taskId)).waiting, null);
+    assert.equal(await waitingOn(back.sessionId), 0);
+    assert.ok(!(await badgePush.needsYouSessions(ownerId)).includes(back.sessionId));
+    assert.deepEqual(raised, [receipt.recordId]);
+
+    const panel = await runOf('panel confirmation during hold', { projectId: automatic, creatorSessionId: null });
+    const panelRequest = await declare(panel, 'Done.');
+    await userDoor.decide(owner, panel.taskId, undefined, decide({ decision: 'CONFIRM', requestId: null }));
+    const decision = await db.taskOwnerDecision.findFirstOrThrow({ where: { taskId: panel.taskId } });
+    assert.equal(decision.requestId, panelRequest);
+    assert.equal(decision.reviewState, 'UNDER_REVIEW');
+    raised.length = 0;
+    alerts.length = 0;
+    feishuCards.length = 0;
+  });
+
+  await t.test('§16 F3 / D5: paused coordinators hold until deadline and recover unread deliveries', async () => {
+    const coordinator = await conversation('paused confirmation coordinator', { status: RunStatus.FAILED });
+    const automatic = await project('pause recovery', { coordinatorEnabled: true, coordinatorSessionId: coordinator });
+    const run = await runOf('wait through coordinator pause', { projectId: automatic, creatorSessionId: null });
+    const requestId = await declare(run, 'Done.');
+    assert.equal((await reviewRow(requestId))?.delivery, 'PENDING');
+    assert.equal((await card(run.taskId)).waiting, null);
+    assert.equal(await waitingOn(run.sessionId), 0);
+    await db.session.update({ where: { id: coordinator }, data: { status: RunStatus.AWAITING_INPUT } });
+    await reviews.deliverPendingFor(coordinator);
+    const delivered = (await reviewRow(requestId))!;
+    assert.equal(delivered.delivery, 'DELIVERED');
+    await db.conversationTurn.updateMany({ where: { sessionId: coordinator }, data: { status: 'ANSWERED', answeredAt: new Date() } });
+    await db.session.update({ where: { id: coordinator }, data: { status: RunStatus.FAILED } });
+    assert.equal((await card(run.taskId)).waiting, null, 'a drained delivery is still held during pause');
+    await db.session.update({ where: { id: coordinator }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([reviews.deliverPendingFor(coordinator), reviews.deliverPendingFor(coordinator)]);
+    const recovered = (await reviewRow(requestId))!;
+    assert.notEqual(recovered.deliveryTurnClientId, delivered.deliveryTurnClientId);
+    assert.equal((await turnsKeyed(coordinator, REVIEW_PREFIX)).filter((turn) => turn.status === 'PENDING').length, 1);
+    assert.equal((await card(run.taskId)).waiting, null);
+    await db.taskOwnerConfirmationReview.update({ where: { requestId }, data: { dueAt: new Date(Date.now() - 1000) } });
+    assert.equal((await card(run.taskId)).waiting?.review?.notReviewedReason, 'TIMED_OUT');
+    assert.equal(await waitingOn(run.sessionId), 1);
+    assert.ok(!(await badgePush.needsYouSessions(ownerId)).includes(run.sessionId));
+    assert.deepEqual(raised, []);
+    await handOut(coordinator);
+    await runnerDoor.review(runner, run.taskId, coordinator, reviewInput(requestId));
+    assert.equal((await card(run.taskId)).waiting?.review?.lead?.conclusion, 'Ready, with one call for you.');
+    assert.deepEqual(raised, [], 'A7: late review replaces fallback without ringing');
+  });
 
   // (1) ------------------------------------------------------------------------------------------
   await t.test('(1) migration 0370: two tables, the request and session columns, the decision columns, the trigger', async () => {
@@ -669,13 +776,13 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
                       WHERE "session_id" = $1 AND "client_turn_id" LIKE $2`, [drained.reviewer, `${REVIEW_PREFIX}%`]);
     assert.equal((await card(drained.taskId)).waiting?.review?.notReviewedReason, 'REVIEWER_STOPPED');
 
-    // Automatic switched off while the coordinator reviews: the review it has goes on.
+    // §16 F2: switching Automatic off ends the hold; a late review can still be recorded.
     const switching = await conversation('a coordinator whose project is switched off');
     const switched = await project('switched off mid-review', { coordinatorEnabled: true, coordinatorSessionId: switching });
     const switchedRun = await runOf('reviewed across the switch', { projectId: switched, creatorSessionId: switching });
     const switchedRequest = await declare(switchedRun, 'Done.');
     await db.project.update({ where: { id: switched }, data: { coordinatorEnabled: false } });
-    assert.equal((await card(switchedRun.taskId)).waiting?.review?.state, 'UNDER_REVIEW');
+    assert.equal((await card(switchedRun.taskId)).waiting?.review?.notReviewedReason, 'AUTOMATIC_OFF');
     await handOut(switching);
     const receipt = await runnerDoor.review(runner, switchedRun.taskId, switching, reviewInput(switchedRequest, { needsYou: [] }));
     assert.equal(receipt.state, 'REVIEWED');

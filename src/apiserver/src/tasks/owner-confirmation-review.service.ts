@@ -19,7 +19,8 @@ import {
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { openFuseEpisodeId } from '../projects/project-fuse';
-import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
+import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coordinator-evidence-queue';
+import { SESSION_ENDING_SELECT, conversationIsOver, sessionHasEnded } from '../projects/project-open-item';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { assertSessionMayReach } from '../sessions/session-reach';
@@ -98,6 +99,9 @@ class AlreadyRecorded extends Error {
 /** Thrown out of a return's turn hook when the owner confirmed while it was on its way: it is PROBLEMS now. */
 class ReturnBecameProblems extends Error {}
 
+/** A coordinator pause leaves delivery PENDING rather than recording a refusal (§16 F3). */
+class ReviewDeliveryPaused extends Error {}
+
 interface ReviewerStanding {
   session: string;
   turnId: string;
@@ -153,6 +157,7 @@ export class OwnerConfirmationReviewService {
         ownerId: true,
         taskId: true,
         reviewerSessionId: true,
+        reviewerKind: true,
         delivery: true,
         request: { select: { sessionId: true } },
       },
@@ -164,12 +169,13 @@ export class OwnerConfirmationReviewService {
     // reviewer ended (S4). The hook asks again under the lock.
     const reviewer = await this.prisma.session.findUnique({
       where: { id: review.reviewerSessionId },
-      select: SESSION_ENDING_SELECT,
+      select: COORDINATOR_PAUSE_SELECT,
     });
-    if (!reviewer || sessionHasEnded(reviewer)) {
+    if (!reviewer || (review.reviewerKind === 'PROJECT_COORDINATOR' ? conversationIsOver(reviewer) : sessionHasEnded(reviewer))) {
       await this.refuseDelivery(review.id, 'REVIEWER_ENDED', moved);
       return;
     }
+    if (review.reviewerKind === 'PROJECT_COORDINATOR' && conversationIsPaused(reviewer)) return;
     const clientTurnId = ownerConfirmationReviewTurnId(review.id);
     try {
       await this.sessions.createTurn(
@@ -179,6 +185,7 @@ export class OwnerConfirmationReviewService {
         { participateSendTransaction: (tx) => bindReviewDelivery(tx, review.id, clientTurnId) },
       );
     } catch (error) {
+      if (error instanceof ReviewDeliveryPaused) return;
       // Checked first: it is a Conflict too, and its code is the one the hook found.
       const code = error instanceof ReviewDeliveryRefused
         ? error.refusalCode
@@ -228,6 +235,39 @@ export class OwnerConfirmationReviewService {
         `review ${id} delivery failed: ${error instanceof Error ? error.message : error}`,
       ));
     }
+    await this.redeliverUnread(reviewerSessionId).catch((error) => this.logger.warn(
+      `review redelivery failed: ${error instanceof Error ? error.message : error}`,
+    ));
+  }
+
+  private async redeliverUnread(reviewerSessionId: string): Promise<void> {
+    const reviewer = await this.prisma.session.findUnique({ where: { id: reviewerSessionId }, select: COORDINATOR_PAUSE_SELECT });
+    if (!reviewer || conversationIsOver(reviewer) || conversationIsPaused(reviewer)) return;
+    const rows = await this.prisma.taskOwnerConfirmationReview.findMany({
+      where: { reviewerSessionId, reviewerKind: 'PROJECT_COORDINATOR', delivery: 'DELIVERED',
+        abandonedAt: null, records: { none: {} }, dueAt: { gt: new Date() } },
+      select: { id: true, ownerId: true, deliveryTurnClientId: true },
+    });
+    for (const row of rows) {
+      const previous = row.deliveryTurnClientId;
+      if (!previous) continue;
+      const turn = await this.prisma.conversationTurn.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: reviewerSessionId, clientTurnId: previous } },
+        select: { status: true, deliveredAt: true },
+      });
+      if (turn && (turn.status !== 'ANSWERED' || turn.deliveredAt)) continue;
+      const clientTurnId = `${ownerConfirmationReviewTurnId(row.id)}:retry:${randomUUID()}`;
+      await this.sessions.createTurn(row.ownerId, reviewerSessionId,
+        { clientTurnId, content: '', intent: 'NEXT_TURN' }, {
+          onTurnWritten: async (tx) => {
+            const moved = await tx.taskOwnerConfirmationReview.updateMany({
+              where: { id: row.id, delivery: 'DELIVERED', deliveryTurnClientId: previous, records: { none: {} } },
+              data: { deliveryTurnClientId: clientTurnId, deliveredAt: new Date() },
+            });
+            if (moved.count !== 1) throw new ConflictException('the review delivery changed');
+          },
+        });
+    }
   }
 
   /** N5: a state the server itself moved — the task's views and the run's row re-read. */
@@ -267,15 +307,19 @@ export class OwnerConfirmationReviewService {
           'the owner has already decided this request, so there is nobody left to answer needsYou; record '
           + 'the review without it, or use task_confirmation_return if something must change');
       }
+      const before = await this.stateOf(taskId, standing.request, tx);
+      const raised = standing.review.reviewerKind === 'PROJECT_COORDINATOR' && before === 'UNDER_REVIEW'
+        && standing.request.decisions.length === 0 && OWNER_CONFIRMATION_UNSETTLED_STATUSES.some((status) => status === standing.task.status);
       const recordId = await writeReviewRecord(tx, ownerId, taskId, standing, {
         kind: 'REVIEW',
         reviewedSha: input.reviewedSha,
         judgment: input.judgment,
         body: input.lists,
       });
-      return { recordId, request: standing.request, alreadyRecorded: false };
+      return { recordId, request: standing.request, alreadyRecorded: false, raised };
     }, loggedRetry(this.logger, 'ownerConfirmationReview.review'));
     if (!written.alreadyRecorded) {
+      if (written.raised) await this.push?.notifyConfirmationRaised(written.recordId);
       this.publishMoved([{ ownerId, taskId, runSessionId: written.request.sessionId }]);
     }
     return {
@@ -482,9 +526,10 @@ export class OwnerConfirmationReviewService {
   private async stateOf(
     taskId: string,
     request: { id: string; sessionId: string; requestedAt: Date },
+    tx: Prisma.TransactionClient = this.prisma,
   ): Promise<OwnerConfirmationReviewState | null> {
     const views = await confirmationReviewStates(
-      this.prisma,
+      tx,
       [{ id: request.id, taskId, sessionId: request.sessionId, requestedAt: request.requestedAt }],
       new Date(),
     );
@@ -519,10 +564,13 @@ async function bindReviewDelivery(
   }
   const reviewer = await tx.session.findUnique({
     where: { id: review.reviewerSessionId },
-    select: { ...SESSION_ENDING_SELECT, taskId: true },
+    select: { ...COORDINATOR_PAUSE_SELECT, taskId: true },
   });
-  if (!reviewer || sessionHasEnded(reviewer)) {
+  if (!reviewer || (review.reviewerKind === 'PROJECT_COORDINATOR' ? conversationIsOver(reviewer) : sessionHasEnded(reviewer))) {
     throw new ReviewDeliveryRefused('REVIEWER_ENDED', 'the reviewer\'s session has ended');
+  }
+  if (review.reviewerKind === 'PROJECT_COORDINATOR' && conversationIsPaused(reviewer)) {
+    throw new ReviewDeliveryPaused();
   }
   // S3, as `decidingSessionDisqualification`'s first rule: the session that did the work does not
   // review it.

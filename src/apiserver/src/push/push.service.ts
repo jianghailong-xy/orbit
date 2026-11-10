@@ -80,6 +80,7 @@ export interface AgentNotifyResult {
 const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'engine-signed-out': 'Engine signed out',
   'claude-region-blocked': 'Claude is not available on this runner',
+  'confirmation-raised': 'Coordinator raised this for your decision',
   'confirmation-problems': 'Problems found after you confirmed',
   'owner-request': 'Request for you',
   'watch-matched': 'Watch matched',
@@ -800,6 +801,37 @@ export class PushService {
    * problems — and none is the reviewer's. No badge: a settled task is not waiting on anybody.
    * The tap opens the run's session, where the receipt the problems hang under is drawn.
    */
+  /** §13 A6: only the first REVIEW ending a coordinator hold calls this, after commit. */
+  async notifyConfirmationRaised(recordId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const record = await this.prisma.taskOwnerConfirmationReviewRecord.findUnique({
+        where: { id: recordId },
+        select: { kind: true, ownerId: true, taskId: true, body: true,
+          task: { select: { title: true } },
+          review: { select: { request: { select: { sessionId: true } } } } },
+      });
+      if (!record || record.kind !== 'REVIEW') return;
+      const count = ((record.body ?? {}) as { needsYou?: unknown[] }).needsYou?.length ?? 0;
+      const { tokens, feishu } = await this.channels(record.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = { title: record.task.title, body: count
+        ? `Coordinator raised this for your decision · ${count} to decide`
+        : 'Coordinator raised this for your confirmation' };
+      const collapseId = `confirmation-raised-${recordId}`;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `task-${record.taskId}` },
+        kind: 'confirmation-raised', sessionID: record.review.request.sessionId,
+        taskID: record.taskId, recordID: recordId,
+      });
+      this.background(this.feishuOther(feishu, { kind: 'confirmation-raised', ...alert,
+        collapseId, sessionId: record.review.request.sessionId }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
+    } catch (err) {
+      this.log.warn(`confirmation raised notify failed: ${(err as Error).message}`);
+    }
+  }
+
   async notifyConfirmationProblems(recordId: string): Promise<void> {
     if (!this.enabled) return;
     try {

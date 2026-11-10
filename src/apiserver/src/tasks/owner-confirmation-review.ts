@@ -11,6 +11,8 @@ import type {
   OwnerConfirmationReviewState,
   OwnerConfirmationReviewView,
 } from '@orbit/shared';
+import { COORDINATOR_PAUSE_SELECT } from '../projects/coordinator-evidence-queue';
+import { runItemHold } from '../projects/run-item-hold';
 import { hasPendingWakeSource } from '../sessions/session-request';
 import { STALE_ACTION } from './task-owner-confirmation';
 
@@ -79,11 +81,8 @@ export interface ResolvedReviewer {
 }
 
 /**
- * S2, in its order. A task filed from no conversation has nobody to ask, in a project or not — the
- * user API never writes `creator_session_id`, and `creator_type` is not read, because the runner
- * door files a task created inside a session as USER when its call carries no agent header. A task
- * in a project is its coordinator's to review while the project is Automatic, and the owner's own
- * otherwise; outside a project it is the conversation that filed it.
+ * S2: project routing precedes the creator check, so owner-created Automatic tasks are held too.
+ * Outside a project only the conversation that filed the task can review it.
  */
 export async function resolveReviewer(
   tx: Prisma.TransactionClient,
@@ -99,7 +98,7 @@ export async function resolveReviewer(
       },
     },
   });
-  if (!task?.creatorSessionId) return null;
+  if (!task) return null;
   if (task.projectId) {
     if (!task.project?.coordinatorEnabled) return null;
     return {
@@ -109,6 +108,7 @@ export async function resolveReviewer(
       windowSeconds: task.project.exceptionEscalationSeconds,
     };
   }
+  if (!task.creatorSessionId) return null;
   return {
     kind: 'TASK_CREATOR',
     sessionId: task.creatorSessionId,
@@ -268,6 +268,7 @@ const REVIEW_SELECT = {
   deliveryTurnClientId: true,
   abandonedAt: true,
   reviewerEndedAt: true,
+  projectId: true,
   records: {
     select: { id: true, kind: true, reviewedSha: true, judgment: true, reason: true, body: true, recordedAt: true },
   },
@@ -303,6 +304,10 @@ export async function confirmationReviewStates(
     select: REVIEW_SELECT,
   });
   if (reviews.length === 0) return views;
+  const projectIds = [...new Set(reviews.flatMap((review) => review.projectId ? [review.projectId] : []))];
+  const projects = new Map((projectIds.length ? await tx.project.findMany({
+    where: { id: { in: projectIds } }, select: { id: true, coordinatorEnabled: true },
+  }) : []).map((project) => [project.id, project]));
   const byRequest = new Map(requests.map((request) => [request.id, request]));
   const reviewed = reviews.filter((review) => review.records.some((record) => record.kind === 'REVIEW'));
 
@@ -328,8 +333,8 @@ export async function confirmationReviewStates(
   const reviewerIds = [...new Set(reviews.flatMap((review) => (review.reviewerSessionId ? [review.reviewerSessionId] : [])))];
   const reviewers = new Map((reviewerIds.length === 0 ? [] : await tx.session.findMany({
     where: { id: { in: reviewerIds } },
-    select: { id: true, title: true },
-  })).map((session) => [session.id, session.title]));
+    select: { id: true, title: true, ...COORDINATOR_PAUSE_SELECT },
+  })).map((session) => [session.id, session]));
 
   const delivered = reviews.filter((review) => review.delivery === 'DELIVERED'
     && review.reviewerSessionId && review.deliveryTurnClientId);
@@ -351,7 +356,7 @@ export async function confirmationReviewStates(
     const problemsRecord = records.find((record) => record.kind === 'PROBLEMS') ?? null;
     const lists = reviewRecord ? reviewListsOf(reviewRecord.body) : null;
     const problems = problemsRecord ? returnRecordView(problemsRecord) : null;
-    const reading = reviewStateOf({
+    let reading = reviewStateOf({
       delivery: review.delivery,
       deliveryRefusal: review.deliveryRefusal,
       reviewerSessionExists: review.reviewerSessionId == null || reviewers.has(review.reviewerSessionId),
@@ -366,18 +371,42 @@ export async function confirmationReviewStates(
       requestIsNewest: (newest.get(request.taskId) ?? request.id) === request.id,
       runBranchSha: branchOf.get(request.sessionId) ?? null,
     }, readAt);
+    // §13 A1 / §16: coordinator holds share F's read-time fallback rules.
+    if (review.reviewerKind === 'PROJECT_COORDINATOR' && !reviewRecord && !returnRecord) {
+      const hold = runItemHold({
+        kind: 'CONFIRMATION',
+        project: { automatic: true, coordinatorEnabled: (review.projectId ? projects.get(review.projectId)?.coordinatorEnabled : false) ?? false },
+        coordinatorSessionId: review.reviewerSessionId,
+        coordinatorSession: review.reviewerSessionId ? reviewers.get(review.reviewerSessionId) ?? null : null,
+        answered: false,
+        delivery: review.delivery,
+        deliveryRefusal: review.deliveryRefusal,
+        deliveredTurn: review.reviewerSessionId && review.deliveryTurnClientId
+          ? turns.get(`${review.reviewerSessionId}:${review.deliveryTurnClientId}`) ?? null : null,
+        stoppedWithoutAnswer: review.abandonedAt !== null,
+        dueAt: review.dueAt,
+      }, readAt);
+      reading = hold?.place === 'FALLBACK'
+        ? { state: 'NOT_REVIEWED', notReviewedReason: hold.reason, outdated: null }
+        : { state: 'UNDER_REVIEW', notReviewedReason: null, outdated: null };
+    }
     views.set(request.id, {
       reviewId: review.id,
       ...reading,
       reviewer: {
         kind: review.reviewerKind,
         sessionId: review.reviewerSessionId,
-        title: review.reviewerSessionId ? reviewers.get(review.reviewerSessionId) ?? null : null,
+        title: review.reviewerKind === 'PROJECT_COORDINATOR' ? 'Coordinator'
+          : review.reviewerSessionId ? reviewers.get(review.reviewerSessionId)?.title ?? null : null,
       },
       since: request.requestedAt,
       dueAt: review.dueAt,
       windowSeconds: review.windowSeconds,
       headline: reviewHeadline(lists, problems),
+      lead: review.reviewerKind === 'PROJECT_COORDINATOR' && reading.state === 'REVIEWED' && reviewRecord && lists
+        ? { conclusion: reviewRecord.judgment ?? '', points: lists.needsYou,
+          checks: { checked: lists.checked.length, notChecked: lists.notChecked.length, leftOpen: lists.leftOpen.length } }
+        : null,
       review: reviewRecord && lists
         ? {
           recordId: reviewRecord.id,

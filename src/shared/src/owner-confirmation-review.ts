@@ -80,6 +80,12 @@ export type OwnerConfirmationNotReviewedReason =
 
 /** The review of one confirmation request, as the card and its receipts draw it. */
 export interface OwnerConfirmationReviewView<Instant = string> {
+  /** §13 A3: coordinator conclusion first on a REVIEWED card; absent on older servers. */
+  lead?: {
+    conclusion: string;
+    points: ConfirmationNeedsYouItem[];
+    checks: { checked: number; notChecked: number; leftOpen: number };
+  } | null;
   reviewId: string;
   state: OwnerConfirmationReviewState;
   /** Set exactly when state is NOT_REVIEWED (T2). */
