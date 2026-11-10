@@ -2,6 +2,13 @@ package io.orbitd.android.projects
 
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
+import io.orbitd.android.ui.LocalOrbitColors
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
@@ -57,6 +64,40 @@ class ProjectDoneCardTest {
     private fun shows(text: String) = compose.onNodeWithText(text, substring = false).performScrollTo().assertIsDisplayed()
     private fun texts(): List<String> = compose.onAllNodes(hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
         .flatMap { node -> if (SemanticsProperties.Text in node.config) node.config[SemanticsProperties.Text].map { it.text } else emptyList() }
+
+    @Test @Config(qualifiers = "w411dp-h400dp")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun derivedDoneNamesTheConfirmationAndReopensWhileOwnerIsUnchanged() {
+        val ending = JsonObject(doc + mapOf("status" to JsonPrimitive("DONE"), "doneBy" to JsonPrimitive("DERIVED")))
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
+            androidx.compose.material3.Surface {
+                val success = LocalOrbitColors.current.success
+                Column(Modifier.padding(16.dp).fillMaxWidth().background(success.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                    .border(1.dp, success.copy(alpha = 0.3f), RoundedCornerShape(14.dp)).padding(12.dp)) {
+                    ProjectSettledCard(ending, "ending", confirmedAt = "2026-10-02T12:00:00Z", onReopen = { reopened++; null })
+                }
+            }
+        } } }
+        compose.waitForIdle()
+        compose.onNodeWithText("From the criteria you confirmed on Oct 2. Not right? Reopen it.").assertIsDisplayed()
+        compose.onNodeWithTag("ending-reopen").assertTextEquals("Reopen project")
+        System.getenv("ORBIT_DERIVED_SCREENSHOT")?.let { path ->
+            val view = compose.activity.window.decorView
+            val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+            view.draw(android.graphics.Canvas(bitmap))
+            java.io.File(path).outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
+        compose.onNodeWithTag("ending-reopen").performClick()
+        compose.waitForIdle()
+        assertEquals(1, reopened)
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme {
+            ProjectSettledCard(JsonObject(ending + ("doneBy" to JsonPrimitive("OWNER"))), "owner", confirmedAt = "2026-10-02T12:00:00Z", onReopen = { reopened++; null })
+        } } }
+        compose.waitForIdle()
+        compose.onNodeWithTag("owner-reopen").assertDoesNotExist()
+        compose.onNodeWithText("From the criteria", substring = true).assertDoesNotExist()
+    }
 
     @Test fun theCoordinatorsRequestIsDrawnWholeWithHowLongItHasWaited() {
         card(doc, row)

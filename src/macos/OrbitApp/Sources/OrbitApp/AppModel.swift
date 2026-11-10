@@ -2890,6 +2890,7 @@ final class AppModel {
     /// (`ProjectPage.drawsEnding`): the criteria document's own subject, the same read the
     /// conversation's settled card keeps.
     private(set) var projectSessionsDone: ProjectDoneSubject?
+    private(set) var projectSessionsConfirmedAt: String?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -3163,7 +3164,16 @@ final class AppModel {
         }
         let document = try? await api.projectCriteria(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let document else { return }
+        let confirmedAt: String?
+        if document.doneBy == .derived {
+            let standing = try? await api.acceptanceConfirmation(projectID: address.projectID)
+            confirmedAt = standing?.confirmation?.confirmedAt
+        } else {
+            confirmedAt = nil
+        }
+        guard projectSessionsAddress == address, !Task.isCancelled else { return }
         projectSessionsDone = document.doneSubject
+        projectSessionsConfirmedAt = confirmedAt
     }
 
     /// A member may belong to another Workspace. Carry its record into the console's cache, which

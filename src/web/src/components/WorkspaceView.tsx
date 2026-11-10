@@ -408,7 +408,7 @@ import {
   type StartPageRow,
 } from '../lib/projectStart';
 import { PROJECT_DONE_COPY, type ProjectDoneDocument } from '../lib/projectDone';
-import { ProjectWhyNotDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
+import { ProjectSessionsDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -8697,7 +8697,7 @@ export function WorkspaceView({
               card's place (docs/mocks/project-done-sessions-page) — the progress card itself would
               say nothing but the word Done. */}
           {openProjectId && pageSettledDoc && (
-            <ProjectWhyNotDoneCard project={pageSettledDoc} />
+            <ProjectSessionsDoneCard projectId={openProjectId} project={pageSettledDoc} />
           )}
           {openProjectId && !pageSettledDoc && (
             <>

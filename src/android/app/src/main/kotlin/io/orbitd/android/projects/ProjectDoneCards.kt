@@ -196,11 +196,25 @@ private fun ProjectDoneReceipt(doc: JsonObject, record: JsonObject?, enabled: Bo
  * (docs/mocks/project-done-sessions-page, owner decision 2026-10-10). A coordinator conversation drew it too, for a DONE Orbit
  * recorded itself, until the owner's ruling of 2026-10-25. The chrome belongs to the caller: the page's list. */
 @Composable
-internal fun ProjectSettledCard(doc: JsonObject, tag: String) {
+internal fun ProjectSettledCard(doc: JsonObject, tag: String, confirmedAt: String? = null, enabled: Boolean = true,
+    onReopen: (suspend () -> String?)? = null) {
+    val scope = rememberCoroutineScope()
+    var reopening by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth().testTag("$tag-settled"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DoneSettledHead(ProjectDone.settledBadge(doc.text("doneBy"))) {}
         Text(ProjectDone.whyNotDoneTally(doc), Modifier.testTag("$tag-settled-tally"), style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (doc.text("doneBy") == "DERIVED") {
+            ProjectDone.derivedLine(confirmedAt)?.let { Text(it, Modifier.testTag("$tag-derived-from"), style = MaterialTheme.typography.bodyMedium) }
+            onReopen?.let { reopen ->
+                TextButton(onClick = {
+                    reopening = true
+                    scope.launch { try { error = reopen() } finally { reopening = false } }
+                }, enabled = enabled && !reopening, modifier = Modifier.testTag("$tag-reopen")) { Text(ProjectDone.reopenProject) }
+            }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
     }
 }
 

@@ -100,6 +100,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("DONE_CARD_GAPS_ACCEPTED", ProjectDone.gapsAccepted),
         ("DONE_CARD_SEE_ACCEPTED", ProjectDone.seeWhatAccepted),
         ("DONE_CARD_REOPEN", ProjectDone.reopenProject),
+        ("DONE_CARD_DERIVED_FROM", ProjectDone.derivedFrom),
+        ("DONE_CARD_DERIVED_REOPEN_HINT", ProjectDone.derivedReopenHint),
         ("DONE_CARD_EXPLANATION", ProjectDone.recordingExplanation),
         ("DONE_CARD_NOT_YET_HINT", ProjectDone.notYetHint),
         ("DONE_CARD_ASKED_BY_COORDINATOR", ProjectDone.askedByCoordinator),
@@ -153,6 +155,12 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                           "\(Self.words) declares \(name), which this client does not hold — add it to "
                               + "`ProjectDone` and to this table")
         }
+    }
+
+    func testDerivedReceiptNamesTheConfirmationDate() {
+        XCTAssertEqual(ProjectDone.derivedLine("2026-10-02T12:00:00Z", timeZone: TimeZone(secondsFromGMT: 0)!),
+                       "From the criteria you confirmed on Oct 2. Not right? Reopen it.")
+        XCTAssertNil(ProjectDone.derivedLine(nil))
     }
 
     func testTheWordsTheCopyObjectSpellsInlineAreThisClients() throws {

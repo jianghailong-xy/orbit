@@ -1,4 +1,5 @@
 import type { CriterionLandingReason, DoneRequest, ProjectDoneBy, ProjectOpenItemRow } from '@orbit/shared';
+import { api } from '../api';
 import { DEFAULT_MAIN_BRANCH } from './projectStart';
 import { formatSpan } from './watches';
 
@@ -30,6 +31,14 @@ export const DONE_CARD_SHOW_ALL = 'Show all';
 export const DONE_CARD_SHOW_LESS = 'Show less';
 export const DONE_CARD_SEND_TO_COORDINATOR = 'Send to coordinator';
 export const DONE_CARD_BACK = 'Back';
+export const DONE_CARD_DERIVED_FROM = 'From the criteria you confirmed on';
+export const DONE_CARD_DERIVED_REOPEN_HINT = 'Not right? Reopen it.';
+
+/** The authenticated owner status door records the Reopen press (0469), not just OPEN. */
+export function updateProjectStatus(projectId: string, status: 'DONE' | 'CANCELLED' | 'OPEN'): Promise<{ id: string }> {
+  return api<{ id: string }>(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } });
+}
+
 export const DONE_CARD_THIS_PROJECT_IS_DONE = 'This project is done';
 export const WHY_NOT_DONE_HEADING = 'Why is this project not done?';
 export const WHY_NOT_DONE_WAITING_ON_WORK = 'Waiting on work';
@@ -82,6 +91,8 @@ export const PROJECT_DONE_COPY = {
   mergedOutsideOrbit: WHY_NOT_DONE_MERGED_OUTSIDE_ORBIT,
   nothingToLand: WHY_NOT_DONE_NOTHING_TO_LAND,
   thisProjectIsDone: DONE_CARD_THIS_PROJECT_IS_DONE,
+  derivedFrom: DONE_CARD_DERIVED_FROM,
+  derivedReopenHint: DONE_CARD_DERIVED_REOPEN_HINT,
   openItemsDoneRequest: PROJECT_DONE_COORDINATOR_ASKED,
   gapsItCouldntProve: PROJECT_DONE_GAPS_IT_COULDNT_PROVE,
   notAskedYet: PROJECT_DONE_NOT_ASKED_YET,

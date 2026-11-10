@@ -353,6 +353,10 @@ struct ProjectDoneReceiptCard: View {
 /// answer (`ProjectDone.WhyNotDone`); nothing here decides what landed.
 struct ProjectNotDoneCard: View {
     let subject: ProjectDoneSubject
+    var confirmedAt: String? = nil
+    var onReopen: (() async -> String?)? = nil
+    @State private var reopening = false
+    @State private var reopenError: String?
     /// How many open items are with the coordinator — somebody is on the work.
     let withCoordinator: Int
     /// When the coordinator asked to record the project done, or nil while nobody has.
@@ -368,6 +372,24 @@ struct ProjectNotDoneCard: View {
                 ApprovalHeader(symbol: "checkmark.circle.fill", title: ProjectDone.thisProjectIsDone,
                                tone: .green, badge: ProjectDone.settledBadge(subject.doneBy))
                 tally
+                if subject.doneBy == .derived {
+                    if let line = ProjectDone.derivedLine(confirmedAt) {
+                        Text(line).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                    if let onReopen {
+                        Button {
+                            guard !reopening else { return }
+                            reopening = true
+                            Task {
+                                reopenError = await onReopen()
+                                reopening = false
+                            }
+                        } label: { Text(ProjectDone.reopenProject).approvalActionLabel() }
+                        .buttonStyle(.borderless)
+                        .disabled(reopening)
+                    }
+                    if let reopenError { Text(reopenError).font(.orbitLabel).foregroundStyle(.red) }
+                }
             } else {
                 ApprovalHeader(symbol: "questionmark.circle", title: ProjectDone.whyHeading, tone: .blue,
                                badge: doneQuestionBadge)

@@ -216,6 +216,7 @@ private class ProjectSessionsState(initial: List<DirectorySession>) {
     var openItems by mutableStateOf<JsonObject?>(null)
     /** The project document, while the project may be done: what the page's ending is drawn from (`ProjectDone.drawsEnding`). */
     var done by mutableStateOf<JsonObject?>(null)
+    var confirmedAt by mutableStateOf<String?>(null)
 }
 
 private enum class StartSheet { ASKED, OWN }
@@ -339,7 +340,15 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         val row = currentProject
         if (row?.text("status") == "OPEN") { state.done = null; return }
         val doc = try { projects.document(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
-        if (doc != null) state.done = doc
+        if (doc != null) {
+            val confirmedAt = if (doc.text("doneBy") == "DERIVED") {
+                try { projects.confirmation(projectId)?.obj("confirmation")?.text("confirmedAt") }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (_: Exception) { null }
+            } else null
+            state.done = doc
+            state.confirmedAt = confirmedAt
+        }
     }
     LaunchedEffect(handle, projectId) {
         // A member on its way to Trash leaves the page on the press, wherever it was pressed, and what the page holds of it goes too
@@ -429,7 +438,15 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
                         .background(success.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
                         .border(1.dp, success.copy(alpha = 0.3f), RoundedCornerShape(14.dp)).padding(12.dp)) {
-                        ProjectSettledCard(ending, "project-sessions-ending")
+                        ProjectSettledCard(ending, "project-sessions-ending", confirmedAt = state.confirmedAt, enabled = app.canWrite(handle), onReopen = {
+                            try {
+                                projects.setStatus(projectId, "OPEN", "reopen:${ending.text("updatedAt")}")
+                                loadDone()
+                                app.realtime.refreshDirectory()
+                                null
+                            } catch (cancel: CancellationException) { throw cancel }
+                            catch (failure: Exception) { "${ProjectDone.notReopened} — ${failureReason(failure)}" }
+                        })
                     }
                 } else ProgressCard(project, members, state, openStart = { startSheet = it })
             }
