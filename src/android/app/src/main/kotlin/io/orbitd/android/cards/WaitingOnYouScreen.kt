@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import kotlinx.serialization.json.JsonObject
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -159,13 +160,15 @@ private fun InboxRow(tag: String, icon: Int, title: String, detail: String, age:
     }
 }
 
-/** The drawer's count beside Waiting on you: open requests not put off for later, and coordinators' open questions — one count. */
+/** The drawer's count beside Waiting on you: open requests not put off for later, and coordinators' open questions — one count. The
+ * questions are counted off [projects], the drawer's own open-projects read ([io.orbitd.android.navigation.rememberDrawerProjects]),
+ * so the count adds no read of its own to the ones that poll keeps to. */
 @Composable
-fun WaitingOnYouDrawerCount(store: OwnerRequestStore, revision: Long) {
+fun WaitingOnYouDrawerCount(store: OwnerRequestStore, projects: List<JsonObject>, revision: Long) {
     val state by store.state.collectAsState()
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
-    LaunchedEffect(revision) { store.load(OwnerRequestStore.OPEN); store.loadQuestions(items = false) }
-    val count = OwnerRequests.waitingCount(state.open, state.projects, snoozes, Instant.now())
+    LaunchedEffect(revision) { store.load(OwnerRequestStore.OPEN) }
+    val count = OwnerRequests.waitingCount(state.open, projects, snoozes, Instant.now())
     if (count > 0) Text("$count", Modifier.testTag("waiting-on-you-drawer-count").semantics { contentDescription = "$count waiting on you" },
         color = LocalOrbitColors.current.needsYou, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
 }

@@ -305,7 +305,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         NavigationDrawerItem(label = { Text(WAITING_ON_YOU) }, selected = navigation.section == WAITING_ON_YOU,
                             icon = { Icon(painterResource(R.drawable.ic_bell), null) },
                             onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
-                            badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, revision) },
+                            badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision) },
                             modifier = Modifier.testTag("drawer:waiting-on-you"))
                         SectionHeading("Workspaces")
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
