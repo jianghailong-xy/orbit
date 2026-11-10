@@ -32,6 +32,7 @@
 #   12 test-user unregisters
 #   13 the move: a host set up by the previous release, setup run again, one runner per account at
 #      every sample, the account it left listed with its command, which then moves it too
+#   13b legacy root on the machine binary, two drop-ins, setup moves it without registration
 #   14 no sudo throughout
 # Replaced assertions: step 1's hostd refusal of root, legacy fallback and disabled root instance
 # become hostd registration on orbit-runner@root, euid 0, /root/.orbit/bin/orbit, no legacy unit.
@@ -1348,7 +1349,118 @@ show "$(cat "$MV_LOG")"
 check_no_sudo "after test.user moved"
 pass 13 "a machine set up by orbit $V0 ($OLD_REV: $old_template), test-user on $OLD_D and test.user on $OLD_T, both running $BIN; $V1 put at $BIN with install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit $BIN and setup run again: template rewritten (User=%I, $EXEC_START); test-user, which had its own copy, moved $OLD_D → $UNIT_D (now inactive and disabled → enabled and active, pid $moved_pid euid $UID_D exe /home/test-user/.orbit/bin/orbit); test.user, without one, listed as left with 'test.user runs:  /usr/local/bin/orbit register', its runner left as it was (pid $OLDPID_T, still the replaced $BIN image); then test.user ran /usr/local/bin/orbit register without root, which put its own copy in place and brought it onto $UNIT_T (euid $UID_T, exe /home/test.user/.orbit/bin/orbit), $OLD_T inactive and disabled, no orbit-runner@<uid> left enabled; sampled once a second, $setup_samples samples through setup and $register_samples through the registration: never two runner processes or two live runner units for an account — during setup test-user had one runner at ${setup_one[0]} and none at ${setup_none[0]} (its drain-then-start handover), test.user one at all ${setup_one[1]}; during the registration test.user one at ${MV_ONE[1]} and none at ${MV_NONE[1]}, test-user one at all ${MV_ONE[0]}"
 
+# --- 13b. production-style legacy root runner, moved without registration -------------------------
+
+echo "==> 13b. root's legacy machine-binary runner with PATH and CPUWeight drop-ins"
+[ -n "${HOSTD_E2E_KEEP:-}" ] || docker rm -f "$CTR" >/dev/null 2>&1
+start_machine
+start_stub
+ACCOUNTS=()
+docker cp -q "$WORK/orbit-$V1" "$CTR:$BIN" && cx chmod 0755 "$BIN" || harness_fail "cannot install root migration build"
+out=$(csh "$BIN register --server $SERVER --token e2e-legacy-root --name legacy-root-e2e --no-service --force </dev/null" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 13b "legacy root registration exited $rc"
+cx test ! -e "$HOME_COPY" || fail 13b "root already has its own binary before the move"
+# The old unit's drain is held open for three seconds after its runner exits, so the one-second
+# sampler observes the expected gap. This is fixture timing, not a second runner or a copied setting.
+legacy_unit root | sed 's|/home/root|/root|g; /TimeoutStopSec=180/a ExecStopPost=/bin/sleep 3' |
+  docker exec -i "$CTR" tee /etc/systemd/system/orbit-runner-root.service >/dev/null || harness_fail "cannot write root legacy unit"
+ROOT_PATH_DROP=/etc/systemd/system/orbit-runner-root.service.d/path.conf
+cx mkdir -p "${ROOT_PATH_DROP%/*}" &&
+  csh "printf '%s\n' '[Service]' 'Environment=PATH=/opt/node-v26/bin:/usr/local/bin:/usr/bin:/bin' > '$ROOT_PATH_DROP'" &&
+  cx systemctl daemon-reload && cx systemctl enable --now orbit-runner-root.service &&
+  cx systemctl set-property orbit-runner-root.service CPUWeight=200 || harness_fail "cannot prepare root legacy drop-ins"
+ROOT_CPU_DROP=/etc/systemd/system.control/orbit-runner-root.service.d/50-CPUWeight.conf
+cx test -f "$ROOT_CPU_DROP" || fail 13b "set-property did not write $ROOT_CPU_DROP"
+root_drop_hashes=$(cx sha256sum "$ROOT_PATH_DROP" "$ROOT_CPU_DROP")
+[ "$(unit_prop orbit-runner-root.service User)" = root ] &&
+  cx grep -qxF "ExecStart=$BIN run" /etc/systemd/system/orbit-runner-root.service || fail 13b "legacy root layout differs"
+wait_until 30 beats_since legacy-root-e2e 0 || fail 13b "legacy root runner never heartbeated"
+root_old_pid=$(main_pid orbit-runner-root.service)
+[ "$(csh "exe $root_old_pid")" = "$BIN" ] && [ "$(csh "euid $root_old_pid")" = 0 ] || fail 13b "legacy root process has wrong exe or euid"
+check_one_runner 13b 0 orbit-runner-root.service
+root_id=$(stub_field legacy-root-e2e 2)
+root_config_hash=$(cx sha256sum /root/.orbit/config.json)
+root_beats=$(stub_field legacy-root-e2e 4)
+root_requests() { cx journalctl -u orbit-e2e-stub.service -o cat --no-pager | grep -E 'POST /api/runner/(register|device/start|device/poll) ->' || true; }
+root_requests_before=$(root_requests)
+ROOT_MV_LOG="$WORK/root-move-samples.log"
+root_none=0
+root_sample() {
+  local out pids units
+  out=$(csh 'account_runners 0 orbit-runner-root.service orbit-runner@root.service')
+  echo "root sample $1: $out" >>"$ROOT_MV_LOG"
+  pids=${out#pids=}; pids=${pids%% units=*}; units=${out##* units=}
+  case "$pids" in *,*) fail 13b "two live root runners: $out" ;; esac
+  case "$units" in *,*) fail 13b "two live root units: $out" ;; esac
+  [ -n "$pids" ] || root_none=$((root_none + 1))
+}
+root_sample 0
+# Observe setup's actual systemctl replies. Sampling
+# uses single-property show calls; only setup's three-property confirmations enter this audit.
+cat <<'EOF' | docker exec -i "$CTR" tee /usr/local/bin/systemctl >/dev/null
+#!/bin/bash
+out=$(/usr/bin/systemctl "$@" 2>&1)
+rc=$?
+case "$*" in
+  'stop orbit-runner-root.service' | 'disable orbit-runner-root.service' | 'start orbit-runner@root.service' | 'show orbit-runner-root.service -p User -p UnitFileState -p ActiveState')
+    printf '%s rc=%s | %s\n' "$*" "$rc" "$(tr '\n' ' ' <<<"$out")" >>/var/log/root-move-systemctl.log ;;
+esac
+printf '%s\n' "$out"
+exit "$rc"
+EOF
+cx chmod 0755 /usr/local/bin/systemctl || harness_fail "cannot install systemctl observer"
+# docs: design §3.9 — root runs the checked machine binary's setup again, without register.
+cx "$BIN" host setup --server "$SERVER" >"$WORK/root-move-setup.out" 2>&1 &
+job=$!
+samples=0
+while kill -0 "$job" 2>/dev/null; do
+  samples=$((samples + 1)); root_sample "$samples"; sleep 1
+done
+wait "$job"
+rc=$?
+for _ in 1 2 3 4 5; do samples=$((samples + 1)); root_sample "$samples"; sleep 1; done
+out=$(cat "$WORK/root-move-setup.out")
+show "$out"
+show "$(cat "$ROOT_MV_LOG")"
+[ "$rc" -eq 0 ] || fail 13b "root move exited $rc"
+root_audit=$(cx cat /var/log/root-move-systemctl.log)
+show "$root_audit"
+awk '
+  /^stop orbit-runner-root.service rc=0/ { stage=1; next }
+  stage==1 && /^show / && /rc=0/ && /ActiveState=inactive/ { stage=2; next }
+  stage==2 && /^disable orbit-runner-root.service rc=0/ { stage=3; next }
+  stage==3 && /^show / && /rc=0/ && /ActiveState=inactive/ && /UnitFileState=disabled/ { stage=4; next }
+  /^start orbit-runner@root.service rc=0/ { if (stage!=4) exit 1; started=1 }
+  END { if (!started) exit 1 }
+' <<<"$root_audit" || fail 13b "setup did not stop, confirm down, disable, confirm down/disabled before starting root instance"
+cx rm /usr/local/bin/systemctl || harness_fail "cannot remove systemctl observer"
+[ "$root_none" -gt 0 ] || fail 13b "no sample observed the drain handover gap"
+unit_running orbit-runner@root.service && [ "$(unit_prop orbit-runner@root.service UnitFileState)" = enabled ] || fail 13b "root instance is not enabled and active"
+root_pid=$(main_pid orbit-runner@root.service)
+[ "$(csh "euid $root_pid")" = 0 ] && [ "$(csh "exe $root_pid")" = "$HOME_COPY" ] || fail 13b "root instance has wrong euid or exe"
+check_one_runner 13b 0 orbit-runner@root.service
+cx test ! -e /etc/systemd/system/orbit-runner-root.service || fail 13b "legacy root unit file remains"
+[ "$(cx sha256sum "$HOME_COPY" | cut -d' ' -f1)" = "$SHA_V1" ] || fail 13b "setup did not copy the checked machine binary"
+# Removal and daemon-reload may discard the old unit's transition timestamps. The audit above
+# retains its actual inactive/disabled replies before start even when systemd forgets the unit.
+[ "$(unit_prop orbit-runner-root.service ActiveState)" = inactive ] &&
+  [ "$(unit_prop orbit-runner-root.service MainPID)" = 0 ] || fail 13b "legacy root is still live"
+cx test ! -e /etc/systemd/system/multi-user.target.wants/orbit-runner-root.service || fail 13b "legacy root enablement link remains"
+[ "$(cx sha256sum "$ROOT_PATH_DROP" "$ROOT_CPU_DROP")" = "$root_drop_hashes" ] || fail 13b "legacy drop-ins were changed or removed"
+for path in "$ROOT_PATH_DROP" "$ROOT_CPU_DROP"; do
+  grep -qF "Not carried over: $path. Review and recreate this setting under orbit-runner@root.service.d/;" <<<"$out" || fail 13b "move output did not name $path"
+done
+cx test ! -e /etc/systemd/system/orbit-runner@root.service.d || fail 13b "drop-ins copied to root instance"
+wait_until 30 beats_since legacy-root-e2e "$root_beats" || fail 13b "moved root runner did not heartbeat"
+[ -n "$root_id" ] && [ "$(stub_field legacy-root-e2e 2)" = "$root_id" ] &&
+  [ "$(stub_runners | wc -l)" = 1 ] && [ "$(root_requests)" = "$root_requests_before" ] &&
+  [ "$(cx sha256sum /root/.orbit/config.json)" = "$root_config_hash" ] || fail 13b "root identity/configuration changed or stub saw registration/approval"
+check_no_sudo "after root's legacy move"
+pass 13b "root $root_id moved by $BIN host setup --server $SERVER: legacy pid $root_old_pid on $BIN, no home binary; PATH and set-property CPUWeight drop-ins named and left intact, unit file and enablement removed; legacy drained and confirmed inactive/disabled before instance start (systemctl audit); $samples one-second samples, none with two processes or live units, $root_none with no runner; orbit-runner@root.service euid 0 exe $HOME_COPY; same configuration and runner id, fresh heartbeat, no new registration or approval"
+
 # --- 14. no sudo, throughout ----------------------------------------------------------------------
 
 pass 14 "no sudo anywhere: absent from both machines' image and from root's, alice's, test.user's and test-user's PATH at all $SUDO_CHECKS checkpoints, from before setup to the end of the move, and no register or unregister by an account fell back to the sudo path"
-echo "==> all 15 assertions passed"
+echo "==> all 16 assertions passed"
