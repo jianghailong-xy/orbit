@@ -214,7 +214,7 @@ export class TooManyOpenRequests extends ConflictException {}
  * back with the turn it was for.
  */
 export async function chargeOpenRequest(tx: Prisma.TransactionClient, fromSessionId: string): Promise<void> {
-  const open = await tx.sessionRequest.count({ where: { fromSessionId, state: 'OPEN' } });
+  const open = await tx.sessionRequest.count({ where: { fromSessionId, state: 'OPEN', kind: 'MESSAGE' } });
   if (open < MAX_OPEN_REQUESTS_PER_SESSION) return;
   throw new TooManyOpenRequests({
     statusCode: 409,
@@ -477,13 +477,14 @@ export async function hasPendingWakeSource(
   });
   if (wakeup) return true;
   const asked = await tx.sessionRequest.findMany({
-    where: { fromSessionId: sessionId, state: 'OPEN' },
+    where: { fromSessionId: sessionId, state: 'OPEN', kind: 'MESSAGE' },
     select: { toSessionId: true },
   });
   if (asked.length > 0) {
     const waitingOnThis = new Set((await tx.sessionRequest.findMany({
       where: {
         toSessionId: sessionId,
+        kind: 'MESSAGE',
         state: 'OPEN',
         fromSessionId: { in: [...new Set(asked.map((request) => request.toSessionId))] },
       },
@@ -492,7 +493,7 @@ export async function hasPendingWakeSource(
     if (asked.some((request) => !waitingOnThis.has(request.toSessionId))) return true;
   }
   const onItsWay = await tx.sessionRequest.findFirst({
-    where: { fromSessionId: sessionId, state: { not: 'OPEN' }, replyClientTurnId: null, replyHeldAt: null },
+    where: { fromSessionId: sessionId, kind: 'MESSAGE', state: { not: 'OPEN' }, replyClientTurnId: null, replyHeldAt: null },
     select: { id: true },
   });
   if (onItsWay) return true;

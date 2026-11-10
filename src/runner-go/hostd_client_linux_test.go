@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/user"
@@ -468,33 +469,30 @@ func TestRegisterStopsAtTheBrokersOwnCopyRefusalWithoutSudo(t *testing.T) {
 	}
 }
 
-// uid 0's refusal is the one the sudo path still takes, as it always has: root's runner is a
-// legacy unit, never an instance, and the broker carries no code for it.
-func TestRootsRefusalStillFallsBackToTheSudoPath(t *testing.T) {
-	_, sys := newFakeSystem(t)
-	refusal := sys.verbs()["enable"](hostdPeer{UID: 0, PID: 7}, hostdRequest{V: 1, Verb: "enable"})
-	if refusal.OK || refusal.Code != "" {
-		t.Fatalf("fixture: root's enable = %+v, want a plain refusal", refusal)
-	}
-	path, stop := startHostd(t, map[string]hostdVerb{
-		"enable": func(hostdPeer, hostdRequest) hostdResponse { return refusal },
-	})
-	defer stop()
-
-	installed := false
-	out := captureServiceOutput(t, func() {
-		if _, err := setupServiceLinux(path, nil, func() (*runnerService, error) { installed = true; return nil, nil }); err != nil {
-			t.Error(err)
-		}
-	})
-	if !installed {
-		t.Error("root's refused enable must still leave the runner installed the old way")
-	}
-	if want := `note: the machine broker refused "enable" (refusing to enable orbit-runner@root.service: the runner must not run as root`; !strings.Contains(out, want) {
-		t.Errorf("register output must say %q; got:\n%s", want, out)
-	}
-	if !strings.Contains(out, "falling back to the sudo path") {
-		t.Errorf("register output does not say it falls back; got:\n%s", out)
+// Root registers onto the broker instance on a set-up host, and keeps the old path without one.
+func TestRootRegisterBrokerAndLegacy(t *testing.T) {
+	for _, setup := range []bool{true, false} {
+		t.Run(fmt.Sprint(setup), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "absent.sock")
+			if setup {
+				_, sys := newFakeSystem(t)
+				var stop func()
+				path, stop = startHostd(t, map[string]hostdVerb{"enable": func(_ hostdPeer, req hostdRequest) hostdResponse { return sys.enable(hostdPeer{UID: 0}, req) }})
+				defer stop()
+			}
+			installed := false
+			svc, err := setupServiceLinux(path, nil, func() (*runnerService, error) { installed = true; return &runnerService{unit: rootLegacyUnit}, nil })
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := rootLegacyUnit
+			if setup {
+				want = unitForAccount("root")
+			}
+			if svc == nil || svc.unit != want || installed == setup {
+				t.Fatalf("service=%+v installed=%v", svc, installed)
+			}
+		})
 	}
 }
 

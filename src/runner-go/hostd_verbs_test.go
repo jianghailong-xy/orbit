@@ -13,7 +13,7 @@ import (
 )
 
 // The uid every test below calls as. Deliberately not os.Getuid(): the suite runs as
-// root in CI, and root is the one uid these verbs treat differently.
+// root in CI; caller identity must still come from the supplied peer.
 const (
 	testUID  = 1000
 	testUser = "alice"
@@ -840,47 +840,27 @@ func TestHostdStatusReportsActiveStateAndTheBinary(t *testing.T) {
 	}
 }
 
-// Criterion 4a: hostd will not bring a root runner up — and stays able to take one down.
-func TestHostdRefusesToBringUpARootRunner(t *testing.T) {
-	root := hostdPeer{UID: 0, PID: 7}
-
+// Root uses the same lifecycle as every passwd account.
+func TestHostdServesRootRunner(t *testing.T) {
 	for _, layout := range []struct {
 		name   string
 		system func(*testing.T) (*fakeSystem, hostdSystem)
 		unit   string
 	}{
-		{"name template", newFakeSystem, "orbit-runner@root.service"},
-		{"uid template", newUidLayoutSystem, "orbit-runner@0.service"},
+		{"name", newFakeSystem, unitForAccount("root")}, {"uid", newUidLayoutSystem, unitForUid(0)},
 	} {
-		for _, verb := range []string{"enable", "start", "restart"} {
-			t.Run(layout.name+"/refuses "+verb, func(t *testing.T) {
+		for _, verb := range []string{"enable", "start", "restart", "disable", "stop", "status"} {
+			t.Run(layout.name+"/"+verb, func(t *testing.T) {
 				f, sys := layout.system(t)
-				resp := sys.verbs()[verb](root, hostdRequest{V: 1, Verb: verb})
-				if resp.OK {
-					t.Fatalf("%s brought up a root runner", verb)
+				resp := sys.verbs()[verb](hostdPeer{UID: 0}, hostdRequest{V: 1, Verb: verb})
+				if !resp.OK {
+					t.Fatalf("%s refused: %s", verb, resp.Error)
 				}
-				if want := "refusing to " + verb + " " + layout.unit + ": the runner must not run as root"; !strings.Contains(resp.Error, want) {
-					t.Errorf("error %q does not say %q", resp.Error, want)
+				if resp.Data["unit"] != layout.unit {
+					t.Fatalf("wrong target: %+v", resp.Data)
 				}
-				// Before the copy check, too: root's refusal is the one the sudo path takes.
-				if resp.Code != "" {
-					t.Errorf("root's refusal carries code %q; the client must fall back as it always has", resp.Code)
-				}
-				assertArgv(t, f.ran)
-				assertArgv(t, f.asked)
-				if len(f.checked) != 0 {
-					t.Errorf("checked %v for root", f.checked)
-				}
-			})
-		}
-
-		// A root runner from before this rule must remain stoppable and observable, or the
-		// guard would strand exactly the installs it exists to clean up.
-		for _, verb := range []string{"disable", "stop", "status"} {
-			t.Run(layout.name+"/allows "+verb, func(t *testing.T) {
-				_, sys := layout.system(t)
-				if resp := sys.verbs()[verb](root, hostdRequest{V: 1, Verb: verb}); !resp.OK {
-					t.Fatalf("%s on a root runner was refused: %s", verb, resp.Error)
+				if verb != "status" && len(f.ran) == 0 {
+					t.Fatal("no systemctl operation")
 				}
 			})
 		}

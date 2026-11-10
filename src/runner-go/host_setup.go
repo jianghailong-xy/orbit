@@ -176,6 +176,10 @@ func hostSetup(env hostSetupEnv, server string) error {
 
 	// After the template is written and systemd has read it: a host set up before instances
 	// were named after accounts still runs orbit-runner@<uid>, and each is moved now.
+	// Root may have both a uid instance and a legacy unit. Drain all its older units first.
+	if err := env.moveRootLegacy(exe); err != nil {
+		return err
+	}
 	moves, err := env.moveUidInstances()
 	printMoves(env.out, moves, err)
 	return nil

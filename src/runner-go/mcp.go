@@ -765,6 +765,18 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		return toolResult("The question is with the account owner. Their answer will arrive as a "+
 			"message in this conversation; nothing is waiting on this call.\n"+prettyJSON(raw), false)
 
+	case "request_owner_action":
+		body, err := ownerRequestBody(args, time.Now())
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		raw, err := s.t.fileOwnerRequest(s.sessionID, body)
+		if err != nil {
+			return toolResult("request owner action failed: "+err.Error(), true)
+		}
+		return toolResult("The request is with the account owner. Its outcome will arrive as a turn in "+
+			"this conversation; nothing is waiting on this call.\n"+prettyJSON(raw), false)
+
 	case "project_request_start":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -3824,6 +3836,97 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId", "question"),
 		},
 		{
+			"name": "request_owner_action",
+			"description": "Use for anything only the account owner can DO or PROVIDE, from any session. " +
+				"The request becomes a card in front of them, with a state of its own. This call does NOT " +
+				"block: it returns once the request is filed, and the outcome (done, declined with a " +
+				"reason, expired or withdrawn) arrives later as a turn in this conversation, so file it " +
+				"and go on with whatever is not waiting on it. " +
+				"Never ask for a secret in chat, in notify, or in a task comment: prefer kind SECRET for " +
+				"any credential (API key, token, password, private key). A SECRET request says what is " +
+				"needed and where it goes, never its value; the owner enters the value on the card. " +
+				"Kinds: DECISION for a choice only the owner can make (options and recommendedOption); " +
+				"SECRET for a credential (secretSpec); MANUAL_STEP for something only a person can do, " +
+				"such as a sign-in, a purchase or a change on their own device (steps); CONFIRM for a " +
+				"yes or no on something you are about to rely on. options and recommendedOption are " +
+				"only for DECISION, steps only for MANUAL_STEP and secretSpec only for SECRET; any other " +
+				"mix is refused. " +
+				"Do NOT file what you can read or do yourself: a request costs a person's attention.",
+			"inputSchema": obj(map[string]interface{}{
+				"kind": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM"},
+					"description": "What you need from the owner. Use SECRET for any credential.",
+				},
+				"title": map[string]interface{}{
+					"type":        "string",
+					"description": "The line the owner reads first, and the body of the push notification. Up to 200 characters.",
+				},
+				"why": map[string]interface{}{
+					"type":        "string",
+					"description": "What this unblocks and why only the owner can do it. Up to 2000 characters.",
+				},
+				"blocksTaskIds": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "The tasks waiting on this request, so the card shows what it is holding up.",
+				},
+				"ifUnanswered": map[string]interface{}{
+					"type": "string",
+					"description": "What happens if nobody answers, shown on the card as written so the " +
+						"owner can judge how urgent this is. Up to 500 characters.",
+				},
+				"steps": map[string]interface{}{
+					"type": "array",
+					"description": "MANUAL_STEP only, and required there: what the owner has to do, in " +
+						"order, up to 20. Each step is { text, command, link }: command is something " +
+						"they can copy and run, link a page they open to do the step.",
+					"items": obj(map[string]interface{}{
+						"text":    map[string]interface{}{"type": "string"},
+						"command": map[string]interface{}{"type": "string"},
+						"link":    map[string]interface{}{"type": "string"},
+					}, "text"),
+				},
+				"secretSpec": map[string]interface{}{
+					"type": "object",
+					"description": "SECRET only, and required there: what is needed and where it goes, " +
+						"never its value. Name exactly one destination, envVar or filePath.",
+					"properties": map[string]interface{}{
+						"name":     map[string]interface{}{"type": "string", "description": "What the owner is asked for, as they would call it."},
+						"runnerId": map[string]interface{}{"type": "string", "description": "The runner that needs it, as runner_list shows it."},
+						"envVar":   map[string]interface{}{"type": "string", "description": "The environment variable it becomes."},
+						"filePath": map[string]interface{}{"type": "string", "description": "The file it is written to."},
+					},
+					"required": []string{"name", "runnerId"},
+				},
+				"options": map[string]interface{}{
+					"type": "array",
+					"description": "DECISION only: the alternatives, up to 4. Each option is { label, " +
+						"description }: the label is what the owner taps, the description is the " +
+						"consequence of choosing it.",
+					"items": obj(map[string]interface{}{
+						"label":       map[string]interface{}{"type": "string"},
+						"description": map[string]interface{}{"type": "string"},
+					}, "label"),
+				},
+				"recommendedOption": map[string]interface{}{
+					"type":        "integer",
+					"description": "DECISION only: index into options of the one you recommend.",
+				},
+				"expiresIn": map[string]interface{}{
+					"type": "integer",
+					"description": fmt.Sprintf("Seconds from now after which the request expires if still "+
+						"unanswered (1 to %d). Leave it out for a request that stays open until it is answered.",
+						maxOwnerRequestExpiresIn),
+				},
+				"clientRequestId": map[string]interface{}{
+					"type": "string",
+					"description": "Your own key for this request. A call retried under the same key " +
+						"returns the request already filed; omit it and every call is a new request.",
+				},
+			}, "kind", "title", "why"),
+		},
+		{
 			"name": "project_request_start",
 			"description": "Ask the account owner to start the project you coordinate. Until they " +
 				"start it, task_start is refused for its tasks, and this is how the start is put in " +
@@ -4588,10 +4691,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "notify",
-			"description": "Alert the human this session belongs to, on their phone and Mac, with a line you write. " +
-				"For the two moments a transcript cannot cover: you need something only they can give (a decision, a " +
-				"credential, an answer) and are otherwise stuck, or the thing they said they were waiting for is done. " +
-				"Say what happened and what you need in one sentence — it is read on a lock screen, and anything past " +
+			"description": "Tell the human this session belongs to that something happened, on their phone and Mac, " +
+				"with a line you write: the thing they said they were waiting for is done, or something went wrong " +
+				"that they would want to hear about before they next look. " +
+				"Notify is only for telling. If you need a credential, or anything else only the owner can do or " +
+				"provide, do not call this tool: use request_owner_action, which files a card with a state and brings " +
+				"the outcome back to you. Never ask for a credential here. " +
+				"Say what happened in one sentence — it is read on a lock screen, and anything past " +
 				"~200 characters is cut. They can reply straight from the notification, which arrives in this session. " +
 				"NOT for progress updates, step-by-step narration, or anything they will see when they next look: this " +
 				"interrupts a person, and one that did not need to be sent teaches them to ignore the next one. " +
@@ -4602,7 +4708,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"inputSchema": obj(map[string]interface{}{
 				"message": map[string]interface{}{
 					"type":        "string",
-					"description": "The line to show. The session's title is already the alert's heading, so don't restate it — say only what happened or what you need.",
+					"description": "The line to show. The session's title is already the alert's heading, so don't restate it — say only what happened.",
 				},
 			}, "message"),
 		},
@@ -5371,6 +5477,35 @@ func copyIfPresent(dst, src map[string]interface{}, keys ...string) {
 			dst[k] = v
 		}
 	}
+}
+
+// maxOwnerRequestExpiresIn is a year in seconds: long enough for any real deadline, and small enough
+// that the conversion to a time.Duration cannot overflow.
+const maxOwnerRequestExpiresIn = 365 * 24 * 60 * 60
+
+// ownerRequestBody is what POST /runner/owner-requests takes for one request_owner_action call. The
+// per-kind rules (which fields go with which kind) are the server's, so those fields travel as the
+// caller wrote them; the one translation is expiresIn, since the server takes an absolute expiresAt.
+func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]interface{}, error) {
+	kind := getString(args, "kind")
+	title := strings.TrimSpace(getString(args, "title"))
+	why := strings.TrimSpace(getString(args, "why"))
+	if kind == "" || title == "" || why == "" {
+		return nil, errors.New("kind, title and why are required")
+	}
+	body := map[string]interface{}{"kind": kind, "title": title, "why": why}
+	copyIfPresent(body, args, "ifUnanswered", "steps", "secretSpec", "options", "recommendedOption", "clientRequestId")
+	if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
+		body["blocksTaskIds"] = blocked
+	}
+	expiresIn, err := getBoundedOptionalNumber(args, "expiresIn", maxOwnerRequestExpiresIn)
+	if err != nil {
+		return nil, err
+	}
+	if expiresIn > 0 {
+		body["expiresAt"] = now.Add(time.Duration(expiresIn) * time.Second).UTC().Format(time.RFC3339)
+	}
+	return body, nil
 }
 
 func prettyJSON(raw json.RawMessage) string {
