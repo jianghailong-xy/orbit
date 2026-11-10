@@ -201,6 +201,9 @@ func projectDoneRequestFiled(raw json.RawMessage) string {
 // fix, and anything else as the transport says it.
 func projectDoneRequestRefusal(err error) string {
 	var httpErr *transportHTTPError
+	if errors.As(err, &httpErr) && httpErr.code() == "DONE_REQUEST_UNCHANGED_SINCE_DECLINE" {
+		return "Nothing was filed (DONE_REQUEST_UNCHANGED_SINCE_DECLINE). " + httpErr.Error()
+	}
 	if !errors.As(err, &httpErr) || httpErr.code() != "DONE_REQUEST_NOT_READY" {
 		return "request done failed: " + err.Error()
 	}

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { Logger } from '@nestjs/common';
+import type { PushService } from '../push/push.service';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import type { ProjectDoneBy } from '@orbit/shared';
 
@@ -300,6 +301,8 @@ export interface StoreDerivedProjectStatusOptions {
   /** Where the coordinator is told why the owner's DONE was reopened. An edge without one — the
    *  merge-receipt writer, a hand-built fixture — still reopens the record, and tells nobody. */
   sessions?: SessionsService;
+  /** Owner notification, sent only by the successful post-commit OPEN → DONE writer. */
+  push?: Pick<PushService, 'notifyProjectDone'>;
 }
 
 const log = new Logger('ProjectDoneDerived');
@@ -561,6 +564,7 @@ export async function storeDerivedProjectStatus(
   const stored = await prisma.project.findFirst({
     where: { id: projectId, ownerId },
     select: {
+      title: true,
       status: true,
       doneBy: true,
       doneAt: true,
@@ -607,6 +611,16 @@ export async function storeDerivedProjectStatus(
       ...NO_REOPEN_RECORD,
     },
   });
+
+  if (written.count === 1 && derived.done && stored.status === ProjectStatus.OPEN && options.push) {
+    await options.push.notifyProjectDone({
+      ownerId, projectId, title: stored.title,
+      criteriaCount: derived.counts.criteria,
+    }).catch((e) =>
+      log.warn(`owner not told project ${projectId} is done: ${
+        (e as { message?: string })?.message ?? String(e)}`),
+    );
+  }
 
   if (written.count === 1 && reopenedBy !== null && !derived.done && options.sessions) {
     await tellCoordinatorProjectReopened(prisma, options.sessions, {

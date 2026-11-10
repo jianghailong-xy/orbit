@@ -521,6 +521,40 @@ test('a coordinator asks its owner to record the project done, and the project i
       .filter((finding) => finding.code === 'DONE_CRITERION_UNLANDED')
       .map((finding) => `${finding.criterion?.ordinal} ${finding.reason}`);
 
+  await t.test('Not yet refuses unchanged facts and keeps the note until a newer request', async () => {
+    const p = await project('declined-unchanged', ['The missing work is complete.']);
+    const criterion = p.criteria[0];
+    await task(p, 'initial work', { serves: criterion, status: 'DONE', codeless: true });
+    const filed = await ask(p.id, p.sessionId);
+    const note = 'Finish the second walkthrough first.';
+    await openItems.declineDoneRequest(ownerId, p.id, filed.itemId, { note });
+    const before = await requests(p.id);
+    const refusal = await refused(() => ask(p.id, p.sessionId, {
+      ...CALL, judgment: 'A differently worded call still has the same facts.',
+    }));
+    assert.equal(refusal.status, 409);
+    assert.equal(refusal.body.code, 'DONE_REQUEST_UNCHANGED_SINCE_DECLINE');
+    assert.equal(refusal.body.written, 0);
+    assert.ok(refusal.body.message?.includes(note));
+    assert.deepEqual(await requests(p.id), before, 'a refusal writes no item');
+    const view = await openItems.list(ownerId, p.id);
+    assert.equal(view.latestDoneRequestDecline?.note, note);
+    const declined = await prisma.projectOpenItem.findUniqueOrThrow({ where: { id: filed.itemId } });
+    assert.equal(view.latestDoneRequestDecline?.declinedAt.getTime(), declined.resolvedAt!.getTime());
+    const missing = await task(p, 'second walkthrough', { serves: criterion, codeless: true });
+    assert.equal((await refused(() => ask(p.id, p.sessionId))).body.code, 'DONE_REQUEST_NOT_READY');
+    await sql.query(
+      `UPDATE "task" SET "status" = 'DONE'
+        WHERE "id" = $1::uuid AND "completion_criterion" = 'EXECUTABLE'
+          AND "acceptance_command" = 'true' AND "acceptance_expected_exit_code" = 0`,
+      [missing.id],
+    );
+    const next = await ask(p.id, p.sessionId);
+    assert.notEqual(next.itemId, filed.itemId);
+    assert.equal((await requests(p.id)).length, before.length + 1);
+    assert.equal((await openItems.list(ownerId, p.id)).latestDoneRequestDecline, null);
+  });
+
   // ═══ (1) the refusals ══════════════════════════════════════════════════════════════════════════
 
   await t.test('(1a) a project that states no criteria is refused: nothing to be done against', async () => {

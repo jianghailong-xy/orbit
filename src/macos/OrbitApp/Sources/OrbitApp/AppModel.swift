@@ -3786,6 +3786,13 @@ final class AppModel {
         case .open(let route): self.route(to: route)
         case let .approve(sid, behavior): Task { await approveAll(sessionID: sid, behavior: behavior) }
         case let .reply(sid, text): Task { await reply(sessionID: sid, text: text) }
+        case let .openProject(projectID):
+            #if os(iOS)
+            settingsPresented = false
+            openProjectSessions(PublicID.toPublic(projectID), inColumn: false)
+            #else
+            openProject(PublicID.toPublic(projectID))
+            #endif
         case let .openProjectMerge(projectID, sid):
             #if os(iOS)
             // A push names its project by the stored UUID; every list row spells it base62.

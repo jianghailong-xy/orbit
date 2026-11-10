@@ -362,7 +362,15 @@ export class MergeReceiptService {
       select: { ownerId: true },
     }).catch(() => null);
     if (!project) return;
-    await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId).catch((e) =>
+    let push: PushService | undefined;
+    try {
+      push = this.moduleRef?.get(PushService, { strict: false });
+    } catch {
+      // Hand-built application contexts may have no push service.
+    }
+    await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId, {
+      push,
+    }).catch((e) =>
       this.logger.warn(`derived project status not reconciled after a merge receipt: ${e?.message ?? e}`),
     );
   }
