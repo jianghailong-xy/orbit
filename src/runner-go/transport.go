@@ -1750,6 +1750,14 @@ func (t *Transport) askOwner(sessionID, id string, body map[string]interface{}) 
 	return out, err
 }
 
+// fileOwnerRequest files a request that the account owner do or provide something, and returns at
+// once. The session header names who is asking: any session this runner hosts may file one.
+func (t *Transport) fileOwnerRequest(sessionID string, body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/owner-requests", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // requestProjectStart files a coordinator's request that the account owner start its project, and
 // returns at once: the owner answers on the start card, and the coordinator is told when the project
 // starts, as a turn of its own.

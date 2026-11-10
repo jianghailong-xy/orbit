@@ -32,7 +32,9 @@ var cursorEscapeAuthPlatform = runtime.GOOS
 // the kernel (cursorShellPeer, §8.5). It is the one check that decides whether Auto's sandbox is in force
 // and whether an approved command may leave it: a sandbox an approved command cannot escape would break
 // every approved write outside the workspace, so without this the session keeps the unsandboxed shell.
-func cursorEscapeAuthSupported() bool { return cursorEscapeAuthPlatform == "linux" }
+func cursorEscapeAuthSupported() bool {
+	return cursorEscapeAuthPlatform == "linux" || cursorEscapeAuthPlatform == "darwin"
+}
 
 type cursorShellConfig struct {
 	Binary, Platform, Socket, Helper string
