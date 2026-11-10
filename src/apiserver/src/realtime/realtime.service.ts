@@ -1572,7 +1572,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         ? {
           ...underReview,
           since: underReview.since.toISOString(),
-          dueAt: underReview.dueAt.toISOString(),
+          dueAt: underReview.dueAt?.toISOString() ?? null,
         }
         : null,
       // The four owner items, sent with every summary — including as an empty list, which is how a

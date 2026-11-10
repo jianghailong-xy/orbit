@@ -514,6 +514,13 @@ describe('a report its reviewer sent back', () => {
     expect(html).toContain('会话间请求与回复：修复 P1 审查发现的问题');
     expect(html).toMatch(/Due \d/u);
     expect(html).toContain(OPEN_TASK_SESSION);
+    const queued = parseConfirmationReviewRequest({ confirmationReviewRequest: { ...card!, dueAt: null } });
+    expect(queued).not.toBeNull();
+    const queuedHtml = renderToStaticMarkup(
+      <MemoryRouter><ReviewRequestedCard card={queued!} queued /></MemoryRouter>,
+    );
+    expect(queuedHtml).toContain(REVIEW_REQUESTED);
+    expect(queuedHtml).not.toContain('Due ');
     expect(parseConfirmationReviewRequest({ confirmationReviewRequest: { requestId: 'x' } })).toBeNull();
   });
 });

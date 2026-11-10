@@ -5142,7 +5142,7 @@ final class ConsoleModel {
         reviewDueRead?.cancel()
         reviewDueRead = nil
         guard let review = OwnerConfirmations.waitingIn(read, sessionID: sessionID)?.review,
-              review.state == .underReview, let due = RelativeTime.parse(review.dueAt) else { return }
+              review.state == .underReview, let due = review.dueAt.flatMap(RelativeTime.parse) else { return }
         let wait = max(0, due.timeIntervalSinceNow + 1)
         reviewDueRead = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))

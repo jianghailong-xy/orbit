@@ -72,7 +72,7 @@ object OwnerReview {
     fun readable(review: JsonElement?): JsonObject? {
         val value = review as? JsonObject ?: return null
         if (value.text("state") !in states || value.text("reviewId") == null || value.obj("reviewer") == null ||
-            value.text("since") == null || value.text("dueAt") == null || value.number("windowSeconds") == null) return null
+            value.text("since") == null || (value["dueAt"] != JsonNull && value.text("dueAt") == null) || value.number("windowSeconds") == null) return null
         return value
     }
 
