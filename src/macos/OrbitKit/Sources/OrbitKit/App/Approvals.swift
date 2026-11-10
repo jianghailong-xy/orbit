@@ -44,8 +44,7 @@ public enum Approvals {
     /// Changing a project's merge check — the check run on the combined tree before that project's
     /// work lands. The one integration setting an agent may propose: where the work LANDS is the
     /// owner's alone and the runner does not ask about it at all. Web keys it off
-    /// `isMergeCheckChange`, and draws the two commands; here it renders as the plain card, whose
-    /// body is the ask as the runner built it.
+    /// `isMergeCheckChange`; both draw the two commands, here from `MergeCheckChangePreview`.
     public static func isMergeCheckChange(toolName: String) -> Bool {
         toolName == "orbit_project_update_integration"
     }

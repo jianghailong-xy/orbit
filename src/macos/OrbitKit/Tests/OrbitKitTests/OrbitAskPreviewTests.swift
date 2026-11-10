@@ -262,6 +262,54 @@ final class OrbitAskPreviewTests: XCTestCase {
         }
     }
 
+    // MARK: a merge-check change
+
+    /// The input as `runner-go/mcp.go`'s `projectMergeCheckCard` files it: the project's current
+    /// check beside the proposal, flat.
+    func testAMergeCheckChangeShowsBothCommands() {
+        let m = Approvals.mergeCheckChangePreview(toolName: "orbit_project_update_integration", from: json("""
+            {"projectId":"34vCfW","projectTitle":"Payments","currentMergeCheckCommand":null,
+             "currentMergeCheckTimeoutSeconds":null,
+             "mergeCheckCommand":"npm ci && npm test","mergeCheckTimeoutSeconds":1800}
+            """))
+        XCTAssertEqual(m?.projectLine, "Payments")
+        XCTAssertEqual(m?.currentLine, "no check configured", "a missing check is said, not left blank")
+        XCTAssertEqual(m?.nextLine, "npm ci && npm test")
+        XCTAssertEqual(m?.timeoutLine, "killed after 1800s")
+        XCTAssertEqual(m?.declineName, "Payments's merge check")
+
+        XCTAssertNil(Approvals.mergeCheckChangePreview(toolName: "orbit_blocker_resolve", from: json("{}")))
+    }
+
+    func testClearingAndTimeoutOnlyProposalsSayWhatHappensToTheCommand() {
+        let cleared = Approvals.mergeCheckChangePreview(toolName: "orbit_project_update_integration", from: json("""
+            {"projectTitle":"","currentMergeCheckCommand":"make check","mergeCheckCommand":null}
+            """))
+        XCTAssertEqual(cleared?.projectLine, "This project")
+        XCTAssertEqual(cleared?.currentLine, "make check")
+        XCTAssertEqual(cleared?.nextLine, "no check — nothing runs on the combined tree")
+        XCTAssertNil(cleared?.timeoutLine, "no budget named, no budget line")
+        XCTAssertEqual(cleared?.declineName, "this project's merge check")
+
+        // A proposal naming only the budget leaves the command where it is: not "no check".
+        let budget = Approvals.mergeCheckChangePreview(toolName: "orbit_project_update_integration", from: json("""
+            {"projectTitle":"Payments","currentMergeCheckCommand":"make check","mergeCheckTimeoutSeconds":600}
+            """))
+        XCTAssertEqual(budget?.nextLine, "make check (unchanged)")
+        XCTAssertEqual(budget?.timeoutLine, "killed after 600s")
+    }
+
+    /// The card reads the preview instead of the plain "Approve tool call" chrome, whose body showed
+    /// none of these fields.
+    func testAMergeCheckCardIsDrawnFromThePreview() throws {
+        let card = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift")
+        for shown in ["Approvals.mergeCheckChangePreview(toolName:",
+                      "mergeCheck.projectLine", "mergeCheck.currentLine", "mergeCheck.nextLine", "mergeCheck.timeoutLine",
+                      "MergeCheckChangePreview.action", "mergeCheck.declineName"] {
+            XCTAssertTrue(card.contains(shown), "\(shown) is part of what this card shows and the press it offers")
+        }
+    }
+
     private struct NoSuchFile: Error, CustomStringConvertible {
         let path: String
         var description: String { "\(path) was not found above this test" }
