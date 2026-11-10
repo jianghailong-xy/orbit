@@ -101,6 +101,7 @@ function fakePrisma(
     // A number stands in for "the table answers this much"; a function is the table itself, for the
     // one case where the count is a predicate over WHICH rows answer (`backgroundJobId ∈ …`).
     approval: {
+      findMany: async () => [],
       count: async ({ where }: { where: Record<string, never> }) =>
         typeof pendingApprovals === 'function' ? pendingApprovals(where) : pendingApprovals,
     },

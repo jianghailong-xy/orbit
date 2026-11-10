@@ -1,3 +1,4 @@
+import type { OwnerConfirmationNotReviewedReason } from './owner-confirmation-review';
 // The wire contract shared by the control plane, the Go runner, the web app and the native
 // clients.
 //
@@ -2154,6 +2155,8 @@ export type ApprovalStatus = 'PENDING' | 'ALLOWED' | 'DENIED' | 'ABANDONED';
 /** A tool-permission request awaiting a human allow/deny (from claude's
  *  --permission-prompt-tool, served by the orbit MCP server). */
 export interface ApprovalInfo {
+  answeredBy?: 'COORDINATOR' | null;
+  coordinatorFallback?: OwnerConfirmationNotReviewedReason | null;
   id: string;
   sessionId: string;
   toolName: string;

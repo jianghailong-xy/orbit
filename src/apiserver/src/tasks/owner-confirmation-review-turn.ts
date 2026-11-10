@@ -1,3 +1,4 @@
+import { appendRunQuestionContext, questionApprovalId, RUN_QUESTION_PREFIX } from '../sessions/run-question';
 import { CreatorType, Prisma } from '@prisma/client';
 import {
   uuidToBase62,
@@ -75,6 +76,8 @@ export function confirmationReviewRetryTurnId(clientTurnId: string | null | unde
   if (reviewId) return `${ownerConfirmationReviewTurnId(reviewId)}:retry:${nonce}`;
   const recordId = returnRecordIdOfTurn(clientTurnId);
   if (recordId) return `${confirmationReturnTurnId(recordId)}:retry:${nonce}`;
+  const question = questionApprovalId(clientTurnId);
+  if (question) return `${RUN_QUESTION_PREFIX}${question}:retry:${nonce}`;
   return evidenceReviewRetryTurnId(clientTurnId, nonce);
 }
 
@@ -99,7 +102,8 @@ export function ownerConfirmationAnswersTurnId(decisionId: string): string {
 export function isConfirmationReviewContentTurn(clientTurnId: string | null | undefined): boolean {
   return isOwnerConfirmationReviewTurn(clientTurnId)
     || isConfirmationReturnTurn(clientTurnId)
-    || isEvidenceReviewTurn(clientTurnId);
+    || isEvidenceReviewTurn(clientTurnId)
+    || questionApprovalId(clientTurnId) !== null;
 }
 
 function clip(text: string, max: number): string {
@@ -358,6 +362,7 @@ export async function readConfirmationReturnCard(
 
 /** What the queued row of any content turn shows before it is handed out: the block itself. */
 export async function queuedConfirmationReviewContent(db: Db, clientTurnId: string): Promise<string> {
+  if (questionApprovalId(clientTurnId)) return (await appendRunQuestionContext(db, clientTurnId, '')) ?? '';
   if (isOwnerConfirmationReviewTurn(clientTurnId)) {
     return (await appendOwnerConfirmationReviewContext(db, clientTurnId, '')) ?? '';
   }

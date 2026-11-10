@@ -656,6 +656,7 @@ const MAX_OPTIONS = 4;
 
 /** A question as the caller asked it, before it is a row. */
 export interface AskedQuestion {
+  forRunQuestion?: string;
   question: string;
   options?: Array<{ label: string; description?: string }>;
   recommendedOption?: number;

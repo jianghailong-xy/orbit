@@ -1,3 +1,4 @@
+import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
   mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction,
@@ -3422,7 +3423,7 @@ export class SessionsService {
       // turn raises just as well — and those sit at AWAITING_INPUT for the whole turn.
       this.prisma.session.findMany({
         where: { ...open, ...GENERATING_SESSION_FILTER, approvals: { some: { status: 'PENDING' } } },
-        select: { id: true, workspaceId: true },
+        select: { id: true, taskId: true, workspaceId: true, approvals: { where: { status: 'PENDING' }, select: { id: true, toolName: true } } },
       }),
       // The second kind of card a person still has to answer, and the one the query above cannot
       // see: a card that names the runner-hosted job reading it (approval.background_job_id,
@@ -3439,7 +3440,7 @@ export class SessionsService {
           runningBgShells: true,
           approvals: {
             where: { status: 'PENDING', backgroundJobId: { not: null } },
-            select: { backgroundJobId: true },
+            select: { id: true, toolName: true, backgroundJobId: true },
           },
         },
       }),
@@ -3482,7 +3483,11 @@ export class SessionsService {
     // is "sessions that need you", and a coordinator blocked on a tool call while a proposal is
     // also unanswered is still one place to go.
     const needsYou = new Set<string>();
-    for (const session of [...blocked, ...awaitingDecision]) {
+    const visibleBlocked = [];
+    for (const session of blocked) {
+      if (!session.taskId || (await visibleQuestions(this.prisma, session.approvals)).length) visibleBlocked.push(session);
+    }
+    for (const session of [...visibleBlocked, ...awaitingDecision]) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
@@ -3491,7 +3496,7 @@ export class SessionsService {
     // already lit by a blocked turn is not lit twice by the card a job filed beside it.
     for (const session of jobCards) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
-      if (!session.approvals.some((a) => readByLiveBackgroundJob(a, session.runningBgShells))) continue;
+      if (!(await visibleQuestions(this.prisma, session.approvals)).some((a) => readByLiveBackgroundJob(a, session.runningBgShells))) continue;
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
     }
@@ -4189,10 +4194,11 @@ export class SessionsService {
       ? []
       : await this.prisma.approval.findMany({
           where: { sessionId: { in: candidates }, status: 'PENDING' },
-          select: { sessionId: true, backgroundJobId: true },
+          select: { id: true, toolName: true, sessionId: true, backgroundJobId: true },
         });
+    const heldQuestions = await questionsWithCoordinator(this.prisma, sessions.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
-    for (const card of cards) {
+    for (const card of await visibleQuestions(this.prisma, cards)) {
       if (!generating.has(card.sessionId) && !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? [])) {
         continue;
       }
@@ -4221,6 +4227,7 @@ export class SessionsService {
       const peers = requests.get(s.id);
       return {
         ...s,
+        questionWithCoordinator: heldQuestions.get(s.id) ?? null,
         pendingApprovals: approvals + (waiting?.count ?? 0),
         waitingKind: sessionWaitingKind(approvals, waiting),
         // Always sent, as null when there is none: a client folding a summary into a row it holds
@@ -8553,7 +8560,7 @@ export class SessionsService {
       orderBy: { createdAt: 'asc' },
     });
     const answerable = status === 'PENDING' ? await this.stillBeingAsked(session, approvals) : approvals;
-    return answerable.map((a) => this.toApprovalInfo(a));
+    return (await visibleQuestions(this.prisma, answerable)).map((a) => this.toApprovalInfo(a));
   }
 
   /**
@@ -8777,6 +8784,8 @@ export class SessionsService {
     message: string | null;
     createdAt: Date;
     decidedAt: Date | null;
+    decidedCredentialKind?: string | null;
+    coordinatorFallback?: string | null;
   }): ApprovalInfo {
     return {
       id: a.id,
@@ -8785,6 +8794,8 @@ export class SessionsService {
       input: a.input,
       toolUseId: a.toolUseId ?? undefined,
       backgroundJobId: a.backgroundJobId ?? undefined,
+      answeredBy: a.decidedCredentialKind === 'COORDINATOR' ? 'COORDINATOR' : null,
+      coordinatorFallback: a.coordinatorFallback as ApprovalInfo['coordinatorFallback'] ?? null,
       status: a.status as ApprovalStatus,
       message: a.message ?? undefined,
       createdAt: a.createdAt.toISOString(),

@@ -1,3 +1,4 @@
+import { visibleQuestions } from './run-question';
 import { Prisma, PrismaClient } from '@prisma/client';
 
 import { isSessionGenerating } from '../common/session-generating';
@@ -327,24 +328,20 @@ export function readByLiveBackgroundJob(
  * verdicts about which states count (it reads the Prisma `RunStatus`, callers the shared one).
  */
 export async function countLiveApprovals(
-  db: Pick<PrismaClient, 'approval'>,
-  session: { id: string; runningBgShells: readonly string[] } & Parameters<
+  db: Prisma.TransactionClient,
+  session: { id: string; taskId?: string | null; runningBgShells: readonly string[] } & Parameters<
     typeof isSessionGenerating
   >[0],
 ): Promise<number> {
-  if (isSessionGenerating(session)) {
-    return db.approval.count({ where: { sessionId: session.id, status: 'PENDING' } });
-  }
-  if (session.runningBgShells.length === 0) return 0;
-  return db.approval.count({
-    where: {
-      sessionId: session.id,
-      status: 'PENDING',
-      // The predicate above as the query spells it. `in` over the session's own live set is the
-      // whole rule: a card is a question while the job it named is up.
-      backgroundJobId: { in: [...session.runningBgShells] },
-    },
-  });
+  const generating = isSessionGenerating(session);
+  if (!generating && session.runningBgShells.length === 0) return 0;
+  const where = { sessionId: session.id, status: 'PENDING',
+    ...(!generating ? { backgroundJobId: { in: [...session.runningBgShells] } } : {}),
+  };
+  const count = await db.approval.count({ where });
+  if (!session.taskId || count === 0) return count;
+  const questions = await db.approval.findMany({ where: { ...where, toolName: 'AskUserQuestion' }, select: { id: true, toolName: true } });
+  return count - (questions.length - (await visibleQuestions(db, questions)).length);
 }
 
 /** The trace, in the row itself, of why a card whose reader was replaced will never be answered. */

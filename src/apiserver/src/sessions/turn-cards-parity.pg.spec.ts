@@ -79,6 +79,7 @@ const SHA = 'c3'.repeat(20);
 /** Every card a turn can carry, by the name its echo stores it under. Keyed by `TurnCards`: a card
  *  added there is a compile error here until it is listed, and then a red below until it has a case. */
 const CARD_FIELDS: Record<keyof TurnCards, true> = {
+  runQuestion: true,
   openItemDelivery: true,
   ownerAnswer: true,
   coordinatorDelivery: true,
@@ -451,6 +452,23 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
     const back = await turnKeyed(filed.run, CONFIRMATION_RETURN_TURN_KEY_PREFIX);
     assert.equal(back.clientTurnId, `${CONFIRMATION_RETURN_TURN_KEY_PREFIX}${returned.recordId}`);
     await assertSameCards('confirmationReturn', filed.run, back.id, { listedWhileHanded: false });
+  });
+
+  await t.test('a run question handed to the coordinator (runQuestion)', async () => {
+    const { projectId, coordinator } = await coordinatedProject('run question parity');
+    const taskId = await task('the run question', { projectId });
+    const run = await session('Questioning run', { taskId, status: RunStatus.RUNNING });
+    const approval = await prisma.approval.create({ data: { sessionId: run, toolName: 'AskUserQuestion',
+      input: { questions: [{ question: 'Which port?', options: [{ label: '3000' }, { label: '4000' }] }] } } });
+    const clientTurnId = `run-question:v1:${approval.id}`;
+    const turn = await sessions.createTurn(ownerId, coordinator, { clientTurnId, content: '', intent: 'NEXT_TURN' }, {
+      onTurnWritten: async (tx, written) => {
+        await tx.sessionRequest.create({ data: { ownerId, fromSessionId: run, toSessionId: coordinator,
+          turnId: written.id, clientTurnId, kind: 'RUN_QUESTION', approvalId: approval.id,
+          requestPreview: 'Which port?', replyBy: new Date(Date.now() + 300_000) } });
+      },
+    });
+    await assertSameCards('runQuestion', coordinator, turn.turnId, { listedWhileHanded: false });
   });
 
   // ── sessionMessage ────────────────────────────────────────────────────────────────────────────

@@ -319,6 +319,7 @@ export type ReplyRefusal =
 
 /** What `session_reply` carries. */
 export interface SessionReplyInput {
+  answers?: import('./run-question').QuestionAnswer[];
   message?: string | null;
   option?: number | null;
 }
@@ -331,6 +332,7 @@ export function readReply(request: Pick<SessionRequest, 'options'>, input: Sessi
   replyText: string | null;
   replyOption: number | null;
 } {
+  if (input.answers !== undefined) throw new BadRequestException('answers is only for a run question');
   const message = typeof input.message === 'string' ? stripNul(input.message).trim() : '';
   if (input.message != null && typeof input.message !== 'string') {
     throw new BadRequestException('message must be text');
@@ -1587,7 +1589,7 @@ export async function readOpenRequestPeers(
   if (sessionIds.length === 0) return peers;
   const ids = [...new Set(sessionIds)];
   const open = await db.sessionRequest.findMany({
-    where: { ownerId, state: 'OPEN', OR: [{ fromSessionId: { in: ids } }, { toSessionId: { in: ids } }] },
+    where: { ownerId, kind: 'MESSAGE', state: 'OPEN', OR: [{ fromSessionId: { in: ids } }, { toSessionId: { in: ids } }] },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: { id: true, fromSessionId: true, toSessionId: true },
   });

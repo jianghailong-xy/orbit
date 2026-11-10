@@ -1,3 +1,4 @@
+import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, Optional } from '@nestjs/common';
@@ -291,6 +292,9 @@ export class PushService {
   private async claimApprovalAlert(sessionId: string, approvalId: string): Promise<boolean> {
     return withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR NO KEY UPDATE`;
+      const candidates = await tx.approval.findMany({ where: { sessionId, toolName: 'AskUserQuestion', status: 'PENDING' }, select: { id: true, toolName: true } });
+      const holds = await questionHolds(tx, candidates.map(a => a.id));
+      const held = [...holds].filter(([, h]) => h?.place === 'HELD').map(([id]) => id);
       const claimed = await tx.$executeRaw`
         UPDATE "session" AS s SET "alerted_approval_at" = x."created_at"
           FROM "approval" AS x
@@ -300,6 +304,8 @@ export class PushService {
              SELECT 1 FROM "approval" AS a
               WHERE a."session_id" = s."id" AND a."id" <> x."id"
                 AND (a."created_at", a."id") < (x."created_at", x."id")
+                AND NOT (a."id" = ANY(${held}::uuid[]))
+                AND a."decided_credential_kind" IS DISTINCT FROM 'COORDINATOR'
                 AND (a."status" = 'PENDING' OR a."decided_at" > x."created_at"))`;
       return claimed === 1;
     }, loggedRetry(this.log, 'push.claimApprovalAlert'));
@@ -1111,11 +1117,12 @@ export class PushService {
           cancelRequestedAt: null,
           approvals: { some: { status: 'PENDING' } },
         },
-        select: { id: true },
+        select: { id: true, taskId: true, approvals: { where: { status: 'PENDING' }, select: { id: true, toolName: true } } },
       }),
       readOwnerItemSessionIds(this.prisma, ownerId),
     ]);
-    return [...new Set([...rows.map((r) => r.id), ...blockedOnOwner])];
+    const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
+    return [...new Set([...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id), ...blockedOnOwner])];
   }
 
   /** Debounced: something that could lower `ownerId`'s "needs you" count happened (an approval

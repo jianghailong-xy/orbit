@@ -21,7 +21,7 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
     session: {
       findMany: async (args: any) => {
         calls.push(args);
-        return [{ id: 's-open' }];
+        return [{ id: 's-open', approvals: [{ id: 'approval-open', toolName: 'Bash' }] }];
       },
     },
     // The owner-item half of the count reads its own rows (see the two tests below); none here.
@@ -50,7 +50,7 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
 /** The badge's other half: one RUNNING session stopped on a tool call. */
 function approvalPrisma() {
   return {
-    session: { findMany: async (): Promise<Array<{ id: string }>> => [{ id: 's-blocked' }] },
+    session: { findMany: async () => [{ id: 's-blocked', approvals: [{ id: 'approval-blocked', toolName: 'Bash' }] }] },
     // Overridden per test with the rows that half should or should not count.
     projectOpenItem: { findMany: async (): Promise<any[]> => [] },
     // Which of those rows nobody owes any more (`openItemsNoLongerOwed`): none, here.
