@@ -666,3 +666,16 @@ struct ProjectDoneDeclineRow: View {
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
 }
+
+struct ProjectStaleDoneRow: View {
+    let detail: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ProjectDone.staleHeading).font(.orbitLabel.weight(.bold))
+            Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+}

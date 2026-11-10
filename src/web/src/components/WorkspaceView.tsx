@@ -409,6 +409,7 @@ import {
 } from '../lib/projectStart';
 import { PROJECT_DONE_COPY, type ProjectDoneDocument } from '../lib/projectDone';
 import { ProjectDoneDeclineRow } from './ProjectDoneDeclineRow';
+import { ProjectStaleDoneRow } from './ProjectStaleDoneRow';
 import { ProjectSessionsDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
@@ -8728,7 +8729,10 @@ export function WorkspaceView({
               onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
                 navigate(sessionPath(pageCoordinator.id), { state: stampFromList() })) : null} />
           )}
-          {openProjectId && <ProjectDoneDeclineRow items={pageOpenItemsQ.data} />}
+          {openProjectId && <>
+            <ProjectStaleDoneRow view={pageOpenItemsQ.data} />
+            <ProjectDoneDeclineRow items={pageOpenItemsQ.data} />
+          </>}
           {openProjectId
             ? projectMembers.length === 0 && !loadingSessions && (
               <div className="session-project-empty">
