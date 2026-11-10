@@ -3095,6 +3095,9 @@ model Project {
   doneAt             DateTime? @map("done_at") @db.Timestamptz(3)
   /// The seal of the criteria the DONE was recorded against.
   doneCriteriaDigest String?   @map("done_criteria_digest") @db.Char(64)
+  /// Serving task lifecycle epochs captured by the owner DONE press (migration 0510).
+  /// Null on legacy records, which retain timestamp-based reopen detection.
+  doneTaskEpochs Json? @map("done_task_epochs")
   /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
   acceptedGaps       Json      @default("[]") @map("accepted_gaps")
 

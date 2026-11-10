@@ -824,6 +824,7 @@ test('an update writes only the fields it was sent, and null clears one', async 
     doneBy: null,
     doneAt: null,
     doneCriteriaDigest: null,
+    doneTaskEpochs: Prisma.DbNull,
     acceptedGaps: [],
     reopenedAt: null,
     reopenedFacts: Prisma.DbNull,

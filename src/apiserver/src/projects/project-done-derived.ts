@@ -569,6 +569,7 @@ export async function storeDerivedProjectStatus(
       doneBy: true,
       doneAt: true,
       doneCriteriaDigest: true,
+      doneTaskEpochs: true,
       reopenedAt: true,
       reopenedFacts: true,
     },
@@ -641,6 +642,7 @@ export const NO_DONE_RECORD = {
   doneBy: null,
   doneAt: null,
   doneCriteriaDigest: null,
+  doneTaskEpochs: Prisma.DbNull,
   acceptedGaps: [],
 } as const satisfies Prisma.ProjectUpdateManyMutationInput;
 
@@ -674,8 +676,8 @@ const CHECK_CONCLUSION_SELECT = { id: true, verdict: true, verdictRevision: true
  *
  * WHY THE FACTS, AND NOT A TIME
  * -----------------------------
- * `ownerRecordReopenedBy` below can ask a timestamp, because the one task fact it needs has one: the
- * start of a lifecycle epoch. This needs a task's status too, and no row says when that moved:
+ * `ownerRecordReopenedBy` below compares lifecycle epochs captured at the DONE press. This needs a
+ * task's status too, and no row says when that moved:
  * `task.updated_at` moves on a rename, which must not end the press. So this compares what the facts
  * are, with no clock, the way a done request compares its `stateDigest`.
  *
@@ -826,7 +828,8 @@ export async function readStandingOwnerReopen(
  *     about a different set.
  *   * A task serving one of them was reopened after it was recorded. `task_progress_epoch_advance`
  *     (0271) starts a task's next lifecycle epoch whenever it leaves DONE, CANCELLED or FAILED for
- *     OPEN or IN_PROGRESS, whichever door moved it, so the epoch's start is the reopen itself.
+ *     OPEN or IN_PROGRESS, whichever door moved it. Compare its counter with the captured epoch,
+ *     independent of transaction start times and clock skew. Legacy records retain the time rule.
  *
  * Both are read off committed rows rather than told by the edge that runs the projection, so every
  * edge gives the same answer, and a later one still sees a reopen an earlier one missed.
@@ -835,20 +838,25 @@ async function ownerRecordReopenedBy(
   prisma: Pick<PrismaService, 'task'>,
   ownerId: string,
   projectId: string,
-  record: { doneAt: Date | null; doneCriteriaDigest: string | null },
+  record: { doneAt: Date | null; doneCriteriaDigest: string | null; doneTaskEpochs: Prisma.JsonValue },
   seal: string,
 ): Promise<ProjectReopenReason | null> {
   if (record.doneCriteriaDigest !== seal) return { kind: 'CRITERIA_CHANGED', currentDigest: seal };
-  const reopened = await prisma.task.findFirst({
+  const captured = record.doneTaskEpochs as Record<string, number> | null;
+  const serving = await prisma.task.findMany({
     where: {
       ownerId,
       projectId,
       criterionDefinitionId: { not: null },
-      progress: { epochStartedAt: { gt: record.doneAt! } },
+      ...(captured === null ? { progress: { epochStartedAt: { gt: record.doneAt! } } } : {}),
     },
     orderBy: { id: 'asc' },
-    select: { id: true, title: true },
+    select: { id: true, title: true, status: true, progress: { select: { lifecycleEpoch: true } } },
   });
+  const reopened = captured === null ? serving[0] : serving.find((task) =>
+    captured[task.id] === undefined
+      ? !['DONE', 'CANCELLED', 'FAILED'].includes(task.status)
+      : (task.progress?.lifecycleEpoch ?? 0) > captured[task.id]!);
   return reopened
     ? { kind: 'SERVING_TASK_REOPENED', taskId: reopened.id, taskTitle: reopened.title }
     : null;

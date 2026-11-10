@@ -484,6 +484,14 @@ export class ProjectAcceptanceService {
         finding,
       }))];
 
+      // Read committed epochs without locking tasks: an in-flight reopen remains visible as a
+      // greater epoch on the next derivation, regardless of its transaction start time or clocks.
+      const serving = await tx.task.findMany({
+        where: { ownerId, projectId, criterionDefinitionId: { not: null } },
+        select: { id: true, progress: { select: { lifecycleEpoch: true } } },
+      });
+      const doneTaskEpochs = Object.fromEntries(serving.map((task) =>
+        [task.id, task.progress?.lifecycleEpoch ?? 0]));
       const at = new Date();
       await tx.project.update({
         where: { id: projectId },
@@ -492,6 +500,7 @@ export class ProjectAcceptanceService {
           doneBy: 'OWNER' satisfies ProjectDoneBy,
           doneAt: at,
           doneCriteriaDigest: version.digest,
+          doneTaskEpochs,
           acceptedGaps: acceptedGaps as unknown as Prisma.InputJsonValue,
           // This record is the owner's answer now, and it replaces any Reopen they pressed before it.
           ...NO_REOPEN_RECORD,
