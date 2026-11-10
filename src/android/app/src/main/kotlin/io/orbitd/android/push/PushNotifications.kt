@@ -8,12 +8,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.AtomicFile
 import io.orbitd.android.MainActivity
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.protocol.Wire
 import kotlinx.serialization.encodeToString
 import java.io.File
@@ -71,17 +73,34 @@ class PushNotifications(private val context: Context) {
             ?: Intent(Intent.ACTION_MAIN, null, context, MainActivity::class.java).addCategory(Intent.CATEGORY_LAUNCHER))
             .setIdentifier(tag).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pending = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val extras = Bundle().apply { putBundle(DATA, Bundle().apply { data.forEach { (key, value) -> putString(key, value) } }) }
+        val extras = Bundle().apply { putBundle(DATA, bundle(data)) }
         val notification = Notification.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification).setContentTitle(message.payload.title)
             .setContentText(message.payload.body).setStyle(Notification.BigTextStyle().bigText(message.payload.body))
             .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
-            .setCategory(if (message.payload.isReminder) Notification.CATEGORY_REMINDER else Notification.CATEGORY_STATUS)
+            .setCategory(if (message.payload.isReminder || message.payload.isOwnerRequest) Notification.CATEGORY_REMINDER else Notification.CATEGORY_STATUS)
             .addExtras(extras)
+            .apply { ownerRequestActions(message, data, tag).forEach(::addAction) }
             .apply { if (silent) setGroup(SILENT_GROUP).setGroupAlertBehavior(Notification.GROUP_ALERT_SUMMARY) }
             .build()
         return try { manager.notify(tag, 0, notification); true } catch (_: SecurityException) { false }
+    }
+
+    /** An owner request's two actions: the kind's own (Provide key, Answer, Mark done, Review), which opens the request's card on its
+     * input, and Later, which puts it off for an hour on this device ([OwnerRequestLaterReceiver]). Neither ends the request, and a
+     * SECRET has no inline reply: a key is typed only into its card. */
+    private fun ownerRequestActions(message: PushMessage, data: Map<String, String>, tag: String): List<Notification.Action> {
+        val link = message.payload.ownerRequestLink ?: return emptyList()
+        val primary = message.payload.ownerRequestKind?.let(OwnerRequests::pushAction)?.let { label ->
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link), context, MainActivity::class.java)
+                .setIdentifier("$tag:open").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notification), label,
+                PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)).build()
+        }
+        val later = Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_clock), OwnerRequests.later,
+            OwnerRequestLaterReceiver.pending(context, OwnerRequestLaterReceiver.LATER, data, "$tag:later")).build()
+        return listOfNotNull(primary, later)
     }
 
     fun active(): List<PushMessage> = manager.activeNotifications.filter { it.tag?.startsWith(PREFIX) == true }.mapNotNull {
@@ -94,7 +113,7 @@ class PushNotifications(private val context: Context) {
         seen.clear(); history.delete()
     }
     fun channel(message: PushMessage) = when {
-        message.payload.isReminder || message.payload.kind == "confirmation-problems" -> needsYou
+        message.payload.isReminder || message.payload.kind == "confirmation-problems" || message.payload.isOwnerRequest -> needsYou
         message.payload.sessionId != null -> SESSIONS
         else -> UPDATES
     }
@@ -107,5 +126,8 @@ class PushNotifications(private val context: Context) {
         const val UPDATES = "orbit.updates"
         private const val PREFIX = "orbit:"
         private const val DATA = "orbit.push.data"
+        internal fun bundle(data: Map<String, String>) = Bundle().apply { data.forEach { (key, value) -> putString(key, value) } }
+        internal fun map(bundle: Bundle?): Map<String, String> =
+            bundle?.keySet()?.mapNotNull { key -> bundle.getString(key)?.let { key to it } }?.toMap().orEmpty()
     }
 }

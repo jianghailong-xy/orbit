@@ -246,6 +246,16 @@ export function ownerRequestAlert(kind: OwnerRequestKind, title: string): { titl
 }
 
 /**
+ * The alert's category, one per kind, which the clients register with two actions: open the card on its input
+ * ("Provide key", "Answer", "Mark done", "Review") and "Later". Neither answers the request from the notification:
+ * a SECRET has no reply path outside its card (secrets design §7.2), and the other kinds are read before they are
+ * answered.
+ */
+export function ownerRequestPushCategory(kind: OwnerRequestKind): string {
+  return `ORBIT_OWNER_REQUEST_${kind}`;
+}
+
+/**
  * The turn key an ending is queued under on the asking session. A request ends once, so one key per request; the
  * Watch delivery worker writes it, and `createTurn` replays a retry under it instead of queuing a second turn.
  */

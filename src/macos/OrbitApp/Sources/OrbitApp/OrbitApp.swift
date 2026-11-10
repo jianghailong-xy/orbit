@@ -22,6 +22,8 @@ struct OrbitApp: App {
                 .frame(minWidth: 820, minHeight: 520)
                 .hidesTitlebarSeparator()   // seamless, ChatGPT-style floating top (no hard rule)
                 .onOpenURL { url in
+                    // `orbit://owner-request/<id>`: the inbox, with that request's card open on its input.
+                    if let request = OwnerRequestLink.parse(url) { model.openOwnerRequest(request); return }
                     if let route = DeepLink.parse(url) { model.route(to: route) }
                     // `orbit://session/<id>?at=<record>`: the session, at that record.
                     model.followRecord(in: url)
@@ -130,6 +132,7 @@ struct RootView: View {
             if model.signedIn {
                 MainView()
                     .sessionSearchSheet(model)
+                    .ownerRequestInboxSheet(model)
             } else {
                 LoginView()
             }

@@ -25,9 +25,16 @@ data class PushPayload(
     val watchId: String? = null,
     val generation: Int? = null,
     val wikiSpaceId: String? = null,
+    /** `owner-request`: the request, and its kind (DECISION, SECRET, MANUAL_STEP or CONFIRM), which names the notification's action. */
+    val ownerRequestId: String? = null,
+    val ownerRequestKind: String? = null,
 ) {
     val isOwnerItem get() = kind in ownerItemKinds
     val isReminder get() = kind == "approval" || isOwnerItem
+    val isOwnerRequest get() = kind == OWNER_REQUEST
+    /** An owner request's primary action (`orbit://owner-request/<id>`): the inbox, its card open on its input. Neither it nor
+     * Later ends the request; the tap on the notification itself opens the session that asked, as [link] says. */
+    val ownerRequestLink: String? get() = ownerRequestId?.takeIf { isOwnerRequest }?.let { "orbit://owner-request/$it" }
 
     /** The existing ACTION_VIEW/OrbitLinks entry retains authentication and the caller's stack. */
     val link: String? get() = when {
@@ -52,6 +59,7 @@ data class PushPayload(
          * 2026-10-28), is pushed once and routed like a question — to the conversation its card is in, else its project. */
         val ownerItemKinds = setOf("approve-merge-to-main", "coordinator-question", "escalated-to-you", "fuse-paused",
             "landed-without-confirmation")
+        const val OWNER_REQUEST = "owner-request"
     }
 }
 
@@ -69,7 +77,8 @@ data class PushMessage(
         private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
         private val kinds = PushPayload.ownerItemKinds + setOf("approval", "finished", "failed", "agent-message",
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
-            "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked")
+            "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
+            PushPayload.OWNER_REQUEST)
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -102,13 +111,15 @@ data class PushMessage(
             val payload = PushPayload(string("title"), string("body"), string("category"), string("threadId"),
                 string("kind"), number("badge"), clear, id("sessionID"), id("projectID"), id("openItemID"),
                 id("taskID"), id("recordID"), id("runnerID"), string("engine"), id("watchID"),
-                number("generation"), id("wikiSpaceID"))
+                number("generation"), id("wikiSpaceID"), ownerRequestId = id("ownerRequestID"), ownerRequestKind = string("ownerRequestKind"))
             if (type == PushType.ALERT) {
                 require(!payload.title.isNullOrBlank() && payload.body != null && payload.kind in kinds)
                 when (payload.kind) {
                     // A wakeup loop that stopped running, and a wakeup dropped with its FAILED session, are about that session.
                     "approval", "finished", "failed", "loop-missed", "wakeup-dropped" -> require(payload.sessionId != null)
                     "agent-message" -> Unit // Headless orbit notify deliberately names no session.
+                    // A session filed an owner request: about that session, and the request its actions open.
+                    PushPayload.OWNER_REQUEST -> require(payload.sessionId != null && payload.ownerRequestId != null)
                     "confirmation-problems" -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
                     // A confirmed region flip is about its runner's Claude Code, as a sign-out is about its runner's engine.
                     "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())

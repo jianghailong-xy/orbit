@@ -324,6 +324,10 @@ struct ConsoleView: View {
                     focusID: sessionID)
             } else if let console = registry.peek(sessionID) {
                 transcriptAndBand(console, navTitleWidth: navTitleWidth)
+                // The owner requests this conversation filed, each drawn where it was asked.
+                .onChange(of: appModel.ownerRequests?.forSession(sessionID), initial: true) { _, requests in
+                    console.adoptOwnerRequests(requests ?? [])
+                }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
                 // The tasks this conversation filed, which a watch's wake line names its targets by.

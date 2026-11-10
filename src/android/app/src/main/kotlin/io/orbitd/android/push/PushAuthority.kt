@@ -48,6 +48,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 if (session.present("deletedAt") || session.text("lifecycleState") == "TRASH") PushCheck.MISSING
                 else if (exists) PushCheck.ACTIVE else PushCheck.STALE
             }
+            // An owner request stands while it is still PENDING: one ended anywhere takes its notification with it.
+            payload.isOwnerRequest -> {
+                val row = objectRead(listOf("owner-requests", payload.ownerRequestId!!))
+                if (!ObjectId.same(row.text("id"), payload.ownerRequestId) || row.text("state") == null) throw ProtocolException()
+                if (row.text("state") == "PENDING") PushCheck.ACTIVE else PushCheck.STALE
+            }
             payload.sessionId != null -> {
                 val row = sessionRead(payload.sessionId)
                 if (row.present("deletedAt")) PushCheck.MISSING
