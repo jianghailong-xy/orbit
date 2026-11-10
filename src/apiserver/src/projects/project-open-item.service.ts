@@ -80,6 +80,7 @@ import {
   sessionHasEnded,
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
+import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from './coordinator-evidence-queue';
 import { canonicalJson } from './canonical-json';
 import { mainBranchOf, taskLandingSql } from './project-criterion-landing';
 import {
@@ -382,7 +383,7 @@ export interface OpenItemReturned {
   assignee: 'COORDINATOR';
   /** The wait starts over, which is the whole of what "ask again" gives the coordinator. */
   waitingSince: Date;
-  escalateAt: Date;
+  escalateAt: Date | null;
 }
 
 /** The durable result of a coordinator deliberately handing an open item to the owner. */
@@ -729,6 +730,11 @@ export class ProjectOpenItemService {
       await this.handToOwner(item.id, item.assignedAt, 'NO_COORDINATOR');
       return;
     }
+    // A platform delivery must not disarm an existing retry or revive a failed run.
+    const coordinator = await this.prisma.session.findUnique({
+      where: { id: sessionId }, select: COORDINATOR_PAUSE_SELECT,
+    });
+    if (coordinator && conversationIsPaused(coordinator)) return;
     const clientTurnId = openItemTurnId(item.id, item.assignedAt);
     const fixed = await this.landedFixesOf(item.id, item.integrationJobId);
     try {
@@ -1458,7 +1464,6 @@ export class ProjectOpenItemService {
           select: {
             coordinatorSessionId: true,
             coordinatorSession: { select: SESSION_ENDING_SELECT },
-            exceptionEscalationSeconds: true,
           },
         },
       },
@@ -1513,7 +1518,7 @@ export class ProjectOpenItemService {
     // owner's from the start, and this refusal is what it was always about — a project with NO
     // conversation at all.
     const session = item.project.coordinatorSession;
-    if (item.project.coordinatorSessionId == null || session == null || sessionHasEnded(session)) {
+    if (item.project.coordinatorSessionId == null || session == null || conversationIsOver(session)) {
       throw new ConflictException({
         code: OPEN_ITEM_NO_COORDINATOR,
         message:
@@ -1522,7 +1527,8 @@ export class ProjectOpenItemService {
       });
     }
     const now = new Date();
-    const escalateAt = new Date(now.getTime() + item.project.exceptionEscalationSeconds * 1_000);
+    // The new assignment has no deadline until its ITEM turn is taken.
+    const escalateAt = null;
     const returned = await this.prisma.projectOpenItem.updateMany({
       where: { id: itemId, state: 'OPEN', assignee: 'OWNER' },
       data: {
@@ -3081,7 +3087,7 @@ export class ProjectOpenItemService {
     // cannot (§4.7).
     const askable = project.coordinatorSessionId != null
       && project.coordinatorSession != null
-      && !sessionHasEnded(project.coordinatorSession);
+      && !conversationIsOver(project.coordinatorSession);
     // Where "Chat about this" goes, for every row (`openItemChat`): the conversation coordinating the
     // project, and whether it can be handed a message now — asked of the authority the delivering
     // door asks (`receiveBlockedReasonFor`), once for the whole list. A pointer to a row that is not
@@ -3496,9 +3502,9 @@ export class ProjectOpenItemService {
   ): Promise<void> {
     const session = await tx.session.findUniqueOrThrow({
       where: { id: delivery.sessionId },
-      select: SESSION_ENDING_SELECT,
+      select: COORDINATOR_PAUSE_SELECT,
     });
-    if (sessionHasEnded(session)) {
+    if (sessionHasEnded(session) || conversationIsPaused(session)) {
       throw new SessionNotSendable('the coordinator conversation has ended');
     }
     const [owed] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
