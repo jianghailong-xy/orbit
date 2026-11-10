@@ -28,10 +28,11 @@ import {
   useSnoozes,
   wakeRequest,
   type OwnerRequest,
+  type OwnerRequestSecretGrant,
   type OwnerRequestSecretSpec,
   type OwnerRequestStep,
 } from '../lib/ownerRequests';
-import { ownerRequestsQuery, runnersQuery } from '../lib/queries';
+import { accountSecretsQuery, ownerRequestsQuery, runnersQuery } from '../lib/queries';
 import { ago, linkId, sameResourceId } from '../lib/watches';
 import { CardActionButton, CardActions } from './CardAction';
 import { NOTE_PROMPT, OWN_ANSWER_PROMPT, YOUR_ANSWER, QuestionOptions, optionIndex, type Choice } from './CoordinatorQuestionCard';
@@ -42,6 +43,7 @@ import { Alert } from './ui/Alert';
 import { Checkbox } from './ui/Checkbox';
 import { Input } from './ui/Input';
 import { Menu } from './ui/Menu';
+import { PasswordInput } from './ui/PasswordInput';
 import { Textarea } from './ui/Textarea';
 import './OwnerRequest.css';
 
@@ -60,8 +62,6 @@ const PRIMARY: Readonly<Record<OwnerRequest['kind'], string>> = {
   MANUAL_STEP: 'Mark done',
   CONFIRM: 'Confirm',
 };
-
-const SECRET_NOT_READY = 'Entering a key arrives with secret delivery.';
 
 /** The runner a secret goes to, by the name the owner knows it by. */
 function useRunnerName(runnerId: string | undefined): string {
@@ -169,21 +169,134 @@ function destination(spec: OwnerRequestSecretSpec, runner: string): JSX.Element 
   );
 }
 
-/** The key's input, drawn and switched off until the task that delivers secrets gives it somewhere to go. */
-function SecretEntry({ spec, runner }: { spec: OwnerRequestSecretSpec; runner: string }): JSX.Element {
+/** What the owner has put in so far. Held in this card's state only: never stored, never in a URL, gone on unmount. */
+interface SecretDraft {
+  value: string;
+  save: boolean;
+  saveAs: string;
+  savedId: string | null;
+}
+
+const emptyDraft = (spec: OwnerRequestSecretSpec | null): SecretDraft =>
+  ({ value: '', save: false, saveAs: spec?.name ?? '', savedId: null });
+
+type SecretBody = { value: string; saveAs?: string } | { savedSecretId: string };
+
+/**
+ * A secret request's own doors: submit, cancel before delivery, revoke after. Not a mutation, because
+ * a mutation keeps its variables in the query client's cache, and the key would be one of them. The
+ * answer stands in for the request until the next read of it arrives.
+ */
+function useSecretDoor(request: OwnerRequest) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [answer, setAnswer] = useState<{ base: OwnerRequest; view: OwnerRequest } | null>(null);
+  const post = async (door: 'secret' | 'secret/cancel' | 'secret/revoke', body?: SecretBody) => {
+    setBusy(true);
+    setFailure(null);
+    try {
+      const view = await api<OwnerRequest | undefined>(
+        `/owner-requests/${encodeURIComponent(request.id)}/${door}`,
+        body ? { method: 'POST', body } : { method: 'POST' },
+      );
+      if (view?.id) setAnswer({ base: request, view });
+    } catch (error) {
+      setFailure((error as Error).message);
+    } finally {
+      setBusy(false);
+      void qc.invalidateQueries({ queryKey: ['owner-requests'] });
+    }
+  };
+  return { post, busy, failure, current: answer && answer.base === request ? answer.view : request };
+}
+
+/** The key's input, a saved secret to use instead, and whether to keep this one for later. */
+function SecretEntry({ spec, runner, draft, onDraft }: {
+  spec: OwnerRequestSecretSpec;
+  runner: string;
+  draft: SecretDraft;
+  onDraft: (draft: SecretDraft) => void;
+}): JSX.Element {
+  const saved = useQuery(accountSecretsQuery()).data?.secrets ?? [];
+  const using = draft.savedId ? saved.find((secret) => secret.id === draft.savedId) : undefined;
   return (
     <div className="owner-request-secret">
-      <label className="owner-request-field">
-        <span>{spec.name}</span>
-        <Input disabled autoComplete="off" placeholder={SECRET_NOT_READY} />
-      </label>
-      <label className="owner-request-save">
-        <Checkbox disabled checked={false} />
-        <span>Save to my account secrets for later runs</span>
-      </label>
+      {draft.savedId ? (
+        <div className="owner-request-field">
+          <span>{spec.name}</span>
+          <span className="owner-request-saved">
+            {`Using saved “${using?.label ?? 'secret'}”`}
+            <button type="button" className="owner-request-link" onClick={() => onDraft({ ...draft, savedId: null })}>
+              Enter a key instead
+            </button>
+          </span>
+        </div>
+      ) : (
+        <>
+          <label className="owner-request-field">
+            <span>{spec.name}</span>
+            <PasswordInput
+              value={draft.value}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Paste the key"
+              onChange={(event) => onDraft({ ...draft, value: event.target.value })}
+            />
+          </label>
+          {saved.length > 0 ? (
+            <span className="owner-request-saved">
+              Use saved:
+              {saved.map((secret) => (
+                <button
+                  key={secret.id}
+                  type="button"
+                  className="owner-request-chip"
+                  onClick={() => onDraft({ ...draft, value: '', save: false, savedId: secret.id })}
+                >
+                  {secret.label}
+                </button>
+              ))}
+            </span>
+          ) : null}
+          <label className="owner-request-save">
+            <Checkbox checked={draft.save} onCheckedChange={(save) => onDraft({ ...draft, save })} />
+            <span>Save to my account secrets for later runs</span>
+          </label>
+          {draft.save ? (
+            <Input
+              value={draft.saveAs}
+              maxLength={100}
+              aria-label="Name to save it under"
+              placeholder="Name to save it under"
+              onChange={(event) => onDraft({ ...draft, saveAs: event.target.value })}
+            />
+          ) : null}
+        </>
+      )}
       <p className="owner-request-notice">
         <LockOutlined aria-hidden="true" /> {secretNotice(spec, runner)}
       </p>
+    </div>
+  );
+}
+
+/** Submitted, not yet on the runner: the request is done only when the runner says it has the key (design §2, §4.3). */
+function SecretOnItsWay({ grant, runner, expiresAt, now }: {
+  grant: OwnerRequestSecretGrant;
+  runner: string;
+  expiresAt: string | null;
+  now: number;
+}): JSX.Element {
+  const until = expiresAt ? `, until ${decisionReceiptTime(expiresAt, new Date(now))}` : '';
+  return (
+    <div className="owner-request-secret">
+      <p className="owner-request-delivery">
+        <ClockCircleOutlined aria-hidden="true" /> {`Key is on its way to ${runner}.`}
+      </p>
+      {grant.runnerOnline ? null : (
+        <p className="owner-request-notice">{`${runner} is offline. Orbit will deliver this when it comes back${until}.`}</p>
+      )}
     </div>
   );
 }
@@ -208,8 +321,11 @@ function RemindLater({ request, now }: { request: OwnerRequest; now: number }): 
 }
 
 /** A pending request, whole. */
-export function OwnerRequestCard({ request, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+export function OwnerRequestCard({ request: given, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
   const qc = useQueryClient();
+  const door = useSecretDoor(given);
+  const request = door.current;
+  const [draft, setDraft] = useState<SecretDraft>(() => emptyDraft(request.secretSpec));
   const [chosen, setChosen] = useState<Choice>(request.recommendedOption ?? null);
   const [text, setText] = useState('');
   const [declining, setDeclining] = useState(false);
@@ -224,18 +340,30 @@ export function OwnerRequestCard({ request, now = Date.now() }: { request: Owner
     },
   });
   if (end.data) return <OwnerRequestResolved request={end.data} now={now} />;
+  if (request.state !== 'PENDING') return <OwnerRequestResolved request={request} now={now} />;
 
   const options = request.options ?? [];
   const closed = pastDeadline(request, now);
   const trimmed = text.trim();
   const chosenOption = optionIndex(chosen);
+  const grant = request.kind === 'SECRET' ? request.secretGrant : null;
+  const delivering = grant?.state === 'PENDING_DELIVERY';
+  const failed = grant?.state === 'REMOVED' && grant.endReason === 'DELIVERY_FAILED';
   const ready = request.kind === 'SECRET'
-    ? false
+    ? draft.savedId !== null || (draft.value.trim() !== '' && (!draft.save || draft.saveAs.trim() !== ''))
     : request.kind === 'DECISION'
       ? chosenOption !== null || trimmed !== ''
       : true;
   const expiry = expiryText(request, now);
   const pressPrimary = () => {
+    if (request.kind === 'SECRET') {
+      const body: SecretBody = draft.savedId
+        ? { savedSecretId: draft.savedId }
+        : { value: draft.value, ...(draft.save ? { saveAs: draft.saveAs.trim() } : {}) };
+      setDraft(emptyDraft(request.secretSpec));
+      void door.post('secret', body);
+      return;
+    }
     const body = request.kind === 'DECISION'
       ? { ...(chosenOption !== null ? { option: chosenOption } : {}), ...(trimmed ? { text: trimmed } : {}) }
       : {};
@@ -281,7 +409,13 @@ export function OwnerRequestCard({ request, now = Date.now() }: { request: Owner
         ) : null}
 
         {request.kind === 'MANUAL_STEP' ? <Steps steps={request.steps ?? []} /> : null}
-        {request.kind === 'SECRET' && request.secretSpec ? <SecretEntry spec={request.secretSpec} runner={runner} /> : null}
+        {request.kind === 'SECRET' && request.secretSpec ? (
+          delivering ? (
+            <SecretOnItsWay grant={grant!} runner={runner} expiresAt={request.expiresAt} now={now} />
+          ) : (
+            <SecretEntry spec={request.secretSpec} runner={runner} draft={draft} onDraft={setDraft} />
+          )
+        ) : null}
         {request.kind === 'DECISION' ? (
           <div className="owner-request-decision">
             <QuestionOptions
@@ -303,8 +437,11 @@ export function OwnerRequestCard({ request, now = Date.now() }: { request: Owner
         ) : null}
         {request.verifyHint ? <p className="owner-request-hint">{`How to check: ${request.verifyHint}`}</p> : null}
 
-        {end.isError ? (
-          <Alert type="error" title="That was not recorded" description={(end.error as Error).message} />
+        {failed ? (
+          <Alert type="error" title={`The key did not reach ${runner}`} description={grant.removalNote ?? 'Enter it again.'} />
+        ) : null}
+        {end.isError || door.failure ? (
+          <Alert type="error" title="That was not recorded" description={door.failure ?? (end.error as Error).message} />
         ) : null}
 
         {declining ? (
@@ -330,14 +467,17 @@ export function OwnerRequestCard({ request, now = Date.now() }: { request: Owner
           </div>
         ) : (
           <CardActions className="owner-request-actions">
-            <CardActionButton
-              tone="primary"
-              disabled={!ready || end.isPending || closed}
-              title={request.kind === 'SECRET' ? SECRET_NOT_READY : undefined}
-              onClick={pressPrimary}
-            >
-              {PRIMARY[request.kind]}
-            </CardActionButton>
+            {delivering ? (
+              <CardActionButton disabled={door.busy} onClick={() => void door.post('secret/cancel')}>Cancel</CardActionButton>
+            ) : (
+              <CardActionButton
+                tone="primary"
+                disabled={!ready || end.isPending || door.busy || closed}
+                onClick={pressPrimary}
+              >
+                {PRIMARY[request.kind]}
+              </CardActionButton>
+            )}
             <button type="button" className="owner-request-link" disabled={closed} onClick={() => setDeclining(true)}>
               {request.kind === 'MANUAL_STEP' ? 'Can’t do this…' : 'Decline…'}
             </button>
@@ -380,6 +520,34 @@ function endedBy(request: OwnerRequest): string | null {
   return request.resolvedByUserId ? 'by you' : 'by the session that asked';
 }
 
+const GRANT_ENDINGS: Readonly<Record<string, string>> = {
+  TASK_ENDED: 'Removed when the task ended',
+  SESSION_ENDED: 'Removed when the session ended',
+  EXPIRED: 'Removed when it expired',
+  WITHDRAWN: 'Removed: the agent released it',
+  REVOKED: 'Removed: you revoked it',
+  MOVED: 'Removed when the session moved to another runner',
+  RUNNER_DELETED: 'The runner was deleted; removal unconfirmed',
+  KEY_UNREADABLE: 'Removed: the stored key could not be read',
+  DELIVERY_FAILED: 'Delivery failed',
+};
+
+/** Where a delivered key stands now (design §6): in, being removed, or gone and why. */
+function grantLine(grant: OwnerRequestSecretGrant, runner: string, now: number): string | null {
+  const at = (iso: string) => decisionReceiptTime(iso, new Date(now));
+  if (grant.state === 'ACTIVE') return `Key is in · expires ${at(grant.expiresAt)}`;
+  if (grant.state === 'REMOVING') {
+    return !grant.runnerOnline && grant.runnerLastSeenAt
+      ? `Removal pending: ${runner} has not been online since ${at(grant.runnerLastSeenAt)}`
+      : `Removal pending: waiting for ${runner} to confirm`;
+  }
+  if (grant.state === 'REMOVED') {
+    const why = (grant.endReason && GRANT_ENDINGS[grant.endReason]) || 'Removed';
+    return grant.removalNote ? `${why}. ${grant.removalNote}` : why;
+  }
+  return null;
+}
+
 const ENDING_ICON: Readonly<Record<string, ReactNode>> = {
   DONE: <CheckCircleFilled />,
   DECLINED: <CloseCircleFilled />,
@@ -388,7 +556,10 @@ const ENDING_ICON: Readonly<Record<string, ReactNode>> = {
 };
 
 /** A request that has ended, as one row: how, who, when, and from which device. */
-export function OwnerRequestResolved({ request, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+export function OwnerRequestResolved({ request: given, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+  const door = useSecretDoor(given);
+  const request = door.current;
+  const grant = request.kind === 'SECRET' && request.state === 'DONE' ? request.secretGrant : null;
   const runner = useRunnerName(request.kind === 'SECRET' ? request.secretSpec?.runnerId : undefined);
   const when = request.resolvedAt ? decisionReceiptTime(request.resolvedAt, new Date(now)) : null;
   const by = [endedBy(request), when].filter(Boolean).join(' · ');
@@ -399,7 +570,14 @@ export function OwnerRequestResolved({ request, now = Date.now() }: { request: O
       <span className="owner-request-resolved-text">
         <span className="owner-request-resolved-title">{request.title}</span>
         <span className="owner-request-resolved-outcome">{outcomeLine(request, runner)}</span>
+        {grant ? <span className="owner-request-resolved-outcome">{grantLine(grant, runner, now)}</span> : null}
+        {door.failure ? <span className="owner-request-resolved-error">{door.failure}</span> : null}
       </span>
+      {grant?.state === 'ACTIVE' ? (
+        <button type="button" className="owner-request-link" disabled={door.busy} onClick={() => void door.post('secret/revoke')}>
+          Revoke
+        </button>
+      ) : null}
       <span className="owner-request-resolved-by">
         <span>{by}</span>
         {device ? <span>{`via ${device}`}</span> : null}

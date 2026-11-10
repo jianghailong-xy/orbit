@@ -44,6 +44,7 @@ import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { uploadExpiry } from '../files/file-retention';
+import { grantAad, sealOwnerSecret } from '../owner-requests/owner-secret-crypto';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { openItemsNoLongerOwed } from '../projects/project-open-item';
@@ -216,6 +217,31 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const runtimeSessionId = randomUUID();
     const machineSessionId = await open('machine session', { status: 'RUNNING', runtimeSessionId });
     const orphanSessionId = await open('orphan session', { assignedRunnerId: null });
+    // ── a secret the owner entered for the machine session, and one being removed (migration 0506) ──
+    // Asked by a session of its own: A's ack ends the request DONE, which queues a turn there and nowhere a case reads.
+    const secretSessionId = await open('secret session', { status: 'RUNNING' });
+    const secretGrant = async (state: 'PENDING_DELIVERY' | 'REMOVING'): Promise<string> => {
+      const requestId = randomUUID();
+      const grantId = randomUUID();
+      await db.ownerRequest.create({
+        data: {
+          id: requestId, ownerId, askedBySessionId: secretSessionId, kind: 'SECRET', title: 'census key', why: 'census',
+          state: state === 'REMOVING' ? 'DONE' : 'PENDING', resolvedAt: state === 'REMOVING' ? new Date() : null,
+          secretSpec: { name: 'census key', runnerId: of.runnerId, envVar: 'CENSUS_KEY' },
+        },
+      });
+      await db.ownerRequestSecret.create({
+        data: {
+          id: grantId, ownerId, requestId, runnerId: of.runnerId, sessionId: secretSessionId, name: 'CENSUS_KEY',
+          exposure: 'ENV', state, expiresAt: new Date(Date.now() + 24 * 3_600_000),
+          valueEnc: state === 'PENDING_DELIVERY' ? sealOwnerSecret(`census-${grantId}`, grantAad(grantId, ownerId, of.runnerId)) : null,
+          endReason: state === 'REMOVING' ? 'REVOKED' : null,
+        },
+      });
+      return grantId;
+    };
+    const secretGrantId = await secretGrant('PENDING_DELIVERY');
+    const removingSecretGrantId = await secretGrant('REMOVING');
     // An open LANDING container exactly as LS1 writes it: no engine, no runner, provider `orbit`.
     const landingSessionId = await open('landing session', {
       sessionKind: 'LANDING', status: 'AWAITING_INPUT', provider: 'orbit', providerBuiltin: true,
@@ -425,7 +451,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       landingSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, inboxLeaseGeneration, turnSessionId, shellTurnId,
       finalizeSessionId, sessionAttachmentId, uploadedFileId, evidenceRevisionId, runningTaskId, runningTaskSessionId, allowedApprovalId,
-      artifactRequestId, integrationJobId, landingTaskId,
+      artifactRequestId, integrationJobId, landingTaskId, secretGrantId, removingSecretGrantId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,

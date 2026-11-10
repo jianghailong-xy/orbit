@@ -145,6 +145,10 @@ export interface RunnerObjects {
   reviewerSessionId: string;
   /** Wiki: a session in a workspace bound to the space. */
   wikiSessionId: string;
+  /** A SECRET grant to this machine, awaiting delivery, for the machine session's PENDING request (migration 0506). */
+  secretGrantId: string;
+  /** A grant of this machine being removed: what `removed` confirms. */
+  removingSecretGrantId: string;
   /** An import job of the space (server execution P5, contract `import.server`), ended, to be read back. */
   wikiImportJobId: string;
   /** Shared: a session link's root with a file in it; a task link's root with a run and a file; a project link's. */
@@ -245,6 +249,18 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   },
   // One chunk of a running check's output (contract §2.2 J-T4's output route, §2.9 LS2): fenced on
   // the claim it names, so a machine that learned A's claim is still not A's. A's own chunk is taken.
+  // Secret delivery (docs/design/owner-request-secrets.md §4.2, §8.1): every door reads the grant by (id, the
+  // authenticated runner, its owner), so another machine's grant — of this account or another — is the 404 of an id
+  // that names nothing. A's own fetch hands over the value, its ack delivers it, its `removed` confirms the removal.
+  'POST /runner/secret-grants/:id/fetch': { as: RUNNER, request: (of) => ({ params: { id: of.runner.secretGrantId } }) },
+  'POST /runner/secret-grants/:id/ack': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.secretGrantId }, body: { outcome: 'DELIVERED' } }),
+  },
+  'POST /runner/secret-grants/:id/removed': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.removingSecretGrantId }, body: { note: 'census' } }),
+  },
   'POST /runner/integration-jobs/:jobId/output': {
     as: RUNNER,
     request: (of) => ({
@@ -1318,7 +1334,7 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/owner-requests body blocksTaskIds[]':
     'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests body secretSpec.runnerId':
-    'counted among the runner owner\'s own runners before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:136); owner-requests.pg.spec.ts (f) sends another account\'s',
+    'never used: the runner is the asking session\'s own (design §4.1), and any other one is refused 400 before anything is written (owner-requests/owner-secrets.service.ts:178); owner-requests.pg.spec.ts (c) sends another account\'s',
   'POST /runner/owner-requests body clientRequestId':
     'the caller\'s own idempotency key, unique per asking session, and read back only by (the runner\'s owner, the asking session, the key) (owner-requests/owner-requests.service.ts:169); it names nothing of anybody else\'s',
   'POST /runner/owner-requests body projectId':

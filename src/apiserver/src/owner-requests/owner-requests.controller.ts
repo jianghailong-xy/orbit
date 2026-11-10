@@ -1,10 +1,11 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
-import { CompleteOwnerRequestDto, DeclineOwnerRequestDto } from './dto';
+import { CompleteOwnerRequestDto, DeclineOwnerRequestDto, SubmitOwnerSecretDto } from './dto';
 import { OwnerRequestsService } from './owner-requests.service';
+import { OwnerSecretsService, refuseActingSession } from './owner-secrets.service';
 
 /**
  * The account owner's side of owner requests: read them, and end them as done or declined.
@@ -14,7 +15,10 @@ import { OwnerRequestsService } from './owner-requests.service';
 @PatForbidden('NO_SCOPE')
 @Controller('owner-requests')
 export class OwnerRequestsController {
-  constructor(private readonly requests: OwnerRequestsService) {}
+  constructor(
+    private readonly requests: OwnerRequestsService,
+    private readonly secrets: OwnerSecretsService,
+  ) {}
 
   /** `?state=open` (the default), `done`, `declined`, `expired`, `withdrawn` or `all`; newest first. */
   @Get()
@@ -37,5 +41,51 @@ export class OwnerRequestsController {
   @HttpCode(HttpStatus.OK)
   decline(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: DeclineOwnerRequestDto) {
     return this.requests.decline(user.userId, id, dto.reason);
+  }
+
+  /**
+   * The owner enters a SECRET request's key (design §4.2 step 1). Answers with the request as the card shows it, which
+   * never carries the value. The request becomes DONE only when the runner acknowledges delivery.
+   */
+  @Post(':id/secret')
+  @PatForbidden('OWNER_INTERACTIVE')
+  @HttpCode(HttpStatus.OK)
+  async submitSecret(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: SubmitOwnerSecretDto,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    refuseActingSession(request.headers);
+    await this.secrets.submit(user.userId, id, dto);
+    return this.requests.get(user.userId, id);
+  }
+
+  /** The owner takes back a key that has not reached the runner yet. */
+  @Post(':id/secret/cancel')
+  @PatForbidden('OWNER_INTERACTIVE')
+  @HttpCode(HttpStatus.OK)
+  async cancelSecret(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    refuseActingSession(request.headers);
+    await this.secrets.cancel(user.userId, id);
+    return this.requests.get(user.userId, id);
+  }
+
+  /** The owner's Revoke: the runner removes the key on its next heartbeat. */
+  @Post(':id/secret/revoke')
+  @PatForbidden('OWNER_INTERACTIVE')
+  @HttpCode(HttpStatus.OK)
+  async revokeSecret(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    refuseActingSession(request.headers);
+    await this.secrets.revoke(user.userId, id);
+    return this.requests.get(user.userId, id);
   }
 }

@@ -32,6 +32,29 @@ export interface OwnerRequestSecretSpec {
   filePath?: string;
 }
 
+export type OwnerRequestSecretGrantState = 'PENDING_DELIVERY' | 'ACTIVE' | 'REMOVING' | 'REMOVED';
+
+/** The request's latest secret grant: where the key it delivered stands. Never the value or anything derived from it. */
+export interface OwnerRequestSecretGrant {
+  state: OwnerRequestSecretGrantState;
+  endReason: string | null;
+  exposure: 'ENV' | 'FILE';
+  expiresAt: string;
+  deliveredAt: string | null;
+  removedAt: string | null;
+  removalNote: string | null;
+  runnerOnline: boolean;
+  runnerLastSeenAt: string | null;
+}
+
+/** A saved account secret, by label only: no route returns a value. */
+export interface AccountSecret {
+  id: string;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface OwnerRequest {
   id: string;
   kind: OwnerRequestKind;
@@ -44,6 +67,7 @@ export interface OwnerRequest {
   recommendedOption: number | null;
   steps: OwnerRequestStep[] | null;
   secretSpec: OwnerRequestSecretSpec | null;
+  secretGrant: OwnerRequestSecretGrant | null;
   verifyHint: string | null;
   expiresAt: string | null;
   askedBySessionId: string;

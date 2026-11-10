@@ -35,7 +35,7 @@ import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import type { SidebarProject } from './projectAttention';
-import type { OwnerRequest, OwnerRequestListFilter } from './ownerRequests';
+import type { AccountSecret, OwnerRequest, OwnerRequestListFilter } from './ownerRequests';
 import type { ProjectFilter } from '../components/ProjectsToolbar';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { PendingDecisionQueue } from '../components/DecisionRail';
@@ -676,6 +676,13 @@ export const ownerRequestsQuery = (filter: OwnerRequestListFilter) =>
     queryKey: ['owner-requests', filter] as const,
     queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
     refetchInterval: streamPoll(20_000),
+  });
+
+/** The owner's saved account secrets, by label: what "Use saved" offers on a secret request. */
+export const accountSecretsQuery = () =>
+  queryOptions({
+    queryKey: ['account-secrets'] as const,
+    queryFn: () => api<{ secrets: AccountSecret[] }>('/account-secrets'),
   });
 
 /** The project document also supplies title and task counts when a finished project is
