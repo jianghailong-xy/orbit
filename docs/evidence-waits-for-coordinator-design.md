@@ -53,3 +53,45 @@
 5. 三端不再画 Waiting for the coordinator 折叠卡及 Decide it myself；不新增界面文案。
 
 本任务只修订文档与保存效果图，不改代码、设置项或数据结构。
+
+## 6. 同一规则的其余适用处
+
+本节是第二批代码任务的行为规约，不表示这些路径已经改完。以下五条行为逐字沿用本项目验收标准，第六条声明文案范围；各处都沿用 §1 的「暂时不可用」定义，以及契约 §4.6 修订 35 的「取走才计时」规则。排队不出 owner 卡、不计时、不设上限；真正结束与暂时不可用必须分开判断，原有资格与熔断规则不变。
+
+### 6.1 「Record as done…」
+
+「Record as done…」：协调者 FAILED 未结束、排了 retryAt、在队列里等账号或在跑别的 turn 时，项目不进 owner 的待记完成列表；从 LOOKS_FINISHED 投递 turn 的 delivered_at 起算 exceptionEscalationSeconds，到点才转给 owner；协调者已结束、进回收站、项目关掉 Automatic 时仍立刻转给 owner。
+
+对应 `src/apiserver/src/projects/project-looks-finished.ts` 的 LOOKS_FINISHED due 计算：`escalatesAt` 从当前 LOOKS_FINISHED 投递 turn 的 `conversation_turn.delivered_at` 起算。尚无有效投递或该值为空时没有截止时间；不能用 wake 的 `updatedAt`、写入队列或会话恢复的时刻起算。
+
+### 6.2 OWNER_CONFIRMED 预审
+
+OWNER_CONFIRMED 预审：审阅会话 FAILED 未结束、排了 retryAt 或在队列里等账号时，审阅不会被永久拒绝（不记 REVIEWER_ENDED / SESSION_UNAVAILABLE），它回来后投递恰好一次；审阅窗口（dueAt）从投递 turn 被取走起算，取走前不会 TIMED_OUT；审阅会话真的结束、进回收站、fuse、关掉 Automatic 的现有行为不变。
+
+对应 `src/apiserver/src/tasks/owner-confirmation-review.service.ts` 的 `deliver` / `bindReviewDelivery` 与 `owner-confirmation-review.ts`。忙于别的长 turn 也只排队；`dueAt` 从当前投递 turn 的 `conversation_turn.delivered_at` 给满审阅窗口，不从 `requestedAt` 起算。取走前没有截止时间，即使排队超过整个窗口仍不会 TIMED_OUT。暂时不可用造成的投递拒绝保留为待补投，不永久拒绝审阅。
+
+### 6.3 退回与 SEND_BACK 说明不丢
+
+退回与说明不丢：审阅者把 OWNER_CONFIRMED 任务退回给 FAILED 未结束的 run 时被接受，并在 run 回来后送达；证据 SEND_BACK 的说明发给 FAILED 未结束的 run 时，在 run 回来后补发恰好一次；owner 对已审确认的回答发给 FAILED 未结束的审阅者时，在它回来后补发恰好一次。run 或审阅者真的结束时，保持现有行为。
+
+三条路径分别是 `src/apiserver/src/tasks/owner-confirmation-review.service.ts` 的 `returnToRun`、`src/apiserver/src/tasks/evidence-review.service.ts` 的 `deliverSendBack`、`owner-confirmation-review.service.ts` 的 `deliverAnswers`。run / 审阅者排了 retryAt、等账号或忙于别的长 turn 时也接受并排队，不丢说明、不因暂时不可用转给 owner；对方回来后每条消息补发恰好一次，并发触发也只能写一条 turn。
+
+### 6.4 「Ask the coordinator again」
+
+「Ask the coordinator again」：协调者 FAILED 未结束或排了 retryAt 时，owner 的按压被接受，待办交回协调者并排进它的队列，按异常待办现有规则「取走才计时」；协调者真的结束、进回收站或项目没有协调会话时，仍以 OPEN_ITEM_NO_COORDINATOR 拒绝。
+
+对应 `src/apiserver/src/projects/project-open-item.service.ts`：接受后负责人为 COORDINATOR，当前分配的 ITEM 投递 turn 取走前没有截止时间；取走后依 §3 与契约 §4.6 计时。上述真正无法交回的情形仍返回 `409 OPEN_ITEM_NO_COORDINATOR`，不能把 FAILED 未结束当成没有协调会话。
+
+### 6.5 协调者三类事实
+
+协调者事实不卡住：「task run stopped」「dependent ready」「project tasks settled」三类事实在协调者 FAILED 时被拒后，协调者回来时一定会再送达（核实现有的再推导路径，或补上回来时的补发），不需要等别的事件。
+
+对应 `task-run-stopped.producer.ts`、`dependent-ready.producer.ts`、`project-tasks-settled.producer.ts`。协调者暂时不可用时事实排队；三类逐一核实现有再推导是否覆盖回来这一刻，未覆盖就补上恢复后的补发入口，不能只留下「下次再推导」。验收时每类都要覆盖：FAILED 时产生事实，恢复后由 turn 结束或 reconcile tick 恰好送达一次，期间没有任何别的事件；代码任务的证据逐类说明靠现有路径还是新增补发。
+
+上述补发沿用现有入口；ANSWERED 但 `delivered_at` 为空的失败排空 turn 不算取走。补发使用由被替换 turn 推导的新 key，避免旧键重放，并保证并发也只写一条；不新增催 agent 的计时器。
+
+### 6.6 无新增界面文案
+
+本项目没有新增界面文案。
+
+本节只规定消息排队、补发与取走后的计时，不增加任何客户端文案；原有会话队列状态展示沿用 §1。
