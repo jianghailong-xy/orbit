@@ -67,6 +67,8 @@ export interface OwnerRequest {
   recommendedOption: number | null;
   steps: OwnerRequestStep[] | null;
   secretSpec: OwnerRequestSecretSpec | null;
+  /** SECRET: what ends the key (design §6.1) — its task, or, for a session with no task, the session. */
+  secretScope?: 'TASK' | 'SESSION';
   secretGrant: OwnerRequestSecretGrant | null;
   verifyHint: string | null;
   expiresAt: string | null;

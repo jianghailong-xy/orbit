@@ -404,7 +404,9 @@ export function OwnerRequestCard({ request: given, now = Date.now() }: { request
             {request.secretSpec ? (
               <>
                 <Fact label="Delivered to">{destination(request.secretSpec, runner)}</Fact>
-                <Fact label="Removed">When the task ends, or after 7 days</Fact>
+                <Fact label="Removed">
+                  {request.secretScope === 'SESSION' ? 'When the session ends, or after 7 days' : 'When the task ends, or after 7 days'}
+                </Fact>
               </>
             ) : null}
           </dl>

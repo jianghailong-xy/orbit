@@ -441,6 +441,16 @@ describe('a delivered secret', () => {
     expect(host.querySelector('.owner-request-field input')).not.toBeNull();
   });
 
+  it('says what ends the key: the task, or the session when there is no task', async () => {
+    const plain = { ...done({}), secretScope: 'SESSION' as const };
+    await mount(<OwnerRequestResolved now={NOW} request={plain} />);
+    host.innerHTML = '';
+    const pending = { ...done({}), state: 'PENDING' as const, resolvedAt: null, secretGrant: null, secretScope: 'SESSION' as const };
+    await mount(<OwnerRequestCard now={NOW} request={pending} />);
+    expect(host.textContent).toContain('When the session ends, or after 7 days');
+    expect(host.textContent).not.toContain('When the task ends');
+  });
+
   it('a runner’s removal note is told on a request that did not end DONE', async () => {
     const note = 'The file at ~/.config/x/key could not be deleted: permission denied';
     const expired = { ...done({ state: 'REMOVED', endReason: 'EXPIRED', removalNote: note, deliveredAt: null }), state: 'EXPIRED' as const };

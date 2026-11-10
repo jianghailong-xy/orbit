@@ -116,6 +116,8 @@ export interface OwnerSecretGrantView {
   removalNote: string | null;
   runnerOnline: boolean;
   runnerLastSeenAt: Date | null;
+  /** Whether the grant ends with a task (TASK_ENDED) rather than with its session (§6.1). Not the task's id. */
+  taskScoped: boolean;
 }
 
 export interface SecretSubmission {
@@ -354,7 +356,7 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
       where: { ownerId, requestId: { in: requestIds } },
       select: {
         requestId: true, runnerId: true, state: true, endReason: true, exposure: true, expiresAt: true,
-        deliveredAt: true, removedAt: true, removalNote: true,
+        deliveredAt: true, removedAt: true, removalNote: true, taskId: true,
       },
     });
     const runnerIds = [...new Set(grants.map((g) => g.runnerId).filter((id): id is string => Boolean(id)))];
@@ -375,6 +377,7 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
         removalNote: g.removalNote,
         runnerOnline: runner?.status === 'ONLINE',
         runnerLastSeenAt: runner?.lastHeartbeatAt ?? null,
+        taskScoped: g.taskId !== null,
       });
     }
     return views;

@@ -130,6 +130,10 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
     const plain = await a.session();
     const filed = await fileSecret(plain);
     assert.deepEqual(filed.secretSpec, { name: 'DeepSeek API key', runnerId: a.runnerId, envVar: 'DEEPSEEK_API_KEY' });
+    // What ends the key, as the card says it (§6.1): the session for a plain one, the task for a task's run.
+    assert.equal((await requests.get(a.ownerId, filed.id)).secretScope, 'SESSION');
+    const tasked = await fileSecret(await a.session({ taskId: await a.task() }));
+    assert.equal((await requests.get(a.ownerId, tasked.id)).secretScope, 'TASK');
     await assert.rejects(fileSecret(await a.session({ on: a.plainRunnerId })), ConflictException);
     await assert.rejects(fileSecret(plain, { envVar: 'K_ONE', runnerId: a.secondRunnerId }), BadRequestException);
     const key = process.env.PROVIDER_SECRET_KEY;

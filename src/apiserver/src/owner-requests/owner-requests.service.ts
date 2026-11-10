@@ -78,6 +78,8 @@ function json(value: object | null | undefined): Prisma.InputJsonValue | typeof 
 export type OwnerRequestView = Prisma.OwnerRequestGetPayload<{ select: typeof VIEW }> & {
   /** SECRET: the latest grant of the owner's key (design §2), or null before one was entered. Never the value. */
   secretGrant?: OwnerSecretGrantView | null;
+  /** SECRET: what ends the key (§6.1) — its task (TASK_ENDED) or, for a session with no task, the session. */
+  secretScope?: 'TASK' | 'SESSION';
 };
 
 /**
@@ -214,7 +216,19 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     const secretIds = requests.filter((r) => r.kind === 'SECRET').map((r) => r.id);
     if (secretIds.length === 0) return requests;
     const grants = await this.secrets.grantViews(ownerId, secretIds);
-    return requests.map((r) => (r.kind === 'SECRET' ? { ...r, secretGrant: grants.get(r.id) ?? null } : r));
+    const askers = [...new Set(requests.filter((r) => r.kind === 'SECRET').map((r) => r.askedBySessionId))];
+    const sessions = await this.prisma.session.findMany({
+      where: { id: { in: askers }, ownerId },
+      select: { id: true, taskId: true },
+    });
+    const taskOf = new Map(sessions.map((s) => [s.id, s.taskId]));
+    return requests.map((r) => {
+      if (r.kind !== 'SECRET') return r;
+      const grant = grants.get(r.id) ?? null;
+      // The grant's own scope once there is one (it was fixed at submit); before that, the asking session's.
+      const scoped = grant ? grant.taskScoped : Boolean(taskOf.get(r.askedBySessionId));
+      return { ...r, secretGrant: grant, secretScope: scoped ? 'TASK' : 'SESSION' };
+    });
   }
 
   /** The owner did what was asked. A DECISION records the option chosen or the owner's words. */
