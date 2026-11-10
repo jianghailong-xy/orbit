@@ -374,12 +374,10 @@ export class ProjectAcceptanceService {
 
   /** The owner's current check; no conversation's run is excluded. */
   async readProjectDoneCheck(ownerId: string, projectId: string): Promise<ProjectDoneCheck> {
-    return this.prisma.$transaction(async (tx) => {
-      const project = await tx.project.findFirst({ where: { id: projectId, ownerId } });
-      if (!project) throw new NotFoundException('project not found');
-      const state = await readDoneState(tx, ownerId, projectId, null);
-      return { ...state, findings: doneReadiness(state, []) };
-    });
+    const project = await this.prisma.project.findFirst({ where: { id: projectId, ownerId } });
+    if (!project) throw new NotFoundException('project not found');
+    const state = await readDoneState(this.prisma as unknown as Prisma.TransactionClient, ownerId, projectId, null);
+    return { ...state, findings: doneReadiness(state, []) };
   }
 
   /**
