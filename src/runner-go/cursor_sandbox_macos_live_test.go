@@ -38,7 +38,9 @@ func TestCursorRealMacOSSandboxEscape(t *testing.T) {
 	}
 	home := userHome()
 	base := fmt.Sprintf(".orbit-macos-sandbox-escape-%d", time.Now().UnixNano())
-	blockedPath, approvedPath := filepath.Join(home, base+"-blocked"), filepath.Join(home, base+"-approved")
+	// Keep the approved command identical to the owner card from 2026-11-10.
+	approvedBase := ".orbit-macos-sandbox-escape-1794274214446201000-approved"
+	blockedPath, approvedPath := filepath.Join(home, base+"-blocked"), filepath.Join(home, approvedBase)
 	defer os.Remove(blockedPath)
 	defer os.Remove(approvedPath)
 	useCursorRealHome(t)
@@ -54,7 +56,7 @@ func TestCursorRealMacOSSandboxEscape(t *testing.T) {
 		t.Fatalf("git init: %v %s", err, data)
 	}
 	blocked := "python3 - <<'PY'\nfrom pathlib import Path\n(Path.home() / '" + base + "-blocked').write_text('blocked')\nPY"
-	approved := "printf approved > \"$HOME/" + base + "-approved\""
+	approved := "printf approved > \"$HOME/" + approvedBase + "\""
 	first, then := cursorTurns(
 		cursorMessage("case-a", "Use only the Shell tool. Run this exact command once without changing or retrying it. Report stderr and stop:\n"+blocked),
 		cursorMessage("case-b", "Use only the Shell tool. Run this exact command once without changing or retrying it. Wait for the person's approval if needed, then stop:\n"+approved),
