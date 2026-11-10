@@ -2204,11 +2204,14 @@ func TestPromotionPreparesTheTreeBeforeTheChecks(t *testing.T) {
 }
 
 func TestIntegrationLandingPathsExempt(t *testing.T) {
-	for _, scenario := range []string{"exempt", "missing", "empty", "partial", "policy-edit", "candidate-policy", "upstream-absorbed", "promotion"} {
+	for _, scenario := range []string{"exempt", "bare-directory", "missing", "empty", "partial", "policy-edit", "candidate-policy", "upstream-absorbed", "promotion"} {
 		t.Run(scenario, func(t *testing.T) {
 			r := newIntegrationRepo(t)
 			if scenario != "missing" {
 				r.writeIn(".orbit/landing-check-exempt", "# upstream policy\n\ndocs/**\n!docs/private.txt\n")
+				if scenario == "bare-directory" {
+					r.writeIn(".orbit/landing-check-exempt", "docs/\n")
+				}
 				r.commit("upstream policy")
 				r.push("main")
 			}
@@ -2257,7 +2260,7 @@ func TestIntegrationLandingPathsExempt(t *testing.T) {
 				t.Fatalf("acceptance did not run: %+v", result)
 			}
 			check := result.Checks[1]
-			if scenario == "exempt" {
+			if scenario == "exempt" || scenario == "bare-directory" {
 				if result.State != "LANDED" || check.Skipped != "PATHS_EXEMPT" || !slices.Equal(check.Files, []string{"docs/guide.md"}) || check.ExitCode != nil {
 					t.Fatalf("skip result: %+v", result)
 				}
