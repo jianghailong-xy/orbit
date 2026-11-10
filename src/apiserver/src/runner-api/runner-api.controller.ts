@@ -623,6 +623,8 @@ interface IngestOutcome {
   /** The batch's events not stored because their seq holds another event, and the door they came by. */
   seqConflicts: RunEventSeqConflict[];
   door: RunEventDoor;
+  /** This batch stamped Session.engineStartedAt: the run left its starting state. */
+  engineStarted: boolean;
 }
 /**
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
@@ -7839,7 +7841,9 @@ export class RunnerApiController {
       // publishBatch tells them after an ingest of its own.
       const notices = ingested.flatMap(({ batch, outcome }) => {
         if (!OPEN.includes(outcome.session.status)) return [];
-        const notice = runEventBatchNotice(instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)));
+        const notice = runEventBatchNotice(
+          instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted,
+        );
         return notice ? [notice] : [];
       });
       if (notices.length > 0) {
@@ -8330,9 +8334,8 @@ export class RunnerApiController {
       // it), so a redelivered batch cannot push the stamp later than the first arrival. A streamed
       // delta counts too: it is never stored, and a warm process's plain-text reply stores nothing
       // until it ends (engineStreamedIn).
-      if (!session.engineStartedAt && (engineTurnActive !== undefined || engineStreamedIn(events))) {
-        sessionData.engineStartedAt = new Date();
-      }
+      const engineStarted = !session.engineStartedAt && (engineTurnActive !== undefined || engineStreamedIn(events));
+      if (engineStarted) sessionData.engineStartedAt = new Date();
       Object.assign(sessionData, {
         ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
         ...(frontier ? { lastToolUse: frontier.tool } : {}),
@@ -8643,7 +8646,7 @@ export class RunnerApiController {
       }
       return {
         session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
-        seqConflicts, door: link ? 'link' : 'https',
+        seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };
     return ingest.call(this);
@@ -8701,9 +8704,13 @@ export class RunnerApiController {
       // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
       // as one batch: the other replicas hear of it once, not once per event (publishBatch). A merged
       // call's notice went with its transaction (ingestLinkEventCall), so only this replica is left.
+      // A batch that ended the starting state is followed by a session_updated: the clients read that
+      // state off the session row, and no event the engine sends re-reads it (controlTypeFor), so the
+      // "Getting the session ready" notice stayed up over the engine's tool calls until a list's
+      // one-minute safety read.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
-      if (merged) this.realtime.publishBatchHere(sessionId, published);
-      else this.realtime.publishBatch(sessionId, published);
+      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted);
+      else this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted);
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
