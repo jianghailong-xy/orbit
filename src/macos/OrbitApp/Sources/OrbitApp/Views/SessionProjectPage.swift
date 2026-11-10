@@ -374,6 +374,11 @@ struct SessionProjectPage: View {
                 .listRowSeparator(.hidden)
             mergeCard
                 .listRowSeparator(.hidden)
+            if app.projectSessionsOpenItems?.doneRequest == nil,
+               let decline = app.projectSessionsOpenItems?.latestDoneRequestDecline {
+                ProjectDoneDeclineRow(decline: decline)
+                    .listRowSeparator(.hidden)
+            }
             if let coordinator {
                 Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
             }

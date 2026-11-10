@@ -432,6 +432,8 @@ public enum ProjectDone {
     // word for word.
 
     /// `DONE_CARD_HEADING` — the card's question, and the title of the open item that asks it.
+    public static let declineHeading = "You said not yet"
+    public static let declineHint = "The card comes back after the coordinator changes something."
     public static let heading = "Is this project done?"
     /// `DONE_CARD_COORDINATOR_CALL`.
     public static let coordinatorCall = "Coordinator’s call"

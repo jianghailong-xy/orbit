@@ -150,6 +150,8 @@ func TestHostSetupInstallsTheUnitsSystemdWillRead(t *testing.T) {
 		// The drain envelope, identical to the unit installSystemd writes.
 		"KillMode=mixed",
 		"TimeoutStopSec=180",
+		// An OOM kill inside the unit leaves the runner up (TestARunnerUnitSurvivesAnOOMKillInsideIt).
+		"OOMPolicy=continue",
 		"[Install]",
 		"WantedBy=multi-user.target",
 	})

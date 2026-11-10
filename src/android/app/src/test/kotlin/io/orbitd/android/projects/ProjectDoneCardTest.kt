@@ -70,6 +70,23 @@ class ProjectDoneCardTest {
         compose.waitForIdle()
     }
     private fun shows(text: String) = compose.onNodeWithText(text, substring = false).performScrollTo().assertIsDisplayed()
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun latestDeclineRow() {
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
+            ProjectDoneDeclineRow(j("""{"note":"Android build still fails on the release key.","declinedAt":"2026-11-10T10:12:00Z"}"""))
+        } } }
+        compose.onNodeWithTag("project-done-decline").assertExists()
+        compose.onNodeWithText("“Android build still fails on the release key.” ${ProjectDone.declineHint}").assertIsDisplayed()
+        compose.waitForIdle()
+        val view = compose.activity.window.decorView
+        assertTrue(view.width > 0 && view.height > 0)
+        val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+        view.draw(android.graphics.Canvas(bitmap))
+        val output = java.io.File(System.getenv("ORBIT_DECLINE_SCREENSHOT") ?: "build/evidence/not-yet-android.png")
+        output.parentFile.mkdirs()
+        output.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
     private fun texts(): List<String> = compose.onAllNodes(hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
         .flatMap { node -> if (SemanticsProperties.Text in node.config) node.config[SemanticsProperties.Text].map { it.text } else emptyList() }
 

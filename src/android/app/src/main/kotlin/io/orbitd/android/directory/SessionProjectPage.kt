@@ -325,11 +325,10 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
             app.landingJobs.remember(handle, projectId, view)
         } else state.integrationReadFailed = true
     }
-    /** The start row's read, while the sidebar says nobody has started the project. A read that fails keeps the last answer. */
+    /** The page reads the start request and latest Not yet answer. A failed read keeps the last answer. */
     suspend fun loadStart() {
         val row = currentProject
         gateRead = listOf(row?.let { it.text("status") to ProjectDoc.started(it) })
-        if (row?.text("status") != "OPEN" || ProjectDoc.started(row) != false) { state.openItems = null; return }
         val items = try { projects.openItems(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (items != null) state.openItems = items
     }
@@ -487,6 +486,11 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                             projects.recheckPromotion(projectId, promotionId, LandingSessionCopy.RERUN_CHECK_REASON) } },
                         onDetails = { promotionReview = it },
                         onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } })
+                }
+            }
+            if (state.openItems?.obj("doneRequest") == null) {
+                state.openItems?.obj("latestDoneRequestDecline")?.let { decline ->
+                    item(key = "done-decline") { io.orbitd.android.projects.ProjectDoneDeclineRow(decline) }
                 }
             }
             coordinator?.let { c ->
