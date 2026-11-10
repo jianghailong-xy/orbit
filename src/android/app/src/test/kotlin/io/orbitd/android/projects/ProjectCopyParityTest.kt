@@ -46,6 +46,16 @@ class ProjectCopyParityTest {
             "delivery", "deliveryPlatform", "deliveryAgentPush"))
     @Test fun markdownWords() = assertIn(ProjectMarkdown, swift("${kit}ShareMarkdown.swift"))
     @Test fun crossingsWords() = assertIn(ProjectCrossings, swift("${kit}ProjectCrossings.swift"))
+    @Test fun derivedDoneWordsMatchWebLiteralsAndDate() {
+        val web = File(root, "src/web/src/lib/projectDone.ts").readText()
+        for ((key, words) in listOf("DONE_CARD_DERIVED_FROM" to ProjectDone.derivedFrom,
+            "DONE_CARD_DERIVED_REOPEN_HINT" to ProjectDone.derivedReopenHint, "DONE_CARD_REOPEN" to ProjectDone.reopenProject)) {
+            assertTrue(web.contains("export const $key = '$words';"))
+        }
+        assertEquals("From the criteria you confirmed on Oct 2. Not right? Reopen it.",
+            ProjectDone.derivedLine("2026-10-02T12:00:00Z", java.time.ZoneOffset.UTC))
+        assertEquals(null, ProjectDone.derivedLine(null))
+    }
     @Test fun doneWords() = assertIn(ProjectDone, swift("${kit}ProjectDone.swift"))
     @Test fun attentionWords() {
         val source = swift("${kit}ProjectAttention.swift")

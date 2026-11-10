@@ -28,6 +28,7 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // from agents. These refuse a request that carries an agent session — starting a project seals its
   // criteria, the standard-set confirmation by another door.
   'POST /projects/:id/start',
+  'GET /projects/:id/done-check',
   'POST /projects/:id/done',
   'POST /projects/:id/pause',
   'POST /projects/:id/resume',

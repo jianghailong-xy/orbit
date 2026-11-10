@@ -327,6 +327,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
       body: { criteriaDigest: 'e'.repeat(64), line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null },
     }),
   },
+  'GET /projects/:id/done-check': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/done': {
     request: (of) => ({ params: { id: of.projectId }, body: { criteriaDigest: 'e'.repeat(64), acceptedGaps: [] } }),
   },
