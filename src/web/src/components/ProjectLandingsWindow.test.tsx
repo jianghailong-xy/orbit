@@ -200,6 +200,15 @@ async function click(element: Element | null | undefined, what: string): Promise
   await settle();
 }
 
+/** Opens every folded step of every landing drawn open, so each of the server's lines is on screen. */
+async function openSteps(): Promise<void> {
+  for (;;) {
+    const folded = page().querySelector<HTMLButtonElement>('.landing-step-row[aria-expanded="false"]');
+    if (!folded) return;
+    await click(folded, 'a folded step');
+  }
+}
+
 function page(): HTMLElement {
   return container!;
 }
@@ -353,7 +362,8 @@ describe('a landing in the window', () => {
     expect(page().textContent).toContain('Merge check · live 1m 50s');
     expect(page().textContent).toContain('checking');
     expect(page().textContent).toContain('Output 6s ago · Updated just now');
-    // The timeline: every generation, every claim, round, takeover and hand-back.
+    // The timeline: every generation, every claim, round, takeover and hand-back — each step opened.
+    await openSteps();
     expect(page().textContent).toContain('Generation 1');
     expect(page().textContent).toContain('Generation 2');
     expect(page().textContent).toContain('Task marked done · queued to land on project/p1');
@@ -364,13 +374,16 @@ describe('a landing in the window', () => {
     expect(page().textContent).toContain('Handed back by runner wikova · claim 2');
     expect(page().textContent).toContain('Merge check passed · 17m 02s');
     // The marks carry the status (05 a/e/i): queued ≡, in hand ↻, done ✓, failed ✗, takeover ↗,
-    // hand-back ↩ — not a neutral dot/ring/triangle.
+    // hand-back ↩ — not a neutral dot/ring/triangle. Each line sits in its step: generation 2's claim,
+    // takeover and hand-back under Claim, its round under Sync, its check under Merge check.
     const marks = [...page().querySelectorAll<HTMLElement>('.landing-timeline-glyph')]
       .map((mark) => `${mark.textContent}:${mark.className.replace('landing-timeline-glyph ', '')}`);
     expect(marks).toEqual([
       '≡:is-queued', '✗:is-failed',
-      '↻:is-running', '↻:is-running', '↗:is-takeover', '↩:is-queued', '✓:is-ok',
+      '↻:is-running', '↗:is-takeover', '↩:is-queued', '↻:is-running', '✓:is-ok',
     ]);
+    expect([...page().querySelectorAll('.landing-step .chat-tool-name')].map((name) => name.textContent))
+      .toEqual(['Queue', 'Claim', 'Sync', 'Merge check']);
     // The footer is one plain line with nothing to type into: a lock and the sentence's first half (the
     // whole sentence for a screen reader), and the door to who decides at the end
     // (docs/mocks/landings-ui-polish ③).
@@ -526,6 +539,7 @@ describe('a landing in the window', () => {
       },
     });
     await mount();
+    await openSteps();
     const marks = (job: string) => [
       ...page().querySelectorAll<HTMLElement>(`section[data-job="${job}"] .landing-timeline-glyph`),
     ].map((mark) => `${mark.textContent}:${mark.className.replace('landing-timeline-glyph ', '')}`);
@@ -555,10 +569,10 @@ describe('a landing in the window', () => {
     const card = page().querySelector('.landing-status-card')!;
     expect([...card.querySelectorAll('.landing-card-line')].map((line) => line.textContent))
       .toEqual(['Stopped · not landed']);
-    // A stop is not a failure: the head keeps the quiet ring.
-    const head = card.querySelector('.landing-head')!;
-    expect(head.classList.contains('is-failed')).toBe(false);
-    expect(head.querySelector('.landing-head-mark [data-glyph]')?.getAttribute('data-glyph')).toBe('spinner');
+    // A stop is not a failure: the line keeps the quiet mark, not the red ✗.
+    const line = card.querySelector('.landings-window-line')!;
+    expect(line.classList.contains('is-failed')).toBe(false);
+    expect(line.querySelector('.anticon-close-circle')).toBeNull();
   });
 });
 
@@ -804,17 +818,16 @@ describe('a settled merge round', () => {
     mergedRows = [promo({ landingSessionId: SESSION })];
     await mount();
     // One line, not a session's and a merge's: the record and the round, joined by landingSessionId.
-    // A merge is an event, not a bubble: the mark, the words, the line and the time on one centred line
-    // (docs/mocks/landings-ui-polish ②).
-    expect(page().querySelector('.landings-window-row')).toBeNull();
-    const rows = [...page().querySelectorAll<HTMLElement>('.landings-window-event')];
+    // A merge is the chat's background-job line (docs/mocks/landings-chat-tools ①): the mark, the
+    // ending, the merge's line, how long its checks took, the time and Details ›.
+    const rows = [...page().querySelectorAll<HTMLElement>('.landings-window-line-press')];
     expect(rows).toHaveLength(1);
-    expect(rows[0].parentElement?.classList.contains('is-event')).toBe(true);
     expect([...rows[0].children].map((part) => part.className)).toEqual([
-      'landings-window-row-mark is-merge', 'landings-window-event-title', 'landings-window-row-detail', 'landings-window-row-time',
+      'bgwake-mark', 'bgwake-title', 'bgwake-name', 'bgwake-status', 'bgwake-time', 'bgwake-details-label',
     ]);
-    expect(rows[0].textContent).toBe(`⇢Merged into main · 8ed0ea7 · 2 tasks · automatically · ${landingClockTime(at(9, 51))}`);
-    // Opened on it: the receipt over the round's own record, on a panel under the bubble, not in it.
+    expect(rows[0].querySelector('.landings-window-merge-mark')?.textContent).toBe('⇢');
+    expect(rows[0].textContent).toBe(`⇢Merged into main8ed0ea7 · 2 tasks · automaticallycheck 17m 41s${landingClockTime(at(9, 51))}Details`);
+    // Opened on it: the receipt over the round's own record, hung under the line, not in it.
     expect(rows[0].getAttribute('aria-expanded')).toBe('true');
     expect(rows[0].querySelector('.landings-window-record')).toBeNull();
     const record = page().querySelector('.landings-window-record')!;
@@ -823,8 +836,9 @@ describe('a settled merge round', () => {
       'Now on main · 2 tasks', 'Ledger migration order', 'Payout retry budget',
       '✓ Passed on the combined tree · 17m 41s', 'Landed exactly the tested tree 5e5bfca · as a merge commit',
     ].join(''));
-    expect(record.textContent).toContain('Merge check · 1');
-    expect(record.textContent).toContain('Merge check passed · 17m 41s');
+    // One attempt: no section heading; its check is a step whose row says how it ended.
+    expect(record.querySelector('.landing-step[data-step="check:MERGE_CHECK"] .chat-tool-summary')?.textContent)
+      .toBe('Merge check passed · 17m 41s');
     // The round's state is said by its row; the board does not repeat it as a timeline fact.
     expect(page().textContent).not.toContain('Merge round · merged');
     // Pressing the row closes it.
@@ -849,7 +863,7 @@ describe('the window', () => {
     await mount(windowOn(null));
     const days = [...page().querySelectorAll<HTMLElement>('.landings-window-day')].map((day) => [
       day.querySelector('.landings-window-day-head')?.textContent,
-      [...day.querySelectorAll('.landings-window-row-text, .landings-window-card-task')].map((title) => title.textContent),
+      [...day.querySelectorAll('.landings-window-entry:not(.is-card) .bgwake-name, .landings-window-card-task')].map((title) => title.textContent),
     ]);
     expect(days).toEqual([
       ['Yesterday', ['Wiki review link']],
@@ -857,14 +871,20 @@ describe('the window', () => {
       ['Now', ['Ledger migration order']],
     ]);
     const today = [...page().querySelectorAll<HTMLElement>('.landings-window-day')][1];
-    expect([...today.querySelectorAll('.landings-window-row-mark')].map((mark) => mark.textContent)).toEqual(['◌', '✓']);
-    expect([...today.querySelectorAll('.landings-window-row-time')].map((time) => time.textContent))
+    // Each line's mark and ending: ◌ nothing to land, ✓ landed; then when.
+    expect([...today.querySelectorAll('.landings-window-line')].map((line) => line.className.includes('is-quiet') ? '◌' : '✓'))
+      .toEqual(['◌', '✓']);
+    expect([...today.querySelectorAll('.bgwake-mark .anticon')].map((mark) => mark.getAttribute('aria-label')))
+      .toEqual(['minus-circle', 'check-circle']);
+    expect([...today.querySelectorAll('.bgwake-time')].map((time) => time.textContent))
       .toEqual([landingClockTime(at(8, 30)), landingClockTime(at(10, 2))]);
     // Opened from the Landings row, nothing is opened and nothing is outlined.
     expect(page().querySelector('.landings-window-record')).toBeNull();
     expect(page().querySelector('.is-outlined')).toBeNull();
   });
 
+  // In a browser a line also reads its record when it first comes into view; jsdom has no
+  // IntersectionObserver, so here only the press reads it.
   it('reads a settled row’s record only when it is opened, and opens it in place', async () => {
     otherRows = [settledRow('landed-today', 'Land · Runner model order', 'LANDED', at(10, 2))];
     otherViews = {
@@ -886,11 +906,14 @@ describe('the window', () => {
     };
     await mount(windowOn(null));
     expect(calls.some((call) => call.path === 'getSession:landed-today')).toBe(false);
-    const row = page().querySelector<HTMLElement>('[data-landing-entry="landed-today"] .landings-window-row');
+    const row = page().querySelector<HTMLElement>('[data-landing-entry="landed-today"] .landings-window-line-press');
     await click(row, 'the settled row');
     expect(calls.filter((call) => call.path === 'getSession:landed-today')).toHaveLength(1);
     const record = page().querySelector('[data-landing-entry="landed-today"] .landings-window-record')!;
-    expect(record.textContent).toContain('Landed on project/p1 · 9c2e7d1');
+    // Its one line is the Push step's own summary.
+    expect(record.querySelector('.landing-step[data-step="push"] .chat-tool-name')?.textContent).toBe('Push');
+    expect(record.querySelector('.landing-step[data-step="push"] .chat-tool-summary')?.textContent)
+      .toBe('Landed on project/p1 · 9c2e7d1');
     // A task segment's record ends in its two ways out.
     expect([...record.querySelectorAll('.landings-window-links button')].map((link) => link.textContent))
       .toEqual(['Open Task ›', 'Open Source Session ›']);
@@ -901,7 +924,7 @@ describe('the window', () => {
       sha: '3f1c2a9000000000000000000000000000000000', at: at(9, 51), automatic: false, byUserId: 'u1',
     } })];
     await mount(windowOn(null));
-    const row = page().querySelector<HTMLElement>('[data-landing-entry="merge:promo-old"] .landings-window-event');
+    const row = page().querySelector<HTMLElement>('[data-landing-entry="merge:promo-old"] .landings-window-line-press');
     expect(row?.textContent).toContain('Merged into main');
     expect(row?.textContent).toContain('3f1c2a9 · 2 tasks · by you');
     await click(row, 'the old merge');
@@ -935,12 +958,15 @@ describe('the window', () => {
     const card = page().querySelector('.landings-window-card')!;
     expect(card.textContent).toContain('Not landed');
     expect(card.textContent).toContain('checks failed · exit 1 after 3m 52s');
-    // An attempt that stopped on a failure wears the Landings row's red ✕, its word in red (board 02 d).
-    const head = card.querySelector('.landing-head')!;
-    expect(head.classList.contains('is-failed')).toBe(true);
-    expect(head.querySelector('.landing-head-mark [data-glyph]')?.getAttribute('data-glyph')).toBe('cross');
-    expect(head.querySelector('.landing-head-right')?.textContent).toBe('Not landed');
-    expect([...card.querySelectorAll('.landing-card-actions button')].map((door) => door.textContent))
+    // An attempt that stopped on a failure is the chat's failed job line: the red ✕ and its word in
+    // red (docs/mocks/landings-chat-tools ③ d), open without a press, with who decides and the doors.
+    const line = card.querySelector('.landings-window-line')!;
+    expect(line.classList.contains('is-failed')).toBe(true);
+    expect(line.classList.contains('is-open')).toBe(true);
+    expect(line.querySelector('.bgwake-mark .anticon')?.getAttribute('aria-label')).toBe('close-circle');
+    expect(line.querySelector('.bgwake-title')?.textContent).toBe('Not landed');
+    expect(card.querySelector('.landings-window-wait-line')?.textContent).toBe('Decisions: the coordinator');
+    expect([...card.querySelectorAll('.landings-window-wait .landing-card-actions button')].map((door) => door.textContent))
       .toEqual(['Open Coordinator', 'Open Task']);
     await click(button('Open Coordinator'), 'Open Coordinator');
     expect(openedSession).toBe('coord-1');
@@ -951,7 +977,7 @@ describe('the window', () => {
     const entry = page().querySelector<HTMLElement>(`[data-landing-entry="${SESSION}"]`)!;
     expect(entry.className).toContain('is-outlined');
     expect(entry.className).toContain('is-open');
-    expect(entry.querySelector('.landings-window-record')).not.toBeNull();
+    expect(entry.querySelector('.landings-window-card-body')).not.toBeNull();
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 1_600));
     });
@@ -990,7 +1016,7 @@ describe('the window', () => {
     expect(nowSection.querySelector('.landings-window-column .landings-window-card')).not.toBeNull();
     expect(page().querySelector('.landings-window-avatar')).toBeNull();
     // A bubble's words are the task's whole name.
-    expect(page().querySelector('[data-landing-entry="t3"] .landings-window-row-text')?.textContent)
+    expect(page().querySelector('[data-landing-entry="t3"] .bgwake-name')?.textContent)
       .toBe('T3 sudo hints name the binary’s real path');
   });
 
@@ -1032,12 +1058,12 @@ describe('the window', () => {
   });
 
   /**
-   * What jsdom cannot lay out, read from the stylesheet (board 01 b, 03 e): the bubble hugs its words
-   * up to a gutter on its right and never cuts them short, the record's panel is the one a person's
-   * bubble opens its note on, the outline is the bubble's, a merge is a centred line, and the footer is
-   * one plain line on the window's bottom edge (docs/mocks/landings-ui-polish).
+   * What jsdom cannot lay out, read from the stylesheet: a landing is the chat's background-job line,
+   * its steps the chat's tool rows, hung under it off its mark (docs/mocks/landings-chat-tools); the
+   * outline is the line's; and the footer is one plain line on the window's bottom edge
+   * (docs/mocks/landings-ui-polish).
    */
-  it('draws the bubble, its record and the footer with the shapes the board gives them', () => {
+  it('draws the line, its steps and the footer with the shapes the board gives them', () => {
     const found = ['src/index.css', 'src/web/src/index.css'].map((each) => resolve(process.cwd(), each)).find(existsSync);
     if (found === undefined) throw new Error(`no index.css from ${process.cwd()}`);
     const css = readFileSync(found, 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '');
@@ -1049,24 +1075,20 @@ describe('the window', () => {
     const value = (body: string, property: string): string | undefined =>
       new RegExp(`(?:^|;|\\s)${property}:\\s*([^;]+);`, 'u').exec(body)?.[1].trim().replace(/\s+/gu, ' ');
 
-    const bubble = rule('.landings-window-row');
-    expect(value(bubble, 'border-radius')).toBe('16px');
-    expect(value(bubble, 'padding')).toBe('9px 13px 8px');
-    expect(value(bubble, 'background')).toBe('var(--fill-muted)');
-    expect(value(rule('.landings-window-row-line .landings-window-row'), 'max-width')).toBe('calc(100% - 44px)');
-    const words = rule('.landings-window-row-text');
-    expect(words).not.toMatch(/nowrap|ellipsis|line-clamp/u);
-    // A card's task name is whole too: the board wraps it.
-    expect(rule('.landings-window-card-task')).not.toMatch(/nowrap|ellipsis|line-clamp/u);
-    expect(value(rule('.landings-window-row-time'), 'font-variant-numeric')).toBe('tabular-nums');
-    expect(value(rule('.landings-window-entry.is-outlined .landings-window-row'), 'box-shadow')).toBe('0 0 0 2px var(--brand)');
-    expect(css).not.toContain('.landings-window-avatar');
-    expect(value(rule('.landings-window-row-line.is-event'), 'justify-content')).toBe('center');
-    expect(value(rule('.landings-window-event'), 'background')).toBe('transparent');
-
-    const panel = rule('.landings-window-record');
-    const note = rule('.chat-user-wrap > .chat-injected-panel');
-    expect(value(panel, 'background')).toBe(value(note, 'background'));
+    // A landing is the chat's own background-job line and its steps the chat's own tool rows
+    // (docs/mocks/landings-chat-tools): the window adds only what makes them buttons, and draws no
+    // bubble, avatar or panel of its own.
+    for (const gone of ['.landings-window-row', '.landings-window-event', '.landings-window-avatar', '.landings-window-row-text']) {
+      expect(css, gone).not.toContain(gone);
+    }
+    expect(value(rule('.landings-window-line-press'), 'background')).toBe('transparent');
+    expect(value(rule('.landing-step-row'), 'background')).toBe('transparent');
+    expect(value(rule('.landing-step-time'), 'font-variant-numeric')).toBe('tabular-nums');
+    expect(value(rule('.landings-window-entry.is-outlined .landings-window-line-press'), 'box-shadow')).toBe('0 0 0 2px var(--brand)');
+    expect(value(rule('.landings-window-line.is-open .bgwake-caret'), 'transform')).toBe('rotate(90deg)');
+    // What a line carries hangs under it, off its mark, as `.bgwake-body` does.
+    expect(value(rule('.landings-window-record'), 'margin')).toBe('2px 0 10px 22px');
+    expect(value(rule('.landings-window-card-body'), 'margin')).toBe('2px 0 10px 22px');
 
     expect(value(rule('.landings-window-day-head'), 'border-radius')).toBe('999px');
     expect(value(rule('.landings-window-now .landings-window-day-head'), 'color')).toBe('var(--brand)');

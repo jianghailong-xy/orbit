@@ -495,7 +495,11 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                     else write("${RunSettings.notSaved} — ") { api.authorize(id, body) }
                 },
                 stepConcurrency = { stepConcurrency(it) },
-                pause = { next -> write("${if (next) RunSettings.notPaused else RunSettings.notResumed} — ") { api.pause(id, next, revision(doc)) } })
+                pause = { next -> write("${if (next) RunSettings.notPaused else RunSettings.notResumed} — ") { api.pause(id, next, revision(doc)) } },
+                // Read at the press: a merge still live asks before the agent takes over. One that cannot be read asks too.
+                mergeLive = {
+                    try { RunSettings.mergeLive(api.currentPromotion(id)) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { true }
+                })
         }
         doc.text("goal")?.trim()?.takeIf { it.isNotEmpty() }?.let { goal -> item(key = "goal") { SectionHead("Goal"); Folded(goal, 132, link) } }
         state.graph?.takeIf { it.objects("marks").isNotEmpty() }?.let { graph -> item(key = "graph") {

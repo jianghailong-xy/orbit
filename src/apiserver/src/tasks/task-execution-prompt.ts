@@ -10,7 +10,13 @@ import type { TaskCompletionCriterionValue } from './task-completion-criterion';
 export const TASK_DELIVERY_SELECT = {
   codebases: {
     where: { slot: 'primary' },
-    select: { deliveryMode: true, integrationStartedAt: true, integrationRef: true, remoteName: true },
+    select: {
+      deliveryMode: true,
+      integrationStartedAt: true,
+      integrationRef: true,
+      remoteName: true,
+      mergeCheckCommand: true,
+    },
   },
 } satisfies Prisma.ProjectSelect;
 
@@ -20,6 +26,8 @@ interface TaskDeliveryBinding {
   integrationStartedAt: Date | null;
   integrationRef: string;
   remoteName: string;
+  /** The project's merge check; null or absent when it has none. */
+  mergeCheckCommand?: string | null;
 }
 
 /**
@@ -39,8 +47,15 @@ function taskDeliverySentence(task: {
   if (!binding || task.codeless || task.isForeman === true || task.verifiesTaskId != null) return null;
   const branch = branchName(binding.integrationRef);
   if (binding.deliveryMode === 'AGENT_PUSH') {
+    // No candidate is made for an agent's push (O-L2), so nothing of Orbit's runs the merge check:
+    // the agent runs it before it pushes (owner decision 2026-11-10, docs/mocks/agent-push-delivery).
+    const check = binding.mergeCheckCommand?.trim();
     return `This project delivers by pushing to ${branch}. Push your commits to `
-      + `${binding.remoteName}/${branch} before you finish — Orbit checks that they are there.`;
+      + `${binding.remoteName}/${branch} before you finish — Orbit checks that they are there.`
+      + (check
+        ? ` Before you push, rebase onto ${binding.remoteName}/${branch} and run the project’s merge check, `
+          + `\`${check}\`; push only once it passes.`
+        : '');
   }
   return binding.integrationStartedAt
     ? `Do not push to ${branch}. Orbit lands your branch after your work is accepted.`

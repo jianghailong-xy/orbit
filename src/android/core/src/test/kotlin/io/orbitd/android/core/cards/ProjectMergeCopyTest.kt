@@ -43,6 +43,24 @@ class ProjectMergeCopyTest {
         assertEquals(PromotionCards.pageNothingToDo, "Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t.")
     }
 
+    /** Why the asking card asks although Automatic is on (docs/mocks/agent-push-delivery 01): only while it asks, on a main line that
+     * Orbit lands, with Automatic on — and nothing while any of those is unknown. */
+    @Test fun theAskingCardSaysWhyOnlyWhenAutomaticWouldHaveMerged() {
+        val reason = "Asks you because this project lands directly on main, where Automatic never merges by itself."
+        assertEquals(reason, PromotionCards.askReason(candidate("READY"), "MAIN", "PLATFORM", true))
+        assertEquals("Let the agent push instead…", PromotionCards.letAgentPushInstead)
+        assertNull("Automatic off: asking is what it does", PromotionCards.askReason(candidate("READY"), "MAIN", "PLATFORM", false))
+        assertNull("Automatic not read yet", PromotionCards.askReason(candidate("READY"), "MAIN", "PLATFORM", null))
+        assertNull(PromotionCards.askReason(candidate("READY"), "PROJECT_BRANCH", "PLATFORM", true))
+        assertNull(PromotionCards.askReason(candidate("READY"), null, "PLATFORM", true))
+        assertNull(PromotionCards.askReason(candidate("READY"), "MAIN", "AGENT_PUSH", true))
+        assertNull("a server that reports no mode", PromotionCards.askReason(candidate("READY"), "MAIN", null, true))
+        listOf("CONFIRMED", "RECHECKING", "BLOCKED", "MERGED").forEach { assertNull(it, PromotionCards.askReason(candidate(it), "MAIN", "PLATFORM", true)) }
+        assertNull(PromotionCards.askReason(null, "MAIN", "PLATFORM", true))
+        val master = Json.parseToJsonElement(candidate("READY").toString().replace("refs/heads/main", "refs/heads/master")).jsonObject
+        assertEquals(reason.replace("on main", "on master"), PromotionCards.askReason(master, "MAIN", "PLATFORM", true))
+    }
+
     @Test fun theCardNamesTheTasksItCarriesAndCountsTheRest() {
         val titles = listOf("修复 D1", "日志默认关闭", "P6", "P7", "P8")
         val view = candidate("READY", taskIds = listOf("t1", "t2", "t3", "t4", "t5"),

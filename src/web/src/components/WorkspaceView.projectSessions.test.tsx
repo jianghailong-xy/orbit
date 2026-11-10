@@ -1435,8 +1435,8 @@ describe('the project sessions page — the Landings row', () => {
     const entry = (): HTMLElement | null => mounted().querySelector<HTMLElement>(`[data-landing-entry="${landing.id}"]`);
     await until(() => expect(entry()?.className).toContain('is-outlined'));
     expect(entry()!.className).toContain('is-open');
-    expect(entry()!.querySelector('.landings-window-row')?.getAttribute('aria-expanded')).toBe('true');
-    expect(entry()!.querySelector('.landings-window-row-text')?.textContent).toBe('landed long ago');
+    expect(entry()!.querySelector('.landings-window-line-press')?.getAttribute('aria-expanded')).toBe('true');
+    expect(entry()!.querySelector('.bgwake-name')?.textContent).toBe('landed long ago');
     // No conversation is drawn for it: no header, no composer.
     expect(mounted().querySelector('.workspace-header')).toBeNull();
     expect(mounted().querySelector('textarea')).toBeNull();
