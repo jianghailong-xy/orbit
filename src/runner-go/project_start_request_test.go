@@ -585,6 +585,7 @@ func TestProjectRequestStartCLISendsTheSameRequest(t *testing.T) {
 	if err := cmdProjectCLI([]string{
 		"request-start", "proj-1", "--line", "PROJECT_BRANCH", "--automatic",
 		"--max-concurrent-tasks", "3", "--merge-check-command", "npm test",
+		"--landing-check-command", "npm run landing", "--landing-check-timeout-seconds", "120",
 		"--why", "B and C both build on A", "--json",
 	}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
@@ -595,6 +596,7 @@ func TestProjectRequestStartCLISendsTheSameRequest(t *testing.T) {
 	body := (*seen)[0].body
 	if body["line"] != "PROJECT_BRANCH" || body["automatic"] != true ||
 		body["maxConcurrentTasks"] != float64(3) || body["mergeCheckCommand"] != "npm test" ||
+		body["landingCheckCommand"] != "npm run landing" || body["landingCheckTimeoutSeconds"] != float64(120) ||
 		body["why"] != "B and C both build on A" {
 		t.Fatalf("request-start sent %#v", body)
 	}
