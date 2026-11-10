@@ -76,3 +76,27 @@ Checks already completed on the Mac:
 Earlier harness-only problems (missing temporary cache root, unmarked HTTP
 transport, and approval lifetime) were corrected in the opt-in test. Production
 sandbox or authentication code has not changed in this task.
+
+## Local approval file attempt
+
+Job `bgj_ac6c6d9920f5` ran the real Cursor CLI with the revised harness and
+its 30-minute wait budget. The harness printed the pending approved command:
+
+```sh
+printf approved > "$HOME/.orbit-macos-sandbox-escape-1794274214446201000-approved"
+```
+
+Request: `approval-1`. Approval file: `/tmp/orbit-live-approval-34utsde1`.
+The session ended its turn to let the coordinator obtain the owner's card answer.
+No owner answer arrived, and the session never wrote the approval file. The job
+ended with exit 1 after 1800.81 seconds (context deadline exceeded). No successful
+approved command or Part 2 completion is claimed. The helper stops on timeout
+before exporting its final event snapshot. The earlier Part 1 recording remains
+the evidence for the refused inline heredoc.
+
+For the revised harness, set `ORBIT_CURSOR_LIVE_APPROVAL_FILE` to an absent
+absolute path instead of setting the old server session/job variables, and use
+`-timeout 35m`. Only after the coordinator relays the owner's card approval,
+write `approve <request-id>` to that file. The fixture returns that answer with
+person provenance through the production permission bridge; the grant broker
+still handles the approved command. A denial uses `deny <request-id>`.

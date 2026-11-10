@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,20 +14,20 @@ import (
 	"time"
 )
 
-// This opt-in probe spends two real prompts and waits for a real owner card.
-// The control-plane fixture drives turns; approval provenance comes from Orbit.
+// This opt-in probe spends two real prompts and waits for the owner via a local file.
+// The coordinator obtains the owner card answer before writing the file.
 func TestCursorRealMacOSSandboxEscape(t *testing.T) {
 	if os.Getenv("ORBIT_CURSOR_MAC_LIVE") != "1" {
 		t.Skip("set ORBIT_CURSOR_MAC_LIVE=1 to spend two prompts and request an owner approval")
 	}
-	session := os.Getenv("ORBIT_CURSOR_LIVE_SESSION")
-	jobID := os.Getenv("ORBIT_CURSOR_LIVE_JOB")
+	approvalFile := os.Getenv("ORBIT_CURSOR_LIVE_APPROVAL_FILE")
 	out := os.Getenv("ORBIT_CURSOR_REAL_OUT")
-	cfg := loadConfig()
-	if session == "" || jobID == "" || !filepath.IsAbs(out) || cfg == nil {
-		t.Fatal("requires ORBIT_CURSOR_LIVE_SESSION, ORBIT_CURSOR_LIVE_JOB, absolute ORBIT_CURSOR_REAL_OUT and runner config")
+	if !filepath.IsAbs(approvalFile) || !filepath.IsAbs(out) {
+		t.Fatal("requires absolute ORBIT_CURSOR_LIVE_APPROVAL_FILE and ORBIT_CURSOR_REAL_OUT")
 	}
-	transport := newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerMCP)
+	if _, err := os.Stat(approvalFile); !os.IsNotExist(err) {
+		t.Fatal("approval file must be absent before the run")
+	}
 	cli, err := cursorExecutablePath()
 	if err != nil {
 		t.Fatal(err)
@@ -60,12 +59,10 @@ func TestCursorRealMacOSSandboxEscape(t *testing.T) {
 		cursorMessage("case-a", "Use only the Shell tool. Run this exact command once without changing or retrying it. Report stderr and stop:\n"+blocked),
 		cursorMessage("case-b", "Use only the Shell tool. Run this exact command once without changing or retrying it. Wait for the person's approval if needed, then stop:\n"+approved),
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
 	var decision *ApprovalDecisionResponse
 	var decisionMu sync.Mutex
 	run := runCursorSession(t, cursorRunOptions{
-		executable: cli, sameHome: true, execDir: work, timeout: 15 * time.Minute,
+		executable: cli, sameHome: true, execDir: work, timeout: 30 * time.Minute,
 		env: map[string]string{name: token}, first: first, then: then,
 		agent: func(a *AgentExecConfig) { a.PermissionMode = "auto" },
 		onCard: func(card cursorTestCard) []RunInboxResponse {
@@ -73,32 +70,8 @@ func TestCursorRealMacOSSandboxEscape(t *testing.T) {
 				t.Errorf("unexpected approval card: %v", card.Input)
 				return nil
 			}
-			id, err := transport.createApproval(ctx, session, map[string]interface{}{
-				"toolName": card.ToolName, "input": card.Input, "toolUseId": base,
-				"backgroundJobId": jobID,
-			})
-			if err != nil {
-				t.Errorf("real card: %v", err)
-				return nil
-			}
-			t.Logf("REAL_OWNER_CARD %s command=%s", id, approved)
-			go func() {
-				for ctx.Err() == nil {
-					d, err := transport.pollApproval(ctx, session, id)
-					if err != nil {
-						t.Errorf("real card answer: %v", err)
-						break
-					}
-					if d.Status == "PENDING" {
-						continue
-					}
-					decisionMu.Lock()
-					decision = d
-					decisionMu.Unlock()
-					t.Logf("REAL_OWNER_DECISION id=%s status=%s decidedById=%s", id, d.Status, d.DecidedByID)
-					return
-				}
-			}()
+			t.Logf("APPROVAL NEEDED: %s (request %s)", approved, card.ID)
+			t.Logf("Waiting for owner answer via coordinator; approval file: %s", approvalFile)
 			return nil
 		},
 		approve: func(card cursorTestCard) cursorTestDecision {
@@ -108,9 +81,21 @@ func TestCursorRealMacOSSandboxEscape(t *testing.T) {
 			decisionMu.Lock()
 			defer decisionMu.Unlock()
 			if decision == nil {
-				return cursorTestDecision{Status: "PENDING"}
+				answer, err := os.ReadFile(approvalFile)
+				if err != nil {
+					return cursorTestDecision{Status: "PENDING"}
+				}
+				switch strings.TrimSpace(string(answer)) {
+				case "approve " + card.ID:
+					decision = &ApprovalDecisionResponse{Status: "ALLOWED", DecidedByID: "owner-via-coordinator-card"}
+				case "deny " + card.ID:
+					decision = &ApprovalDecisionResponse{Status: "DENIED", DecidedByID: "owner-via-coordinator-card"}
+				default:
+					return cursorTestDecision{Status: "PENDING"}
+				}
+				t.Logf("OWNER_DECISION request=%s status=%s source=owner via coordinator card", card.ID, decision.Status)
 			}
-			return cursorTestDecision{Status: decision.Status, DecidedByID: decision.DecidedByID, Message: decision.Message}
+			return cursorTestDecision{Status: decision.Status, DecidedByID: decision.DecidedByID}
 		},
 	})
 	if err := os.MkdirAll(out, 0755); err != nil {
@@ -167,6 +152,9 @@ func TestCursorRealMacOSSandboxEscape(t *testing.T) {
 	if err := os.Remove(approvedPath); err != nil {
 		t.Error(err)
 	} else {
-		t.Log("CASE_B cleanup: removed")
+		t.Logf("CASE_B cleanup: removed; test -e: %t", exists(approvedPath))
+		if exists(approvedPath) {
+			t.Error("approved probe remains after cleanup")
+		}
 	}
 }
