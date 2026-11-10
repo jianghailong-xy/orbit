@@ -124,6 +124,27 @@ class ProjectDoneCardTest {
         compose.onNodeWithText("From the criteria", substring = true).assertDoesNotExist()
     }
 
+    @Test @Config(qualifiers = "w411dp-h400dp")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun staleRequestRowUsesTheServerReason() {
+        val items = j("""{"latestDoneRequestSuperseded":{"reason":"Criterion 3’s task was reopened after it asked.","supersededAt":"2026-11-10T12:00:00Z"}}""")
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
+            Surface(Modifier.fillMaxSize()) {
+                Column(Modifier.padding(16.dp)) { ProjectStaleDoneRow(ProjectDone.staleRequest(items)!!) }
+            }
+        } } }
+        compose.waitForIdle()
+        compose.onNodeWithText(ProjectDone.staleHeading).assertIsDisplayed()
+        compose.onNodeWithText("Criterion 3’s task was reopened after it asked. ${ProjectDone.staleDetail}").assertIsDisplayed()
+        System.getenv("ORBIT_STALE_SCREENSHOT")?.let { path ->
+            val view = compose.activity.window.decorView
+            val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+            File(path).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
+    }
+
     @Test fun theCoordinatorsRequestIsDrawnWholeWithHowLongItHasWaited() {
         card(doc, row)
         shows(ProjectDone.heading)

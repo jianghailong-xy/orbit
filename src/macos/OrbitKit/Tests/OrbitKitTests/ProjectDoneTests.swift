@@ -6,6 +6,22 @@ import XCTest
 /// held to the browser's own examples (`ProjectDoneSettlementCard.test.tsx`) and to the payloads the
 /// server serves. The words themselves are `ProjectDoneCopyParityTests`'.
 final class ProjectDoneTests: XCTestCase {
+    func testStaleRequestDecodesAndYieldsToAnOpenRequestOrNewerDecline() throws {
+        func items(_ extra: String = "") throws -> ProjectOpenItemsView {
+            let json = """
+            {"latestDoneRequestSuperseded":{"reason":"Task reopened.","supersededAt":"2026-11-10T12:00:00Z"}\(extra)}
+            """
+            return try JSONDecoder().decode(ProjectOpenItemsView.self, from: Data(json.utf8))
+        }
+        XCTAssertEqual(ProjectDone.staleRequest(try items()), "Task reopened. " + ProjectDone.staleDetail)
+        XCTAssertNil(ProjectDone.staleRequest(try items(#", "latestDoneRequestDecline":{"note":"Missing", "declinedAt":"2026-11-10T13:00:00Z"}"#)))
+        XCTAssertNotNil(ProjectDone.staleRequest(try items(#", "latestDoneRequestDecline":{"note":"Missing", "declinedAt":"2026-11-10T11:00:00Z"}"#)))
+        let stale = try items().latestDoneRequestSuperseded
+        let open = ProjectOpenItemRow(itemId: "new", kind: .unknown, title: "", waitingSince: "")
+        XCTAssertNil(ProjectDone.staleRequest(ProjectOpenItemsView(doneRequest: open, latestDoneRequestSuperseded: stale)))
+        XCTAssertNil(ProjectDone.staleRequest(nil))
+    }
+
 
     func testDoneCheckFindingsUseShortLines() throws {
         let json = #"""

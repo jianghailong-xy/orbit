@@ -374,7 +374,10 @@ struct SessionProjectPage: View {
                 .listRowSeparator(.hidden)
             mergeCard
                 .listRowSeparator(.hidden)
-            if app.projectSessionsOpenItems?.doneRequest == nil,
+            if let detail = ProjectDone.staleRequest(app.projectSessionsOpenItems) {
+                ProjectStaleDoneRow(detail: detail)
+                    .listRowSeparator(.hidden)
+            } else if app.projectSessionsOpenItems?.doneRequest == nil,
                let decline = app.projectSessionsOpenItems?.latestDoneRequestDecline {
                 ProjectDoneDeclineRow(decline: decline)
                     .listRowSeparator(.hidden)
