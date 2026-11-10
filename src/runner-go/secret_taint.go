@@ -1,8 +1,12 @@
 package main
 
 import (
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,12 +130,16 @@ func recordSecretTaint(dir, tip string, r *integrationOutputRedactor, exclude ..
 		return nil
 	}
 	commit, err := git(dir, "rev-parse", "--verify", "--quiet", tip+"^{commit}")
-	if err != nil || commit == "" {
+	if err != nil && !taintObjectMissing(err) {
+		// git could not be asked: that is not "no commit here", and a removal must not take it for one.
+		return err
+	}
+	if commit == "" {
 		return nil
 	}
 	repo := secretRepoKey(dir)
 	if repo == "" {
-		return nil
+		return errors.New("the repository of " + dir + " could not be read")
 	}
 	hits, err := secretHistoryObjects(dir, commit, r, exclude...)
 	paths := objectHitPaths(hits)
@@ -331,7 +339,17 @@ func taintAllCheckouts(r *integrationOutputRedactor) error {
 	var failed error
 	for _, entry := range entries {
 		dir := filepath.Join(worktreesDir(), entry.Name())
-		if !entry.IsDir() || !isGitRepo(dir) {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(dir, ".git")); err != nil {
+			continue
+		}
+		// A checkout git cannot read is not one with nothing in it.
+		if !isGitRepo(dir) {
+			if failed == nil {
+				failed = errors.New("the checkout " + dir + " could not be read by git")
+			}
 			continue
 		}
 		base, _ := git(dir, "rev-parse", "--verify", "--quiet", baseRefName(entry.Name()))
@@ -340,8 +358,12 @@ func taintAllCheckouts(r *integrationOutputRedactor) error {
 		}
 		// What is not committed yet: a file held back from a commit stays in the working tree, and the next
 		// `git add -A` after the value is forgotten would stage it.
-		if err := recordTaintObjects(dir, uncommittedObjectsHolding(dir, r)); err != nil && failed == nil {
+		objects, scanErr := uncommittedObjectsHolding(dir, r)
+		if err := recordTaintObjects(dir, objects); err != nil && failed == nil {
 			failed = err
+		}
+		if scanErr != nil && failed == nil {
+			failed = scanErr
 		}
 	}
 	return failed
@@ -350,15 +372,15 @@ func taintAllCheckouts(r *integrationOutputRedactor) error {
 // uncommittedObjectsHolding is every file of dir's index and working tree that a `git add -A` could stage (tracked,
 // and untracked but not ignored) and whose content holds one of r's values, with the blob id `git hash-object` gives
 // its content: the id a `git add` of it makes. Staged blobs that differ from the file are taken too.
-func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) []secretTaintObject {
+func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) ([]secretTaintObject, error) {
 	if r == nil {
-		return nil
+		return nil, nil
 	}
 	var hits []secretTaintObject
 	hits = append(hits, stagedFilesHoldingSecrets(dir, nil, r, nil)...)
 	out, err := git(dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
 	if err != nil {
-		return hits
+		return hits, err
 	}
 	for _, name := range strings.Split(out, "\x00") {
 		if name == "" {
@@ -373,16 +395,48 @@ func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) []secre
 		if err != nil {
 			continue
 		}
-		holds, _ := readerHoldsSecret(file, r)
+		holds, scanErr := readerHoldsSecret(file, r)
 		file.Close()
+		if scanErr != nil {
+			return hits, scanErr
+		}
 		if !holds {
 			continue
 		}
-		if id, err := git(dir, "hash-object", "--", name); err == nil && id != "" {
-			hits = append(hits, secretTaintObject{ID: id, Path: name})
+		id, err := git(dir, "hash-object", "--", name)
+		if err != nil || id == "" {
+			return hits, fmt.Errorf("%s holds the value and its blob id could not be computed: %v", name, err)
+		}
+		hits = append(hits, secretTaintObject{ID: id, Path: name})
+		// The upload door hashes the bytes as they are on disk; git's id applies the checkout's filters (CRLF,
+		// text=auto). Both are recorded, so the same unchanged file is known by either.
+		if raw, err := rawBlobIDs(path); err == nil {
+			for _, rawID := range raw {
+				if rawID != id {
+					hits = append(hits, secretTaintObject{ID: rawID, Path: name})
+				}
+			}
 		}
 	}
-	return hits
+	return hits, nil
+}
+
+// rawBlobIDs is the git blob id, SHA-1 and SHA-256, of path's bytes as they are, with no filter applied.
+func rawBlobIDs(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return rawBlobIDsOf(data), nil
+}
+
+// rawBlobIDsOf is the git blob id, SHA-1 and SHA-256, of data.
+func rawBlobIDsOf(data []byte) []string {
+	header := []byte(fmt.Sprintf("blob %d\x00", len(data)))
+	full := append(header, data...)
+	one := sha1.Sum(full)
+	two := sha256.Sum256(full)
+	return []string{hex.EncodeToString(one[:]), hex.EncodeToString(two[:])}
 }
 
 // secretScanFileMax bounds the working-tree files read at a removal; a bigger one is no file a value is pasted into.
@@ -496,21 +550,31 @@ func recordBeforeForget(r *integrationOutputRedactor) {
 
 // retryPendingTaint records again what could not be recorded, and keeps what still cannot be.
 func retryPendingTaint() {
+	// The matchers stay pending while they are tried: a reader that looked in the meantime would otherwise see neither
+	// the pending state nor the entry still being written. Each leaves the list only once its record is written.
 	secretTaintPending.Lock()
-	pending := secretTaintPending.list
-	secretTaintPending.list = nil
+	pending := append([]*integrationOutputRedactor(nil), secretTaintPending.list...)
 	secretTaintPending.Unlock()
-	var kept []*integrationOutputRedactor
 	for _, r := range pending {
 		if err := secretBeforeForget(r); err != nil {
-			kept = append(kept, r)
+			continue
 		}
-	}
-	if len(kept) > 0 {
 		secretTaintPending.Lock()
-		secretTaintPending.list = append(kept, secretTaintPending.list...)
+		for i, kept := range secretTaintPending.list {
+			if kept == r {
+				secretTaintPending.list = append(secretTaintPending.list[:i], secretTaintPending.list[i+1:]...)
+				break
+			}
+		}
 		secretTaintPending.Unlock()
 	}
+}
+
+// secretTaintIsPending reports whether a removal's record is still to be written.
+func secretTaintIsPending() bool {
+	secretTaintPending.Lock()
+	defer secretTaintPending.Unlock()
+	return len(secretTaintPending.list) > 0
 }
 
 // errSecretTaintPending is what every reader of the record sees while a removal's record is still to be written.

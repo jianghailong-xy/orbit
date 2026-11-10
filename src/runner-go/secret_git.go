@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,10 +47,20 @@ func unstageHeldSecrets(dir string, env []string, sessionID string) {
 		return
 	}
 	paths := make([]string, 0, len(hits))
+	record := append([]secretTaintObject(nil), hits...)
 	for _, hit := range hits {
 		paths = append(paths, hit.Path)
+		// The file as it is on disk too: the upload door hashes its bytes, which a CRLF or text=auto filter makes
+		// differ from the staged blob.
+		if raw, err := rawBlobIDs(filepath.Join(dir, hit.Path)); err == nil {
+			for _, id := range raw {
+				if id != hit.ID {
+					record = append(record, secretTaintObject{ID: id, Path: hit.Path})
+				}
+			}
+		}
 	}
-	recordTaintObjects(dir, hits)
+	recordTaintObjects(dir, record)
 	var err error
 	if _, headErr := gitEnv(dir, env, "rev-parse", "--verify", "--quiet", "HEAD"); headErr == nil {
 		_, err = gitEnv(dir, env, append([]string{"reset", "--quiet", "--"}, paths...)...)

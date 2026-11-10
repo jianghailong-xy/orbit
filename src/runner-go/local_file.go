@@ -1,9 +1,6 @@
 package main
 
 import (
-	"crypto/sha1"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -339,10 +336,7 @@ func fileIsRecordedSecretBlob(file *os.File) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	header := fmt.Sprintf("blob %d\x00", len(data))
-	sha1sum := sha1.Sum(append([]byte(header), data...))
-	sha256sum := sha256.Sum256(append([]byte(header), data...))
-	for _, id := range []string{hex.EncodeToString(sha1sum[:]), hex.EncodeToString(sha256sum[:])} {
+	for _, id := range rawBlobIDsOf(data) {
 		if _, ok := ids[id]; ok {
 			return true, nil
 		}

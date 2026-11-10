@@ -401,6 +401,10 @@ func (s *bgJobService) secretScan(path string) bgSocketResponse {
 }
 
 func secretFileHoldsValue(store *secretStore, path string) (bool, error) {
+	// While a removal's record is still to be written, the runner cannot say what is safe, so nothing is.
+	if secretTaintIsPending() {
+		return true, nil
+	}
 	if store.scrubber() == nil {
 		return false, nil
 	}

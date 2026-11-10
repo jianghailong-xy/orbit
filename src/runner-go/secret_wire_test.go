@@ -698,3 +698,94 @@ func TestUploadRefusesARecordedBlobAfterTheGrantEnds(t *testing.T) {
 		t.Fatal("the handle was not left at the start")
 	}
 }
+
+// Review 8, OPEN 1: a retry keeps its matcher pending while it records, so no reader sees a gap.
+func TestPendingTaintStaysPendingWhileItIsRetried(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	old := secretBeforeForget
+	var sawPending []bool
+	failing := true
+	secretBeforeForget = func(r *integrationOutputRedactor) error {
+		sawPending = append(sawPending, secretTaintIsPending())
+		if failing {
+			return errors.New("disk quota exceeded")
+		}
+		return nil
+	}
+	defer func() {
+		secretBeforeForget = old
+		secretTaintPending.Lock()
+		secretTaintPending.list = nil
+		secretTaintPending.Unlock()
+	}()
+	recordBeforeForget(newSecretRedactor([]string{testSecretValue}))
+	failing = false
+	retryPendingTaint()
+	if len(sawPending) != 2 || !sawPending[1] {
+		t.Fatalf("the retry cleared the pending state before it recorded: %v", sawPending)
+	}
+	if secretTaintIsPending() {
+		t.Fatal("a retry that succeeded left the matcher pending")
+	}
+}
+
+// Review 8, OPEN 2: the runner answers `orbit mcp`'s scan with "holds" while a removal's record is pending.
+func TestSecretScanRefusesWhileARecordIsPending(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	path := filepath.Join(t.TempDir(), "clean.txt")
+	if err := os.WriteFile(path, []byte("nothing secret here\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := newSecretStore(newFakeSecretAPI(), filepath.Join(t.TempDir(), "ledger.json"))
+	if holds, err := secretFileHoldsValue(store, path); err != nil || holds {
+		t.Fatalf("fixture: holds=%v err=%v", holds, err)
+	}
+	secretTaintPending.Lock()
+	secretTaintPending.list = append(secretTaintPending.list, newSecretRedactor([]string{testSecretValue}))
+	secretTaintPending.Unlock()
+	defer func() {
+		secretTaintPending.Lock()
+		secretTaintPending.list = nil
+		secretTaintPending.Unlock()
+	}()
+	if holds, _ := secretFileHoldsValue(store, path); !holds {
+		t.Fatal("the scan said a file was safe while a removal's record was pending")
+	}
+}
+
+// Review 8, OPEN 3: a removal scan that cannot run git reports failure rather than "nothing here".
+func TestRemovalScanReportsGitFailure(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	checkout := filepath.Join(worktreesDir(), "sGitGone")
+	if err := os.MkdirAll(filepath.Join(checkout, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir()) // no git on it
+	if err := taintAllCheckouts(newSecretRedactor([]string{testSecretValue})); err == nil {
+		t.Fatal("a checkout git could not read was taken for one with nothing in it")
+	}
+}
+
+// Review 8, OPEN 4: a held-back file whose stored blob a filter changes (CRLF under text=auto) is still refused by
+// the upload door after its grant ends, by the id of its bytes as they are.
+func TestUploadRefusesAFilteredHeldBackFileAfterTheGrantEnds(t *testing.T) {
+	wt := sessionWorktree(t, "sSecretCRLF")
+	holdTestSecret(t, testSecretValue)
+	if err := os.WriteFile(filepath.Join(wt.Path, ".gitattributes"), []byte("* text=auto\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(wt.Path, "run.env")
+	if err := os.WriteFile(path, []byte("KEY="+testSecretValue+"\r\nOTHER=1\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	liveDiff(wt) // the turn end holds it back
+	runnerSecretStore.Store(nil)
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := refuseFileHoldingSecret(f, path); !errors.Is(err, errFileHoldsOwnerSecret) {
+		t.Fatalf("the CRLF held-back file was uploadable after its grant ended: %v", err)
+	}
+}
