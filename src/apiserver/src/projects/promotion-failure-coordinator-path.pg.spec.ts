@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -334,7 +335,8 @@ async function claim(stack: Stack, w: World, leaseOwner: string): Promise<Integr
   return jobs[0]!;
 }
 
-function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Result) {
+async function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Result) {
+  if (job.kind === 'LAND_TASK') await seedPromotionRequest(stack.db, w.projectId);
   return stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration,
     leaseOwner: job.leaseOwner,

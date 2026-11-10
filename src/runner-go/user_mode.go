@@ -63,16 +63,17 @@ var userModeActions = map[string]string{
 	// account owner's decision, so a terminal with nobody to ask is exactly the case where the write
 	// goes straight through (the same reading `project resolve-blocker` gives a headless caller).
 	"project skip-merge-check": "",
-	"project merge-evidence":  "",
-	"project create":          "",
-	"project update":          "",
-	"project delete":          "",
+	"project merge-evidence":   "",
+	"project create":           "",
+	"project update":           "",
+	"project delete":           "",
 	"project ensure-coordinator": "it opens a coordinator for the session it runs in (ORBIT_SESSION_ID); open the " +
 		"project's coordinator as yourself with `orbit api -X POST /api/projects/PROJECT_ID/coordinator`",
 	"project send": "it delivers a message from the session it runs in (ORBIT_SESSION_ID); send yours to the " +
 		"session `orbit project get` names as coordinatorSessionId, with `orbit session send`",
 	"project request-start": "it asks the account owner as the project's coordinating session (ORBIT_SESSION_ID), " +
 		"and starting a project is the owner's own press in the Orbit app",
+	"project request-promotion": "it requests promotion as the project’s current coordinator conversation (ORBIT_SESSION_ID)",
 	"project request-done": "it asks the account owner as the project's coordinating session (ORBIT_SESSION_ID), " +
 		"and recording a project done is the owner's own press in the Orbit app",
 
