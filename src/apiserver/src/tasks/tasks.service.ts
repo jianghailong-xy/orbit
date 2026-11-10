@@ -2521,6 +2521,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     this.reconcileTimer.unref(); // don't keep the process alive just for this timer
   }
 
+  async deliverLooksFinishedOwedTo(sessionId?: string): Promise<void> {
+    await this.completionInputs?.deliverLooksFinishedOwedTo?.(sessionId);
+  }
+
   /**
    * One tick of the reconcile timer, on the apiserver process that runs the singleton sweeps
    * (realtime/control-plane-leader.ts) and on no other. Two ticks at once are two dispatch decisions
@@ -2580,6 +2584,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // one of its own, for the reason at the top of this block. A coordinator's own turn ending
       // hands it over too; that is the latency, and this is the guarantee that one which is back and
       // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
+      .then(() => this.deliverLooksFinishedOwedTo())
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
       .then(() => this.evidenceReviews?.deliverOwedTo())
       .then(() => this.confirmationReviews?.deliverPendingFor())

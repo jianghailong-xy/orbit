@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -15,6 +15,8 @@ import {
   type SettledCriterionReport,
   projectAcceptanceLandedFact,
   projectTasksSettledFact,
+  wakeIdempotencyKey,
+  type WakeFact,
 } from './coordinator-wake';
 import type { WakeAuthorizer } from './coordinator-wake.service';
 import { criterionKeyOf } from './project-acceptance';
@@ -22,6 +24,8 @@ import {
   LANDING_SERVING_WORK_SELECT, criterionLanding, readLandingBranches, readLandingJobsByTask,
 } from './project-criterion-landing';
 import { landingInFlight, readProjectFinish } from './project-looks-finished';
+import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from './coordinator-evidence-queue';
+import { conversationIsOver } from './project-open-item';
 import { criterionCoverage } from './wake-disposition';
 
 /**
@@ -148,6 +152,80 @@ export interface SettledProjectDelivery {
  */
 @Injectable()
 export class ProjectTasksSettledProducer {
+  private readonly logger = new Logger(ProjectTasksSettledProducer.name);
+
+  /** Recovery uses the same derivation as task writes; preflight reads keep unavailable projects quiet. */
+  async deliverOwedTo(sessionId?: string): Promise<void> {
+    try {
+      const projects = await this.prisma.project.findMany({
+        where: {
+          status: 'OPEN', coordinatorEnabled: true,
+          ...(sessionId ? { coordinatorSessionId: sessionId } : {}),
+          coordinatorSession: {
+            status: { in: ['AWAITING_INPUT', 'INTERRUPTED'] }, retryAt: null,
+            workspace: { enabled: true, deletedAt: null },
+            endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null,
+          },
+          coordinatorWakes: { some: { event: 'PROJECT_TASKS_SETTLED', OR: [
+            { status: 'DELIVERED' }, { status: 'REFUSED', refusalCode: 'DELIVERY_COORDINATOR_PAUSED' },
+          ] } },
+        },
+        select: { id: true },
+      });
+      for (const project of projects) {
+        const latest = await this.prisma.projectCoordinatorWake.findFirst({
+          where: { projectId: project.id, event: 'PROJECT_TASKS_SETTLED' },
+          orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        });
+        if (!latest || (latest.status !== 'DELIVERED' && latest.refusalCode !== 'DELIVERY_COORDINATOR_PAUSED')) continue;
+        if (latest.status === 'DELIVERED') {
+          const record = latest.delivery as { clientTurnId?: string } | null;
+          if (!latest.sessionId || !record?.clientTurnId) continue;
+          const turn = await this.prisma.conversationTurn.findUnique({
+            where: { sessionId_clientTurnId: { sessionId: latest.sessionId, clientTurnId: record.clientTurnId } },
+            select: { status: true, deliveredAt: true },
+          });
+          if (turn && (turn.deliveredAt || turn.status !== 'ANSWERED')) continue;
+        }
+        if ((await readProjectFinish(this.prisma, project.id)).state !== 'LOOKS_FINISHED') continue;
+        await this.afterCommit([project.id]);
+      }
+    } catch (error) {
+      this.logger.warn(`looks-finished recovery failed: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  private async queueLooksFinished(fact: WakeFact, authorize: WakeAuthorizer): Promise<CoordinatorDeliveryOutcome> {
+    const idempotencyKey = wakeIdempotencyKey(fact);
+    const previous = await this.prisma.projectCoordinatorWake.findFirst({
+      where: { projectId: fact.projectId, idempotencyKey, status: 'DELIVERED' },
+    });
+    if (previous) {
+      const request = await this.prisma.projectOpenItem.findFirst({
+        where: { projectId: fact.projectId, kind: 'DONE_REQUEST', state: 'OPEN' }, select: { id: true },
+      });
+      if (request) return { outcome: 'ALREADY_AWAKE', idempotencyKey };
+      const record = previous.delivery as { clientTurnId?: string } | null;
+      if (!record?.clientTurnId || !previous.sessionId) return { outcome: 'ALREADY_AWAKE', idempotencyKey };
+      const turn = await this.prisma.conversationTurn.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: previous.sessionId, clientTurnId: record.clientTurnId } },
+        select: { status: true, deliveredAt: true },
+      });
+      if (turn && (turn.deliveredAt || turn.status !== 'ANSWERED')) return { outcome: 'ALREADY_AWAKE', idempotencyKey };
+      const project = await this.prisma.project.findUnique({
+        where: { id: fact.projectId },
+        select: { coordinatorEnabled: true, coordinatorSession: { select: COORDINATOR_PAUSE_SELECT } },
+      });
+      const session = project?.coordinatorSession;
+      if (!project?.coordinatorEnabled || !session || conversationIsOver(session) || conversationIsPaused(session)) {
+        return { outcome: 'ALREADY_AWAKE', idempotencyKey };
+      }
+      await this.deliveries.requeue(fact, { wakeId: previous.id, idempotencyKey, clientTurnId: record.clientTurnId });
+      return { outcome: 'ALREADY_AWAKE', idempotencyKey };
+    }
+    return this.deliveries.queue(fact, authorize, { holdWhilePaused: true });
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly judgments: CoordinatorJudgmentService,
@@ -260,7 +338,7 @@ export class ProjectTasksSettledProducer {
         continue;
       }
       const outcome = finish === 'LOOKS_FINISHED'
-        ? await this.deliveries.queue(fact, authorize)
+        ? await this.queueLooksFinished(fact, authorize)
         : await this.judgments.wake(fact, authorize);
       deliveries.push({ projectId, outcome: outcome.outcome });
     }

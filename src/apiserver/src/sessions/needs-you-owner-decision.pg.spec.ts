@@ -1000,6 +1000,13 @@ test('the badge says Record as done… once a finished-looking project has waite
   // The settled fact, as the producer leaves it when it hands a finished-looking project to the
   // conversation coordinating it: DELIVERED there, instead of a judgment.
   const wakeId = randomUUID();
+  const clientTurnId = randomUUID();
+  await db.conversationTurn.create({
+    data: {
+      sessionId: f.coordinatorSessionId, clientTurnId, seq: 2,
+      kind: 'message', content: 'The project looks finished.', status: 'ANSWERED', deliveredAt: new Date(),
+    },
+  });
   await db.projectCoordinatorWake.create({
     data: {
       id: wakeId,
@@ -1011,7 +1018,7 @@ test('the badge says Record as done… once a finished-looking project has waite
       idempotencyKey: `cw:v1:PROJECT_TASKS_SETTLED:PROJECT:${f.projectId}:settled`,
       status: 'DELIVERED',
       sessionId: f.coordinatorSessionId,
-      delivery: { clientTurnId: randomUUID() },
+      delivery: { clientTurnId },
     },
   });
 
@@ -1036,9 +1043,9 @@ test('the badge says Record as done… once a finished-looking project has waite
 
   await t.test('(8b) once the window has run out with no request, the row lights as Record as done…', async () => {
     await sql.query(
-      `UPDATE "project_coordinator_wake" SET "updated_at" = "updated_at" - interval '7201 seconds'
-        WHERE "id" = $1::uuid`,
-      [wakeId],
+      `UPDATE "conversation_turn" SET "delivered_at" = "delivered_at" - interval '7201 seconds'
+        WHERE "session_id" = $1::uuid AND "client_turn_id" = $2`,
+      [f.coordinatorSessionId, clientTurnId],
     );
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
       sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'RECORD_AS_DONE',

@@ -7402,6 +7402,7 @@ export class RunnerApiController {
       if ('taskId' in finalized && finalized.taskId) await this.observeAfterWorkTurn(sessionId, finalized.taskId);
       // And the evidence revisions that waited for it while it was paused: a coordinator whose turn
       // ended is back, and a paused one is left alone (projects/coordinator-evidence-queue.service.ts).
+      await this.tasks?.deliverLooksFinishedOwedTo?.(sessionId);
       await this.evidenceQueue?.deliverOwedTo(sessionId);
       await this.evidenceReviews?.deliverOwedTo(sessionId);
       // And the confirmation reviews it was to be handed whose delivery a crash cut off between their

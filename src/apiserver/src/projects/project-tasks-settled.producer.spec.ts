@@ -37,6 +37,7 @@ function producerFixture(
     serving: criterion.servingStatuses.map((status) => ({ id: randomUUID(), status })),
   }));
   const prisma = {
+    projectCoordinatorWake: { findFirst: async () => null },
     // The 0282 tally, as the triggers maintain it: whatever the statuses say, unless the fixture
     // is asked for the one shape the producer has to survive — a tally that has fallen behind.
     projectTaskStatusCount: {
