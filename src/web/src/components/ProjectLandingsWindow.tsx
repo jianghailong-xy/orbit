@@ -1,10 +1,11 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeftOutlined,
   CloseOutlined,
   FileTextOutlined,
+  LockOutlined,
   MoreOutlined,
   MessageOutlined,
   ProjectOutlined,
@@ -97,7 +98,7 @@ interface WindowFacts {
  * window opens. A landing session id opens this window on its landing (`focusId`): scrolled to,
  * opened and outlined for a moment.
  *
- * The window is the old landing session page's shell — `Landings`, `Run by Orbit · <project>`, a ⋯
+ * The window is the old landing session page's shell — `Landings` over the project's name, a ⋯
  * with the coordinator and the project, the read-only footer and no composer (LS6) — and each landing
  * in it carries what that page drew: a card still in hand is its status card, polled on §2.7a's
  * cadence; a settled row opens in place to its timeline, read once and never polled. The doors the
@@ -105,8 +106,10 @@ interface WindowFacts {
  *
  * It is drawn as a chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles, option C): each day
  * under a centered chip, each settled landing one message bubble from Orbit, the ones Orbit sent close
- * together (`landingsWindowGroups`) one group with Orbit's avatar beside its first, the cards in hand
- * Orbit's last group, and the read-only footer shaped like the composer's card.
+ * together (`landingsWindowGroups`) one group, and the cards in hand Orbit's last group. Polished
+ * 2026-11-10 (docs/mocks/landings-ui-polish): no avatars — every message here is Orbit's — a merge into
+ * main is one centred event line, the head's second line is the project's name, and the read-only
+ * footer is one plain line on the window's bottom edge.
  *
  * Nothing here is a new read: the two the project's sessions page already makes (its LANDING rows and
  * its merges into main), and each landing's own view when it is drawn as a card or opened.
@@ -263,7 +266,7 @@ export function ProjectLandingsWindow({
       onSelect: () => navigate(`/projects/${encodeId(projectId)}`),
     },
   ];
-  const [runs, typeHere] = SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS.split(' — ');
+  const [runs] = SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS.split(' — ');
 
   return (
     <div className="landing-page landings-window" data-project={projectId}>
@@ -276,7 +279,7 @@ export function ProjectLandingsWindow({
         <div className="landings-window-titles">
           <div className="landing-page-title">{SESSION_LANDINGS_COPY.TITLE}</div>
           <div className="landing-page-sub">
-            {projectTitle ? `${LANDING_PAGE_COPY.RUN_BY_ORBIT} · ${projectTitle}` : LANDING_PAGE_COPY.RUN_BY_ORBIT}
+            {projectTitle || LANDING_PAGE_COPY.RUN_BY_ORBIT}
           </div>
         </div>
         <Menu
@@ -311,7 +314,6 @@ export function ProjectLandingsWindow({
             <div className="landings-window-day-head">{day.title}</div>
             {landingsWindowGroups(day.rows).map((group) => (
               <div key={group[0].key} className="landings-window-group">
-                <OrbitAvatar />
                 <div className="landings-window-column">
                   {group.map((row) => (
                     <LandingWindowRow
@@ -336,7 +338,6 @@ export function ProjectLandingsWindow({
             {/* What is still in hand is Orbit's last group of messages: its cards take the column's
                 whole width, with no gutter on the right. */}
             <div className="landings-window-group">
-              <OrbitAvatar />
               <div className="landings-window-column">
                 {cards.map((card) => (
                   <LandingWindowCard
@@ -359,58 +360,23 @@ export function ProjectLandingsWindow({
       </div>
 
       <div className="landing-page-foot">
-        {/* What this window is, who decides, and the way to them: nothing to type here (LS6). Drawn as
-            the conversation's composer card with nothing to type into — the sentence where the text
-            would be, and the way to the coordinator in Send's place (board 01 b). */}
-        <div className="landing-page-foot-line">
-          <span>{`${runs} — `}</span><b>{typeHere}</b>
-        </div>
-        <div className="landing-page-foot-bar">
-          <span>{LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR}</span>
-          {coordinatorId ? (
-            <Button className="landing-page-foot-open" icon={<UserOutlined />}
-              onClick={() => onOpenSession(coordinatorId)}>
-              {LANDING_PAGE_COPY.OPEN_COORDINATOR_LINK}
-            </Button>
-          ) : null}
-        </div>
+        {/* What this window is and the way to who decides: nothing to type here (LS6). One plain line on
+            the window's bottom edge — a lock and the sentence's first half, the coordinator's door at
+            the end (docs/mocks/landings-ui-polish ③). */}
+        <span className="landing-page-foot-line" title={SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}>
+          <LockOutlined aria-hidden="true" />
+          <span className="sr-only">{SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}</span>
+          <span className="landing-page-foot-words" aria-hidden="true">{runs}</span>
+        </span>
+        {coordinatorId ? (
+          <Button className="landing-page-foot-open" icon={<UserOutlined />}
+            title={LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR}
+            onClick={() => onOpenSession(coordinatorId)}>
+            {LANDING_PAGE_COPY.OPEN_COORDINATOR_LINK}
+          </Button>
+        ) : null}
       </div>
     </div>
-  );
-}
-
-/**
- * Orbit's avatar, once beside each group of its messages (board 01 b): the app icon — the favicon's
- * mark in white on the brand tile, the prompt in the brand's blue — as `OrbitAppIcon` and the native
- * app icon draw it. Decorative: who sent the group is said by where it stands, not read out each time.
- */
-function OrbitAvatar(): JSX.Element {
-  const tile = useId();
-  return (
-    <svg className="landings-window-avatar" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
-      <defs>
-        <linearGradient id={tile} x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#5c8cff" />
-          <stop offset="1" stopColor="#3370ff" />
-        </linearGradient>
-      </defs>
-      <rect width="1024" height="1024" rx="229" fill={`url(#${tile})`} />
-      <g transform="translate(96 118) scale(13)">
-        <g transform="rotate(-26 32 32)">
-          <ellipse cx="32" cy="32" rx="28" ry="12.5" stroke="#fff" strokeOpacity="0.9" strokeWidth="3.4" fill="none" />
-          <circle cx="56" cy="25.6" r="5.4" fill="#fff" />
-        </g>
-        <rect x="19" y="20" width="26" height="24" rx="6" fill="#fff" />
-        <path
-          d="M25 27.5 L30 32 L25 36.5 M33 35.8 L39.5 35.8"
-          stroke="#3370ff"
-          strokeWidth="2.9"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-      </g>
-    </svg>
   );
 }
 
@@ -697,6 +663,19 @@ function LandingWindowRow({
       data-landing-entry={key}
       onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}
     >
+      {row.tone === 'merge' ? (
+        // A merge into main is an event, not a message: one centred line, as a chat draws what
+        // happened in it (docs/mocks/landings-ui-polish ②).
+        <div className="landings-window-row-line is-event">
+          <button type="button" className="landings-window-event" aria-expanded={expanded} onClick={onToggle}>
+            <span className="landings-window-row-mark is-merge" aria-hidden="true">{mark}</span>
+            <span className="landings-window-event-title">{row.title}</span>
+            <span className="landings-window-row-detail">{` · ${row.detail}`}</span>
+            {row.time ? <span className="landings-window-row-time">{` · ${row.time}`}</span> : null}
+          </button>
+          <LandingMore items={items} open={menuOpen} onOpenChange={setMenuOpen} />
+        </div>
+      ) : (
       <div className="landings-window-row-line">
         <button type="button" className="landings-window-row" aria-expanded={expanded} onClick={onToggle}>
           <span className="landings-window-row-text">{row.title}</span>
@@ -708,6 +687,7 @@ function LandingWindowRow({
         </button>
         <LandingMore items={items} open={menuOpen} onOpenChange={setMenuOpen} />
       </div>
+      )}
       {expanded ? (
         <div className="landings-window-record">
           {row.tone === 'merge' ? <LandingReceiptBlock receipt={landingMergeReceipt(row.promotion, landing)} /> : null}
