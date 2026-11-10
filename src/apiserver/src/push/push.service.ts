@@ -12,6 +12,7 @@ import { openItemsNoLongerOwed } from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
+import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
 import { settleAlert } from './settle-alert';
 import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
@@ -80,6 +81,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'engine-signed-out': 'Engine signed out',
   'claude-region-blocked': 'Claude is not available on this runner',
   'confirmation-problems': 'Problems found after you confirmed',
+  'owner-request': 'Request for you',
   'watch-matched': 'Watch matched',
   'loop-missed': 'Wakeup loop missed',
   'wakeup-dropped': 'Scheduled wakeup dropped',
@@ -208,7 +210,7 @@ export class PushService {
    * Tell the session's owner a tool approval is pending. Fire-and-forget: callers `void` this so a
    * slow/failed APNs round-trip never blocks the runner request that created the approval.
    */
-  async notifyApprovalRequest(sessionId: string, approvalId: string, toolName: string): Promise<void> {
+  async notifyApprovalRequest(sessionId: string, approvalId: string, toolName: string, coordinatorFallback = false): Promise<void> {
     if (!this.enabled) return;
     try {
       const session = await this.prisma.session.findFirst({
@@ -240,7 +242,7 @@ export class PushService {
       // phone once per tool. Alert on the session's 0 → pending edge, which is the transition the
       // clients notify on too (SessionDelta.diff). Decided on the session row, not in this process's
       // memory: the approvals of one turn can reach different apiservers, and each used to ring once.
-      if (!(await this.claimApprovalAlert(sessionId, approvalId))) {
+      if (!coordinatorFallback && !(await this.claimApprovalAlert(sessionId, approvalId))) {
         // Feishu shows the stretch on one card, each approval with its own buttons (§6.2): one that did not open the
         // stretch is added to the card the opening one sent, rather than sending a second.
         if (feishu && this.feishu) this.background(this.feishu.joinApprovalStretch(feishu, sessionId, approvalId));
@@ -250,7 +252,7 @@ export class PushService {
 
       const body = JSON.stringify({
         aps: {
-          alert: { title: session.title || 'Orbit', body: `Needs your reply · ${toolName}` },
+          alert: { title: session.title || 'Orbit', body: `${coordinatorFallback ? 'Not reviewed by the coordinator · ' : ''}Needs your reply · ${toolName}` },
           sound: 'default',
           badge,
           category: 'ORBIT_APPROVAL', // matches OrbitKit Notifications.approvalCategory
@@ -260,7 +262,7 @@ export class PushService {
         kind: 'approval',
       });
 
-      this.background(feishu && this.feishu ? this.feishu.post(feishu, this.feishu.approvalCard(feishu, sessionId, approvalId)) : null);
+      this.background(feishu && this.feishu ? this.feishu.post(feishu, this.feishu.approvalCard(feishu, sessionId, approvalId, coordinatorFallback)) : null);
 
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
@@ -522,7 +524,7 @@ export class PushService {
     /** Alert title when there is no session to take it from (the runner's name). */
     fallbackTitle: string;
     message: string;
-  }): Promise<AgentNotifyResult> {
+  }, alreadyClaimed = false): Promise<AgentNotifyResult> {
     const alert = agentAlert(input.message);
     if (!alert) return { delivered: false, reason: 'message is empty' };
     if (!this.enabled) return { delivered: false, reason: 'push is not configured on this server' };
@@ -553,7 +555,7 @@ export class PushService {
 
       const now = new Date();
       const wait = agentNotifyWait(rang, now);
-      if (wait !== null) return { delivered: false, reason: `rate limited — try again in ${wait}s` };
+      if (!alreadyClaimed && wait !== null) return { delivered: false, reason: `rate limited — try again in ${wait}s` };
 
       const { tokens, feishu } = await this.channels(input.ownerId);
       if (tokens.length === 0 && !feishu) {
@@ -584,7 +586,7 @@ export class PushService {
       // Recorded before the round-trip: an APNs call that is slow or fails still consumed this
       // session's turn to interrupt, and retrying it in a tight loop is exactly what the limit is for.
       // A call another apiserver recorded since the read above wins, and this one is refused.
-      const taken = await this.claimAgentNotify(input, now);
+      const taken = alreadyClaimed ? null : await this.claimAgentNotify(input, now);
       if (taken !== null) {
         return { delivered: false, reason: `rate limited — try again in ${agentNotifyWait(taken, now) ?? 1}s` };
       }
@@ -631,6 +633,28 @@ export class PushService {
       ? await this.prisma.session.findFirst({ where: { id: input.sessionId }, select: { agentNotifiedAt: true } })
       : await this.prisma.user.findUnique({ where: { id: input.ownerId }, select: { agentNotifiedAt: true } });
     return holder?.agentNotifiedAt ?? now;
+  }
+
+  /** The projection's successful OPEN → DONE edge, after its compare-and-set commits. */
+  async notifyProjectDone(input: {
+    ownerId: string; projectId: string; title: string;
+    criteriaCount: number;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    const { tokens } = await this.channels(input.ownerId);
+    const body = JSON.stringify({
+      aps: {
+        alert: {
+          title: `${input.title} is done`,
+          body: `Orbit recorded it: all ${input.criteriaCount} criteria met and on main.`,
+        },
+        sound: 'default',
+        'thread-id': input.projectId,
+      },
+      kind: 'project-done',
+      projectID: input.projectId,
+    });
+    await this.deliver(tokens, body, 'alert', '10');
   }
 
   /**
@@ -731,6 +755,47 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', `owner-item-${itemId}`);
     } catch (err) {
       this.log.warn(`owner item notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * A session filed an owner request (`OwnerRequestsService.file`). Sent once, after the row commits,
+   * and only while it is still PENDING. The banner is the kind ("Decision needed") over the request's
+   * own title, cut to a lock-screen line; collapsed on the request, so a replay never stacks a second
+   * one. The tap opens the session that asked; the category's actions open the card itself. Best-effort: a failure is logged, never thrown.
+   */
+  async notifyOwnerRequest(requestId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const request = await this.prisma.ownerRequest.findUnique({
+        where: { id: requestId },
+        select: { kind: true, state: true, title: true, ownerId: true, askedBySessionId: true, projectId: true },
+      });
+      if (!request || request.state !== 'PENDING') return;
+      const { tokens, feishu } = await this.channels(request.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = ownerRequestAlert(request.kind as OwnerRequestKind, request.title);
+      const body = JSON.stringify({
+        aps: {
+          alert,
+          sound: 'default',
+          // Per kind: the clients' actions open the card on its input, or put it off ("Later").
+          category: ownerRequestPushCategory(request.kind as OwnerRequestKind),
+          'thread-id': `owner-request-${request.askedBySessionId}`,
+        },
+        kind: 'owner-request',
+        sessionID: request.askedBySessionId,
+        ...(request.projectId ? { projectID: request.projectId } : {}),
+        ownerRequestID: requestId,
+        ownerRequestKind: request.kind,
+      });
+      this.background(this.feishuOther(feishu, {
+        kind: 'owner-request', ...alert, collapseId: `owner-request-${requestId}`,
+        sessionId: request.askedBySessionId, projectId: request.projectId,
+      }));
+      await this.deliver(tokens, body, 'alert', '10', `owner-request-${requestId}`);
+    } catch (err) {
+      this.log.warn(`owner request notify failed: ${(err as Error).message}`);
     }
   }
 

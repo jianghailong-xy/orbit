@@ -385,7 +385,23 @@ test('the owner sends a done request back with a note', {
     assert.equal(await projectDoneRequest(), null);
   });
 
-  await t.test('the coordinator can ask again after Not yet', async () => {
+  await t.test('the coordinator can ask again after Not yet once the work changes', async () => {
+    const followup = await tasks.create(ownerId, {
+      title: 'complete the production migration',
+      projectId,
+      criterionKey: criterion.key,
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+      autoRunWhenReady: false,
+    } as never) as unknown as { id: string };
+    await prisma.task.update({ where: { id: followup.id }, data: { codeless: true } });
+    const settled = await sql.query(
+      `UPDATE "task" SET "status" = 'DONE'
+         WHERE "id" = $1::uuid AND "status" IN ('OPEN', 'IN_PROGRESS')`,
+      [followup.id],
+    );
+    assert.equal(settled.rowCount, 1, 'the missing work has settled before asking again');
     const again = await ask('The missing migration is now the only thing to check.');
     assert.equal(again.state, 'OPEN');
     assert.notEqual(again.itemId, replacement.itemId);

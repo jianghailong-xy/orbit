@@ -36,6 +36,17 @@ class PushNotificationsTest {
         shadowOf(manager).setNotificationsEnabled(true)
     }
 
+    @Test fun derivedProjectDoneOpensItsProjectWithoutASession() {
+        val source = changedKind("project-done", removeSession = true)
+        val payload = Wire.json.parseToJsonElement(source.getValue("payload")).jsonObject
+        val project = "01a0d6a9-d763-70e1-b4cf-8793e971b500"
+        val data = source + ("payload" to JsonObject(payload + ("projectID" to JsonPrimitive(project))).toString())
+        val message = PushMessage.parse(data)!!
+        assertEquals("orbit://project/$project", message.payload.link)
+        assertTrue(notifications.show(message, data))
+        assertNull(PushMessage.parse(source))
+    }
+
     @Test fun channelsAndImmutableViewIntentUseExistingAuthenticationNavigation() {
         assertEquals(setOf(PushNotifications.NEEDS_YOU, PushNotifications.SESSIONS, PushNotifications.UPDATES),
             manager.notificationChannels.map { it.id }.toSet())

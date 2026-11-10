@@ -250,24 +250,34 @@ function endedSessionStates(
 
 /**
  * The notification publishBatch sends the other replicas of a batch of a session's events, from the replica named
- * `instanceId`, or null when nothing of the batch is stored: the stored events whole when they fit (MAX_NOTIFY_BYTES),
- * otherwise their seq range. A function of its arguments alone, so that a transaction storing several sessions'
- * batches (RunnerApiController.ingestLinkEventCall) sends each one's itself, and the other replicas hear of every
- * batch once, at its commit (docs/runner-link-design.md §6.7).
+ * `instanceId`, or null when nothing of the batch is stored and the session's row did not change: the stored events
+ * whole when they fit (MAX_NOTIFY_BYTES), otherwise their seq range. A function of its arguments alone, so that a
+ * transaction storing several sessions' batches (RunnerApiController.ingestLinkEventCall) sends each one's itself,
+ * and the other replicas hear of every batch once, at its commit (docs/runner-link-design.md §6.7).
+ *
+ * `rowChanged` (`u`) says the batch changed what the session's list row shows in a way no event of it announces
+ * (controlTypeFor): the receiving replica follows the batch with a session_updated (batchRowUpdate).
  */
 export function runEventBatchNotice(
   instanceId: string,
   runId: string,
   events: readonly NormalizedRunEvent[],
+  rowChanged = false,
 ): { channel: string; payload: string } | null {
   const stored = events.filter((event) => !NON_REPLAYABLE_EVENT_TYPES.includes(event.type));
-  if (stored.length === 0) return null;
-  const whole = JSON.stringify({ i: instanceId, r: runId, b: stored });
+  if (stored.length === 0 && !rowChanged) return null;
+  const u = rowChanged ? { u: 1 } : {};
+  const whole = JSON.stringify({ i: instanceId, r: runId, b: stored, ...u });
   if (Buffer.byteLength(whole, 'utf8') <= MAX_NOTIFY_BYTES) return { channel: EVENT_CHANNEL, payload: whole };
   const seqs = stored.map((event) => event.seq);
   const from = seqs.reduce((a, b) => Math.min(a, b));
   const to = seqs.reduce((a, b) => Math.max(a, b));
-  return { channel: EVENT_CHANNEL, payload: JSON.stringify({ i: instanceId, r: runId, f: from, t: to }) };
+  return { channel: EVENT_CHANNEL, payload: JSON.stringify({ i: instanceId, r: runId, f: from, t: to, ...u }) };
+}
+
+/** The session_updated a batch whose ingest changed the session's row is followed by (runEventBatchNotice). */
+function batchRowUpdate(): NormalizedRunEvent {
+  return { seq: 0, type: RunEventType.SESSION_UPDATED, payload: {}, ts: new Date().toISOString() };
 }
 
 /**
@@ -276,7 +286,7 @@ export function runEventBatchNotice(
  * input is whatever the asker sent. Seq 0, like every live-only event: a card is never stored in run_event.
  */
 export function approvalRequestEvent(
-  approval: { id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null },
+  approval: { id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null; coordinatorFallback?: string | null },
   ts: string,
 ): NormalizedRunEvent {
   return {
@@ -292,6 +302,7 @@ export function approvalRequestEvent(
       // up, whatever the conversation is doing, and a client that reads only the turn would
       // take the card down the moment the turn ended (`WorkspaceView`'s local predicate).
       backgroundJobId: approval.backgroundJobId ?? undefined,
+      ...(approval.coordinatorFallback ? { coordinatorFallback: approval.coordinatorFallback } : {}),
     },
     ts,
   };
@@ -497,7 +508,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (!payload) return;
     let m: {
       i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number;
-      a?: string; ts?: string;
+      a?: string; ts?: string; u?: 1;
     };
     try {
       m = JSON.parse(payload);
@@ -525,9 +536,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       } else if (Array.isArray(m.b)) {
         // A batch the ingest stored, whole (publishBatch).
         for (const event of m.b) this.toHub(m.r, event);
+        if (m.u) this.toHub(m.r, batchRowUpdate());
       } else if (typeof m.f === 'number' && typeof m.t === 'number') {
-        // A batch too big to ride along: read back what the ingest stored of it.
+        // A batch too big to ride along: read back what the ingest stored of it. The row update waits behind the
+        // read-back (toHub), so it still follows the batch.
         this.relayStoredBatch(m.r, m.f, m.t);
+        if (m.u) this.toHub(m.r, batchRowUpdate());
       } else if (typeof m.s === 'number') {
         // Oversized event was sent as a signal — fetch it from the durable log.
         const seq = m.s;
@@ -542,7 +556,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         this.readBackInOrder(m.r, `approval ${approvalId}`, async () => {
           const row = await this.prisma.approval.findFirst({
             where: { id: approvalId, sessionId: m.r },
-            select: { id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, createdAt: true },
+            select: { id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, createdAt: true, coordinatorFallback: true },
           });
           return row ? [approvalRequestEvent(row, ts ?? row.createdAt.toISOString())] : [];
         });
@@ -816,9 +830,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *   - the stored events ride the notification whole when it fits (MAX_NOTIFY_BYTES), and otherwise as the seq range
    *     the other replicas read back from run_event, where the ingest has already stored them.
    */
-  publishBatch(runId: string, events: readonly NormalizedRunEvent[]): void {
-    this.publishBatchHere(runId, events);
-    const notice = runEventBatchNotice(this.instanceId, runId, events);
+  publishBatch(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false): void {
+    this.publishBatchHere(runId, events, rowChanged);
+    const notice = runEventBatchNotice(this.instanceId, runId, events, rowChanged);
     if (notice) this.notifyRaw(notice.channel, notice.payload);
   }
 
@@ -826,8 +840,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * publishBatch without its notification: the batch to this replica's streams alone. For a batch whose notification
    * the transaction that stored it sent (runEventBatchNotice), once that transaction has committed.
    */
-  publishBatchHere(runId: string, events: readonly NormalizedRunEvent[]): void {
+  publishBatchHere(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false): void {
     for (const event of events) this.publishHere(runId, event);
+    if (rowChanged) this.publishHere(runId, batchRowUpdate());
   }
 
   /** This replica's name in the notifications it sends, by which it knows its own when they come back (onNotify). */
@@ -1571,7 +1586,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         ? {
           ...underReview,
           since: underReview.since.toISOString(),
-          dueAt: underReview.dueAt.toISOString(),
+          dueAt: underReview.dueAt?.toISOString() ?? null,
         }
         : null,
       // The four owner items, sent with every summary — including as an empty list, which is how a

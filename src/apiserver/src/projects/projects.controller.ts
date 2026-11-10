@@ -466,6 +466,15 @@ export class ProjectsController {
    * whole, and a seal or a request that has moved is a 409 that writes nothing.
    */
   @PatForbidden('OWNER_INTERACTIVE')
+  @Get(':id/done-check')
+  doneCheck(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.acceptance.readProjectDoneCheck(user.userId, id);
+  }
+
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/done')
   done(
     @CurrentUser() user: AuthUser,

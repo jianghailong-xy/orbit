@@ -132,6 +132,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'deliveredSessionId',
   'confirmedByUserId',
   'openItemId',
+  'escalatedItemId',
   'receiptIds',
   // The same pause, named by the rows that hang off it rather than by the card that points at it:
   // a held action's `episodeId`, and the `:episodeId` the resume door is addressed by (0280).
@@ -452,6 +453,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // response bodies, so they follow the same rule (see the `@IsPublicId({ each: true })` DTOs).
   'tagIds',
   'taskIds',
+  // `owner_request.blocks_task_ids` (0503): the tasks an owner request blocks — task addresses like `taskIds`.
+  'blocksTaskIds',
   'dependsOnTaskIds',
   'anchorTaskId',
   'attachmentIds',
@@ -545,6 +548,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'observerSessionId',
   'targetResourceId',
   'snapshotSourceId',
+  // The owner request a Watch delivery hands back to the session that asked (migration 0504): an address, looked up,
+  // never compared as a fence.
+  'ownerRequestId',
   // Orbit Wiki (migration 0307). Every one is an address a reader follows: the space an entry,
   // topic, binding or changeset lives in, the lineage (`orbit-wiki:<id>`) a revision, op or exposure
   // is about, the revision a source supports, the changeset an op belongs to and the op a revision

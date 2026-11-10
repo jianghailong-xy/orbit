@@ -504,6 +504,9 @@ final class AppModel {
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
+    /// What sessions asked the owner to do: the "Waiting on you" inbox, each conversation's request
+    /// cards and the push actions that open them.
+    private(set) var ownerRequests: OwnerRequestsModel?
     /// The account's projects: the Projects section and the drawer's project rows.
     private(set) var projects: ProjectsModel?
     /// The account's wiki: the Wiki section, the drawer's Wiki row and every entry page.
@@ -591,6 +594,24 @@ final class AppModel {
         }
         #endif
         watches = watchesModel
+        let ownerRequestsModel = OwnerRequestsModel(baseURL: url, tokenStore: tokenStore)
+        // "Delivered to Runner HPC": the runner a key goes to, by the name the owner knows it by.
+        ownerRequestsModel.runnerName = { [weak self] id in
+            guard let names = self?.agents?.runnerNames else { return "this runner" }
+            return names[id] ?? names.first { PublicID.storageKey($0.key) == PublicID.storageKey(id) }?.value
+                ?? "this runner"
+        }
+        // A coordinator's question in the inbox opens its card where it was asked: the project's
+        // coordinator conversation, landed on that card (the needs-you banner's entry).
+        ownerRequestsModel.onAnswerQuestion = { [weak self, weak ownerRequestsModel] question in
+            guard let self, let session = question.coordinatorSessionID else { return }
+            ownerRequestsModel?.inboxPresented = false
+            self.openProjectCoordinator(
+                sessionID: session, agentID: question.coordinatorWorkspaceID,
+                focus: SessionOwnerItem(itemId: question.row.itemId, kind: .coordinatorQuestion,
+                                        title: question.row.title, since: question.row.waitingSince))
+        }
+        ownerRequests = ownerRequestsModel
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
@@ -1086,6 +1107,7 @@ final class AppModel {
         // remote lifecycle change or permanent deletion cannot leave a ghost console.
         await refreshFocusedSessionDetailIfNeeded()
         await refreshWatchesIfDue()
+        await refreshOwnerRequestsIfDue()
         await projects?.refreshIfDue(live: controlPlaneLive)
         await managedRunner?.refreshIfDue()
     }
@@ -1115,6 +1137,23 @@ final class AppModel {
         watchesRefreshNotBefore = now.addingTimeInterval(
             controlPlaneLive ? PollSchedule.liveFallback : Self.watchesRefreshInterval)
         await watches.load()
+    }
+
+    /// The owner requests' floor: no event names them, so they ride the watches' cadence — a minute
+    /// apart with the control stream live, 30 s without it — and every press reads its answer back.
+    private var ownerRequestsRefreshNotBefore = Date.distantPast
+
+    private func refreshOwnerRequestsIfDue(now: Date = Date()) async {
+        guard now >= ownerRequestsRefreshNotBefore, let ownerRequests else { return }
+        ownerRequestsRefreshNotBefore = now.addingTimeInterval(
+            controlPlaneLive ? PollSchedule.liveFallback : Self.watchesRefreshInterval)
+        await ownerRequests.load()
+    }
+
+    /// `orbit://owner-request/<id>`, a push's "Provide key": the inbox, that card open on its input.
+    func openOwnerRequest(_ id: String) {
+        settingsPresented = false
+        ownerRequests?.show(id)
     }
 
     /// The runners a page just read (`RunnersModel.onRead`) are the tick's runner snapshot too, so the
@@ -1431,7 +1470,7 @@ final class AppModel {
     /// the server announces (contract §5 N5): the window is read, never swept. So the list reads again
     /// a second after the earliest such row is due — web's `reviewDueAt` effect.
     private func scheduleReviewDueRefresh(_ list: [Session]) {
-        let due = list.compactMap { $0.confirmationUnderReview.flatMap { RelativeTime.parse($0.dueAt) } }.min()
+        let due = list.compactMap { $0.confirmationUnderReview.flatMap { $0.dueAt.flatMap(RelativeTime.parse) } }.min()
         guard due != reviewDueAt else { return }
         reviewDueAt = due
         reviewDueTask?.cancel()
@@ -3747,6 +3786,13 @@ final class AppModel {
         case .open(let route): self.route(to: route)
         case let .approve(sid, behavior): Task { await approveAll(sessionID: sid, behavior: behavior) }
         case let .reply(sid, text): Task { await reply(sessionID: sid, text: text) }
+        case let .openProject(projectID):
+            #if os(iOS)
+            settingsPresented = false
+            openProjectSessions(PublicID.toPublic(projectID), inColumn: false)
+            #else
+            openProject(PublicID.toPublic(projectID))
+            #endif
         case let .openProjectMerge(projectID, sid):
             #if os(iOS)
             // A push names its project by the stored UUID; every list row spells it base62.
@@ -3755,6 +3801,10 @@ final class AppModel {
             #else
             route(to: .session(sid))
             #endif
+        case .openOwnerRequest(let id):
+            openOwnerRequest(id)
+        case .snoozeOwnerRequest(let id):
+            ownerRequests?.snooze(id, for: OwnerRequests.laterSeconds)
         }
     }
 

@@ -22,7 +22,7 @@
  *       NOTHING_TO_LAND, NO_RECEIPT, CODELESS — does not refuse: the request is filed and carries
  *       them, and a LANDED criterion has none. The row, its payload and the owner's read of it;
  *   (3) the void rules: the same request again writes nothing, a newer one supersedes it, and a task
- *       filed, the criteria edited or a merge recorded supersedes it the next time it is read; the
+ *       serving a criterion filed, the criteria edited or a merge recorded supersedes it the next time it is read; the
  *       owner's press on a request whose work moved since is 409 and writes nothing;
  *   (4) Ready to close: while a request stands, the coordinator's session row says DONE_REQUEST and
  *       the project list carries `doneRequest`; the owner's DONE answers the request and both go dark;
@@ -76,7 +76,10 @@ import {
 import { criterionKeyOf } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from './project-integration-job';
+import { readDoneState, supersedeStaleDoneRequest } from './project-done-request';
 import { ProjectOpenItemService } from './project-open-item.service';
+import { ProjectsController } from './projects.controller';
+import { doneReadiness, readDoneState } from './project-done-request';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -518,6 +521,40 @@ test('a coordinator asks its owner to record the project done, and the project i
       .filter((finding) => finding.code === 'DONE_CRITERION_UNLANDED')
       .map((finding) => `${finding.criterion?.ordinal} ${finding.reason}`);
 
+  await t.test('Not yet refuses unchanged facts and keeps the note until a newer request', async () => {
+    const p = await project('declined-unchanged', ['The missing work is complete.']);
+    const criterion = p.criteria[0];
+    await task(p, 'initial work', { serves: criterion, status: 'DONE', codeless: true });
+    const filed = await ask(p.id, p.sessionId);
+    const note = 'Finish the second walkthrough first.';
+    await openItems.declineDoneRequest(ownerId, p.id, filed.itemId, { note });
+    const before = await requests(p.id);
+    const refusal = await refused(() => ask(p.id, p.sessionId, {
+      ...CALL, judgment: 'A differently worded call still has the same facts.',
+    }));
+    assert.equal(refusal.status, 409);
+    assert.equal(refusal.body.code, 'DONE_REQUEST_UNCHANGED_SINCE_DECLINE');
+    assert.equal(refusal.body.written, 0);
+    assert.ok(refusal.body.message?.includes(note));
+    assert.deepEqual(await requests(p.id), before, 'a refusal writes no item');
+    const view = await openItems.list(ownerId, p.id);
+    assert.equal(view.latestDoneRequestDecline?.note, note);
+    const declined = await prisma.projectOpenItem.findUniqueOrThrow({ where: { id: filed.itemId } });
+    assert.equal(view.latestDoneRequestDecline?.declinedAt.getTime(), declined.resolvedAt!.getTime());
+    const missing = await task(p, 'second walkthrough', { serves: criterion, codeless: true });
+    assert.equal((await refused(() => ask(p.id, p.sessionId))).body.code, 'DONE_REQUEST_NOT_READY');
+    await sql.query(
+      `UPDATE "task" SET "status" = 'DONE'
+        WHERE "id" = $1::uuid AND "completion_criterion" = 'EXECUTABLE'
+          AND "acceptance_command" = 'true' AND "acceptance_expected_exit_code" = 0`,
+      [missing.id],
+    );
+    const next = await ask(p.id, p.sessionId);
+    assert.notEqual(next.itemId, filed.itemId);
+    assert.equal((await requests(p.id)).length, before.length + 1);
+    assert.equal((await openItems.list(ownerId, p.id)).latestDoneRequestDecline, null);
+  });
+
   // ═══ (1) the refusals ══════════════════════════════════════════════════════════════════════════
 
   await t.test('(1a) a project that states no criteria is refused: nothing to be done against', async () => {
@@ -839,10 +876,31 @@ test('a coordinator asks its owner to record the project done, and the project i
     return { view, row };
   }
 
-  await t.test('(3b) a task filed after the request supersedes it, the next time it is read', async () => {
+  await t.test('(3b) only serving work moving supersedes the request', async () => {
     assert.equal((await openItems.list(ownerId, p.id)).doneRequest?.itemId, filed.itemId,
       'drawn while the project is the one it was made about');
-    await task(p, 'closing · one more chore', { status: 'OPEN' });
+    const before = await readDoneState(prisma, ownerId, p.id, p.sessionId);
+    const chore = await task(p, 'closing · one more chore', { status: 'OPEN' });
+    assert.equal((await readDoneState(prisma, ownerId, p.id, p.sessionId)).stateDigest,
+      before.stateDigest, 'filing non-serving work does not move the digest');
+    await sql.query(`UPDATE "task" SET "status" = 'IN_PROGRESS' WHERE "id" = $1::uuid`, [chore.id]);
+    const started = await readDoneState(prisma, ownerId, p.id, p.sessionId);
+    assert.equal(started.stateDigest, before.stateDigest, 'non-serving status changes do not move the digest');
+    assert.equal(started.tasks.find((task) => task.id === chore.id)?.status, 'IN_PROGRESS',
+      'readiness still sees non-serving work');
+    assert.equal(await supersedeStaleDoneRequest(db, ownerId, p.id), false);
+    assert.equal((await afterRead(filed.itemId)).row.state, 'OPEN');
+    assert.equal((await openItems.list(ownerId, p.id)).doneRequest?.itemId, filed.itemId);
+    await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1::uuid`, [chore.id]);
+    assert.equal((await readDoneState(prisma, ownerId, p.id, p.sessionId)).stateDigest,
+      before.stateDigest, 'settling non-serving work does not move the digest');
+    const serving = before.tasks.find((task) => task.criterionDefinitionId !== null)!;
+    await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1::uuid`, [serving.id]);
+    assert.notEqual((await readDoneState(prisma, ownerId, p.id, p.sessionId)).stateDigest, before.stateDigest);
+    assert.equal(await supersedeStaleDoneRequest(db, ownerId, p.id), true);
+    // Restore the serving work so the later request scenarios can proceed.
+    await sql.query(`UPDATE "task" SET "status" = $2::"task_status" WHERE "id" = $1::uuid`,
+      [serving.id, serving.status]);
     const { view, row } = await afterRead(filed.itemId);
     assert.equal(view.doneRequest, null, 'the owner is no longer shown a card about a project that moved');
     assert.equal(row.state, 'SUPERSEDED');
@@ -943,6 +1001,36 @@ test('a coordinator asks its owner to record the project done, and the project i
     const done = await refused(() => ask(p.id, p.sessionId, GAPS));
     assert.equal(done.status, 409);
     assert.equal(done.body.code, 'PROJECT_ALREADY_DONE');
+  });
+
+  await t.test('owner done-check and POST done without a request retain every finding and succeed', async () => {
+    const q = await project('owner-without-request', ['the release works']);
+    await task(q, 'work still running', { serves: q.criteria[0], status: 'IN_PROGRESS', codeless: true });
+    const controller = Object.assign(Object.create(ProjectsController.prototype), { acceptance }) as ProjectsController;
+    const check = await controller.doneCheck({ userId: ownerId } as never, q.id);
+    const expectedState = await readDoneState(prisma as never, ownerId, q.id, null);
+    assert.deepEqual(check, { ...expectedState, findings: doneReadiness(expectedState, []) });
+    assert.ok(check.findings.some((finding) => finding.code === 'DONE_TASKS_IN_FLIGHT'));
+    const record = await controller.done({ userId: ownerId } as never, q.id, {
+      requestId: null,
+      criteriaDigest: check.criteriaDigest,
+      acceptedGaps: [],
+    }, undefined);
+    assert.equal(record.status, 'DONE', 'REFUSE findings do not refuse the owner');
+    assert.ok(record.acceptedGaps.some((gap) => gap.criterionKey === q.criteria[0].key));
+    assert.deepEqual(record.acceptedGaps.map((gap) => gap.finding), check.findings);
+    for (const gap of record.acceptedGaps) {
+      assert.equal(gap.title, gap.finding!.message);
+      assert.equal(gap.whyNotProven, gap.finding!.message);
+      assert.equal(gap.criterionKey, gap.finding!.criterion?.key ?? `project:${q.id}`);
+    }
+    const [stored] = (await sql.query(
+      `SELECT "status", "accepted_gaps" FROM "project" WHERE "id" = $1::uuid`, [q.id],
+    )).rows;
+    assert.equal(stored.status, 'DONE');
+    assert.deepEqual(stored.accepted_gaps, record.acceptedGaps);
+    const forbidden = await refused(() => controller.doneCheck({ userId: randomUUID() } as never, q.id));
+    assert.equal(forbidden.status, 404, 'another owner cannot read the check');
   });
 
   await t.test('(4b) a request left open on a project that is no longer OPEN asks nobody anything', async () => {

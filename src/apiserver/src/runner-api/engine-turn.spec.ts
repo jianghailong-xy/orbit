@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunEventType } from '@orbit/shared';
-import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
+import { enginePhaseAfter, enginePhaseSinceAfter, engineStreamedIn, engineTurnActiveAfter } from './engine-turn';
 
 test('a turn ending leaves the engine idle', () => {
   assert.equal(
@@ -281,4 +281,31 @@ test('leaving a phase clears its clock, and a batch that decides nothing writes 
   // No phase before and none after is not a change: without this, every ordinary output batch
   // would write a null over a null.
   assert.equal(enginePhaseSinceAfter(null, null, now), undefined);
+});
+
+/**
+ * A warm reused process streaming a plain-text reply: no handshake, and nothing stored until the
+ * `assistant` event that ends it. The deltas are the only sign the engine has started, and the
+ * stored part of the batch says nothing (engineTurnActiveAfter is undefined).
+ */
+test('a batch of streamed deltas alone shows the engine has started', () => {
+  const batch = [
+    { seq: 5, type: RunEventType.TEXT_DELTA, payload: { text: 'Part one' } },
+    { seq: 6, type: RunEventType.THINKING_DELTA, payload: { text: '…' } },
+  ];
+  assert.equal(engineTurnActiveAfter(batch), undefined);
+  assert.equal(engineStreamedIn(batch), true);
+  assert.equal(engineStreamedIn([{ seq: 6, type: RunEventType.THINKING_DELTA }]), true);
+});
+
+/** The runner's own echo of the user turn and its live tool output are not the engine speaking. */
+test('runner-side events do not show the engine has started', () => {
+  assert.equal(
+    engineStreamedIn([
+      { seq: 1, type: RunEventType.USER, payload: { text: 'hi' } },
+      { seq: 2, type: RunEventType.TOOL_OUTPUT, payload: { id: 'shell-1' } },
+      { seq: 3, type: RunEventType.QUEUED_TURNS_CHANGED },
+    ]),
+    false,
+  );
 });

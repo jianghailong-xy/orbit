@@ -84,6 +84,16 @@ type bgJobService struct {
 	agentID            string
 	taskID             string
 	allowOrchestration bool
+	// The runner's owner-request secrets, which secret_lease and secret_scan answer from (secret_exec.go). Nil holds
+	// none.
+	secrets *secretStore
+	// What ends a held lease besides its revocation: the service stopping, or its context ending.
+	leaseStop <-chan struct{}
+	leaseCtx  context.Context
+	// Closed when the session itself ended (endSessionLeases), as opposed to this runner process stopping: open
+	// leases are then revoked rather than just closed.
+	sessionEnded   chan struct{}
+	endSessionOnce sync.Once
 }
 
 // startBgJobService listens on socketPath until ctx is cancelled, and writes the
@@ -115,6 +125,10 @@ func startBgJobService(ctx context.Context, svc *bgJobService, socketPath, token
 
 	var wg sync.WaitGroup
 	done := make(chan struct{})
+	svc.leaseStop, svc.leaseCtx = done, ctx
+	if svc.sessionEnded == nil {
+		svc.sessionEnded = make(chan struct{})
+	}
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -168,6 +182,11 @@ func (s *bgJobService) serveConn(conn net.Conn) {
 	// must not be able to start or kill another's jobs.
 	if s.token == "" || req.Token != s.token {
 		writeBgResponse(conn, bgSocketResponse{Error: "background job token is not this session's"})
+		return
+	}
+	// A lease is held on its connection for as long as the command using it runs.
+	if req.Op == "secret_lease" {
+		s.serveSecretLease(conn, req.Args)
 		return
 	}
 	writeBgResponse(conn, s.handle(req))
@@ -257,6 +276,9 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			return bgSocketResponse{Error: err.Error()}
 		}
 		return bgSocketResponse{OK: true, Result: status}
+
+	case "secret_scan":
+		return s.secretScan(getString(args, "path"))
 
 	case "list":
 		return bgSocketResponse{OK: true, Result: map[string]interface{}{
@@ -420,8 +442,38 @@ func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, j
 		agentID:            publicID(job.AgentID),
 		taskID:             publicID(job.TaskID),
 		allowOrchestration: job.AllowOrchestration,
+		secrets:            runnerSecrets(),
 	}
-	return startBgJobService(ctx, svc, bgSocketPath(job.SessionID), bgTokenPath(job.SessionID))
+	stop, err := startBgJobService(ctx, svc, bgSocketPath(job.SessionID), bgTokenPath(job.SessionID))
+	if err != nil {
+		return nil, err
+	}
+	key := decodeSessionID(job.SessionID)
+	bgSessionServices.Store(key, svc)
+	return func() {
+		bgSessionServices.CompareAndDelete(key, svc)
+		stop()
+	}, nil
+}
+
+// bgSessionServices is each live session's job service, by session id, for endSessionLeases.
+var bgSessionServices sync.Map
+
+// endSessionLeases revokes every secret lease open on a session's socket: the session has ended, so a command
+// holding one is told so instead of asking again until the grant expires. A runner that is only stopping does not
+// call this; its leases just close, and their commands ask the next process.
+func endSessionLeases(sessionID string) {
+	if svc, ok := bgSessionServices.Load(decodeSessionID(sessionID)); ok {
+		svc.(*bgJobService).endSession()
+	}
+}
+
+func (s *bgJobService) endSession() {
+	s.endSessionOnce.Do(func() {
+		if s.sessionEnded != nil {
+			close(s.sessionEnded)
+		}
+	})
 }
 
 // bgJobEnvPairs is how an engine's `orbit mcp` child finds this session's

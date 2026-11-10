@@ -966,6 +966,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	var requestOrbitSuggestion func(turnID string, at int)
 	// emitThrough buffers one event, filed against turnID, if gate still admits it.
 	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+		// Every owner-request secret this runner holds is scrubbed from every string of the payload before anything
+		// below reads it, the spool included (secret_store.go).
+		payload = runnerSecrets().scrubPayload(payload)
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
 		pool.engineTurnEvent(live, eventType, payload)
@@ -1045,6 +1048,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 	}
 	emit := emitOn(emissionGate)
+	// Where a file left out of a commit for holding a secret is told about (secretUnstagedWarning).
+	defer registerSecretWarnings(sessionID, emit)()
 
 	// What the stream still holds, left in the spool by an earlier process or not yet seen stored for an
 	// earlier supervisor of the session, is stored before this supervisor emits anything: it was written
@@ -1179,7 +1184,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// unavailable, and the agent keeps the engine-owned shells it has today.
 		logln("background job service unavailable for", sessionID+":", err)
 	} else {
-		defer stopBgJobService()
+		defer func() {
+			// The session ended, rather than this runner stopping or the session moving to another process:
+			// an `orbit secret exec` still running is told so (endSessionLeases).
+			if shutdownCtx.Err() == nil && ownershipCtx.Err() == nil {
+				endSessionLeases(sessionID)
+			}
+			stopBgJobService()
+		}()
 	}
 
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
@@ -1215,6 +1227,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// a queued follow-up is immediately ready; every other authoritative status
 	// releases this generation's permit (AWAITING_INPUT also starts the warm TTL).
 	completeTurn := func(req TurnCompleteRequest, providerContexts ...context.Context) error {
+		// Every owner-request secret's value out of its text and patches, before it is kept on disk or sent
+		// (secret_wire.go).
+		req = scrubTurnComplete(req, sessionID)
 		// Kept before anything else: the flush below sends no completion when it fails, and a runner that
 		// stops, or is killed, before the control plane answers leaves it to its next process.
 		completions.keep(req)
@@ -1312,6 +1327,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			stopCurrentEngine()
 		} else if err == nil && !retainsTurnPermit(next) {
 			pool.park(live, permitGeneration)
+		} else if err == nil {
+			// The permit went straight to a queued follow-up; a drain for an update holds it back.
+			pool.holdFollowUpForUpdate(live, permitGeneration)
 		}
 		return err
 	}

@@ -97,6 +97,7 @@ import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOu
 import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
 import { parseWatchWake } from '../lib/watches';
+import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
@@ -886,6 +887,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.reviewRequest
   && !node.reviewReturn
   && !parseWatchWake(node.text)
+  && !resolutionTurnLabel(node.text)
   && !parseBackgroundWake(node.note);
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
@@ -1699,9 +1701,7 @@ export interface TranscriptInsert {
   element: ReactNode;
 }
 
-const TOOL_GROUP_MIN = 3;
-
-type NodeListItem = { kind: 'node'; node: Node } | { kind: 'toolGroup'; key: string; nodes: ToolNode[] };
+type NodeListItem = { kind: 'node'; node: Node } | { kind: 'steps'; key: string; nodes: Node[] };
 
 function NodeList({
   nodes,
@@ -1719,15 +1719,15 @@ function NodeList({
   return (
     <>
       {items.flatMap((item) => {
-        const seqs = item.kind === 'toolGroup' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+        const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
         // The row a turn opens with, under its message and over everything the turn writes.
         const head =
           item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
             <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
           ) : null;
         return [
-          item.kind === 'toolGroup' ? (
-            <ToolGroupView key={item.key} nodes={item.nodes} live={live} />
+          item.kind === 'steps' ? (
+            <StepsLine key={item.key} nodes={item.nodes} live={live} />
           ) : (
             <NodeView key={item.node.seq} node={item.node} live={live} />
           ),
@@ -1741,20 +1741,21 @@ function NodeList({
   );
 }
 
+/**
+ * Everything a turn does between two things it says — its thinking and its tool calls, however few
+ * — folds into one line of steps ("Thought for 15s, ran 2 shell commands"), so the replies read as
+ * one thread and the work between them as a sentence. A call that is its own card (below) stays a
+ * row of its own and ends the run.
+ */
 function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
   const out: NodeListItem[] = [];
-  let run: ToolNode[] = [];
+  let run: Node[] = [];
   const flush = () => {
-    if (run.length >= TOOL_GROUP_MIN) {
-      out.push({ kind: 'toolGroup', key: `tool-group-${run[0].seq}`, nodes: run });
-    } else {
-      out.push(...run.map((node) => ({ kind: 'node' as const, node })));
-    }
+    if (run.length) out.push({ kind: 'steps', key: `steps-${run[0].seq}`, nodes: run });
     run = [];
   };
-
   for (const node of nodes) {
-    if (isGroupableTool(node, chat)) {
+    if (node.kind === 'thinking' || isGroupableTool(node, chat)) {
       run.push(node);
       continue;
     }
@@ -1911,6 +1912,12 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             />
           </>
         );
+      }
+      // The turn Orbit starts when an owner request ends: the card above says how it ended, and the
+      // payload is written for the agent.
+      const ownerRequestEnding = resolutionTurnLabel(node.text);
+      if (ownerRequestEnding) {
+        return <div className="owner-request-turn-divider"><span>{ownerRequestEnding}</span></div>;
       }
       // A turn a watch queued is the watch's to show, not a message the user typed.
       const wake = parseWatchWake(node.text);
@@ -3972,131 +3979,151 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   );
 }
 
-type ToolGroupSummary = {
-  title: string;
-  summary: string;
-  breakdown?: string;
-  lead?: { label: 'Running' | 'Failed'; text: string; mono: boolean };
-  icon: ReactNode;
-  tone: Tone;
-  status: 'running' | 'error' | 'pending' | 'ok';
-};
+/** What one kind of call adds to a steps line, as a verb phrase for `n` of them. */
+type StepVerb = { key: string; phrase: (n: number) => string };
 
-function ToolGroupView({ nodes, live }: { nodes: ToolNode[]; live?: boolean }) {
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+function stepVerb(node: ToolNode): StepVerb {
+  const i = node.input ?? {};
+  switch (node.name) {
+    case 'Bash': {
+      const word = shellCommandSummary(String(i.command ?? '')).split(/\s+/)[0];
+      if (['ls', 'tree', 'find'].includes(word)) {
+        return { key: 'list', phrase: (n) => `listed ${plural(n, 'directory', 'directories')}` };
+      }
+      return { key: 'shell', phrase: (n) => `ran ${plural(n, 'shell command', 'shell commands')}` };
+    }
+    case 'Read':
+      return { key: 'read', phrase: (n) => `read ${plural(n, 'file', 'files')}` };
+    case 'Grep':
+    case 'Glob':
+      return { key: 'search', phrase: (n) => `searched ${plural(n, 'time', 'times')}` };
+    case 'Edit':
+    case 'MultiEdit':
+    case 'apply_patch':
+      return { key: 'edit', phrase: (n) => `edited ${plural(n, 'file', 'files')}` };
+    case 'Write':
+      return { key: 'write', phrase: (n) => `wrote ${plural(n, 'file', 'files')}` };
+    case 'WebFetch':
+      return { key: 'fetch', phrase: (n) => `fetched ${plural(n, 'page', 'pages')}` };
+    case 'WebSearch':
+      return { key: 'web', phrase: (n) => `searched the web ${plural(n, 'time', 'times')}` };
+    case 'TodoWrite':
+      return { key: 'todo', phrase: () => 'updated the plan' };
+    default:
+      return { key: 'other', phrase: (n) => `used ${plural(n, 'tool', 'tools')}` };
+  }
+}
+
+/** The file a call reads or writes, so three edits to one file count as one file edited. */
+function stepFile(node: ToolNode): string | null {
+  const path = node.input?.file_path ?? node.input?.path;
+  return typeof path === 'string' && path ? path : null;
+}
+
+/** The steps line's words for `nodes`: the thinking first, then each kind of call in the order it came. */
+export function stepsSummary(nodes: Node[]): string {
+  let thought = false;
+  let thinkMs = 0;
+  const kinds = new Map<string, { verb: StepVerb; calls: number; files: Set<string>; unnamed: number }>();
+  for (const node of nodes) {
+    if (node.kind === 'thinking') {
+      thought = true;
+      thinkMs += node.thinkingMs ?? 0;
+      continue;
+    }
+    if (node.kind !== 'tool') continue;
+    const verb = stepVerb(node);
+    const kind = kinds.get(verb.key) ?? { verb, calls: 0, files: new Set<string>(), unnamed: 0 };
+    kinds.set(verb.key, kind);
+    kind.calls += 1;
+    const file = ['read', 'edit', 'write'].includes(verb.key) ? stepFile(node) : null;
+    if (file) kind.files.add(file);
+    else kind.unnamed += 1;
+  }
+  const parts = [...kinds.values()].map(({ verb, calls, files, unnamed }) =>
+    verb.phrase(['read', 'edit', 'write'].includes(verb.key) ? files.size + unnamed : calls),
+  );
+  if (thought) parts.unshift(thinkMs ? `Thought for ${formatThinkingDuration(thinkMs)}` : 'Thought');
+  const line = parts.join(', ');
+  return line && line[0].toUpperCase() + line.slice(1);
+}
+
+/** Asks a folded steps line to open, so ⌘F can show a match inside it (SessionFind). */
+export const REVEAL_EVENT = 'orbit:reveal';
+
+/**
+ * A run of steps, folded to one muted line that opens into the cards it stands for. While the
+ * turn is live, a call still in flight is drawn under the line on its own — what it is doing, and
+ * the command — and joins the line once it answers. A failure does not unfold anything: the line
+ * says how many failed, in red, and the reader opens it.
+ */
+function StepsLine({ nodes, live }: { nodes: Node[]; live?: boolean }) {
   const exp = useContext(ExportCtx);
-  const summary = useMemo(() => summarizeToolGroup(nodes, live), [nodes, live]);
-  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  // Nothing auto-opens but a static export. A failure used to force the group open, which
-  // unfolded the failed call too (ToolView opens on error) — one wrong command turned into a
-  // screenful of clamped heredoc with the reason buried under it. The row says which call failed
-  // instead, in the same slot that names the running one.
-  const open = manualOpen ?? !!exp;
-  const toggle = () => setManualOpen((prev) => !(prev ?? !!exp));
+  const [open, setOpen] = useState(!!exp);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const reveal = () => setOpen(true);
+    el.addEventListener(REVEAL_EVENT, reveal);
+    return () => el.removeEventListener(REVEAL_EVENT, reveal);
+  }, []);
+  const running = live ? nodes.filter((node): node is ToolNode => node.kind === 'tool' && !node.result) : [];
+  const settled = running.length ? nodes.filter((node) => !running.includes(node as ToolNode)) : nodes;
+  const line = stepsSummary(settled);
+  const failed = settled.filter((node) => node.kind === 'tool' && node.result?.isError).length;
   return (
-    <div
-      data-seq={nodes[0].seq}
-      className={`chat-tool-card chat-tool-group chat-tone-${summary.tone}${open ? ' is-open' : ''}`}
-    >
-      <div className="chat-tool-row" onClick={toggle}>
-        <span className="chat-tool-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
-        <span className="chat-tool-icon">{summary.icon}</span>
-        <span className="chat-tool-name">{summary.title}</span>
-        <span
-          className="chat-tool-summary"
-          title={summary.lead ? `${summary.summary} · ${summary.lead.label}: ${summary.lead.text}` : summary.summary}
-        >
-          {summary.summary}
-          {summary.lead && (
-            <span className={`chat-tool-group-lead${summary.lead.label === 'Failed' ? ' is-failed' : ''}`}>
-              {' '}
-              · {summary.lead.label}:{' '}
-              <span className={summary.lead.mono ? 'mono' : undefined}>{summary.lead.text}</span>
-            </span>
-          )}
-        </span>
-        {summary.breakdown && <span className="chat-tool-meta chat-tool-group-breakdown">{summary.breakdown}</span>}
-        <ToolGroupStatus status={summary.status} />
-      </div>
-      {open && (
-        <div className="chat-tool-group-detail">
+    <div ref={ref} className={`chat-steps${open ? ' is-open' : ''}`} data-seq={nodes[0].seq}>
+      {line && (
+        <div className="chat-steps-line" onClick={() => setOpen((o) => !o)}>
+          {line}
+          {failed > 0 && <span className="chat-steps-failed">{` · ${failed} failed`}</span>}
+          <span className="chat-steps-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
+        </div>
+      )}
+      {open ? (
+        <div className="chat-steps-detail">
           {nodes.map((node) => (
-            <ToolView key={node.seq} node={node} live={live} />
+            <NodeView key={node.seq} node={node} live={live} />
           ))}
+        </div>
+      ) : (
+        running.map((node) => <StepLive key={node.seq} node={node} />)
+      )}
+    </div>
+  );
+}
+
+/** A call in flight under its steps line: what it is doing, then the command it runs. */
+function StepLive({ node }: { node: ToolNode }) {
+  const desc = describeTool(node.name, node.input, false);
+  const what = leadToolSummary(desc);
+  const command = node.name === 'Bash' && node.input?.description ? shellCommandSummary(String(node.input?.command ?? '')) : '';
+  return (
+    <div className="chat-steps-live" data-seq={node.seq}>
+      <div className="chat-steps-live-head">
+        <span className="chat-steps-dot" />
+        <span className={what?.mono ? 'mono' : undefined}>{what?.text}</span>
+      </div>
+      {command && (
+        <div className="chat-steps-live-cmd mono" title={command}>
+          <span className="chat-steps-elbow">⎿</span> $ {command}
         </div>
       )}
     </div>
   );
 }
 
-function summarizeToolGroup(nodes: ToolNode[], live?: boolean): ToolGroupSummary {
-  const described = nodes.map((node) => describeTool(node.name, node.input, node.id.startsWith('shell-')));
-  const counts = new Map<string, number>();
-  for (const desc of described) counts.set(desc.label, (counts.get(desc.label) ?? 0) + 1);
-  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  const sameKind = entries.length === 1;
-  const title = sameKind ? `${entries[0][0]} × ${nodes.length}` : `Tools × ${nodes.length}`;
-  const running = nodes.filter((node) => live && !node.result).length;
-  const pending = nodes.filter((node) => !live && !node.result).length;
-  const failed = nodes.filter((node) => !!node.result?.isError).length;
-  const succeeded = nodes.length - running - pending - failed;
-  const parts: string[] = [];
-  if (running) parts.push(`${running} running`);
-  if (failed) parts.push(`${failed} failed`);
-  if (pending) parts.push(`${pending} pending`);
-  if (succeeded) parts.push(`${succeeded} succeeded`);
-  // One call earns a slot on the folded row, and only when it is the reason someone would look:
-  // the one still in flight (progress), or — once nothing is running — the one that failed. Any
-  // other call is an arbitrary anchor that doesn't stand for the group (a 31-step group tends to
-  // end on some small `ls`), so the row goes to the counts and the per-kind breakdown instead.
-  // Running points at the *oldest* unfinished call, so parallel calls settling can't make the
-  // label jump backwards; failed points at the first failure, which is usually the cause of any
-  // that follow.
-  const leadIndex = running
-    ? nodes.findIndex((node) => !node.result)
-    : failed
-      ? nodes.findIndex((node) => !!node.result?.isError)
-      : -1;
-  const leadText = leadIndex >= 0 ? leadToolSummary(described[leadIndex]) : undefined;
-  const lead: ToolGroupSummary['lead'] = leadText
-    ? { label: running ? 'Running' : 'Failed', ...leadText }
-    : undefined;
-  const first = described[0];
-  const status: ToolGroupSummary['status'] = running ? 'running' : failed ? 'error' : pending ? 'pending' : 'ok';
-  return {
-    title,
-    summary: parts.join(' · '),
-    breakdown: sameKind ? undefined : entries.map(([label, count]) => `${label} × ${count}`).join(' · '),
-    lead,
-    icon: sameKind ? first?.icon : <ToolOutlined />,
-    tone: sameKind ? (first?.tone ?? 'default') : 'default',
-    status,
-  };
-}
-
-// What the call the row names is doing, in the same words its expanded row uses: the
+// What the call a live line names is doing, in the same words its expanded row uses: the
 // tool's own description when it has one (`desc.summary` already falls back to the raw
 // command for shells that ship without one), never a second, command-shaped language.
 function leadToolSummary(desc: ToolDesc): { text: string; mono: boolean } | undefined {
   if (desc.path) return { text: relPath(desc.path), mono: true };
   if (desc.summary) return { text: desc.summary, mono: !!desc.summaryMono };
   if (desc.meta) return { text: desc.meta, mono: true };
-  // A generic tool can have no compact input summary (apply_patch is the common example when its
-  // input only carries a file list). Naming the tool is still more useful than a red row with no
-  // lead, and keeps the failed call discoverable inside the folded group.
   return { text: desc.label, mono: false };
-}
-
-function ToolGroupStatus({ status }: { status: ToolGroupSummary['status'] }) {
-  switch (status) {
-    case 'running':
-      return <LoadingOutlined className="chat-tool-status running" spin />;
-    case 'error':
-      return <CloseCircleFilled className="chat-tool-status err" />;
-    case 'pending':
-      return <MinusCircleOutlined className="chat-tool-status pending" />;
-    case 'ok':
-      return <CheckCircleFilled className="chat-tool-status ok" />;
-  }
 }
 
 // Folded-row status: spinner while a result is still pending on a live session,

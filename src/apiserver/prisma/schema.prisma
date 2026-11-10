@@ -349,6 +349,9 @@ model User {
 
   /// Persistent observations this account is keeping (migration 0259).
   watches          Watch[]
+  ownerRequests    OwnerRequest[]
+  ownerRequestSecrets OwnerRequestSecret[]
+  accountSecrets   AccountSecret[]
 
   /// Public links this account made, ended ones included (migration 0306).
   shareLinks       ShareLink[]
@@ -2539,6 +2542,7 @@ model SessionFolder {
 // process from the runner's seq-owning session loop, so persisting it as an event
 // would race the runner's monotonic seq. Idempotent on (sessionId, toolUseId).
 model Approval {
+  coordinatorFallback String? @map("coordinator_fallback")
   id           String    @id @default(uuid(7)) @db.Uuid
   sessionId    String    @map("session_id") @db.Uuid
   session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -2576,7 +2580,7 @@ model Approval {
   startAfterCreate Boolean @default(false) @map("start_after_create")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById  String?   @map("decided_by_id") @db.Uuid
-  /// The credential the decider used (0500): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` — a click on a Feishu card
+  /// The credential the decider used (0500, 0505): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` | `COORDINATOR` — a click on a Feishu card
   /// (docs/feishu-bot-design.md §7.2). NULL on a row nobody decided and on every row decided before 0500.
   decidedCredentialKind String? @map("decided_credential_kind")
   /// The clicker's open_id and the card's message_id when `decidedCredentialKind` is `FEISHU`, and only then
@@ -2855,6 +2859,10 @@ model SessionWakeupLoop {
 /// is not one: the request is written under the RECIPIENT's row lock, and a key to the asker would
 /// take that row too. The partial indexes the workers and reads use live in migration 0350.
 model SessionRequest {
+  kind              String    @default("MESSAGE")
+  approvalId        String?   @map("approval_id") @db.Uuid
+  escalatedItemId   String?   @map("escalated_item_id") @db.Uuid
+  ownerAlertedAt    DateTime? @map("owner_alerted_at") @db.Timestamptz(3)
   id                String    @id @default(uuid(7)) @db.Uuid
   ownerId           String    @map("owner_id") @db.Uuid
   fromSessionId     String    @map("from_session_id") @db.Uuid
@@ -2868,7 +2876,7 @@ model SessionRequest {
   /// `[{ label, description? }]`, two to four of them, or null.
   options           Json?
   replyBy           DateTime  @map("reply_by") @db.Timestamptz(3)
-  /// OPEN | REPLIED | NO_REPLY | RECIPIENT_ENDED | EXPIRED | UNDELIVERED
+  /// OPEN | REPLIED | NO_REPLY | RECIPIENT_ENDED | EXPIRED | UNDELIVERED | OWNER_ANSWERED | READ
   state             String    @default("OPEN")
   replyText         String?   @map("reply_text")
   replyOption       Int?      @map("reply_option")
@@ -7242,6 +7250,103 @@ model CodexRateLimitResetOperation {
 /// The database is the fact source. Real-time events only ever schedule an evaluation earlier, so
 /// liveness is `nextEvaluateAt` plus a leased sweep — there is deliberately no event table, no
 /// outbox and no hint queue here (contract §8).
+/// An agent session asking the account owner to act (migration 0503): a decision, a secret, a step only a person can
+/// do, or a yes/no. PENDING, then exactly one of DONE | DECLINED | EXPIRED | WITHDRAWN, which is final
+/// (`owner-requests/owner-request.ts`). The asking session and the project are history, not foreign keys.
+model OwnerRequest {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  ownerId             String    @map("owner_id") @db.Uuid
+  owner               User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  askedBySessionId    String    @map("asked_by_session_id") @db.Uuid
+  projectId           String?   @map("project_id") @db.Uuid
+  kind                String
+  state               String    @default("PENDING")
+  title               String
+  why                 String
+  blocksTaskIds       String[]  @default([]) @map("blocks_task_ids") @db.Uuid
+  ifUnanswered        String?   @map("if_unanswered")
+  /// DECISION: `[{ label, description? }]`.
+  options             Json?
+  recommendedOption   Int?      @map("recommended_option")
+  /// MANUAL_STEP: `[{ text, command?, link? }]`.
+  steps               Json?
+  /// SECRET: `{ name, runnerId, envVar? , filePath? }` — never the value.
+  secretSpec          Json?     @map("secret_spec")
+  verifyHint          String?   @map("verify_hint")
+  expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
+  clientRequestId     String?   @map("client_request_id")
+  resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolvedByUserId    String?   @map("resolved_by_user_id") @db.Uuid
+  resolvedBySessionId String?   @map("resolved_by_session_id") @db.Uuid
+  /// Why it was declined (required) or withdrawn.
+  resolutionNote      String?   @map("resolution_note")
+  /// What the owner chose or said when marking it done: `{ option?, text? }`.
+  answer              Json?
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// The one delivery of its ending to the asking session (migration 0504), written with the ending.
+  deliveries          WatchDelivery[]
+  /// SECRET: the value's grant to one runner (migration 0506), once the owner has entered one.
+  secretGrant         OwnerRequestSecret?
+
+  @@unique([askedBySessionId, clientRequestId], map: "owner_request_session_client_key")
+  @@index([ownerId, state, createdAt], map: "owner_request_owner_state_idx")
+  @@map("owner_request")
+}
+
+/// The value an owner entered on a SECRET request, granted to one runner (migration 0506, design
+/// docs/design/owner-request-secrets.md §3.2). PENDING_DELIVERY → ACTIVE → REMOVING → REMOVED; `valueEnc` is the
+/// AES-256-GCM ciphertext (owner-requests/owner-secret-crypto.ts) and is NULL from REMOVING on. `runnerId` is a
+/// composite foreign key with `ownerId` in SQL, ON DELETE SET NULL (runner_id) — declared there rather than here,
+/// because Prisma cannot null half of a composite key — so a deleted runner leaves the grant to be ended
+/// RUNNER_DELETED. No length, prefix or hash of the value is stored.
+model OwnerRequestSecret {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  ownerId     String       @map("owner_id") @db.Uuid
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  requestId   String       @unique(map: "owner_request_secret_request_key") @map("request_id") @db.Uuid
+  request     OwnerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  runnerId    String?      @map("runner_id") @db.Uuid
+  sessionId   String       @map("session_id") @db.Uuid
+  taskId      String?      @map("task_id") @db.Uuid
+  /// The task's lifecycle epoch at submission (task_progress.lifecycle_epoch): a reopened task is a new epoch.
+  taskEpoch   Int?         @map("task_epoch")
+  /// The environment variable, for ENV; NULL for FILE.
+  name        String?
+  exposure    String
+  filePath    String?      @map("file_path")
+  valueEnc    String?      @map("value_enc")
+  state       String       @default("PENDING_DELIVERY")
+  endReason   String?      @map("end_reason")
+  expiresAt   DateTime     @map("expires_at") @db.Timestamptz(3)
+  /// When the runner first fetched the value: a grant ended before its ack is REMOVING once fetched (§2).
+  fetchedAt   DateTime?    @map("fetched_at") @db.Timestamptz(3)
+  deliveredAt DateTime?    @map("delivered_at") @db.Timestamptz(3)
+  removedAt   DateTime?    @map("removed_at") @db.Timestamptz(3)
+  removalNote String?      @map("removal_note")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([runnerId, state], map: "owner_request_secret_runner_state_idx")
+  @@map("owner_request_secret")
+}
+
+/// An owner's saved secret (migration 0506, design §3.4): write-only — no route returns `valueEnc` or anything
+/// derived from it. "Use saved" re-encrypts a copy into a new grant.
+model AccountSecret {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  label     String
+  valueEnc  String   @map("value_enc")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, label], map: "account_secret_owner_label_key")
+  @@map("account_secret")
+}
+
+
 model Watch {
   id      String @id @default(uuid(7)) @db.Uuid
   ownerId String @map("owner_id") @db.Uuid
@@ -7383,7 +7488,8 @@ model WatchMatch {
 model WatchDelivery {
   id String @id @default(uuid(7)) @db.Uuid
 
-  /// `MATCH` | `EXPIRY` (migration 0261) | `REVOKED` | `UNRESOLVABLE` (0263). A CHECK holds each row
+  /// `MATCH` | `EXPIRY` (migration 0261) | `REVOKED` | `UNRESOLVABLE` (0263) | `OWNER_REQUEST` (0504: an owner
+  /// request's ending, delivered as one turn to the session that asked). A CHECK holds each row
   /// to the one thing its kind is about: a MATCH row names its Match; the other three name a
   /// RESUME_SESSION watch that ended that way unmatched, and only an EXPIRY row carries the snapshot
   /// its evaluation took (contract §5). A REVOKED row says nothing about the targets (§7).
@@ -7394,6 +7500,10 @@ model WatchDelivery {
   /// index): one end delivery per watch, whichever way it ended.
   watchId String?     @map("watch_id") @db.Uuid
   watch   Watch?      @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  /// Set only on an OWNER_REQUEST row (migration 0504), and unique among those rows (a partial index): a
+  /// request ends once, so its ending is delivered to the session that asked at most once.
+  ownerRequestId String?       @map("owner_request_id") @db.Uuid
+  ownerRequest   OwnerRequest? @relation(fields: [ownerRequestId], references: [id], onDelete: Cascade)
   /// An EXPIRY row's structured snapshot, and NULL on every other kind. It is written in the same
   /// transaction as the EXPIRED state and never changes, so every attempt builds the same turn.
   expirySnapshot Json? @map("expiry_snapshot")

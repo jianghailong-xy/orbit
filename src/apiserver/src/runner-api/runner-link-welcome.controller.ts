@@ -23,8 +23,9 @@ import { RunnerReleaseFeed } from './runner-release-feed';
  * from it about anything but its own sessions. Machine protocol, so that the link serves it (raw UUIDs, like every other
  * route the gateway calls). It reads, but for one write a link call makes: the gateway is opening a connection, so the
  * runner's last beat is kept as the last it was heard with before it connected again (recordRunnerLinkOpened), which is
- * how the reaper knows of a mass disconnection its runners are back from. That write is the same however often the
- * gateway asks again, and one that fails is logged and costs the answer nothing.
+ * how the reaper knows of a mass disconnection its runners are back from — unless the connection is a renewal: opened
+ * with a token minted moments ago by a process still heard. That write is the same however often the gateway asks
+ * again, and one that fails is logged and costs the answer nothing.
  */
 @MachineProtocol()
 @UseGuards(RunnerAuthGuard)
@@ -49,7 +50,7 @@ export class RunnerLinkWelcomeController {
     const sessionIds = welcomeSessionIds(body);
     // Before Welcome, and so before the new connection's first beat moves the runner's last one on.
     if (link) {
-      await recordRunnerLinkOpened(this.prisma, runner.id).catch((error: unknown) =>
+      await recordRunnerLinkOpened(this.prisma, runner.id, link).catch((error: unknown) =>
         this.log.warn(`runner ${runner.id}: its last beat before this connection was not kept: ${(error as Error).message}`));
     }
     const sessions = await readRunnerLinkSessionStates(this.prisma, runner.id, leaseOwner, sessionIds);

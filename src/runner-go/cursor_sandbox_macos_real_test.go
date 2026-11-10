@@ -12,6 +12,7 @@ import (
 
 func TestCursorRealSandboxMacOS(t *testing.T) {
 	r := realCursorEnv(t)
+	useCursorEscapeAuthPlatform(t, "linux") // The launcher is held on macOS; this test still drives it.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)

@@ -140,6 +140,10 @@ function newClient() {
 // is not always what the key holds) and by the level being read, so a later subtask page under the
 // same project cannot land here. Spelled out rather than imported — a key the component changed
 // unilaterally should break these tests, which it can't do if both sides read one constant.
+/** The queries this page made of its own: the rows' `Waiting on you` badge shares one account-wide read. */
+const pageQueryKeys = (qc: QueryClient) =>
+  qc.getQueryCache().getAll().map((q) => q.queryKey).filter((key) => key[0] !== 'owner-requests');
+
 const tasksKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'tasks', 'root'];
 
 // Unit L7's entry, under the same `['project', id]` prefix as the document and for the same
@@ -1362,7 +1366,7 @@ describe('ProjectDetailPage — top-level tasks', () => {
     // open a page for those three — expansion is the next unit, so the document, its root task
     // level, the panorama's own entries and the Coordinator surface's one read are the only
     // queries this page is allowed to have.
-    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+    expect(pageQueryKeys(qc)).toEqual([
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...headerKeys(P1),
@@ -1561,7 +1565,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     // ...and closed means NOT FETCHED, not merely not shown: the level component is the only
     // thing that registers a child query, and a closed row does not render one at all. Two rows
     // claiming four children between them still leave exactly the queries this page already had.
-    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+    expect(pageQueryKeys(qc)).toEqual([
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...headerKeys(P1),
@@ -1679,7 +1683,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
       'aria-expanded="false"',
     ]);
     // ...and none of THEIR levels is fetched either, so opening one row never opens a subtree.
-    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([childKey(P1, 't1')]);
+    expect(pageQueryKeys(qc)).toEqual([childKey(P1, 't1')]);
   });
 
   it('spins inside the row while the child page is still loading', () => {

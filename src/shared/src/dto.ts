@@ -344,6 +344,44 @@ export interface PlanUsageWindow {
   windowDurationMins?: number;
 }
 
+/** One Claude model-scoped weekly limit (PlanUsageSnapshot.modelLimits). */
+export interface PlanUsageModelLimit {
+  /** The model's display name, as the endpoint gives it ("Fable"). */
+  model: string;
+  /** Percent of the limit consumed, 0..100. */
+  utilization: number;
+  resetsAt?: string;
+  /** Whether this limit is the one binding the model now, as the endpoint says. */
+  active: boolean;
+}
+
+/** A Claude login's extra usage (PlanUsageSnapshot.extraUsage). Amounts are in minor units of
+ *  `currency` (10^exponent per unit); absent when the endpoint sent none. */
+export interface PlanUsageExtraUsage {
+  enabled: boolean;
+  currency?: string;
+  exponent?: number;
+  usedMinor?: number;
+  limitMinor?: number;
+}
+
+/** A Claude login's weekly-reset grants (PlanUsageSnapshot.resetGrants). */
+export interface PlanUsageResetGrants {
+  eligible: boolean;
+  ineligibleReason?: string;
+  /** Resets usable now, summed across grants. */
+  resetsLeft: number;
+  grants?: PlanUsageResetGrant[];
+}
+
+export interface PlanUsageResetGrant {
+  id: string;
+  label?: string;
+  resetsLeft: number;
+  usableNow: boolean;
+  endsAt?: string;
+}
+
 export interface PlanUsageCredits {
   hasCredits: boolean;
   unlimited: boolean;
@@ -459,6 +497,14 @@ export interface PlanUsageSnapshot {
   sevenDayOpus?: PlanUsageWindow;
   /** 7-day Sonnet-scoped limit. */
   sevenDaySonnet?: PlanUsageWindow;
+  /** Claude only, display only: the endpoint's model-scoped weekly limits (`limits[]` of kind
+   *  `weekly_scoped`), e.g. Fable's share of the weekly allowance. No quota decision reads them. */
+  modelLimits?: PlanUsageModelLimit[];
+  /** Claude only, display only: pay-as-you-go usage past the plan's limits (`spend`, else `extra_usage`). */
+  extraUsage?: PlanUsageExtraUsage;
+  /** Claude only, display only: the weekly-reset block (`cedar_ember`). Over OAuth it has so far always
+   *  answered ineligible (`ineligibleReason: "surface"`): resets are used on claude.ai, never by Orbit. */
+  resetGrants?: PlanUsageResetGrants;
   /** Kimi Code only: the monthly limit on everything the account spends (`usages.limit_month_total`). */
   month?: PlanUsageWindow;
   /** Kimi Code only: the monthly limit on coding use (`usages.limit_month_code`), beside `month`. */
@@ -1216,6 +1262,14 @@ export interface RunnerHeartbeatResponse {
    *  /runner/region-check, and only to a process that declared `claude-region/v1`. Absent otherwise,
    *  so every other runner sees the response shape it always had. */
   regionCheckRequest?: ClaudeRegionCheckRequest;
+  /**
+   * Owner-entered secrets this runner may hold (docs/design/owner-request-secrets.md §6.3): every grant of the runner
+   * awaiting delivery or delivered whose scope is live, by id and expiry — never a value. Only a PRESENT list states
+   * anything: absent (an older server, a runner without owner-secret/v1) removes nothing, `[]` means hold nothing.
+   */
+  secretGrants?: Array<{ id: string; expiresAt: string }>;
+  /** Grants of this runner being removed: remove the copy if held, then confirm with /removed either way. */
+  secretGrantsRemoving?: string[];
 }
 
 // ── Claude region check (docs/claude-region-check-contract.md) ──
