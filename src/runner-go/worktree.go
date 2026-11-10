@@ -1591,7 +1591,13 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("could not resolve branch %q", req.Branch)}
 	}
 	// What this merge would publish holds no owner-request secret (secret_wire.go).
-	if refusal := secretPushRefusal(repoRoot, sourceSha, "refs/heads/"+target, "refs/remotes/origin/"+target); refusal != "" {
+	// Excluded is only what the destination already has: origin's target when origin tracks it, since the merge may
+	// be pushed there with whatever the local target holds that origin does not; the local target otherwise.
+	destination := "refs/heads/" + target
+	if _, err := git(repoRoot, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+target); err == nil {
+		destination = "refs/remotes/origin/" + target
+	}
+	if refusal := secretPushRefusalOf(repoRoot, []string{sourceSha, "refs/heads/" + target}, destination); refusal != "" {
 		return mergeOutcome{Status: "error", Message: refusal}
 	}
 
@@ -2730,7 +2736,7 @@ const commitMsgModel = "sonnet"
 // that can take the whole minute below — and no test can assert on what a model writes anyway.
 var commitMsgEngine = "claude"
 
-// commitMsgPrompt instructs the one-shot Claude; the staged diff is appended verbatim.
+// commitMsgPrompt instructs the one-shot Claude; the staged diff follows it verbatim, on stdin.
 const commitMsgPrompt = `Generate a git commit message for the staged changes below.
 
 Rules:
@@ -2753,6 +2759,17 @@ func generateCommitMessage(wtPath, fallback string) string {
 	if err != nil || strings.TrimSpace(diff) == "" {
 		return fallback
 	}
+	// The diff goes to a model vendor. Not when it holds an owner-request secret, on either side of it — a removed
+	// line is in it as much as an added one — and not from a repository a commit holding one was recorded in, whose
+	// values this runner may no longer know (secret_taint.go).
+	if r := runnerSecrets().scrubber(); r != nil && r.holds([]byte(diff)) {
+		logln("commit message: the staged diff holds a secret the owner delivered to this runner; using the diffstat message")
+		return fallback
+	}
+	if taintAppliesTo(wtPath) {
+		logln("commit message: this repository has a commit recorded as holding a secret; using the diffstat message")
+		return fallback
+	}
 	const maxDiffRunes = 12000 // a few thousand tokens characterizes any change; keeps it quick
 	if r := []rune(diff); len(r) > maxDiffRunes {
 		diff = string(r[:maxDiffRunes]) + "\n…(diff truncated)"
@@ -2769,8 +2786,11 @@ func generateCommitMessage(wtPath, fallback string) string {
 	defer os.RemoveAll(tmp)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, commitMsgEngine, "-p", commitMsgPrompt+diff,
+	// The diff on stdin, which `claude -p` reads after its prompt, not on the command line, where every process of
+	// this user can read it.
+	cmd := exec.CommandContext(ctx, commitMsgEngine, "-p", commitMsgPrompt,
 		"--model", commitMsgModel, "--output-format", "text")
+	cmd.Stdin = strings.NewReader(diff)
 	cmd.Dir = tmp
 	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.Output()

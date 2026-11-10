@@ -16,12 +16,25 @@ import (
 // hash of it. Every merge and push guard refuses a tip from which a recorded commit is reachable and the target is not
 // (secretPushRefusal), with no grant held at all.
 
-// secretTaintEntry is one recorded commit.
+// secretTaintEntry is one recorded commit, and the objects in its history that hold a value.
+//
+// Objects are recorded by their git object id so that a rewritten copy of the commit — rebased, amended, squashed,
+// cherry-picked, Orbit's own integration rebase and merge-recovery replay included — is still recognised: it carries
+// the same blob. A git object id is a hash of the object's content, but it is no new exposure of the value: git itself
+// already stores that id, beside the object it names, in this same repository on this same disk, so this 0600 file
+// says nothing anyone who can read the repository cannot read there. It is never a hash of the value alone.
 type secretTaintEntry struct {
-	Repo       string    `json:"repo"` // the repository's common git directory
-	Commit     string    `json:"commit"`
-	Paths      []string  `json:"paths"`
-	RecordedAt time.Time `json:"recordedAt"`
+	Repo       string              `json:"repo"` // the repository's common git directory
+	Commit     string              `json:"commit"`
+	Paths      []string            `json:"paths"`
+	Objects    []secretTaintObject `json:"objects,omitempty"`
+	RecordedAt time.Time           `json:"recordedAt"`
+}
+
+// secretTaintObject is one object holding a value: its git object id and the path it was found at.
+type secretTaintObject struct {
+	ID   string `json:"id"`
+	Path string `json:"path,omitempty"`
 }
 
 type secretTaintFile struct {
@@ -89,8 +102,10 @@ func secretRepoKey(dir string) string {
 	return ""
 }
 
-// recordSecretTaint scans dir's history from tip, not from exclude, for r's values, and records tip when it holds
-// one. Entries of the same repository whose commit no local ref reaches any more are pruned on the way.
+// recordSecretTaint scans dir's history from tip, not from exclude, for r's values, and records tip and the objects
+// holding one. An entry of the same repository none of whose objects, its commit included, is still in the
+// repository is pruned on the way: nothing of it is left to publish. (An entry is not pruned because its commit is no
+// longer on a branch: that is what a rewrite does, and the rewritten copy still carries the objects.)
 func recordSecretTaint(dir, tip string, r *integrationOutputRedactor, exclude ...string) {
 	if r == nil || tip == "" {
 		return
@@ -103,7 +118,8 @@ func recordSecretTaint(dir, tip string, r *integrationOutputRedactor, exclude ..
 	if repo == "" {
 		return
 	}
-	paths, err := secretHistoryScan(dir, commit, r, exclude...)
+	hits, err := secretHistoryObjects(dir, commit, r, exclude...)
+	paths := objectHitPaths(hits)
 	if err != nil {
 		logln("secret grants: the history of", dir, "could not be scanned:", firstLine(err.Error()))
 		return
@@ -118,11 +134,9 @@ func recordSecretTaint(dir, tip string, r *integrationOutputRedactor, exclude ..
 	kept := entries[:0]
 	changed := false
 	for _, entry := range entries {
-		if entry.Repo == repo && entry.Commit != commit {
-			if refs, err := git(dir, "for-each-ref", "--contains", entry.Commit, "--count=1", "--format=%(refname)"); err != nil || refs == "" {
-				changed = true
-				continue // reachable from no local ref: it cannot be pushed from here any more
-			}
+		if entry.Repo == repo && entry.Commit != commit && !taintEntryPresent(dir, entry) {
+			changed = true
+			continue
 		}
 		if entry.Repo == repo && entry.Commit == commit {
 			if len(paths) == 0 {
@@ -134,7 +148,11 @@ func recordSecretTaint(dir, tip string, r *integrationOutputRedactor, exclude ..
 		kept = append(kept, entry)
 	}
 	if len(paths) > 0 {
-		kept = append(kept, secretTaintEntry{Repo: repo, Commit: commit, Paths: paths, RecordedAt: time.Now().UTC()})
+		objects := make([]secretTaintObject, 0, len(hits))
+		for _, hit := range hits {
+			objects = append(objects, secretTaintObject{ID: hit.id, Path: hit.path})
+		}
+		kept = append(kept, secretTaintEntry{Repo: repo, Commit: commit, Paths: paths, Objects: objects, RecordedAt: time.Now().UTC()})
 		changed = true
 		logln("secret grants: commit", commit, "in", repo, "holds a secret's value; it will not be merged or pushed")
 	}
@@ -159,6 +177,33 @@ func taintedPaths(dir, tip string, exclude ...string) []string {
 	}
 	repo := secretRepoKey(dir)
 	var paths []string
+	// Any recorded object among what tip would publish: a rewritten copy of a recorded commit carries them.
+	objects := map[string]string{}
+	for _, entry := range entries {
+		if entry.Repo != repo {
+			continue
+		}
+		for _, object := range entry.Objects {
+			objects[object.ID] = object.Path
+		}
+	}
+	if len(objects) > 0 {
+		ids, names, err := listPublishedObjects(dir, tip, exclude...)
+		if err != nil {
+			return []string{"(what this would publish could not be listed: " + firstLine(err.Error()) + ")"}
+		}
+		for _, id := range ids {
+			if path, tainted := objects[id]; tainted {
+				if names[id] != "" {
+					path = names[id]
+				}
+				if path == "" {
+					path = "object " + id
+				}
+				paths = append(paths, path)
+			}
+		}
+	}
 	for _, entry := range entries {
 		if entry.Repo != repo || !gitIsAncestor(dir, entry.Commit, tip) {
 			continue
@@ -174,7 +219,46 @@ func taintedPaths(dir, tip string, exclude ...string) []string {
 			paths = append(paths, entry.Paths...)
 		}
 	}
-	return paths
+	// Each path once, whether the object or the commit named it.
+	seen := map[string]bool{}
+	unique := paths[:0]
+	for _, path := range paths {
+		if !seen[path] {
+			seen[path] = true
+			unique = append(unique, path)
+		}
+	}
+	return unique
+}
+
+// taintEntryPresent reports whether anything an entry recorded is still an object of dir's repository.
+func taintEntryPresent(dir string, entry secretTaintEntry) bool {
+	if _, err := git(dir, "cat-file", "-e", entry.Commit); err == nil {
+		return true
+	}
+	for _, object := range entry.Objects {
+		if _, err := git(dir, "cat-file", "-e", object.ID); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// taintAppliesTo reports whether any recorded entry is of dir's repository, or whether the record cannot be read.
+func taintAppliesTo(dir string) bool {
+	secretTaintMu.Lock()
+	entries, err := readSecretTaint()
+	secretTaintMu.Unlock()
+	if err != nil {
+		return true
+	}
+	repo := secretRepoKey(dir)
+	for _, entry := range entries {
+		if entry.Repo == repo {
+			return true
+		}
+	}
+	return false
 }
 
 // gitIsAncestor reports whether commit is reachable from tip. An object that is not there is reachable from nothing.

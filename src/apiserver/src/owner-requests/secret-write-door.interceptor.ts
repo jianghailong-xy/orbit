@@ -65,6 +65,8 @@ export function secretForms(value: string): string[] {
     bytes.toString('base64'),
     bytes.toString('base64').replace(/=+$/, ''),
     bytes.toString('base64url'),
+    // Padded base64url, which Go's base64.URLEncoding writes and the runner's scrubber matches.
+    bytes.toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
     bytes.toString('hex'),
     bytes.toString('hex').toUpperCase(),
     encodeURIComponent(value),

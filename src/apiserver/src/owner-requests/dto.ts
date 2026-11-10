@@ -109,7 +109,7 @@ export class ReplaceAccountSecretDto {
 export class SecretGrantAckDto {
   @IsIn(['DELIVERED', 'FAILED']) outcome!: 'DELIVERED' | 'FAILED';
   @IsOptional() @IsString() @MaxLength(100) code?: string;
-  @IsOptional() @IsString() @MaxLength(400) message?: string;
+  @IsOptional() @IsString() @MaxLength(500) message?: string;
 }
 
 /** The runner's word that its copy is gone (`POST /runner/secret-grants/:id/removed`). */

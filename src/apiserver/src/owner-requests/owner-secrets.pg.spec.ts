@@ -186,6 +186,13 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
     assert.equal((await grantOf(failing.id)).valueEnc, null);
     await secrets.submit(a.ownerId, failing.id, { value: canary() });
     assert.equal((await grantOf(failing.id)).state, 'PENDING_DELIVERY', 'the owner can enter it again');
+
+    // A delivered key the runner later cannot hold ends, rather than failing on every heartbeat.
+    const lost = await deliver(await a.session());
+    await secrets.ack(runnerA, lost.grantId, 'FAILED', 'SECRET_PATH_EXISTS', 'the path is taken');
+    const ended = await db.ownerRequestSecret.findUniqueOrThrow({ where: { id: lost.grantId } });
+    assert.deepEqual([ended.state, ended.endReason, ended.valueEnc], ['REMOVING', 'DELIVERY_FAILED', null]);
+    assert.ok((await secrets.reconcileFor(a.runnerId)).secretGrantsRemoving.includes(lost.grantId));
   });
 
   /** A delivered key, ended by `trigger`, swept, and confirmed removed by its runner. */

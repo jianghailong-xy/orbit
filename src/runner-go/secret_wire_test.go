@@ -295,3 +295,120 @@ func TestMergeRecoveryPreviewRefusesACandidateHoldingASecret(t *testing.T) {
 		t.Fatalf("preview = %+v", out)
 	}
 }
+
+// Review 3, OPEN 1: merge recovery publishes the local target's unpublished commits, so they are scanned too.
+func TestMergeRecoveryScansTheLocalTargetItPublishes(t *testing.T) {
+	repo, _, req := recoveryFixture(t)
+	// An unpublished commit of the local target, which the candidate is built on.
+	commitFile(t, repo, "local-leak.env", "KEY="+testSecretValue+"\n", "local key")
+	holdTestSecret(t, testSecretValue)
+	out := mergeToMain(req)
+	if out.Recovery == nil || out.Recovery.Patch != "" || !strings.Contains(sprintAll(out), "local-leak.env") {
+		t.Fatalf("preview = %+v", out)
+	}
+}
+
+// Review 3, OPEN 2: a rewritten copy of a recorded commit (here a cherry-pick, as a rebase or a squash makes) is
+// refused after the grant has ended: it carries the same blob.
+func TestRewrittenCopyOfATaintedCommitIsRefused(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	main := mustGit(t, repo, "rev-parse", "main")
+	mustGit(t, repo, "checkout", "-q", "-b", "orbit/leak")
+	commitFile(t, repo, "config.env", "KEY="+testSecretValue+"\n", "add key")
+	leak := mustGit(t, repo, "rev-parse", "HEAD")
+	recordSecretTaint(repo, "HEAD", newSecretRedactor([]string{testSecretValue}), main)
+
+	raw, _ := os.ReadFile(secretTaintPath())
+	if strings.Contains(string(raw), testSecretValue) || !strings.Contains(string(raw), `"objects"`) {
+		t.Fatalf("taint record: %s", raw)
+	}
+	// The original branch is rewritten away; a copy lands elsewhere with a new commit id.
+	mustGit(t, repo, "checkout", "-q", "-b", "orbit/copy", main)
+	commitFile(t, repo, "other.txt", "other\n", "other")
+	mustGit(t, repo, "cherry-pick", leak)
+	mustGit(t, repo, "branch", "-f", "orbit/leak", main)
+	mustGit(t, repo, "checkout", "-q", "main")
+	if gitIsAncestor(repo, leak, "refs/heads/orbit/copy") {
+		t.Fatal("fixture: the copy contains the original commit")
+	}
+	if runnerSecrets() != nil {
+		t.Fatal("fixture: a grant is held")
+	}
+	if refusal := secretPushRefusal(repo, "refs/heads/orbit/copy", "refs/heads/main"); !strings.Contains(refusal, "config.env") {
+		t.Fatalf("rewritten copy: %q", refusal)
+	}
+	// Recording again in the same repository keeps the entry: its commit is off every branch, its blob is not.
+	recordSecretTaint(repo, "refs/heads/main", newSecretRedactor([]string{testSecretValue}))
+	if refusal := secretPushRefusal(repo, "refs/heads/orbit/copy", "refs/heads/main"); refusal == "" {
+		t.Fatal("the entry was pruned while its blob is still on a branch")
+	}
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/copy", BaseSha: main})
+	if out.Status != "error" || !strings.Contains(out.Message, "config.env") {
+		t.Fatalf("merge of the copy = %+v", out)
+	}
+}
+
+// fakeCommitMsgEngine is a claude that records its argv and stdin and writes a message.
+func fakeCommitMsgEngine(t *testing.T) (argv, stdin func() string) {
+	t.Helper()
+	dir := t.TempDir()
+	script := filepath.Join(dir, "claude")
+	body := "#!/bin/sh\nprintf '%s' \"$*\" > '" + dir + "/argv'\ncat > '" + dir + "/stdin'\necho 'feat: from the engine'\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := commitMsgEngine
+	commitMsgEngine = script
+	t.Cleanup(func() { commitMsgEngine = old })
+	read := func(name string) func() string {
+		return func() string { data, _ := os.ReadFile(filepath.Join(dir, name)); return string(data) }
+	}
+	return read("argv"), read("stdin")
+}
+
+// Review 3, OPEN 3: the diff goes to the model on stdin, never in argv; not at all when either side of it holds a value,
+// or when the repository has a recorded commit holding one.
+func TestCommitMessageNeverSendsASecretToTheModel(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	argv, stdin := fakeCommitMsgEngine(t)
+	const fallback = "Update files"
+
+	if err := os.WriteFile(filepath.Join(repo, "ok.txt"), []byte("ordinary change\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "add", "-A")
+	if got := generateCommitMessage(repo, fallback); got != "feat: from the engine" {
+		t.Fatalf("clean diff: %q", got)
+	}
+	if strings.Contains(argv(), "ordinary change") || !strings.Contains(stdin(), "ordinary change") {
+		t.Fatalf("argv %q, stdin %q", argv(), stdin())
+	}
+	mustGit(t, repo, "commit", "-q", "-m", "ok")
+
+	// A value on the removed side only.
+	commitFile(t, repo, "config.env", "KEY="+testSecretValue+"\n", "key")
+	if err := os.WriteFile(filepath.Join(repo, "config.env"), []byte("KEY=\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "add", "-A")
+	holdTestSecret(t, testSecretValue)
+	before := stdin()
+	if got := generateCommitMessage(repo, fallback); got != fallback {
+		t.Fatalf("a diff removing a value: %q", got)
+	}
+	if stdin() != before {
+		t.Fatal("the engine was started for a diff holding a value")
+	}
+
+	// No grant held, but the repository has a recorded commit holding one.
+	recordSecretTaint(repo, "HEAD", newSecretRedactor([]string{testSecretValue}), "HEAD~1")
+	runnerSecretStore.Store(nil)
+	if got := generateCommitMessage(repo, fallback); got != fallback {
+		t.Fatalf("a tainted repository: %q", got)
+	}
+	if stdin() != before {
+		t.Fatal("the engine was started for a tainted repository")
+	}
+}

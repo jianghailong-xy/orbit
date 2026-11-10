@@ -68,9 +68,36 @@ func withoutSecretPatches(patches []FilePatch, sessionID string) []FilePatch {
 // hides one. It returns the paths, as `git rev-list --objects` names them ("commit <id>" for a commit), and an error
 // when the scan could not be completed: a caller refuses then, rather than push what it could not read.
 func secretHistoryScan(repo, tip string, r *integrationOutputRedactor, exclude ...string) ([]string, error) {
+	hits, err := secretHistoryObjects(repo, tip, r, exclude...)
+	if err != nil {
+		return nil, err
+	}
+	return objectHitPaths(hits), nil
+}
+
+// secretHistoryObjects is secretHistoryScan's objects: each one holding a value, with the path it goes by.
+func secretHistoryObjects(repo, tip string, r *integrationOutputRedactor, exclude ...string) ([]objectHit, error) {
 	if r == nil || tip == "" {
 		return nil, nil
 	}
+	ids, names, err := listPublishedObjects(repo, tip, exclude...)
+	if err != nil {
+		return nil, err
+	}
+	hits, err := objectsHolding(repo, ids, r)
+	if err != nil {
+		return nil, err
+	}
+	for i := range hits {
+		hits[i].path = names[hits[i].id]
+	}
+	return hits, nil
+}
+
+// listPublishedObjects is every object reachable from tip and from none of exclude, in order, with the path
+// `git rev-list --objects` gives it ("" for commits and root trees). Exclude must be what the destination already
+// has: a ref this push or merge would itself publish hides exactly what it publishes.
+func listPublishedObjects(repo, tip string, exclude ...string) ([]string, map[string]string, error) {
 	args := []string{"rev-list", "--objects", tip}
 	var not []string
 	for _, ref := range exclude {
@@ -86,7 +113,7 @@ func secretHistoryScan(repo, tip string, r *integrationOutputRedactor, exclude .
 	}
 	listed, err := git(repo, args...)
 	if err != nil {
-		return nil, fmt.Errorf("listing the objects of %s: %w", tip, err)
+		return nil, nil, fmt.Errorf("listing the objects of %s: %w", tip, err)
 	}
 	var ids []string
 	names := map[string]string{}
@@ -100,17 +127,18 @@ func secretHistoryScan(repo, tip string, r *integrationOutputRedactor, exclude .
 		}
 		names[id] = name
 	}
-	hits, err := objectsHolding(repo, ids, r)
-	if err != nil {
-		return nil, err
-	}
+	return ids, names, nil
+}
+
+// objectHitPaths is the names of hits for a refusal: the path, or "commit <id>" for a commit's message.
+func objectHitPaths(hits []objectHit) []string {
 	paths := map[string]bool{}
 	for _, hit := range hits {
-		switch name := names[hit.id]; {
+		switch {
 		case hit.kind == "commit":
 			paths["commit "+hit.id] = true
-		case name != "":
-			paths[name] = true
+		case hit.path != "":
+			paths[hit.path] = true
 		default:
 			paths[hit.kind+" "+hit.id] = true
 		}
@@ -120,10 +148,10 @@ func secretHistoryScan(repo, tip string, r *integrationOutputRedactor, exclude .
 		out = append(out, p)
 	}
 	sort.Strings(out)
-	return out, nil
+	return out
 }
 
-type objectHit struct{ id, kind string }
+type objectHit struct{ id, kind, path string }
 
 // objectsHolding reads each object through one `git cat-file --batch` and returns those holding a value. Anything
 // short of reading every object is an error.
@@ -206,6 +234,19 @@ func secretPushRefusal(repo, tip string, exclude ...string) string {
 	}
 	if paths := taintedPaths(repo, tip, exclude...); len(paths) > 0 {
 		return secretHistoryRefusal(paths)
+	}
+	return ""
+}
+
+// secretPushRefusalOf is secretPushRefusal for several tips published together, the first refusal winning.
+func secretPushRefusalOf(repo string, tips []string, exclude ...string) string {
+	for _, tip := range tips {
+		if tip == "" {
+			continue
+		}
+		if refusal := secretPushRefusal(repo, tip, exclude...); refusal != "" {
+			return refusal
+		}
 	}
 	return ""
 }

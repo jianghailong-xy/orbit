@@ -513,7 +513,17 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
         SELECT g."request_id"::text AS request_id, g."state" FROM "owner_request_secret" g
          WHERE g."id" = ${grantId}::uuid AND g."runner_id" = ${runner.id}::uuid AND g."owner_id" = ${runner.ownerId}::uuid`;
       if (!grant || grant.state === 'REMOVING' || grant.state === 'REMOVED') return null;
-      if (grant.state === 'ACTIVE') return { state: 'ACTIVE', resolved: false };
+      if (grant.state === 'ACTIVE' && outcome === 'DELIVERED') return { state: 'ACTIVE', resolved: false };
+      if (grant.state === 'ACTIVE') {
+        // A delivered key the runner can no longer hold (its ledger was lost and the path is now taken, say): the grant
+        // ends rather than being fetched and failing on every heartbeat, and the card says why.
+        const note = [code, message].filter(Boolean).join(': ').slice(0, 500) || 'the runner could not hold the key';
+        const ended = await tx.ownerRequestSecret.updateMany({
+          where: { id: grantId, state: 'ACTIVE' },
+          data: { state: 'REMOVING', endReason: 'DELIVERY_FAILED', valueEnc: null, removalNote: note },
+        });
+        return ended.count === 1 ? { state: 'REMOVING', resolved: false, ended: true } : null;
+      }
       // Lock order: the request, then the grant — as submit takes them.
       await tx.$queryRaw`SELECT 1 FROM "owner_request" WHERE "id" = ${grant.request_id}::uuid FOR UPDATE`;
       if (outcome === 'FAILED') {
@@ -539,6 +549,7 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
     }, loggedRetry(this.logger, 'ownerSecrets.ack'));
     if (!result) throw new NotFoundException('secret grant not found');
     if (result.resolved) this.delivery?.kick();
+    if ('ended' in result && result.ended) this.realtime?.markRunnerChanged(runner.id);
     return { state: result.state };
   }
 

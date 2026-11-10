@@ -128,7 +128,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     at: 'owner-requests/owner-secrets.service.ts#ack',
     shape: 'TX_RETRIED',
     locks: "The owner_request_secret row by (id, runner, owner); then its owner_request row FOR UPDATE; then the grant again FOR UPDATE under the live-scope predicate; then the grant UPDATE, the request's compare-and-set on PENDING, and when that matched one watch_delivery INSERT (enqueueResolutions). No trigger.",
-    identity: "The grant's PENDING_DELIVERY state and the request's PENDING state: a repeated ack finds the grant ACTIVE and writes nothing, and the request ends DONE once.",
+    identity: "The grant's PENDING_DELIVERY state and the request's PENDING state: a repeated ack finds the grant ACTIVE and writes nothing, and the request ends DONE once. A FAILED ack of an ACTIVE grant is one compare-and-set on ACTIVE to REMOVING, and writes nothing else.",
     isolation: '',
     attempts: 4,
     replay: 'Re-run from the first read against the committed rows; a rollback discards the grant, the ending and the delivery together.',
