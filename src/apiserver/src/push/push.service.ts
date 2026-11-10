@@ -1,14 +1,19 @@
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { recordRunNotify } from '../sessions/run-notify';
+import { runItemHold } from '../projects/run-item-hold';
+import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coordinator-evidence-queue';
+import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus, type DeviceToken } from '@prisma/client';
-import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
-import { openItemsNoLongerOwed } from '../projects/project-open-item';
+import { conversationIsOver, openItemsNoLongerOwed } from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
@@ -63,6 +68,10 @@ const WAKEUP_MISSED_REASONS: Record<WakeupMissedReason, string> = {
 /** What became of an agent's own `notify` call — the answer handed straight back to the agent. */
 export interface AgentNotifyResult {
   delivered: boolean;
+  recipient?: 'coordinator' | 'owner';
+  recipientSessionId?: string;
+  placement?: string;
+  fallback?: string;
   /** Devices the configured transports accepted it for. Present only when delivered. */
   devices?: number;
   /** The owner's Feishu app took it as a card (docs/feishu-bot-design.md §6.1). Present only when it did. */
@@ -116,6 +125,7 @@ export class PushService {
     private readonly prisma: PrismaService,
     config: ConfigService,
     @Optional() private readonly feishu?: FeishuTransport,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {
     this.keyId = config.get<string>('APNS_KEY_ID');
     this.teamId = config.get<string>('APNS_TEAM_ID');
@@ -527,7 +537,6 @@ export class PushService {
   }, alreadyClaimed = false): Promise<AgentNotifyResult> {
     const alert = agentAlert(input.message);
     if (!alert) return { delivered: false, reason: 'message is empty' };
-    if (!this.enabled) return { delivered: false, reason: 'push is not configured on this server' };
     try {
       let title = input.fallbackTitle;
       // When this session (headless, this account) last rang the owner's devices.
@@ -537,12 +546,66 @@ export class PushService {
         // reads as absent rather than as a session whose title we would then leak.
         const session = await this.prisma.session.findFirst({
           where: { id: input.sessionId, ownerId: input.ownerId },
-          select: { title: true, agentNotifiedAt: true },
+          select: { title: true, agentNotifiedAt: true, task: { select: { id: true, title: true, project: true } } },
         });
         if (!session) return { delivered: false, reason: 'session not found' };
+        const project = session.task?.project;
+        if (!alreadyClaimed && project?.coordinatorEnabled && project.coordinatorSessionId !== input.sessionId) {
+          const now = new Date();
+          const wait = agentNotifyWait(session.agentNotifiedAt ?? null, now);
+          if (wait !== null) return { delivered: false, reason: `rate limited — try again in ${wait}s` };
+          const taken = await this.claimAgentNotify(input, now);
+          if (taken !== null) return { delivered: false, reason: `rate limited — try again in ${agentNotifyWait(taken, now) ?? 1}s` };
+          const coordinator = project.coordinatorSessionId ? await this.prisma.session.findFirst({
+            where: { id: project.coordinatorSessionId, ownerId: input.ownerId }, select: COORDINATOR_PAUSE_SELECT,
+          }) : null;
+          const dueAt = new Date(now.getTime() + project.exceptionEscalationSeconds * 1000);
+          const fused = await openFuseEpisodeId(this.prisma, project.id);
+          const hold = runItemHold({
+            kind: 'NOTIFY', project: { automatic: true, coordinatorEnabled: true },
+            coordinatorSessionId: project.coordinatorSessionId, coordinatorSession: coordinator,
+            answered: false, delivery: fused ? 'REFUSED' : 'PENDING', deliveryRefusal: fused ? 'COORDINATOR_PAUSED' : null,
+            deliveredTurn: null, stoppedWithoutAnswer: false, dueAt,
+          }, now);
+          let fallback = hold?.place === 'FALLBACK' ? hold.reason : 'UNREACHABLE';
+          if (hold?.place === 'HELD') {
+            try {
+              const requestId = randomUUID();
+              const clientTurnId = `run-notify:v1:${requestId}`;
+              const { SessionsService } = await import('../sessions/sessions.service.js');
+              const sent = await this.moduleRef!.get(SessionsService, { strict: false }).createTurn(
+                input.ownerId, hold.coordinatorSessionId, { clientTurnId, content: '', intent: 'NEXT_TURN' },
+                { coalesce: async (tx) => {
+                  // createTurn holds the recipient lock: a pause that won the race must not be disarmed.
+                  const current = await tx.session.findFirst({
+                    where: { id: hold.coordinatorSessionId, ownerId: input.ownerId }, select: COORDINATOR_PAUSE_SELECT,
+                  });
+                  if (!current || conversationIsOver(current) || conversationIsPaused(current)
+                    || await openFuseEpisodeId(tx, project.id)) {
+                    throw new ConflictException('The coordinator is unavailable');
+                  }
+                  return null;
+                }, onTurnWritten: async (tx, turn) => {
+                  await recordRunNotify(tx, {
+                    id: requestId, kind: 'RUN_NOTIFY', ownerId: input.ownerId, fromSessionId: input.sessionId!,
+                    toSessionId: hold.coordinatorSessionId, turnId: turn.id, clientTurnId,
+                    requestPreview: input.message.trim().slice(0, 200), replyBy: dueAt,
+                  });
+                } },
+              );
+              return { delivered: true, recipient: 'coordinator', recipientSessionId: uuidToBase62(hold.coordinatorSessionId), placement: sent.placement };
+            } catch (error) {
+              this.log.warn(`coordinator notify failed: ${(error as Error).message}`);
+              fallback = 'UNREACHABLE';
+            }
+          }
+          const result = await this.notifyAgentMessage({ ...input, message: `Not reviewed by the coordinator · ${input.message.trim()}` }, true);
+          return { ...result, recipient: 'owner', fallback };
+        }
         title = session.title || input.fallbackTitle;
         rang = session.agentNotifiedAt ?? null;
       }
+      if (!this.enabled) return { delivered: false, reason: 'push is not configured on this server' };
       const user = await this.prisma.user.findUnique({
         where: { id: input.ownerId },
         select: { preferences: true, agentNotifiedAt: true },
