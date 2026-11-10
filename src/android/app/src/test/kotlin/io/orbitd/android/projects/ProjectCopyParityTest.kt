@@ -56,6 +56,18 @@ class ProjectCopyParityTest {
             ProjectDone.derivedLine("2026-10-02T12:00:00Z", java.time.ZoneOffset.UTC))
         assertEquals(null, ProjectDone.derivedLine(null))
     }
+    @Test fun doneCheckWebWords() {
+        val web = File(root, "src/web/src/lib/projectDone.ts").readText()
+        assertTrue(web.contains("export const DONE_CHECK_NO_CRITERIA = '${ProjectDone.checkNoCriteria}';"))
+        assertTrue(web.contains("export const DONE_CHECK_UNMET = '${ProjectDone.checkUnmet}';"))
+        assertTrue(web.contains("export const DONE_CHECK_UNLANDED = '${ProjectDone.checkUnlanded}';"))
+        assertTrue(web.contains("export const DONE_CHECK_TASKS = '${ProjectDone.checkTasks}';"))
+        assertTrue(web.contains("export const DONE_CHECK_TASK = '${ProjectDone.checkTask}';"))
+        assertTrue(web.contains("export const DONE_CHECK_OWNER_ITEMS = '${ProjectDone.checkOwnerItems}';"))
+        assertTrue(web.contains("export const DONE_CHECK_LANDINGS = '${ProjectDone.checkLandings}';"))
+        assertTrue(web.contains("export const DONE_CARD_FINDINGS_HEADING = '${ProjectDone.findingsHeading}';"))
+        assertTrue(web.contains("export const DONE_CARD_FINDINGS_ACCEPTED = '${ProjectDone.findingsAccepted}';"))
+    }
     @Test fun doneWords() = assertIn(ProjectDone, swift("${kit}ProjectDone.swift"))
     @Test fun attentionWords() {
         val source = swift("${kit}ProjectAttention.swift")

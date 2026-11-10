@@ -27,6 +27,7 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
     suspend fun coordinator(id: String) = readObject(listOf("projects", id, "coordinator", "status"))
     suspend fun graph(id: String) = readObject(listOf("projects", id, "dependency-graph"))
     suspend fun ready(id: String) = readObject(listOf("projects", id, "panorama", "ready"), listOf("limit" to "5"))
+    suspend fun doneCheck(id: String) = readObject(listOf("projects", id, "done-check"))
     suspend fun confirmation(id: String) = readObject(listOf("projects", id, "acceptance", "confirmation"))
     suspend fun share(id: String) = readObject(listOf("projects", id, "share"))
     /** Every crossing this project is an end of, in either direction (`GET /projects/:id/handoffs`). */

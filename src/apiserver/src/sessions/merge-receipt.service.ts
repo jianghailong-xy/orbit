@@ -36,7 +36,8 @@ import {
 } from './merge-receipt';
 import { assertEngineSession } from './engine-session';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
-import { storeDerivedProjectStatus } from '../projects/project-done-derived';
+import { SessionsService } from './sessions.service';
+import { refreshProjectDone } from '../projects/project-done-request';
 import {
   checkpointIdForCommit,
   checkpointLandingGate,
@@ -363,13 +364,20 @@ export class MergeReceiptService {
     }).catch(() => null);
     if (!project) return;
     let push: PushService | undefined;
+    let sessions: SessionsService | undefined;
     try {
       push = this.moduleRef?.get(PushService, { strict: false });
     } catch {
       // Hand-built application contexts may have no push service.
     }
-    await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId, {
+    try {
+      sessions = this.moduleRef?.get(SessionsService, { strict: false });
+    } catch {
+      // Hand-built application contexts may have no sessions service.
+    }
+    await refreshProjectDone(this.prisma, project.ownerId, projectId, {
       push,
+      sessions,
     }).catch((e) =>
       this.logger.warn(`derived project status not reconciled after a merge receipt: ${e?.message ?? e}`),
     );

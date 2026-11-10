@@ -47,7 +47,7 @@ import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
 import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
-import { storeDerivedProjectStatus } from '../projects/project-done-derived';
+import { refreshProjectDone } from '../projects/project-done-request';
 import { deliveredIdentityAtDone, enqueueForDoneTask } from '../projects/project-integration-job';
 import { SessionsService } from '../sessions/sessions.service';
 
@@ -955,7 +955,7 @@ export class TaskCompletionEvidenceService {
    */
   private async reprojectProjectStatus(ownerId: string, projectId: string | null): Promise<void> {
     if (!projectId || !this.completionInputs) return;
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+    await refreshProjectDone(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
       push: this.push,
     }).catch((error) =>
