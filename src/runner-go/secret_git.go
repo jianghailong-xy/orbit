@@ -30,32 +30,40 @@ func registerSecretWarnings(sessionID string, emit emitFn) func() {
 	return func() { secretWarnSinks.CompareAndDelete(key, sink) }
 }
 
-// unstageHeldSecrets unstages every staged file of dir whose content holds a value this runner holds. env is the git
-// environment the staging ran under (a temporary index), nil for the checkout's own. sessionID names whom to warn;
-// empty for a workspace's own baseline.
+// unstageHeldSecrets unstages every staged file of dir whose content holds a value this runner holds, or whose blob
+// was recorded as holding one while a value was known (secret_taint.go): a file held back while a grant was live is
+// held back after it has ended too. env is the git environment the staging ran under (a temporary index), nil for the
+// checkout's own. sessionID names whom to warn; empty for a workspace's own baseline. What it unstages for a value it
+// holds is recorded, so the next `git add` of the same content, which makes the same blob, is known after the grant.
 func unstageHeldSecrets(dir string, env []string, sessionID string) {
 	red := runnerSecrets().scrubber()
-	if red == nil {
+	recorded := taintObjectIDs(dir)
+	if red == nil && len(recorded) == 0 {
 		return
 	}
-	hits := stagedFilesHoldingSecrets(dir, env, red)
+	hits := stagedFilesHoldingSecrets(dir, env, red, recorded)
 	if len(hits) == 0 {
 		return
 	}
+	paths := make([]string, 0, len(hits))
+	for _, hit := range hits {
+		paths = append(paths, hit.Path)
+	}
+	recordTaintObjects(dir, hits)
 	var err error
 	if _, headErr := gitEnv(dir, env, "rev-parse", "--verify", "--quiet", "HEAD"); headErr == nil {
-		_, err = gitEnv(dir, env, append([]string{"reset", "--quiet", "--"}, hits...)...)
+		_, err = gitEnv(dir, env, append([]string{"reset", "--quiet", "--"}, paths...)...)
 	} else {
-		_, err = gitEnv(dir, env, append([]string{"rm", "--cached", "--quiet", "--"}, hits...)...)
+		_, err = gitEnv(dir, env, append([]string{"rm", "--cached", "--quiet", "--"}, paths...)...)
 	}
-	for _, path := range hits {
+	for _, path := range paths {
 		secretUnstagedWarning(sessionID, path, err)
 	}
 }
 
-// stagedFilesHoldingSecrets is the staged paths, changed against HEAD (all of them before there is a HEAD), whose
-// staged content holds a value.
-func stagedFilesHoldingSecrets(dir string, env []string, red *integrationOutputRedactor) []string {
+// stagedFilesHoldingSecrets is the staged files, changed against HEAD (all of them before there is a HEAD), whose
+// staged blob holds a value red knows (red may be nil) or is one of recorded, with that blob's id.
+func stagedFilesHoldingSecrets(dir string, env []string, red *integrationOutputRedactor, recorded map[string]string) []secretTaintObject {
 	args := []string{"diff", "--cached", "--name-only", "-z", "--no-renames", "--diff-filter=ACMRT", "HEAD"}
 	if _, err := gitEnv(dir, env, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
 		args = []string{"ls-files", "--cached", "-z"}
@@ -66,27 +74,29 @@ func stagedFilesHoldingSecrets(dir string, env []string, red *integrationOutputR
 	}
 	var names []string
 	for _, name := range strings.Split(out, "\x00") {
-		// A name with a newline in it cannot be asked for in a batch; it is read on its own.
 		if name != "" {
 			names = append(names, name)
 		}
 	}
-	var hits []string
+	var hits []secretTaintObject
 	var batch []string
 	for _, name := range names {
+		// A name with a newline in it cannot be asked for in a batch; it is read on its own.
 		if strings.ContainsAny(name, "\n\r") {
-			if content, err := gitEnv(dir, env, "cat-file", "blob", ":"+name); err == nil && red.holds([]byte(content)) {
-				hits = append(hits, name)
+			id, _ := gitEnv(dir, env, "rev-parse", ":"+name)
+			content, err := gitEnv(dir, env, "cat-file", "blob", ":"+name)
+			if _, tainted := recorded[id]; (id != "" && tainted) || (err == nil && red != nil && red.holds([]byte(content))) {
+				hits = append(hits, secretTaintObject{ID: id, Path: name})
 			}
 			continue
 		}
 		batch = append(batch, name)
 	}
-	return append(hits, stagedBlobsHolding(dir, env, batch, red)...)
+	return append(hits, stagedBlobsHolding(dir, env, batch, red, recorded)...)
 }
 
 // stagedBlobsHolding reads the staged blob of each name through one `git cat-file --batch`.
-func stagedBlobsHolding(dir string, env []string, names []string, red *integrationOutputRedactor) []string {
+func stagedBlobsHolding(dir string, env []string, names []string, red *integrationOutputRedactor, recorded map[string]string) []secretTaintObject {
 	if len(names) == 0 {
 		return nil
 	}
@@ -112,7 +122,7 @@ func stagedBlobsHolding(dir string, env []string, names []string, red *integrati
 		}
 	}()
 	reader := bufio.NewReader(stdout)
-	var hits []string
+	var hits []secretTaintObject
 	for _, name := range names {
 		header, err := reader.ReadString('\n')
 		if err != nil {
@@ -131,8 +141,9 @@ func stagedBlobsHolding(dir string, env []string, names []string, red *integrati
 			break
 		}
 		_, _ = reader.ReadByte() // the newline after the content
-		if fields[1] == "blob" && red.holds(content) {
-			hits = append(hits, name)
+		_, tainted := recorded[fields[0]]
+		if fields[1] == "blob" && (tainted || (red != nil && red.holds(content))) {
+			hits = append(hits, secretTaintObject{ID: fields[0], Path: name})
 		}
 	}
 	_, _ = io.Copy(io.Discard, reader)

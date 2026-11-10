@@ -237,7 +237,7 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 	// refused here as its push would be (secret_wire.go).
 	// Excluded is only what origin has: the candidate is built on the local target, whose unpublished commits this
 	// push would send.
-	if refusal := secretPushRefusal(root, r.CandidateSha, r.RemoteSha, "refs/remotes/origin/"+r.TargetBranch); refusal != "" {
+	if refusal := secretPushRefusalOf(root, []string{r.CandidateSha, r.SourceSha}, r.RemoteSha, "refs/remotes/origin/"+r.TargetBranch); refusal != "" {
 		return recoveryError(r, "PREVIEW_FAILED", refusal)
 	}
 	r.Patch, err = git(root, "diff", "--no-ext-diff", "--binary", r.RemoteSha, r.CandidateSha, "--")
@@ -596,7 +596,7 @@ func applyMergeRecovery(root string, req MergeCommand) mergeOutcome {
 		if err := recoveryLocalReady(root, r.TargetBranch, r.CandidateSha); err != nil {
 			return recoveryError(r, "LOCAL_CHECKOUT_BLOCKED", err.Error())
 		}
-		if refusal := secretPushRefusal(root, r.CandidateSha, r.RemoteSha, "refs/remotes/origin/"+r.TargetBranch); refusal != "" {
+		if refusal := secretPushRefusalOf(root, []string{r.CandidateSha, r.SourceSha}, r.RemoteSha, "refs/remotes/origin/"+r.TargetBranch); refusal != "" {
 			return recoveryError(r, "PUSH_FAILED", refusal)
 		}
 		if err := pushRecoveryCandidate(root, r.CandidateSha, r.TargetBranch); err != nil {

@@ -43,16 +43,22 @@ func scrubRunFinalize(req RunFinalizeRequest, sessionID string) RunFinalizeReque
 	return req
 }
 
-// withoutSecretPatches leaves out of patches every file whose patch text (or preview) holds a held value, and warns
-// the session once per file. The file stays in the changed-file list with its counts.
+// withoutSecretPatches leaves out of patches every file whose patch text (or preview) holds a held value, or whose
+// patch names, on either side of its `index` line, a blob recorded as holding one (secret_taint.go) — what is left of
+// a value once its grant has ended. The session is warned once per file; the file stays in the changed-file list with
+// its counts.
 func withoutSecretPatches(patches []FilePatch, sessionID string) []FilePatch {
 	r := runnerSecrets().scrubber()
-	if r == nil || len(patches) == 0 {
+	if len(patches) == 0 {
+		return patches
+	}
+	recorded := taintObjects("")
+	if r == nil && len(recorded) == 0 {
 		return patches
 	}
 	kept := make([]FilePatch, 0, len(patches))
 	for _, patch := range patches {
-		if r.holds([]byte(patch.Patch)) || r.holds([]byte(patch.Preview)) {
+		if (r != nil && (r.holds([]byte(patch.Patch)) || r.holds([]byte(patch.Preview)))) || patchNamesRecordedBlob(patch.Patch, recorded) {
 			secretFileWarning(sessionID, patch.Path, "secret_patch_withheld", fmt.Sprintf(
 				"%s holds the value of a secret the owner delivered to this runner, so Orbit left its diff out of what it reports. Remove the value from the file and from the branch's history.", patch.Path))
 			continue
@@ -60,6 +66,32 @@ func withoutSecretPatches(patches []FilePatch, sessionID string) []FilePatch {
 		kept = append(kept, patch)
 	}
 	return kept
+}
+
+// patchNamesRecordedBlob reports whether a unified diff's `index <old>..<new>` line names a recorded blob on either
+// side. The ids there are abbreviated, so they are matched as prefixes, and only at git's own minimum of 7 digits.
+func patchNamesRecordedBlob(patch string, recorded map[string]string) bool {
+	if len(recorded) == 0 {
+		return false
+	}
+	for _, line := range strings.Split(patch, "\n") {
+		if !strings.HasPrefix(line, "index ") {
+			continue
+		}
+		ids, _, _ := strings.Cut(strings.TrimPrefix(line, "index "), " ")
+		old, new, _ := strings.Cut(ids, "..")
+		for _, short := range []string{old, new} {
+			if len(short) < 7 || strings.Trim(short, "0") == "" {
+				continue
+			}
+			for id := range recorded {
+				if strings.HasPrefix(id, short) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // secretHistoryScan is what a push or merge of tip would publish that holds a value r knows: every object reachable

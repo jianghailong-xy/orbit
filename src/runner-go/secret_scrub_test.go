@@ -125,6 +125,8 @@ func TestUnstageHeldSecretsKeepsAValueOutOfTheCommit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
+	// What unstaging records (secret_taint.go) goes to this test's own Orbit directory.
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	store := newSecretStore(newFakeSecretAPI(), filepath.Join(t.TempDir(), "ledger.json"))
 	store.held["g"] = &heldSecret{id: "g", exposure: secretExposureEnv, name: "K_KEY", value: secretValue(testSecretValue), revoked: make(chan struct{})}
 	store.rebuildScrubLocked()

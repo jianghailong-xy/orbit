@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -134,7 +135,9 @@ func recordSecretTaint(dir, tip string, r *integrationOutputRedactor, exclude ..
 	kept := entries[:0]
 	changed := false
 	for _, entry := range entries {
-		if entry.Repo == repo && entry.Commit != commit && !taintEntryPresent(dir, entry) {
+		// An entry of objects alone (recordTaintObjects) stays: its blob may be gone from the object store and still
+		// be made again by the next `git add` of a file that holds it.
+		if entry.Repo == repo && entry.Commit != "" && entry.Commit != commit && !taintEntryPresent(dir, entry) {
 			changed = true
 			continue
 		}
@@ -205,7 +208,7 @@ func taintedPaths(dir, tip string, exclude ...string) []string {
 		}
 	}
 	for _, entry := range entries {
-		if entry.Repo != repo || !gitIsAncestor(dir, entry.Commit, tip) {
+		if entry.Repo != repo || entry.Commit == "" || !gitIsAncestor(dir, entry.Commit, tip) {
 			continue
 		}
 		published := false
@@ -293,7 +296,123 @@ func taintAllCheckouts(r *integrationOutputRedactor) {
 		}
 		base, _ := git(dir, "rev-parse", "--verify", "--quiet", baseRefName(entry.Name()))
 		recordSecretTaint(dir, "HEAD", r, base)
+		// What is not committed yet: a file held back from a commit stays in the working tree, and the next
+		// `git add -A` after the value is forgotten would stage it.
+		recordTaintObjects(dir, uncommittedObjectsHolding(dir, r))
 	}
+}
+
+// uncommittedObjectsHolding is every file of dir's index and working tree that a `git add -A` could stage (tracked,
+// and untracked but not ignored) and whose content holds one of r's values, with the blob id `git hash-object` gives
+// its content: the id a `git add` of it makes. Staged blobs that differ from the file are taken too.
+func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) []secretTaintObject {
+	if r == nil {
+		return nil
+	}
+	var hits []secretTaintObject
+	hits = append(hits, stagedFilesHoldingSecrets(dir, nil, r, nil)...)
+	out, err := git(dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	if err != nil {
+		return hits
+	}
+	for _, name := range strings.Split(out, "\x00") {
+		if name == "" {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > secretScanFileMax {
+			continue
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		holds, _ := readerHoldsSecret(file, r)
+		file.Close()
+		if !holds {
+			continue
+		}
+		if id, err := git(dir, "hash-object", "--", name); err == nil && id != "" {
+			hits = append(hits, secretTaintObject{ID: id, Path: name})
+		}
+	}
+	return hits
+}
+
+// secretScanFileMax bounds the working-tree files read at a removal; a bigger one is no file a value is pasted into.
+const secretScanFileMax = 64 << 20
+
+// recordTaintObjects records objects, ids and paths only, as dir's repository's entry of objects alone.
+func recordTaintObjects(dir string, objects []secretTaintObject) {
+	if len(objects) == 0 {
+		return
+	}
+	repo := secretRepoKey(dir)
+	if repo == "" {
+		return
+	}
+	secretTaintMu.Lock()
+	defer secretTaintMu.Unlock()
+	entries, err := readSecretTaint()
+	if err != nil {
+		logln("secret grants: the taint record is unreadable:", err)
+		return
+	}
+	at := -1
+	for i, entry := range entries {
+		if entry.Repo == repo && entry.Commit == "" {
+			at = i
+		}
+	}
+	if at < 0 {
+		entries = append(entries, secretTaintEntry{Repo: repo, RecordedAt: time.Now().UTC()})
+		at = len(entries) - 1
+	}
+	known := map[string]bool{}
+	for _, object := range entries[at].Objects {
+		known[object.ID] = true
+	}
+	changed := false
+	for _, object := range objects {
+		if object.ID == "" || known[object.ID] {
+			continue
+		}
+		known[object.ID] = true
+		entries[at].Objects = append(entries[at].Objects, object)
+		entries[at].Paths = appendUnique(entries[at].Paths, object.Path)
+		changed = true
+	}
+	if changed {
+		if err := writeSecretTaint(entries); err != nil {
+			logln("secret grants: cannot write the taint record:", err)
+		}
+	}
+}
+
+// taintObjectIDs is every recorded object id of dir's repository, with its path.
+func taintObjectIDs(dir string) map[string]string {
+	return taintObjects(secretRepoKey(dir))
+}
+
+// taintObjects is every recorded object id of repo, or of every repository when repo is "".
+func taintObjects(repo string) map[string]string {
+	secretTaintMu.Lock()
+	entries, err := readSecretTaint()
+	secretTaintMu.Unlock()
+	if err != nil {
+		return nil
+	}
+	ids := map[string]string{}
+	for _, entry := range entries {
+		if repo != "" && entry.Repo != repo {
+			continue
+		}
+		for _, object := range entry.Objects {
+			ids[object.ID] = object.Path
+		}
+	}
+	return ids
 }
 
 // secretBeforeForget runs just before a grant's value is forgotten. A variable for the store's tests.

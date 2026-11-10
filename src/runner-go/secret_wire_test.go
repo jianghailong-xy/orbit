@@ -412,3 +412,140 @@ func TestCommitMessageNeverSendsASecretToTheModel(t *testing.T) {
 		t.Fatal("the engine was started for a tainted repository")
 	}
 }
+
+// Review 4, OPEN A: a replay that rewrites the value-holding file (new blob, new commit) is refused once the grant has
+// ended, at preview and at apply: the source it was replayed from is guarded too.
+func TestMergeRecoveryGuardsTheSourceItReplays(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	commitFile(t, repo, "leak.env", "a\n1\n2\n3\n4\nb\n", "leak.env")
+	bare := addOriginBare(t, repo)
+	base := mustGit(t, repo, "rev-parse", "main")
+	mustGit(t, repo, "checkout", "-q", "-b", "orbit/feat")
+	commitFile(t, repo, "leak.env", "a\n1\n2\n3\n4\nKEY="+testSecretValue+"\n", "key")
+	mustGit(t, repo, "checkout", "-q", "main")
+	// Upstream edits the same file, so the replayed blob differs from the source's.
+	advanceOriginMain(t, repo, "leak.env", "A\n1\n2\n3\n4\nb\n")
+	commitFile(t, repo, "local.txt", "local\n", "local work")
+	req := MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "recovery", BaseSha: base, RecoveryAction: "preview"}
+
+	ready := mergeToMain(req)
+	if ready.Recovery == nil || ready.Recovery.Code != "READY" {
+		t.Fatalf("fixture preview: %+v", ready)
+	}
+	if candidateBlob := mustGit(t, repo, "rev-parse", ready.Recovery.CandidateSha+":leak.env"); candidateBlob == mustGit(t, repo, "rev-parse", "orbit/feat:leak.env") {
+		t.Fatal("fixture: the replay kept the source's blob")
+	}
+	// Recorded while the grant was held; the grant has ended since.
+	recordSecretTaint(repo, "refs/heads/orbit/feat", newSecretRedactor([]string{testSecretValue}), base)
+	if runnerSecrets() != nil {
+		t.Fatal("fixture: a grant is held")
+	}
+	preview := mergeToMain(req)
+	if preview.Recovery == nil || preview.Recovery.Patch != "" || !strings.Contains(sprintAll(preview), "leak.env") {
+		t.Fatalf("preview = %+v", preview)
+	}
+	remote := mustGit(t, bare, "rev-parse", "main")
+	req.RecoveryAction, req.Recovery = "apply", ready.Recovery
+	applied := mergeToMain(req)
+	if applied.Status == "merged" || !strings.Contains(sprintAll(applied), "leak.env") || mustGit(t, bare, "rev-parse", "main") != remote {
+		t.Fatalf("apply = %+v", applied)
+	}
+}
+
+// Review 4, OPEN B: a file held back from a commit while the grant was live stays held back after it has ended: it is
+// unstaged again, left out of the diff and the commit message, and its blob refuses a merge or push.
+func TestHeldBackFileStaysHeldBackAfterTheGrantEnds(t *testing.T) {
+	wt := sessionWorktree(t, "sHeldBack")
+	holdTestSecret(t, testSecretValue)
+	argv, stdin := fakeCommitMsgEngine(t)
+	var events []map[string]interface{}
+	defer registerSecretWarnings(wt.Session, func(_ string, payload map[string]interface{}) { events = append(events, payload) })()
+	if err := os.WriteFile(filepath.Join(wt.Path, "notes.env"), []byte("KEY="+testSecretValue+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	listed := func(files []ChangedFile) string {
+		var out []string
+		for _, f := range files {
+			out = append(out, f.Path)
+		}
+		return strings.Join(out, ",")
+	}
+	// The turn end while the grant is held.
+	if files, _ := liveDiff(wt); strings.Contains(listed(files), "notes.env") {
+		t.Fatalf("held: %s", listed(files))
+	}
+
+	// The grant ends.
+	runnerSecretStore.Store(nil)
+	secretWarned.Range(func(key, _ interface{}) bool { secretWarned.Delete(key); return true })
+	events = nil
+
+	// The next turn end.
+	files, patches := liveDiff(wt)
+	if strings.Contains(listed(files), "notes.env") {
+		t.Fatalf("after: %s", listed(files))
+	}
+	for _, p := range patches {
+		if p.Path == "notes.env" || strings.Contains(p.Patch, testSecretValue) {
+			t.Fatalf("a patch for the held-back file: %+v", p)
+		}
+	}
+	mustGit(t, wt.Path, "add", "-A")
+	unstageHeldSecrets(wt.Path, nil, wt.Session)
+	if staged := mustGit(t, wt.Path, "diff", "--cached", "--name-only"); strings.Contains(staged, "notes.env") {
+		t.Fatalf("staged after the grant ended: %q", staged)
+	}
+	if len(events) == 0 {
+		t.Fatal("no warning after the grant ended")
+	}
+	if got := generateCommitMessage(wt.Path, "fallback"); got != "fallback" || argv() != "" || stdin() != "" {
+		t.Fatalf("commit message %q, argv %q, stdin %q", got, argv(), stdin())
+	}
+
+	// The agent commits it itself, around Orbit: its diff is withheld and its branch is not merged or pushed.
+	mustGit(t, wt.Path, "add", "-A")
+	mustGit(t, wt.Path, "commit", "-q", "-m", "notes")
+	_, patches = liveDiff(wt)
+	for _, p := range patches {
+		if p.Path == "notes.env" {
+			t.Fatalf("a patch for the committed file: %+v", p)
+		}
+	}
+	if refusal := secretPushRefusal(wt.Path, "HEAD", wt.baseSha()); !strings.Contains(refusal, "notes.env") {
+		t.Fatalf("push guard: %q", refusal)
+	}
+	out := mergeToMain(MergeCommand{WorkDir: wt.RepoDir, Branch: wt.Branch, SessionID: wt.Session, BaseSha: wt.baseSha()})
+	if out.Status != "error" || !strings.Contains(out.Message, "notes.env") {
+		t.Fatalf("merge = %+v", out)
+	}
+}
+
+// Review 4, OPEN B: removal records the blob ids of uncommitted files that hold the value, before it is forgotten.
+func TestRemovalRecordsUncommittedFilesHoldingTheValue(t *testing.T) {
+	home := secretTestHome(t)
+	_ = home
+	dir := filepath.Join(worktreesDir(), "s1")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, dir, "init", "-q", "-b", "main")
+	mustGit(t, dir, "config", "user.email", "t@orbit")
+	mustGit(t, dir, "config", "user.name", "T")
+	commitFile(t, dir, "base.txt", "base\n", "base")
+	if err := os.WriteFile(filepath.Join(dir, "draft.env"), []byte("KEY="+testSecretValue+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := mustGit(t, dir, "hash-object", "draft.env")
+	store := newSecretStore(newFakeSecretAPI(), filepath.Join(home, "ledger.json"))
+	store.held["g"] = &heldSecret{id: "g", exposure: secretExposureEnv, name: "K_KEY", value: secretValue(testSecretValue), revoked: make(chan struct{})}
+	store.rebuildScrubLocked()
+	store.remove("g")
+	if path, ok := taintObjectIDs(dir)[want]; !ok || path != "draft.env" {
+		t.Fatalf("recorded = %v", taintObjectIDs(dir))
+	}
+	raw, _ := os.ReadFile(secretTaintPath())
+	if strings.Contains(string(raw), testSecretValue) {
+		t.Fatal("the record holds the value")
+	}
+}
