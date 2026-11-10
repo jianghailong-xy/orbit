@@ -460,11 +460,7 @@ export class ProjectsController {
     return { ...started, coordinator };
   }
 
-  /**
-   * Record as done: the account owner records the project DONE in person
-   * (`ProjectAcceptanceService.recordProjectDone`). A request carrying an acting session is refused
-   * whole, and a seal or a request that has moved is a 409 that writes nothing.
-   */
+  /** Read the owner's current project done check. */
   @PatForbidden('OWNER_INTERACTIVE')
   @Get(':id/done-check')
   doneCheck(
@@ -474,6 +470,11 @@ export class ProjectsController {
     return this.acceptance.readProjectDoneCheck(user.userId, id);
   }
 
+  /**
+   * Record as done: the account owner records the project DONE in person
+   * (`ProjectAcceptanceService.recordProjectDone`). A request carrying an acting session is refused
+   * whole, and a seal or a request that has moved is a 409 that writes nothing.
+   */
   @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/done')
   done(
