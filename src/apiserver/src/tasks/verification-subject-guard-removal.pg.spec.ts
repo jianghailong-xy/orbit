@@ -209,7 +209,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 54,
+  assert.equal(installed.rowCount, 64,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -236,7 +236,9 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + '`project_rollup_candidate_task_insert` and `project_rollup_candidate_task_update` to `task`, '
     + 'appending the tasks GET /projects has to classify itself, and 54 once 0476 added '
     + '`session_wiki_chat_space_guard` to `session`, which refuses a write that would change the '
-    + 'wiki space a session is a chat of');
+    + 'wiki space a session is a chat of, and 64 once 0484 gave `conversation_turn`, `session` and '
+    + '`task` the Open list\'s version counters (`<table>_open_list_epoch_insert`/`_update`/`_delete`, '
+    + 'plus `conversation_turn_evidence_review_deadline`), which write only `open_list_epoch`');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }
@@ -278,6 +280,10 @@ suite('(h) every project_acceptance relation is unchanged, field by field', asyn
     // `project_acceptance_run|project_acceptance_run_closure_guard`, which 0227 removed with
     // 0215's closing move, minus the seven that stood on the four judgment relations 0229 dropped.
     // Each is a later and separate account-owner decision, and none of them is this removal's.
+    // 0484 then added the Open list's three version counters, which guard nothing.
+    'project_acceptance_criterion_definition|project_acceptance_criterion_definition_open_list_epoch_delete',
+    'project_acceptance_criterion_definition|project_acceptance_criterion_definition_open_list_epoch_insert',
+    'project_acceptance_criterion_definition|project_acceptance_criterion_definition_open_list_epoch_update',
     'project_acceptance_criterion_definition|project_acceptance_definition_normalize',
     'project_acceptance_criterion_definition|zz_project_completion_contract_definition',
   ]);

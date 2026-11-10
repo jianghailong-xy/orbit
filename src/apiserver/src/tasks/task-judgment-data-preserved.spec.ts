@@ -2888,7 +2888,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // No completion ledger, DONE fence or preserved trigger/function is changed.
       '0507_confirmation_review_waits_for_pickup',
       // 0510 adds nullable project JSON only; no preserved rows, triggers or DONE fence change.
-      '0510_project_done_task_epochs'],
+      '0510_project_done_task_epochs',
+      // 0511 only replaces 0487's `open_list_bump_owner`, so that an UPDATE of `project_integration_job` that changes
+      // nothing but a lease renewal's columns bumps no Open-list counter. No table, column, constraint or trigger is
+      // created, altered or dropped; the function writes `open_list_epoch` alone, and none of the six preserved
+      // triggers/functions is named or replaced, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE runs at apply time.
+      '0511_open_list_renewal_not_a_change'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
