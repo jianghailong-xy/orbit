@@ -199,8 +199,8 @@ import {
   derivedDoneFromLanes,
   readStandardSetConfirmationState,
   reopenRecordOfPress,
-  storeDerivedProjectStatus,
 } from './project-done-derived';
+import { refreshProjectDone } from './project-done-request';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { tellCoordinatorProjectPaused, tellCoordinatorProjectStarted } from './project-started';
 import {
@@ -4100,7 +4100,7 @@ export class ProjectsService {
    * stored must no more un-state them than a wake that could not be delivered un-records a merge.
    */
   private async reprojectProjectStatus(ownerId: string, projectId: string): Promise<void> {
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+    await refreshProjectDone(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
       push: this.push,
     }).catch((e) =>
