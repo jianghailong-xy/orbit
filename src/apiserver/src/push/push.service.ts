@@ -635,6 +635,28 @@ export class PushService {
     return holder?.agentNotifiedAt ?? now;
   }
 
+  /** The projection's successful OPEN → DONE edge, after its compare-and-set commits. */
+  async notifyProjectDone(input: {
+    ownerId: string; projectId: string; title: string;
+    criteriaCount: number;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    const { tokens } = await this.channels(input.ownerId);
+    const body = JSON.stringify({
+      aps: {
+        alert: {
+          title: `${input.title} is done`,
+          body: `Orbit recorded it: all ${input.criteriaCount} criteria met and on main.`,
+        },
+        sound: 'default',
+        'thread-id': input.projectId,
+      },
+      kind: 'project-done',
+      projectID: input.projectId,
+    });
+    await this.deliver(tokens, body, 'alert', '10');
+  }
+
   /**
    * Tell the account owner that one of the four things only they can answer is waiting
    * (`docs/project-integration-line-contract.md` §7.6 V12).
