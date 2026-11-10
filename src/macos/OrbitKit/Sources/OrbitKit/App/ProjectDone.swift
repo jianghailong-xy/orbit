@@ -250,6 +250,39 @@ public struct DoneRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// The owner card reads the server check, including refusals and warnings.
+public struct ProjectDoneFinding: Codable, Equatable, Sendable {
+    public struct Criterion: Codable, Equatable, Sendable { public let ordinal: Int }
+    public struct Task: Codable, Equatable, Sendable { public let taskId: String }
+    public struct Item: Codable, Equatable, Sendable { public let itemId: String }
+    public struct Job: Codable, Equatable, Sendable { public let integrationJobId: String }
+    public let code: String
+    public let message: String
+    public let criterion: Criterion?
+    public let tasks: [Task]
+    public let items: [Item]
+    public let jobs: [Job]
+
+    public func line(main: String) -> String {
+        let template: String
+        let n: Int
+        switch code {
+        case "DONE_NO_CRITERIA": return ProjectDone.checkNoCriteria
+        case "DONE_CRITERION_UNSATISFIED": template = ProjectDone.checkUnmet; n = criterion?.ordinal ?? 0
+        case "DONE_CRITERION_UNLANDED": template = ProjectDone.checkUnlanded; n = criterion?.ordinal ?? 0
+        case "DONE_TASKS_IN_FLIGHT": template = tasks.count == 1 ? ProjectDone.checkTask : ProjectDone.checkTasks; n = tasks.count
+        case "DONE_OWNER_ITEMS_OPEN": template = ProjectDone.checkOwnerItems; n = items.count
+        case "DONE_INTEGRATION_IN_FLIGHT": template = ProjectDone.checkLandings; n = jobs.count
+        default: return message
+        }
+        return template.replacingOccurrences(of: "{n}", with: String(n)).replacingOccurrences(of: "{main}", with: main)
+    }
+}
+
+public struct ProjectDoneCheck: Codable, Equatable, Sendable {
+    public let findings: [ProjectDoneFinding]
+}
+
 /// `POST /projects/:id/done`: the request the press answers (nil when the owner records it done
 /// without being asked), the seal the owner read, and the gaps accepted — `ProjectDoneRequestBody`.
 /// Encoded by hand: the door reads an absent request and a null one the same, and the browser
@@ -413,6 +446,15 @@ public enum ProjectDone {
     /// `DONE_CARD_RECORD`.
     public static let recordAsDone = "Record as done"
     /// `DONE_CARD_RECORD_ANYWAY` — while some criterion is still not met.
+    public static let checkNoCriteria = "No acceptance criteria are stated"
+    public static let checkUnmet = "Criterion {n} is not met"
+    public static let checkUnlanded = "Criterion {n} is not on {main}"
+    public static let checkTasks = "{n} tasks are still running"
+    public static let checkTask = "1 task is still running"
+    public static let checkOwnerItems = "Open owner items: {n}"
+    public static let checkLandings = "Landings in flight: {n}"
+    public static let findingsHeading = "Orbit can’t prove {n} things"
+    public static let findingsAccepted = "These will be kept as the gaps you accepted."
     public static let recordAsDoneAnyway = "Record as done anyway"
     /// `DONE_CARD_NOT_YET`.
     public static let notYet = "Not yet…"
@@ -425,6 +467,11 @@ public enum ProjectDone {
     /// `DONE_CARD_SEE_ACCEPTED`.
     public static let seeWhatAccepted = "See what you accepted"
     /// `DONE_CARD_REOPEN`.
+    public static let derivedFrom = "From the criteria you confirmed on"
+    public static let derivedReopenHint = "Not right? Reopen it."
+    public static func derivedLine(_ confirmedAt: String?, timeZone: TimeZone = .current) -> String? {
+        date(confirmedAt, timeZone: timeZone).map { "\(derivedFrom) \($0). \(derivedReopenHint)" }
+    }
     public static let reopenProject = "Reopen project"
     /// `DONE_CARD_EXPLANATION` — the one paragraph the card keeps.
     public static let recordingExplanation =
@@ -701,8 +748,9 @@ public enum ProjectDone {
         return ([projectTitle, askedByCoordinator] + [waiting].compactMap { $0 }).joined(separator: " · ")
     }
 
-    /// What the record press says: anyway while some criterion is not met.
-    public static func recordLabel(_ counts: ProjectDoneCounts?) -> String {
+    /// What the record press says: anyway without a request, or while some criterion is not met.
+    public static func recordLabel(_ counts: ProjectDoneCounts?, asked: Bool = true) -> String {
+        guard asked else { return recordAsDoneAnyway }
         if let counts, counts.met < counts.criteria { return recordAsDoneAnyway }
         return recordAsDone
     }
@@ -839,7 +887,7 @@ public enum ProjectDone {
                             currentDigest: String?) -> ProjectDoneRequestBody? {
         guard let digest = request?.criteriaDigest ?? currentDigest else { return nil }
         return ProjectDoneRequestBody(requestId: requestID, criteriaDigest: digest,
-                                      acceptedGaps: gaps(subject, request: request))
+                                      acceptedGaps: request?.gaps ?? [])
     }
 
     /// The note "Not yet…" sends, or nil while there is nothing in it.

@@ -36,6 +36,7 @@ struct ProjectDoneCard: View {
     let sealRead: Bool
     /// A press the door did not take, in its own words.
     var error: String? = nil
+    var doneCheck: ProjectDoneCheck? = nil
     let onRecord: () async -> Void
     /// "Not yet…", answered with the owner's note — nil where there is no request to answer. Says
     /// whether the note went.
@@ -109,7 +110,7 @@ struct ProjectDoneCard: View {
             }
         }
         doneWhen
-        ProjectDoneGapList(subject: subject, gaps: gaps)
+        if request != nil { ProjectDoneGapList(subject: subject, gaps: gaps) }
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.green)
             Text(ProjectDone.orbitCheckedLine(counts: counts, confirmedAt: confirmedAt,
@@ -118,10 +119,23 @@ struct ProjectDoneCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.orbitLabel)
-        Text(ProjectDone.recordingExplanation)
-            .font(.orbitProse)
-            .fixedSize(horizontal: false, vertical: true)
+        if request == nil, let findings = doneCheck?.findings, !findings.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(ProjectDone.findingsHeading.replacingOccurrences(of: "{n}", with: String(findings.count))).bold()
+                ForEach(Array(findings.enumerated()), id: \.offset) { _, finding in
+                    Text(finding.line(main: subject.main))
+                }
+            }
+            .font(.orbitLabel)
+            .foregroundStyle(Color.red)
+            .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.3)))
+            Text(ProjectDone.findingsAccepted).font(.orbitLabel).foregroundStyle(.secondary)
+        } else if request != nil {
+            Text(ProjectDone.recordingExplanation).font(.orbitProse)
+        }
         if let error {
             Text("\(ProjectDone.notRecorded) — \(error)")
                 .font(.orbitLabel).foregroundStyle(Color.red)
@@ -186,7 +200,7 @@ struct ProjectDoneCard: View {
                 recording = false
             }
         } label: {
-            Text(ProjectDone.recordLabel(counts)).approvalActionLabel()
+            Text(ProjectDone.recordLabel(counts, asked: request != nil)).approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
         .disabled(recording || !sealRead)
@@ -353,6 +367,10 @@ struct ProjectDoneReceiptCard: View {
 /// answer (`ProjectDone.WhyNotDone`); nothing here decides what landed.
 struct ProjectNotDoneCard: View {
     let subject: ProjectDoneSubject
+    var confirmedAt: String? = nil
+    var onReopen: (() async -> String?)? = nil
+    @State private var reopening = false
+    @State private var reopenError: String?
     /// How many open items are with the coordinator — somebody is on the work.
     let withCoordinator: Int
     /// When the coordinator asked to record the project done, or nil while nobody has.
@@ -368,6 +386,24 @@ struct ProjectNotDoneCard: View {
                 ApprovalHeader(symbol: "checkmark.circle.fill", title: ProjectDone.thisProjectIsDone,
                                tone: .green, badge: ProjectDone.settledBadge(subject.doneBy))
                 tally
+                if subject.doneBy == .derived {
+                    if let line = ProjectDone.derivedLine(confirmedAt) {
+                        Text(line).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                    if let onReopen {
+                        Button {
+                            guard !reopening else { return }
+                            reopening = true
+                            Task {
+                                reopenError = await onReopen()
+                                reopening = false
+                            }
+                        } label: { Text(ProjectDone.reopenProject).approvalActionLabel() }
+                        .buttonStyle(.borderless)
+                        .disabled(reopening)
+                    }
+                    if let reopenError { Text(reopenError).font(.orbitLabel).foregroundStyle(.red) }
+                }
             } else {
                 ApprovalHeader(symbol: "questionmark.circle", title: ProjectDone.whyHeading, tone: .blue,
                                badge: doneQuestionBadge)

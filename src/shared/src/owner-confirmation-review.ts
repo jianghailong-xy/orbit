@@ -100,7 +100,7 @@ export interface OwnerConfirmationReviewView<Instant = string> {
   };
   /** The request's requestedAt: "Reviewing since". */
   since: Instant;
-  dueAt: Instant;
+  dueAt: Instant | null;
   windowSeconds: number;
   /** H2, computed by the server from the record shown: PROBLEMS when there is one, else REVIEW. */
   headline: ConfirmationReviewHeadline | null;
@@ -148,7 +148,7 @@ export interface ConfirmationUnderReview<Instant = string> {
   reviewerTitle: string | null;
   /** The request's requestedAt. */
   since: Instant;
-  dueAt: Instant;
+  dueAt: Instant | null;
 }
 
 /**
@@ -163,7 +163,7 @@ export interface ConfirmationReviewRequestCard {
   runSessionId: string;
   branch: string | null;
   sha: string | null;
-  dueAt: string;
+  dueAt: string | null;
 }
 
 /**

@@ -1,4 +1,5 @@
-import type { CriterionLandingReason, DoneRequest, ProjectDoneBy, ProjectOpenItemRow } from '@orbit/shared';
+import type { CriterionLandingReason, DoneRequest, ProjectDoneFinding, ProjectDoneBy, ProjectOpenItemRow } from '@orbit/shared';
+import { api } from '../api';
 import { DEFAULT_MAIN_BRANCH } from './projectStart';
 import { formatSpan } from './watches';
 
@@ -16,6 +17,15 @@ export const DONE_CARD_WHAT_ORBIT_CANT_PROVE = 'What Orbit can’t prove';
 export const DONE_CARD_COORDINATOR_CHECKED = 'Coordinator checked';
 export const DONE_CARD_ORBIT_CHECKED = 'Orbit checked';
 export const DONE_CARD_RECORD = 'Record as done';
+export const DONE_CHECK_NO_CRITERIA = 'No acceptance criteria are stated';
+export const DONE_CHECK_UNMET = 'Criterion {n} is not met';
+export const DONE_CHECK_UNLANDED = 'Criterion {n} is not on {main}';
+export const DONE_CHECK_TASKS = '{n} tasks are still running';
+export const DONE_CHECK_TASK = '1 task is still running';
+export const DONE_CHECK_OWNER_ITEMS = 'Open owner items: {n}';
+export const DONE_CHECK_LANDINGS = 'Landings in flight: {n}';
+export const DONE_CARD_FINDINGS_HEADING = 'Orbit can’t prove {n} things';
+export const DONE_CARD_FINDINGS_ACCEPTED = 'These will be kept as the gaps you accepted.';
 export const DONE_CARD_RECORD_ANYWAY = 'Record as done anyway';
 export const DONE_CARD_NOT_YET = 'Not yet…';
 export const DONE_CARD_MISSING = 'What’s missing before it’s done?';
@@ -30,6 +40,14 @@ export const DONE_CARD_SHOW_ALL = 'Show all';
 export const DONE_CARD_SHOW_LESS = 'Show less';
 export const DONE_CARD_SEND_TO_COORDINATOR = 'Send to coordinator';
 export const DONE_CARD_BACK = 'Back';
+export const DONE_CARD_DERIVED_FROM = 'From the criteria you confirmed on';
+export const DONE_CARD_DERIVED_REOPEN_HINT = 'Not right? Reopen it.';
+
+/** The authenticated owner status door records the Reopen press (0469), not just OPEN. */
+export function updateProjectStatus(projectId: string, status: 'DONE' | 'CANCELLED' | 'OPEN'): Promise<{ id: string }> {
+  return api<{ id: string }>(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } });
+}
+
 export const DONE_CARD_THIS_PROJECT_IS_DONE = 'This project is done';
 export const WHY_NOT_DONE_HEADING = 'Why is this project not done?';
 export const WHY_NOT_DONE_WAITING_ON_WORK = 'Waiting on work';
@@ -58,6 +76,8 @@ export const PROJECT_DONE_RECORD_AS_DONE_ROW = 'Record as done…';
 // The object is the ergonomic web API; the named constants above are the parity API.
 export const PROJECT_DONE_COPY = {
   heading: DONE_CARD_HEADING,
+  findingsHeading: DONE_CARD_FINDINGS_HEADING,
+  findingsAccepted: DONE_CARD_FINDINGS_ACCEPTED,
   coordinatorCall: DONE_CARD_COORDINATOR_CALL,
   doneWhen: DONE_CARD_DONE_WHEN,
   whatOrbitCantProve: DONE_CARD_WHAT_ORBIT_CANT_PROVE,
@@ -82,6 +102,8 @@ export const PROJECT_DONE_COPY = {
   mergedOutsideOrbit: WHY_NOT_DONE_MERGED_OUTSIDE_ORBIT,
   nothingToLand: WHY_NOT_DONE_NOTHING_TO_LAND,
   thisProjectIsDone: DONE_CARD_THIS_PROJECT_IS_DONE,
+  derivedFrom: DONE_CARD_DERIVED_FROM,
+  derivedReopenHint: DONE_CARD_DERIVED_REOPEN_HINT,
   openItemsDoneRequest: PROJECT_DONE_COORDINATOR_ASKED,
   gapsItCouldntProve: PROJECT_DONE_GAPS_IT_COULDNT_PROVE,
   notAskedYet: PROJECT_DONE_NOT_ASKED_YET,
@@ -120,6 +142,19 @@ export function whyNotDoneNeedsCallDetail(main: string = DEFAULT_MAIN_BRANCH): s
 }
 export function landedOn(main: string = DEFAULT_MAIN_BRANCH): string {
   return `landed on ${main}`;
+}
+
+export function doneFindingLine(finding: ProjectDoneFinding, main: string = DEFAULT_MAIN_BRANCH): string {
+  const ordinal = finding.criterion?.ordinal;
+  switch (finding.code) {
+    case 'DONE_NO_CRITERIA': return DONE_CHECK_NO_CRITERIA;
+    case 'DONE_CRITERION_UNSATISFIED': return DONE_CHECK_UNMET.replace('{n}', String(ordinal));
+    case 'DONE_CRITERION_UNLANDED': return DONE_CHECK_UNLANDED.replace('{n}', String(ordinal)).replace('{main}', main);
+    case 'DONE_TASKS_IN_FLIGHT': return finding.tasks.length === 1 ? DONE_CHECK_TASK : DONE_CHECK_TASKS.replace('{n}', String(finding.tasks.length));
+    case 'DONE_OWNER_ITEMS_OPEN': return DONE_CHECK_OWNER_ITEMS.replace('{n}', String(finding.items.length));
+    case 'DONE_INTEGRATION_IN_FLIGHT': return DONE_CHECK_LANDINGS.replace('{n}', String(finding.jobs.length));
+    default: return finding.message;
+  }
 }
 
 export type ProjectDoneCriterion = {

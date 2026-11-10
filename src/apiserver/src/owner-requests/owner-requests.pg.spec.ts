@@ -15,7 +15,10 @@
  *       matches nothing (the sweep), and the row is unchanged;
  *   (f) a PENDING request past its deadline is refused as expired before the sweep reaches it;
  *       only the asker may withdraw; a decline needs a reason; a runner cannot speak for a session
- *       it does not host.
+ *       it does not host;
+ *   (g) the owner's done or decline through the controller records the client kind of its
+ *       X-Orbit-Client header (`ios/1.0` reads back `ios`, from the answer, by id and in the list);
+ *       an unknown client, a bare kind with no version, or none, stores null, and a withdrawn or expired request reads null.
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to its own account.
  */
@@ -53,11 +56,16 @@ import {
   canTransition,
   type OwnerRequestState,
 } from './owner-request';
+import { OwnerRequestsController } from './owner-requests.controller';
 import { OwnerRequestsService, type OwnerRequestView } from './owner-requests.service';
+import { OwnerSecretsService } from './owner-secrets.service';
+import type { AuthUser } from '../common/current-user.decorator';
 import type { FileOwnerRequestDto } from './dto';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
+// Filing a SECRET needs a store to keep its value in later (owner-secret-crypto.ts).
+process.env.PROVIDER_SECRET_KEY ??= 'owner-requests-pg-spec-key';
 
 interface Account {
   ownerId: string;
@@ -90,7 +98,9 @@ test('owner requests: any session files one, and every ending is final', {
   const prisma = db as unknown as PrismaService;
   const told: string[] = [];
   const push = { notifyOwnerRequest: async (id: string) => { told.push(id); } } as unknown as PushService;
-  const service = new OwnerRequestsService(prisma, push);
+  const secrets = new OwnerSecretsService(prisma);
+  const service = new OwnerRequestsService(prisma, secrets, push);
+  const owner = new OwnerRequestsController(service, secrets);
   const door = new RunnerOwnerRequestsController(prisma, service);
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
@@ -130,7 +140,7 @@ test('owner requests: any session files one, and every ending is final', {
     const secret = await file({
       kind: 'SECRET',
       title: 'Stripe test key',
-      secretSpec: { name: 'Stripe test key', runnerId: a.runner.id, envVar: 'STRIPE_KEY' },
+      secretSpec: { name: 'Stripe test key', envVar: 'STRIPE_KEY' },
       verifyHint: 'curl https://api.stripe.com/v1/balance answers 200',
     });
     const step = await file({
@@ -194,6 +204,11 @@ test('owner requests: any session files one, and every ending is final', {
       () => file({ kind: 'SECRET', secretSpec: { name: 'k', runnerId: a.runner.id } }),
       () => file({ kind: 'SECRET', secretSpec: { name: 'k', runnerId: a.runner.id, envVar: 'A', filePath: '/x' } }),
       () => file({ kind: 'SECRET', secretSpec: { name: 'k', runnerId: a.runner.id, envVar: 'not a name' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', envVar: 'PATH' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', envVar: 'ORBIT_SESSION_ID' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', envVar: 'LD_PRELOAD' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', filePath: 'relative/key' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', filePath: '~/a/../../etc/key' } }),
       () => file({ kind: 'CONFIRM', options: [{ label: 'x' }] }),
       () => file({ kind: 'DECISION', options: [{ label: 'x' }], recommendedOption: 1 }),
       () => file({ kind: 'CONFIRM', expiresAt: new Date(Date.now() - 1_000).toISOString() }),
@@ -203,9 +218,10 @@ test('owner requests: any session files one, and every ending is final', {
     const other = await account(db, 'other');
     await assert.rejects(file({ kind: 'CONFIRM', blocksTaskIds: [other.taskId] }), NotFoundException);
     await assert.rejects(file({ kind: 'CONFIRM', projectId: other.projectId }), NotFoundException);
+    // The runner is the asking session's own (design §4.1): naming another one is refused, never honoured.
     await assert.rejects(
       file({ kind: 'SECRET', secretSpec: { name: 'k', runnerId: other.runner.id, envVar: 'K' } }),
-      NotFoundException,
+      BadRequestException,
     );
     assert.equal(await db.ownerRequest.count({ where: { ownerId: a.ownerId } }), before);
   });
@@ -318,6 +334,45 @@ test('owner requests: any session files one, and every ending is final', {
     await assert.rejects(door.get(other.runner, mine.id), NotFoundException);
     await assert.rejects(service.complete(other.ownerId, mine.id, {}), NotFoundException);
   });
+
+  await t.test('(g) the client that ended a request is recorded from X-Orbit-Client', async () => {
+    const user = { userId: a.ownerId } as AuthUser;
+    const stored = async (id: string) =>
+      (await sql.query<{ resolved_client: string | null }>(`SELECT resolved_client FROM owner_request WHERE id = $1`, [id]))
+        .rows[0].resolved_client;
+
+    const fromPhone = await file({ kind: 'CONFIRM', title: 'done from a phone' });
+    const done = await owner.complete(user, fromPhone.id, { text: 'ok' }, 'ios/1.0');
+    assert.equal(done.state, 'DONE');
+    assert.equal(done.resolvedClient, 'ios', 'the answer says which client ended it');
+    assert.equal((await owner.get(user, fromPhone.id)).resolvedClient, 'ios', 'and so does a later read');
+    const listed = (await owner.list(user, 'done')).requests.find((r) => r.id === fromPhone.id);
+    assert.equal(listed?.resolvedClient, 'ios', 'and the list');
+    assert.equal(await stored(fromPhone.id), 'ios');
+
+    const fromWeb = await file({ kind: 'CONFIRM', title: 'declined from the web' });
+    const declined = await owner.decline(user, fromWeb.id, { reason: 'not now' }, 'web/1.2.3');
+    assert.equal(declined.state, 'DECLINED');
+    assert.equal(declined.resolvedClient, 'web');
+    assert.equal((await owner.get(user, fromWeb.id)).resolvedClient, 'web');
+
+    for (const header of ['cli/1.0', 'iOS/1.0', 'ios', 'runner/0.9', '', undefined]) {
+      const request = await file({ kind: 'CONFIRM', title: `done from ${String(header)}` });
+      const ended = await owner.complete(user, request.id, {}, header);
+      assert.equal(ended.resolvedClient, null, `${JSON.stringify(header)} is no client`);
+      assert.equal((await owner.get(user, request.id)).resolvedClient, null);
+      assert.equal(await stored(request.id), null);
+    }
+
+    for (const ending of ['WITHDRAWN', 'EXPIRED'] as const) {
+      const request = await file({ kind: 'CONFIRM', title: `${ending} reads no client`, expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+      const ended = await end(request.id, ending);
+      assert.equal(ended.state, ending);
+      assert.equal(ended.resolvedClient, null, `a ${ending} request names no client`);
+      assert.equal((await owner.get(user, request.id)).resolvedClient, null);
+      assert.equal(await stored(request.id), null);
+    }
+  });
 });
 
 /** An account with a runner, a project coordinated by one session, and a worker session beside it. */
@@ -334,7 +389,7 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
       name: `owner-requests-runner-${label}`,
       tokenHash: `hash-${randomUUID()}`,
       status: RunnerStatus.ONLINE,
-      capabilities: [],
+      capabilities: ['owner-secret/v1'],
       capabilitiesReportedAt: new Date(),
       lastHeartbeatAt: new Date(),
     },

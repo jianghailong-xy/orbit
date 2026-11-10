@@ -78,7 +78,7 @@ final class AcceptedTurnWiringTests: XCTestCase {
     /// Cancel — the runner has the turn.
     func testTheHeadIsDrawnByTheTranscriptsOwnRowWithNoCancel() throws {
         let console = try source(Self.consolePath)
-        let item = statements(try section(console, from: "case .item(let item):", to: "case .toolGroup(let cards):"))
+        let item = statements(try section(console, from: "case .item(let item):", to: "case .steps(let items):"))
         XCTAssertEqual(item.dropFirst().first,
                        "TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)",
                        "an item row is no longer drawn by the transcript's item view")

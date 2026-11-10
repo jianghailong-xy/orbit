@@ -20,6 +20,7 @@ import {
 } from '../components/ProjectAcceptanceCard';
 import { ProjectBlockersCard, type ProjectBlockers } from '../components/ProjectBlockers';
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
+import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
@@ -99,6 +100,7 @@ import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import {
+  updateProjectStatus,
   doneProvenance,
   PROJECT_DONE_COPY,
   type ProjectDerivedDone,
@@ -748,12 +750,7 @@ type ProjectStatusPress = 'DONE' | 'CANCELLED' | 'OPEN';
  * goes through is where that claim is put beside whatever evidence the server can actually offer;
  * a dropdown would read as filing a status the system already knew.
  */
-export function updateProjectStatus(
-  projectId: string,
-  status: ProjectStatusPress,
-): Promise<{ id: string }> {
-  return api<{ id: string }>(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } });
-}
+export { updateProjectStatus } from '../lib/projectDone';
 
 /** The two task statuses that END a task. FAILED is deliberately not one of them: it is a run's
  *  own conservative self-report that it stopped short, so the work under it is still outstanding —
@@ -2537,6 +2534,7 @@ function ProjectTaskRow({
                     {task.title}
                   </ProjectTaskLink>{' '}
                   <Badge tone={tagTone(TASK_STATUS_COLOR[task.status] ?? 'default')}>{task.status}</Badge>
+                  <WaitingOnYouTaskBadge taskId={task.id} />
                   {workLabel ? (
                     <Badge data-testid="project-task-work-state" tone={tagTone(workLabel.color)}>
                       {workLabel.text}

@@ -124,6 +124,11 @@ type PlanUsage struct {
 	SevenDay       *PlanUsageWindow `json:"sevenDay,omitempty"`
 	SevenDayOpus   *PlanUsageWindow `json:"sevenDayOpus,omitempty"`
 	SevenDaySonnet *PlanUsageWindow `json:"sevenDaySonnet,omitempty"`
+	// Claude only, display only (no quota decision reads them): the endpoint's model-scoped weekly
+	// limits, its extra usage, and its weekly-reset grants (claude_usage_extras.go).
+	ModelLimits []PlanUsageModelLimit `json:"modelLimits,omitempty"`
+	ExtraUsage  *PlanUsageExtraUsage  `json:"extraUsage,omitempty"`
+	ResetGrants *PlanUsageResetGrants `json:"resetGrants,omitempty"`
 
 	// Kimi Code's monthly limits: everything the account spends, and its coding use (kimi_usage.go).
 	Month     *PlanUsageWindow `json:"month,omitempty"`
@@ -558,7 +563,7 @@ func (r *claudeUsageRead) fetch(ctx context.Context, client *http.Client, config
 	}
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(cctx, http.MethodGet, planUsageURL, nil)
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, planUsageURL+claudeUsageQuery, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -687,14 +692,16 @@ func parsePlanUsage(body []byte) (*PlanUsage, error) {
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, err
 	}
-	return &PlanUsage{
+	usage := &PlanUsage{
 		Provider:       providerClaude,
 		FiveHour:       norm(raw.FiveHour),
 		SevenDay:       norm(raw.SevenDay),
 		SevenDayOpus:   norm(raw.SevenDayOpus),
 		SevenDaySonnet: norm(raw.SevenDaySonnet),
 		FetchedAt:      time.Now().UTC().Format(time.RFC3339),
-	}, nil
+	}
+	parseClaudeUsageExtras(body, usage)
+	return usage, nil
 }
 
 func fetchCodexPlanUsage(ctx context.Context, reader *codexResetReader) (*PlanUsage, error) {

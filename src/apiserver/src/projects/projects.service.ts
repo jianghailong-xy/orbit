@@ -6,7 +6,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { PushService } from '../push/push.service';
 import {
   Prisma,
   ProjectIdentitySource,
@@ -197,8 +199,8 @@ import {
   derivedDoneFromLanes,
   readStandardSetConfirmationState,
   reopenRecordOfPress,
-  storeDerivedProjectStatus,
 } from './project-done-derived';
+import { refreshProjectDone } from './project-done-request';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { tellCoordinatorProjectPaused, tellCoordinatorProjectStarted } from './project-started';
 import {
@@ -1031,6 +1033,7 @@ export class ProjectsService {
     // waited for the conversation being replaced is the new one's to decide. Defaulted like the rest.
     private readonly evidenceQueue: CoordinatorEvidenceQueueService =
       undefined as unknown as CoordinatorEvidenceQueueService,
+    @Optional() private readonly push?: PushService,
   ) {}
 
   /**
@@ -4097,8 +4100,9 @@ export class ProjectsService {
    * stored must no more un-state them than a wake that could not be delivered un-records a merge.
    */
   private async reprojectProjectStatus(ownerId: string, projectId: string): Promise<void> {
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+    await refreshProjectDone(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
+      push: this.push,
     }).catch((e) =>
       this.logger.warn(`derived project status not re-projected after a criteria edit: ${
         (e as { message?: string })?.message ?? String(e)}`),

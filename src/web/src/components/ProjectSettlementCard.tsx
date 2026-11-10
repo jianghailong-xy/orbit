@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DoneRequest, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind } from '@orbit/shared';
+import type { DoneRequest, ProjectDoneCheck, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind } from '@orbit/shared';
 import { api } from '../api';
 import {
   acceptanceConfirmationKey,
@@ -23,7 +23,9 @@ import {
   DONE_CARD_SEE_ACCEPTED,
   PROJECT_DONE_COPY,
   criterionForGap,
+  doneFindingLine,
   doneProvenance,
+  updateProjectStatus,
   formatDoneDate,
   formatDoneDateTime,
   doneRequestWaiting,
@@ -720,6 +722,12 @@ export function SessionProjectSettlementCard({
     enabled: Boolean(projectId) && needsStanding,
     refetchInterval: needsStanding ? streamPoll(20_000) : false,
   });
+  const doneCheckRead = useQuery({
+    queryKey: ['project', project, 'done-check'],
+    queryFn: () => api<ProjectDoneCheck>(`/projects/${encodeURIComponent(project)}/done-check`),
+    enabled: Boolean(projectId) && needsStanding && !doneRequest,
+    refetchInterval: needsStanding ? streamPoll(20_000) : false,
+  });
   const done = useMutation({
     mutationFn: async () => {
       // A request carries the exact criteria seal it was made about.  Answering with that seal
@@ -732,7 +740,7 @@ export function SessionProjectSettlementCard({
         body: {
           requestId: doneRequestRow?.itemId ?? null,
           criteriaDigest,
-          acceptedGaps: doneRequest?.gaps ?? syntheticDoneGaps(document as ProjectDoneDocument),
+          acceptedGaps: doneRequest?.gaps ?? [],
         },
       });
     },
@@ -787,8 +795,9 @@ export function SessionProjectSettlementCard({
         standing={standing}
         receipt={doneReceipt}
         keys={keys}
-        busy={done.isPending || !(doneRequest?.criteriaDigest ?? standing?.currentVersion.digest)}
-        error={done.error ?? decline.error}
+        doneCheck={doneCheckRead.data}
+        busy={done.isPending || !(doneRequest?.criteriaDigest ?? standing?.currentVersion.digest) || (!doneRequest && !doneCheckRead.data)}
+        error={done.error ?? decline.error ?? doneCheckRead.error}
         notYetBusy={decline.isPending}
         openItemsCount={orbitCheckedOpenItemCount(openItemsRead.data)}
         runningCount={doneProject.derivedDone?.counts?.byReason?.IN_FLIGHT ?? 0}
@@ -838,6 +847,7 @@ export interface ProjectDoneCardProps {
   onReopen?: () => void;
   /** A page opened without a coordinator request. */
   ownerInitiated?: boolean;
+  doneCheck?: ProjectDoneCheck | null;
   /** The open-item read is used only for the sentence in the Orbit checked row. */
   openItemsCount?: number;
   runningCount?: number;
@@ -849,37 +859,6 @@ function doneCriterionText(project: ProjectDoneDocument, key: string): string {
 
 function doneCriterionOrdinal(project: ProjectDoneDocument, key: string): number | null {
   return criterionForGap(project, key)?.ordinal ?? null;
-}
-
-function syntheticDoneGaps(project: ProjectDoneDocument): Array<{
-  criterionKey: string;
-  title: string;
-  whyNotProven: string;
-  coordinatorChecked?: string;
-  evidenceRefs?: string[];
-}> {
-  const criteria = project.derivedDone?.criteria ?? [];
-  const main = mainBranchName(project.integration?.upstreamRef);
-  return criteria
-    // NOTHING_TO_LAND and CODELESS are intentional zero-work outcomes, not gaps to paper over
-    // with a merge receipt.  Keep genuine work/receipt gaps in the owner-initiated payload.
-    .filter((criterion) => (
-      (criterion.landingReason !== null
-        && criterion.landingReason !== 'NOTHING_TO_LAND'
-        && criterion.landingReason !== 'CODELESS')
-      || !criterion.satisfied
-    ))
-    .map((criterion) => {
-      const item = project.acceptanceCriteriaItems?.find((candidate) => candidate.id === criterion.definitionId);
-      const reason = landingReasonLabel(criterion.landingReason, main);
-      return {
-        criterionKey: item?.key ?? item?.id ?? criterion.definitionId,
-        title: item?.text ?? criterion.definitionId,
-        whyNotProven: criterion.satisfied
-          ? `Orbit cannot prove this criterion is on ${main}: ${reason}.`
-          : 'Orbit cannot prove this criterion is met by its work yet.',
-      };
-    });
 }
 
 function orbitCheckedText(
@@ -1020,12 +999,13 @@ export function ProjectDoneCard({
   onNotYet,
   onReopen,
   ownerInitiated = false,
+  doneCheck = null,
   openItemsCount = 0,
   runningCount = 0,
 }: ProjectDoneCardProps): JSX.Element {
   const [notYetOpen, setNotYetOpen] = useState(false);
   const [note, setNote] = useState('');
-  const gaps = doneRequest?.gaps ?? syntheticDoneGaps(project);
+  const gaps = doneRequest?.gaps ?? [];
   const counts = project.derivedDone?.counts;
   const receiptDate = formatDoneDate(receipt?.doneAt ?? project.doneAt);
   const accepted = receipt?.acceptedGaps ?? project.acceptedGaps ?? [];
@@ -1093,14 +1073,18 @@ export function ProjectDoneCard({
           </div>
         ) : null}
         <DoneWhenSummary project={project} counts={counts} />
-        <DoneGaps project={project} gaps={gaps} />
+        {doneRequest ? <DoneGaps project={project} gaps={gaps} /> : null}
         <div className="project-done-orbit-checked">
           <span aria-hidden="true">✓</span>{' '}
           {orbitCheckedText(project, standing, openItemsCount, runningCount)}
         </div>
-        <p className="project-done-explanation">
-          {PROJECT_DONE_COPY.recordingExplanation}
-        </p>
+        {!doneRequest && doneCheck && doneCheck.findings.length > 0 ? <>
+          <div className="project-done-findings" role="note">
+            <b>{PROJECT_DONE_COPY.findingsHeading.replace('{n}', String(doneCheck.findings.length))}</b>
+            <ul>{doneCheck.findings.map((finding, index) => <li key={index}>{doneFindingLine(finding, mainBranchName(project.integration?.upstreamRef))}</li>)}</ul>
+          </div>
+          <p className="project-done-explanation">{PROJECT_DONE_COPY.findingsAccepted}</p>
+        </> : doneRequest ? <p className="project-done-explanation">{PROJECT_DONE_COPY.recordingExplanation}</p> : null}
         {error ? <Alert className="project-settlement-error" type="error" title="Project was not recorded done" description={error.message} /> : null}
         {notYetOpen ? (
           <div className="project-done-not-yet">
@@ -1127,7 +1111,7 @@ export function ProjectDoneCard({
       {!notYetOpen ? (
         <div className="approval-actions project-settlement-actions">
           <button type="button" className="card-action card-action--primary" disabled={!canRecord} onClick={onRecordDone}>
-            {counts && counts.met < counts.criteria ? PROJECT_DONE_COPY.recordAsDoneAnyway : DONE_CARD_RECORD}
+            {!doneRequest || (counts && counts.met < counts.criteria) ? PROJECT_DONE_COPY.recordAsDoneAnyway : DONE_CARD_RECORD}
             {keys && canRecord ? <span className="approval-kbd">{ENTER_HINT}</span> : null}
           </button>
           {doneRequest ? (
@@ -1184,6 +1168,12 @@ export function ProjectDoneDialog({
     enabled: open && Boolean(projectId),
     refetchInterval: open ? streamPoll(20_000) : false,
   });
+  const doneCheckRead = useQuery({
+    queryKey: ['project', projectId, 'done-check'],
+    queryFn: () => api<ProjectDoneCheck>(`/projects/${encodeURIComponent(projectId)}/done-check`),
+    enabled: open && Boolean(projectId) && !(suppliedRow ?? openItemsRead.data?.doneRequest)?.doneRequest,
+    refetchInterval: open ? streamPoll(20_000) : false,
+  });
   const [receipt, setReceipt] = useState<ProjectDoneRecord | null>(null);
   const [declineError, setDeclineError] = useState<Error | null>(null);
   const record = useMutation({
@@ -1226,7 +1216,7 @@ export function ProjectDoneDialog({
   const openItemsCount = orbitCheckedOpenItemCount(openItemsRead.data);
   const submit = (): void => {
     if (!project || !criteriaDigest || record.isPending) return;
-    record.mutate({ requestId: row?.itemId ?? null, criteriaDigest, acceptedGaps: (request?.gaps ?? syntheticDoneGaps(project)) as Record<string, unknown>[] });
+    record.mutate({ requestId: row?.itemId ?? null, criteriaDigest, acceptedGaps: (request?.gaps ?? []) as Record<string, unknown>[] });
   };
   const submitNotYet = (note: string): void => {
     if (row?.itemId && note.trim()) decline.mutate({ itemId: row.itemId, note });
@@ -1243,9 +1233,10 @@ export function ProjectDoneDialog({
           requestWaitingSince={row?.waitingSince ?? null}
           standing={standing}
           receipt={receipt}
-          busy={record.isPending || !criteriaDigest}
-          error={record.error ?? declineError}
+          busy={record.isPending || !criteriaDigest || (!request && !doneCheckRead.data)}
+          error={record.error ?? declineError ?? doneCheckRead.error}
           notYetBusy={decline.isPending}
+          doneCheck={doneCheckRead.data}
           ownerInitiated={!request}
           openItemsCount={openItemsCount}
           runningCount={runningCount}
@@ -1258,11 +1249,34 @@ export function ProjectDoneDialog({
   );
 }
 
+/** The sessions page uses the same standing confirmation and owner Reopen door as the project page. */
+export function ProjectSessionsDoneCard({ projectId, project }: { projectId: string; project: ProjectDoneDocument }): JSX.Element {
+  const qc = useQueryClient();
+  const standing = useQuery({
+    queryKey: acceptanceConfirmationKey(projectId),
+    queryFn: () => readAcceptanceConfirmation(projectId),
+    enabled: project.doneBy === 'DERIVED',
+  });
+  const reopen = useMutation({
+    mutationFn: () => updateProjectStatus(projectId, 'OPEN'),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['project', projectId] });
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+  return <ProjectWhyNotDoneCard project={project} confirmedAt={standing.data?.confirmation?.confirmedAt}
+    onReopen={() => reopen.mutate()} reopenBusy={reopen.isPending} reopenError={reopen.error} />;
+}
+
 export interface ProjectWhyNotDoneCardProps {
   project: ProjectDoneDocument;
   openItems?: { withCoordinator?: readonly ProjectOpenItemRow[]; doneRequest?: ProjectOpenItemRow | null };
   onReview?: () => void;
   onAskCoordinator?: () => void;
+  confirmedAt?: string | null;
+  onReopen?: () => void;
+  reopenBusy?: boolean;
+  reopenError?: Error | null;
   /** The clock the request's wait is read against. */
   now?: number;
 }
@@ -1284,8 +1298,13 @@ export function ProjectWhyNotDoneCard({
   openItems,
   onReview,
   onAskCoordinator,
+  confirmedAt,
+  onReopen,
+  reopenBusy,
+  reopenError,
   now = Date.now(),
 }: ProjectWhyNotDoneCardProps): JSX.Element {
+  const confirmedDate = formatDoneDate(confirmedAt);
   const criteria = project.derivedDone?.criteria ?? [];
   const byKey = new Map((project.acceptanceCriteriaItems ?? []).map((item) => [item.id, item]));
   const main = mainBranchName(project.integration?.upstreamRef);
@@ -1307,13 +1326,18 @@ export function ProjectWhyNotDoneCard({
   // A DONE project is done whatever its criteria still say: nothing is left to ask "why not".
   if (project.status === 'DONE' || (!hasGaps && project.derivedDone?.done === true)) {
     return (
-      <div className="approval-card project-settlement project-why-not-done is-settled">
+      <div className={`approval-card project-settlement project-why-not-done is-settled${project.doneBy === 'DERIVED' ? ' is-derived' : ''}`}>
         <div className="approval-head project-settlement-head">
           <span className="project-settlement-heading">{PROJECT_DONE_COPY.thisProjectIsDone}</span>
           <span className="criteria-provenance">{project.doneBy === 'OWNER' ? PROJECT_DONE_COPY.recordedByYou : PROJECT_DONE_COPY.recordedByOrbit}</span>
         </div>
         <div className="approval-body is-questions project-settlement-body">
           <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone, main)}</p>
+          {project.doneBy === 'DERIVED' && confirmedDate ? <p className="project-done-derived-line">{PROJECT_DONE_COPY.derivedFrom} {confirmedDate}. {PROJECT_DONE_COPY.derivedReopenHint}</p> : null}
+          {project.doneBy === 'DERIVED' && onReopen ? (
+            <button type="button" className="card-action project-done-derived-reopen" disabled={reopenBusy} onClick={onReopen}>{PROJECT_DONE_COPY.reopenProject}</button>
+          ) : null}
+          {reopenError ? <Alert type="error" title="The project was not reopened" description={reopenError.message} /> : null}
         </div>
       </div>
     );

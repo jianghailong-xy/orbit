@@ -109,10 +109,10 @@ describe('the live drafts sit where the generation started', () => {
   it('keeps a run of tool calls folded when nothing is streaming', () => {
     // The two halves either side of the drafts are grouped separately, so an idle transcript
     // has to stay ONE list: splitting it would break a run of calls that spans the seam out of
-    // its summary row and back into three cards.
+    // its steps line and into two.
     const calls = [1, 2, 3].map((i) => ev(i, 'tool_use', { id: `t${i}`, name: 'Bash', input: { command: `echo ${i}` } }));
     const html = renderToStaticMarkup(<Transcript events={calls} live />);
 
-    expect(html).toContain('chat-tool-group');
+    expect(html.split('class="chat-steps"').length - 1).toBe(1);
   });
 });

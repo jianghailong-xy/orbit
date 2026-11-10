@@ -9,6 +9,7 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
+import { PushService } from '../push/push.service';
 import {
   CreatorType,
   Prisma,
@@ -97,6 +98,7 @@ import {
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from './evidence-review.service';
+import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
@@ -130,7 +132,7 @@ import {
 } from '../projects/project-handoff.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import type { RunStop } from '../projects/task-run-stopped.producer';
-import { storeDerivedProjectStatus } from '../projects/project-done-derived';
+import { refreshProjectDone } from '../projects/project-done-request';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { criterionStandingRefusal, quotedCriterion } from './task-evidence-decision';
 import {
@@ -2134,6 +2136,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      */
     @Optional() files?: FilesService,
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
+    @Optional() private readonly confirmationReviews?: OwnerConfirmationReviewService,
+    @Optional() private readonly push?: PushService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.files = files ?? new FilesService(prisma);
@@ -2243,8 +2247,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         select: { ownerId: true },
       }).catch(() => null);
       if (!project) continue;
-      await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId, {
+      await refreshProjectDone(this.prisma, project.ownerId, projectId, {
         sessions: this.sessions,
+        push: this.push,
       }).catch((e) =>
         this.logger.warn(`derived project status not reconciled: ${e?.message ?? e}`),
       );
@@ -2580,6 +2585,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
       .then(() => this.evidenceReviews?.deliverOwedTo())
+      .then(() => this.confirmationReviews?.deliverPendingFor())
       .catch((e) =>
         this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
       );

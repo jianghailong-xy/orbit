@@ -175,7 +175,7 @@ final class ProjectDoneWiringTests: XCTestCase {
                      "Text(ProjectDone.criterionState(criterion, main: subject.main))",
                      "ProjectDoneGapList(subject: subject, gaps: gaps)",
                      "ProjectDone.orbitCheckedLine(counts: counts, confirmedAt: confirmedAt,",
-                     "Text(ProjectDone.recordingExplanation)", "Text(ProjectDone.recordLabel(counts))",
+                     "Text(ProjectDone.recordingExplanation)", "Text(ProjectDone.recordLabel(counts, asked: request != nil))",
                      "Text(ProjectDone.notYet)", "TextField(ProjectDone.missingBeforeDone, text: $note, axis: .vertical)",
                      "Text(ProjectDone.notYetHint)", "Text(ProjectDone.sendToCoordinator)", "Text(ProjectDone.back)",
                      "if request != nil, onNotYet != nil { notYetButton }",

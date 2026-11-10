@@ -464,13 +464,18 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
     write: suspend (String, suspend () -> Unit) -> String?) {
     val doc = state.document ?: return
     val row = ProjectDone.live(state.openItems, ProjectDoc.status(doc))
+    var doneCheck by remember { mutableStateOf<JsonObject?>(null) }
     var confirmation by remember { mutableStateOf<JsonObject?>(null) }
     var unread by remember { mutableStateOf(false) }
     var record by remember { mutableStateOf<JsonObject?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     // While a press is out the sheet cannot be put away from it.
     var writing by remember { mutableStateOf(false) }
-    LaunchedEffect(id) {
+    LaunchedEffect(id, row?.text("itemId")) {
+        if (row == null) try { doneCheck = api.doneCheck(id) }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) { error = failureReason(failure) }
+
         try { confirmation = api.confirmation(id); unread = false } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { unread = true }
     }
     val digest = confirmation?.obj("currentVersion")?.text("digest")
@@ -486,8 +491,8 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
         Surface(Modifier.fillMaxWidth(0.94f).testTag("project-done-sheet"), shape = MaterialTheme.shapes.large) {
             Column(Modifier.heightIn(max = 720.dp).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ProjectDoneCard(doc, row, confirmation?.obj("confirmation")?.text("confirmedAt"), ProjectDone.openItemsCount(state.openItems),
-                    ProjectDone.runningCount(doc), record, sealRead = row?.obj("doneRequest") != null || digest != null, now = now, enabled = enabled,
-                    error = error, tag = "project-done",
+                    ProjectDone.runningCount(doc), record, sealRead = row?.obj("doneRequest") != null || (digest != null && doneCheck != null), now = now, enabled = enabled,
+                    error = error, tag = "project-done", doneCheck = doneCheck,
                     onRecord = {
                         val body = ProjectDone.body(doc, itemId, row?.obj("doneRequest"), digest)
                         var answer: JsonObject? = null

@@ -230,7 +230,7 @@ public struct OwnerConfirmationReviewView: Codable, Equatable, Sendable {
     public let reviewer: Reviewer
     /// The request's requestedAt: "Reviewing since".
     public let since: String
-    public let dueAt: String
+    public let dueAt: String?
     public let windowSeconds: Int
     public let headline: ConfirmationReviewHeadline?
     public let review: Record?
@@ -239,7 +239,7 @@ public struct OwnerConfirmationReviewView: Codable, Equatable, Sendable {
 
     public init(reviewId: String, state: OwnerConfirmationReviewState,
                 notReviewedReason: OwnerConfirmationNotReviewedReason? = nil,
-                outdated: Outdated? = nil, reviewer: Reviewer, since: String, dueAt: String,
+                outdated: Outdated? = nil, reviewer: Reviewer, since: String, dueAt: String?,
                 windowSeconds: Int, headline: ConfirmationReviewHeadline? = nil, review: Record? = nil,
                 returned: ConfirmationReturnRecordView? = nil,
                 problems: ConfirmationReturnRecordView? = nil) {
@@ -274,7 +274,7 @@ public struct OwnerConfirmationReviewView: Codable, Equatable, Sendable {
         outdated = try? box.decodeIfPresent(Outdated.self, forKey: .outdated)
         reviewer = try box.decode(Reviewer.self, forKey: .reviewer)
         since = try box.decode(String.self, forKey: .since)
-        dueAt = try box.decode(String.self, forKey: .dueAt)
+        dueAt = try box.decodeIfPresent(String.self, forKey: .dueAt)
         windowSeconds = try box.decode(Int.self, forKey: .windowSeconds)
         headline = try? box.decodeIfPresent(ConfirmationReviewHeadline.self, forKey: .headline)
         review = try? box.decodeIfPresent(Record.self, forKey: .review)
@@ -325,10 +325,10 @@ public struct ConfirmationUnderReview: Codable, Equatable, Sendable {
     public let reviewerTitle: String?
     /// The request's requestedAt.
     public let since: String
-    public let dueAt: String
+    public let dueAt: String?
 
     public init(requestId: String, taskId: String, reviewerSessionId: String? = nil,
-                reviewerTitle: String? = nil, since: String, dueAt: String) {
+                reviewerTitle: String? = nil, since: String, dueAt: String?) {
         self.requestId = requestId
         self.taskId = taskId
         self.reviewerSessionId = reviewerSessionId
