@@ -69,6 +69,59 @@ test('a payload carrying no window we understand reads as no quota, not an empty
   assert.equal(parseSubscriptionUsage('nope', 'now'), null);
 });
 
+test('the display-only parts beside the windows are read as the runner reads them', () => {
+  // The OAuth endpoint's answer on 2026-11-10, trimmed to the parts read.
+  const usage = parseSubscriptionUsage(
+    {
+      seven_day: { utilization: 99, resets_at: '2026-11-13T04:00:00Z' },
+      cedar_ember: { eligible: false, ineligible_reason: 'surface', grants: [] },
+      extra_usage: { is_enabled: false },
+      limits: [
+        { kind: 'weekly_all', percent: 99, resets_at: '2026-11-13T04:00:00Z', scope: null, is_active: true },
+        {
+          kind: 'weekly_scoped',
+          percent: 0,
+          resets_at: '2026-11-13T04:00:00+00:00',
+          scope: { model: { id: null, display_name: 'Fable' } },
+          is_active: false,
+        },
+      ],
+      spend: { used: { amount_minor: 0, currency: 'USD', exponent: 2 }, limit: null, enabled: false },
+    },
+    'now',
+  );
+  assert.deepEqual(usage?.modelLimits, [
+    { model: 'Fable', utilization: 0, resetsAt: '2026-11-13T04:00:00+00:00', active: false },
+  ]);
+  assert.deepEqual(usage?.extraUsage, { enabled: false, currency: 'USD', exponent: 2, usedMinor: 0 });
+  assert.deepEqual(usage?.resetGrants, { eligible: false, ineligibleReason: 'surface', resetsLeft: 0 });
+});
+
+test('only usable reset grants count toward resetsLeft, and a changed part is left out alone', () => {
+  const usage = parseSubscriptionUsage(
+    {
+      seven_day: { utilization: 2 },
+      limits: 'changed',
+      cedar_ember: {
+        eligible: true,
+        grants: [
+          { id: 'a', label: 'One reset', resets_left: 1, usable_now: true, ends_at: '2027-03-09T07:59:00Z' },
+          { id: 'b', resets_left: 1, usable_now: false },
+          { resets_left: 5, usable_now: true },
+        ],
+      },
+    },
+    'now',
+  );
+  assert.equal(usage?.modelLimits, undefined);
+  assert.equal(usage?.extraUsage, undefined);
+  assert.equal(usage?.resetGrants?.resetsLeft, 1);
+  assert.deepEqual(
+    usage?.resetGrants?.grants?.map((g) => g.id),
+    ['a', 'b'],
+  );
+});
+
 test('the endpoint refusing to READ a token is not the endpoint refusing the token', () => {
   // The live case: a Claude Code setup token holds no `user:profile` scope, so this endpoint turns the
   // read away while sessions run on the very same token. Nothing is wrong with the key.
