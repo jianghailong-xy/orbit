@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 )
 
@@ -84,7 +85,11 @@ func copySessionRequestArgs(body, args map[string]interface{}) {
 func sessionReplyDescriptor(obj func(map[string]interface{}, ...string) map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"name": "session_reply",
-		"description": "Answer a request another Orbit session sent you — a message whose " +
+		"description": "Answer a run question (<orbit-run-question>) with answers, one entry per question: " +
+			"{question: index, option: index}, {question: index, options: [indices]} for multiple choice, or {question: index, text: words}. " +
+			"If the decision belongs to the owner, use ask_owner with forRunQuestion and your recommendation first. " +
+			"For a run question the answer resolves the blocked question tool; it does not queue a reply turn. " +
+			"Otherwise answer a request another Orbit session sent you — a message whose " +
 			"<orbit-session-message> block carries request-id and asks for a reply. Give `option` (the index " +
 			"of the answer you choose) when it offered options, `message`, or both; without options, " +
 			"`message` is required. If you cannot do what was asked, say so here: an answer is better than " +
@@ -92,7 +97,13 @@ func sessionReplyDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			"answer it, and only once — a request that already has an outcome is refused with " +
 			"REQUEST_CLOSED (send an ordinary session_send to add something after that).",
 		"inputSchema": obj(map[string]interface{}{
-			"requestId": map[string]interface{}{"type": "string", "description": "The request-id from the message's <orbit-session-message> block."},
+			"answers": map[string]interface{}{"type": "array", "items": obj(map[string]interface{}{
+				"question": map[string]interface{}{"type": "integer", "minimum": 0},
+				"option":   map[string]interface{}{"type": "integer", "minimum": 0},
+				"options":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "integer", "minimum": 0}},
+				"text":     map[string]interface{}{"type": "string"},
+			}, "question")},
+			"requestId": map[string]interface{}{"type": "string", "description": "The request-id from the <orbit-session-message> or <orbit-run-question> block."},
 			"message":   map[string]interface{}{"type": "string", "description": "Your answer, in words."},
 			"option":    map[string]interface{}{"type": "integer", "minimum": 0, "maximum": 3, "description": "The index of the option you choose, when the request offered options."},
 		}, "requestId"),
@@ -190,6 +201,7 @@ func cliSessionReply(args []string, in io.Reader, out io.Writer, ctx cliOrchestr
 	message := fs.String("message", "", "your answer, in words")
 	messageFile := fs.String("message-file", "", "read the answer from stdin (-)")
 	option := fs.Int("option", -1, "the index of the option you choose")
+	answersFile := fs.String("answers-json", "", "read run question answers from a JSON file or stdin (-)")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -209,14 +221,31 @@ func cliSessionReply(args []string, in io.Reader, out io.Writer, ctx cliOrchestr
 		}
 		chosen = option
 	}
-	if (!messageSet || strings.TrimSpace(messageText) == "") && chosen == nil {
-		return fmt.Errorf("--message, --message-file - or --option is required")
+	if (!messageSet || strings.TrimSpace(messageText) == "") && chosen == nil && *answersFile == "" {
+		return fmt.Errorf("--message, --message-file -, --option or --answers-json is required")
 	}
 	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
-	raw, err := t.sendSessionReply(ctx.sessionID, ctx.token, id, sessionReplyBody(messageText, messageSet, chosen))
+	body := sessionReplyBody(messageText, messageSet, chosen)
+	if *answersFile != "" {
+		var data []byte
+		if *answersFile == "-" {
+			data, err = io.ReadAll(in)
+		} else {
+			data, err = os.ReadFile(*answersFile)
+		}
+		if err != nil {
+			return err
+		}
+		var answers []interface{}
+		if err = json.Unmarshal(data, &answers); err != nil {
+			return fmt.Errorf("--answers-json: %w", err)
+		}
+		body["answers"] = answers
+	}
+	raw, err := t.sendSessionReply(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("reply to session request: %w", err)
 	}

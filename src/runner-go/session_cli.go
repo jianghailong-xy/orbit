@@ -28,7 +28,7 @@ Usage:
   orbit session get SESSION_ID [--json]
   orbit session await --session-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]
   orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]
-  orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N) [--json]
+  orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N | --answers-json FILE) [--json]
   orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]
   orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]
   orbit session merge-receipt SESSION_ID --result RESULT --source-sha SHA --target-branch BRANCH [options]
@@ -191,7 +191,7 @@ SESSION_MESSAGE_RATE_LIMITED and is not retryable. Sending to other sessions is 
 	"reply": `orbit session reply — answer a request another session sent you
 
 Usage:
-  orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N) [--json]
+  orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N | --answers-json FILE) [--json]
 
 REQUEST_ID is the request-id of the <orbit-session-message> block the request arrived with.
 --option is the index of the answer you choose when the request offered options; --message
@@ -283,7 +283,7 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
 	{Tool: "session_await", Argv: []string{"orbit", "session", "await"}, Usage: "orbit session await --session-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]", Arguments: awaitCLIArguments("session-id", "sessionIds", sessionAwaitPresets), Mutates: true},
 	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--resume-if-ended", "--expect-reply", "--reply-options <json array of {label, description}>", "--reply-within-seconds <n> (60-2592000)", "--json"}, Mutates: true},
-	{Tool: "session_reply", Argv: []string{"orbit", "session", "reply"}, Usage: "orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N) [--json]", Arguments: []string{"[request-id] (required)", "--message <text> | --message-file -", "--option <n>", "--json"}, Mutates: true},
+	{Tool: "session_reply", Argv: []string{"orbit", "session", "reply"}, Usage: "orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N | --answers-json FILE) [--json]", Arguments: []string{"[request-id] (required)", "--message <text> | --message-file -", "--option <n>", "--answers-json <file|->", "--json"}, Mutates: true},
 	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file -", "--client-turn-id <id>", "--json"}, Mutates: true},
 	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--wait-seconds <n> (1-300; wait for the outcome and return the receipt instead of just queueing)", "--json"}, Mutates: true},
 	{Tool: "session_end", Argv: []string{"orbit", "session", "end"}, Usage: "orbit session end SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
