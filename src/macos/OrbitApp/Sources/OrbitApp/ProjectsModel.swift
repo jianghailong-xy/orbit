@@ -306,6 +306,12 @@ final class ProjectDetailModel {
         }
     }
 
+    /// The merge into main on offer now, read at the moment a press needs it — nil when there is
+    /// none, or when the read fails.
+    func currentPromotion() async -> ProjectPromotionView? {
+        try? await api.currentPromotion(projectID: projectID)
+    }
+
     /// Retry, on a landing job the server judged timed out (`POST /projects/:id/integration/jobs/
     /// :jobId/retry`): its silent generation ends and the next one is queued. The answer is the line
     /// read again, which the job list redraws from at once; then the page reads everything again,

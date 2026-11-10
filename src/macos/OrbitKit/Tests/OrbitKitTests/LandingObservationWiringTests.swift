@@ -157,12 +157,15 @@ final class LandingObservationWiringTests: XCTestCase {
 
     // MARK: How it runs and the project page
 
-    /// Delivery sits between Main branch and Automatic, as on the web; it is drawn only for a server
-    /// that reads it, offers the agent's way only where the line allows, and writes at once.
+    /// Delivery sits directly under the line, before Main branch (owner decision 2026-11-10), as on the
+    /// web; it is drawn only for a server that reads it, offers the agent's way only where the line
+    /// allows, and writes at once — except a move to the agent's way while a merge into main is
+    /// live, which asks first in the app's confirmation style.
     func testHowItRunsDrawsTheDelivery() throws {
         let view = try source(Self.projects)
         let block = try section(view, from: "private func runSettingsSection(", to: "private func lineSetting(")
-        let order = ["mainBranchSetting(", "deliverySetting(", "automaticSetting("].map { block.range(of: $0)?.lowerBound }
+        let order = ["lineSetting(", "deliverySetting(", "mainBranchSetting(", "automaticSetting("]
+            .map { block.range(of: $0)?.lowerBound }
         XCTAssertFalse(order.contains(nil))
         XCTAssertEqual(order.compactMap { $0 }, order.compactMap { $0 }.sorted())
         let delivery = try section(view, from: "private func deliverySetting(", to: "/// Automatic, moved here")
@@ -170,6 +173,17 @@ final class LandingObservationWiringTests: XCTestCase {
         XCTAssertTrue(delivery.contains("ForEach(RunSettings.deliveryChoices(line: view.line, main: main))"))
         XCTAssertTrue(delivery.contains("chosen: choice.mode == current)"))
         XCTAssertTrue(delivery.contains("notice = await store.updateIntegration(RunSettings.deliveryWrite(view, to: choice.mode))"))
+        XCTAssertTrue(delivery.contains("if RunSettings.deliveryMayAsk(view, to: choice.mode),")
+                      && delivery.contains("RunSettings.mergeLive(await store.currentPromotion())"),
+                      "the agent's way asks first while a merge into main is live")
+        XCTAssertTrue(delivery.contains(".orbitConfirmation(RunSettings.agentPushConfirmTitle(main),"))
+        XCTAssertTrue(delivery.contains("Text(RunSettings.agentPushConfirmBody(main))"))
+        XCTAssertTrue(delivery.contains("RunSettings.deliveryWrite(asked, to: .agentPush)"),
+                      "Let the agent push writes what was asked about")
+        XCTAssertTrue(delivery.contains("Button(RunSettings.agentPushCancel, role: .cancel)"), "Cancel writes nothing")
+        let mergeCheck = try section(view, from: "private func mergeCheckSetting(", to: "/// Escalate after")
+        XCTAssertTrue(mergeCheck.contains("Text(RunSettings.mergeCheckHint(view, main: main))"),
+                      "the merge check's hint follows the delivery")
         XCTAssertTrue(delivery.contains(".disabled(store.busy || !choice.offered)"),
                       "drawn but not offered where the line does not allow it")
         let line = try section(view, from: "private func lineSetting(", to: "private func lineOption(")
@@ -177,6 +191,24 @@ final class LandingObservationWiringTests: XCTestCase {
                       "Directly into main's hint follows the delivery")
         let automatic = try section(view, from: "private func automaticSetting(", to: "private func atMostSetting(")
         XCTAssertTrue(automatic.contains("Text(RunSettings.automaticHint(view,"), "and so does Automatic's")
+    }
+
+    /// The asking merge card on the project's sessions page says why it asks while Automatic is on,
+    /// off the facts the page already reads, and its press opens the project's How it runs.
+    func testTheAskingMergeCardSaysWhyAndOpensHowItRuns() throws {
+        let page = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectPage.swift")
+        XCTAssertTrue(page.contains("askReason: PromotionCards.askReason("))
+        XCTAssertTrue(page.contains("merge.current, line: app.projectSessionsIntegration?.line,"))
+        XCTAssertTrue(page.contains("deliveryMode: app.projectSessionsIntegration?.deliveryMode, automatic: merge.automatic),"))
+        XCTAssertTrue(page.contains("onLetAgentPush: { openProject() },"))
+        let asking = try section(page, from: "@ViewBuilder private func asking(", to: "@ViewBuilder private func merging(")
+        let reason = try XCTUnwrap(asking.range(of: "if let askReason {")?.lowerBound)
+        let buttons = try XCTUnwrap(asking.range(of: "await merge.confirmMergeToMain(view)")?.lowerBound)
+        XCTAssertLessThan(reason, buttons, "the line sits above the buttons")
+        XCTAssertTrue(asking.contains("Button(PromotionCards.letAgentPushInstead, action: onLetAgentPush)"))
+        let model = try source("src/macos/OrbitApp/Sources/OrbitApp/ProjectMergeModel.swift")
+        XCTAssertTrue(model.contains("automatic = document.coordinatorEnabled"),
+                      "Automatic comes off the criteria read the asking card already makes")
     }
 
     /// The project page's Open items row says what is handling it, as the web's row does.

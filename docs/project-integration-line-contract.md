@@ -1707,7 +1707,7 @@ interface ProjectListAttention {
 - `Wake-ups`：`delivered · last <age>` / `queued · <age>` / `returned · <age>`（琥珀）/ `none yet`。来源：发往当前协调会话的最近一条平台投递（`project_open_item_delivery` 与 `project_coordinator_wake.status = DELIVERED` 取较新者），送达看 `conversation_turn.delivered_at`。
 - `Self-started today`：`<selfStartedTurns> of <limit>` + 进度条，取 `assessSpend` 的 `spend.selfStartedTurns` 与 `limits`；暂停时显示 `paused`。
 
-**V8（Automatic 说明文案）**：`PROJECT_BRANCH`：`Tasks land on <ref> by themselves and start once their prerequisites land. It also merges <ref> into main by itself when the checks pass cleanly, and leaves you a receipt with the commit to revert.`（修订 3：原句 `Merging into main always asks you.` 对 `PROJECT_BRANCH` 已不成立，留着它就是在没告知的情况下扩大授权范围）；`MAIN`：`Tasks are checked on main by themselves and start once their prerequisites land. Merging into main always asks you.`（不变）；未决定：现有文案后加 `If its work lands on a branch of its own, it also merges that branch into main by itself when the checks pass cleanly.`
+**V8（Automatic 说明文案）**：`PROJECT_BRANCH`：`Tasks land on <ref> by themselves and start once their prerequisites land. It also merges <ref> into main by itself when the checks pass cleanly, and leaves you a receipt with the commit to revert.`（修订 3：原句 `Merging into main always asks you.` 对 `PROJECT_BRANCH` 已不成立，留着它就是在没告知的情况下扩大授权范围）；`MAIN`：`Tasks are checked on main by themselves and start once their prerequisites land. Merging into main always asks you.`（不变）；`MAIN` 且交付方式为 `PLATFORM` 时，客户端的说明在这句之后指向交付方式：`to skip that card, choose “The agent pushes it” under Delivery`（2026-11-10，`docs/mocks/agent-push-delivery/`；`AGENT_PUSH` 是 `MAIN` 线上唯一不出卡的路，O-L2）；未决定：现有文案后加 `If its work lands on a branch of its own, it also merges that branch into main by itself when the checks pass cleanly.`
 
 **V9（状态接口）**：`GET /projects/:id/coordinator/status` 的 `coordination` 增加 `wakeups: { state: 'DELIVERED' | 'QUEUED' | 'RETURNED' | 'NONE'; at: Date | null }` 与 `fuse: { selfStartedToday: number; limit: number; paused: boolean; episodeId: string | null }`，并写进 `docs/project-coordinator-status-contract.md` 的字段表。
 
@@ -2070,6 +2070,7 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 **O-L3（把交付方式告诉 agent）**：任务启动提示按项目的交付方式加一句（产品文案，英文）：
 
 - `AGENT_PUSH`：`This project delivers by pushing to <branch>. Push your commits to <remote>/<branch> before you finish — Orbit checks that they are there.`
+  项目设了合并检查（`merge_check_command` 非空）时句末再加：`` Before you push, rebase onto <remote>/<branch> and run the project’s merge check, `<command>`; push only once it passes. ``（owner 2026-11-10 决定，设计图 `docs/mocks/agent-push-delivery/`）：`AGENT_PUSH` 不建候选（O-L2），平台不会再跑这条检查，所以交给 agent 在推之前跑；平台不核实它是否跑过。
 - `PLATFORM`，且项目已开始集成：`Do not push to <branch>. Orbit lands your branch after your work is accepted.`
 
 `<branch>` 是集成线分支的短名（`AGENT_PUSH` 只在 `MAIN` 线上，就是 upstream），`<remote>` 是代码库行的 `remote_name`。工头与验证任务的运行、声明 codeless 的任务不加这句：它们不交付提交。项目说明与它冲突时以设置为准。协调会话写项目说明前读 `project_get.integration.deliveryMode`。

@@ -55,6 +55,7 @@ final class LandingObservationTests: XCTestCase {
 
     private static let projectStart = "src/web/src/lib/projectStart.ts"
     private static let runSettings = "src/web/src/components/ProjectRunSettings.tsx"
+    private static let promotionCard = "src/web/src/components/ProjectPromotionCard.tsx"
     private static let progressStatus = "src/web/src/components/ProjectProgressStatus.tsx"
     private static let projectsPage = "src/web/src/pages/ProjectsPage.tsx"
     private static let confirmationCard = "src/web/src/components/OwnerConfirmationCard.tsx"
@@ -423,7 +424,13 @@ final class LandingObservationTests: XCTestCase {
         draft.automatic = false
         XCTAssertEqual(draft.automaticSays,
                        "You decide when each task is done. The agent pushes each task’s work to main itself.")
-        XCTAssertEqual(draft.deliveryHint, "The agent pushes to main itself, and Orbit checks the commits are there.")
+        XCTAssertEqual(draft.deliveryHint, "No merge card. The agent pushes to main itself, and Orbit records each commit once it sees it there.")
+        // The merge check is the agent's to run while it pushes (owner decision 2026-11-10).
+        XCTAssertEqual(draft.mergeCheckHint,
+                       "Run by the agent before it pushes, on its work rebased onto main. Orbit doesn’t run it.")
+        draft.deliveryMode = .platform
+        XCTAssertEqual(draft.mergeCheckHint, RunSettings.mergeCheckHint("main"))
+        draft.deliveryMode = .agentPush
 
         let merges = { (mode: DeliveryMode) in
             StartProject.comesToYou(automatic: true, line: .main, ownerConfirmed: [], evidenceJudged: 0,
@@ -472,7 +479,7 @@ final class LandingObservationTests: XCTestCase {
         let onMain = RunSettings.deliveryChoices(line: .main, main: "main")
         XCTAssertEqual(onMain.map { [$0.label, $0.hint] }, [
             ["Orbit lands it", "The agent doesn’t push to main: Orbit lands its branch once the work is accepted."],
-            ["The agent pushes it", "The agent pushes to main itself, and Orbit checks the commits are there."],
+            ["The agent pushes it", "No merge card. The agent pushes to main itself, and Orbit records each commit once it sees it there."],
         ])
         XCTAssertEqual(onMain.map(\.offered), [true, true])
         let offMain = RunSettings.deliveryChoices(line: .projectBranch, main: "main")
@@ -510,6 +517,24 @@ final class LandingObservationTests: XCTestCase {
         XCTAssertEqual(RunSettings.automaticHint(standing(.platform), main: "main"), RunSettings.automaticHint(.main))
         XCTAssertEqual(RunSettings.automaticHint(standing(.platform, line: .projectBranch), main: "main"),
                        RunSettings.automaticHint(.projectBranch))
+        // Orbit's way on main points at Delivery; a server with no Delivery row keeps the older words.
+        XCTAssertEqual(RunSettings.automaticHint(standing(.platform), main: "main"),
+                       "The coordinator runs it for you: it decides when each task is done and handles conflicts "
+                       + "and failed checks. Merging into main always asks you — to skip that card, choose “The "
+                       + "agent pushes it” under Delivery. The criteria and anything irreversible stay yours.")
+        XCTAssertEqual(RunSettings.automaticHint(standing(nil), main: "develop"),
+                       "The coordinator runs it for you: it decides when each task is done and handles conflicts "
+                       + "and failed checks. Merging into develop always asks you — a project that lands directly on "
+                       + "develop never merges by itself. The criteria and anything irreversible stay yours.")
+        XCTAssertEqual(RunSettings.automaticHint(standing(nil, line: .projectBranch), main: "main"),
+                       RunSettings.automaticHint(.projectBranch))
+
+        // The merge check's hint follows the delivery.
+        XCTAssertEqual(RunSettings.mergeCheckHint(pushing, main: "main"),
+                       "Run by the agent before it pushes, on its work rebased onto main. Orbit doesn’t run it.")
+        XCTAssertEqual(RunSettings.mergeCheckHint(standing(.platform), main: "main"), RunSettings.mergeCheckHint("main"))
+        XCTAssertEqual(RunSettings.mergeCheckHint(standing(.agentPush, line: .projectBranch), main: "main"),
+                       RunSettings.mergeCheckHint("main"), "off main the agent does not push")
 
         let encoded = try JSONEncoder().encode(UpdateProjectIntegrationRequest(line: .projectBranch, deliveryMode: .platform))
         let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: String])
@@ -525,6 +550,57 @@ final class LandingObservationTests: XCTestCase {
         XCTAssertNil(older.deliveryMode)
     }
 
+    // MARK: - why the merge card asks, and the switch to the agent's way (owner 2026-11-10)
+
+    private func candidate(_ state: PromotionState, into: String = "refs/heads/feature/v1.1.1") -> ProjectPromotionView {
+        ProjectPromotionView(promotionId: "pr1", state: state, sourceRef: "refs/heads/orbit/fix", sourceSha: "abc",
+                             upstreamRef: into)
+    }
+
+    /// The press to the agent's way asks first only from Orbit's way, only where the write would go,
+    /// and only while a merge into main is live.
+    func testTheSwitchToTheAgentsWayAsksOnlyWhileAMergeIsLive() {
+        XCTAssertTrue(RunSettings.deliveryMayAsk(standing(.platform), to: .agentPush))
+        XCTAssertFalse(RunSettings.deliveryMayAsk(standing(.agentPush), to: .platform), "back to Orbit's never asks")
+        XCTAssertFalse(RunSettings.deliveryMayAsk(standing(.agentPush), to: .agentPush), "no move, no question")
+        XCTAssertFalse(RunSettings.deliveryMayAsk(standing(.platform, line: .projectBranch), to: .agentPush),
+                       "a write that would not go asks nothing")
+        XCTAssertFalse(RunSettings.deliveryMayAsk(standing(nil), to: .agentPush))
+
+        for state in [PromotionState.checking, .ready, .confirmed, .rechecking] {
+            XCTAssertTrue(RunSettings.mergeLive(candidate(state)), "\(state)")
+        }
+        for state in [PromotionState.merged, .blocked, .declined, .cancelled, .superseded, .unknown] {
+            XCTAssertFalse(RunSettings.mergeLive(candidate(state)), "\(state)")
+        }
+        XCTAssertFalse(RunSettings.mergeLive(nil))
+
+        XCTAssertEqual(RunSettings.agentPushConfirmTitle("feature/v1.1.1"), "Let the agent push to feature/v1.1.1?")
+        XCTAssertEqual(RunSettings.agentPushConfirmBody("main"),
+                       "Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing "
+                       + "into main. Merges already waiting for you stay until you answer them.")
+        XCTAssertEqual(RunSettings.agentPushConfirm, "Let the agent push")
+        XCTAssertEqual(RunSettings.agentPushCancel, "Cancel")
+    }
+
+    /// The asking card says why it asks only when every fact is read and true: READY, a main line,
+    /// Orbit's way, Automatic on.
+    func testTheAskingCardSaysWhyOnlyWhenEveryFactSaysSo() {
+        let ready = candidate(.ready)
+        XCTAssertEqual(PromotionCards.askReason(ready, line: .main, deliveryMode: .platform, automatic: true),
+                       "Asks you because this project lands directly on feature/v1.1.1, where Automatic never merges by itself.")
+        XCTAssertNil(PromotionCards.askReason(candidate(.checking), line: .main, deliveryMode: .platform, automatic: true))
+        XCTAssertNil(PromotionCards.askReason(ready, line: .projectBranch, deliveryMode: .platform, automatic: true))
+        XCTAssertNil(PromotionCards.askReason(ready, line: .main, deliveryMode: .agentPush, automatic: true))
+        XCTAssertNil(PromotionCards.askReason(ready, line: .main, deliveryMode: .platform, automatic: false))
+        XCTAssertNil(PromotionCards.askReason(ready, line: nil, deliveryMode: .platform, automatic: true), "line not read")
+        XCTAssertNil(PromotionCards.askReason(ready, line: .main, deliveryMode: nil, automatic: true), "delivery not read")
+        XCTAssertNil(PromotionCards.askReason(ready, line: .main, deliveryMode: .platform, automatic: nil),
+                     "Automatic not read")
+        XCTAssertNil(PromotionCards.askReason(nil, line: .main, deliveryMode: .platform, automatic: true))
+        XCTAssertEqual(PromotionCards.letAgentPushInstead, "Let the agent push instead…")
+    }
+
     /// Every sentence about the delivery, as the browser writes it for the project's main branch.
     func testTheDeliveryWordsAreTheBrowsers() throws {
         let web = try web(Self.projectStart)
@@ -536,6 +612,16 @@ final class LandingObservationTests: XCTestCase {
         assertSays(web, RunSettings.deliveryNeedsMainLine(Self.main), "why the agent's way is not offered")
         assertSays(web, "return `\(RunSettings.lineMainHintAgentPush(Self.main))`;", "Directly into main's hint")
         assertSays(web, RunSettings.automaticHintAgentPush(Self.main), "How it runs' Automatic sentence")
+        assertSays(web, RunSettings.automaticHintMainNoDelivery(Self.main), "Automatic's sentence with no Delivery row")
+        assertSays(web, "return `\(RunSettings.mergeCheckHintAgentPush(Self.main))`;", "the merge check while the agent pushes")
+        assertSays(web, "return `\(RunSettings.agentPushConfirmTitle(Self.main))`;", "the switch's question")
+        assertSays(web, "return `\(RunSettings.agentPushConfirmBody(Self.main))`;", "what the switch leaves standing")
+        assertSays(web, "export const RUN_AGENT_PUSH_CONFIRM = '\(RunSettings.agentPushConfirm)';", "the switch's press")
+        assertSays(web, "export const RUN_AGENT_PUSH_CANCEL = '\(RunSettings.agentPushCancel)';", "and its way out")
+        let card = try self.web(Self.promotionCard)
+        assertSays(card, "return `\(PromotionCards.askReason(Self.main))`;", "why the merge card asks")
+        assertSays(card, "export const LET_THE_AGENT_PUSH_INSTEAD = '\(PromotionCards.letAgentPushInstead)';",
+                   "the press under it")
         let says = RunSettings.automaticSaysAgentPush(automatic: true, main: Self.main)
         let tail = String(says.dropFirst("The coordinator decides".count))
         assertSays(web, "`${automatic ? 'The coordinator decides' : 'You decide'}\(tail)`;", "the start card's sentence")

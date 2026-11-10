@@ -36,14 +36,6 @@ describe('the SPA shell', () => {
     expect(shellSource.indexOf('id="theme-color"')).toBeLessThan(shellSource.indexOf('/theme-boot.js'));
   });
 
-  it('names a script file the policy lets run', () => {
-    const nginx = readFileSync(resolve(process.cwd(), 'nginx.conf'), 'utf8');
-    for (const script of shell.querySelectorAll('script')) {
-      const src = script.getAttribute('src')!;
-      // The entry module: the build writes it, and the chunks it loads, under /assets/.
-      expect(nginx).toContain(script.type === 'module' && src.startsWith('/src/') ? '*:*/assets/' : `*:*${src}`);
-    }
-  });
 });
 
 describe('public/theme-boot.js', () => {

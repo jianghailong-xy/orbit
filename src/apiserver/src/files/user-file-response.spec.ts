@@ -56,6 +56,17 @@ test('a type off the list is never answered inline, whatever the route asked for
   }
 });
 
+test('a type a browser could run as a script leaves as bytes, however it is written', async () => {
+  for (const type of ['text/javascript', 'application/javascript', 'Text/ECMAScript; charset=utf-8', 'text/plain, text/jscript', 'text/livescript']) {
+    assert.deepEqual(await headersFor(file(type)), {
+      'Content-Security-Policy': 'sandbox',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': 'attachment',
+    }, type);
+  }
+});
+
 test('a route that already saves the file keeps its own name for it', async () => {
   const saved = await headersFor(file('image/svg+xml', attachmentDisposition('drawing.svg')));
   assert.equal(saved['Content-Disposition'], undefined, 'nothing replaces the name the route gave');

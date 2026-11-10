@@ -18,8 +18,16 @@ import {
   START_MERGING_INTO_MAIN,
   mainBranchName,
   mainBranchRef,
+  RUN_AGENT_PUSH_CANCEL,
+  RUN_AGENT_PUSH_CONFIRM,
+  runAgentPushConfirmBody,
+  runAgentPushConfirmTitle,
   runAutomaticHint,
+  runAutomaticHintMainNoDelivery,
   runAutomaticSays,
+  runDeliveryAgentPushHint,
+  runDeliveryPlatformHint,
+  runMergeCheckHintAgentPush,
   runLastChoiceFor,
   runLineInSentence,
   runLineLocked,
@@ -58,8 +66,9 @@ const SENTENCES: Array<[string, (main?: string) => string, string]> = [
     + 'revert. The criteria and anything irreversible stay yours.'],
   ['Automatic directly into main', (main) => runAutomaticHint('MAIN', main),
     'The coordinator runs it for you: it decides when each task is done and handles conflicts and '
-    + 'failed checks. Merging into main always asks you — a project that lands directly on main never '
-    + 'merges by itself. The criteria and anything irreversible stay yours.'],
+    // Owner decision 2026-11-10: the second half now points to Delivery, the way not to be asked.
+    + 'failed checks. Merging into main always asks you — to skip that card, choose “The agent pushes it” '
+    + 'under Delivery. The criteria and anything irreversible stay yours.'],
   ['the merge check', runMergeCheckHint,
     'Runs on the combined tree before anything lands — on the project branch and again before main.'],
   ['no merge check', runNoMergeCheckWarning,
@@ -116,7 +125,7 @@ describe('the main branch, in the words of the settings band', () => {
       'This project started integrating, so the line it lands on and its main branch can no longer '
       + 'change. Merge it into master, or give up the branch, to start another.');
     expect(runAutomaticHint('MAIN', 'develop')).toContain(
-      'Merging into develop always asks you — a project that lands directly on develop never merges by itself.');
+      'Merging into develop always asks you — to skip that card, choose “The agent pushes it” under Delivery.');
   });
 
   it('keeps the line’s own lock sentence, for a project with no Main branch row, as it always read', () => {
@@ -196,5 +205,37 @@ describe('the start’s own lines, by the main branch the start names', () => {
     expect(startRequestSummary(onMaster)).toBe('The coordinator asked · directly into master · Automatic off · at most 1 at a time');
     // A project branch names no main branch, whatever the start recorded.
     expect(runSettingsLine({ ...onMaster, line: 'PROJECT_BRANCH' })).toBe('A project branch · Automatic off · 1 task at a time · no merge check');
+  });
+});
+
+describe('the agent pushing, in the owner-approved words (2026-11-10)', () => {
+  it('says what each delivery costs, naming the main branch', () => {
+    expect(runDeliveryPlatformHint('feature/v1.1.1')).toBe(
+      'The agent doesn’t push to feature/v1.1.1: Orbit lands its branch once the work is accepted.');
+    expect(runDeliveryAgentPushHint('feature/v1.1.1')).toBe(
+      'No merge card. The agent pushes to feature/v1.1.1 itself, and Orbit records each commit once it sees it there.');
+    expect(runDeliveryAgentPushHint()).toBe(
+      'No merge card. The agent pushes to main itself, and Orbit records each commit once it sees it there.');
+  });
+
+  it('says who runs the merge check while the agent pushes', () => {
+    expect(runMergeCheckHintAgentPush('develop')).toBe(
+      'Run by the agent before it pushes, on its work rebased onto develop. Orbit doesn’t run it.');
+  });
+
+  it('keeps the older Automatic sentence for a server with no Delivery row', () => {
+    expect(runAutomaticHintMainNoDelivery('develop')).toBe(
+      'The coordinator runs it for you: it decides when each task is done and handles conflicts and failed '
+      + 'checks. Merging into develop always asks you — a project that lands directly on develop never merges '
+      + 'by itself. The criteria and anything irreversible stay yours.');
+  });
+
+  it('asks before switching while a merge is waiting', () => {
+    expect(runAgentPushConfirmTitle('feature/v1.1.1')).toBe('Let the agent push to feature/v1.1.1?');
+    expect(runAgentPushConfirmBody('feature/v1.1.1')).toBe(
+      'Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing into '
+      + 'feature/v1.1.1. Merges already waiting for you stay until you answer them.');
+    expect(RUN_AGENT_PUSH_CONFIRM).toBe('Let the agent push');
+    expect(RUN_AGENT_PUSH_CANCEL).toBe('Cancel');
   });
 });

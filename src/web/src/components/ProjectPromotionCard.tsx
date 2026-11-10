@@ -3,8 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { LandingLink } from './LandingLink';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
 import type {
+  DeliveryMode,
   IntegrationCheckResult,
+  IntegrationLine,
   ProjectLandTask,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
@@ -42,7 +45,7 @@ import {
   promotionEventLine,
   promotionReceiptLine,
 } from '../lib/projectMerge';
-import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
+import { DEFAULT_MAIN_BRANCH, RUN_DELIVERY_ANCHOR, mainBranchName, revealRunDelivery } from '../lib/projectStart';
 
 /**
  * The card that asks the account owner to merge a project branch into main (mock 4,
@@ -120,6 +123,12 @@ export const NOTHING_TO_DO =
   'nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t';
 /** M8, in the card's own words: this merge is not the project finishing. */
 export const CRITERIA_TAIL = 'merging does not close the project';
+/** Why a card asks on a project whose Automatic is on (owner decision 2026-11-10): it lands directly
+ *  on main, where Automatic never merges — and the way not to be asked, which opens How it runs. */
+export function promotionAsksBecauseMain(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Asks you because this project lands directly on ${main}, where Automatic never merges by itself.`;
+}
+export const LET_THE_AGENT_PUSH_INSTEAD = 'Let the agent push instead…';
 /** B5: what merging does to a blocker somebody was still going to decide. */
 export const BLOCKERS_DECIDED_TOO = 'merging decides them too';
 
@@ -158,6 +167,10 @@ export interface PromotionProjectView {
   /** The project's coordinator conversation: where state D's chat goes when no item has been filed
    *  for the candidate to say so itself. */
   coordinatorSessionId?: string | null;
+  /** Automatic, and the line's settings half: whether a READY card says why it asks (one line, only
+   *  while all three are known and say a main line, Orbit landing, Automatic on). */
+  coordinatorEnabled?: boolean;
+  integration?: { line: IntegrationLine | null; deliveryMode?: DeliveryMode } | null;
 }
 
 /** The states that ask or tell the reader something. `CHECKING` is the moment before the question
@@ -783,6 +796,18 @@ export function ProjectPromotionCard({
   };
 
   const line = promotionEventLine(promotion);
+  // Why this card asks although Automatic is on: the project lands directly on main and Orbit lands
+  // its work. Said only while every one of those facts is known.
+  const asksBecauseMain = promotion.state === 'READY'
+    && project?.coordinatorEnabled === true
+    && project.integration?.line === 'MAIN'
+    && project.integration.deliveryMode === 'PLATFORM';
+  const letTheAgentPush = (): void => {
+    setReviewOpen(false);
+    // How it runs is on the project page: there it is brought into view; anywhere else the page is
+    // opened at it.
+    if (!revealRunDelivery()) navigate(`/projects/${encodeId(projectId)}#${RUN_DELIVERY_ANCHOR}`);
+  };
   const card = (
     <div
       ref={anchor}
@@ -810,6 +835,14 @@ export function ProjectPromotionCard({
           <ReadyRows promotion={promotion} project={project} now={now} />
         )}
       </div>
+      {asksBecauseMain ? (
+        <div className="project-promotion-reason">
+          <div>{promotionAsksBecauseMain(mainBranchName(promotion.upstreamRef))}</div>
+          <Button variant="link" size="small" className="project-promotion-reason-link" onClick={letTheAgentPush}>
+            {LET_THE_AGENT_PUSH_INSTEAD}
+          </Button>
+        </div>
+      ) : null}
       {decide.isError ? (
         <Alert
           type="error"

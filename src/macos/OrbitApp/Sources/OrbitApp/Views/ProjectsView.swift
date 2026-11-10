@@ -376,6 +376,9 @@ struct ProjectDetailView: View {
     @State private var confirmingStatus: ProjectStatus?
     @State private var confirmingDelete = false
     @State private var confirmingReplace = false
+    /// Delivery's press to the agent's way while a merge into main is live: asked first, then
+    /// written (owner decision 2026-11-10). Nil while nothing is being asked.
+    @State private var confirmingAgentPush: ProjectIntegrationView?
     @State private var goalExpanded = false
     @State private var instructionsExpanded = false
     @State private var criteriaExpanded = false
@@ -1251,8 +1254,9 @@ struct ProjectDetailView: View {
             Section {
                 if let view = store.integration {
                     lineSetting(store, view, document: document, now: now)
-                    mainBranchSetting(store, view, now: now)
+                    // Directly under the line it depends on (owner decision 2026-11-10).
                     deliverySetting(store, view)
+                    mainBranchSetting(store, view, now: now)
                     automaticSetting(store, view, document: document)
                     atMostSetting(store, document: document)
                     mergeCheckSetting(store, view, document: document)
@@ -1403,6 +1407,22 @@ struct ProjectDetailView: View {
                     deliveryOption(store, view, choice, chosen: choice.mode == current)
                 }
             }
+            // Moving to the agent's way while a merge into main is live asks first: the waiting card
+            // stays, and the reader is told so. Cancel writes nothing.
+            .orbitConfirmation(RunSettings.agentPushConfirmTitle(main),
+                               isPresented: Binding(get: { confirmingAgentPush != nil },
+                                                    set: { if !$0 { confirmingAgentPush = nil } })) {
+                Button(RunSettings.agentPushConfirm) {
+                    let asked = confirmingAgentPush
+                    confirmingAgentPush = nil
+                    if let asked {
+                        Task { notice = await store.updateIntegration(RunSettings.deliveryWrite(asked, to: .agentPush)) }
+                    }
+                }
+                Button(RunSettings.agentPushCancel, role: .cancel) { confirmingAgentPush = nil }
+            } message: {
+                Text(RunSettings.agentPushConfirmBody(main))
+            }
         }
     }
 
@@ -1411,7 +1431,14 @@ struct ProjectDetailView: View {
     private func deliveryOption(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
                                 _ choice: RunSettings.DeliveryChoice, chosen: Bool) -> some View {
         Button {
-            Task { notice = await store.updateIntegration(RunSettings.deliveryWrite(view, to: choice.mode)) }
+            Task {
+                if RunSettings.deliveryMayAsk(view, to: choice.mode),
+                   RunSettings.mergeLive(await store.currentPromotion()) {
+                    confirmingAgentPush = view
+                    return
+                }
+                notice = await store.updateIntegration(RunSettings.deliveryWrite(view, to: choice.mode))
+            }
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
@@ -1499,7 +1526,7 @@ struct ProjectDetailView: View {
                 } else {
                     Text(RunSettings.mergeCheckPlaceholder).font(.orbitLabel).foregroundStyle(.secondary)
                 }
-                Text(RunSettings.mergeCheckHint(main))
+                Text(RunSettings.mergeCheckHint(view, main: main))
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2509,7 +2536,7 @@ private struct MergeCheckEditor: View {
                         #endif
                 } footer: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(RunSettings.mergeCheckHint(main))
+                        Text(RunSettings.mergeCheckHint(view, main: main))
                         if missing {
                             Text("⚠ \(RunSettings.noMergeCheckWarning(main))").foregroundStyle(Color.orange)
                         }
