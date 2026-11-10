@@ -64,11 +64,24 @@ const VIEW = {
   resolvedAt: true,
   resolvedByUserId: true,
   resolvedBySessionId: true,
+  resolvedClient: true,
   resolutionNote: true,
   answer: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.OwnerRequestSelect;
+
+/** The clients an owner ends a request from, as `resolved_client` stores them. */
+export type OwnerRequestClient = 'web' | 'ios' | 'macos' | 'android';
+const CLIENTS: ReadonlySet<string> = new Set<OwnerRequestClient>(['web', 'ios', 'macos', 'android']);
+
+/** The client kind of an `X-Orbit-Client: <kind>/<version>` header (`ios/1.0` is `ios`), or null for anything else. */
+export function ownerRequestClient(header: string | string[] | undefined): OwnerRequestClient | null {
+  const slash = typeof header === 'string' ? header.indexOf('/') : -1;
+  if (slash < 0) return null;
+  const kind = (header as string).slice(0, slash);
+  return CLIENTS.has(kind) ? (kind as OwnerRequestClient) : null;
+}
 
 /** A JSON column's value, or SQL NULL when there is none. */
 function json(value: object | null | undefined): Prisma.InputJsonValue | typeof Prisma.DbNull {
@@ -232,7 +245,12 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** The owner did what was asked. A DECISION records the option chosen or the owner's words. */
-  async complete(ownerId: string, id: string, given: { option?: number; text?: string }): Promise<OwnerRequestView> {
+  async complete(
+    ownerId: string,
+    id: string,
+    given: { option?: number; text?: string },
+    client: OwnerRequestClient | null = null,
+  ): Promise<OwnerRequestView> {
     const request = await this.get(ownerId, id);
     if (request.kind === 'SECRET') {
       throw new BadRequestException('a SECRET request is done when the runner has the key: enter it with POST /owner-requests/:id/secret');
@@ -254,16 +272,17 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       : null;
     return this.settle(ownerId, id, 'DONE', {
       resolvedByUserId: ownerId,
+      resolvedClient: client,
       answer: json(answer),
     });
   }
 
   /** The owner refuses the request. The reason is what the asking session reads. */
-  async decline(ownerId: string, id: string, reason: string): Promise<OwnerRequestView> {
+  async decline(ownerId: string, id: string, reason: string, client: OwnerRequestClient | null = null): Promise<OwnerRequestView> {
     const note = reason?.trim();
     if (!note) throw new BadRequestException('reason is required: say why, so the session asking can act on it');
     await this.get(ownerId, id);
-    return this.settle(ownerId, id, 'DECLINED', { resolvedByUserId: ownerId, resolutionNote: note });
+    return this.settle(ownerId, id, 'DECLINED', { resolvedByUserId: ownerId, resolvedClient: client, resolutionNote: note });
   }
 
   /** The asking session no longer needs it. Only the session that filed a request may withdraw it. */

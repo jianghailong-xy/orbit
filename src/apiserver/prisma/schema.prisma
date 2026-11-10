@@ -7278,6 +7278,8 @@ model OwnerRequest {
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
   resolvedByUserId    String?   @map("resolved_by_user_id") @db.Uuid
   resolvedBySessionId String?   @map("resolved_by_session_id") @db.Uuid
+  /// The client the owner ended it from (`web`, `ios`, `macos`, `android`); null when withdrawn, expired or unknown.
+  resolvedClient      String?   @map("resolved_client")
   /// Why it was declined (required) or withdrawn.
   resolutionNote      String?   @map("resolution_note")
   /// What the owner chose or said when marking it done: `{ option?, text? }`.

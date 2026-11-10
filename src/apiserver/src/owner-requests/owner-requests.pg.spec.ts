@@ -15,7 +15,10 @@
  *       matches nothing (the sweep), and the row is unchanged;
  *   (f) a PENDING request past its deadline is refused as expired before the sweep reaches it;
  *       only the asker may withdraw; a decline needs a reason; a runner cannot speak for a session
- *       it does not host.
+ *       it does not host;
+ *   (g) the owner's done or decline through the controller records the client kind of its
+ *       X-Orbit-Client header (`ios/1.0` reads back `ios`, from the answer, by id and in the list);
+ *       an unknown client, a bare kind with no version, or none, stores null, and a withdrawn or expired request reads null.
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to its own account.
  */
@@ -53,8 +56,10 @@ import {
   canTransition,
   type OwnerRequestState,
 } from './owner-request';
+import { OwnerRequestsController } from './owner-requests.controller';
 import { OwnerRequestsService, type OwnerRequestView } from './owner-requests.service';
 import { OwnerSecretsService } from './owner-secrets.service';
+import type { AuthUser } from '../common/current-user.decorator';
 import type { FileOwnerRequestDto } from './dto';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -93,7 +98,9 @@ test('owner requests: any session files one, and every ending is final', {
   const prisma = db as unknown as PrismaService;
   const told: string[] = [];
   const push = { notifyOwnerRequest: async (id: string) => { told.push(id); } } as unknown as PushService;
-  const service = new OwnerRequestsService(prisma, new OwnerSecretsService(prisma), push);
+  const secrets = new OwnerSecretsService(prisma);
+  const service = new OwnerRequestsService(prisma, secrets, push);
+  const owner = new OwnerRequestsController(service, secrets);
   const door = new RunnerOwnerRequestsController(prisma, service);
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
@@ -326,6 +333,45 @@ test('owner requests: any session files one, and every ending is final', {
     await assert.rejects(door.file(a.runner, undefined, { kind: 'CONFIRM', title: 't', why: 'w' } as FileOwnerRequestDto), BadRequestException);
     await assert.rejects(door.get(other.runner, mine.id), NotFoundException);
     await assert.rejects(service.complete(other.ownerId, mine.id, {}), NotFoundException);
+  });
+
+  await t.test('(g) the client that ended a request is recorded from X-Orbit-Client', async () => {
+    const user = { userId: a.ownerId } as AuthUser;
+    const stored = async (id: string) =>
+      (await sql.query<{ resolved_client: string | null }>(`SELECT resolved_client FROM owner_request WHERE id = $1`, [id]))
+        .rows[0].resolved_client;
+
+    const fromPhone = await file({ kind: 'CONFIRM', title: 'done from a phone' });
+    const done = await owner.complete(user, fromPhone.id, { text: 'ok' }, 'ios/1.0');
+    assert.equal(done.state, 'DONE');
+    assert.equal(done.resolvedClient, 'ios', 'the answer says which client ended it');
+    assert.equal((await owner.get(user, fromPhone.id)).resolvedClient, 'ios', 'and so does a later read');
+    const listed = (await owner.list(user, 'done')).requests.find((r) => r.id === fromPhone.id);
+    assert.equal(listed?.resolvedClient, 'ios', 'and the list');
+    assert.equal(await stored(fromPhone.id), 'ios');
+
+    const fromWeb = await file({ kind: 'CONFIRM', title: 'declined from the web' });
+    const declined = await owner.decline(user, fromWeb.id, { reason: 'not now' }, 'web/1.2.3');
+    assert.equal(declined.state, 'DECLINED');
+    assert.equal(declined.resolvedClient, 'web');
+    assert.equal((await owner.get(user, fromWeb.id)).resolvedClient, 'web');
+
+    for (const header of ['cli/1.0', 'iOS/1.0', 'ios', 'runner/0.9', '', undefined]) {
+      const request = await file({ kind: 'CONFIRM', title: `done from ${String(header)}` });
+      const ended = await owner.complete(user, request.id, {}, header);
+      assert.equal(ended.resolvedClient, null, `${JSON.stringify(header)} is no client`);
+      assert.equal((await owner.get(user, request.id)).resolvedClient, null);
+      assert.equal(await stored(request.id), null);
+    }
+
+    for (const ending of ['WITHDRAWN', 'EXPIRED'] as const) {
+      const request = await file({ kind: 'CONFIRM', title: `${ending} reads no client`, expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+      const ended = await end(request.id, ending);
+      assert.equal(ended.state, ending);
+      assert.equal(ended.resolvedClient, null, `a ${ending} request names no client`);
+      assert.equal((await owner.get(user, request.id)).resolvedClient, null);
+      assert.equal(await stored(request.id), null);
+    }
   });
 });
 

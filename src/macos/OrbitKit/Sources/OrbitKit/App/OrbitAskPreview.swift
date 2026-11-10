@@ -200,8 +200,10 @@ public struct SkipMergeCheckPreview: Equatable, Sendable {
     /// The project's main branch by name; `main` where the card names none.
     public let mainBranch: String
 
-    /// The header holds one line beside its badge, so the task's name takes the row under it.
-    public static let heading = "Land without the merge check?"
+    /// The header holds one line beside its "merge check" badge, so the task's name takes the row
+    /// under it, and the heading leaves "merge" to the badge: at .body bold on a phone the longer
+    /// "Land without the merge check?" was cut short.
+    public static let heading = "Land without the check?"
     public var taskLine: String { taskTitle.isEmpty ? "This task" : taskTitle }
     public var projectLine: String? { projectTitle.isEmpty ? nil : "In \(projectTitle)" }
     public static let commandCaption = "This landing runs without the merge check"
