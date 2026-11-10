@@ -236,7 +236,7 @@ export function isRetryableLandingFailure(
 
 /** The checks the runner ran, as it reports them back. `outputTail` is clipped by the runner. */
 export interface IntegrationCheckResult {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
   exitCode: number | null;
@@ -247,7 +247,7 @@ export interface IntegrationCheckResult {
 
 /** The check the runner is told to run (§2.3 `IntegrationJobCommand`). */
 export interface IntegrationCheckSpec {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
   timeoutSeconds: number;
@@ -275,6 +275,8 @@ export interface IntegrationCheckSource {
   acceptanceCommand: string | null;
   acceptanceExpectedExitCode: number | null;
   acceptanceTimeoutSeconds: number | null;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   skipMergeCheck: boolean;
@@ -290,7 +292,7 @@ export interface IntegrationCheckSource {
  *
  * ONE GENERATION MAY SKIP ITS CHECK. `integration_skip_merge_check` queues a landing with the merge
  * check NOT RUN, because the account owner agreed the check is what is red rather than the delivery
- * (§2.4 J-S5, 0393) — so no MERGE_CHECK spec is built and the runner's CHECK phase does not happen
+ * (§2.4 J-S5, 0393) — so no LANDING_CHECK spec is built and the runner's CHECK phase does not happen
  * at all. The task's own acceptance is deliberately NOT skipped with it: the check the owner was
  * asked about is the project's, and a task whose own criterion cannot pass on the combined tree is a
  * statement about that task that no approval here chose to waive. This is the only place a check
@@ -320,12 +322,17 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
   // impossible: what skips a check is one task's landing onto the project's own branch, and a row
   // that arrived saying otherwise — a hand-written fixture, a build ahead of the migration — keeps
   // the check it was queued for rather than landing unchecked.
-  if (row.mergeCheckCommand && !(row.kind === 'LAND_TASK' && row.skipMergeCheck)) {
+  const landing = row.kind === 'LAND_TASK';
+  const command = landing ? row.landingCheckCommand ?? row.mergeCheckCommand : row.mergeCheckCommand;
+  const timeout = landing
+    ? row.landingCheckTimeoutSeconds ?? row.mergeCheckTimeoutSeconds
+    : row.mergeCheckTimeoutSeconds;
+  if (command && !(landing && row.skipMergeCheck)) {
     checks.push({
-      name: 'MERGE_CHECK',
-      command: row.mergeCheckCommand,
+      name: landing ? 'LANDING_CHECK' : 'MERGE_CHECK',
+      command,
       expectedExitCode: 0,
-      timeoutSeconds: row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+      timeoutSeconds: timeout ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
     });
   }
   return checks;
@@ -847,7 +854,7 @@ export async function queueLandingBehindTheWork(
  *
  * It rides on the generation it was asked for and nowhere else: the project's
  * `merge_check_command` is not touched, so the next landing and every promotion check run as they
- * did. The check is skipped, never passed — `checksFor` hands the runner no MERGE_CHECK at all, and
+ * did. The check is skipped, never passed — `checksFor` hands the runner no LANDING_CHECK at all, and
  * the row keeps this so that a landing whose checks array is empty cannot be read as a green one.
  */
 export interface LandingSkipMergeCheck {
