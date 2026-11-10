@@ -538,17 +538,17 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const tuple = async () =>
       (await sql.query<{ ctid: string }>('SELECT ctid::text FROM runner_presence WHERE runner_id = $1', [r.id])).rows[0]?.ctid;
 
-    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id);
+    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id, { leaseOwner: process });
     assert.equal(await db.runnerPresence.count({ where: { runnerId: r.id } }), 0, 'no presence row: nothing kept, nothing made');
     await linkBeat();
     assert.equal((await presenceRow()).lostAt, null, 'its first beat leaves nothing lost');
 
     // The gateway opens a new connection: the beat before it is kept; asked again, it writes nothing.
     const { lastBeatAt } = await presenceRow();
-    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id);
+    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id, { leaseOwner: process });
     assert.equal((await presenceRow()).lostAt?.getTime(), lastBeatAt.getTime());
     const kept = await tuple();
-    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id);
+    await recordRunnerLinkOpened(db as unknown as PrismaService, r.id, { leaseOwner: process });
     assert.equal(await tuple(), kept, 'the same row version: a welcome sent again changes nothing');
 
     // A beat 30 s after the one before is on time, and leaves lost_at as it was.

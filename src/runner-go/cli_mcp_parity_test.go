@@ -37,6 +37,9 @@ var cliParityExemptTools = map[string]string{
 	// sends no session header and is refused every time, so the command would be one that can only
 	// fail; inside one, the coordinator reaches it over MCP.
 	"ask_owner": "asks as the project's coordinator session: a terminal outside one is refused by the server",
+	// request_owner_action files AS the calling session, and the door refuses a call with no session
+	// header. The outcome comes back as a turn in that session, which a terminal does not have.
+	"request_owner_action": "files as the calling session and answers it with a turn: a terminal outside one is refused by the server",
 	// open_item_resolve closes an item AS the project's coordinator conversation, and the server
 	// checks the acting session against the project's own coordinator pointer (contract §4.7). A
 	// terminal outside a session sends no session header, and the door deliberately does not read a
