@@ -97,6 +97,7 @@ import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOu
 import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
 import { parseWatchWake } from '../lib/watches';
+import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
@@ -886,6 +887,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.reviewRequest
   && !node.reviewReturn
   && !parseWatchWake(node.text)
+  && !resolutionTurnLabel(node.text)
   && !parseBackgroundWake(node.note);
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
@@ -1911,6 +1913,12 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             />
           </>
         );
+      }
+      // The turn Orbit starts when an owner request ends: the card above says how it ended, and the
+      // payload is written for the agent.
+      const ownerRequestEnding = resolutionTurnLabel(node.text);
+      if (ownerRequestEnding) {
+        return <div className="owner-request-turn-divider"><span>{ownerRequestEnding}</span></div>;
       }
       // A turn a watch queued is the watch's to show, not a message the user typed.
       const wake = parseWatchWake(node.text);

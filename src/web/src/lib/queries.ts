@@ -35,6 +35,7 @@ import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import type { SidebarProject } from './projectAttention';
+import type { OwnerRequest, OwnerRequestListFilter } from './ownerRequests';
 import type { ProjectFilter } from '../components/ProjectsToolbar';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { PendingDecisionQueue } from '../components/DecisionRail';
@@ -664,6 +665,17 @@ export const openProjectsQuery = () =>
     // The splash reads it to decide the Open list's shape (BootGate); the rail mounting a moment
     // later shows that read instead of making another.
     staleTime: streamStaleTime,
+  });
+
+/**
+ * The owner requests in one state, newest first, at most 200. No realtime event announces one, so
+ * this polls like the coordinator's questions do; a press re-reads it at once.
+ */
+export const ownerRequestsQuery = (filter: OwnerRequestListFilter) =>
+  queryOptions({
+    queryKey: ['owner-requests', filter] as const,
+    queryFn: () => api<{ requests: OwnerRequest[] }>(`/owner-requests?state=${filter}`),
+    refetchInterval: streamPoll(20_000),
   });
 
 /** The project document also supplies title and task counts when a finished project is

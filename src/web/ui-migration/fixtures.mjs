@@ -155,6 +155,7 @@ export async function installFixtures(page, { theme = 'light', scenario = 'defau
     if (method === 'GET' && path === '/api/workspaces') return json([WORKSPACE]);
     if (method === 'GET' && path === '/api/providers') return json([]);
     if (method === 'GET' && path === '/api/watches') return json([]);
+    if (method === 'GET' && path === '/api/owner-requests') return json({ requests: [] });
     if (await sessionApi(route)) return;
     if (method === 'GET' && path === '/api/task-lists') return json([]);
     if (method === 'GET' && path === '/api/tasks/counts') return json(counts);
