@@ -40,6 +40,7 @@ export function isOrbitAuthoredTurn(clientTurnId: string | null | undefined): bo
   // imports this, and a constant read mid-cycle is `undefined`.
   const prefixes = [
     RUN_QUESTION_PREFIX,
+    'run-notify:v1:',
     WATCH_TURN_KEY_PREFIX,
     BACKGROUND_WAKE_TURN_PREFIX,
     OPEN_ITEM_TURN_PREFIX,

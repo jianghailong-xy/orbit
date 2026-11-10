@@ -68,6 +68,11 @@ class ProjectCopyParityTest {
         assertTrue(web.contains("export const DONE_CARD_FINDINGS_HEADING = '${ProjectDone.findingsHeading}';"))
         assertTrue(web.contains("export const DONE_CARD_FINDINGS_ACCEPTED = '${ProjectDone.findingsAccepted}';"))
     }
+    @Test fun declineWordsMatchWeb() {
+        val web = File(root, "src/web/src/lib/projectDone.ts").readText()
+        assertTrue(web.contains("export const DONE_DECLINE_HEADING = '${ProjectDone.declineHeading}';"))
+        assertTrue(web.contains("export const DONE_DECLINE_HINT = '${ProjectDone.declineHint}';"))
+    }
     @Test fun doneWords() = assertIn(ProjectDone, swift("${kit}ProjectDone.swift"))
     @Test fun attentionWords() {
         val source = swift("${kit}ProjectAttention.swift")

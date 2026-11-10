@@ -2413,6 +2413,7 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  { at: 'sessions/run-notify.ts#recordRunNotify', under: 'sessions.createTurn onTurnWritten, under the recipient Session lock (rank 30). One session_request INSERT (rank 60), whose recipient foreign key names that locked row. The request id and clientTurnId are minted before the retried transaction; a replay of a committed turn never reaches the hook. Turn and request roll back together, with no external effects. A refused or exhausted createTurn is caught by notifyAgentMessage and falls back to the owner after rollback.' },
   // An owner request's ending delivered to the session that asked (migration 0504): its watch_delivery row.
   { at: 'owner-requests/owner-request-endings.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue, and owner-requests/owner-secrets.service.ts#ack' },
   // A SECRET request's key that was never delivered, ended with the request (migration 0506): its grant row.

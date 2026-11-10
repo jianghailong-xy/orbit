@@ -1,4 +1,5 @@
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
+import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
   mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction,
@@ -364,7 +365,8 @@ import {
  * (tasks/owner-confirmation-review-turn.ts).
  */
 function isPlatformContentTurn(clientTurnId: string | null | undefined): boolean {
-  return isBackgroundWakeTurn(clientTurnId)
+  return isRunNotifyTurn(clientTurnId)
+    || isBackgroundWakeTurn(clientTurnId)
     || isSessionReplyTurn(clientTurnId)
     || isConfirmationReviewContentTurn(clientTurnId);
 }
@@ -7169,6 +7171,11 @@ export class SessionsService {
     const wakeContent = new Map<string, string>();
     for (const turn of turns) {
       if (!turn.clientTurnId || turn.status !== 'PENDING') continue;
+      if (isRunNotifyTurn(turn.clientTurnId)) {
+        const block = await runNotifyContent(this.prisma, sessionId, turn.clientTurnId);
+        if (block) wakeContent.set(turn.id, block);
+        continue;
+      }
       if (isSessionReplyTurn(turn.clientTurnId)) {
         // In the turn's own kind too: a reply steer's blocks say which turn they join.
         const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId, turn.kind);

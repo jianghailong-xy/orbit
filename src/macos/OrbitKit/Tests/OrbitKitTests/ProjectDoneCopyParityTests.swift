@@ -142,6 +142,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("PROJECT_DONE_GAPS_IT_COULDNT_PROVE", ProjectDone.gapsItCouldntProve),
         ("PROJECT_DONE_NOT_ASKED_YET", ProjectDone.notAskedYet),
         ("PROJECT_DONE_RECORD_AS_DONE_ROW", ProjectDone.recordAsDoneRow),
+        ("DONE_DECLINE_HEADING", ProjectDone.declineHeading),
+        ("DONE_DECLINE_HINT", ProjectDone.declineHint),
     ]
 
     // MARK: the words

@@ -849,8 +849,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectStart(_ address: SessionProjectAddress) async {",
                              to: "\n    }")
-        XCTAssertTrue(load.contains("guard row?.status == .open, row?.started == false else {"),
-                      "a started project's page reads nothing more than before")
+        XCTAssertFalse(load.contains("row?.started == false"),
+                       "the latest decline remains readable after the project starts")
         XCTAssertFalse(load.contains("AWAITING_DECISION"),
                        "the Landings group's holders are gone with the group (owner 2026-10-27)")
         XCTAssertTrue(load.contains("api.projectOpenItems(projectID: address.projectID)"))

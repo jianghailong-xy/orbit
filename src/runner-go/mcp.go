@@ -4737,7 +4737,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "notify",
-			"description": "Tell the human this session belongs to that something happened, on their phone and Mac, " +
+			"description": "In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices. " +
+				"Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back. " +
+				"Tell the human this session belongs to that something happened, on their phone and Mac, " +
 				"with a line you write: the thing they said they were waiting for is done, or something went wrong " +
 				"that they would want to hear about before they next look. " +
 				"Notify is only for telling. If you need a credential, or anything else only the owner can do or " +

@@ -10,6 +10,9 @@ import { formatSpan } from './watches';
 // Keep each public copy token as a literal declaration.  Native copy-parity tests intentionally
 // read the source (rather than importing the web bundle), so an alias such as
 // `DONE_CARD_HEADING = PROJECT_DONE_COPY.heading` is not enough for them to prove parity.
+export const DONE_DECLINE_HEADING = 'You said not yet';
+export const DONE_DECLINE_HINT = 'The card comes back after the coordinator changes something.';
+
 export const DONE_CARD_HEADING = 'Is this project done?';
 export const DONE_CARD_COORDINATOR_CALL = 'Coordinator’s call';
 export const DONE_CARD_DONE_WHEN = 'Done when';

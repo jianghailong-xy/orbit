@@ -1,4 +1,5 @@
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
+import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { readMergeRecovery, mergeRecoveryReady, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
@@ -5119,6 +5120,13 @@ export class RunnerApiController {
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
+      // M4: taking a notice up is its terminal outcome, in the turn delivery transaction.
+      if (isRunNotifyTurn(t.clientTurnId)) {
+        await tx.sessionRequest.updateMany({
+          where: { toSessionId: sessionId, id: t.clientTurnId!.slice('run-notify:v1:'.length).split(':')[0], kind: 'RUN_NOTIFY', state: 'OPEN' },
+          data: { state: 'READ', closedAt: new Date() },
+        });
+      }
       let attachments: TurnAttachment[] | undefined;
       // Who outside Orbit sent it, on the first delivery of a message only: the runner says so to the agent after the
       // words (docs/feishu-bot-design.md §8.2). A re-delivery's continuation is the platform's words, as below.
@@ -5274,6 +5282,7 @@ export class RunnerApiController {
         // evidence revision handed to the session that dispatched its task (tasks/evidence-review.ts).
         if (t.kind === 'message') {
           content = (await appendRunQuestionContext(tx, t.clientTurnId, content)) ?? content;
+          content = (await runNotifyContent(tx, sessionId, t.clientTurnId)) ?? content;
           content = (await appendOwnerConfirmationReviewContext(tx, t.clientTurnId, content)) ?? content;
           content = (await appendConfirmationReturnContext(tx, t.clientTurnId, content)) ?? content;
         }
