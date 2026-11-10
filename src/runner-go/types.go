@@ -688,13 +688,15 @@ type IntegrationCheckSpec struct {
 // IntegrationCheckResult is what one check came to. ExitCode is nil when the command never
 // produced one — it could not start, or its budget killed it.
 type IntegrationCheckResult struct {
-	Name             string `json:"name"`
-	Command          string `json:"command"`
-	ExpectedExitCode int    `json:"expectedExitCode"`
-	ExitCode         *int   `json:"exitCode"`
-	TimedOut         bool   `json:"timedOut"`
-	DurationMs       int64  `json:"durationMs"`
-	OutputTail       string `json:"outputTail"`
+	Skipped          string   `json:"skipped,omitempty"`
+	Files            []string `json:"files,omitempty"`
+	Name             string   `json:"name"`
+	Command          string   `json:"command"`
+	ExpectedExitCode int      `json:"expectedExitCode"`
+	ExitCode         *int     `json:"exitCode"`
+	TimedOut         bool     `json:"timedOut"`
+	DurationMs       int64    `json:"durationMs"`
+	OutputTail       string   `json:"outputTail"`
 }
 
 // IntegrationJobProgressRequest renews the lease and says which step the job reached.
