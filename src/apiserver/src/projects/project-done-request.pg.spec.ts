@@ -76,10 +76,9 @@ import {
 import { criterionKeyOf } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from './project-integration-job';
-import { readDoneState, supersedeStaleDoneRequest } from './project-done-request';
+import { doneReadiness, readDoneState, supersedeStaleDoneRequest } from './project-done-request';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
-import { doneReadiness, readDoneState } from './project-done-request';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
