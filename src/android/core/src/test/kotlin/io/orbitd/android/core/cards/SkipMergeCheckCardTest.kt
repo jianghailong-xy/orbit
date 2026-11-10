@@ -37,7 +37,7 @@ class SkipMergeCheckCardTest {
     @Test fun sayingNoToASkipIsAConversation() {
         val card = card()
         assertEquals(listOf(CardVerb.ALLOW, CardVerb.CHAT), card.actions)
-        assertEquals("Land without the merge check?", card.title)
+        assertEquals("Land without the check?", card.title)
         val refusal = Wire.json.parseToJsonElement(CardRequests.build(card, CardVerb.CHAT, CardInput("Fix the spec first")).body!!.decodeToString()).jsonObject
         assertEquals("deny", refusal.text("behavior"))
         assertEquals("Fix the spec first", refusal.text("message"))

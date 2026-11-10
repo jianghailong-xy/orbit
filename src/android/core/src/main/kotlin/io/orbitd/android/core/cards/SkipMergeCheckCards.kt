@@ -22,7 +22,7 @@ data class SkipMergeCheckCard(val projectTitle: String, val taskTitle: String, v
 /** The skip card's names and words. The server reads the card back by id, so there is no standing yes to offer. */
 object SkipMergeCheckCards {
     const val tool = "orbit_integration_skip_merge_check"
-    const val heading = "Land without the merge check?"
+    const val heading = "Land without the check?"
     const val commandCaption = "This landing runs without the merge check"
     const val reasonCaption = "The agent says this red is the check’s, not the work’s"
     const val action = "Land it without the check"
