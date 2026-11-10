@@ -752,7 +752,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// The options travel as the caller wrote them: the server is what decides whether 0, 2, 3
 		// or 4 of them is a question, and picking them apart here would be a second opinion about
 		// the same rule.
-		copyIfPresent(body, args, "options", "recommendedOption", "ifUnanswered", "clientQuestionId")
+		copyIfPresent(body, args, "options", "recommendedOption", "ifUnanswered", "clientQuestionId", "forRunQuestion")
 		if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
 			body["blocksTaskIds"] = blocked
 		}
@@ -1554,10 +1554,12 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			chosen := getNumber(args, "option")
 			option = &chosen
 		}
-		if strings.TrimSpace(message) == "" && option == nil {
-			return toolResult("give option (the index of the answer you choose), message, or both", true)
+		if strings.TrimSpace(message) == "" && option == nil && args["answers"] == nil {
+			return toolResult("give answers for a run question, or option (the index of the answer you choose), message, or both", true)
 		}
-		raw, err := s.t.sendSessionReply(s.sessionID, s.orchestrationToken, requestID, sessionReplyBody(message, messageSet, option))
+		body := sessionReplyBody(message, messageSet, option)
+		copyIfPresent(body, args, "answers")
+		raw, err := s.t.sendSessionReply(s.sessionID, s.orchestrationToken, requestID, body)
 		if err != nil {
 			return toolResult("reply failed: "+err.Error(), true)
 		}
@@ -3811,7 +3813,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"Say which one you recommend and why in its description — you know the work best; " +
 				"they are deciding, not designing. " +
 				"Only the conversation this project is coordinated FROM may ask, because the " +
-				"question is filed in the project's name.",
+				"question is filed in the project's name. For a run question, set forRunQuestion to its request-id, " +
+				"give your recommendation, then use session_reply to pass the owner’s answer back to the run.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -3849,6 +3852,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"with the first option tomorrow\". Shown on the card as written, so the " +
 						"owner can decide how urgent this is.",
 				},
+				"forRunQuestion": map[string]interface{}{"type": "string", "description": "The request-id of the run question you cannot answer without the owner."},
 				"clientQuestionId": map[string]interface{}{
 					"type": "string",
 					"description": "Your own key for this question. A call retried under the same key " +
@@ -4733,7 +4737,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "notify",
-			"description": "Tell the human this session belongs to that something happened, on their phone and Mac, " +
+			"description": "In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices. " +
+				"Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back. " +
+				"Tell the human this session belongs to that something happened, on their phone and Mac, " +
 				"with a line you write: the thing they said they were waiting for is done, or something went wrong " +
 				"that they would want to hear about before they next look. " +
 				"Notify is only for telling. If you need a credential, or anything else only the owner can do or " +

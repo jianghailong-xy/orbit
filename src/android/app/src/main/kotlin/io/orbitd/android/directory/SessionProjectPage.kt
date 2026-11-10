@@ -488,7 +488,10 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                         onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } })
                 }
             }
-            if (state.openItems?.obj("doneRequest") == null) {
+            val staleRequest = io.orbitd.android.projects.ProjectDone.staleRequest(state.openItems)
+            if (staleRequest != null) {
+                item(key = "done-request-stale") { io.orbitd.android.projects.ProjectStaleDoneRow(staleRequest) }
+            } else if (state.openItems?.obj("doneRequest") == null) {
                 state.openItems?.obj("latestDoneRequestDecline")?.let { decline ->
                     item(key = "done-decline") { io.orbitd.android.projects.ProjectDoneDeclineRow(decline) }
                 }

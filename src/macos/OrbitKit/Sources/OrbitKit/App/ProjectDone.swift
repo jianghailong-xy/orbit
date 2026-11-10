@@ -427,6 +427,14 @@ public struct ProjectDoneSubject: Equatable, Sendable {
 // MARK: - the words
 
 public enum ProjectDone {
+    public static let staleHeading = "The coordinator’s request went stale"
+    public static let staleDetail = "The coordinator has been told and will ask again when the work settles."
+    public static func staleRequest(_ items: ProjectOpenItemsView?) -> String? {
+        guard items?.doneRequest == nil, let stale = items?.latestDoneRequestSuperseded else { return nil }
+        if let declined = items?.latestDoneRequestDecline, declined.declinedAt >= stale.supersededAt { return nil }
+        return stale.reason.trimmingCharacters(in: CharacterSet(charactersIn: ". \n")) + ". " + staleDetail
+    }
+
 
     // The owner card, in `lib/projectDone.ts`'s order. Each is one of that file's declarations,
     // word for word.

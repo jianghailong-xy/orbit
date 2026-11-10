@@ -1,3 +1,4 @@
+import { readRunQuestionCard } from './run-question';
 import type { Prisma, SessionRunSource } from '@prisma/client';
 import type {
   ConfirmationReturnCard,
@@ -46,6 +47,7 @@ import { readSessionReplyCards, readTurnRequestIds } from './session-request';
  * the queue that way, and `taskStart` was never on it at all.
  */
 export interface TurnCards {
+  runQuestion?: NonNullable<Awaited<ReturnType<typeof readRunQuestionCard>>>;
   openItemDelivery?: OpenItemDeliveryCard;
   ownerAnswer?: OwnerAnswerCard;
   coordinatorDelivery?: CoordinatorDeliveryCard;
@@ -159,6 +161,10 @@ export async function readTurnCards(
   for (const turn of turns) {
     const sessionReplies = replies.get(turn.clientTurnId);
     if (sessionReplies) add(turn.id, { sessionReplies });
+  }
+  for (const turn of turns) {
+    const runQuestion = await readRunQuestionCard(db, turn.clientTurnId);
+    if (runQuestion) add(turn.id, { runQuestion });
   }
   return cards;
 }

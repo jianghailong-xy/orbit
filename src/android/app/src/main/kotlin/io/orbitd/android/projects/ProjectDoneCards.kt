@@ -326,3 +326,13 @@ internal fun ProjectDoneDeclineRow(decline: JsonObject) {
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+@Composable
+internal fun ProjectStaleDoneRow(detail: String) {
+    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.padding(12.dp)) {
+            Text(ProjectDone.staleHeading, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
