@@ -246,6 +246,7 @@ import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from '../tasks/evidence-review.service';
 import {
@@ -1592,6 +1593,7 @@ export class RunnerApiController {
      * without it the answer leaves both fields out, which states nothing.
      */
     @Optional() private readonly ownerSecrets?: OwnerSecretsService,
+    @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -7402,6 +7404,7 @@ export class RunnerApiController {
       if ('taskId' in finalized && finalized.taskId) await this.observeAfterWorkTurn(sessionId, finalized.taskId);
       // And the evidence revisions that waited for it while it was paused: a coordinator whose turn
       // ended is back, and a paused one is left alone (projects/coordinator-evidence-queue.service.ts).
+      await this.coordinatorFacts?.deliverOwedTo(sessionId);
       await this.evidenceQueue?.deliverOwedTo(sessionId);
       await this.evidenceReviews?.deliverOwedTo(sessionId);
       // And the confirmation reviews it was to be handed whose delivery a crash cut off between their

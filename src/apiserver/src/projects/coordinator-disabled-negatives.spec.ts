@@ -113,6 +113,7 @@ const WIRED: readonly WiredWakeFact[] = [
     producedBy: [
       'projects/coordinator-wake.ts#projectTasksSettledFact',
       'projects/project-tasks-settled.producer.ts#afterCommit',
+      'projects/project-tasks-settled.producer.ts#queuedFactFor',
     ],
     negatives: [
       {
@@ -143,6 +144,7 @@ const WIRED: readonly WiredWakeFact[] = [
     producedBy: [
       'projects/coordinator-wake.ts#projectAcceptanceLandedFact',
       'projects/project-tasks-settled.producer.ts#afterCommit',
+      'projects/project-tasks-settled.producer.ts#queuedFactFor',
     ],
     negatives: [
       {
