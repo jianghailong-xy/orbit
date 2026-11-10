@@ -1498,7 +1498,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Every attempt re-locks the task and re-reads every row of §3.5\'s table inside the closure — the reviewer, the turn, whether the request is still the newest, what it already has — so a re-run records against the same facts or is refused; a rolled-back attempt leaves no record.',
-    effects: 'After commit only: a task.changed nudge and a session row refresh for the run whose card the review moved (§5 N5).',
+    effects: 'After commit only: a task.changed nudge and a session row refresh for the run whose card the review moved (§5 N5); the first REVIEW ending a coordinator hold alerts the owner once through PushService.notifyConfirmationRaised (§13 A6).',
     answer: 'Typed 503 after retry exhaustion. A caller that is not the request\'s reviewer, or no session, is a 403; outside a turn, a superseded request and one already reviewed are 409s; malformed input and needsYou after the owner decided are 400s.',
   },
   {
