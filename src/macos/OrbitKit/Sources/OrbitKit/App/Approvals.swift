@@ -48,6 +48,14 @@ public enum Approvals {
     public static func isMergeCheckChange(toolName: String) -> Bool {
         toolName == "orbit_project_update_integration"
     }
+    /// Letting ONE landing go on without the merge check that stopped it. The other half of the
+    /// merge-check subject and deliberately its own card: a skip is this landing unchecked, a change
+    /// is every later one checked by something else. The server reads the card back by id, so a
+    /// standing rule could answer nothing. Web keys it off `isSkipMergeCheck`; the card reads
+    /// `SkipMergeCheckPreview`.
+    public static func isSkipMergeCheck(toolName: String) -> Bool {
+        toolName == "orbit_integration_skip_merge_check"
+    }
     /// Deleting one of the account's runners, or one of its workspaces. The server deletes only on a
     /// card a person answered, so a standing rule could answer nothing. Web keys them off
     /// `isRunnerDelete` and `isWorkspaceDelete`; the card reads `DeleteApprovalPreview`.
@@ -66,6 +74,7 @@ public enum Approvals {
         isTaskBatch(toolName: toolName) || isDagChange(toolName: toolName)
             || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
             || isBlockerResolve(toolName: toolName) || isMergeCheckChange(toolName: toolName)
+            || isSkipMergeCheck(toolName: toolName)
             || isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName)
             || isWorkspaceCreate(toolName: toolName) || isWorkspaceUpdate(toolName: toolName)
     }

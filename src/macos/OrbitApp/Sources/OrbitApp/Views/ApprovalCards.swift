@@ -246,6 +246,13 @@ struct ToolApprovalCard: View {
             Approvals.mergeCheckChangePreview(toolName: approval.toolName ?? "", from: $0)
         }
     }
+    /// Letting one landing through without its merge check: the command that will not run, what it
+    /// said, and why the agent says the red is the check's. Without it the plain card drew no body.
+    private var skipCheck: SkipMergeCheckPreview? {
+        approval.input.flatMap {
+            Approvals.skipMergeCheckPreview(toolName: approval.toolName ?? "", from: $0)
+        }
+    }
     /// Deleting a runner or a workspace: what the server read about it when it filed the card.
     private var deleting: DeleteApprovalPreview? {
         approval.input.flatMap {
@@ -418,6 +425,35 @@ struct ToolApprovalCard: View {
                          detail: "The agent says it no longer blocks",
                          rows: blocker.reason.isEmpty ? [] : [blocker.reason],
                          markdown: true)
+        } else if let skipCheck {
+            // The header stays on one line, so the task's name takes the row under it and wraps.
+            // The command is whole and selectable: the decision is about that command.
+            ApprovalHeader(symbol: "forward.end", title: SkipMergeCheckPreview.heading,
+                           tone: .orange, badge: "merge check")
+            VStack(alignment: .leading, spacing: 6) {
+                Text(skipCheck.taskLine).font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let project = skipCheck.projectLine {
+                    Text(project).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Text(SkipMergeCheckPreview.commandCaption).font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                workspaceWriteBlock(skipCheck.checkCommand)
+                if !skipCheck.failure.isEmpty {
+                    Text(skipCheck.failure).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Text(SkipMergeCheckPreview.reasonCaption).font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !skipCheck.reason.isEmpty {
+                    MarkdownView(source: skipCheck.reason).font(.orbitProse)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Text(skipCheck.note).font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else if let mergeCheck {
             // Both commands whole and selectable: the write goes through only as this card shows it.
             ApprovalHeader(symbol: "wrench.and.screwdriver", title: MergeCheckChangePreview.heading,
@@ -555,6 +591,7 @@ struct ToolApprovalCard: View {
         if create != nil { return "Create it" }
         if dag != nil { return "Apply changes" }
         if blocker != nil { return "Resolve it" }
+        if skipCheck != nil { return SkipMergeCheckPreview.action }
         if mergeCheck != nil { return MergeCheckChangePreview.action }
         if deleting != nil { return Approvals.deleteAction }
         if let writing { return writing.action }
@@ -615,6 +652,7 @@ struct ToolApprovalCard: View {
         if let batch { return "\(batch.taskCount) new task\(batch.taskCount == 1 ? "" : "s")" }
         if let dag { return dag.listTitle }
         if let blocker { return blocker.declineName }
+        if let skipCheck { return skipCheck.declineName }
         if let mergeCheck { return mergeCheck.declineName }
         if let deleting { return deleting.declineName }
         if let writing { return writing.declineName }
