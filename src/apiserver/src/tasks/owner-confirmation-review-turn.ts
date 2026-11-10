@@ -114,12 +114,14 @@ type Db = Prisma.TransactionClient;
 
 /** Everything a review block and card are rendered from, read at once. */
 async function readReviewForTurn(db: Db, reviewId: string) {
-  return db.taskOwnerConfirmationReview.findUnique({
+  const review = await db.taskOwnerConfirmationReview.findUnique({
     where: { id: reviewId },
     select: {
       id: true,
       taskId: true,
-      dueAt: true,
+      windowSeconds: true,
+      reviewerSessionId: true,
+      deliveryTurnClientId: true,
       records: { select: { kind: true } },
       task: { select: { title: true, acceptanceCriteria: true } },
       request: {
@@ -134,6 +136,15 @@ async function readReviewForTurn(db: Db, reviewId: string) {
       },
     },
   });
+  if (!review) return null;
+  const turn = review.reviewerSessionId && review.deliveryTurnClientId
+    ? await db.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId: review.reviewerSessionId, clientTurnId: review.deliveryTurnClientId } },
+      select: { deliveredAt: true },
+    }) : null;
+  const dueAt = turn?.deliveredAt
+    ? new Date(turn.deliveredAt.getTime() + review.windowSeconds * 1_000) : null;
+  return { ...review, dueAt };
 }
 
 /**
@@ -156,7 +167,7 @@ export async function ownerConfirmationReviewBlock(db: Db, reviewId: string): Pr
     `run-session="${uuidToBase62(request.sessionId)}"`,
     `branch="${attribute(branch ?? '')}"`,
     `sha="${request.branchSha ?? ''}"`,
-    `due-at="${isoSeconds(review.dueAt)}"`,
+    ...(review.dueAt ? [`due-at="${isoSeconds(review.dueAt)}"`] : []),
   ];
   const open = `<orbit-confirmation-review ${attributes.join(' ')}>`;
   const close = '</orbit-confirmation-review>';
@@ -266,7 +277,7 @@ export async function readConfirmationReviewRequestCard(
     runSessionId: review.request.sessionId,
     branch: run?.branch ?? null,
     sha: review.request.branchSha,
-    dueAt: review.dueAt.toISOString(),
+    dueAt: review.dueAt?.toISOString() ?? null,
   };
 }
 
