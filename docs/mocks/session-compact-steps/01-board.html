@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#eef0f3;font-family:-apple-system,BlinkMacSystemFont,Inter,'PingFang SC','Noto Sans SC',sans-serif;color:#1f2329}
+.board{width:2280px;padding:40px;box-sizing:border-box}
+h1{font-size:30px;margin:0 0 6px}.sub{color:#646a73;font-size:16px;margin-bottom:28px}
+.row{display:flex;gap:28px;align-items:flex-start;margin-bottom:28px}
+.f{background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.f h2{font-size:18px;margin:0 0 4px}.f p{margin:0 0 12px;color:#646a73;font-size:14px;line-height:1.5;max-width:500px}
+.f img{display:block;width:521px;border:1px solid #e5e6eb;border-radius:8px}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:2px}
+.now{background:#fff1f0;color:#cf1322}.prop{background:#e8f7ee;color:#1a7f37}.alt{background:#fff7e6;color:#ad6800}
+.notes{display:flex;gap:28px}.notes .f{flex:1}
+table{border-collapse:collapse;font-size:14px;width:100%}td,th{border-bottom:1px solid #eee;padding:7px 8px;text-align:left;vertical-align:top}th{color:#646a73;font-weight:500}
+code{font-family:'JetBrains Mono',Menlo,monospace;font-size:12.5px;background:#f2f3f5;padding:1px 4px;border-radius:4px}
+ol,ul{margin:0;padding-left:20px;font-size:14px;line-height:1.7}
+.ask{border:2px solid #faad14}
+</style></head><body><div class="board">
+<h1>Session 对话流 · 紧凑步骤行</h1>
+<div class="sub">参考：Claude Code 的 “Thought for 15s, listed 1 directory, ran 1 shell command”。以下截图来自真实 Web 会话页（左＝今天的 main，其余＝原型分支），同一段对话：你截图里那次“服务打不开了”排查。界面文案为英文。</div>
+<div class="row">
+ <div class="f"><h2>① 今天 <span class="tag now">main</span></h2><p>思考一行、每条命令一张卡；3 条以上才合成 “Bash × 4”。7 轮排查要 ~1060px 高，结论文字被卡片挤散。</p><img src="frames/today-live.png"></div>
+ <div class="f"><h2>② 方案 A · 进行中 <span class="tag prop">推荐</span></h2><p>两段回复之间的思考+工具调用合成<b>一行灰字</b>，无卡片无图标。正在跑的那条单独显示：● 描述 + ⎿ 命令（同截图）。高度 ~720px（−32%）。</p><img src="frames/A-live.png"></div>
+ <div class="f"><h2>② 方案 A · 点开一行</h2><p>悬停出现 ⌄；点击展开为今天的原样卡片（思考、每条命令、输出都在），左侧竖线收拢。再点收起。</p><img src="frames/A-open.png"></div>
+</div>
+<div class="row">
+ <div class="f"><h2>② 方案 A · 回合结束 + 有失败</h2><p>失败不自动展开，行尾红字 “· 1 failed”。回合结束后最后一条命令也并回步骤行；回复下的 ⧉ · 时间保持不变。</p><img src="frames/A-done-failed.png"></div>
+ <div class="f"><h2>③ 方案 B · A + 回复前加 ● <span class="tag alt">可选</span></h2><p>和截图完全一致：每段回复前一个实心点，步骤行与回复文字对齐。区分“说的话”和“做的事”更强，但 Markdown 长回复（列表、表格）里也会多一个点。</p><img src="frames/B-live.png"></div>
+ <div class="f"><h2>② 方案 A · 深色</h2><p>颜色全部沿用现有变量（<code>--text-3</code>、<code>--border</code>），无新色值。</p><img src="frames/A-dark.png"></div>
+</div>
+<div class="notes">
+ <div class="f"><h2>规则</h2><table>
+ <tr><th>情况</th><th>步骤行写法</th></tr>
+ <tr><td>思考</td><td><code>Thought for 15s</code>（多段相加），总在最前</td></tr>
+ <tr><td>Bash</td><td><code>ran 2 shell commands</code>；<code>ls/find/tree</code> 开头算 <code>listed 1 directory</code></td></tr>
+ <tr><td>Read / Grep·Glob / Edit / Write</td><td><code>read 3 files</code> / <code>searched 2 times</code> / <code>edited 1 file</code> / <code>wrote 1 file</code></td></tr>
+ <tr><td>WebFetch / WebSearch / 其他 MCP</td><td><code>fetched 1 page</code> / <code>searched the web 1 time</code> / <code>used 2 tools</code></td></tr>
+ <tr><td>有失败</td><td>行尾 <code>· 1 failed</code>（红），不自动展开</td></tr>
+ <tr><td>进行中</td><td>已完成部分成行；当前那条单独 ● 描述 + ⎿ 命令，结束后并入</td></tr>
+ <tr><td>不并入（保持原卡片）</td><td>提问、计划、子 Agent/Workflow、建任务/会话卡、带图片的结果、用户的 <code>!</code> 命令（与今天的分组例外相同）</td></tr>
+ <tr><td>导出 / ⌘F</td><td>导出时全部展开；⌘F 命中折叠内容时自动展开该行</td></tr>
+ </table></div>
+ <div class="f"><h2>改动范围</h2><ul>
+ <li><code>src/web/src/components/Transcript.tsx</code>：<code>groupToolRuns</code> 改为“思考+可分组工具”任意条数成组；新 <code>StepsLine</code> 取代 <code>ToolGroupView</code> 的折叠行</li>
+ <li><code>src/web/src/index.css</code>：<code>.chat-steps*</code> 约 15 行</li>
+ <li>测试：<code>Transcript.thinking / turnEnd / streamingOrder</code> 等按新结构更新，新增步骤行文案测试</li>
+ <li>仅 Web；iOS/macOS 不在本次范围（如需跟进另开）</li>
+ </ul></div>
+ <div class="f ask"><h2>待你定</h2><ol>
+ <li><b>A 还是 B</b>（回复前要不要 ●）？推荐 A：改动小，不影响长回复排版。</li>
+ <li><b>Edit/Write 也折叠吗？</b>推荐折叠（与截图一致）；或保留为卡片，方便直接看改了哪些文件。</li>
+ <li><b>单条也折叠？</b>推荐是：哪怕只有 1 次思考或 1 条命令也合成一行，节奏统一。</li>
+ <li><b>回合结束后</b>是否把整回合再收成一行 “Worked for 7m · 6 steps”？推荐不做，保持每步一行。</li>
+ </ol></div>
+</div></div></body></html>

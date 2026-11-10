@@ -10497,41 +10497,85 @@ button.chat-jump-start:hover {
 .chat-tool-task .chat-tool-row:hover {
   background: #f4eefe;
 }
-.chat-tool-group .chat-tool-row {
-  min-height: 32px;
+.chat-steps {
+  margin: 4px 0 10px;
+  padding: 0 12px;
 }
-.chat-tool-group:not(.is-open) .chat-tool-row {
-  background: transparent;
-}
-.chat-tool-group:not(.is-open) .chat-tool-row:hover {
-  background: var(--bg-sunken);
-}
-.chat-tool-group-lead {
+/* One muted line between two replies: no card, no icon. The caret shows only on hover (or while
+   open), so a turn of eight steps reads as eight quiet sentences. */
+.chat-steps-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 13px;
   color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
 }
-.chat-tool-group-lead.is-failed {
+.chat-steps-line:hover {
+  color: var(--text-2);
+}
+.chat-steps-caret {
+  font-size: 10px;
+  opacity: 0;
+}
+.chat-steps-line:hover .chat-steps-caret,
+.chat-steps.is-open .chat-steps-caret {
+  opacity: 1;
+}
+.chat-steps-failed {
   color: var(--error);
 }
-.chat-tool-group-lead .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+.chat-steps-detail {
+  margin: 6px 0 4px 2px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
 }
-/* The breakdown is what a settled group's folded row is really for, so give it room for the
-   usual two-or-three kinds — but never much past half the row, or a narrow window would let it
-   squeeze the counts (which have no fixed width of their own) out of the line entirely. */
-.chat-tool-group-breakdown {
-  max-width: min(420px, 55%);
+.chat-steps-live {
+  margin-top: 6px;
+  font-size: 13.5px;
+}
+.chat-steps-live-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.chat-steps-live-head > span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chat-tool-group-detail {
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-raised);
-  padding: 4px 8px 8px;
+.chat-steps-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: chat-steps-pulse 1.2s ease-in-out infinite;
 }
-.chat-tool-group-detail .chat-tool-card {
-  margin: 4px 0;
+@keyframes chat-steps-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-steps-dot {
+    animation: none;
+  }
+}
+.chat-steps-live-cmd {
+  padding-left: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-steps-elbow {
+  margin-right: 4px;
 }
 .chat-tool-detail {
   border-top: 1px solid var(--border-subtle);

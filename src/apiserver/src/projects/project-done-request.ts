@@ -3,6 +3,9 @@ import { createHash } from 'node:crypto';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import type {
   AcceptedGap,
+  DoneState,
+  DoneStateCriterion,
+  DoneStateTask,
   DoneRequest,
   DoneRequestGap,
   OpenItemKind,
@@ -21,7 +24,6 @@ import {
   criteriaFromDefinitions,
   criterionKeyOf,
   standardSetVersion,
-  type StatedAcceptanceCriterion,
 } from './project-acceptance';
 import {
   criterionLanding,
@@ -92,41 +94,7 @@ export const MAX_DONE_REQUEST_EVIDENCE_REF = 500;
 /** The owner's explanation is a card-sized sentence, not an unbounded report. */
 export const MAX_DONE_REQUEST_DECLINE_NOTE = 2_000;
 
-/** One criterion, as the check reads it. */
-export interface DoneStateCriterion {
-  stated: StatedAcceptanceCriterion;
-  satisfied: boolean;
-  /** The work holding it unmet, as the satisfaction lane names it; empty when nothing is filed. */
-  heldUpBy: Array<{ taskId: string; title: string }>;
-  landing: CriterionLanding;
-  /** Why it is not LANDED (`criterion-landing-reason.ts`); null when it is. */
-  reason: CriterionLandingReason | null;
-  /** The serving work that has something to land and is not on the upstream. */
-  heldOffLanded: Array<{ taskId: string; title: string }>;
-}
-
-/** One task of the project, as the check reads it. */
-export interface DoneStateTask {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  criterionDefinitionId: string | null;
-  /** A run of it is going, or waiting for a runner — never the asking conversation's own. */
-  run: 'RUNNING' | 'QUEUED' | null;
-}
-
-/** Everything the check and the digest read: the project as it stands. */
-export interface DoneState {
-  criteria: DoneStateCriterion[];
-  /** Every task of the project, cancelled ones included, oldest first. */
-  tasks: DoneStateTask[];
-  /** The open items waiting on the owner, oldest first — this kind's own excepted. */
-  ownerItems: Array<{ itemId: string; kind: OpenItemKind; title: string }>;
-  /** The landings and merges into main queued or running, oldest first. */
-  jobs: Array<{ integrationJobId: string; kind: string; state: string; taskId: string | null }>;
-  criteriaDigest: string;
-  stateDigest: string;
-}
+export type { DoneState, DoneStateCriterion, DoneStateTask } from '@orbit/shared';
 
 /**
  * The project as a done request reads it, once.
@@ -282,10 +250,10 @@ export async function readDoneState(
 }
 
 /**
- * What a done request was made about, apart from the criteria themselves: every task by its id, its
+ * What a done request was made about, apart from the criteria themselves: each serving task by its id, its
  * status, the criterion it serves and whether a run of it is going; every criterion by whether it is
  * met, where its work has landed and why not; and the landings in flight. Sorted, so the digest is a
- * property of the project and not of the order it was read in. A task filed, reopened, cancelled or
+ * property of the project and not of the order it was read in. A serving task filed, reopened, cancelled or
  * started, a receipt recorded, a landing queued or finished — each is a different state.
  */
 export function doneStateDigest(
@@ -294,8 +262,9 @@ export function doneStateDigest(
   jobs: DoneState['jobs'],
 ): string {
   const state = {
-    version: 1,
+    version: 2,
     tasks: tasks
+      .filter((task) => task.criterionDefinitionId !== null)
       .map((task) => `${task.id}:${task.status}:${task.criterionDefinitionId ?? ''}:${task.run ?? ''}`)
       .sort(),
     criteria: criteria
