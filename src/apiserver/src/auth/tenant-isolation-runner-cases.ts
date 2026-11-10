@@ -1300,15 +1300,15 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
 
 /**
  * The plan-usage snapshot a heartbeat reports, wherever it nests: provider-side names of rate-limit
- * buckets and credits, kept on the reporting machine's own row and read back only through it.
+ * buckets, credits and reset grants, kept on the reporting machine's own row and read back only through it.
  */
-const PLAN_USAGE_IDS = ['limitId', 'rateLimits[].limitId', 'rateLimitReset.rateLimitResetCredits.credits[].id', 'buckets[].id'];
+const PLAN_USAGE_IDS = ['limitId', 'rateLimits[].limitId', 'rateLimitReset.rateLimitResetCredits.credits[].id', 'buckets[].id', 'resetGrants.grants[].id'];
 const planUsageReadings = Object.fromEntries(
   ['planUsage.', 'planUsage.claude.', 'planUsage.codex.', 'planUsage.kimi.', 'planUsage.cursor.', 'planUsage.antigravity.', 'engines[].planUsage.']
     .flatMap((at) => PLAN_USAGE_IDS.map((id) => [
       `POST /runner/heartbeat body ${at}${id}`,
-      'a provider\'s own name for one of its rate-limit buckets or credits, not an Orbit row: stored as the reporting '
-        + 'machine\'s own plan usage and read back only through that machine (runner-api.controller.ts:1085)',
+      'a provider\'s own name for one of its rate-limit buckets, credits or reset grants, not an Orbit row: stored as the reporting '
+        + 'machine\'s own plan usage and read back only through that machine (runner-api.controller.ts:2167)',
     ])),
 );
 
