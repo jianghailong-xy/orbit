@@ -80,9 +80,9 @@ class LandingSessionShellTest {
         signIn(); open("orbit-session:$landing")
         await { exists(hasTestTag("landings-window")) }
         // The window's shell: its title, the project it runs for, and the read-only footer — no composer.
-        await { text("page-bar-subtitle") == "Run by Orbit · Launch" }
+        await { text("page-bar-subtitle") == "Launch" }
         assertTrue(exists(hasText("Landings") and hasAnyAncestor(hasTestTag("app-bar")), unmerged = true))
-        assertEquals("Orbit runs these landings — nothing to type here.", text("landings:footer-line"))
+        assertEquals("Orbit runs these landings", text("landings:footer-line"))
         // The landing it was opened on: a card under Now, named by its task, opened in place and outlined for a moment.
         await { text("landing:task-name") == "Wire the page" }
         assertTrue(exists(hasTestTag("landings:day:Now")))
@@ -266,7 +266,7 @@ class LandingSessionShellTest {
         assertFalse("a settled landing is no card", exists(hasTestTag("landing-status-card"), unmerged = true))
         // Opened where it was focused: its record, read off the detail the link already read.
         await { exists(hasText("Landed on project/launch · 8ed0ea7"), unmerged = true) }
-        assertEquals("Orbit runs these landings — nothing to type here.", text("landings:footer-line"))
+        assertEquals("Orbit runs these landings", text("landings:footer-line"))
         val reads = ProjectShell.calls.count { it == "GET sessions/$landing" }
         compose.mainClock.advanceTimeBy(20_000)
         settle()
