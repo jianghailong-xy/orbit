@@ -18,6 +18,10 @@ final class OwnerRequestsModel {
     /// The Done and Declined tabs' own reads.
     private(set) var ended: [OwnerRequests.InboxTab: [OwnerRequest]] = [:]
     private(set) var savedSecrets: [AccountSecret] = []
+    /// The coordinators' open questions: one inbox and one count with the requests (web `WaitingOnYouPage`).
+    private(set) var questions: [OwnerInboxQuestion] = []
+    /// Answer on a question's row: its card, in the coordinator conversation it was asked in.
+    var onAnswerQuestion: (OwnerInboxQuestion) -> Void = { _ in }
     /// The titles of the tasks requests hold up, by id, read once each.
     private(set) var taskTitles: [String: String] = [:]
     private(set) var snoozes: [String: Date]
@@ -42,7 +46,10 @@ final class OwnerRequestsModel {
         snoozes = store.all()
     }
 
-    var waitingCount: Int { OwnerRequests.waitingCount(open, snoozes: snoozes) }
+    var waitingCount: Int { OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) }
+
+    /// The Open tab: pending requests and open questions, newest first.
+    var openEntries: [OwnerInboxEntry] { OwnerRequests.openEntries(open, questions: questions) }
 
     /// Every request this client has read, the newest read of each winning.
     var known: [OwnerRequest] { OwnerRequests.merged(all, ended[.done] ?? [], ended[.declined] ?? [], open) }
@@ -61,12 +68,31 @@ final class OwnerRequestsModel {
             open = try await api.ownerRequests(state: "open").requests
             all = try await api.ownerRequests(state: "all").requests
             if tab != .open { await loadTab(tab) }
+            await loadQuestions()
         } catch APIError.http(let status, _) where status == 404 {
             unsupported = true
         } catch {
             // The next tick reads again; what was drawn stays.
         }
         snoozes = store.all()
+    }
+
+    /// The open projects whose coordinator asked the owner something, and each one's open questions.
+    /// A project that cannot be read keeps the questions it had.
+    func loadQuestions() async {
+        guard let projects = try? await api.projects(status: .open) else { return }
+        var next: [OwnerInboxQuestion] = []
+        for project in OwnerRequests.projectsAsking(projects) {
+            guard let items = try? await api.projectOpenItems(projectID: project.id) else {
+                next += questions.filter { $0.projectID == project.id }
+                continue
+            }
+            let document = try? await api.project(project.id)
+            next += OwnerRequests.questions(project: project, items: items,
+                                            coordinatorSessionID: document?.coordinatorSessionId,
+                                            coordinatorWorkspaceID: document?.coordinatorWorkspaceId)
+        }
+        questions = next
     }
 
     func loadTab(_ tab: OwnerRequests.InboxTab) async {
@@ -164,7 +190,9 @@ final class OwnerRequestsModel {
     #if DEBUG
     /// Probe and preview fixtures: the lists as a read would have answered them.
     func seed(open: [OwnerRequest], all: [OwnerRequest], ended: [OwnerRequests.InboxTab: [OwnerRequest]] = [:],
-              saved: [AccountSecret] = [], taskTitles: [String: String] = [:]) {
+              saved: [AccountSecret] = [], taskTitles: [String: String] = [:],
+              questions: [OwnerInboxQuestion] = []) {
+        self.questions = questions
         self.taskTitles = Dictionary(uniqueKeysWithValues: taskTitles.map { (PublicID.storageKey($0.key), $0.value) })
         self.open = open
         self.all = all

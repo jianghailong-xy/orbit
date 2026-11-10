@@ -546,17 +546,22 @@ struct OwnerRequestInboxView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         let rows = model.rows(model.tab)
-                        if rows.isEmpty {
+                        let entries = model.openEntries
+                        if model.tab == .open ? entries.isEmpty : rows.isEmpty {
                             Text(model.tab.empty).font(.orbitSubtext).foregroundStyle(.secondary).padding(16)
                         }
-                        ForEach(rows) { request in
-                            if model.tab == .open {
-                                row(request).id(request.id)
+                        if model.tab == .open {
+                            ForEach(entries) { entry in
+                                switch entry {
+                                case .request(let request): row(request).id(request.id)
+                                case .question(let question): questionRow(question)
+                                }
                                 Divider()
-                            } else {
-                                OwnerRequestResolvedLine(model: model, request: request)
-                                    .padding(.horizontal, 16).padding(.vertical, 6)
                             }
+                        }
+                        ForEach(model.tab == .open ? [] : rows) { request in
+                            OwnerRequestResolvedLine(model: model, request: request)
+                                .padding(.horizontal, 16).padding(.vertical, 6)
                         }
                     }
                 }
@@ -574,6 +579,28 @@ struct OwnerRequestInboxView: View {
         }
         .task(id: model.tab) { await model.loadTab(model.tab) }
         .accessibilityIdentifier("owner-request-inbox")
+    }
+
+    /// A coordinator's question: Answer opens its card in the conversation it was asked in.
+    private func questionRow(_ question: OwnerInboxQuestion) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "questionmark")
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 32, height: 32)
+                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(OwnerRequests.questionTitle(question)).font(.orbitSubtext.weight(.semibold)).lineLimit(2)
+                Text(OwnerRequests.questionDetail(question)).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(RelativeTime.ago(question.row.waitingSince) ?? "").font(.orbitLabel).foregroundStyle(.secondary)
+                Button(OwnerRequests.answer) { model.onAnswerQuestion(question) }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .accessibilityIdentifier("owner-question-row-\(question.id)")
+            }
+        }
+        .padding(16)
     }
 
     private func row(_ request: OwnerRequest) -> some View {

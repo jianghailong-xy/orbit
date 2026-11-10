@@ -601,6 +601,16 @@ final class AppModel {
             return names[id] ?? names.first { PublicID.storageKey($0.key) == PublicID.storageKey(id) }?.value
                 ?? "this runner"
         }
+        // A coordinator's question in the inbox opens its card where it was asked: the project's
+        // coordinator conversation, landed on that card (the needs-you banner's entry).
+        ownerRequestsModel.onAnswerQuestion = { [weak self, weak ownerRequestsModel] question in
+            guard let self, let session = question.coordinatorSessionID else { return }
+            ownerRequestsModel?.inboxPresented = false
+            self.openProjectCoordinator(
+                sessionID: session, agentID: question.coordinatorWorkspaceID,
+                focus: SessionOwnerItem(itemId: question.row.itemId, kind: .coordinatorQuestion,
+                                        title: question.row.title, since: question.row.waitingSince))
+        }
         ownerRequests = ownerRequestsModel
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)

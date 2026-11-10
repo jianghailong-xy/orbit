@@ -436,3 +436,102 @@ public enum OwnerRequestLink {
         }
     }
 }
+
+// MARK: one inbox — owner requests and the coordinators' questions
+
+/// An open question a project's coordinator put to the owner (`ask_owner`, a COORDINATOR_QUESTION open
+/// item). It stays on its own table, but to the owner it is one more thing waiting, listed and counted
+/// beside the owner requests (owner decision: one "Waiting on you" inbox; web `WaitingOnYouPage`).
+public struct OwnerInboxQuestion: Equatable, Sendable, Identifiable {
+    public let projectID: String
+    public let projectTitle: String
+    /// The conversation the question's card is drawn in, which Answer opens. Nil while unknown.
+    public let coordinatorSessionID: String?
+    public let coordinatorWorkspaceID: String?
+    public let row: ProjectOpenItemRow
+    public var id: String { row.itemId }
+
+    public init(projectID: String, projectTitle: String, coordinatorSessionID: String? = nil,
+                coordinatorWorkspaceID: String? = nil, row: ProjectOpenItemRow) {
+        self.projectID = projectID
+        self.projectTitle = projectTitle
+        self.coordinatorSessionID = coordinatorSessionID
+        self.coordinatorWorkspaceID = coordinatorWorkspaceID
+        self.row = row
+    }
+}
+
+/// One row of the inbox's Open tab.
+public enum OwnerInboxEntry: Equatable, Sendable, Identifiable {
+    case request(OwnerRequest)
+    case question(OwnerInboxQuestion)
+
+    public var id: String {
+        switch self {
+        case .request(let request): return "request-\(PublicID.storageKey(request.id))"
+        case .question(let question): return "question-\(question.row.itemId)"
+        }
+    }
+
+    /// When it started waiting: a request's `createdAt`, a question's `waitingSince`.
+    public var at: String {
+        switch self {
+        case .request(let request): return request.createdAt
+        case .question(let question): return question.row.waitingSince
+        }
+    }
+}
+
+public extension OwnerRequests {
+    /// The open projects whose coordinator has a question waiting on the owner: the only ones whose
+    /// open items are read, as the web reads them (`projectsWithQuestions`).
+    static func projectsAsking(_ projects: [ProjectSummary]) -> [ProjectSummary] {
+        projects.filter { project in
+            project.status == .open
+                && (project.attention?.ownerItems ?? []).contains { $0.kind == .coordinatorQuestion && $0.count > 0 }
+        }
+    }
+
+    /// One project's open questions, from its open-items read.
+    static func questions(project: ProjectSummary, items: ProjectOpenItemsView?, coordinatorSessionID: String?,
+                          coordinatorWorkspaceID: String?) -> [OwnerInboxQuestion] {
+        CoordinatorQuestions.open(items).map {
+            OwnerInboxQuestion(projectID: project.id, projectTitle: project.title,
+                               coordinatorSessionID: coordinatorSessionID,
+                               coordinatorWorkspaceID: coordinatorWorkspaceID, row: $0)
+        }
+    }
+
+    /// The Open tab: pending requests and open questions, newest first.
+    static func openEntries(_ requests: [OwnerRequest], questions: [OwnerInboxQuestion]) -> [OwnerInboxEntry] {
+        let entries = requests.filter { $0.state == .pending }.map(OwnerInboxEntry.request)
+            + questions.map(OwnerInboxEntry.question)
+        return entries.enumerated().sorted { a, b in
+            let x = RelativeTime.parse(a.element.at) ?? .distantPast
+            let y = RelativeTime.parse(b.element.at) ?? .distantPast
+            return x != y ? x > y : a.offset < b.offset
+        }.map(\.element)
+    }
+
+    /// The one count: requests not put off until later, plus every open coordinator question.
+    static func waitingCount(_ open: [OwnerRequest], questions: [OwnerInboxQuestion], snoozes: [String: Date],
+                             now: Date = Date()) -> Int {
+        waitingCount(open, snoozes: snoozes, now: now) + questions.count
+    }
+
+    /// A question row's title: its opening as plain text.
+    static func questionTitle(_ question: OwnerInboxQuestion) -> String {
+        question.row.question.map(CoordinatorQuestions.lead) ?? question.row.title
+    }
+
+    /// "Payments · decision · recommended: auth" — the web row's detail, word for word.
+    static func questionDetail(_ question: OwnerInboxQuestion) -> String {
+        let asked = question.row.question
+        let label = asked?.recommendedOption.flatMap { index in
+            asked.flatMap { $0.options.indices.contains(index) ? $0.options[index].label : nil }
+        }
+        return "\(question.projectTitle) · \(label.map { "decision · recommended: \($0)" } ?? "decision")"
+    }
+
+    static let answer = "Answer"
+}

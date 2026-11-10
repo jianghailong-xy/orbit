@@ -376,4 +376,57 @@ final class OwnerRequestsTests: XCTestCase {
         XCTAssertEqual(card.id, "owner-request-\(PublicID.storageKey(requestID))")
         XCTAssertEqual(DeliveredDecisionCard(kind: .ownerRequest(requestID: PublicID.toPublic(requestID))).id, card.id)
     }
+
+    // MARK: one inbox — the coordinators' questions beside the requests
+
+    private func question(_ id: String, project: ProjectSummary, waiting: String, recommended: Int? = 0) -> OwnerInboxQuestion {
+        let asked = CoordinatorQuestion(question: "Which branch lands **first**?",
+                                        options: [.init(label: "auth"), .init(label: "billing")],
+                                        recommendedOption: recommended)
+        return OwnerInboxQuestion(projectID: project.id, projectTitle: project.title, coordinatorSessionID: "coord-1",
+                                  row: ProjectOpenItemRow(itemId: id, kind: .coordinatorQuestion,
+                                                          title: "Coordinator asks", waitingSince: waiting,
+                                                          question: asked))
+    }
+
+    func testOpenQuestionsShareTheInboxAndTheCount() {
+        let asking = ProjectSummary(id: "p-pay", title: "Payments", attention: ProjectListAttention(
+            ownerItems: [ProjectListOwnerItem(kind: .coordinatorQuestion, count: 1, oldestWaitingSince: "2026-11-07T08:00:00Z")]))
+        let quiet = ProjectSummary(id: "p-quiet", title: "Quiet", attention: ProjectListAttention(
+            ownerItems: [ProjectListOwnerItem(kind: .escalated, count: 2, oldestWaitingSince: "2026-11-07T08:00:00Z")]))
+        let closed = ProjectSummary(id: "p-done", title: "Done", status: .done, attention: ProjectListAttention(
+            ownerItems: [ProjectListOwnerItem(kind: .coordinatorQuestion, count: 1, oldestWaitingSince: "2026-11-07T08:00:00Z")]))
+        // Only open projects with a question waiting are read.
+        XCTAssertEqual(OwnerRequests.projectsAsking([asking, quiet, closed]).map(\.id), ["p-pay"])
+
+        // A project's open items: only the owner's questions become rows.
+        let items = ProjectOpenItemsView(needsYou: [
+            question("q1", project: asking, waiting: "2026-11-07T08:00:00Z").row,
+            ProjectOpenItemRow(itemId: "e1", kind: .taskFailed, title: "Task failed", waitingSince: "2026-11-07T09:00:00Z"),
+        ])
+        let rows = OwnerRequests.questions(project: asking, items: items, coordinatorSessionID: "coord-1",
+                                           coordinatorWorkspaceID: "ws-1")
+        XCTAssertEqual(rows.map(\.id), ["q1"])
+        XCTAssertEqual(rows.first?.coordinatorSessionID, "coord-1")
+        XCTAssertEqual(OwnerRequests.questionTitle(rows[0]), "Which branch lands first?")
+        XCTAssertEqual(OwnerRequests.questionDetail(rows[0]), "Payments · decision · recommended: auth")
+        XCTAssertEqual(OwnerRequests.questionDetail(question("q2", project: asking, waiting: "2026-11-07T08:00:00Z",
+                                                             recommended: nil)), "Payments · decision")
+
+        // The Open tab: pending requests and questions, newest first; ended requests stay out.
+        let q = question("q1", project: asking, waiting: "2026-11-07T08:00:00Z")   // 08:00
+        let open = [secret(), steps(), confirm(), secret(state: .done)]           // 10:53, yesterday, 10:00
+        XCTAssertEqual(OwnerRequests.openEntries(open, questions: [q]).map(\.id), [
+            "request-\(PublicID.storageKey(requestID))", "request-\(PublicID.storageKey("c4"))", "question-q1",
+            "request-\(PublicID.storageKey("s2"))",
+        ])
+
+        // One count: requests not put off, plus every open question.
+        let pending = [secret(), steps(), confirm()]
+        XCTAssertEqual(OwnerRequests.waitingCount(pending, questions: [q], snoozes: [:], now: now), 4)
+        let later = [PublicID.storageKey(requestID): now.addingTimeInterval(3_600)]
+        XCTAssertEqual(OwnerRequests.waitingCount(pending, questions: [q], snoozes: later, now: now), 3)
+        XCTAssertEqual(OwnerRequests.waitingCount([], questions: [q, question("q3", project: asking, waiting: "x")],
+                                                  snoozes: [:], now: now), 2)
+    }
 }
