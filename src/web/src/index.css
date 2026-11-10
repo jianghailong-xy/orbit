@@ -20307,13 +20307,13 @@ div.landing-jobs-open {
   align-items: flex-start;
 }
 .landings-window-group + .landings-window-group {
-  margin-top: 12px;
+  margin-top: 2px;
 }
 .landings-window-column {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 /* Now's cards keep the room they had between them. */
@@ -20331,122 +20331,45 @@ div.landing-jobs-open {
   transition: outline-color 200ms ease;
 }
 /* The landing the window was opened on, outlined for a moment (board 03 f): a card's whole entry, a
-   settled landing's bubble. */
+   settled landing's line. */
 .landings-window-entry.is-card.is-outlined {
   outline-color: var(--brand);
 }
-.landings-window-entry.is-outlined .landings-window-row {
-  box-shadow: 0 0 0 2px var(--brand);
+/* A landing as the chat's background-job line (docs/mocks/landings-chat-tools ①): `.bgwake`'s own
+   row, mark, title, name, chip and Details ›, pressed as a button; its ⋯ at the end of the line. */
+/* Lines stand as close as the chat's job lines in a run of them. */
+.landings-window-line.bgwake {
+  margin: 0;
 }
-/* The bubble and its ⋯, which stands in the gutter the bubble leaves on its right. */
-.landings-window-row-line {
+.landings-window-line-row {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
 }
-.landings-window-row-line .landings-window-row {
+.landings-window-line-press {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: calc(100% - 44px);
-}
-/* A settled landing is one message from Orbit (board 01 b): it hugs its words, which are never cut
-   short, on the neutral fill of a chat's incoming bubble; the mark, the line and the time under them. */
-.landings-window-row {
-  display: flex;
-  flex-direction: column;
-  padding: 9px 13px 8px;
   border: 0;
-  border-radius: 16px;
-  background: var(--fill-muted);
-  color: var(--text-1);
+  background: transparent;
+  color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
-  transition: background-color 120ms ease, box-shadow 200ms ease;
 }
-.landings-window-row:hover {
-  background: color-mix(in srgb, var(--fill-muted), var(--text-1) 5%);
+.landings-window-line.is-open .bgwake-caret {
+  transform: rotate(90deg);
 }
-/* A merge into main is an event, not a message: one line centred across the column, as a chat draws
-   what happened in it (docs/mocks/landings-ui-polish ②). Its ⋯ keeps the bubble's place at the end. */
-.landings-window-row-line.is-event {
-  justify-content: center;
-  padding-left: 32px;
-}
-.landings-window-event {
-  min-width: 0;
-  padding: 3px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-3);
-  font: inherit;
-  font-size: 12px;
-  line-height: 18px;
-  text-align: center;
-  overflow-wrap: anywhere;
-  cursor: pointer;
-}
-.landings-window-event:hover {
-  background: var(--bg-hover);
-}
-.landings-window-event .landings-window-row-mark {
-  margin-right: 5px;
-}
-.landings-window-event-title {
-  color: var(--text-2);
-  font-weight: 600;
-}
-.landings-window-event .landings-window-row-time {
-  margin-left: 0;
-  padding-left: 0;
-  color: inherit;
-}
-.landings-window-entry.is-outlined .landings-window-event {
-  box-shadow: 0 0 0 2px var(--brand);
-}
-.landings-window-row-text {
-  font-size: 14px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-.landings-window-row-foot {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 3px;
-  color: var(--text-2);
-  font-size: 12px;
-  line-height: 16px;
-}
-.landings-window-row-mark {
-  flex: none;
-}
-.landings-window-row-mark.is-ok {
-  color: var(--success);
-}
-.landings-window-row-mark.is-merge {
+.landings-window-merge-mark {
   color: var(--brand);
+  font-weight: 700;
 }
-.landings-window-row-mark.is-quiet {
-  color: var(--text-3);
-}
-.landings-window-row-detail {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.landings-window-row-time {
-  flex: none;
-  margin-left: auto;
-  padding-left: 12px;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
+.landings-window-entry.is-outlined .landings-window-line-press {
+  box-shadow: 0 0 0 2px var(--brand);
 }
 .landings-window-more {
   flex: none;
   width: 28px;
   height: 28px;
-  margin: 6px 4px 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -20461,40 +20384,33 @@ div.landing-jobs-open {
   background: var(--bg-hover);
   color: var(--text-1);
 }
-/* A bubble's ⋯ shows where the pointer or the keyboard is on it, or while its menu is open; a card's
-   always shows, and so does every one on a screen without hover. */
-.landings-window-row-line .landings-window-more {
-  margin: 0;
+/* A line's ⋯ shows where the pointer or the keyboard is on it, or while its menu is open; every one
+   shows on a screen without hover. */
+.landings-window-line-row .landings-window-more {
   opacity: 0;
 }
-.landings-window-entry:hover .landings-window-row-line .landings-window-more,
-.landings-window-row-line:focus-within .landings-window-more,
-.landings-window-row-line .landings-window-more[data-popup-open],
-.landings-window-row-line .landings-window-more[aria-expanded="true"] {
+.landings-window-entry:hover .landings-window-line-row .landings-window-more,
+.landings-window-line-row:focus-within .landings-window-more,
+.landings-window-line-row .landings-window-more[data-popup-open],
+.landings-window-line-row .landings-window-more[aria-expanded="true"] {
   opacity: 1;
 }
 @media (hover: none) {
-  .landings-window-row-line .landings-window-more {
+  .landings-window-line-row .landings-window-more {
     opacity: 1;
   }
 }
-.landings-window-card {
-  margin-bottom: 0;
-}
-.landings-window-card-top {
+/* A landing's steps, each the chat's tool row (②), hung under its line as `.bgwake-body` is. */
+.landings-window-steps {
   display: flex;
-  align-items: flex-start;
-  gap: 4px;
-}
-.landings-window-card-top .landings-window-more {
-  margin: -2px -6px 0 0;
-}
-.landings-window-card-press {
-  display: flex;
-  flex: 1;
   flex-direction: column;
-  min-width: 0;
-  padding: 0;
+  gap: 2px;
+}
+.landings-window-steps .landing-timeline-section + .landing-timeline-section {
+  margin-top: 10px;
+}
+.landing-step-row {
+  width: 100%;
   border: 0;
   background: transparent;
   color: inherit;
@@ -20502,28 +20418,51 @@ div.landing-jobs-open {
   text-align: left;
   cursor: pointer;
 }
-/* The task the card is about: the one line the window adds under the status card's head. */
-.landings-window-card-task {
-  display: block;
-  margin-top: 8px;
-  color: var(--text-1);
-  font-size: 13px;
-  overflow-wrap: anywhere;
+.landing-step-time {
+  font-variant-numeric: tabular-nums;
 }
-/* A bubble's record opens under it across the column, on the quiet panel a person's bubble opens its
-   ⊕ note on (`.chat-user-wrap > .chat-injected-panel`, board 03 e). A card's opens under the card as
-   before. */
-.landings-window-record {
-  margin-top: 4px;
-  padding: 10px 12px 12px;
-  border-radius: 12px;
-  background: var(--bg-sunken);
+.landing-step-detail {
+  padding: 6px 12px 8px;
 }
-.landings-window-entry.is-card .landings-window-record {
-  margin-top: 0;
-  padding: 12px 4px 4px;
+.landings-window-card.landing-status-card {
+  margin-bottom: 0;
+  padding: 0;
   border-radius: 0;
   background: none;
+  box-shadow: none;
+}
+/* What a landing in hand carries, open under its line: its facts, its steps, and who decides. */
+.landings-window-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 2px 0 10px 22px;
+}
+.landings-window-card-body .landing-card-block,
+.landings-window-card-body .landing-card-actions {
+  margin-top: 0;
+}
+.landings-window-card-detail {
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.landings-window-wait {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-sunken);
+}
+.landings-window-wait-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+/* A settled line's record hangs under it, off the line's mark, as `.bgwake-body` does: a merge's
+   receipt first, then its steps. */
+.landings-window-record {
+  margin: 2px 0 10px 22px;
 }
 .landings-window-receipt {
   margin-bottom: 12px;
@@ -20538,8 +20477,7 @@ div.landing-jobs-open {
   margin-left: 0;
 }
 @media (prefers-reduced-motion: reduce) {
-  .landings-window-entry.is-card,
-  .landings-window-row {
+  .landings-window-entry.is-card {
     transition: none;
   }
 }
