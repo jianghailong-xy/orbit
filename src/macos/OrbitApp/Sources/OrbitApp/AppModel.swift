@@ -1470,7 +1470,7 @@ final class AppModel {
     /// the server announces (contract §5 N5): the window is read, never swept. So the list reads again
     /// a second after the earliest such row is due — web's `reviewDueAt` effect.
     private func scheduleReviewDueRefresh(_ list: [Session]) {
-        let due = list.compactMap { $0.confirmationUnderReview.flatMap { RelativeTime.parse($0.dueAt) } }.min()
+        let due = list.compactMap { $0.confirmationUnderReview.flatMap { $0.dueAt.flatMap(RelativeTime.parse) } }.min()
         guard due != reviewDueAt else { return }
         reviewDueAt = due
         reviewDueTask?.cancel()

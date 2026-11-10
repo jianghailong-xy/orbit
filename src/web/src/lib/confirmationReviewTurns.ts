@@ -23,7 +23,7 @@ export function parseConfirmationReviewRequest(payload: unknown): ConfirmationRe
     || typeof card.taskId !== 'string' || card.taskId === ''
     || typeof card.title !== 'string'
     || typeof card.runSessionId !== 'string'
-    || typeof card.dueAt !== 'string'
+    || (card.dueAt !== null && typeof card.dueAt !== 'string')
   ) {
     return null;
   }

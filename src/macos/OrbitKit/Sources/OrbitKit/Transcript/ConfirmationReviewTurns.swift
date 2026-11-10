@@ -20,10 +20,10 @@ public struct ConfirmationReviewRequestCard: Codable, Equatable, Sendable {
     public let runSessionId: String
     public let branch: String?
     public let sha: String?
-    public let dueAt: String
+    public let dueAt: String?
 
     public init(requestId: String, reviewId: String = "", taskId: String, title: String,
-                runSessionId: String, branch: String? = nil, sha: String? = nil, dueAt: String) {
+                runSessionId: String, branch: String? = nil, sha: String? = nil, dueAt: String?) {
         self.requestId = requestId
         self.reviewId = reviewId
         self.taskId = taskId
@@ -44,13 +44,12 @@ public struct ConfirmationReviewRequestCard: Codable, Equatable, Sendable {
               let requestId = card["requestId"]?.stringValue,
               let taskId = card["taskId"]?.stringValue, !taskId.isEmpty,
               let title = card["title"]?.stringValue,
-              let run = card["runSessionId"]?.stringValue,
-              let dueAt = card["dueAt"]?.stringValue else { return nil }
+              let run = card["runSessionId"]?.stringValue else { return nil }
         return ConfirmationReviewRequestCard(requestId: requestId,
                                              reviewId: card["reviewId"]?.stringValue ?? "",
                                              taskId: taskId, title: title, runSessionId: run,
                                              branch: card["branch"]?.stringValue,
-                                             sha: card["sha"]?.stringValue, dueAt: dueAt)
+                                             sha: card["sha"]?.stringValue, dueAt: card["dueAt"]?.stringValue)
     }
 }
 

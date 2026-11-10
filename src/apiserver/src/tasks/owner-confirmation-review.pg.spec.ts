@@ -411,7 +411,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     assert.equal(out.projectId, null);
     assert.equal(out.windowSeconds, 1_800, 'outside a project the window is 30 minutes (N4)');
     const request = await latestRequest(outside.taskId);
-    assert.equal(out.dueAt.getTime(), request.requestedAt.getTime() + 1_800_000, 'counted from the request');
+    assert.equal((await card(outside.taskId)).waiting?.review?.dueAt, null, 'unread reviews have no deadline');
     assert.equal(request.branchSha, SHA_A, 'the request keeps the commit the run reported');
     assert.equal(out.delivery, 'DELIVERED');
     assert.equal(out.deliveryTurnClientId, `${REVIEW_PREFIX}${out.id}`);
@@ -492,8 +492,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     assert.equal(listed?.confirmationUnderReview?.requestId, outsideRequest);
     assert.equal(listed?.confirmationUnderReview?.taskId, outside.taskId);
     assert.equal(listed?.confirmationUnderReview?.reviewerSessionId, outside.reviewer);
-    assert.equal(new Date(listed!.confirmationUnderReview!.dueAt).getTime(),
-      (await reviewRow(outsideRequest))!.dueAt.getTime());
+    assert.equal(listed!.confirmationUnderReview!.dueAt, null);
     assert.deepEqual(await taskRow(outside.taskId).then((r) => [r.awaitingOwnerConfirmation, r.confirmationUnderReview]), [false, true]);
     // The same in an Automatic project: the run's row is dark while the coordinator reviews it.
     assert.equal(await waitingOn(inProject.sessionId), 0);
@@ -548,6 +547,8 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     }>;
     const listed = queued.find((each) => each.confirmationReviewRequest);
     assert.ok(listed, 'the queued review turn is listed with its card');
+    assert.doesNotMatch(listed.content, /due-at=/);
+    assert.equal((listed.confirmationReviewRequest as unknown as { dueAt: null }).dueAt, null);
     assert.equal(listed.authoredByOrbit, true);
     assert.deepEqual(
       [listed.confirmationReviewRequest?.requestId, listed.confirmationReviewRequest?.reviewId,
@@ -563,7 +564,11 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
 
     const handed = await handOut(outside.reviewer);
     assert.equal(handed?.turnId, listed.turnId);
-    assert.equal(handed?.content, listed.content, 'the same bytes, read by the same function');
+    const pickedTurn = await db.conversationTurn.findUniqueOrThrow({ where: { id: handed!.turnId } });
+    const pickedDue = new Date(pickedTurn.deliveredAt!.getTime() + review.windowSeconds * 1_000);
+    assert.ok(handed?.content?.includes(`due-at="${pickedDue.toISOString().slice(0, 19)}Z"`));
+    assert.equal(handed?.content?.replace(/ due-at="[^"]*"/, ''), listed.content.replace(/ due-at="[^"]*"/, ''),
+      'the same block, with the deadline refreshed at hand-out');
     // The runner echoes what it was handed; the stored event carries the card and records the block as Orbit's.
     const echo = await ingest(outside.reviewer, handed!.turnId, RunEventType.USER, { text: handed!.content });
     assert.equal((echo.confirmationReviewRequest as { reviewId: string }).reviewId, review.id);
@@ -591,18 +596,57 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     assert.equal(resent[0].content, '');
   });
 
+  await t.test('temporary reviewer outages queue exactly once and the window starts at pickup', async () => {
+    for (const outage of ['FAILED', 'RETRY', 'PENDING'] as const) {
+      const reviewer = await conversation(`coordinator waiting: ${outage}`);
+      const projectId = await project(`outage: ${outage}`, { coordinatorEnabled: true, coordinatorSessionId: reviewer });
+      const waiting = { ...(await runOf(`reviewer waiting: ${outage}`, { projectId, creatorSessionId: reviewer })), reviewer };
+      await db.session.update({ where: { id: waiting.reviewer }, data: {
+        status: outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
+        retryAt: outage === 'RETRY' ? new Date(Date.now() + 3_600_000) : null,
+      } });
+      const requestId = await declare(waiting, 'Done.');
+      const review = (await reviewRow(requestId))!;
+      assert.notEqual(review.delivery, 'REFUSED');
+      assert.equal(review.deliveryRefusal, null);
+      assert.equal(review.reviewerEndedAt, null);
+      const read = async (at: Date) => [...(await confirmationReviewStates(db, [{
+        id: requestId, taskId: waiting.taskId, sessionId: waiting.sessionId,
+        requestedAt: (await latestRequest(waiting.taskId)).requestedAt,
+      }], at)).values()][0];
+      const farFuture = new Date(Date.now() + 30 * 86_400_000);
+      assert.equal((await read(farFuture)).state, 'UNDER_REVIEW');
+      assert.equal((await read(farFuture)).dueAt, null);
+      if (outage !== 'PENDING') assert.equal((await turnsKeyed(waiting.reviewer, REVIEW_PREFIX)).length, 0);
+      await db.session.update({ where: { id: waiting.reviewer }, data: { status: RunStatus.AWAITING_INPUT, retryAt: null } });
+      await Promise.all([reviews.deliverPendingFor(), reviews.deliverPendingFor(waiting.reviewer)]);
+      assert.equal((await turnsKeyed(waiting.reviewer, REVIEW_PREFIX)).length, 1);
+      assert.equal((await read(farFuture)).state, 'UNDER_REVIEW', 'queued is still unread');
+      const handed = await handOut(waiting.reviewer);
+      assert.ok(handed);
+      const picked = (await turnsKeyed(waiting.reviewer, REVIEW_PREFIX))[0].deliveredAt!;
+      const due = new Date(picked.getTime() + review.windowSeconds * 1_000);
+      assert.equal((await read(new Date(due.getTime() - 1))).state, 'UNDER_REVIEW');
+      assert.equal((await read(due)).notReviewedReason, 'TIMED_OUT');
+      assert.equal((await read(due)).dueAt?.getTime(), due.getTime());
+    }
+  });
+
   // (6) ------------------------------------------------------------------------------------------
   await t.test('(6) the window runs out: not reviewed, counted, and the row lights (N4, T1, N2)', async () => {
     const late = await filedRun('nobody got to it');
     const requestId = await declare(late, 'Done.');
     assert.equal(await waitingOn(late.sessionId), 0);
     const review = (await reviewRow(requestId))!;
-    // Read at due_at itself, without moving any row: the clock is the read's.
+    await handOut(late.reviewer);
+    const turn = (await turnsKeyed(late.reviewer, REVIEW_PREFIX))[0];
+    const dueAt = new Date(turn.deliveredAt!.getTime() + review.windowSeconds * 1_000);
+    // Read at the full pickup window, without moving any row.
     const [atDue] = [...(await confirmationReviewStates(db, [{
       id: requestId, taskId: late.taskId, sessionId: late.sessionId, requestedAt: (await latestRequest(late.taskId)).requestedAt,
-    }], review.dueAt)).values()];
+    }], dueAt)).values()];
     assert.deepEqual([atDue.state, atDue.notReviewedReason], ['NOT_REVIEWED', 'TIMED_OUT']);
-    await sql.query(`UPDATE "task_owner_confirmation_review" SET "due_at" = now() - interval '1 second' WHERE "id" = $1`, [review.id]);
+    await sql.query(`UPDATE "conversation_turn" SET "delivered_at" = now() - interval '1801 seconds' WHERE "id" = $1`, [turn.id]);
     assert.equal((await card(late.taskId)).waiting?.review?.notReviewedReason, 'TIMED_OUT');
     assert.equal(await waitingOn(late.sessionId), 1);
     const listed = await row(late.sessionId);
@@ -635,16 +679,16 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
   });
 
   // (8) ------------------------------------------------------------------------------------------
-  await t.test('(8) "not reviewed" does not go back: the reviewer\'s end, a retry, a turn taken away, Automatic switched off (§3.1, T1)', async () => {
+  await t.test('(8) temporary outages and unread turns wait; genuine ends and Automatic retain their behavior', async () => {
     const failing = await filedRun('the reviewer failed for good');
     const failingRequest = await declare(failing, 'Done.');
     await sql.query(`UPDATE "session" SET "status" = 'FAILED' WHERE "id" = $1`, [failing.reviewer]);
-    assert.ok((await reviewRow(failingRequest))?.reviewerEndedAt, 'the trigger wrote the end');
-    assert.equal((await card(failing.taskId)).waiting?.review?.notReviewedReason, 'REVIEWER_ENDED');
-    assert.equal(await waitingOn(failing.sessionId), 1);
+    assert.equal((await reviewRow(failingRequest))?.reviewerEndedAt, null, 'a failed open conversation has not ended');
+    assert.equal((await card(failing.taskId)).waiting?.review?.state, 'UNDER_REVIEW');
+    assert.equal(await waitingOn(failing.sessionId), 0);
     await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1`, [failing.reviewer]);
-    assert.equal((await card(failing.taskId)).waiting?.review?.state, 'NOT_REVIEWED', 'woken again, still not reviewed');
-    assert.equal(await waitingOn(failing.sessionId), 1);
+    assert.equal((await card(failing.taskId)).waiting?.review?.state, 'UNDER_REVIEW', 'recovery keeps the review');
+    assert.equal(await waitingOn(failing.sessionId), 0);
 
     const retrying = await filedRun('the reviewer has a retry armed');
     const retryingRequest = await declare(retrying, 'Done.');
@@ -655,19 +699,34 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     assert.equal((await reviewRow(retryingRequest))?.reviewerEndedAt, null, 'a retry armed is not an end');
     assert.equal((await card(retrying.taskId)).waiting?.review?.state, 'UNDER_REVIEW');
     await sql.query(`UPDATE "session" SET "retry_at" = NULL WHERE "id" = $1`, [retrying.reviewer]);
-    assert.ok((await reviewRow(retryingRequest))?.reviewerEndedAt, 'the retry given up is the end');
+    assert.equal((await reviewRow(retryingRequest))?.reviewerEndedAt, null, 'clearing a retry is not a conversation end');
 
     const withdrawn = await filedRun('the review turn was withdrawn');
     await declare(withdrawn, 'Done.');
+    const withdrawnKey = (await turnsKeyed(withdrawn.reviewer, REVIEW_PREFIX))[0].clientTurnId;
     await sql.query(`DELETE FROM "conversation_turn" WHERE "session_id" = $1 AND "client_turn_id" LIKE $2`,
       [withdrawn.reviewer, `${REVIEW_PREFIX}%`]);
-    assert.equal((await card(withdrawn.taskId)).waiting?.review?.notReviewedReason, 'REVIEWER_STOPPED');
+    assert.equal((await card(withdrawn.taskId)).waiting?.review?.state, 'UNDER_REVIEW');
+    await db.session.update({ where: { id: withdrawn.reviewer }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([reviews.deliverPendingFor(withdrawn.reviewer), reviews.deliverPendingFor(withdrawn.reviewer)]);
+    const replacements = await turnsKeyed(withdrawn.reviewer, REVIEW_PREFIX);
+    assert.equal(replacements.length, 1, 'one replacement for a deleted unread turn');
+    assert.notEqual(replacements[0].clientTurnId, withdrawnKey);
 
     const drained = await filedRun('the review turn was drained unread');
     await declare(drained, 'Done.');
     await sql.query(`UPDATE "conversation_turn" SET "status" = 'ANSWERED', "answered_at" = now()
                       WHERE "session_id" = $1 AND "client_turn_id" LIKE $2`, [drained.reviewer, `${REVIEW_PREFIX}%`]);
-    assert.equal((await card(drained.taskId)).waiting?.review?.notReviewedReason, 'REVIEWER_STOPPED');
+    assert.equal((await card(drained.taskId)).waiting?.review?.state, 'UNDER_REVIEW');
+    await db.session.update({ where: { id: drained.reviewer }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([reviews.deliverPendingFor(drained.reviewer), reviews.deliverPendingFor(drained.reviewer)]);
+    assert.equal((await turnsKeyed(drained.reviewer, REVIEW_PREFIX)).length, 2, 'one replacement for an unread drained turn');
+
+    const trashed = await filedRun('the reviewer goes to trash');
+    const trashedRequest = await declare(trashed, 'Done.');
+    await db.session.update({ where: { id: trashed.reviewer }, data: { deletedAt: new Date() } });
+    assert.ok((await reviewRow(trashedRequest))?.reviewerEndedAt);
+    assert.equal((await card(trashed.taskId)).waiting?.review?.notReviewedReason, 'REVIEWER_ENDED');
 
     // Automatic switched off while the coordinator reviews: the review it has goes on.
     const switching = await conversation('a coordinator whose project is switched off');

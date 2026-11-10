@@ -112,7 +112,7 @@ test('the owner channel refuses a personal access token door by door and field b
   const token = (await pats.issue(userId, { name: 'every scope', scopes: [...PAT_SCOPES], expiresInDays: 90, createdVia: 'WEB' })).token;
   const jwtSecret = `owner-channel-${randomUUID()}`;
   const login = await new JwtService({ secret: jwtSecret }).signAsync({ sub: userId, email });
-  server = await startApiserver(url, jwtSecret, { ORBIT_WIKI: 'on' });
+  server = await startApiserver(url, jwtSecret, { ORBIT_WIKI: 'on', PROVIDER_SECRET_KEY: `owner-channel-secrets-${RUN}` });
   const api = (method: string, path: string, bearer: string, body?: unknown): Promise<Reply> =>
     call(server!, method, `/api${path}`, bearer, body);
   const ok = (reply: Reply, what: string) => {
@@ -151,6 +151,25 @@ test('the owner channel refuses a personal access token door by door and field b
     ok(await api('POST', '/sessions', login, { prompt: 'knocked on', workspaceId }), 'creating a session').json.id,
   );
 
+  // Real SECRET cards on this runner: submit, cancel an undelivered grant, and revoke a delivered one.
+  await db.session.update({ where: { id: sessionId }, data: { assignedRunnerId: runnerId } });
+  const secretRequest = async () => (await db.ownerRequest.create({
+    data: {
+      ownerId: userId, askedBySessionId: sessionId, kind: 'SECRET', title: 'API key', why: 'the session needs a key',
+      secretSpec: { name: 'API key', runnerId, envVar: 'OWNER_CHANNEL_KEY' },
+    },
+  })).id;
+  const secretToSubmit = await secretRequest();
+  const secretToCancel = await secretRequest();
+  const secretToRevoke = await secretRequest();
+  for (const requestId of [secretToCancel, secretToRevoke]) {
+    ok(await api('POST', `/owner-requests/${requestId}/secret`, login, { value: 'fixture-key' }), 'preparing a secret grant');
+  }
+  await db.ownerRequestSecret.update({ where: { requestId: secretToRevoke }, data: { state: 'ACTIVE', deliveredAt: new Date() } });
+  const grantRow = (requestId: string) => db.ownerRequestSecret.findUnique({ where: { requestId } });
+  const savedSecret = await db.accountSecret.create({ data: { ownerId: userId, label: 'door fixture', valueEnc: 'to be replaced' } });
+  const savedRow = () => db.accountSecret.findUnique({ where: { id: savedSecret.id } });
+
   // A Feishu app of the account's (switched off, so nothing connects it) with a group waiting on a live ticket, and two
   // groups connected: the three group doors (docs/feishu-bot-design.md §8.1) stood up for real.
   const feishuAppId = `cli_owner_channel_${RUN}`;
@@ -174,6 +193,28 @@ test('the owner channel refuses a personal access token door by door and field b
   // ── (1) the owner channel, door by door ────────────────────────────────────────────────────
 
   const doors: Door[] = [
+    {
+      route: 'POST /owner-requests/:id/secret', path: `/owner-requests/${secretToSubmit}/secret`,
+      body: { value: 'submitted-key', saveAs: 'submitted key' }, login: 200,
+      observe: async () => ({ grant: await grantRow(secretToSubmit), saved: await db.accountSecret.findUnique({ where: { ownerId_label: { ownerId: userId, label: 'submitted key' } } }) }),
+    },
+    {
+      route: 'POST /owner-requests/:id/secret/cancel', path: `/owner-requests/${secretToCancel}/secret/cancel`,
+      login: 200, observe: () => grantRow(secretToCancel),
+    },
+    {
+      route: 'POST /owner-requests/:id/secret/revoke', path: `/owner-requests/${secretToRevoke}/secret/revoke`,
+      login: 200, observe: () => grantRow(secretToRevoke),
+    },
+    { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
+    {
+      route: 'PUT /account-secrets/:id', path: `/account-secrets/${savedSecret.id}`,
+      body: { value: 'replacement-key' }, login: 204, observe: savedRow,
+    },
+    {
+      route: 'DELETE /account-secrets/:id', path: `/account-secrets/${savedSecret.id}`,
+      login: 204, observe: savedRow,
+    },
     { route: 'POST /tasks/:taskId/owner-confirmation', path: `/tasks/${nobody()}/owner-confirmation`, body: { decision: 'CONFIRM' }, login: 404 },
     {
       route: 'POST /tasks/:taskId/evidence/decision',

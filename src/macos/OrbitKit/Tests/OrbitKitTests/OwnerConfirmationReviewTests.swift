@@ -138,6 +138,12 @@ final class OwnerConfirmationReviewTests: XCTestCase {
         let base = #"{"reviewId":"rv1","reviewer":{"kind":"TASK_CREATOR","sessionId":"s2","title":"R"},"#
             + #""since":"2026-10-02T14:55:00Z","dueAt":"2026-10-02T15:25:00Z","windowSeconds":1800,"#
             + #""outdated":null,"headline":null,"review":null,"returned":null,"problems":null,"#
+        let queued = try view(base.replacingOccurrences(of: #""dueAt":"2026-10-02T15:25:00Z""#,
+                                                        with: #""dueAt":null"#)
+                             + #""state":"UNDER_REVIEW","notReviewedReason":null}"#)
+        XCTAssertEqual(queued.waiting?.review?.state, .underReview)
+        XCTAssertNil(queued.waiting?.review?.dueAt)
+
         let unknownState = try view(base + #""state":"SOMETHING_NEW","notReviewedReason":null}"#)
         XCTAssertNotNil(unknownState.waiting, "the question is still asked")
         XCTAssertNil(unknownState.waiting?.review, "without a bar this build cannot draw")

@@ -120,7 +120,8 @@ export async function resolveReviewer(
 /**
  * D1: the review row, written in the transaction that records its request, so the first read after
  * that turn already says "under review" and the owner's count never lights for a moment first. The
- * window is frozen here (N4) and counted from the request, not from the delivery. An Automatic
+ * window is frozen here (N4); readers derive its deadline from the current turn's pickup.
+ * The stored legacy dueAt is not used to time the review. An Automatic
  * project with no coordinator conversation is refused at once (S4); every other row starts PENDING
  * for `OwnerConfirmationReviewService.deliver` to take after the commit.
  *
@@ -170,7 +171,7 @@ export interface ReviewStateFacts {
   abandonedAt: Date | null;
   /** DELIVERED only: the delivered turn as it stands, or null when no row has its key any more. */
   deliveredTurn: { status: string; deliveredAt: Date | null } | null;
-  dueAt: Date;
+  dueAt: Date | null;
   hasReturn: boolean;
   /** The REVIEW record's commit, when there is a REVIEW record. */
   review: { reviewedSha: string | null } | null;
@@ -227,16 +228,7 @@ function notReviewedReasonOf(
   }
   if (facts.reviewerEndedAt != null || !facts.reviewerSessionExists) return 'REVIEWER_ENDED';
   if (facts.abandonedAt != null) return 'REVIEWER_STOPPED';
-  // The delivered turn was taken away before an engine read it: an interrupt or a withdrawal deletes
-  // it, and a drain answers it without its ever having been handed out.
-  if (
-    facts.delivery === 'DELIVERED'
-    && (facts.deliveredTurn == null
-      || (facts.deliveredTurn.status === 'ANSWERED' && facts.deliveredTurn.deliveredAt == null))
-  ) {
-    return 'REVIEWER_STOPPED';
-  }
-  if (readAt.getTime() >= facts.dueAt.getTime()) return 'TIMED_OUT';
+  if (facts.deliveredTurn?.deliveredAt && facts.dueAt && readAt.getTime() >= facts.dueAt.getTime()) return 'TIMED_OUT';
   return null;
 }
 
@@ -351,6 +343,10 @@ export async function confirmationReviewStates(
     const problemsRecord = records.find((record) => record.kind === 'PROBLEMS') ?? null;
     const lists = reviewRecord ? reviewListsOf(reviewRecord.body) : null;
     const problems = problemsRecord ? returnRecordView(problemsRecord) : null;
+    const deliveredTurn = review.reviewerSessionId && review.deliveryTurnClientId
+      ? turns.get(`${review.reviewerSessionId}:${review.deliveryTurnClientId}`) ?? null : null;
+    const dueAt = deliveredTurn?.deliveredAt
+      ? new Date(deliveredTurn.deliveredAt.getTime() + review.windowSeconds * 1_000) : null;
     const reading = reviewStateOf({
       delivery: review.delivery,
       deliveryRefusal: review.deliveryRefusal,
@@ -360,7 +356,7 @@ export async function confirmationReviewStates(
       deliveredTurn: review.delivery === 'DELIVERED' && review.reviewerSessionId && review.deliveryTurnClientId
         ? turns.get(`${review.reviewerSessionId}:${review.deliveryTurnClientId}`) ?? null
         : null,
-      dueAt: review.dueAt,
+      dueAt,
       hasReturn: returnRecord != null,
       review: reviewRecord ? { reviewedSha: reviewRecord.reviewedSha } : null,
       requestIsNewest: (newest.get(request.taskId) ?? request.id) === request.id,
@@ -375,7 +371,7 @@ export async function confirmationReviewStates(
         title: review.reviewerSessionId ? reviewers.get(review.reviewerSessionId) ?? null : null,
       },
       since: request.requestedAt,
-      dueAt: review.dueAt,
+      dueAt,
       windowSeconds: review.windowSeconds,
       headline: reviewHeadline(lists, problems),
       review: reviewRecord && lists
