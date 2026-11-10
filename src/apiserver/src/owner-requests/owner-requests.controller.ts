@@ -1,10 +1,10 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { CompleteOwnerRequestDto, DeclineOwnerRequestDto, SubmitOwnerSecretDto } from './dto';
-import { OwnerRequestsService } from './owner-requests.service';
+import { OwnerRequestsService, ownerRequestClient } from './owner-requests.service';
 import { OwnerSecretsService, refuseActingSession } from './owner-secrets.service';
 
 /**
@@ -33,14 +33,24 @@ export class OwnerRequestsController {
 
   @Post(':id/done')
   @HttpCode(HttpStatus.OK)
-  complete(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: CompleteOwnerRequestDto) {
-    return this.requests.complete(user.userId, id, dto);
+  complete(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: CompleteOwnerRequestDto,
+    @Headers('x-orbit-client') client?: string,
+  ) {
+    return this.requests.complete(user.userId, id, dto, ownerRequestClient(client));
   }
 
   @Post(':id/decline')
   @HttpCode(HttpStatus.OK)
-  decline(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: DeclineOwnerRequestDto) {
-    return this.requests.decline(user.userId, id, dto.reason);
+  decline(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: DeclineOwnerRequestDto,
+    @Headers('x-orbit-client') client?: string,
+  ) {
+    return this.requests.decline(user.userId, id, dto.reason, ownerRequestClient(client));
   }
 
   /**
