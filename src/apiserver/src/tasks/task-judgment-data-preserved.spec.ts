@@ -2881,9 +2881,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0505 adds run-item request columns/index and widens request/approval CHECKs only.
       // No completion ledger, DONE fence, preserved trigger or function is changed.
       '0505_run_item_requests',
-      // 0506 only replaces the confirmation-review end trigger: open FAILED runs keep waiting.
+      // 0506 adds owner_request_secret and account_secret only. No completion ledger, DONE fence,
+      // preserved trigger or function is changed, and there is no INSERT, UPDATE or DELETE.
+      '0506_owner_request_secret',
+      // 0507 only replaces the confirmation-review end trigger: open FAILED runs keep waiting.
       // No completion ledger, DONE fence or preserved trigger/function is changed.
-      '0506_confirmation_review_waits_for_pickup'],
+      '0507_confirmation_review_waits_for_pickup'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
