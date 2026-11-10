@@ -425,6 +425,11 @@ public enum ProjectDone {
     /// `DONE_CARD_SEE_ACCEPTED`.
     public static let seeWhatAccepted = "See what you accepted"
     /// `DONE_CARD_REOPEN`.
+    public static let derivedFrom = "From the criteria you confirmed on"
+    public static let derivedReopenHint = "Not right? Reopen it."
+    public static func derivedLine(_ confirmedAt: String?, timeZone: TimeZone = .current) -> String? {
+        date(confirmedAt, timeZone: timeZone).map { "\(derivedFrom) \($0). \(derivedReopenHint)" }
+    }
     public static let reopenProject = "Reopen project"
     /// `DONE_CARD_EXPLANATION` — the one paragraph the card keeps.
     public static let recordingExplanation =

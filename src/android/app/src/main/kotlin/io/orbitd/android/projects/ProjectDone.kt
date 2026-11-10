@@ -38,6 +38,10 @@ object ProjectDone {
     const val showLess = "Show less"
     const val sendToCoordinator = "Send to coordinator"
     const val back = "Back"
+    const val derivedFrom = "From the criteria you confirmed on"
+    const val derivedReopenHint = "Not right? Reopen it."
+    fun derivedLine(confirmedAt: String?, zone: ZoneId = ZoneId.systemDefault()): String? =
+        date(confirmedAt, zone)?.let { "$derivedFrom $it. $derivedReopenHint" }
     const val thisProjectIsDone = "This project is done"
     const val onMain = "on main"
     const val onProjectBranch = "On the project branch"

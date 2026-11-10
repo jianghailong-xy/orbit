@@ -24,6 +24,7 @@ import {
   PROJECT_DONE_COPY,
   criterionForGap,
   doneProvenance,
+  updateProjectStatus,
   formatDoneDate,
   formatDoneDateTime,
   doneRequestWaiting,
@@ -1258,11 +1259,34 @@ export function ProjectDoneDialog({
   );
 }
 
+/** The sessions page uses the same standing confirmation and owner Reopen door as the project page. */
+export function ProjectSessionsDoneCard({ projectId, project }: { projectId: string; project: ProjectDoneDocument }): JSX.Element {
+  const qc = useQueryClient();
+  const standing = useQuery({
+    queryKey: acceptanceConfirmationKey(projectId),
+    queryFn: () => readAcceptanceConfirmation(projectId),
+    enabled: project.doneBy === 'DERIVED',
+  });
+  const reopen = useMutation({
+    mutationFn: () => updateProjectStatus(projectId, 'OPEN'),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['project', projectId] });
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+  return <ProjectWhyNotDoneCard project={project} confirmedAt={standing.data?.confirmation?.confirmedAt}
+    onReopen={() => reopen.mutate()} reopenBusy={reopen.isPending} reopenError={reopen.error} />;
+}
+
 export interface ProjectWhyNotDoneCardProps {
   project: ProjectDoneDocument;
   openItems?: { withCoordinator?: readonly ProjectOpenItemRow[]; doneRequest?: ProjectOpenItemRow | null };
   onReview?: () => void;
   onAskCoordinator?: () => void;
+  confirmedAt?: string | null;
+  onReopen?: () => void;
+  reopenBusy?: boolean;
+  reopenError?: Error | null;
   /** The clock the request's wait is read against. */
   now?: number;
 }
@@ -1284,8 +1308,13 @@ export function ProjectWhyNotDoneCard({
   openItems,
   onReview,
   onAskCoordinator,
+  confirmedAt,
+  onReopen,
+  reopenBusy,
+  reopenError,
   now = Date.now(),
 }: ProjectWhyNotDoneCardProps): JSX.Element {
+  const confirmedDate = formatDoneDate(confirmedAt);
   const criteria = project.derivedDone?.criteria ?? [];
   const byKey = new Map((project.acceptanceCriteriaItems ?? []).map((item) => [item.id, item]));
   const main = mainBranchName(project.integration?.upstreamRef);
@@ -1307,13 +1336,18 @@ export function ProjectWhyNotDoneCard({
   // A DONE project is done whatever its criteria still say: nothing is left to ask "why not".
   if (project.status === 'DONE' || (!hasGaps && project.derivedDone?.done === true)) {
     return (
-      <div className="approval-card project-settlement project-why-not-done is-settled">
+      <div className={`approval-card project-settlement project-why-not-done is-settled${project.doneBy === 'DERIVED' ? ' is-derived' : ''}`}>
         <div className="approval-head project-settlement-head">
           <span className="project-settlement-heading">{PROJECT_DONE_COPY.thisProjectIsDone}</span>
           <span className="criteria-provenance">{project.doneBy === 'OWNER' ? PROJECT_DONE_COPY.recordedByYou : PROJECT_DONE_COPY.recordedByOrbit}</span>
         </div>
         <div className="approval-body is-questions project-settlement-body">
           <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone, main)}</p>
+          {project.doneBy === 'DERIVED' && confirmedDate ? <p className="project-done-derived-line">{PROJECT_DONE_COPY.derivedFrom} {confirmedDate}. {PROJECT_DONE_COPY.derivedReopenHint}</p> : null}
+          {project.doneBy === 'DERIVED' && onReopen ? (
+            <button type="button" className="card-action project-done-derived-reopen" disabled={reopenBusy} onClick={onReopen}>{PROJECT_DONE_COPY.reopenProject}</button>
+          ) : null}
+          {reopenError ? <Alert type="error" title="The project was not reopened" description={reopenError.message} /> : null}
         </div>
       </div>
     );

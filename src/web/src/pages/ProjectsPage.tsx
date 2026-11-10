@@ -100,6 +100,7 @@ import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import {
+  updateProjectStatus,
   doneProvenance,
   PROJECT_DONE_COPY,
   type ProjectDerivedDone,
@@ -749,12 +750,7 @@ type ProjectStatusPress = 'DONE' | 'CANCELLED' | 'OPEN';
  * goes through is where that claim is put beside whatever evidence the server can actually offer;
  * a dropdown would read as filing a status the system already knew.
  */
-export function updateProjectStatus(
-  projectId: string,
-  status: ProjectStatusPress,
-): Promise<{ id: string }> {
-  return api<{ id: string }>(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } });
-}
+export { updateProjectStatus } from '../lib/projectDone';
 
 /** The two task statuses that END a task. FAILED is deliberately not one of them: it is a run's
  *  own conservative self-report that it stopped short, so the work under it is still outstanding —
