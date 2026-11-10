@@ -1312,6 +1312,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			stopCurrentEngine()
 		} else if err == nil && !retainsTurnPermit(next) {
 			pool.park(live, permitGeneration)
+		} else if err == nil {
+			// The permit went straight to a queued follow-up; a drain for an update holds it back.
+			pool.holdFollowUpForUpdate(live, permitGeneration)
 		}
 		return err
 	}

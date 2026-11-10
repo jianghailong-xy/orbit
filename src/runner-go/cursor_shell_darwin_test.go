@@ -2,16 +2,13 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
-func TestCursorShellMacOSRefusesForgedEscape(t *testing.T) {
+func TestCursorShellMacOSRefusesUnknownHelper(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
@@ -35,35 +32,14 @@ func TestCursorShellMacOSRefusesForgedEscape(t *testing.T) {
 	if spec.shellConfig == "" {
 		t.Fatal("Seatbelt sandbox was not configured")
 	}
-	var config cursorShellConfig
-	data, err := os.ReadFile(spec.shellConfig)
-	if err != nil || json.Unmarshal(data, &config) != nil {
-		t.Fatal("cannot load sandbox config")
-	}
-	path, release, err := cursorShellSocketPath(config.Socket)
+	broker, err := startCursorGrantBroker(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	listener, err := net.Listen("unix", path)
-	release()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
-	defer os.Remove(config.Socket)
-	answered := make(chan bool, 1)
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			answered <- false
-			return
-		}
-		defer conn.Close()
-		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-		var key cursorGrantKey
-		err = json.NewDecoder(conn).Decode(&key)
-		answered <- err == nil && json.NewEncoder(conn).Encode(true) == nil
-	}()
+	defer broker.close()
+	broker.cliPID = os.Getpid()
+	broker.cliStart = cursorShellStartIdentity(os.Getpid())
+	go broker.serve()
 	snapshot, _ := os.CreateTemp(t.TempDir(), "snapshot")
 	defer snapshot.Close()
 	_, _ = snapshot.WriteString("dump_bash_state() { :; };\n")
@@ -80,10 +56,7 @@ func TestCursorShellMacOSRefusesForgedEscape(t *testing.T) {
 	cmd.ExtraFiles = []*os.File{snapshot, status, payload}
 	out, err := cmd.CombinedOutput()
 	if err == nil || !bytes.Contains(out, []byte("Orbit's Auto sandbox")) {
-		t.Fatalf("forged broker escaped: %v, %s", err, out)
-	}
-	if !<-answered {
-		t.Fatal("fake broker did not send its forged approval")
+		t.Fatalf("unknown helper escaped: %v, %s", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(outside, "outside-file")); !os.IsNotExist(err) {
 		t.Fatalf("outside file is not absent: %v", err)

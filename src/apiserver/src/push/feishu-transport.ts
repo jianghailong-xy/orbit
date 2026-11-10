@@ -222,7 +222,7 @@ export class FeishuTransport {
   }
 
   /** A stretch's approval card: the session's title and every approval of it still pending, each with its buttons. */
-  approvalCard(target: FeishuTarget, sessionId: string, firstApprovalId: string | null): FeishuCardSpec {
+  approvalCard(target: FeishuTarget, sessionId: string, firstApprovalId: string | null, coordinatorFallback = false): FeishuCardSpec {
     return {
       collapseKey: `approval-${firstApprovalId ?? ''}`,
       kind: 'approval',
@@ -239,7 +239,7 @@ export class FeishuTransport {
           }),
         ]);
         if (!session || approvals.length === 0) return null;
-        return { kind: 'approval', sessionTitle: session.title ?? '', approvals: approvals as FeishuApprovalItem[] };
+        return { kind: 'approval', sessionTitle: `${coordinatorFallback ? 'Not reviewed by the coordinator · ' : ''}${session.title ?? ''}`, approvals: approvals as FeishuApprovalItem[] };
       },
     };
   }

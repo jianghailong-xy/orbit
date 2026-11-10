@@ -12,6 +12,9 @@ import (
 
 const cursorSandboxInstallTimeout = 2 * time.Minute
 
+// cursorEscapeAuthNotice explains the fail-closed gate on unsupported platforms.
+const cursorEscapeAuthNotice = "Cursor Auto asks about inline scripts because this platform cannot authenticate commands leaving the command sandbox."
+
 // Only the installation outcome is process-wide; availability and writable roots
 // must be probed again for each session.
 type cursorSandboxInstaller struct {
@@ -98,6 +101,14 @@ func (b *cursorPermissionBridge) prepareSandbox(ctx context.Context, job *Claime
 	if b.policy().Answer != cursorAnswerReview {
 		return
 	}
-	b.sandbox, b.sandboxReason = installer.ensure(ctx, job, b.workspace, detect, install)
+	if !cursorEscapeAuthSupported() {
+		b.sandboxNotice = cursorEscapeAuthNotice
+		return
+	}
+	var reason string
+	b.sandbox, reason = installer.ensure(ctx, job, b.workspace, detect, install)
 	b.sandboxInForce = b.sandbox != nil
+	if reason != "" {
+		b.sandboxNotice = "Cursor Auto asks for approval for inline scripts because the command sandbox is unavailable: " + reason
+	}
 }

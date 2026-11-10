@@ -952,9 +952,9 @@ a controlled server, which supplies person-decision provenance for the approved
 command; it does **not** establish a production human UI click. The blocked Python
 and function-definition requests receive `ALLOWED` without person provenance and
 remain sandboxed; task 5 still owns relaxing Auto's inline-script classifier.
-macOS peer/process authentication is not implemented: its helper refuses every
-escape, pending the separate macOS work. Other permission modes retain their
-existing wrappers; entering or leaving Auto restarts the CLI process.
+Linux and macOS now authenticate escape callers (Darwin details in §8.5.3).
+Other permission modes retain their existing wrappers; entering or leaving Auto
+restarts the CLI process.
 
 
 #### 8.5.2 macOS invocation matrix and escalation verdict (2026-11-09)
@@ -967,10 +967,9 @@ roots, network, inherited descriptors, shell replay and launch-file protection
 (`bgj_87694540ac51`). The profile now protects sealed ancestors against rename;
 launch paths use canonical paths and long Darwin broker socket paths use short,
 temporary private aliases. Detection still uses the unchanged real Seatbelt trial.
-**macOS escapes are explicitly refused**, including after a forged positive broker
-reply: there is no verified macOS peer/process identity backend. A person-approved
-outside write therefore remains confined. The recording documents this limitation
-and a real-helper refusal regression; no successful Mac escape is claimed.
+**Historical result (2026-11-09): macOS escapes were explicitly refused.** The
+recording predates the authenticated Darwin backend in §8.5.3 and documents the
+then-current limitation, rather than the current capability.
 
 Recorded on `longdeMac-mini.local`, macOS 27.2 / Darwin arm64, with the same
 pinned Cursor CLI `2026.10.14-941492e`. The [recording README](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/README.md)
@@ -1029,13 +1028,11 @@ Identical concurrent commands still require count semantics rather than PID attr
 The fresh-Bash approved path in §8.5.1 must remain independent of Cursor's persisted
 snapshot. This is an input-compatibility finding, not a successful macOS broker test.
 
-macOS needs a trusted peer/process authentication backend in place of Linux's
-`/proc` and kernel-peer checks. The [host diagnostic](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/detection.json)
-records an empty `cursorShellStartIdentity` result; `cursor_shell_other.go` currently
-refuses every escape. A macOS backend must establish peer PID/UID, executable identity,
-parent CLI identity/generation, live session ancestry, cwd and command context without
-trusting client-supplied JSON. UID alone remains insufficient. Until that exists,
-no macOS escape should be granted. This task does not implement it.
+The historical [host diagnostic](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-macos/detection.json)
+records the old empty `cursorShellStartIdentity` result. The replacement Darwin
+backend in §8.5.3 now establishes peer PID/UID, executable identity, parent CLI
+generation, live session ancestry, cwd and conversation context without trusting
+client-supplied JSON. UID alone remains insufficient.
 
 **Sandbox detection depends on execution context.** The same host diagnostic calls
 `detectCursorSandbox` and records the exact Seatbelt profile/argv: available, empty
@@ -1054,6 +1051,49 @@ and detection diagnostics, not write confinement or successful macOS escalation;
 those remain the macOS sandbox verification task's responsibility.
 
 ---
+
+#### 8.5.3 Darwin grant authentication and capability (2026-11-10)
+
+`cursor_shell_darwin.go` mirrors the Linux broker checks using kernel interfaces.
+It calls the `proc_info` syscall used by libproc's `proc_pidinfo` and `proc_pidpath`,
+without cgo, using the fixed layouts in Darwin's `sys/proc_info.h`. An error,
+short result, missing value, unexpected argv or changed process generation refuses
+an escape. The broker never authenticates a PID, UID, cwd or conversation asserted
+by the request body.
+
+| Linux check | Darwin equivalent |
+| --- | --- |
+| Unix `SO_PEERCRED`, runner UID | `LOCAL_PEERPID` and version-checked `LOCAL_PEERCRED` on the accepted Unix socket; compare UID with `os.Getuid()` and process UID |
+| Positive CLI PID and nonempty matching `/proc/<cli>/stat` start time | `PROC_PIDTBSDINFO` PID and start seconds/microseconds; compare with the launch-time anchor |
+| `/proc/<peer>/exe` matches installed helper inode | `PROC_PIDPATHINFO` (the `proc_pidpath` kernel operation), then `os.Stat`/`os.SameFile` against the sealed helper |
+| Exact helper argv, config path and byte-for-byte loader | `KERN_PROCARGS2` argc/argv; exactly eight arguments, including the same config and five loader arguments |
+| Direct parent is pinned CLI `node` or `cursor-agent-sea` | `PROC_PIDTBSDINFO` parent PID plus `PROC_PIDPATHINFO`; canonical pinned CLI directory |
+| CLI anchor reached within 16 ancestors; only runner executables bridge the chain; no shell helper bridge | Walk BSD parent PIDs; executable inode matches the runner and argv excludes `internal-cursor-shell`; reject unknown or excessive ancestry |
+| `/proc/<peer>/cwd` | `PROC_PIDVNODEPATHINFO` current-directory vnode path |
+| Nonempty `CURSOR_CONVERSATION_ID` from `/proc/<peer>/environ` | `KERN_PROCARGS2` environment; reject empty or duplicate conversation entries |
+| JSON cwd/conversation must match authenticated context | Unchanged shared broker comparison before looking up a grant |
+| Exact conversation/cwd/command, expiry, revocation and single consumption | Unchanged runner-owned ledger under its mutex; deletion precedes the response, including a lost response |
+
+Darwin also rechecks PID/start time, UID, parent and executable path after each
+process snapshot and again across the completed ancestry walk. The CLI generation
+is rechecked before returning authenticated context. A stale cached generation
+cannot authorize a new process at that PID.
+
+`cursorEscapeAuthSupported()` now returns true for Linux and Darwin. Auto uses
+Seatbelt on macOS when the existing detection trial succeeds; inline scripts may
+run without a card inside that sandbox. Person approvals and standing rules alone
+create escape grants. A successful Mac backend no longer emits the old notice
+about unavailable caller authentication. A failed sandbox detection still emits
+the English unavailable-backend notice and retains the existing approval policy.
+
+Native Mac tests exercise a copied native `node` parent and the real internal
+shell helper over Unix sockets, successful authorization, refusal after one grant
+consumption, wrong executable/start time/UID, a stale generation paired with a
+live PID, unknown callers, wrong config, wrong parent path and unrelated ancestry.
+The UID and stale-generation negative tests supply mismatched expected kernel
+identities to the verifier; they do not change the host user's UID or force the
+kernel to wrap its PID allocator. The real-Cursor live verification is a separate
+follow-up; these native tests do not claim that recording.
 
 ## 9. 登录、API key 与 token（覆盖要求 7）
 

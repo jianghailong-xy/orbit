@@ -183,16 +183,40 @@ export async function markRunnersChanged(
 /**
  * The link gateway is opening a new connection for this runner (the welcome route, which it calls for each one before
  * Welcome, and so before the connection's first beat): the runner's last beat is the last it was heard with before it
- * connected again — before it lost contact, if it did — and is kept as such (`lost_at`, migration 0450). A connection
- * opened while the one before is still up, for a token's renewal or a process just started, is kept alike: what the
- * reaper reads off these is many runners losing contact at once, which renewals spread over the hour are not. One
- * statement on the primary key, which writes nothing when it would change nothing; nothing for a runner with no presence
- * row.
+ * connected again — before it lost contact, if it did — and is kept as such (`lost_at`, migration 0450). A process just
+ * started is kept alike: its predecessor's connection is gone.
+ *
+ * Except for a renewal. A runner replaces its connection make-before-break 55 minutes after its token was minted
+ * (linkRenewBefore, src/runner-go/link_client.go): it mints a fresh token and opens the new connection while the old one
+ * still beats, and the gateway then closes the old one as superseded. Nothing was lost. After a fleet-wide restart every
+ * runner's renewals fall in the same minute, every hour, and kept as losses they read as a mass disconnection to the
+ * reaper (production, 2026-11-08 05:26Z and 06:21Z), which then held the silence of any runner that really went quiet
+ * beside them. So nothing is kept when the connection is opened with a token minted within RUNNER_SILENT_AFTER_MS, by the
+ * process the presence row last heard over the link, heard within RUNNER_SILENT_AFTER_MS: a process that has not missed a
+ * beat and has just minted a token is renewing. A reconnection after a drop opens with the token in hand, minted when the
+ * connection before was (up to 55 minutes ago), and is kept as before; one that comes more than RUNNER_SILENT_AFTER_MS
+ * after the last beat is kept by that beat in any case (runner-api/link-heartbeat.ts). Decided on the token's own `iat`
+ * and this database's clock, so a runner or gateway of any version renews alike.
+ *
+ * One statement on the primary key, which writes nothing when it would change nothing, or for a renewal; nothing for a
+ * runner with no presence row.
  */
-export async function recordRunnerLinkOpened(prisma: Pick<PrismaService, '$executeRaw'>, runnerId: string): Promise<void> {
+export async function recordRunnerLinkOpened(
+  prisma: Pick<PrismaService, '$executeRaw'>,
+  runnerId: string,
+  connection: { leaseOwner: string; tokenMintedAt?: number },
+): Promise<void> {
+  const silent = Prisma.sql`(${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')`;
+  const mintedAt = connection.tokenMintedAt ?? 0;
   await prisma.$executeRaw`
     UPDATE "runner_presence" SET "lost_at" = "last_beat_at"
      WHERE "runner_id" = ${runnerId}::uuid AND "lost_at" IS DISTINCT FROM "last_beat_at"
+       AND NOT COALESCE(
+             "link_state" = 'LINK'
+         AND "process_id"::text = lower(${connection.leaseOwner})
+         AND "last_beat_at" >= (now() AT TIME ZONE 'UTC') - ${silent}
+         AND (to_timestamp(${mintedAt}::float8) AT TIME ZONE 'UTC') >= (now() AT TIME ZONE 'UTC') - ${silent},
+           false)
   `;
 }
 
