@@ -78,6 +78,8 @@ import { ProjectAcceptanceService } from './project-acceptance.service';
 import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from './project-integration-job';
 import { readDoneState, supersedeStaleDoneRequest } from './project-done-request';
 import { ProjectOpenItemService } from './project-open-item.service';
+import { ProjectsController } from './projects.controller';
+import { doneReadiness, readDoneState } from './project-done-request';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -965,6 +967,36 @@ test('a coordinator asks its owner to record the project done, and the project i
     const done = await refused(() => ask(p.id, p.sessionId, GAPS));
     assert.equal(done.status, 409);
     assert.equal(done.body.code, 'PROJECT_ALREADY_DONE');
+  });
+
+  await t.test('owner done-check and POST done without a request retain every finding and succeed', async () => {
+    const q = await project('owner-without-request', ['the release works']);
+    await task(q, 'work still running', { serves: q.criteria[0], status: 'IN_PROGRESS', codeless: true });
+    const controller = Object.assign(Object.create(ProjectsController.prototype), { acceptance }) as ProjectsController;
+    const check = await controller.doneCheck({ userId: ownerId } as never, q.id);
+    const expectedState = await readDoneState(prisma as never, ownerId, q.id, null);
+    assert.deepEqual(check, { ...expectedState, findings: doneReadiness(expectedState, []) });
+    assert.ok(check.findings.some((finding) => finding.code === 'DONE_TASKS_IN_FLIGHT'));
+    const record = await controller.done({ userId: ownerId } as never, q.id, {
+      requestId: null,
+      criteriaDigest: check.criteriaDigest,
+      acceptedGaps: [],
+    }, undefined);
+    assert.equal(record.status, 'DONE', 'REFUSE findings do not refuse the owner');
+    assert.ok(record.acceptedGaps.some((gap) => gap.criterionKey === q.criteria[0].key));
+    assert.deepEqual(record.acceptedGaps.map((gap) => gap.finding), check.findings);
+    for (const gap of record.acceptedGaps) {
+      assert.equal(gap.title, gap.finding!.message);
+      assert.equal(gap.whyNotProven, gap.finding!.message);
+      assert.equal(gap.criterionKey, gap.finding!.criterion?.key ?? `project:${q.id}`);
+    }
+    const [stored] = (await sql.query(
+      `SELECT "status", "accepted_gaps" FROM "project" WHERE "id" = $1::uuid`, [q.id],
+    )).rows;
+    assert.equal(stored.status, 'DONE');
+    assert.deepEqual(stored.accepted_gaps, record.acceptedGaps);
+    const forbidden = await refused(() => controller.doneCheck({ userId: randomUUID() } as never, q.id));
+    assert.equal(forbidden.status, 404, 'another owner cannot read the check');
   });
 
   await t.test('(4b) a request left open on a project that is no longer OPEN asks nobody anything', async () => {

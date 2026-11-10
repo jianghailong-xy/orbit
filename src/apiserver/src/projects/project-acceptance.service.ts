@@ -10,6 +10,7 @@ import {
 import { Prisma, ProjectStatus } from '@prisma/client';
 import {
   type DoneRequest,
+  type ProjectDoneCheck,
   type ProjectDoneBy,
   type ProjectDoneRecord,
   type ProjectDoneRequestBody,
@@ -43,7 +44,13 @@ import { NO_REOPEN_RECORD, storeDerivedProjectStatus } from './project-done-deri
 import { defaultStartLine, startProjectLine, type StartLineSettings } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
-import { DONE_REQUEST_KIND, answerDoneRequests, doneRequestMoved } from './project-done-request';
+import {
+  DONE_REQUEST_KIND,
+  answerDoneRequests,
+  doneRequestMoved,
+  readDoneState,
+  doneReadiness,
+} from './project-done-request';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** One stated criterion, as every read surface reports it. */
@@ -350,6 +357,16 @@ export class ProjectAcceptanceService {
     ));
   }
 
+  /** The owner's current check; no conversation's run is excluded. */
+  async readProjectDoneCheck(ownerId: string, projectId: string): Promise<ProjectDoneCheck> {
+    return this.prisma.$transaction(async (tx) => {
+      const project = await tx.project.findFirst({ where: { id: projectId, ownerId } });
+      if (!project) throw new NotFoundException('project not found');
+      const state = await readDoneState(tx, ownerId, projectId, null);
+      return { ...state, findings: doneReadiness(state, []) };
+    });
+  }
+
   /**
    * `POST /projects/:id/done`: the account owner records the project done, on the "Is this project
    * done?" card or on the project page, in one write.
@@ -439,6 +456,19 @@ export class ProjectAcceptanceService {
         }
       }
 
+      // The owner accepts the current check, even when it contains REFUSE findings.
+      // Project-wide findings use the shared reserved project anchor rather than inventing a criterion.
+      const findings = requestId === null
+        ? doneReadiness(await readDoneState(tx, ownerId, projectId, null), [])
+        : [];
+      const acceptedGaps = [...input.acceptedGaps, ...findings.map((finding) => ({
+        criterionKey: finding.criterion?.key ?? `project:${projectId}`,
+        scope: finding.criterion ? 'CRITERION' as const : 'PROJECT' as const,
+        title: finding.message,
+        whyNotProven: finding.message,
+        finding,
+      }))];
+
       const at = new Date();
       await tx.project.update({
         where: { id: projectId },
@@ -447,7 +477,7 @@ export class ProjectAcceptanceService {
           doneBy: 'OWNER' satisfies ProjectDoneBy,
           doneAt: at,
           doneCriteriaDigest: version.digest,
-          acceptedGaps: input.acceptedGaps as unknown as Prisma.InputJsonValue,
+          acceptedGaps: acceptedGaps as unknown as Prisma.InputJsonValue,
           // This record is the owner's answer now, and it replaces any Reopen they pressed before it.
           ...NO_REOPEN_RECORD,
         },
@@ -457,7 +487,7 @@ export class ProjectAcceptanceService {
         projectId,
         requestId,
         at,
-        acceptedGaps: input.acceptedGaps,
+        acceptedGaps,
       });
       return {
         projectId,
@@ -465,7 +495,7 @@ export class ProjectAcceptanceService {
         doneBy: 'OWNER',
         doneAt: at.toISOString(),
         criteriaDigest: version.digest,
-        acceptedGaps: input.acceptedGaps,
+        acceptedGaps,
         requestId,
       };
     }, loggedRetry(this.logger, 'projectAcceptance.recordProjectDone'));
