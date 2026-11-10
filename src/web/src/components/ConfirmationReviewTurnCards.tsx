@@ -87,7 +87,7 @@ export function ReviewRequestedCard({
           {task ? <AppLink to={`/tasks/${encodeURIComponent(task)}`}>{card.title}</AppLink> : card.title}
         </div>
         <div className="crc-meta">
-          {reviewDue(decisionReceiptTime(card.dueAt))}
+          {card.dueAt ? reviewDue(decisionReceiptTime(card.dueAt)) : null}
           {ts ? ` · ${decisionReceiptTime(ts)}` : ''}
         </div>
         {run ? (

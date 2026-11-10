@@ -245,7 +245,7 @@ describe('the live stream renders in the order it arrived', () => {
   it('keeps a tool call the model ran above the reply that explains it', async () => {
     await mount();
     await waitForUi(() => {
-      expect(mounted().querySelectorAll('.chat-tool-card')).toHaveLength(1);
+      expect(mounted().querySelector('.chat-steps-line')?.textContent).toContain('Ran 1 shell command');
     });
     expect(sessionEventsUrl(SESSION_PUBLIC)).toContain(`/api/sessions/${SESSION_PUBLIC}/events`);
 
@@ -256,16 +256,16 @@ describe('the live stream renders in the order it arrived', () => {
     });
 
     expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
-    const cards = [...mounted().querySelectorAll('.chat-tool-card')];
-    expect(cards, 'both tool calls are on screen').toHaveLength(2);
-    expect(mounted().textContent).toContain(SECOND_COMMAND);
+    // Both calls fold into the one steps line the answer follows.
+    const steps = [...mounted().querySelectorAll('.chat-steps')];
+    expect(steps, 'both tool calls are on one steps line').toHaveLength(1);
+    expect(steps[0].textContent).toContain('Ran 2 shell commands');
 
     // The whole of the bug, as a user sees it: the answer must come after the command it
     // describes, not between the two calls.
     const draft = mounted().querySelector('.chat-streaming-md')!;
-    const secondCard = cards[1];
     expect(
-      secondCard.compareDocumentPosition(draft) & Node.DOCUMENT_POSITION_FOLLOWING,
+      steps[0].compareDocumentPosition(draft) & Node.DOCUMENT_POSITION_FOLLOWING,
       'the streamed answer renders ABOVE the tool call it explains',
     ).toBeTruthy();
   });

@@ -1,6 +1,7 @@
 package io.orbitd.android.cards
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -43,6 +44,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
     when (card.family) {
         CardFamily.TOOL, CardFamily.PROVIDER -> {
             val input = row.obj("input") ?: JsonObject(emptyMap())
+            if (row.text("toolName") == SkipMergeCheckCards.tool) { SkipMergeCheckCardBody(SkipMergeCheckCards.read(input), open); return }
             input.text("command")?.let { CodeText(it, "sh") }
             if (input.text("command") == null) listOf("file_path", "notebook_path", "url", "pattern", "path").firstNotNullOfOrNull { input.text(it) }?.let { Text(it) }
             DetailFold("Tool parameters") { CodeText(redactProvider(input, card.family == CardFamily.PROVIDER).toString(), "json") }
@@ -216,6 +218,25 @@ private fun WorkspaceWriteCardBody(write: WorkspaceWriteCard) {
         Block(field.value)
     }
     Text(WorkspaceWriteCards.note, style = small, color = muted)
+}
+
+/**
+ * What a skip lets through (iOS `ToolApprovalCard`'s skip branch, web `SkipMergeCheckBody`): the task's name on the row under the
+ * heading, its project, the command that will not run whole and selectable — the decision is about that command — what it said, the
+ * agent's reason, and that it is this landing only.
+ */
+@Composable
+private fun SkipMergeCheckCardBody(skip: SkipMergeCheckCard, open: (String) -> Unit) {
+    val small = MaterialTheme.typography.bodySmall
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Text(skip.taskLine, style = MaterialTheme.typography.titleSmall)
+    skip.projectLine?.let { Text(it, style = small, color = muted) }
+    Text(SkipMergeCheckCards.commandCaption, style = small, color = muted)
+    SelectionContainer { Text(skip.checkCommand, style = small, fontFamily = FontFamily.Monospace) }
+    if (skip.failure.isNotEmpty()) Text(skip.failure, style = small, color = muted)
+    Text(SkipMergeCheckCards.reasonCaption, style = small, color = muted)
+    if (skip.reason.isNotEmpty()) MarkdownText(skip.reason, open = open)
+    Text(skip.note, style = small, color = muted)
 }
 
 @Composable

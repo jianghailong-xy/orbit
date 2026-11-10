@@ -223,15 +223,17 @@ final class ProjectLandingsModel {
 /// window opens. A landing session id opens it on that landing (`focusID`): scrolled to, opened and
 /// outlined for a moment.
 ///
-/// The window is the old landing session page's shell — `Landings`, `Run by Orbit · <project>`, a ⋯
+/// The window is the old landing session page's shell — `Landings` over the project's name, a ⋯
 /// with the coordinator and the project, the read-only footer and no composer (LS6) — and each landing
 /// in it carries what that page drew: a card still in hand is its status card, a settled row opens in
 /// place to its timeline. The doors the page's ⋯ held are each landing's own: a long press on it.
 ///
 /// It reads as a chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles, option C): each settled
-/// landing is a message from Orbit in a bubble, with Orbit's avatar beside the first of each group
-/// sent close together (`LandingsWindowDay.groups`); the day sections are chips; the cards in hand are
-/// Orbit's last messages; and the footer stands in the composer's place and shape, read only.
+/// landing is a message from Orbit in a bubble, grouped with those sent close together
+/// (`LandingsWindowDay.groups`); the day sections are chips; the cards in hand are Orbit's last
+/// messages. Polished on the phone (owner 2026-11-10, docs/mocks/landings-ui-polish): no avatars, a
+/// merge into main is a centred event line, the head is the navigation bar's one row, and the
+/// read-only footer is one opaque line on the bottom edge.
 struct ProjectLandingsWindowView: View {
     /// The project whose landings these are; nil when the window was opened on a landing whose
     /// project this device has not read yet, which its own read names.
@@ -257,7 +259,16 @@ struct ProjectLandingsWindowView: View {
 
     var body: some View {
         windowAndBar
+        #if os(iOS)
+        // The phone's head is the navigation bar's one row (owner 2026-11-10, docs/mocks/landings-ui-polish
+        // ⑤): back, `Landings` over the project's name, and the ⋯ — not a second head under an empty bar.
+        .toolbar {
+            ToolbarItem(placement: .principal) { titleBlock }
+            ToolbarItem(placement: .topBarTrailing) { windowMenu }
+        }
+        #else
         .safeAreaInset(edge: .top, spacing: 0) { header }
+        #endif
         .task(id: "\(projectID ?? "")|\(focusID ?? "")") { await run() }
         .task(id: outlined) {
             // The landing it was opened on is outlined for a moment (board 03 f), then stays open.
@@ -280,26 +291,13 @@ struct ProjectLandingsWindowView: View {
         return window.days.flatMap { $0.rows.map(\.id) } + window.now.map(\.id)
     }
 
-    /// The window and the read-only bar in the composer's place under it. On iOS 26 the bar floats
-    /// over the window as the console's band floats over its transcript: the messages run on under its
-    /// glass, and the system's scroll-edge effect softens what passes beneath. Elsewhere it stands
-    /// under the window, which fades into it.
-    @ViewBuilder private var windowAndBar: some View {
-        #if os(iOS)
-        if #available(iOS 26.0, *) {
-            scroller.safeAreaBar(edge: .bottom, spacing: 0) { footer }
-        } else {
-            VStack(spacing: 0) {
-                scroller.fadesIntoComposerBand()
-                footer
-            }
-        }
-        #else
+    /// The window and the read-only bar under it (owner 2026-11-10, docs/mocks/landings-ui-polish ③):
+    /// one opaque line on the bottom edge, so no message runs on beneath or below it.
+    private var windowAndBar: some View {
         VStack(spacing: 0) {
-            scroller.fadesIntoComposerBand()
+            scroller
             footer
         }
-        #endif
     }
 
     private var scroller: some View {
@@ -311,7 +309,7 @@ struct ProjectLandingsWindowView: View {
                     } else {
                         ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
                     }
-                    Color.clear.frame(height: .composerBandFade).id(Self.bottom)
+                    Color.clear.frame(height: 8).id(Self.bottom)
                 }
                 .padding(.horizontal, 16)
                 .frame(maxWidth: 760, alignment: .leading)
@@ -330,7 +328,19 @@ struct ProjectLandingsWindowView: View {
 
     // MARK: - the shell
 
-    /// The old landing page's head, for the whole project: `Landings`, run by Orbit, and the window's
+    #if os(iOS)
+    /// The navigation bar's title: `Landings` over the project's name.
+    private var titleBlock: some View {
+        VStack(spacing: 1) {
+            Text(SessionLandingsCopy.title).font(.headline).lineLimit(1)
+            Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .frame(maxWidth: 260)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+    #else
+    /// The Mac window's head, for the whole project: `Landings`, the project's name, and the window's
     /// own ⋯ — the coordinator and the project, nothing else (LS6).
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -349,10 +359,13 @@ struct ProjectLandingsWindowView: View {
         .padding(.horizontal, 16).padding(.vertical, 8)
         .background(.bar)
     }
+    #endif
 
+    /// The project's name; `Run by Orbit` until it is known. The bar at the bottom already says Orbit
+    /// runs these landings, so the name has the whole line.
     private var subtitle: String {
         guard let title = model?.projectTitle, !title.isEmpty else { return LandingPageCopy.runByOrbit }
-        return "\(LandingPageCopy.runByOrbit) · \(title)"
+        return title
     }
 
     private var windowMenu: some View {
@@ -364,60 +377,59 @@ struct ProjectLandingsWindowView: View {
                 Button(SessionProjectCopy.openProject) { open("orbit-project", projectID) }
             }
         } label: {
+            #if os(iOS)
+            Image(systemName: "ellipsis")
+            #else
             Image(systemName: "ellipsis.circle")
                 .font(.orbitGlyph)
+            #endif
         }
         // The board's plain ⋯ rather than macOS's pull-down bezel (iOS's Menu already draws one).
         #if os(macOS)
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        #endif
         .fixedSize()
         .frame(width: 28)
+        #endif
         .accessibilityIdentifier("landings-more")
         .accessibilityLabel("More actions")
     }
 
-    /// What this window is, who decides, and the way to them, in the composer's place and shape — read
-    /// only, nothing to type here (LS6). The board's bar (docs/mocks/landings-chat-bubbles, ① 5): the
-    /// sentence where the words would go, `Decisions: the coordinator` on the toolbar, and
-    /// `Open coordinator` where the send button stands.
+    /// What this window is and the way to who decides, read only — nothing to type here (LS6): a lock
+    /// and the sentence's first half, `Open coordinator` at the trailing edge. One line, on the bar's
+    /// own colour, pinned to the bottom edge (owner 2026-11-10, docs/mocks/landings-ui-polish ③).
     private var footer: some View {
-        let parts = SessionLandingsCopy.orbitRunsTheseLandings.components(separatedBy: " — ")
-        return ComposerBand {
-            VStack(alignment: .leading, spacing: 0) {
-                (Text("\(parts.first ?? "") — ").foregroundStyle(.secondary)
-                    + Text(parts.dropFirst().joined(separator: " — ")).fontWeight(.semibold))
-                    .font(.orbitSubtext)
-                    // Capped, never `fixedSize`: a Mac window measures its minimum at zero width, where
-                    // a vertically fixed sentence stands one glyph to a line and the window's floor
-                    // grows past the screen, pushing this bar off its bottom edge (probe run 41370339640).
-                    .lineLimit(2)
-                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
-                HStack(spacing: 8) {
-                    Text(LandingPageCopy.decisionsTheCoordinator)
-                        .font(.orbitLabel).foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    if let coordinator = model?.coordinatorID {
-                        Button { open("orbit-session", coordinator) } label: {
-                            Label(LandingPageCopy.openCoordinatorLink, systemImage: "person")
-                                .font(.orbitLabel.weight(.semibold))
-                        }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.small)
-                        .accessibilityIdentifier("landings-open-coordinator")
-                    }
+        let words = SessionLandingsCopy.orbitRunsTheseLandings.components(separatedBy: " — ").first ?? ""
+        return HStack(spacing: 10) {
+            Label(words, systemImage: "lock")
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                // One line, never `fixedSize`: a Mac window measures its minimum at zero width, where a
+                // vertically fixed sentence stands one glyph to a line and the window's floor grows past
+                // the screen, pushing this bar off its bottom edge (probe run 41370339640).
+                .lineLimit(1)
+                .accessibilityLabel(SessionLandingsCopy.orbitRunsTheseLandings)
+            Spacer(minLength: 8)
+            if let coordinator = model?.coordinatorID {
+                Button { open("orbit-session", coordinator) } label: {
+                    Label(LandingPageCopy.openCoordinatorLink, systemImage: "person")
+                        .font(.orbitLabel.weight(.semibold))
                 }
-                .frame(minHeight: 40)
-                .padding(.leading, 16).padding(.trailing, 8).padding(.bottom, 6)
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .accessibilityHint(LandingPageCopy.decisionsTheCoordinator)
+                .accessibilityIdentifier("landings-open-coordinator")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .composerBandCard(cornerRadius: 24)
         }
+        .frame(minHeight: 34)
+        .padding(.leading, 18).padding(.trailing, 12).padding(.vertical, 8)
         .frame(maxWidth: 760)
         .frame(maxWidth: .infinity)
+        .background(alignment: .top) {
+            Rectangle().fill(.bar).ignoresSafeArea(edges: .bottom)
+                .overlay(alignment: .top) { Divider() }
+        }
         .accessibilityIdentifier("landings-footer")
     }
 
@@ -436,15 +448,15 @@ struct ProjectLandingsWindowView: View {
             dayChip(day.title)
             ForEach(day.groups) { group in
                 ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
-                    rowView(row, leads: index == 0, ends: index == group.rows.count - 1, model: model)
+                    rowView(row, ends: index == group.rows.count - 1, model: model)
                 }
             }
         }
         if !window.now.isEmpty {
             dayChip(SessionLandingsCopy.now, now: true)
-            // What is still in hand is Orbit's last group of messages: one avatar beside the first card.
+            // What is still in hand is Orbit's last group of messages.
             ForEach(Array(window.now.enumerated()), id: \.element.id) { index, card in
-                cardView(card, leads: index == 0, ends: index == window.now.count - 1, model: model)
+                cardView(card, ends: index == window.now.count - 1, model: model)
             }
         }
     }
@@ -462,36 +474,34 @@ struct ProjectLandingsWindowView: View {
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// One message's line: Orbit's avatar beside the first message of a group — room for it beside the
-    /// rest — then the message, and the gap a group ends with.
-    private func messageLine<Content: View>(leads: Bool, ends: Bool,
-                                            @ViewBuilder _ message: () -> Content) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            ZStack(alignment: .top) {
-                if leads { OrbitAppIcon(size: 32) }
-            }
-            .frame(width: 32)
-            .accessibilityHidden(true)
-            message()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.bottom, ends ? 14 : 4)
+    /// One message's line, and the gap a group ends with. No avatar: every message here is Orbit's,
+    /// and the head says so (owner 2026-11-10, docs/mocks/landings-ui-polish ①).
+    private func messageLine<Content: View>(ends: Bool, @ViewBuilder _ message: () -> Content) -> some View {
+        message()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, ends ? 14 : 6)
     }
 
     /// One settled landing as Orbit's message: its bubble — the task's name, and a foot with the mark
     /// that says how it ended, its line and the moment it settled — that opens to its record under it.
-    @ViewBuilder private func rowView(_ row: LandingsWindowRow, leads: Bool, ends: Bool,
+    @ViewBuilder private func rowView(_ row: LandingsWindowRow, ends: Bool,
                                       model: ProjectLandingsModel) -> some View {
         let id = row.id
         let open = expanded.contains(id)
         let landing = row.sessionId.flatMap { model.details[$0] }
-        messageLine(leads: leads, ends: ends) {
+        messageLine(ends: ends) {
             VStack(alignment: .leading, spacing: 4) {
                 Button {
                     PlatformHaptics.tap()
                     toggle(id)
                 } label: {
-                    LandingsWindowBubble(row: row)
+                    // A merge into main is an event, not a message: one centred line, as a chat draws
+                    // what happened in it (owner 2026-11-10, docs/mocks/landings-ui-polish ②).
+                    if row.tone == .merge {
+                        LandingsWindowEventLine(row: row)
+                    } else {
+                        LandingsWindowBubble(row: row)
+                    }
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("landings-row:\(id)")
@@ -504,8 +514,9 @@ struct ProjectLandingsWindowView: View {
                     record(row, landing: landing, model: model)
                 }
             }
-            // An incoming message's gutter: a bubble never runs to the window's far edge.
-            .padding(.trailing, 44)
+            // An incoming message's gutter: a bubble never runs to the window's far edge. A merge's
+            // event line is centred across the whole column.
+            .padding(.trailing, row.tone == .merge ? 0 : 44)
         }
         .id(id)
         .task(id: row.sessionId ?? "") {
@@ -592,13 +603,13 @@ struct ProjectLandingsWindowView: View {
     /// One landing still in hand, under `Now`, as one of Orbit's last messages: the old landing page's
     /// status card with the task's name under its head, across the whole column (a card is wider than
     /// a bubble). Pressing it opens its record under it; a long press holds its doors.
-    @ViewBuilder private func cardView(_ card: LandingsWindowCard, leads: Bool, ends: Bool,
+    @ViewBuilder private func cardView(_ card: LandingsWindowCard, ends: Bool,
                                        model: ProjectLandingsModel) -> some View {
         let id = card.sessionId
         let open = expanded.contains(id)
         let landing = model.details[id]
         let promotion = model.promotion(for: landing)
-        messageLine(leads: leads, ends: ends) {
+        messageLine(ends: ends) {
             VStack(alignment: .leading, spacing: 8) {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     LandingStatusCardView(
@@ -834,6 +845,27 @@ private struct LandingsWindowBubble: View {
             #endif
             shape.fill(Color.primary.opacity(0.055))
         }
+    }
+}
+
+/// A merge into main as the window's event line: `⇢ Merged into main · 15406e9 · 1 task ·
+/// automatically · 23:24`, centred across the column, as a chat draws what happened in it.
+private struct LandingsWindowEventLine: View {
+    let row: LandingsWindowRow
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Text("⇢").fontWeight(.semibold).foregroundStyle(Color.accentColor)
+            (Text(row.title).fontWeight(.semibold).foregroundStyle(Color.primary.opacity(0.8))
+                + Text(([""] + [row.detail, row.time].filter { !$0.isEmpty }).joined(separator: " · "))
+                    .foregroundStyle(.secondary))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+        }
+        .font(.orbitLabel)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 }
 

@@ -239,7 +239,7 @@ test('the owner records a project done in person, and the projection keeps that 
   /** One press of Record as done, as the card sends it. */
   async function press(
     id: string,
-    body: { requestId?: string; criteriaDigest: string; acceptedGaps: AcceptedGap[] },
+    body: { requestId?: string | null; criteriaDigest: string; acceptedGaps: AcceptedGap[] },
     actingSessionId?: string,
   ): Promise<{ status: number; body: Record<string, unknown> }> {
     const response = await fetch(`${base}/api/projects/${uuidToBase62(id)}/done`, {
@@ -602,8 +602,13 @@ test('the owner records a project done in person, and the projection keeps that 
   await t.test('changing the criteria reopens the project, and tells the coordinator', async () => {
     // Recorded again by the owner unasked. The task reopened above was reopened BEFORE this record,
     // so a later edge does not hold it against this one.
-    const response = await press(projectId, { criteriaDigest: currentSeal, acceptedGaps: gaps });
+    const response = await press(projectId, { requestId: null, criteriaDigest: currentSeal, acceptedGaps: [] });
     assert.equal(response.status, 201, JSON.stringify(response.body));
+    const storedGaps = (await record()).accepted_gaps as AcceptedGap[];
+    assert.ok(storedGaps.some((gap) => gap.criterionKey === built.key
+      && gap.finding?.code === 'DONE_CRITERION_UNSATISFIED'),
+    'POST without a request still succeeds and stores the unmet criterion as an accepted gap');
+    assert.ok(storedGaps.every((gap) => gap.title && gap.whyNotProven));
     await tasks.update(ownerId, rolloutWork, { title: 'roll the closing door out' } as never);
     assert.equal((await record()).done_by, 'OWNER',
       'a reopen from before the record took the new record away');

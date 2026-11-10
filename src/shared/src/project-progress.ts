@@ -1303,6 +1303,8 @@ export interface ProjectOpenItemsView<Instant = string> {
    * the reason `startRequest` is. Absent from a server that predates done requests.
    */
   doneRequest?: ProjectOpenItemRow<Instant> | null;
+  /** The owner's latest Not yet answer, until a newer done request is filed. */
+  latestDoneRequestDecline?: { note: string; declinedAt: Instant } | null;
   /**
    * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — which
    * a row's merge into main is a merge into. Null when the project has no repository bound.

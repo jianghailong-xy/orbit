@@ -131,6 +131,8 @@ public enum AppIntent: Equatable, Sendable {
     case open(Route)
     case approve(sessionID: String, behavior: ApprovalBehavior)   // app resolves which pending approval(s)
     case reply(sessionID: String, text: String)
+    /// A derived completion opens its project without needing a coordinator session.
+    case openProject(projectID: String)
     /// A merge into main waiting on the owner: answered on the project's sessions page, where its
     /// card is (owner decision 2026-10-06). A client without that page opens the coordinator
     /// conversation, which draws the merge as its line.
@@ -243,6 +245,9 @@ public enum Notifications {
     /// `UNNotificationDefaultActionIdentifier` (→ open) or one of the action constants above.
     public static func intent(actionId: String, userInfo: [String: String],
                               responseText: String? = nil) -> AppIntent? {
+        if userInfo[keyKind] == "project-done", let project = userInfo[keyProject] {
+            return .openProject(projectID: project)
+        }
         // An owner request's actions open its card or put it off; its plain tap opens the session below.
         if let request = userInfo[keyOwnerRequest] {
             if actionId == actionOwnerRequestOpen { return .openOwnerRequest(requestID: request) }

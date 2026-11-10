@@ -1,0 +1,33 @@
+/* 2026-11-10 · 项目 DONE 由谁确认 · 在 ../project-done-sessions-page/kit.css 之上补的几样 */
+.ac.q { margin: 8px 0 0; padding: 13px 15px 14px; }
+.ac.q .tile { width: 28px; height: 28px; }
+.ac.q .h b { font-size: 17.5px; }
+.ac.q .prov { margin-top: 6px; font-size: 12.5px; letter-spacing: .01em; }
+.ac.q .lbl { margin-top: 8px; font-size: 12.5px; }
+.ac.q .val { font-size: 14.5px; line-height: 1.4; }
+.ac.q .val.sm2 { font-size: 13.5px; color: var(--green-ink); }
+.gap { font-size: 13.5px; line-height: 1.4; color: #3a3a3c; margin-top: 2px; }
+.gap i { font-style: normal; color: var(--green-ink); font-weight: 600; }
+.warnbox { margin-top: 9px; border-radius: 10px; background: rgba(255,59,48,.07); box-shadow: inset 0 0 0 1px rgba(255,59,48,.22);
+           padding: 8px 10px; font-size: 13px; line-height: 1.45; color: var(--red-ink); }
+.warnbox b { display: block; color: var(--red-ink); font-size: 13px; }
+.expl { margin-top: 9px; font-size: 12.5px; line-height: 1.45; color: var(--l2); }
+.btns { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
+.btn2 { font-size: 14.5px; font-weight: 600; border-radius: 999px; padding: 7px 14px; }
+.btn2.p { background: var(--tint); color: #fff; }
+.btn2.s { background: rgba(120,120,128,.14); color: var(--tint); }
+.btn2.d { background: var(--red); color: #fff; }
+.dcard { margin-top: 8px; padding: 13px 14px 13px; }
+.dcard .tl2 { margin-top: 5px; font-size: 13px; line-height: 1.45; color: #3a3a3c; }
+.dcard .rlink { margin-top: 9px; font-size: 14px; font-weight: 600; color: var(--tint); }
+.info { margin-top: 8px; border-radius: 13px; background: rgba(120,120,128,.1); padding: 11px 13px; font-size: 13.5px; line-height: 1.45; color: #3a3a3c; }
+.info b { display: block; font-size: 14.5px; color: #16161a; margin-bottom: 2px; }
+.info.empty { color: var(--l2); text-align: center; padding: 16px 13px; }
+.rtc { flex: none; font-size: 11.5px; font-weight: 650; color: var(--green-ink); background: rgba(52,199,89,.15); border-radius: 999px; padding: 1px 8px; }
+.r.strike .rtc { text-decoration: line-through; }
+.board-table { border-collapse: collapse; margin-top: 30px; font-size: 13.5px; background: #f4f4f7; border-radius: 12px; overflow: hidden; max-width: 1800px; }
+.board-table th, .board-table td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #dcdce3; vertical-align: top; line-height: 1.5; }
+.board-table th { background: #dedee6; font-size: 13px; }
+.decide { margin-top: 26px; background: #fff4d6; border: 1px solid #f0d58a; border-radius: 12px; padding: 14px 18px; max-width: 1780px; font-size: 15px; }
+.decide b { color: #6b4b00; }
+.board-table th { white-space: nowrap; }

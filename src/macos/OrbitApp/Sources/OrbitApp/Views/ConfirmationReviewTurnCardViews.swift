@@ -48,7 +48,7 @@ struct ReviewRequestedCardView: View {
                     .font(.orbitProse.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if let due = OwnerConfirmations.receiptTime(card.dueAt) {
+            if let dueAt = card.dueAt, let due = OwnerConfirmations.receiptTime(dueAt) {
                 Text(OwnerConfirmations.reviewDue(due))
                     .font(.orbitSubtext).foregroundStyle(.secondary)
             }
