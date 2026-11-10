@@ -239,6 +239,8 @@ Options:
                                  --automatic=false to suggest it off, and say why in --why)
   --max-concurrent-tasks N       how many of its tasks may run at once, 1-100 (required)
   --merge-check-command CMD      the check run on the combined tree before anything lands
+  --landing-check-command CMD      project landing check; empty falls back to merge check
+  --landing-check-timeout-seconds N  landing check budget in seconds
   --merge-check-timeout-seconds N  that check's budget in seconds — how long it may run on the
                                  combined tree before the landing is stopped; leave it out for the
                                  one-hour default
@@ -366,6 +368,8 @@ Options:
   --project-branch REF             the project branch, as a full refs/heads/... ref
   --upstream-ref REF               what main is for this project, as a full ref
   --merge-check-command TEXT       what runs on the combined tree before anything lands
+  --landing-check-command CMD      project landing check; empty falls back to merge check
+  --landing-check-timeout-seconds N  landing check budget in seconds
   --merge-check-timeout-seconds N  that check's budget
   --escalate-after-seconds N       how long an exception waits on the coordinator (300–604800)
   --json                           emit compact JSON
@@ -426,6 +430,8 @@ Options:
   --project-branch REF             the project branch's full ref (refs/heads/project/next)
   --upstream-ref REF               what main is for this project, as a full ref
   --merge-check-command CMD        run on the combined tree before a landing (empty removes it)
+  --landing-check-command CMD      project landing check; empty falls back to merge check
+  --landing-check-timeout-seconds N  landing check budget in seconds
   --merge-check-timeout-seconds N  that check's budget in seconds
   --delivery-mode PLATFORM|AGENT_PUSH
                                    how finished work reaches main: Orbit lands it, or the agents
@@ -961,6 +967,8 @@ func cliProjectRequestStart(args []string, out io.Writer) error {
 	automatic := fs.Bool("automatic", true, "whether the coordinator runs the project for the owner (default on)")
 	maxConcurrent := fs.Int("max-concurrent-tasks", 0, "how many of its tasks may run at once")
 	mergeCheck := fs.String("merge-check-command", "", "the check run on the combined tree")
+	landingCheck := fs.String("landing-check-command", "", "the project landing check (empty falls back to the merge check)")
+	landingTimeout := fs.Int("landing-check-timeout-seconds", 0, "the landing check budget in seconds")
 	mergeCheckTimeout := fs.Int("merge-check-timeout-seconds", 0, "that check's budget in seconds")
 	why := fs.String("why", "", "one sentence, shown to the owner on the card")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
@@ -994,6 +1002,12 @@ func cliProjectRequestStart(args []string, out io.Writer) error {
 		// Named on its own, so a `--merge-check-timeout-seconds 0` is refused as the mistake it is
 		// rather than read as "no budget": leaving the flag out is what suggests none.
 		fields["mergeCheckTimeoutSeconds"] = float64(*mergeCheckTimeout)
+	}
+	if flagWasSet(fs, "landing-check-command") {
+		fields["landingCheckCommand"] = *landingCheck
+	}
+	if flagWasSet(fs, "landing-check-timeout-seconds") {
+		fields["landingCheckTimeoutSeconds"] = *landingTimeout
 	}
 	body, err := projectStartRequestBody(fields)
 	if err != nil {
@@ -1350,6 +1364,21 @@ func projectIntegrationSettings(
 		}
 		integration["mergeCheckTimeoutSeconds"] = mergeCheckTimeoutSeconds
 	}
+	if flagWasSet(fs, "landing-check-command") {
+		command := fs.Lookup("landing-check-command").Value.String()
+		if strings.TrimSpace(command) == "" {
+			integration["landingCheckCommand"] = nil
+		} else {
+			integration["landingCheckCommand"] = command
+		}
+	}
+	if flagWasSet(fs, "landing-check-timeout-seconds") {
+		seconds, err := positiveSeconds(fs.Lookup("landing-check-timeout-seconds").Value.(flag.Getter).Get(), "landingCheckTimeoutSeconds")
+		if err != nil {
+			return nil, err
+		}
+		integration["landingCheckTimeoutSeconds"] = seconds
+	}
 	return integration, nil
 }
 
@@ -1367,6 +1396,8 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	projectBranch := fs.String("project-branch", "", "the project branch as a full ref, e.g. refs/heads/project/next")
 	upstreamRef := fs.String("upstream-ref", "", "what main is for this project, as a full ref")
 	mergeCheckCommand := fs.String("merge-check-command", "", "the check run on the combined tree before a landing")
+	fs.String("landing-check-command", "", "the project landing check (empty falls back to the merge check)")
+	fs.Int("landing-check-timeout-seconds", 0, "the landing check budget in seconds")
 	mergeCheckTimeoutSeconds := fs.Int("merge-check-timeout-seconds", 0, "that check's budget in seconds")
 	escalateAfterSeconds := fs.Int("escalate-after-seconds", 0, "how long an exception waits on the coordinator before it becomes yours")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
@@ -1498,6 +1529,8 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 	projectBranch := fs.String("project-branch", "", "the project branch's full ref, e.g. refs/heads/project/next")
 	upstreamRef := fs.String("upstream-ref", "", "what main is for this project, as a full ref")
 	mergeCheckCommand := fs.String("merge-check-command", "", "the check run on the combined tree before a landing (empty removes it)")
+	fs.String("landing-check-command", "", "the project landing check (empty falls back to the merge check)")
+	fs.Int("landing-check-timeout-seconds", 0, "the landing check budget in seconds")
 	mergeCheckTimeoutSeconds := fs.Int("merge-check-timeout-seconds", 0, "that check's budget in seconds")
 	deliveryMode := fs.String("delivery-mode", "", "how finished work reaches main: PLATFORM or AGENT_PUSH")
 	expectedConfigRevision := fs.String("expected-config-revision", "", "only write if the project is still at this configRevision")

@@ -47,7 +47,7 @@ import { canonicalJson } from './canonical-json';
 export const PROJECT_INTEGRATION_APPROVAL_TOOL_NAME = 'orbit_project_update_integration';
 
 /** The merge-check fields, in the spelling the DTO and the card both use. */
-const MERGE_CHECK_FIELDS = ['mergeCheckCommand', 'mergeCheckTimeoutSeconds'] as const;
+const MERGE_CHECK_FIELDS = ['mergeCheckCommand', 'mergeCheckTimeoutSeconds', 'landingCheckCommand', 'landingCheckTimeoutSeconds'] as const;
 
 /** Where a project's work lands. No card authorises these; see the header. */
 const INTEGRATION_LINE_FIELDS = ['line', 'projectBranchName', 'upstreamRef'] as const;
