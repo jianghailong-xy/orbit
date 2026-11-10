@@ -665,3 +665,20 @@ func TestProjectRequestStartCLINeedsTheSession(t *testing.T) {
 		t.Fatalf("request-start without a session: %v", err)
 	}
 }
+
+func TestProjectRequestStartCLICarriesLandingSettings(t *testing.T) {
+	srv, seen := startRequestServer(t, http.StatusCreated, startRequestFiledBody)
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "sess-1")
+	t.Setenv("ORBIT_SERVICE_TOKEN", "")
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"request-start", "proj-1", "--line", "PROJECT_BRANCH",
+		"--max-concurrent-tasks", "1", "--landing-check-command", "npm run landing",
+		"--landing-check-timeout-seconds", "180", "--why", "ready", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	body := (*seen)[0].body
+	if body["landingCheckCommand"] != "npm run landing" || body["landingCheckTimeoutSeconds"] != float64(180) {
+		t.Fatalf("request lost landing settings: %#v", body)
+	}
+}

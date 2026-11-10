@@ -137,7 +137,7 @@ async function readLogPage(
     jobId,
     claim: Number(row.claim),
     round: row.round,
-    check: { name: row.checkName as 'TASK_ACCEPTANCE' | 'MERGE_CHECK', index: row.checkIndex },
+    check: { name: row.checkName as 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK', index: row.checkIndex },
     seq: row.seq,
     text: row.text,
     truncatedBytes: row.truncatedBytes,
