@@ -363,7 +363,7 @@ test('an APPROVAL_REQUEST maps to approval.requested with the live pending count
   assert.equal(got[0].type, 'approval.requested');
   // The kind rides with the count because clients overwrite the row with both: a blocked tool call
   // is counted here, so this row says "approval", not "Waiting for your confirmation".
-  assert.deepEqual(got[0].data, { approvalId: 'ap1', pendingApprovals: 2, waitingKind: null });
+  assert.deepEqual(got[0].data, { approvalId: 'ap1', pendingApprovals: 2, waitingKind: null, questionWithCoordinator: null });
 });
 
 test('transcript events (text deltas) are dropped, not forwarded', async () => {
