@@ -1,0 +1,53 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="../project-done-sessions-page/kit.css">
+<link rel="stylesheet" href="board.css">
+<script src="../project-done-sessions-page/kit.js"></script>
+<script src="board.js"></script>
+<body>
+<h1>② 你会碰到的三处：过期请求、不经请求的记录、Not yet 之后</h1>
+<p class="lede" style="max-width:1780px">不管 ① 选 A 还是 B，这三处都要修。<b>问题 1</b>：coordinator 的请求过期后被悄悄作废，列表还写着 Ready to close，点进去卡没了，谁也不知道。<b>问题 4</b>：不经请求直接按「Record as done…」，卡上看不到任何检查结果，记录里的 accepted gaps 是空的。<b>问题 5</b>：你按 Not yet 之后，coordinator 什么都没改也能马上再问一遍。</p>
+<div class="row" id="figs"></div>
+<table class="board-table">
+<tr><th>编号</th><th>只改服务端（不画）</th><th>改法</th><th>文件</th></tr>
+<tr><td>1</td><td>作废时通知 coordinator；在任务写入 / merge receipt 的边上作废，不再只靠你打开页面</td><td>复用 supersede 时已经写好的原因文案，给 coordinator 发一轮</td><td><code>project-done-request.ts</code> <code>supersedeStaleDoneRequest</code>；<code>project-open-item.service.ts:3075</code></td></tr>
+<tr><td>2</td><td><code>stateDigest</code> 只看服务判据的任务、判据满足与落地、落地任务</td><td>不服务任何判据的任务动了，请求不作废</td><td><code>project-done-request.ts</code> <code>doneStateDigest</code></td></tr>
+<tr><td>3</td><td>「DONE 之后被 reopen」改比 <code>lifecycle_epoch</code>，不比时间戳</td><td>记录时存下每个服务任务的 epoch，像 <code>reopenedFacts</code> 那样</td><td><code>project-acceptance.service.ts</code> <code>recordProjectDone</code>；<code>project-done-derived.ts</code> <code>ownerRecordReopenedBy</code></td></tr>
+<tr><td>5</td><td>与最近一次 DECLINED 的 <code>stateDigest</code> 相同时拒绝新请求</td><td>新错误码 <code>DONE_REQUEST_UNCHANGED_SINCE_DECLINE</code>，告诉 coordinator 先把你说缺的做完</td><td><code>project-open-item.service.ts</code> <code>requestDone</code></td></tr>
+<tr><td>6</td><td>文档</td><td>补 <code>DONE_REQUEST</code>、<code>done_by=OWNER</code>（0345）、Reopen（0469）</td><td><code>docs/project-done-gate.md</code></td></tr>
+</table>
+<script>
+const readyRow = listRow({ t: PROJECT, badge: 'Ready to close', sub: 'The coordinator asked · 1 gap it couldn’t prove', tm: '2h ago' });
+const others = [
+  listRow({ t: 'Orbit Files 文件', sub: '3 tasks running', tm: '5m ago' }),
+  listRow({ t: 'Wiki chat', sub: 'Waiting on you · 1 item', tm: '1h ago' }),
+].join('');
+document.getElementById('figs').innerHTML = [
+  fig('now', '现在 · 问题 1', listPage(mkRow(readyRow, 1) + others),
+    `<b>列表说 Ready to close</b><ol>
+<li>${n(1)}请求两小时前提的。之后服务判据 3 的任务被 reopen 了，请求其实已经不成立，但作废只在你打开项目页时才发生，所以列表还亮着。</li></ol>`),
+  fig('now', '现在 · 点进去', projPage(mk(infoRow('No open items', 'empty'), 1),
+      { coordSub: 'Asked you to record the project done. Waiting.' }),
+    `<b>卡没了，没人知道为什么</b><ol>
+<li>${n(1)}打开页面那一刻请求被改成 SUPERSEDED，卡片直接消失，什么也没说。</li>
+<li>coordinator 那一行还写着在等你。它不会再问；要过了 <code>exceptionEscalationSeconds</code> 才会出现一行没有判断和 gap 的「Record as done…」。</li></ol>`),
+  fig('after', '提案 · 问题 1', projPage(mk(infoRow('<b>The coordinator’s request went stale</b>Criterion 3’s task was reopened after it asked. The coordinator has been told and will ask again when the work settles.'), 1),
+      { coordSub: 'Request went stale · checking criterion 3 again' }),
+    `<b>作废发生在事实变的那一刻，两边都知道</b><ol>
+<li>任务 reopen 的同一个边上作废请求，列表上的 Ready to close 跟着消失。</li>
+<li>${n(1)}项目页留一行说明，24 小时后或 coordinator 再提时消失。</li>
+<li>coordinator 收到一轮消息，原因就是作废时写的那句。</li></ol>`),
+  fig('after', '提案 · 问题 4', projPage(mk(askCard({ meta: 'Session Recap · record as done anyway', checked: '4 of 6 met · 3 landed on main',
+      warn: '<b>Orbit can’t prove 3 things</b>2 tasks are still running<br>Criterion 5 is not met<br>Criterion 6 is not on main',
+      note: 'These will be kept as the gaps you accepted.', buttons: [['Record as done anyway', 'd'], ['Back', 's']] }), 1),
+      { coordSub: '2 tasks running · criterion 5 not met' }),
+    `<b>不经请求的记录也要看到检查结果</b><ol>
+<li>现在这张卡只有一行计数，按下去 <code>acceptedGaps = []</code>，之后「See what you accepted」是空的。</li>
+<li>${n(1)}提案：卡上列出预检的拒绝项和警告项（和 coordinator 提请求时跑的是同一个检查），按下时原样存成 accepted gaps。仍然允许你按：这是你的权限。</li></ol>`),
+  fig('after', '提案 · 问题 5', projPage(mk(infoRow('<b>You said not yet · 10:12</b>“Android build still fails on the release key.” The card comes back after the coordinator changes something.'), 1),
+      { coordSub: 'Fixing the Android release key' }),
+    `<b>Not yet 之后不会原样再弹</b><ol>
+<li>现在：你刚按 Not yet，coordinator 原封不动再提一次，卡立刻回来。</li>
+<li>${n(1)}提案：页上留着你说的话；状态没变时 coordinator 再提会被拒（<code>DONE_REQUEST_UNCHANGED_SINCE_DECLINE</code>），你什么都看不到。</li></ol>`),
+].join('');
+</script>
+</body>
