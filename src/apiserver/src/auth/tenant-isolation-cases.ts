@@ -813,13 +813,13 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'POST /owner-requests/:id/secret':
     'the request is read FOR UPDATE by (id, the caller) and nothing else, 404 for another account\'s id, and the grant takes its runner and session from that row, never from the body (owner-requests/owner-secrets.service.ts:242); owner-secrets.pg.spec.ts (h) sends it',
   'POST /owner-requests/:id/secret/cancel':
-    'the grant is written by (request id, the caller) only; when that matched nothing the request is counted by (id, the caller), 404 for another account\'s (owner-requests/owner-secrets.service.ts:306); owner-secrets.pg.spec.ts (h) sends it',
+    'the grant is written by (request id, the caller) only; when that matched nothing the request is counted by (id, the caller), 404 for another account\'s (owner-requests/owner-secrets.service.ts:312); owner-secrets.pg.spec.ts (h) sends it',
   'POST /owner-requests/:id/secret/revoke':
-    'the grant is read and written by (request id, the caller) only, 404 for another account\'s (owner-requests/owner-secrets.service.ts:324); owner-secrets.pg.spec.ts (h) sends it',
+    'the grant is read and written by (request id, the caller) only, 404 for another account\'s (owner-requests/owner-secrets.service.ts:330); owner-secrets.pg.spec.ts (h) sends it',
   'PUT /account-secrets/:id':
-    'written by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:395); owner-secrets.pg.spec.ts (h) sends another account\'s',
+    'written by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:401); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'DELETE /account-secrets/:id':
-    'deleted by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:403); owner-secrets.pg.spec.ts (h) sends another account\'s',
+    'deleted by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:409); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'POST /owner-requests/:id/decline':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:193), and the write is a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:270)',
   'POST /admin/managed-runners/:id/volume-switch':

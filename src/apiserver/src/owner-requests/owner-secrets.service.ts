@@ -262,6 +262,12 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
         });
       }
       const existing = await tx.ownerRequestSecret.findUnique({ where: { requestId }, select: { state: true } });
+      if (existing?.state === 'REMOVING') {
+        throw new ConflictException({
+          code: SECRET_ALREADY_DELIVERED,
+          message: 'the earlier key is still being removed from the runner; enter one again once the runner confirms it is gone',
+        });
+      }
       if (existing && existing.state !== 'PENDING_DELIVERY' && existing.state !== 'REMOVED') {
         throw new ConflictException({
           code: SECRET_ALREADY_DELIVERED,
@@ -470,32 +476,30 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
     const [grant] = await this.prisma.$queryRaw<Array<{
       id: string; request_id: string; owner_id: string; runner_id: string; session_id: string; task_id: string | null;
       name: string | null; exposure: string; file_path: string | null; value_enc: string; expires_at: Date;
+      previously_fetched: boolean;
     }>>`
-      SELECT g."id"::text AS id, g."request_id"::text AS request_id, g."owner_id"::text AS owner_id,
-             g."runner_id"::text AS runner_id, g."session_id"::text AS session_id, g."task_id"::text AS task_id,
-             g."name", g."exposure", g."file_path", g."value_enc", g."expires_at"
-        FROM "owner_request_secret" g
+      -- One statement, under the row's lock: the fetch is stamped (fetched_at) as it reads, so an ending of the grant
+      -- either comes first, and nothing is handed out, or sees the fetch and waits for the runner (§2).
+      UPDATE "owner_request_secret" g SET "fetched_at" = COALESCE(g."fetched_at", now())
        WHERE g."id" = ${grantId}::uuid AND g."runner_id" = ${runner.id}::uuid AND g."owner_id" = ${runner.ownerId}::uuid
-         AND g."state" IN ('PENDING_DELIVERY', 'ACTIVE') AND ${LIVE}`;
+         AND g."state" IN ('PENDING_DELIVERY', 'ACTIVE') AND ${LIVE}
+      RETURNING g."id"::text AS id, g."request_id"::text AS request_id, g."owner_id"::text AS owner_id,
+             g."runner_id"::text AS runner_id, g."session_id"::text AS session_id, g."task_id"::text AS task_id,
+             g."name", g."exposure", g."file_path", g."value_enc", g."expires_at",
+             -- A subquery here reads the row as it stood before this statement: whether an earlier fetch handed it out.
+             (SELECT o."fetched_at" IS NOT NULL FROM "owner_request_secret" o WHERE o."id" = g."id") AS previously_fetched`;
     if (!grant) throw new NotFoundException('secret grant not found');
     let value: string;
     try {
       value = openOwnerSecret(grant.value_enc, grantAad(grant.id, grant.owner_id, grant.runner_id));
     } catch {
-      await this.prisma.$executeRaw`
-        UPDATE "owner_request_secret"
-           SET "state" = CASE WHEN "state" = 'ACTIVE' THEN 'REMOVING' ELSE 'REMOVED' END,
-               "removed_at" = CASE WHEN "state" = 'ACTIVE' THEN NULL ELSE now() END,
-               "end_reason" = 'KEY_UNREADABLE', "value_enc" = NULL, "updated_at" = now()
-         WHERE "id" = ${grant.id}::uuid AND "state" IN ('PENDING_DELIVERY', 'ACTIVE')`;
-      this.logger.warn(`secret grant ${grant.id} could not be decrypted and was ended KEY_UNREADABLE`);
+      // This fetch handed nothing out: if no earlier one did either, the grant was never fetched.
+      if (!grant.previously_fetched) {
+        await this.prisma.ownerRequestSecret.updateMany({ where: { id: grant.id }, data: { fetchedAt: null } });
+      }
+      await this.endUnreadable(grant.id, runner.id);
       throw new NotFoundException('secret grant not found');
     }
-    // From here the runner may hold a copy: an ending before its ack waits for it to confirm (§2).
-    await this.prisma.ownerRequestSecret.updateMany({
-      where: { id: grant.id, fetchedAt: null },
-      data: { fetchedAt: new Date() },
-    });
     return {
       id: grant.id,
       requestId: grant.request_id,
@@ -646,7 +650,8 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
                             THEN 'REMOVING' ELSE 'REMOVED' END,
              "removed_at" = CASE WHEN (g."state" = 'ACTIVE' OR g."fetched_at" IS NOT NULL) AND g."runner_id" IS NOT NULL
                                  THEN NULL ELSE now() END,
-             "removal_note" = CASE WHEN g."state" = 'ACTIVE' AND g."runner_id" IS NULL THEN ${RUNNER_DELETED_NOTE}
+             "removal_note" = CASE WHEN (g."state" = 'ACTIVE' OR g."fetched_at" IS NOT NULL) AND g."runner_id" IS NULL
+                                   THEN ${RUNNER_DELETED_NOTE}
                                    ELSE g."removal_note" END,
              "end_reason" = ${END_REASON},
              "value_enc" = NULL,

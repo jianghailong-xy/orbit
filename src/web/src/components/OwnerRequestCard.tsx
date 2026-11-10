@@ -348,6 +348,8 @@ export function OwnerRequestCard({ request: given, now = Date.now() }: { request
   const chosenOption = optionIndex(chosen);
   const grant = request.kind === 'SECRET' ? request.secretGrant : null;
   const delivering = grant?.state === 'PENDING_DELIVERY';
+  // An earlier key the runner fetched and never confirmed is still being removed (§2, §6.4): no new one until it is.
+  const removing = grant?.state === 'REMOVING';
   const failed = grant?.state === 'REMOVED' && grant.endReason === 'DELIVERY_FAILED';
   const ready = request.kind === 'SECRET'
     ? draft.savedId !== null || (draft.value.trim() !== '' && (!draft.save || draft.saveAs.trim() !== ''))
@@ -412,6 +414,13 @@ export function OwnerRequestCard({ request: given, now = Date.now() }: { request
         {request.kind === 'SECRET' && request.secretSpec ? (
           delivering ? (
             <SecretOnItsWay grant={grant!} runner={runner} expiresAt={request.expiresAt} now={now} />
+          ) : removing ? (
+            <div className="owner-request-secret">
+              <p className="owner-request-delivery">
+                <ClockCircleOutlined aria-hidden="true" /> {grantLine(grant!, runner, now)}
+              </p>
+              <p className="owner-request-notice">{`You can enter a key again once ${runner} confirms the earlier one is gone.`}</p>
+            </div>
           ) : (
             <SecretEntry spec={request.secretSpec} runner={runner} draft={draft} onDraft={setDraft} />
           )
@@ -559,7 +568,10 @@ const ENDING_ICON: Readonly<Record<string, ReactNode>> = {
 export function OwnerRequestResolved({ request: given, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
   const door = useSecretDoor(given);
   const request = door.current;
-  const grant = request.kind === 'SECRET' && request.state === 'DONE' ? request.secretGrant : null;
+  // A delivered key's whole story on a DONE request; on any other ending, only a removal still pending — a key the
+  // runner fetched and never confirmed (§2, §6.4) — so the card never says gone while a copy may remain.
+  const held = request.kind === 'SECRET' ? request.secretGrant : null;
+  const grant = held && (request.state === 'DONE' || held.state === 'REMOVING') ? held : null;
   const runner = useRunnerName(request.kind === 'SECRET' ? request.secretSpec?.runnerId : undefined);
   const when = request.resolvedAt ? decisionReceiptTime(request.resolvedAt, new Date(now)) : null;
   const by = [endedBy(request), when].filter(Boolean).join(' · ');

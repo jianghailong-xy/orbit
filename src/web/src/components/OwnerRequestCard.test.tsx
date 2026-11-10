@@ -370,6 +370,14 @@ describe('SECRET', () => {
     // Back to input.
     expect(keyInput().disabled).toBe(false);
   });
+
+  it('an earlier key the runner fetched and never confirmed: says removal is pending, and takes no new key yet', async () => {
+    answering({ ...secret });
+    await mount(<OwnerRequestCard now={NOW} request={{ ...secret, secretGrant: grant({ state: 'REMOVING', endReason: 'REVOKED' }) }} />);
+    expect(host.textContent).toContain('Removal pending: waiting for HPC to confirm');
+    expect(host.textContent).toContain('You can enter a key again once HPC confirms the earlier one is gone.');
+    expect(host.querySelector('.owner-request-field input')).toBeNull();
+  });
 });
 
 describe('a delivered secret', () => {
@@ -412,6 +420,13 @@ describe('a delivered secret', () => {
   it('REMOVING with the runner gone quiet says since when', async () => {
     await mount(<OwnerRequestResolved now={NOW} request={done({ state: 'REMOVING', runnerOnline: false, runnerLastSeenAt: new Date(NOW - DAY).toISOString() })} />);
     expect(host.textContent).toContain('Removal pending: HPC has not been online since ');
+  });
+
+  it('an ended request whose fetched key was never confirmed still says removal is pending', async () => {
+    const expired = { ...done({ state: 'REMOVING', endReason: 'EXPIRED', deliveredAt: null, runnerOnline: false, runnerLastSeenAt: new Date(NOW - DAY).toISOString() }), state: 'EXPIRED' as const };
+    await mount(<OwnerRequestResolved now={NOW} request={expired} />);
+    expect(host.textContent).toContain('Removal pending: HPC has not been online since ');
+    expect(host.querySelector('button')).toBeNull();
   });
 
   it('REMOVED says why, with the runner’s note', async () => {
