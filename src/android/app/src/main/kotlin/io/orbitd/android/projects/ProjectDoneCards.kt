@@ -315,3 +315,14 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
         }
     }
 }
+
+@Composable
+internal fun ProjectDoneDeclineRow(decline: JsonObject) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
+        .padding(12.dp).testTag("project-done-decline"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("${ProjectDone.declineHeading} · ${ProjectDone.dateTime(decline.text("declinedAt")) ?: ""}",
+            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        Text("“${decline.text("note") ?: ""}” ${ProjectDone.declineHint}",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

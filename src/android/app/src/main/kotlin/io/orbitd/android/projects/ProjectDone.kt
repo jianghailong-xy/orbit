@@ -15,6 +15,8 @@ import java.util.Locale
  * server's (`derivedDone.counts`). */
 object ProjectDone {
     // The card's words, as main's ProjectDone.swift declares them.
+    const val declineHeading = "You said not yet"
+    const val declineHint = "The card comes back after the coordinator changes something."
     const val heading = "Is this project done?"
     const val coordinatorCall = "Coordinator’s call"
     const val doneWhen = "Done when"

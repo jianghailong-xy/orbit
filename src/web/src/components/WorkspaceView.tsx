@@ -408,6 +408,7 @@ import {
   type StartPageRow,
 } from '../lib/projectStart';
 import { PROJECT_DONE_COPY, type ProjectDoneDocument } from '../lib/projectDone';
+import { ProjectDoneDeclineRow } from './ProjectDoneDeclineRow';
 import { ProjectSessionsDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
@@ -3044,12 +3045,12 @@ export function WorkspaceView({
   const pageSessionsError = (projectSessionsQ.error ?? completedProjectSessionsQ.error) as Error | null;
   // A project nobody has started (docs/mocks/project-start-sessions-page): its progress line says so,
   // and the start's row sits under it — by the project page's own rule (`startPageRow`), read off the
-  // sidebar's `startedAt` and the open items, which are read only while that holds.
+  // sidebar's `startedAt` and the open items, also read for the latest Not yet answer.
   const pageStarted = pageProject ? projectStarted(pageProject) : null;
   const pageNotStarted = pageProject?.status === 'OPEN' && pageStarted === false;
   const pageOpenItemsQ = useQuery({
     ...projectOpenItemsQuery(openProjectId ?? ''),
-    enabled: !!openProjectId && pageNotStarted,
+    enabled: !!openProjectId,
     refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const pageStart = pageNotStarted
@@ -8727,6 +8728,7 @@ export function WorkspaceView({
               onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
                 navigate(sessionPath(pageCoordinator.id), { state: stampFromList() })) : null} />
           )}
+          {openProjectId && <ProjectDoneDeclineRow items={pageOpenItemsQ.data} />}
           {openProjectId
             ? projectMembers.length === 0 && !loadingSessions && (
               <div className="session-project-empty">

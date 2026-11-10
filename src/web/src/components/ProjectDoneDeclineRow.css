@@ -1,0 +1,15 @@
+.project-done-decline-row {
+  margin: 8px 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg-sunken, #f2f2f2);
+  color: var(--text-2, #555);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.project-done-decline-row strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-1, #222);
+}
