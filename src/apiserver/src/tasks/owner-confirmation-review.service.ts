@@ -259,13 +259,7 @@ export class OwnerConfirmationReviewService {
       const clientTurnId = `${ownerConfirmationReviewTurnId(row.id)}:retry:${randomUUID()}`;
       await this.sessions.createTurn(row.ownerId, reviewerSessionId,
         { clientTurnId, content: '', intent: 'NEXT_TURN' }, {
-          onTurnWritten: async (tx) => {
-            const moved = await tx.taskOwnerConfirmationReview.updateMany({
-              where: { id: row.id, delivery: 'DELIVERED', deliveryTurnClientId: previous, records: { none: {} } },
-              data: { deliveryTurnClientId: clientTurnId, deliveredAt: new Date() },
-            });
-            if (moved.count !== 1) throw new ConflictException('the review delivery changed');
-          },
+          onTurnWritten: (tx) => bindReviewRedelivery(tx, row.id, previous, clientTurnId),
         });
     }
   }
@@ -535,6 +529,20 @@ export class OwnerConfirmationReviewService {
     );
     return views.get(request.id)?.state ?? null;
   }
+}
+
+/** D5: replace an unread delivery atomically with the new turn, under the reviewer Session lock. */
+async function bindReviewRedelivery(
+  tx: Prisma.TransactionClient,
+  reviewId: string,
+  previous: string,
+  clientTurnId: string,
+): Promise<void> {
+  const moved = await tx.taskOwnerConfirmationReview.updateMany({
+    where: { id: reviewId, delivery: 'DELIVERED', deliveryTurnClientId: previous, records: { none: {} } },
+    data: { deliveryTurnClientId: clientTurnId, deliveredAt: new Date() },
+  });
+  if (moved.count !== 1) throw new ConflictException('the review delivery changed');
 }
 
 /**
