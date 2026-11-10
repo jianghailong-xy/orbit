@@ -504,7 +504,7 @@ test('a paths-exempt landing check preserves its files and is skipped on the tim
     assert.equal(lastLandingCheck(row.checks), 'PASSING');
     const events = await stack.db.projectIntegrationJobEvent.findMany({ where: { jobId: job.jobId, kind: 'CHECK_FINISHED' } });
     assert.equal(events.length, 1);
-    assert.match(events[0].text, /Landing check skipped/);
+    assert.equal(events[0].text, 'Landing check skipped · only exempt paths changed');
     assert.deepEqual((events[0].data as { files: string[] }).files, check.files);
     assert.equal((events[0].data as { skipped: string }).skipped, 'PATHS_EXEMPT');
   } finally {
