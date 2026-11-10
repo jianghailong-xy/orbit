@@ -4393,6 +4393,9 @@ final class ConsoleModel {
                 // The owner answers one of these by pressing a door, not by replying — so it counts,
                 // and the bar is told it is not a question (see `openBelowRows`' doc).
                 return waiting(ExceptionCards.isOpen(ownerItemStanding(itemID)), question: false)
+            case .ownerRequest(let requestID):
+                // Answered on its card, by pressing — like the exceptions above.
+                return waiting(pendingOwnerRequests.contains(PublicID.storageKey(requestID)), question: false)
             }
         }
         // Oldest in the CONVERSATION first — which is not the order these were delivered in, now
@@ -4738,6 +4741,11 @@ final class ConsoleModel {
         return .onArrival(afterItemID: DeliveryAnchor.onArrival(of: .projectDone, items: state.items))
     }
 
+    func readProjectDoneCheck() async throws -> ProjectDoneCheck? {
+        guard let projectID else { return nil }
+        return try await api.projectDoneCheck(projectID: projectID)
+    }
+
     /// Record the project done from its card (`POST /projects/:id/done`, `ProjectDone.body`): the
     /// request the card answers and that request's own seal — or, unasked, the seal standing now —
     /// and the gaps the card shows. The card turns into its receipt in place; a request superseded
@@ -4883,6 +4891,19 @@ final class ConsoleModel {
     }
 
     /// The same, for a card whose whole placement the caller worked out (`DeliveryAnchor`).
+    /// This conversation's owner requests (`OwnerRequestsModel.forSession`), each placed by its own
+    /// `createdAt` — where it was asked — and drawn from the account's read on every render: whole
+    /// while pending, one line once ended. Which are still pending is kept for the needs-you bar.
+    func adoptOwnerRequests(_ requests: [OwnerRequest]) {
+        pendingOwnerRequests = Set(requests.filter { $0.state == .pending }.map { PublicID.storageKey($0.id) })
+        for request in requests {
+            deliver(.ownerRequest(requestID: request.id), placement: .at(request.createdAt))
+        }
+    }
+
+    /// The owner requests of this conversation still pending, by storage key.
+    private(set) var pendingOwnerRequests: Set<String> = []
+
     private func deliver(_ kind: DeliveredDecisionCard.Kind,
                          placement: DeliveredDecisionCard.Placement) {
         let card = DeliveredDecisionCard(kind: kind, placement: placement)
@@ -5142,7 +5163,7 @@ final class ConsoleModel {
         reviewDueRead?.cancel()
         reviewDueRead = nil
         guard let review = OwnerConfirmations.waitingIn(read, sessionID: sessionID)?.review,
-              review.state == .underReview, let due = RelativeTime.parse(review.dueAt) else { return }
+              review.state == .underReview, let due = review.dueAt.flatMap(RelativeTime.parse) else { return }
         let wait = max(0, due.timeIntervalSinceNow + 1)
         reviewDueRead = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))

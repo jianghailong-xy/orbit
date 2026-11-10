@@ -80,6 +80,12 @@ export type OwnerConfirmationNotReviewedReason =
 
 /** The review of one confirmation request, as the card and its receipts draw it. */
 export interface OwnerConfirmationReviewView<Instant = string> {
+  /** §13 A3: coordinator conclusion first on a REVIEWED card; absent on older servers. */
+  lead?: {
+    conclusion: string;
+    points: ConfirmationNeedsYouItem[];
+    checks: { checked: number; notChecked: number; leftOpen: number };
+  } | null;
   reviewId: string;
   state: OwnerConfirmationReviewState;
   /** Set exactly when state is NOT_REVIEWED (T2). */
@@ -94,7 +100,7 @@ export interface OwnerConfirmationReviewView<Instant = string> {
   };
   /** The request's requestedAt: "Reviewing since". */
   since: Instant;
-  dueAt: Instant;
+  dueAt: Instant | null;
   windowSeconds: number;
   /** H2, computed by the server from the record shown: PROBLEMS when there is one, else REVIEW. */
   headline: ConfirmationReviewHeadline | null;
@@ -142,7 +148,7 @@ export interface ConfirmationUnderReview<Instant = string> {
   reviewerTitle: string | null;
   /** The request's requestedAt. */
   since: Instant;
-  dueAt: Instant;
+  dueAt: Instant | null;
 }
 
 /**
@@ -157,7 +163,7 @@ export interface ConfirmationReviewRequestCard {
   runSessionId: string;
   branch: string | null;
   sha: string | null;
-  dueAt: string;
+  dueAt: string | null;
 }
 
 /**

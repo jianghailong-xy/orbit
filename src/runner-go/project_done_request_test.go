@@ -307,6 +307,20 @@ func TestProjectRequestDoneListsEveryReasonTheServerGave(t *testing.T) {
 	}
 }
 
+func TestProjectRequestDoneUnchangedSinceDecline(t *testing.T) {
+	srv, _ := doneRequestServer(t, http.StatusConflict,
+		`{"code":"DONE_REQUEST_UNCHANGED_SINCE_DECLINE","message":"The owner said Not yet: Finish the walkthrough. Do the missing work first."}`)
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "coordinator"}
+	res := mcp.callTool("project_request_done", map[string]interface{}{
+		"projectId": "proj-1", "judgment": "Done.", "gaps": []interface{}{},
+	})
+	text := toolText(t, res)
+	if res["isError"] != true || !strings.Contains(text, "DONE_REQUEST_UNCHANGED_SINCE_DECLINE") ||
+		!strings.Contains(text, "Finish the walkthrough") || !strings.Contains(text, "Do the missing work first") {
+		t.Fatalf("the decline refusal or owner's note was lost: %#v", res)
+	}
+}
+
 // Any other refusal — the wrong session, a project already done — travels as the server raised it.
 func TestProjectRequestDonePassesOtherRefusalsThrough(t *testing.T) {
 	srv, _ := doneRequestServer(t, http.StatusForbidden,

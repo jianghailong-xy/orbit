@@ -927,8 +927,8 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
       } as never);
 
       const view = await confirmations.read(ownerId, filedTaskId);
-      assert.ok(view.waiting, 'the card is drawn');
-      assert.equal(view.waiting.review?.state, 'UNDER_REVIEW', 'and its coordinator has it first');
+      assert.equal(view.waiting, null, 'the coordinator holds the card (§13 A2)');
+      const request = await db.taskOwnerConfirmationRequest.findFirstOrThrow({ where: { taskId: filedTaskId } });
       const rows = await sessions.list(ownerId, { view: 'open' }) as Array<{
         id: string; pendingApprovals: number; waitingKind?: string | null;
         confirmationUnderReview?: { requestId: string } | null;
@@ -936,7 +936,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
       const run = rows.find((each) => each.id === filedSessionId);
       assert.equal(run?.pendingApprovals, 0, 'the run\'s row is dark while it is under review');
       assert.equal(run?.waitingKind ?? null, null);
-      assert.equal(run?.confirmationUnderReview?.requestId, view.waiting.requestId, 'and says Under review');
+      assert.equal(run?.confirmationUnderReview?.requestId, request.id, 'and says Under review');
       // The coordinator's row stays dark too: reviewing a run's report asks the owner nothing.
       const coordinatorRow = rows.find((each) => each.id === coordinatorSessionId);
       assert.equal(coordinatorRow?.pendingApprovals, 0);

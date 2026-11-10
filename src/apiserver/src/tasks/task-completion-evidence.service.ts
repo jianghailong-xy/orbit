@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { PushService } from '../push/push.service';
 import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { settleCitedFileExpiry } from '../files/file-retention';
@@ -46,7 +47,7 @@ import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
 import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
-import { storeDerivedProjectStatus } from '../projects/project-done-derived';
+import { refreshProjectDone } from '../projects/project-done-request';
 import { deliveredIdentityAtDone, enqueueForDoneTask } from '../projects/project-integration-job';
 import { SessionsService } from '../sessions/sessions.service';
 
@@ -283,6 +284,7 @@ export class TaskCompletionEvidenceService {
      *  the reason the router above is: the fixtures that build this service by hand are about the
      *  ledger. The module provides it. */
     @Optional() private readonly sessions?: SessionsService,
+    @Optional() private readonly push?: PushService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -953,8 +955,9 @@ export class TaskCompletionEvidenceService {
    */
   private async reprojectProjectStatus(ownerId: string, projectId: string | null): Promise<void> {
     if (!projectId || !this.completionInputs) return;
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+    await refreshProjectDone(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
+      push: this.push,
     }).catch((error) =>
       this.logger.warn(`derived project status not re-projected after completion evidence: ${
         error instanceof Error ? error.message : error}`),

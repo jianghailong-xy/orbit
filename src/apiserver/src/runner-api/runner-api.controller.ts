@@ -1,4 +1,5 @@
 import { readMergeRecovery, mergeRecoveryReady, type MergeRecovery } from '@orbit/shared';
+import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
   BadRequestException,
   Body,
@@ -364,7 +365,7 @@ import {
 } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
-import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
+import { enginePhaseAfter, enginePhaseSinceAfter, engineStreamedIn, engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { bookedAfter, ownCost, ownModelUsage, reportsRunningTotals, runningTotalsBase } from './running-totals';
@@ -622,6 +623,8 @@ interface IngestOutcome {
   /** The batch's events not stored because their seq holds another event, and the door they came by. */
   seqConflicts: RunEventSeqConflict[];
   door: RunEventDoor;
+  /** This batch stamped Session.engineStartedAt: the run left its starting state. */
+  engineStarted: boolean;
 }
 /**
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
@@ -1585,6 +1588,12 @@ export class RunnerApiController {
      */
     @Optional() files?: FilesService,
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
+    /**
+     * The owner-entered secrets a runner may hold (owner-requests/owner-secrets.service.ts), stated on every full
+     * answer to a runner that declares owner-secret/v1. `@Optional()` for the same reason as the rest of this list;
+     * without it the answer leaves both fields out, which states nothing.
+     */
+    @Optional() private readonly ownerSecrets?: OwnerSecretsService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2495,6 +2504,12 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
+    // The secrets this runner may hold (design §6.3). A read that fails leaves both fields out, which the runner reads
+    // as "nothing stated" — never as "remove everything".
+    let secretReconcile: Awaited<ReturnType<OwnerSecretsService['reconcileFor']>> | undefined;
+    if (this.ownerSecrets && runnerSupportsCapability(capabilities, OWNER_SECRET_CAPABILITY)) {
+      secretReconcile = await this.ownerSecrets.reconcileFor(runner.id).catch(() => undefined);
+    }
     // Cursor API keys somebody is waiting on a check of (cursor-key-check-relay.ts), held in an apiserver
     // process's memory: handed over each once. A beat the link gateway forwarded may reach any process, and takes
     // them from whichever holds them.
@@ -2558,6 +2573,8 @@ export class RunnerApiController {
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
       // Only while the owner's Check again waits, and only to a process that declared claude-region/v1.
       ...(regionCheckRequest ? { regionCheckRequest } : {}),
+      // Only to a runner that declared owner-secret/v1: ids and expiries, never a value.
+      ...(secretReconcile ?? {}),
       // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
       ...(linkHints ? { linkHints } : {}),
     };
@@ -7824,7 +7841,9 @@ export class RunnerApiController {
       // publishBatch tells them after an ingest of its own.
       const notices = ingested.flatMap(({ batch, outcome }) => {
         if (!OPEN.includes(outcome.session.status)) return [];
-        const notice = runEventBatchNotice(instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)));
+        const notice = runEventBatchNotice(
+          instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted,
+        );
         return notice ? [notice] : [];
       });
       if (notices.length > 0) {
@@ -8312,10 +8331,11 @@ export class RunnerApiController {
       // was still booting. Every value it does return — a spawn handshake, a generation event
       // from a reused warm process, a turn ending — is the engine talking.
       // Fill only while unset, like runtimeSessionId above: one-shot per run (the claim clears
-      // it), so a redelivered batch cannot push the stamp later than the first arrival.
-      if (!session.engineStartedAt && engineTurnActive !== undefined) {
-        sessionData.engineStartedAt = new Date();
-      }
+      // it), so a redelivered batch cannot push the stamp later than the first arrival. A streamed
+      // delta counts too: it is never stored, and a warm process's plain-text reply stores nothing
+      // until it ends (engineStreamedIn).
+      const engineStarted = !session.engineStartedAt && (engineTurnActive !== undefined || engineStreamedIn(events));
+      if (engineStarted) sessionData.engineStartedAt = new Date();
       Object.assign(sessionData, {
         ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
         ...(frontier ? { lastToolUse: frontier.tool } : {}),
@@ -8626,7 +8646,7 @@ export class RunnerApiController {
       }
       return {
         session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
-        seqConflicts, door: link ? 'link' : 'https',
+        seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };
     return ingest.call(this);
@@ -8684,9 +8704,13 @@ export class RunnerApiController {
       // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
       // as one batch: the other replicas hear of it once, not once per event (publishBatch). A merged
       // call's notice went with its transaction (ingestLinkEventCall), so only this replica is left.
+      // A batch that ended the starting state is followed by a session_updated: the clients read that
+      // state off the session row, and no event the engine sends re-reads it (controlTypeFor), so the
+      // "Getting the session ready" notice stayed up over the engine's tool calls until a list's
+      // one-minute safety read.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
-      if (merged) this.realtime.publishBatchHere(sessionId, published);
-      else this.realtime.publishBatch(sessionId, published);
+      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted);
+      else this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted);
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in

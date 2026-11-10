@@ -121,39 +121,61 @@ final class TranscriptRowsTests: XCTestCase {
                              canPageOlder: false, showWorkingIndicator: false)
     }
 
-    func testThreeConsecutiveCallsFoldIntoOneRowKeyedOnTheFirst() {
+    private func ids(_ row: TranscriptRow) -> [String]? {
+        guard case .steps(let items) = row else { return nil }
+        return items.map(\.id)
+    }
+
+    func testCallsBetweenTwoRepliesFoldIntoOneStepsLineKeyedOnTheFirst() {
         let r = built([.user(user("i1")), toolItem("t1"), toolItem("t2"), toolItem("t3")])
 
         // The run's three rows become one, and it answers to the first call's id — the prepend
         // anchor may well be that call, and a scrollTo nobody carries is a silent no-op.
         XCTAssertEqual(r.map(\.id), ["i1", "t1", "transcript-bottom"])
-        guard case .toolGroup(let cards) = r[1] else { return XCTFail("expected a folded run") }
-        XCTAssertEqual(cards.map(\.id), ["t1", "t2", "t3"])
+        XCTAssertEqual(ids(r[1]), ["t1", "t2", "t3"])
     }
 
-    func testTwoCallsStayTheirOwnRows() {
-        XCTAssertEqual(built([toolItem("t1"), toolItem("t2")]).map(\.id), ["t1", "t2", "transcript-bottom"])
+    func testASingleCallFoldsToo() {
+        let r = built([toolItem("t1")])
+
+        XCTAssertEqual(r.map(\.id), ["t1", "transcript-bottom"])
+        XCTAssertEqual(ids(r[0]), ["t1"])
+    }
+
+    // Settled thinking is a step like any call; thinking still being written keeps its own open
+    // row until it settles.
+    func testSettledThinkingJoinsTheLineAndThinkingInProgressDoesNot() {
+        let settled = TranscriptItem.thinking(ThinkingBlock(id: "k1", text: "why", streamingText: "", seq: 4))
+        let streaming = TranscriptItem.thinking(ThinkingBlock(id: "k2", text: "", streamingText: "so", seq: nil))
+        let r = built([settled, toolItem("t1"), streaming])
+
+        XCTAssertEqual(r.map(\.id), ["k1", "k2", "transcript-bottom"])
+        XCTAssertEqual(ids(r[0]), ["k1", "t1"])
+        guard case .item(.thinking) = r[1] else { return XCTFail("the live thinking lost its own row") }
     }
 
     func testProseBetweenCallsKeepsThemApart() {
         let r = built([toolItem("t1"), toolItem("t2"), .error(id: "e1", message: "boom"), toolItem("t3"), toolItem("t4")])
 
-        XCTAssertEqual(r.map(\.id), ["t1", "t2", "e1", "t3", "t4", "transcript-bottom"])
+        XCTAssertEqual(r.map(\.id), ["t1", "e1", "t3", "transcript-bottom"])
+        XCTAssertEqual(ids(r[0]), ["t1", "t2"])
+        XCTAssertEqual(ids(r[2]), ["t3", "t4"])
     }
 
     // A question, a plan, a spawned child session and a `!`-shell line each render as their own
     // card — folding them away would hide the thing the turn was about.
     func testCallsThatAreNotStepsBreakTheRun() {
         let r = built([toolItem("t1"), toolItem("t2"), toolItem("q1", "AskUserQuestion"), toolItem("t3"), toolItem("t4")])
-        XCTAssertEqual(r.map(\.id), ["t1", "t2", "q1", "t3", "t4", "transcript-bottom"])
+        XCTAssertEqual(r.map(\.id), ["t1", "q1", "t3", "transcript-bottom"])
+        guard case .item(.toolCall) = r[1] else { return XCTFail("the question folded away") }
 
         let shell = built([toolItem("t1"), toolItem("shell-1"), toolItem("t2"), toolItem("t3")])
-        XCTAssertEqual(shell.map(\.id), ["t1", "shell-1", "t2", "t3", "transcript-bottom"])
+        XCTAssertEqual(shell.map(\.id), ["t1", "shell-1", "t2", "transcript-bottom"])
     }
 
-    // A picture can only be read off the result, never the name — and the folded group is the one
+    // A picture can only be read off the result, never the name — and the steps line is the one
     // fold the card can't open through. An image result therefore leaves the run and splits it,
-    // instead of vanishing into a closed "Tools × 7" row.
+    // instead of vanishing into a closed line.
     func testAnImageResultLeavesTheRunAndSplitsIt() {
         let shot = TranscriptItem.toolCall(ToolCard(id: "img1", name: "Read", input: .null, result: nil,
                                                     resultImages: [Data([0x89, 0x50])], resultHasImage: true,
@@ -162,11 +184,10 @@ final class TranscriptRowsTests: XCTestCase {
                        toolItem("t4"), toolItem("t5"), toolItem("t6")])
 
         XCTAssertEqual(r.map(\.id), ["t1", "img1", "t4", "transcript-bottom"])
-        guard case .toolGroup(let head) = r[0], case .item(.toolCall(let card)) = r[1],
-              case .toolGroup(let tail) = r[2] else { return XCTFail("expected run · image · run") }
-        XCTAssertEqual(head.map(\.id), ["t1", "t2", "t3"])
+        guard case .item(.toolCall(let card)) = r[1] else { return XCTFail("expected run · image · run") }
+        XCTAssertEqual(ids(r[0]), ["t1", "t2", "t3"])
         XCTAssertEqual(card.id, "img1")
-        XCTAssertEqual(tail.map(\.id), ["t4", "t5", "t6"])
+        XCTAssertEqual(ids(r[2]), ["t4", "t5", "t6"])
     }
 
     // The server strips an oversized image's bytes and keeps the block, and only an open card
@@ -177,7 +198,7 @@ final class TranscriptRowsTests: XCTestCase {
                                                     resultImages: [], resultHasImage: true, status: .ok))
         let r = built([toolItem("t1"), toolItem("t2"), shot, toolItem("t3")])
 
-        XCTAssertEqual(r.map(\.id), ["t1", "t2", "img1", "t3", "transcript-bottom"])
+        XCTAssertEqual(r.map(\.id), ["t1", "img1", "t3", "transcript-bottom"])
     }
 
     func testEveryRowIdStaysUniqueWithFoldedRuns() {

@@ -45,6 +45,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     // A08-7: the batch review's open task page, by its place in the window; the batch's yes waits on the review it came from.
     var batchPage by rememberSaveable(card.key, card.binding) { mutableStateOf<Int?>(null) }
     val batchPreview = card.source.obj("input")?.obj("preview")?.takeIf { card.family == CardFamily.BATCH }
+    val skip = card.source.takeIf { it.text("toolName") == SkipMergeCheckCards.tool }?.let { SkipMergeCheckCards.read(it.obj("input") ?: JsonObject(emptyMap())) }
     val enabled = fresh && !result.busy && !result.uncertain && !result.settled
     val input = CardInput(note, selections, custom, ownerAnswers, option,
         edited = if (editTitle.isBlank()) null else buildJsonObject {
@@ -116,7 +117,9 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             OutlinedTextField(editSummary, { editSummary = it }, Modifier.fillMaxWidth(), enabled = enabled, label = { Text("Revised summary") })
         }
         if (noteAction != null) {
-            Text(noteAction!!.label, style = MaterialTheme.typography.labelMedium)
+            // A skip's refusal names the landing it keeps checked (iOS `declineSubject`).
+            Text(if (skip != null && noteAction == CardVerb.CHAT) "${CardVerb.CHAT.label}: ${skip.declineName}" else noteAction!!.label,
+                style = MaterialTheme.typography.labelMedium)
             OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), enabled = enabled, label = { Text("Say what to do instead…") })
             TextButton(onClick = { noteAction = null }, enabled = enabled) { Text("Back") }
         }
@@ -137,6 +140,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             } else if (verb == CardVerb.SEND_BACK && noteAction != verb) "Chat about this"
             // The batch's yes names its count, because the question above it scrolls away (iOS `batchCreateAction`).
             else if (verb == CardVerb.CREATE_BATCH && batchPreview != null) BatchReview.createAction(batchPreview.number("taskCount") ?: BatchReview.tasks(batchPreview).size)
+            else if (verb == CardVerb.ALLOW && skip != null) SkipMergeCheckCards.action
             else verb.label
             OutlinedButton(onClick = {
                 when {

@@ -374,6 +374,11 @@ struct SessionProjectPage: View {
                 .listRowSeparator(.hidden)
             mergeCard
                 .listRowSeparator(.hidden)
+            if app.projectSessionsOpenItems?.doneRequest == nil,
+               let decline = app.projectSessionsOpenItems?.latestDoneRequestDecline {
+                ProjectDoneDeclineRow(decline: decline)
+                    .listRowSeparator(.hidden)
+            }
             if let coordinator {
                 Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
             }
@@ -554,7 +559,12 @@ struct SessionProjectPage: View {
     /// (docs/mocks/project-landing-card, owner decision 2026-10-11).
     @ViewBuilder private var firstCard: some View {
         if let subject = doneSubject, ProjectPage.drawsEnding(subject) {
-            ProjectNotDoneCard(subject: subject, withCoordinator: 0, askedAt: nil)
+            ProjectNotDoneCard(subject: subject, confirmedAt: app.projectSessionsConfirmedAt, onReopen: {
+                guard let store = app.projects?.detail(address.projectID) else { return ProjectDone.notReopened }
+                if let error = await store.setStatus(.open) { return error }
+                await app.loadProjectDone(address)
+                return nil
+            }, withCoordinator: 0, askedAt: nil)
         } else {
             progressCard
             landingCard

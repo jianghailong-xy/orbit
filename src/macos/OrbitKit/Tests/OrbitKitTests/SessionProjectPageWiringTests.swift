@@ -429,7 +429,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let order = try [XCTUnwrap(first.range(of: "progressCard")?.lowerBound),
                          XCTUnwrap(first.range(of: "landingCard")?.lowerBound)]
         XCTAssertEqual(order, order.sorted(), "the landing card is drawn under the progress card")
-        XCTAssertTrue(first.contains("ProjectNotDoneCard(subject: subject, withCoordinator: 0, askedAt: nil)"),
+        XCTAssertTrue(first.contains("ProjectNotDoneCard(subject: subject, confirmedAt: app.projectSessionsConfirmedAt, onReopen: {"),
                       "a done project's ending still takes both their place")
         let card = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
         XCTAssertFalse(card.contains("landingLine"), "the landing is no longer a row inside the progress card")
@@ -849,8 +849,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectStart(_ address: SessionProjectAddress) async {",
                              to: "\n    }")
-        XCTAssertTrue(load.contains("guard row?.status == .open, row?.started == false else {"),
-                      "a started project's page reads nothing more than before")
+        XCTAssertFalse(load.contains("row?.started == false"),
+                       "the latest decline remains readable after the project starts")
         XCTAssertFalse(load.contains("AWAITING_DECISION"),
                        "the Landings group's holders are gone with the group (owner 2026-10-27)")
         XCTAssertTrue(load.contains("api.projectOpenItems(projectID: address.projectID)"))
@@ -871,8 +871,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let card = try slice(page, from: "@ViewBuilder private var firstCard: some View {", to: "\n    }")
         XCTAssertTrue(card.contains("if let subject = doneSubject, ProjectPage.drawsEnding(subject) {"),
                       "the shared rule — DONE, and a projection to tally — decides the card")
-        XCTAssertTrue(card.contains("ProjectNotDoneCard(subject: subject, withCoordinator: 0, askedAt: nil)"),
+        XCTAssertTrue(card.contains("ProjectNotDoneCard(subject: subject, confirmedAt: app.projectSessionsConfirmedAt, onReopen: {"),
                       "the settled card the conversation draws, asked nothing and waiting on nobody")
+        XCTAssertTrue(card.contains("await store.setStatus(.open)"), "reuse the project page's owner Reopen press")
+        XCTAssertTrue(card.contains("await app.loadProjectDone(address)"), "refresh the ending after a successful press")
         XCTAssertTrue(card.contains("} else {\n            progressCard\n            landingCard\n        }"),
                       "and the progress card, with the landing card under it, wherever the ending does not stand")
         let subject = try slice(page, from: "private var doneSubject: ProjectDoneSubject? {", to: "\n    }")
@@ -887,6 +889,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(load.contains("api.projectCriteria(projectID: address.projectID)"))
         XCTAssertTrue(load.contains("projectSessionsAddress == address, !Task.isCancelled"))
         XCTAssertTrue(load.contains("projectSessionsDone = document.doneSubject"))
+        XCTAssertTrue(load.contains("api.acceptanceConfirmation(projectID: address.projectID)"))
+        XCTAssertTrue(load.contains("confirmedAt = standing?.confirmation?.confirmedAt"))
         XCTAssertFalse(load.contains("async let"))
         let sessions = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {",
                                  to: "\n    }")

@@ -132,11 +132,60 @@ function answerOpenItem(
  * recommended none of its options, nothing at all.
  */
 const OTHER = 'other';
-type Choice = number | typeof OTHER | null;
+export type Choice = number | typeof OTHER | null;
 
 /** The option an answer names, or null when the answer is words alone. */
-function optionIndex(chosen: Choice): number | null {
+export function optionIndex(chosen: Choice): number | null {
   return typeof chosen === 'number' ? chosen : null;
+}
+
+/**
+ * The options as radio rows, the recommendation marked where it was made, then the Other row. A
+ * question asked without options draws nothing here: it is prose only. An owner request's DECISION
+ * card draws the same rows.
+ */
+export function QuestionOptions({
+  name,
+  options,
+  recommendedOption,
+  chosen,
+  onChoose,
+}: {
+  name: string;
+  options: ReadonlyArray<{ label: string; description?: string }>;
+  recommendedOption?: number | null;
+  chosen: Choice;
+  onChoose: (choice: Choice) => void;
+}): JSX.Element | null {
+  if (options.length === 0) return null;
+  return (
+    <>
+      {options.map((option, index) => (
+        <label
+          key={`${index}-${option.label}`}
+          className={`coordinator-question-option${chosen === index ? ' is-chosen' : ''}`}
+        >
+          <input type="radio" name={name} checked={chosen === index} onChange={() => onChoose(index)} />
+          <span className="coordinator-question-option-text">
+            {option.label}
+            {index === recommendedOption ? (
+              <span className="coordinator-question-recommended">{RECOMMENDED}</span>
+            ) : null}
+            {option.description ? (
+              <span className="coordinator-question-option-why">{option.description}</span>
+            ) : null}
+          </span>
+        </label>
+      ))}
+      {/* A row rather than a hint because the owner has to be able to SEE that answering in their
+          own words is allowed before they type them. Choosing it takes the choice off the
+          recommendation: from there the box is the answer. */}
+      <label className={`coordinator-question-option${chosen === OTHER ? ' is-chosen' : ''}`}>
+        <input type="radio" name={name} checked={chosen === OTHER} onChange={() => onChoose(OTHER)} />
+        <span className="coordinator-question-option-text">{OTHER_OPTION}</span>
+      </label>
+    </>
+  );
 }
 
 export function CoordinatorQuestionCard({
@@ -216,47 +265,13 @@ export function CoordinatorQuestionCard({
             {question.question}
           </Markdown>
         </div>
-        {/* The options are the answer: one tap, with the recommendation marked where it was made
-            rather than as a sentence above them. A question asked without any is prose only. */}
-        {question.options.map((option, index) => (
-          <label
-            key={`${index}-${option.label}`}
-            className={`coordinator-question-option${chosen === index ? ' is-chosen' : ''}`}
-          >
-            <input
-              type="radio"
-              name={`question-${row.itemId}`}
-              checked={chosen === index}
-              onChange={() => setChosen(index)}
-            />
-            <span className="coordinator-question-option-text">
-              {option.label}
-              {index === question.recommendedOption ? (
-                <span className="coordinator-question-recommended">{RECOMMENDED}</span>
-              ) : null}
-              {option.description ? (
-                <span className="coordinator-question-option-why">{option.description}</span>
-              ) : null}
-            </span>
-          </label>
-        ))}
-        {/* The last row is this card's own, and it is a row rather than a hint because the owner
-            has to be able to SEE that answering in their own words is allowed before they type
-            them. Choosing it takes the choice off the recommendation: from there the box is the
-            answer, and the receipt carries the words with no option in front of them. */}
-        {free ? null : (
-          <label
-            className={`coordinator-question-option${chosen === OTHER ? ' is-chosen' : ''}`}
-          >
-            <input
-              type="radio"
-              name={`question-${row.itemId}`}
-              checked={chosen === OTHER}
-              onChange={() => setChosen(OTHER)}
-            />
-            <span className="coordinator-question-option-text">{OTHER_OPTION}</span>
-          </label>
-        )}
+        <QuestionOptions
+          name={`question-${row.itemId}`}
+          options={question.options}
+          recommendedOption={question.recommendedOption}
+          chosen={chosen}
+          onChoose={setChosen}
+        />
         {/* Always there: none of the options may be what the owner wants, and one that is may
             still need a condition said with it. */}
         <Textarea

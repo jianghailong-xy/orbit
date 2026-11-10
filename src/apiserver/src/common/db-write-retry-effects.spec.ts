@@ -245,7 +245,9 @@ test('a runner event batch that loses two deadlocks persists once and broadcasts
   // The one thing a retry could double that the database would never notice.
   assert.deepEqual(
     published.filter((line) => /^publish(?:Batch)?\(/.test(line)),
-    [`publishBatch(${A},[2])`],
+    // `true`: the session has not started its engine, so this batch ends the starting state and is followed by a
+    // session_updated (RealtimeService.publishBatch) — once, like the batch.
+    [`publishBatch(${A},[2],true)`],
     'both events reach live subscribers exactly once, in one batch, after the attempt that committed',
   );
 });

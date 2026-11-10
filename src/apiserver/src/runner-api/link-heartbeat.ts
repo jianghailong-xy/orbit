@@ -207,6 +207,23 @@ export const HEARTBEAT_DELIVERIES = {
     writers: ['runners/runners.service.ts#requestRegionCheck'],
     pending: 'a Check again no check has answered yet: every full answer carries it until the check route clears it',
   },
+  secretGrants: {
+    how: 'MARKED',
+    writers: [
+      'owner-requests/owner-secrets.service.ts#submit', 'owner-requests/owner-secrets.service.ts#cancel',
+      'owner-requests/owner-secrets.service.ts#revoke', 'owner-requests/owner-secrets.service.ts#release',
+      'owner-requests/owner-secrets.service.ts#sweep',
+    ],
+    pending: 'a grant of the runner awaiting delivery or being removed (readLinkReconcilePending)',
+  },
+  secretGrantsRemoving: {
+    how: 'MARKED',
+    writers: [
+      'owner-requests/owner-secrets.service.ts#revoke', 'owner-requests/owner-secrets.service.ts#release',
+      'owner-requests/owner-secrets.service.ts#sweep',
+    ],
+    pending: 'a grant of the runner being removed (readLinkReconcilePending)',
+  },
   linkHints: { how: 'EVERY_BEAT', reads: 'readRunnerLinkHints in the beat statement; watchers and the release in this process' },
 } as const satisfies Record<keyof Required<RunnerHeartbeatResponse> | 'linkHints', HeartbeatDelivery>;
 
@@ -800,6 +817,10 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
          WHERE w."runner_id" = ${runnerId}::uuid AND j."state" IN ('QUEUED', 'RUNNING')
       )
       OR EXISTS (
+        SELECT 1 FROM "owner_request_secret" g
+         WHERE g."runner_id" = ${runnerId}::uuid AND g."state" IN ('PENDING_DELIVERY', 'REMOVING')
+      )
+      OR EXISTS (
         SELECT 1 FROM "wiki_repo_op" o
           JOIN "workspace" w ON w."id" = o."workspace_id"
          WHERE w."runner_id" = ${runnerId}::uuid AND o."state" IN ('queued', 'running')
@@ -832,6 +853,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || (answer.integrationJobs?.length ?? 0) > 0
     || (answer.wikiRepoOps?.length ?? 0) > 0
     || (answer.cursorKeyChecks?.length ?? 0) > 0
+    || (answer.secretGrantsRemoving?.length ?? 0) > 0
     || answer.loginRequest !== undefined
     || answer.accountRemoveRequest !== undefined
     || answer.codexAccountRemoveRequest !== undefined

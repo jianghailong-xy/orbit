@@ -1,0 +1,38 @@
+{
+  "approvedCommand": "printf approved \u003e \"$HOME/.orbit-macos-sandbox-escape-1794274214446201000-approved\"",
+  "blockedCommand": "python3 - \u003c\u003c'PY'\nfrom pathlib import Path\n(Path.home() / '.orbit-macos-sandbox-escape-1794276990652915000-blocked').write_text('blocked')\nPY",
+  "cards": [
+    {
+      "ID": "approval-1",
+      "ToolName": "Bash",
+      "ToolUseID": "call-979926d9-d723-46e6-8f4b-3b750d7c14e4-1\nfc_7ce2da40-13ce-9d4f-9b5e-76cf92c1da9d_0",
+      "Input": {
+        "command": "printf approved \u003e \"$HOME/.orbit-macos-sandbox-escape-1794274214446201000-approved\""
+      },
+      "Withdrawn": false,
+      "Polls": 455544
+    }
+  ],
+  "cli": "/Users/long/.orbit/cursor/versions/2026.10.14-941492e/cursor-agent",
+  "host": "longdeMac-mini.local",
+  "launch": {
+    "Args": [
+      "acp",
+      "--disable-auto-update",
+      "--disable-indexing",
+      "--disable-project-configs"
+    ],
+    "ConfigDir": "/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape1961818397/001/.orbit/runs/31111111-2222-4333-8444-666666666666/cursor/config",
+    "Cwd": "/private/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape1961818397/003/work",
+    "DataDir": "/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape1961818397/001/.orbit/runs/31111111-2222-4333-8444-666666666666/cursor/data",
+    "Executable": "/Users/long/.orbit/cursor/versions/2026.10.14-941492e/cursor-agent",
+    "Home": "/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape1961818397/001/.orbit/runs/31111111-2222-4333-8444-666666666666/cursor/home",
+    "Version": "2026.10.14-941492e"
+  },
+  "ownerDecision": {
+    "decidedById": "owner-via-coordinator-card",
+    "id": "",
+    "status": "ALLOWED"
+  },
+  "sandboxConfig": "/var/folders/6p/plfqmx1d0rqcq2pc8r3ggwjw0000gn/T/TestCursorRealMacOSSandboxEscape1961818397/001/.orbit/runs/31111111-2222-4333-8444-666666666666/cursor/bin/sandbox.json"
+}
