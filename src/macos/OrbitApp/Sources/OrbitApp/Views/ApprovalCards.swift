@@ -2131,6 +2131,8 @@ struct DeliveredDecisionCardView: View {
                 PromotionEventLine(console: console, promotionID: promotionID)
             case .promotionReceipt(let promotion):
                 PromotionReceiptLine(promotion: promotion)
+            case .ownerRequest(let requestID):
+                OwnerRequestView(requestID: requestID)
             }
         }
         .environment(\.approvalReviewTarget, .delivered(card))

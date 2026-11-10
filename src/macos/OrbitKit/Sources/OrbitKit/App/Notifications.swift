@@ -135,6 +135,12 @@ public enum AppIntent: Equatable, Sendable {
     /// card is (owner decision 2026-10-06). A client without that page opens the coordinator
     /// conversation, which draws the merge as its line.
     case openProjectMerge(projectID: String, sessionID: String)
+    /// An owner request's push action — "Provide key", "Answer", "Mark done", "Review": the "Waiting
+    /// on you" inbox with that request's card open and its input focused (`OwnerRequestLink`). It
+    /// never answers the request: a secret has no reply path outside its card (secrets design §7.2).
+    case openOwnerRequest(requestID: String)
+    /// An owner request's "Later": put off for `OwnerRequests.laterSeconds`, on this device only.
+    case snoozeOwnerRequest(requestID: String)
 }
 
 public enum Notifications {
@@ -144,6 +150,44 @@ public enum Notifications {
     public static let actionAllow = "ALLOW"
     public static let actionDeny = "DENY"
     public static let actionReply = "REPLY"
+    /// An owner request's two actions, under its kind's category (`ownerRequestCategory`).
+    public static let actionOwnerRequestOpen = "OWNER_REQUEST_OPEN"
+    public static let actionOwnerRequestLater = "OWNER_REQUEST_LATER"
+    /// `userInfo` key naming the owner request an alert is about (apiserver `PushService.notifyOwnerRequest`).
+    public static let keyOwnerRequest = "ownerRequestID"
+
+    /// The category the server files an owner request's alert under, one per kind
+    /// (apiserver `ownerRequestPushCategory`), so each kind's first action can say what it opens.
+    public static func ownerRequestCategory(_ kind: OwnerRequestKind) -> String {
+        "ORBIT_OWNER_REQUEST_\(kind.rawValue)"
+    }
+
+    /// The first action's title on an owner request's alert. Each opens the card on its input.
+    public static func ownerRequestActionTitle(_ kind: OwnerRequestKind) -> String {
+        switch kind {
+        case .secret:     return "Provide key"
+        case .decision:   return "Answer"
+        case .manualStep: return "Mark done"
+        case .confirm:    return "Review"
+        }
+    }
+
+    public static let ownerRequestLaterTitle = "Later"
+
+    /// The reminder a push's Later brings back an hour on: the request's own words, its card one tap away.
+    public static func ownerRequestReminder(requestID: String, kind: OwnerRequestKind, title: String,
+                                            sessionID: String) -> NotificationContent {
+        let key = PublicID.storageKey(requestID)
+        return NotificationContent(
+            identifier: "owner-request-\(key)",
+            title: "\(OwnerRequests.waitingOnYou): \(title)",
+            body: "You asked to be reminded.",
+            categoryIdentifier: ownerRequestCategory(kind),
+            threadIdentifier: "owner-request-\(sessionID)",
+            route: .session(sessionID),
+            userInfo: [keySession: sessionID, keyKind: "owner-request", keyOwnerRequest: requestID,
+                       "ownerRequestKind": kind.rawValue])
+    }
 
     /// `userInfo` key naming the session an alert is about — set by both the locally posted
     /// notifications below and the server's APNs payload, so the delivery layer can tell which
@@ -199,6 +243,11 @@ public enum Notifications {
     /// `UNNotificationDefaultActionIdentifier` (→ open) or one of the action constants above.
     public static func intent(actionId: String, userInfo: [String: String],
                               responseText: String? = nil) -> AppIntent? {
+        // An owner request's actions open its card or put it off; its plain tap opens the session below.
+        if let request = userInfo[keyOwnerRequest] {
+            if actionId == actionOwnerRequestOpen { return .openOwnerRequest(requestID: request) }
+            if actionId == actionOwnerRequestLater { return .snoozeOwnerRequest(requestID: request) }
+        }
         guard let sid = userInfo[keySession] else {
             // A watch's alert names no session and carries no actions: tapping it opens the watch.
             return userInfo[keyWatch].map { .open(.watch($0)) }
