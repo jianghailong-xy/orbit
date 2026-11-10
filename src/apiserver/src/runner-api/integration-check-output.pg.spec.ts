@@ -19,6 +19,7 @@ import {
   MAX_CHECK_OUTPUT_TAIL,
   enqueueForDoneTask,
 } from '../projects/project-integration-job';
+import { lastLandingCheck } from '../projects/project-integration-line';
 import { readProjectIntegrationLog } from '../projects/project-integration-log';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -466,6 +467,46 @@ test('a chunk is held to the rule the tail is held to, and one the rule grows pa
     await send(2, 'after\n');
     const rows = await stack.db.projectIntegrationJobLog.findMany({ where: { jobId: job.jobId }, orderBy: { seq: 'asc' } });
     assert.deepEqual(rows.map((row) => row.seq), [0, 2]);
+  } finally {
+    await hangUp(stack);
+  }
+});
+
+
+test('a paths-exempt landing check preserves its files and is skipped on the timeline', {
+  skip, concurrency: 1, timeout: 120_000,
+}, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'paths-exempt');
+    await doneTask(stack, w, 'paths-exempt');
+    const job = await claim(stack, w);
+    const check: IntegrationCheckResult = {
+      ...RED_CHECK, name: 'LANDING_CHECK', exitCode: null, timedOut: false,
+      durationMs: 0, outputTail: '', skipped: 'PATHS_EXEMPT', files: ['docs/a.md', 'docs/b.md'],
+    };
+    for (const invalid of [
+      { ...check, skipped: 'UNKNOWN' },
+      { ...check, name: 'TASK_ACCEPTANCE' },
+      { ...check, files: [] },
+      { ...check, files: [1] },
+    ]) {
+      await assert.rejects(report(stack, w, job, { ...CHECK_FAILED, checks: [invalid] } as Answer),
+        (error: unknown) => error instanceof IntegrationJobRefused && error.refusal === 'INVALID_RESULT');
+    }
+    await report(stack, w, job, {
+      state: 'LANDED', phase: 'VERIFY', sourceSha: sha('d'), targetShaBefore: sha('c'), upstreamSha: sha('c'),
+      testedSha: sha('f'), testedTreeSha: sha('e'), landedSha: sha('f'), landedTreeSha: sha('e'),
+      checks: [check],
+    });
+    const row = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: job.jobId } });
+    assert.deepEqual(row.checks, [check]);
+    assert.equal(lastLandingCheck(row.checks), 'PASSING');
+    const events = await stack.db.projectIntegrationJobEvent.findMany({ where: { jobId: job.jobId, kind: 'CHECK_FINISHED' } });
+    assert.equal(events.length, 1);
+    assert.match(events[0].text, /Landing check skipped/);
+    assert.deepEqual((events[0].data as { files: string[] }).files, check.files);
+    assert.equal((events[0].data as { skipped: string }).skipped, 'PATHS_EXEMPT');
   } finally {
     await hangUp(stack);
   }

@@ -249,6 +249,7 @@ export function checkStartedText(
 }
 
 export function checkFinishedText(check: {
+  skipped?: 'PATHS_EXEMPT';
   name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   exitCode: number | null;
   expectedExitCode: number;
@@ -256,6 +257,7 @@ export function checkFinishedText(check: {
   durationMs: number;
 }): string {
   const label = checkLabel(check.name);
+  if (check.skipped === 'PATHS_EXEMPT') return `${label} skipped · exempt paths`;
   if (check.timedOut) return `${label} timed out after ${durationText(check.durationMs)}`;
   if (check.exitCode !== check.expectedExitCode) {
     const code = check.exitCode == null ? 'no exit code' : `exit ${check.exitCode}`;
