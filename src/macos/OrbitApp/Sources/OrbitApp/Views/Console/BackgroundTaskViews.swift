@@ -171,8 +171,8 @@ struct SubagentTranscriptView: View {
                 switch row {
                 case .item(let item):
                     TranscriptItemView(item: item, fullPayload: fullPayload)
-                case .toolGroup(let cards):
-                    ToolGroupCardView(cards: cards, fullPayload: fullPayload)
+                case .steps(let items):
+                    StepsRowView(items: items, fullPayload: fullPayload)
                 default:
                     EmptyView()
                 }

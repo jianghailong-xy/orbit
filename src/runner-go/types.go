@@ -339,6 +339,13 @@ type ModelInfo struct {
 	Parameters []ModelParameter `json:"parameters,omitempty"`
 }
 
+// SecretGrantRef is one owner-request secret a heartbeat says this runner may hold: its id and when it ends. The value
+// is never in a heartbeat; the runner fetches it (Transport.fetchSecretGrant).
+type SecretGrantRef struct {
+	ID        string `json:"id"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
 // ModelParameter is one setting a model takes, with the values it accepts and the one it starts on.
 // ID is what selects it, and is the model's own: one model's effort is `effort`, another's
 // `reasoning_effort`.
@@ -357,6 +364,13 @@ type ModelParameterValue struct {
 
 type HeartbeatResponse struct {
 	CancelSessionIDs []string `json:"cancelSessionIds"`
+	// The owner-request secrets this runner may hold (secret_store.go), sent only to a runner that declares
+	// owner-secret/v1. A POINTER because only a present list states anything: absent (an older control plane, or an
+	// answer that reconciled nothing) removes nothing, and [] means hold nothing.
+	SecretGrants *[]SecretGrantRef `json:"secretGrants,omitempty"`
+	// Grants of this runner the control plane is removing: each is removed here if held, and reported removed either
+	// way. Absent means none.
+	SecretGrantsRemoving []string `json:"secretGrantsRemoving,omitempty"`
 	// LeaseLostSessionIDs is process-fence loss, not durable user cancellation.
 	// The runner detaches the exact supervisor epoch advertised by this heartbeat;
 	// a delayed response cannot cancel a replacement with the same session id.

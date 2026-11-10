@@ -313,7 +313,17 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
     for (const [where, carrier] of readings) {
       const cards = cardsOf(carrier);
       for (const each of FIELDS) {
-        assert.deepEqual(cards[each], expected[each], `${each}: ${where} disagrees with the queue view`);
+        if (each === 'confirmationReviewRequest' && expected[each] && where === 'the echo') {
+          const queuedCard = expected[each] as { reviewId: string; dueAt: string | null };
+          assert.equal(queuedCard.dueAt, null, 'a queued review has no deadline');
+          const picked = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: turnId } });
+          const review = await prisma.taskOwnerConfirmationReview.findUniqueOrThrow({ where: { id: queuedCard.reviewId } });
+          assert.ok(picked.deliveredAt);
+          const dueAt = new Date(picked.deliveredAt.getTime() + review.windowSeconds * 1_000).toISOString();
+          assert.deepEqual(cards[each], { ...queuedCard, dueAt }, 'only the pickup-based deadline changes at hand-out');
+        } else {
+          assert.deepEqual(cards[each], expected[each], `${each}: ${where} disagrees with the queue view`);
+        }
       }
     }
     covered.add(field);

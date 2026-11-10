@@ -22,6 +22,7 @@ import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerOwnerRequestsController } from './runner-owner-requests.controller';
+import { RunnerSecretGrantsController } from './runner-secret-grants.controller';
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
@@ -110,6 +111,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerProjectsController,
     RunnerWatchesController,
     RunnerOwnerRequestsController,
+    RunnerSecretGrantsController,
     // Which runner release each runner is to run (runner-release.ts).
     RunnerReleaseController,
     RunnerWikiController,

@@ -8,6 +8,7 @@ import {
   canTransition,
   normalizeOwnerRequest,
   ownerRequestAlert,
+  ownerRequestPushCategory,
 } from './owner-request';
 
 test('only PENDING moves, and only to a terminal state; every terminal state is final', () => {
@@ -44,4 +45,13 @@ test('the lock-screen alert is the kind over a title cut to one line', () => {
     assert.ok(alert.body.endsWith('…'));
   }
   assert.deepEqual(ownerRequestAlert('DECISION', 'Which\n  database?'), { title: 'Decision needed', body: 'Which database?' });
+});
+
+test('each kind has its own push category, the one the clients register its actions under', () => {
+  assert.deepEqual(OWNER_REQUEST_KINDS.map(ownerRequestPushCategory), [
+    'ORBIT_OWNER_REQUEST_DECISION',
+    'ORBIT_OWNER_REQUEST_SECRET',
+    'ORBIT_OWNER_REQUEST_MANUAL_STEP',
+    'ORBIT_OWNER_REQUEST_CONFIRM',
+  ]);
 });

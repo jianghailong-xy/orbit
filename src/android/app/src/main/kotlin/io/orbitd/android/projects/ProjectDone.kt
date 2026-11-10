@@ -22,6 +22,15 @@ object ProjectDone {
     const val coordinatorChecked = "Coordinator checked"
     const val orbitChecked = "Orbit checked"
     const val recordAsDone = "Record as done"
+    const val checkNoCriteria = "No acceptance criteria are stated"
+    const val checkUnmet = "Criterion {n} is not met"
+    const val checkUnlanded = "Criterion {n} is not on {main}"
+    const val checkTasks = "{n} tasks are still running"
+    const val checkTask = "1 task is still running"
+    const val checkOwnerItems = "Open owner items: {n}"
+    const val checkLandings = "Landings in flight: {n}"
+    const val findingsHeading = "Orbit can’t prove {n} things"
+    const val findingsAccepted = "These will be kept as the gaps you accepted."
     const val recordAsDoneAnyway = "Record as done anyway"
     const val notYet = "Not yet…"
     const val missingBeforeDone = "What’s missing before it’s done?"
@@ -38,6 +47,10 @@ object ProjectDone {
     const val showLess = "Show less"
     const val sendToCoordinator = "Send to coordinator"
     const val back = "Back"
+    const val derivedFrom = "From the criteria you confirmed on"
+    const val derivedReopenHint = "Not right? Reopen it."
+    fun derivedLine(confirmedAt: String?, zone: ZoneId = ZoneId.systemDefault()): String? =
+        date(confirmedAt, zone)?.let { "$derivedFrom $it. $derivedReopenHint" }
     const val thisProjectIsDone = "This project is done"
     const val onMain = "on main"
     const val onProjectBranch = "On the project branch"
@@ -142,6 +155,19 @@ object ProjectDone {
     /** The gaps the card shows: the request's, or the ones Orbit fills in when nobody asked. */
     fun gaps(doc: JsonObject, request: JsonObject?): List<JsonObject> = request?.objects("gaps") ?: syntheticGaps(doc)
 
+    fun findingLine(finding: JsonObject, main: String): String {
+        val (template, n) = when (finding.text("code")) {
+            "DONE_NO_CRITERIA" -> return checkNoCriteria
+            "DONE_CRITERION_UNSATISFIED" -> checkUnmet to finding.obj("criterion")?.number("ordinal")
+            "DONE_CRITERION_UNLANDED" -> checkUnlanded to finding.obj("criterion")?.number("ordinal")
+            "DONE_TASKS_IN_FLIGHT" -> (if (finding.objects("tasks").size == 1) checkTask else checkTasks) to finding.objects("tasks").size
+            "DONE_OWNER_ITEMS_OPEN" -> checkOwnerItems to finding.objects("items").size
+            "DONE_INTEGRATION_IN_FLIGHT" -> checkLandings to finding.objects("jobs").size
+            else -> return finding.text("message").orEmpty()
+        }
+        return template.replace("{n}", "$n").replace("{main}", main)
+    }
+
     /** The body a press sends: the request it answers (or null), the seal — the request's own, or the one standing now when nobody
      * asked — and the gaps the card showed. Null when no seal could be read: no press then. */
     fun body(doc: JsonObject, requestId: String?, request: JsonObject?, currentDigest: String?): JsonObject? {
@@ -149,7 +175,7 @@ object ProjectDone {
         return buildJsonObject {
             put("requestId", requestId?.let(::JsonPrimitive) ?: JsonNull)
             put("criteriaDigest", digest)
-            put("acceptedGaps", JsonArray(gaps(doc, request)))
+            put("acceptedGaps", JsonArray(request?.objects("gaps") ?: emptyList()))
         }
     }
     /** The note "Not yet…" sends, or null while there is nothing in it. */

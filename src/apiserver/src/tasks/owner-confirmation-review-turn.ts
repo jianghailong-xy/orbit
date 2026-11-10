@@ -118,12 +118,16 @@ type Db = Prisma.TransactionClient;
 
 /** Everything a review block and card are rendered from, read at once. */
 async function readReviewForTurn(db: Db, reviewId: string) {
-  return db.taskOwnerConfirmationReview.findUnique({
+  const review = await db.taskOwnerConfirmationReview.findUnique({
     where: { id: reviewId },
     select: {
+      reviewerKind: true,
       id: true,
       taskId: true,
+      windowSeconds: true,
       dueAt: true,
+      reviewerSessionId: true,
+      deliveryTurnClientId: true,
       records: { select: { kind: true } },
       task: { select: { title: true, acceptanceCriteria: true } },
       request: {
@@ -138,6 +142,17 @@ async function readReviewForTurn(db: Db, reviewId: string) {
       },
     },
   });
+  if (!review) return null;
+  const turn = review.reviewerSessionId && review.deliveryTurnClientId
+    ? await db.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId: review.reviewerSessionId, clientTurnId: review.deliveryTurnClientId } },
+      select: { deliveredAt: true },
+    }) : null;
+  const dueAt = review.reviewerKind === 'PROJECT_COORDINATOR'
+    ? review.dueAt
+    : turn?.deliveredAt
+      ? new Date(turn.deliveredAt.getTime() + review.windowSeconds * 1_000) : null;
+  return { ...review, dueAt };
 }
 
 /**
@@ -160,7 +175,7 @@ export async function ownerConfirmationReviewBlock(db: Db, reviewId: string): Pr
     `run-session="${uuidToBase62(request.sessionId)}"`,
     `branch="${attribute(branch ?? '')}"`,
     `sha="${request.branchSha ?? ''}"`,
-    `due-at="${isoSeconds(review.dueAt)}"`,
+    ...(review.dueAt ? [`due-at="${isoSeconds(review.dueAt)}"`] : []),
   ];
   const open = `<orbit-confirmation-review ${attributes.join(' ')}>`;
   const close = '</orbit-confirmation-review>';
@@ -207,6 +222,10 @@ export async function ownerConfirmationReviewBlock(db: Db, reviewId: string): Pr
   const lines = [
     open,
     ...situation,
+    ...(review.reviewerKind === 'PROJECT_COORDINATOR' ? [
+      'This Automatic project holds the request with you: the owner sees no card, count or alert while you hold it.',
+      "Recording a review raises it: your judgment leads the owner's card, followed by what you put in needsYou.",
+    ] : []),
     '',
     `What settles it (the task's acceptance criteria, first ${QUOTE_CHARS} characters): ${clip(review.task.acceptanceCriteria?.trim() || '(none stated)', QUOTE_CHARS)}`,
     `What the run reported (the report the owner's card shows, first ${QUOTE_CHARS} characters): ${clip(report?.text ?? '(nothing)', QUOTE_CHARS)}`,
@@ -215,7 +234,9 @@ export async function ownerConfirmationReviewBlock(db: Db, reviewId: string): Pr
     '- task_confirmation_review: record what you checked, what you could not check and why, what only',
     '  the owner can decide (each with options and the one you recommend), and what is left open, each',
     '  line with the evidence it rests on. Orbit writes the card\'s first line from these lists; your',
-    '  one-sentence judgment is shown last, quoted.',
+    review.reviewerKind === 'PROJECT_COORDINATOR'
+      ? '  judgment leads the card, so write the conclusion the owner should read first.'
+      : '  one-sentence judgment is shown last, quoted.',
     '- task_confirmation_return: send it back to the run with the reason, when something must change',
     '  before the owner looks. The reason becomes the run\'s next message; the owner is not asked.',
     'You cannot confirm or send back for the owner. If you end your turn without doing either and nothing',
@@ -270,7 +291,7 @@ export async function readConfirmationReviewRequestCard(
     runSessionId: review.request.sessionId,
     branch: run?.branch ?? null,
     sha: review.request.branchSha,
-    dueAt: review.dueAt.toISOString(),
+    dueAt: review.dueAt?.toISOString() ?? null,
   };
 }
 

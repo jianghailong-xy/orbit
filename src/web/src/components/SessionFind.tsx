@@ -6,7 +6,7 @@ import { sessionEventSearchQuery } from '../lib/queries';
 import { splitHighlight } from '../lib/searchHighlight';
 import { findMatches, type FindSegment } from '../lib/findMatches';
 import { elementForSeq as elementForSeqIn } from '../lib/transcriptDeepLink';
-import { relTime } from './Transcript';
+import { REVEAL_EVENT, relTime } from './Transcript';
 
 /**
  * Find within the open session (⌘F / Ctrl+F).
@@ -269,6 +269,13 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
         await new Promise((r) => setTimeout(r, 0));
         await new Promise((r) => requestAnimationFrame(() => r(null)));
         if (!openRef.current) return;
+        // A hit folded into a steps line opens it first, so the match is drawn and painted.
+        const folded = elementForSeq(hit.seq)?.closest('.chat-steps:not(.is-open)');
+        if (folded) {
+          folded.dispatchEvent(new Event(REVEAL_EVENT));
+          await new Promise((r) => requestAnimationFrame(() => r(null)));
+          if (!openRef.current) return;
+        }
         rescan();
         const host = elementForSeq(hit.seq);
         if (host) {

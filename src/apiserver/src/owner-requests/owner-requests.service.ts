@@ -14,6 +14,8 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
+import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
+import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
 import {
   OWNER_REQUEST_EXPIRED,
   OWNER_REQUEST_NOT_ASKER,
@@ -62,18 +64,36 @@ const VIEW = {
   resolvedAt: true,
   resolvedByUserId: true,
   resolvedBySessionId: true,
+  resolvedClient: true,
   resolutionNote: true,
   answer: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.OwnerRequestSelect;
 
+/** The clients an owner ends a request from, as `resolved_client` stores them. */
+export type OwnerRequestClient = 'web' | 'ios' | 'macos' | 'android';
+const CLIENTS: ReadonlySet<string> = new Set<OwnerRequestClient>(['web', 'ios', 'macos', 'android']);
+
+/** The client kind of an `X-Orbit-Client: <kind>/<version>` header (`ios/1.0` is `ios`), or null for anything else. */
+export function ownerRequestClient(header: string | string[] | undefined): OwnerRequestClient | null {
+  const slash = typeof header === 'string' ? header.indexOf('/') : -1;
+  if (slash < 0) return null;
+  const kind = (header as string).slice(0, slash);
+  return CLIENTS.has(kind) ? (kind as OwnerRequestClient) : null;
+}
+
 /** A JSON column's value, or SQL NULL when there is none. */
 function json(value: object | null | undefined): Prisma.InputJsonValue | typeof Prisma.DbNull {
   return value ? (value as Prisma.InputJsonValue) : Prisma.DbNull;
 }
 
-export type OwnerRequestView = Prisma.OwnerRequestGetPayload<{ select: typeof VIEW }>;
+export type OwnerRequestView = Prisma.OwnerRequestGetPayload<{ select: typeof VIEW }> & {
+  /** SECRET: the latest grant of the owner's key (design §2), or null before one was entered. Never the value. */
+  secretGrant?: OwnerSecretGrantView | null;
+  /** SECRET: what ends the key (§6.1) — its task (TASK_ENDED) or, for a session with no task, the session. */
+  secretScope?: 'TASK' | 'SESSION';
+};
 
 /**
  * Owner requests: filed by any session of the account, answered by the owner (migration 0503).
@@ -90,6 +110,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly secrets: OwnerSecretsService,
     /** Optional so a build or spec without PushModule files requests exactly the same. */
     @Optional() private readonly push?: PushService,
     /**
@@ -139,10 +160,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       const project = await this.prisma.project.count({ where: { id: request.projectId, ownerId } });
       if (project === 0) throw new NotFoundException('projectId names a project this account does not have');
     }
-    if (request.secretSpec) {
-      const runner = await this.prisma.runner.count({ where: { id: request.secretSpec.runnerId, ownerId } });
-      if (runner === 0) throw new NotFoundException('secretSpec.runnerId names a runner this account does not have');
-    }
+    // The secret goes to the runner this session runs on, never one the caller names (design §4.1).
+    const secretSpec = request.secretSpec
+      ? { ...request.secretSpec, runnerId: await this.secrets.runnerForFiling(ownerId, askingSessionId, request.secretSpec.runnerId) }
+      : undefined;
 
     const [created] = await this.prisma.ownerRequest.createManyAndReturn({
       data: [{
@@ -158,7 +179,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
         options: json(request.options),
         recommendedOption: request.recommendedOption ?? null,
         steps: json(request.steps),
-        secretSpec: json(request.secretSpec),
+        secretSpec: json(secretSpec),
         verifyHint: request.verifyHint ?? null,
         expiresAt: request.expiresAtDate,
         clientRequestId: request.clientRequestId ?? null,
@@ -193,18 +214,47 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       take: LIST_LIMIT,
       select: VIEW,
     });
-    return { requests };
+    return { requests: await this.withGrants(ownerId, requests) };
   }
 
   async get(ownerId: string, id: string): Promise<OwnerRequestView> {
     const request = await this.prisma.ownerRequest.findFirst({ where: { id, ownerId }, select: VIEW });
     if (!request) throw new NotFoundException('owner request not found');
-    return request;
+    const [view] = await this.withGrants(ownerId, [request]);
+    return view;
+  }
+
+  /** Each SECRET request with what its card shows of its key's grant. */
+  private async withGrants(ownerId: string, requests: OwnerRequestView[]): Promise<OwnerRequestView[]> {
+    const secretIds = requests.filter((r) => r.kind === 'SECRET').map((r) => r.id);
+    if (secretIds.length === 0) return requests;
+    const grants = await this.secrets.grantViews(ownerId, secretIds);
+    const askers = [...new Set(requests.filter((r) => r.kind === 'SECRET').map((r) => r.askedBySessionId))];
+    const sessions = await this.prisma.session.findMany({
+      where: { id: { in: askers }, ownerId },
+      select: { id: true, taskId: true },
+    });
+    const taskOf = new Map(sessions.map((s) => [s.id, s.taskId]));
+    return requests.map((r) => {
+      if (r.kind !== 'SECRET') return r;
+      const grant = grants.get(r.id) ?? null;
+      // The grant's own scope once there is one (it was fixed at submit); before that, the asking session's.
+      const scoped = grant ? grant.taskScoped : Boolean(taskOf.get(r.askedBySessionId));
+      return { ...r, secretGrant: grant, secretScope: scoped ? 'TASK' : 'SESSION' };
+    });
   }
 
   /** The owner did what was asked. A DECISION records the option chosen or the owner's words. */
-  async complete(ownerId: string, id: string, given: { option?: number; text?: string }): Promise<OwnerRequestView> {
+  async complete(
+    ownerId: string,
+    id: string,
+    given: { option?: number; text?: string },
+    client: OwnerRequestClient | null = null,
+  ): Promise<OwnerRequestView> {
     const request = await this.get(ownerId, id);
+    if (request.kind === 'SECRET') {
+      throw new BadRequestException('a SECRET request is done when the runner has the key: enter it with POST /owner-requests/:id/secret');
+    }
     const text = given.text?.trim();
     const option = given.option ?? undefined;
     if (option !== undefined) {
@@ -222,16 +272,17 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       : null;
     return this.settle(ownerId, id, 'DONE', {
       resolvedByUserId: ownerId,
+      resolvedClient: client,
       answer: json(answer),
     });
   }
 
   /** The owner refuses the request. The reason is what the asking session reads. */
-  async decline(ownerId: string, id: string, reason: string): Promise<OwnerRequestView> {
+  async decline(ownerId: string, id: string, reason: string, client: OwnerRequestClient | null = null): Promise<OwnerRequestView> {
     const note = reason?.trim();
     if (!note) throw new BadRequestException('reason is required: say why, so the session asking can act on it');
     await this.get(ownerId, id);
-    return this.settle(ownerId, id, 'DECLINED', { resolvedByUserId: ownerId, resolutionNote: note });
+    return this.settle(ownerId, id, 'DECLINED', { resolvedByUserId: ownerId, resolvedClient: client, resolutionNote: note });
   }
 
   /** The asking session no longer needs it. Only the session that filed a request may withdraw it. */
@@ -242,6 +293,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
         code: OWNER_REQUEST_NOT_ASKER,
         message: 'only the session that filed this request may withdraw it',
       });
+    }
+    // A delivered key the session no longer needs (design §6.1 WITHDRAWN): the request stays DONE, the key goes.
+    if (request.kind === 'SECRET' && request.state === 'DONE' && await this.secrets.release(ownerId, sessionId, id)) {
+      return this.get(ownerId, id);
     }
     return this.settle(ownerId, id, 'WITHDRAWN', {
       resolvedBySessionId: sessionId,
@@ -263,6 +318,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       });
       const ids = rows.map((row) => row.id);
       await enqueueResolutions(tx, ids);
+      await endUndeliveredGrants(tx, ids, 'EXPIRED');
       return ids;
     }, loggedRetry(this.logger, 'ownerRequests.expireDue'));
     if (expired.length > 0) this.delivery?.kick();
@@ -286,7 +342,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
         where: { id, ownerId, state: 'PENDING', OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
         data: { ...data, state: to, resolvedAt: now },
       });
-      if (written.count === 1) await enqueueResolutions(tx, [id]);
+      if (written.count === 1) {
+        await enqueueResolutions(tx, [id]);
+        await endUndeliveredGrants(tx, [id], to === 'WITHDRAWN' ? 'WITHDRAWN' : 'REVOKED');
+      }
       return written;
     }, loggedRetry(this.logger, 'ownerRequests.settle'));
     if (settled.count === 1) this.delivery?.kick();
@@ -304,19 +363,4 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       message: `this request is already ${request.state}; an ended request is final and nothing was written`,
     });
   }
-}
-
-/**
- * The delivery of each ending to the session that asked: one OWNER_REQUEST `watch_delivery` row per request (migration
- * 0504), due now, written in the transaction that writes the ending — so an ending that commits has its delivery and
- * one that rolls back has none. The Watch delivery worker turns it into exactly one turn on the asking session, keyed
- * `ownerRequestTurnClientId`, and retries or dead-letters it like any other wake. `watch_delivery_owner_request_key`
- * holds a request to one delivery; the endings are compare-and-sets on PENDING, so a second is never attempted.
- */
-async function enqueueResolutions(tx: Prisma.TransactionClient, requestIds: string[]): Promise<void> {
-  if (requestIds.length === 0) return;
-  await tx.$executeRaw`
-    INSERT INTO "watch_delivery" ("id", "kind", "owner_request_id", "action", "next_attempt_at")
-    SELECT gen_random_uuid(), 'OWNER_REQUEST', r."id", 'RESUME_SESSION', now()
-      FROM unnest(${requestIds}::uuid[]) AS r("id")`;
 }

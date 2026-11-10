@@ -1266,8 +1266,8 @@ export interface IntegrationJobPlatformEnd {
  * only pushes after it reads `cancelRequested = false` from this answer.
  *
  * A RENEWAL MUST NOT INVALIDATE THE OPEN LIST'S VERSION: the statement updates the job row, and
- * `readOpenListVersion` fingerprints that table by the columns the list can show, excluding these
- * renewal-only ones (open-list-version.ts).
+ * the table's Open-list counter skips an UPDATE that changed nothing but these renewal-only columns
+ * (`open_list_bump_owner`, migration 0511).
  */
 export async function receiveIntegrationJobProgress(
   prisma: PrismaService,

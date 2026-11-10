@@ -770,12 +770,34 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult(err.Error(), true)
 		}
+		// The destination is checked here, on the machine it names, before the owner is asked for anything: a path
+		// the runner would refuse to write is a request that could only fail (secret_path.go).
+		if spec, ok := body["secretSpec"]; ok {
+			if err := checkSecretSpec(spec); err != nil {
+				return toolResult("request owner action refused: "+err.Error(), true)
+			}
+		}
 		raw, err := s.t.fileOwnerRequest(s.sessionID, body)
 		if err != nil {
 			return toolResult("request owner action failed: "+err.Error(), true)
 		}
 		return toolResult("The request is with the account owner. Its outcome will arrive as a turn in "+
 			"this conversation; nothing is waiting on this call.\n"+prettyJSON(raw), false)
+
+	case "withdraw_owner_request":
+		id := strings.TrimSpace(getString(args, "requestId"))
+		if id == "" {
+			return toolResult("requestId is required", true)
+		}
+		body := map[string]interface{}{}
+		if reason := strings.TrimSpace(getString(args, "reason")); reason != "" {
+			body["reason"] = reason
+		}
+		raw, err := s.t.withdrawOwnerRequest(s.sessionID, id, body)
+		if err != nil {
+			return toolResult("withdraw owner request failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
 
 	case "project_request_start":
 		id := getString(args, "projectId")
@@ -3894,14 +3916,23 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"secretSpec": map[string]interface{}{
 					"type": "object",
 					"description": "SECRET only, and required there: what is needed and where it goes, " +
-						"never its value. Name exactly one destination, envVar or filePath.",
+						"never its value. Name exactly one destination, envVar or filePath. It is delivered " +
+						"to the runner this session runs on, and only commands of this session (or of its " +
+						"task) can use it; it is removed when the task or session ends, when it expires, or " +
+						"when the owner revokes it.",
 					"properties": map[string]interface{}{
-						"name":     map[string]interface{}{"type": "string", "description": "What the owner is asked for, as they would call it."},
-						"runnerId": map[string]interface{}{"type": "string", "description": "The runner that needs it, as runner_list shows it."},
-						"envVar":   map[string]interface{}{"type": "string", "description": "The environment variable it becomes."},
-						"filePath": map[string]interface{}{"type": "string", "description": "The file it is written to."},
+						"name": map[string]interface{}{"type": "string", "description": "What the owner is asked for, as they would call it."},
+						"envVar": map[string]interface{}{"type": "string", "description": "The environment variable it " +
+							"becomes, matching ^[A-Z][A-Z0-9_]{0,63}$. Not ORBIT_*, PATH, HOME, LD_*, DYLD_*, BASH_ENV, " +
+							"ENV, NODE_OPTIONS or PYTHON*. It is never in your own environment: once the request " +
+							"is done, run the command that needs it as `orbit secret exec NAME -- <command>` " +
+							"(or that same line with bg_run), and only that command gets it."},
+						"filePath": map[string]interface{}{"type": "string", "description": "The file it is written to " +
+							"(0600), absolute or ~/..., under the runner user's home and not existing yet; not " +
+							"inside Orbit's directory, a workspace, a git repository or a coding engine's own " +
+							"directory, and not through a symbolic link."},
 					},
-					"required": []string{"name", "runnerId"},
+					"required": []string{"name"},
 				},
 				"options": map[string]interface{}{
 					"type": "array",
@@ -3929,6 +3960,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"returns the request already filed; omit it and every call is a new request.",
 				},
 			}, "kind", "title", "why"),
+		},
+		{
+			"name": "withdraw_owner_request",
+			"description": "Withdraw a request you filed with request_owner_action. A request still waiting " +
+				"for the owner is closed as withdrawn. A SECRET request that is done ends the secret's grant: " +
+				"it is removed from the runner and `orbit secret exec` stops giving it out. Use it as soon as " +
+				"you no longer need a secret, or when a request was filed with a mistake.",
+			"inputSchema": obj(map[string]interface{}{
+				"requestId": map[string]interface{}{"type": "string", "description": "The id request_owner_action returned."},
+				"reason":    map[string]interface{}{"type": "string", "description": "Why, shown to the owner."},
+			}, "requestId"),
 		},
 		{
 			"name": "project_request_start",

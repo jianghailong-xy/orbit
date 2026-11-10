@@ -88,6 +88,7 @@ class OwnerReviewTest {
         val review = corpus.objects("bars").first().obj("review")!!
         assertNull(OwnerReview.readable(JsonObject(review + ("state" to JsonPrimitive("SOMETHING_NEW")))))
         assertNull(OwnerReview.readable(JsonObject(review - "dueAt")))
+        assertNotNull(OwnerReview.readable(JsonObject(review + ("dueAt" to JsonNull))))
         assertNotNull(OwnerReview.readable(review))
         assertEquals("Only the agent that did the work has checked this.", OwnerReview.notReviewedNote("SOMETHING_NEW", 1800))
         assertEquals("Only the agent that did the work has checked this.", OwnerReview.notReviewedNote(null, 1800))
