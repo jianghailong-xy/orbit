@@ -2889,6 +2889,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0507_confirmation_review_waits_for_pickup',
       // 0508 adds mutable landing settings and extends the event/log check-name sets.
       '0508_project_landing_check',
+      // 0509 adds coordinator promotion request facts only; no existing ledger or fence changes.
+      '0509_project_promotion_request',
       // 0510 adds nullable owner_request client metadata only; no preserved rows, triggers or DONE fence change.
       '0510_owner_request_resolved_client',
       // 0511 only replaces 0487's `open_list_bump_owner`, so that an UPDATE of `project_integration_job` that changes

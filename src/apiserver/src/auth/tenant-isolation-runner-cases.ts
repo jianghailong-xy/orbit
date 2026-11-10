@@ -635,6 +635,13 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   },
   // The coordinator's "look again" (§10.8): the acting session is the project's current coordinator, as
   // on the doors above, and the owner's own machine has an observation queued.
+  'POST /runner/projects/:id/promotions/request': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId }, headers: calling(mine.runner.coordinatorSessionId),
+      body: { reason: 'the census' },
+    }),
+  },
   'POST /runner/projects/:id/integration/observe': {
     as: RUNNER,
     request: (of, mine) => ({
@@ -826,6 +833,9 @@ const coordinatorRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenan
   'POST /runner/projects/:id/integration/jobs/:jobId/abandon': (mine) => ({
     params: { id: mine.projectId, jobId: mine.runner.integrationJobId },
     body: { reason: 'the census' },
+  }),
+  'POST /runner/projects/:id/promotions/request': (mine) => ({
+    params: { id: mine.projectId }, body: { reason: 'the census' },
   }),
   'POST /runner/projects/:id/integration/observe': (mine) => ({
     params: { id: mine.projectId },
