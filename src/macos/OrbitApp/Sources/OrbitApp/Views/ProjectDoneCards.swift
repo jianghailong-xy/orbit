@@ -650,3 +650,19 @@ private extension View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+struct ProjectDoneDeclineRow: View {
+    let decline: ProjectDoneRequestDecline
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(ProjectDone.declineHeading) · \(ProjectDone.dateTime(decline.declinedAt) ?? "")")
+                .font(.orbitLabel.weight(.bold))
+            Text("“\(decline.note)” \(ProjectDone.declineHint)")
+                .font(.orbitLabel).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+}

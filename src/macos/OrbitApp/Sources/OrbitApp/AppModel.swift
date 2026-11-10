@@ -3131,18 +3131,10 @@ final class AppModel {
     }
 
     /// One poll of what the page's start row needs (docs/mocks/project-start-sessions-page): the
-    /// project's open items — the coordinator's request to start among them — while the sidebar row
-    /// says nobody has started it. A started project, or one the row does not say about, reads
-    /// nothing more than before; a read that fails keeps the last answer rather than drawing none.
+    /// project's open items, including the start request and the owner's latest Not yet answer.
+    /// A failed read keeps the last answer rather than drawing none.
     func loadProjectStart(_ address: SessionProjectAddress) async {
         guard let api else { return }
-        let key = PublicID.storageKey(address.projectID)
-        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
-        // The start row needs the items only on a project nobody has started.
-        guard row?.status == .open, row?.started == false else {
-            projectSessionsOpenItems = nil
-            return
-        }
         let items = try? await api.projectOpenItems(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
         projectSessionsOpenItems = items
