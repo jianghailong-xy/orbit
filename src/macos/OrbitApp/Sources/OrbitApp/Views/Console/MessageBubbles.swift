@@ -423,14 +423,14 @@ struct ThinkingView: View {
             row
             if expanded { content }
         }
-        // ToolGroupCardView's List rule, same row: animating the fold has SwiftUI interpolating
+        // StepsRowView's List rule, same row: animating the fold has SwiftUI interpolating
         // the contents while the UICollectionView behind the List re-measures and animates the
         // same cell — both driving one height, which is the flicker. The fold is instant instead.
         .animation(nil, value: expanded)
     }
 
     /// The tap row. The fold is driven by hand — chevron, contentShape, onTapGesture — the way
-    /// every other foldable row in this List does it (ToolCardView, ToolGroupCardView): the
+    /// every other foldable row in this List does it (ToolCardView, StepsRowView): the
     /// `DisclosureGroup` this row was before would not collapse on tap on iOS (reported on a
     /// streaming Kimi turn, 2026-10-09).
     private var row: some View {

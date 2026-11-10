@@ -198,7 +198,7 @@ abstract class LandingSessionFrames {
         assertTrue(exists(hasText("Now on main · 2 tasks"), unmerged = true))
         assertTrue(exists(hasText("✓ Passed on the combined tree · 17m 41s"), unmerged = true))
         assertTrue(exists(hasText("Landed exactly the tested tree 5e5bfca · as a merge commit"), unmerged = true))
-        assertEquals("Orbit runs these landings — nothing to type here.", text("landings:footer-line"))
+        assertEquals("Orbit runs these landings", text("landings:footer-line"))
         shot("05-settled")
         // The window lists every merge into main the project read: the frames after this one are of other rounds.
         ProjectShell.merged = "[]"

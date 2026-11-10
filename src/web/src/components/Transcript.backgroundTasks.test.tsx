@@ -180,6 +180,7 @@ describe('background agent and workflow cards', () => {
     expect(container.textContent).toContain('Reader A complete');
     expect(container.textContent).not.toContain('Reader B finding');
     expect(fetchFull).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLElement>('.agent-progress-transcript .chat-steps-line')!.click());
     await act(async () => container.querySelector<HTMLElement>('.agent-progress-transcript .chat-tool-row')!.click());
     expect(fetchFull).toHaveBeenCalledWith(5);
     expect(container.textContent).toContain('cat src/project.ts');

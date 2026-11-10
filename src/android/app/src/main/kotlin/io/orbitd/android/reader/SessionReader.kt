@@ -119,7 +119,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // receipt in the queue's listing settles one no runner will speak for. Only a window at the live tail can see how they came out.
     val listedTurns = state.session?.snapshot?.queuedTurns.orEmpty()
     val atTail = state.window.newerAfter == null
-    val rows = remember(state.window.events, listedTurns, atTail) { transcriptRows(state.window.events, listedTurns, holdsSteers = atTail) }
+    val rows = remember(state.window.events, listedTurns, atTail) { Steps.group(transcriptRows(state.window.events, listedTurns, holdsSteers = atTail)) }
     // What the tray holds, off the same events the rows leave them out of — or the live transcript's, while the reader is in history.
     val steerEvents = if (atTail) state.window.events else state.session?.transcript?.events.orEmpty()
     val unreadSteers = remember(steerEvents, listedTurns) { SteerDelivery.place(steerEvents, listedTurns).unread }
@@ -502,7 +502,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             )
                         }
                     }
-                    itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> it.event.type }) { index, row ->
+                    itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> if (it.steps.isNotEmpty()) "steps" else it.event.type }) { index, row ->
                         val asked = ownerPlaced[index]
                         if (asked == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
