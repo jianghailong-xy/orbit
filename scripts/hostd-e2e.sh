@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end acceptance for multi-user runners without root (orbit-hostd + orbit-runner@<user>).
+# End-to-end acceptance for multi-user runners (orbit-hostd + orbit-runner@<user>).
 #
 # On a real systemd, in a throwaway container that has no sudo at all, root installs orbit with
 # src/web/public/install.sh, which puts it in root's own home, sees `orbit host setup` refuse that
@@ -17,7 +17,7 @@
 #
 # Prints one PASS or FAIL line per assertion:
 #    0 setup refusing root's own copy, which is not the machine's
-#    1 setup
+#    1 setup; root registers through hostd onto orbit-runner@root (euid 0, root's own exe)
 #    2 accounts and a legacy unit
 #    3 setup refusing a binary an account could change
 #    4 alice registers, past a legacy unit that first refuses to stop
@@ -33,6 +33,10 @@
 #   13 the move: a host set up by the previous release, setup run again, one runner per account at
 #      every sample, the account it left listed with its command, which then moves it too
 #   14 no sudo throughout
+# Replaced assertions: step 1's hostd refusal of root, legacy fallback and disabled root instance
+# become hostd registration on orbit-runner@root, euid 0, /root/.orbit/bin/orbit, no legacy unit.
+# Step 8's no-root-runner assertion becomes exactly one root runner on that instance, followed by
+# its request to update hostd, with every candidate execution recorded as a non-root uid.
 # The first FAIL prints systemctl status and the journal of the units involved and exits 1; a
 # harness problem (no docker, a failed build) exits 2.
 #
@@ -298,11 +302,25 @@ trap cleanup EXIT
 BASE_SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 echo "==> base $BASE_SHA ($(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null))"
 echo "==> building orbit $V1, $V2, $V3 and $V4 (linux/amd64), orbit $V0 from $OLD_REV, the stub control plane and $IMAGE"
+# A build overlay adds an audit at process entry without changing production sources. It records
+# every hostd candidate execution (including a mistaken uid 0), not root's own self-update probes.
+cat >"$WORK/audit.go" <<'GO'
+package main
+import ("fmt"; "os"; "strings")
+func init() {
+  if !strings.HasPrefix(os.Args[0], "/usr/local/bin/orbit.new-") { return }
+  f, err := os.OpenFile("/var/log/orbit-e2e-candidate-uids", os.O_WRONLY|os.O_APPEND, 0)
+  if err != nil { os.Exit(97) }
+  if _, err = fmt.Fprintf(f, "uid=%d euid=%d argv=%q\n", os.Getuid(), os.Geteuid(), os.Args); err != nil { os.Exit(98) }
+  if f.Close() != nil { os.Exit(99) }
+}
+GO
+printf '{"Replace":{"%s/hostd_e2e_audit.go":"%s/audit.go"}}\n' "$SRC" "$WORK" >"$WORK/overlay.json"
 for v in "$V1" "$V2" "$V3" "$V4"; do
   # defaultServer is the stub, as a deployment's own download defaults to its PUBLIC_ORIGIN: root's
   # `orbit upgrade` in 8 has no runner config to name a server.
   (cd "$SRC" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags "-s -w -X main.version=$v -X main.sourceSHA=$BASE_SHA -X main.defaultServer=$SERVER" -o "$WORK/orbit-$v" .) ||
+    go build -overlay "$WORK/overlay.json" -ldflags "-s -w -X main.version=$v -X main.sourceSHA=$BASE_SHA -X main.defaultServer=$SERVER" -o "$WORK/orbit-$v" .) ||
     harness_fail "building orbit $v failed"
   mkdir -p "$WORK/release-$v"
   gzip -c -n "$WORK/orbit-$v" >"$WORK/release-$v/orbit-linux-x64.gz" || harness_fail "gzip failed"
@@ -350,6 +368,7 @@ start_machine() {
   wait_until 90 system_up || harness_fail "systemd in the container did not come up (state: '$state')"
   [ "$state" = degraded ] && echo "    note: systemd is degraded: $(cx systemctl --failed --no-legend --plain | tr '\n' ';')"
   echo "    $(cx systemctl --version | head -1), $(cx sh -c '. /etc/os-release; echo "$PRETTY_NAME"'), docker $(docker version --format '{{.Server.Version}}')"
+  cx touch /var/log/orbit-e2e-candidate-uids && cx chmod 0666 /var/log/orbit-e2e-candidate-uids || harness_fail "cannot create candidate audit log"
   cx mkdir -p /opt/orbit-e2e /srv/orbit-dl || harness_fail "mkdir in the container failed"
   docker cp -q "$WORK/stubserver" "$CTR:/opt/orbit-e2e/stubserver" &&
     docker cp -q "$HERE/in-container.sh" "$CTR:/opt/orbit-e2e/in-container.sh" ||
@@ -446,18 +465,27 @@ cx grep -qxF "$EXEC_START" "$TEMPLATE" || fail 1 "$TEMPLATE does not run each ac
 cx grep -qxF "ExecStart=$BIN hostd" /etc/systemd/system/orbit-hostd.service || fail 1 "orbit-hostd.service does not run $BIN"
 [ "$(unit_prop orbit-hostd.socket ActiveState)" = active ] || fail 1 "orbit-hostd.socket is not active" orbit-hostd.socket
 TEMPLATE_SHA=$(cx sha256sum "$TEMPLATE" | cut -d' ' -f1)
-# docs: "Security model" — hostd brings up no runner for root: root's own registration is refused and
-# taken by the legacy path, which runs a root runner and says so. Root unregisters it again.
+# Root uses the broker and the same template as every account.
 out=$(csh "orbit register --server $SERVER --token e2e-enroll-root --name root-e2e --force </dev/null" 2>&1)
 rc=$?
 show "$out"
 [ "$rc" -eq 0 ] || fail 1 "root's orbit register exited $rc"
-grep -qxF "note: the machine broker refused \"enable\" (refusing to enable orbit-runner@root.service: the runner must not run as root — it would own every file its agents write and read root's own engine logins. Ask from the unprivileged account the runner should belong to instead.) — falling back to the sudo path." <<<"$out" ||
-  fail 1 "hostd did not refuse to bring up a runner for root" orbit-hostd.service
+grep -qF 'Background service started as root' <<<"$out" || fail 1 "root's broker registration did not start its service"
+grep -qF 'falling back' <<<"$out" && fail 1 "root's registration fell back from hostd"
 grep -qF "Running as root — agents will have root access on this machine." <<<"$out" ||
   fail 1 "root's registration did not warn that its runner runs as root"
-[ "$(unit_prop orbit-runner@root.service UnitFileState)" != enabled ] || fail 1 "orbit-runner@root.service is enabled" orbit-runner@root.service
-[ "$(unit_prop orbit-runner-root.service User)" = root ] || fail 1 "the legacy path did not install orbit-runner-root.service" orbit-runner-root.service
+check_root_runner() {
+  local pid
+  unit_running orbit-runner@root.service && [ "$(unit_prop orbit-runner@root.service UnitFileState)" = enabled ] ||
+    fail "$1" "orbit-runner@root.service is not enabled and running" orbit-runner@root.service
+  pid=$(main_pid orbit-runner@root.service)
+  [ "$(csh "euid $pid")" = 0 ] && [ "$(csh "exe $pid")" = "$HOME_COPY" ] ||
+    fail "$1" "root instance pid $pid must have euid 0 and exe $HOME_COPY" orbit-runner@root.service
+  check_one_runner "$1" 0 orbit-runner@root.service
+  [ "$(unit_prop orbit-runner-root.service LoadState)" = not-found ] &&
+    cx test ! -e /etc/systemd/system/orbit-runner-root.service || fail "$1" "legacy root unit is installed"
+}
+check_root_runner 1
 out=$(csh "orbit unregister --yes </dev/null" 2>&1)
 rc=$?
 show "$out"
@@ -466,7 +494,7 @@ show "$out"
   fail 1 "orbit-runner-root.service is still there after root unregistered" orbit-runner-root.service
 [ -z "$(csh "runner_pids 0")" ] || fail 1 "root still runs a runner after unregistering" orbit-runner-root.service
 check_no_sudo "after setup"
-pass 1 "install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit $BIN (root) made $BIN a regular file of uid 0 and gid 0, mode 0755, the $V1 release; $BIN host setup (root) exit 0: /run/orbit/host.sock is a root-owned socket, mode 0666; orbit-runner@.service (User=%I, $EXEC_START), orbit-hostd.socket (active) and orbit-hostd.service (ExecStart=$BIN hostd) installed; root's own orbit register refused by hostd (orbit-runner@root.service not enabled), taken by the legacy path with its root warning, then unregistered"
+pass 1 "install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit $BIN (root) made $BIN a regular file of uid 0 and gid 0, mode 0755, the $V1 release; $BIN host setup (root) exit 0: /run/orbit/host.sock is a root-owned socket, mode 0666; orbit-runner@.service (User=%I, $EXEC_START), orbit-hostd.socket (active) and orbit-hostd.service (ExecStart=$BIN hostd) installed; root's orbit register through hostd onto enabled orbit-runner@root.service, exactly one runner with euid 0 and exe $HOME_COPY, no legacy root unit, root warning retained, then unregistered"
 
 # --- 2. two accounts, and the unit alice's runner had before the broker existed ------------------
 
@@ -963,10 +991,6 @@ each_runner copy_is "$SHA_V2" || fail 8 "orbit upgrade changed an account's own 
 cx systemctl restart 'orbit-runner@*' || fail 8 "systemctl restart 'orbit-runner@*' failed" "$UNIT_A" "$UNIT_T" "$UNIT_D"
 wait_until 30 restarted "$UNIT_A" "$PID_A" && wait_until 30 restarted "$UNIT_T" "$PID_T" && wait_until 30 restarted "$UNIT_D" "$PID_D" ||
   fail 8 "the runner instances did not come back after systemctl restart" "$UNIT_A" "$UNIT_T" "$UNIT_D"
-# The glob reaches every instance systemd has loaded: neither root's nor an account's older
-# orbit-runner@<uid> may be one it starts.
-[ -z "$(csh "runner_pids 0")" ] && [ "$(unit_prop orbit-runner@root.service ActiveState)" = inactive ] ||
-  fail 8 "systemctl restart 'orbit-runner@*' left a runner running as root" orbit-runner@root.service
 exes=""
 each_runner runs_version 8 "$V2"
 wait_until 60 each_runner beats_version "$V2" ||
@@ -976,7 +1000,41 @@ PID_A=$(main_pid "$UNIT_A")
 PID_T=$(main_pid "$UNIT_T")
 PID_D=$(main_pid "$UNIT_D")
 check_no_sudo "after the update"
-pass 8 "stub published $V2 → each runner installed it into its own copy (each its account's regular file, the $V2 build) and runs it, one runner per account, heartbeating $V2: $exes_v2; then each asked hostd once (accepted for${accepted}), none delegated its own update, and hostd installed $V2 once into its own binary, $HOSTD_BIN as orbit-hostd.service names it (verified as uid $verifier; root-owned 0755 regular file, sha256 of the $V2 build, --version $V2), and restarted no runner (InvocationIDs and NRestarts unchanged, journal: no runner restarted); the download was executed $(wc -l <<<"$execs") time(s), every time as uid $verifier, never as root; root's orbit upgrade then reinstalled $V2 into $HOSTD_BIN and restarted no runner, and systemctl restart 'orbit-runner@*' brought all three back ($pre → $PID_A $PID_T $PID_D) on their own copies, one runner per account and none as root"
+pass 8 "stub published $V2 → each runner installed it into its own copy (each its account's regular file, the $V2 build) and runs it, one runner per account, heartbeating $V2: $exes_v2; then each asked hostd once (accepted for${accepted}), none delegated its own update, and hostd installed $V2 once into its own binary, $HOSTD_BIN as orbit-hostd.service names it (verified as uid $verifier; root-owned 0755 regular file, sha256 of the $V2 build, --version $V2), and restarted no runner (InvocationIDs and NRestarts unchanged, journal: no runner restarted); the download was executed $(wc -l <<<"$execs") time(s), every time as uid $verifier, never as root; root's orbit upgrade then reinstalled $V2 into $HOSTD_BIN and restarted no runner, and systemctl restart 'orbit-runner@*' brought all three back ($pre → $PID_A $PID_T $PID_D) on their own copies, one runner per ordinary account"
+
+# Replace the old no-root-runner assertion with root's instance and its own hostd update request.
+# Ordinary accounts already have V2; root alone starts on V1 and requests the published V2.
+docker cp -q "$WORK/orbit-$V1" "$CTR:/opt/orbit-e2e/orbit-$V1" || harness_fail "cannot copy V1"
+cx install -o root -g root -m 0755 "/opt/orbit-e2e/orbit-$V1" "$BIN" || harness_fail "cannot reset hostd's binary"
+cx rm -f /run/orbit/last-update || harness_fail "cannot clear hostd update stamp"
+csh ': > /var/log/orbit-e2e-candidate-uids' || harness_fail "cannot reset candidate audit"
+out=$(csh "orbit register --server $SERVER --token e2e-enroll-root-update --name root-update-e2e --force </dev/null" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" = 0 ] || fail 8 "root's update registration exited $rc"
+check_root_runner 8
+root_invocation=$(unit_prop orbit-runner@root.service InvocationID)
+publish "$V2"
+wait_until 150 reports_version root-update-e2e "$V2" && wait_until 150 machine_version_is "$V2" ||
+  fail 8 "root's runner or hostd did not update to $V2" orbit-runner@root.service orbit-hostd.service
+[ "$(asked_hostd orbit-runner@root.service "$V2")" = 1 ] || fail 8 "root's runner did not ask hostd exactly once"
+cx journalctl -u orbit-runner@root.service -o cat --no-pager | grep -qF "to update its own binary: it is installing orbit $V2 as its own binary" ||
+  fail 8 "hostd did not accept root's update request"
+check_root_runner 8
+check_hostd_binary 8 "$V2" "$SHA_V2"
+[ "$(unit_prop orbit-runner@root.service InvocationID)" = "$root_invocation" ] || fail 8 "hostd restarted root's instance"
+root_execs=$(cx cat /var/log/orbit-e2e-candidate-uids)
+show "$root_execs"
+nobody_uid=$(cx id -u nobody)
+[ "$nobody_uid" != 0 ] && [ "$(wc -l <<<"$root_execs")" -ge 2 ] &&
+  ! grep -v "^uid=$nobody_uid euid=$nobody_uid " <<<"$root_execs" ||
+  fail 8 "every hostd candidate execution must be recorded as nobody, never uid 0"
+out=$(csh 'orbit unregister --yes </dev/null' 2>&1)
+rc=$?
+show "$out"
+[ "$rc" = 0 ] && [ -z "$(csh 'runner_pids 0')" ] || fail 8 "root did not unregister"
+pass 8 "replacement for no-root-runner: root registered onto orbit-runner@root.service (euid 0, exe $HOME_COPY, exactly one runner, no legacy unit); root's runner updated and asked hostd once, hostd accepted and installed $V2 at $BIN with sha256 $SHA_V2, no instance restart; every candidate execution logged at entry, all $(wc -l <<<"$root_execs") as nobody uid $nobody_uid, none uid 0"
+
 
 # --- 9. a binary directory the staff group can write --------------------------------------------
 
