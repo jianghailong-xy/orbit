@@ -84,6 +84,12 @@ type bgJobService struct {
 	agentID            string
 	taskID             string
 	allowOrchestration bool
+	// The runner's owner-request secrets, which secret_lease and secret_scan answer from (secret_exec.go). Nil holds
+	// none.
+	secrets *secretStore
+	// What ends a held lease besides its revocation: the service stopping, or its context ending.
+	leaseStop <-chan struct{}
+	leaseCtx  context.Context
 }
 
 // startBgJobService listens on socketPath until ctx is cancelled, and writes the
@@ -115,6 +121,7 @@ func startBgJobService(ctx context.Context, svc *bgJobService, socketPath, token
 
 	var wg sync.WaitGroup
 	done := make(chan struct{})
+	svc.leaseStop, svc.leaseCtx = done, ctx
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -168,6 +175,11 @@ func (s *bgJobService) serveConn(conn net.Conn) {
 	// must not be able to start or kill another's jobs.
 	if s.token == "" || req.Token != s.token {
 		writeBgResponse(conn, bgSocketResponse{Error: "background job token is not this session's"})
+		return
+	}
+	// A lease is held on its connection for as long as the command using it runs.
+	if req.Op == "secret_lease" {
+		s.serveSecretLease(conn, req.Args)
 		return
 	}
 	writeBgResponse(conn, s.handle(req))
@@ -257,6 +269,9 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			return bgSocketResponse{Error: err.Error()}
 		}
 		return bgSocketResponse{OK: true, Result: status}
+
+	case "secret_scan":
+		return s.secretScan(getString(args, "path"))
 
 	case "list":
 		return bgSocketResponse{OK: true, Result: map[string]interface{}{
@@ -420,6 +435,7 @@ func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, j
 		agentID:            publicID(job.AgentID),
 		taskID:             publicID(job.TaskID),
 		allowOrchestration: job.AllowOrchestration,
+		secrets:            runnerSecrets(),
 	}
 	return startBgJobService(ctx, svc, bgSocketPath(job.SessionID), bgTokenPath(job.SessionID))
 }

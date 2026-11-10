@@ -1072,6 +1072,17 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
 	// copies a crash or a kill left behind go before any session starts again.
 	pruneAntigravityTokenCopies()
+	// Owner-request secrets (secret_store.go): every file past its expiry goes now, before any session is reclaimed,
+	// whether or not the control plane can be reached. What is still live is held again from the ledger.
+	secrets := newSecretStore(t, secretLedgerPath())
+	secrets.startup()
+	runnerSecretStore.Store(secrets)
+	defer runnerSecretStore.Store(nil)
+	// Heartbeat answers are applied here, and the ledger's expiries are checked every minute.
+	secretSync := newSecretReconciler(secrets)
+	secretCtx, stopSecrets := context.WithCancel(context.Background())
+	defer stopSecrets()
+	go secretSync.run(secretCtx, secretExpiryInterval)
 	// The runner link (link_mode.go), which carries t's daemon calls. Started before anything sends on t.
 	stopLink := startLink(t)
 	defer stopLink()
@@ -1492,6 +1503,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				ManagedWorkload:      workload,
 			}, t.heartbeat)
 			if err != nil {
+				// No reconcile is coming from this beat; sessions do not wait on one (secretStore.waitReady).
+				secrets.markReady()
 				logln("heartbeat failed:", err)
 				// A managed instance the control plane will never accept again (superseded, fenced,
 				// its credential replaced) stops claiming and drains rather than beat on forever.
@@ -1526,7 +1539,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// last found.
 			if resp.AgentDirs != nil {
 				agentDirs.trigger(resp.AgentDirs)
+				// Where an owner-request secret file may not go (secret_path.go).
+				setSecretWorkspaceDirs(resp.AgentDirs)
 			}
+			// Owner-request secrets: fetch what is newly listed and remove what is not. Off this goroutine, which
+			// the fetches must not hold up; one reconcile runs at a time, in the order the answers came.
+			secretSync.post(resp.SecretGrants, resp.SecretGrantsRemoving)
 			// The legacy half of the scratch sweep: builds before the move staged a job's
 			// throwaway worktree beside its workspace, and only the control plane knows those
 			// directories. Once, before this response's jobs are launched, the parent of every
@@ -2125,6 +2143,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				// normal worktree/server finalization below. Its cancelled context makes
 				// runInteractiveSession take that path without spawning an engine.
 			}
+			// After a restart, not before the first heartbeat answer has given back the live owner-request
+			// secrets: until then the scrubber does not know them (secretStore.waitReady). Bounded, so a control
+			// plane that does not answer holds nothing up for long.
+			secrets.waitReady(loopCtx, secretStartupWait)
 			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsage.mergeCodexRateLimits, pool, live)
 		}(job, execDir, s, initiallyActive)
 	}

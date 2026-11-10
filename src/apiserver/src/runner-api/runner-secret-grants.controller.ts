@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
+import { MachineProtocol } from '../common/machine-protocol';
 import { SecretGrantAckDto, SecretGrantRemovedDto } from '../owner-requests/dto';
 import { OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { CurrentRunner } from './current-runner.decorator';
@@ -12,6 +13,9 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  * and nothing else, and none of these log a body.
  */
 @UseGuards(RunnerAuthGuard)
+// The runner's own protocol: ids stay the UUIDs the runner compares with its session and task, and nothing here is
+// handed to an agent.
+@MachineProtocol()
 @Controller('runner/secret-grants')
 export class RunnerSecretGrantsController {
   constructor(private readonly secrets: OwnerSecretsService) {}

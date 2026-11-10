@@ -420,6 +420,8 @@ func initGitRepo(dir string) error {
 	if _, err := git(dir, "add", "-A"); err != nil {
 		return err
 	}
+	// A file holding an owner-request secret stays out of the baseline (secret_git.go).
+	unstageHeldSecrets(dir, nil, "")
 	// Use the user's git identity; --no-verify keeps hooks from blocking the baseline,
 	// and --allow-empty gives even an empty dir a HEAD to fork.
 	_, err := git(dir, "commit", "--no-verify", "--allow-empty", "-m", "orbit: baseline")
@@ -930,6 +932,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	if err := stageForFinalize(wt.Path); err != nil {
 		return nil, nil, fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
 	}
+	// A file holding an owner-request secret is left out of the commit, and the session is told (secret_git.go).
+	unstageHeldSecrets(wt.Path, nil, wt.Session)
 	// `diff --cached --quiet` exits non-zero when something is staged → there's work to commit.
 	if _, err := git(wt.Path, "diff", "--cached", "--quiet"); err != nil {
 		var msg string
@@ -1157,6 +1161,8 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	if _, err := ops.runEnv(wt.Path, env, add...); err != nil {
 		return nil, nil
 	}
+	// The live diff's patches leave this machine: a file holding an owner-request secret is not in them.
+	unstageHeldSecrets(wt.Path, env, wt.Session)
 	numOut, err := ops.runEnv(wt.Path, env, "diff", "--cached", "--numstat", baseSha)
 	if err != nil {
 		return nil, nil
@@ -2388,6 +2394,7 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	if err := gitIndex(addAllArgs(wtPath)...); err != nil {
 		return fail(err)
 	}
+	unstageHeldSecrets(wtPath, nil, req.SessionID)
 	// `diff --cached --quiet` exits 0 when nothing is staged → the tree is already clean.
 	if _, err := git(wtPath, "diff", "--cached", "--quiet"); err == nil {
 		failedCommits.clear(req.SessionID)

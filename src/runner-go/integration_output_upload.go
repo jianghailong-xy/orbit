@@ -475,5 +475,9 @@ func (r *integrationOutputRedactor) redact(text string) string {
 	for _, secret := range r.secrets {
 		text = strings.ReplaceAll(text, secret, integrationOutputRedacted)
 	}
+	// An owner-request secret's scrubber (newSecretRedactor) replaces exact values only.
+	if r.urlCredential == nil {
+		return text
+	}
 	return r.urlCredential.ReplaceAllString(text, "${1}"+integrationOutputRedacted+"@")
 }

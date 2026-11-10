@@ -966,6 +966,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	var requestOrbitSuggestion func(turnID string, at int)
 	// emitThrough buffers one event, filed against turnID, if gate still admits it.
 	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+		// Every owner-request secret this runner holds is scrubbed from every string of the payload before anything
+		// below reads it, the spool included (secret_store.go).
+		payload = runnerSecrets().scrubPayload(payload)
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
 		pool.engineTurnEvent(live, eventType, payload)
@@ -1045,6 +1048,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 	}
 	emit := emitOn(emissionGate)
+	// Where a file left out of a commit for holding a secret is told about (secretUnstagedWarning).
+	defer registerSecretWarnings(sessionID, emit)()
 
 	// What the stream still holds, left in the spool by an earlier process or not yet seen stored for an
 	// earlier supervisor of the session, is stored before this supervisor emits anything: it was written

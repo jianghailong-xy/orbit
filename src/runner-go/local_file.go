@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -199,6 +201,9 @@ func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
 		if err == nil && !info.Mode().IsRegular() {
 			err = errors.New("not a regular file")
 		}
+		if err == nil {
+			err = refuseFileHoldingSecret(file, real)
+		}
 		if err != nil {
 			file.Close()
 			return nil, nil, err
@@ -255,6 +260,45 @@ func checkLocalSaveTarget(info os.FileInfo, err error) error {
 	}
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("%s: %w", info.Name(), errLocalPathChanged)
+	}
+	return nil
+}
+
+// errFileHoldsOwnerSecret refuses a file that holds the value of an owner-request secret this runner holds.
+var errFileHoldsOwnerSecret = errors.New("the file holds the value of a secret the owner delivered to this runner, so it is not sent")
+
+// refuseFileHoldingSecret scans a file inside the roots for every owner-request secret's value before it leaves this
+// machine (docs/design/owner-request-secrets.md §7.2), and leaves it read from the start again. The runner process
+// holds the values and scans the handle itself; `orbit mcp` holds none, and asks the runner over the session's socket.
+// A runner that cannot be asked, or is too old to know the question, does not stop the file: this check is the
+// accident net (level B), and a failure to reach the runner fails open.
+func refuseFileHoldingSecret(file *os.File, path string) error {
+	if store := runnerSecrets(); store != nil {
+		holds, err := store.readerHolds(file)
+		if _, seekErr := file.Seek(0, io.SeekStart); err == nil {
+			err = seekErr
+		}
+		if err != nil {
+			return err
+		}
+		if holds {
+			return errFileHoldsOwnerSecret
+		}
+		return nil
+	}
+	socket, token := os.Getenv(envBgSocket), os.Getenv(envBgToken)
+	if socket == "" || token == "" {
+		return nil
+	}
+	raw, err := bgSocketCall(socket, token, "secret_scan", map[string]interface{}{"path": path})
+	if err != nil {
+		return nil
+	}
+	var answer struct {
+		Holds bool `json:"holds"`
+	}
+	if json.Unmarshal(raw, &answer) == nil && answer.Holds {
+		return errFileHoldsOwnerSecret
 	}
 	return nil
 }
