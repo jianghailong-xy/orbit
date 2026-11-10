@@ -584,7 +584,8 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
     }
     await this.prisma.ownerRequestSecret.updateMany({
       where: { id: grantId, state: 'REMOVING' },
-      data: { state: 'REMOVED', removedAt: new Date(), removalNote: note?.trim().slice(0, 500) || null },
+      // The runner's own note when it sent one; otherwise the note already there (a delivery failure's reason) stays.
+      data: { state: 'REMOVED', removedAt: new Date(), ...(note?.trim() ? { removalNote: note.trim().slice(0, 500) } : {}) },
     });
     return { state: 'REMOVED' };
   }

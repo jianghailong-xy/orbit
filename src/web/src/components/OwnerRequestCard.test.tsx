@@ -441,6 +441,13 @@ describe('a delivered secret', () => {
     expect(host.querySelector('.owner-request-field input')).not.toBeNull();
   });
 
+  it('a runner’s removal note is told on a request that did not end DONE', async () => {
+    const note = 'The file at ~/.config/x/key could not be deleted: permission denied';
+    const expired = { ...done({ state: 'REMOVED', endReason: 'EXPIRED', removalNote: note, deliveredAt: null }), state: 'EXPIRED' as const };
+    await mount(<OwnerRequestResolved now={NOW} request={expired} />);
+    expect(host.textContent).toContain(`Removed when it expired. ${note}`);
+  });
+
   it('REMOVED says why, with the runner’s note', async () => {
     await mount(<OwnerRequestResolved now={NOW} request={done({ state: 'REMOVED', endReason: 'TASK_ENDED', removalNote: 'a different file stands at /etc/key; left in place' })} />);
     expect(host.textContent).toContain('Removed when the task ended. a different file stands at /etc/key; left in place');

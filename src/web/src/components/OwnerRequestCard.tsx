@@ -547,13 +547,16 @@ const GRANT_ENDINGS: Readonly<Record<string, string>> = {
 };
 
 /**
- * A removal the card must state on any request, not only a DONE one (design §6.1, §6.4): one still pending, or one
- * that ended without the runner ever confirming it (its runner was deleted after it fetched the key).
+ * A removal the card must state on any request, not only a DONE one (design §6.1, §6.3, §6.4): one still pending, one
+ * that ended without the runner ever confirming it (its runner was deleted after it fetched the key), and one the
+ * runner confirmed with a note — a file it could not delete, or another file now standing at the path. A failed
+ * delivery has an alert of its own on a pending card.
  */
 function removalToTell(grant: OwnerRequestSecretGrant | null | undefined): boolean {
   if (!grant) return false;
   if (grant.state === 'REMOVING') return true;
-  return grant.state === 'REMOVED' && (grant.endReason === 'RUNNER_DELETED' || /^Removal unconfirmed/.test(grant.removalNote ?? ''));
+  if (grant.state !== 'REMOVED' || grant.endReason === 'DELIVERY_FAILED') return false;
+  return grant.endReason === 'RUNNER_DELETED' || Boolean(grant.removalNote?.trim());
 }
 
 /** Where a delivered key stands now (design §6): in, being removed, or gone and why. */
