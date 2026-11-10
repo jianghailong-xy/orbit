@@ -7,6 +7,8 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { PushService } from '../push/push.service';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import {
   type DoneRequest,
@@ -153,7 +155,19 @@ export class ProjectAcceptanceService {
      *  `@Optional()` because telling is never a condition of starting: every spec that builds this
      *  service by hand from a client alone confirms and starts exactly as before, and tells nobody. */
     @Optional() private readonly sessions?: SessionsService,
+    @Optional() private readonly push?: PushService,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
+
+  /** Resolve lazily: this shared evaluator's module also serves contexts without push wiring. */
+  private projectDonePush(): PushService | undefined {
+    if (this.push) return this.push;
+    try {
+      return this.moduleRef?.get(PushService, { strict: false });
+    } catch {
+      return undefined;
+    }
+  }
 
   /** Read the authored criteria. The delegate check is for unit-test doubles that stub Prisma with
    * only the tables the case is about; production schema always has it. */
@@ -343,6 +357,7 @@ export class ProjectAcceptanceService {
     // confirmation that was.
     await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
+      push: this.projectDonePush(),
     }).catch((error) =>
       this.logger.warn(`derived project status not re-projected after confirmation: ${
         (error as { message?: string })?.message ?? String(error)}`),
@@ -719,6 +734,7 @@ export class ProjectAcceptanceService {
     }
     await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
+      push: this.projectDonePush(),
     }).catch((error) =>
       this.logger.warn(`derived project status not re-projected after the start: ${
         (error as { message?: string })?.message ?? String(error)}`),

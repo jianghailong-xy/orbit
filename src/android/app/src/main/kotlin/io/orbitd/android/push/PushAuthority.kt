@@ -30,6 +30,11 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
             message.type == PushType.SYNC -> PushCheck.UNKNOWN
             payload.isOwnerItem -> ownerItem(payload)
             payload.kind == "approval" -> approval(payload)
+            payload.kind == "project-done" -> {
+                val project = objectRead(listOf("projects", payload.projectId!!))
+                if (!ObjectId.same(project.text("id"), payload.projectId)) throw ProtocolException()
+                if (project.text("status") == "DONE") PushCheck.ACTIVE else PushCheck.STALE
+            }
             payload.kind == "watch-matched" -> {
                 val row = objectRead(listOf("watches", payload.watchId!!))
                 if (!ObjectId.same(row.text("id"), payload.watchId) || row.text("action") == null) throw ProtocolException()

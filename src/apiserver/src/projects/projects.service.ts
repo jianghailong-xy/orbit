@@ -6,7 +6,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { PushService } from '../push/push.service';
 import {
   Prisma,
   ProjectIdentitySource,
@@ -1031,6 +1033,7 @@ export class ProjectsService {
     // waited for the conversation being replaced is the new one's to decide. Defaulted like the rest.
     private readonly evidenceQueue: CoordinatorEvidenceQueueService =
       undefined as unknown as CoordinatorEvidenceQueueService,
+    @Optional() private readonly push?: PushService,
   ) {}
 
   /**
@@ -4099,6 +4102,7 @@ export class ProjectsService {
   private async reprojectProjectStatus(ownerId: string, projectId: string): Promise<void> {
     await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
+      push: this.push,
     }).catch((e) =>
       this.logger.warn(`derived project status not re-projected after a criteria edit: ${
         (e as { message?: string })?.message ?? String(e)}`),
