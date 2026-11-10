@@ -12339,6 +12339,19 @@ button.chat-jump-start:hover {
   line-height: 1.5;
 }
 .project-done-not-yet-actions { display: flex; gap: 8px; margin-top: 9px; }
+/* Option A: the derived receipt names the confirmation and offers the owner's correction. */
+.project-why-not-done.is-derived,
+.project-why-not-done.is-derived .approval-head {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+.project-why-not-done.is-derived .criteria-provenance {
+  color: var(--success);
+  border-color: var(--success-border);
+}
+.project-done-derived-line { margin: 7px 0; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.project-done-derived-reopen { padding: 4px 0; color: var(--brand); background: transparent; }
+.project-done-derived-reopen:hover:not(:disabled) { text-decoration: underline; }
 .project-done-receipt-line { margin: 9px 0 0; font-size: 14px; font-weight: 600; color: var(--text-1); }
 .project-done-accepted { margin-top: 8px; font-size: 12.5px; }
 .project-done-accepted summary { color: var(--brand); cursor: pointer; }
