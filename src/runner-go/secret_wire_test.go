@@ -201,7 +201,9 @@ func TestTaintedCommitIsRefusedAfterTheGrantEnds(t *testing.T) {
 	store.held["g"] = &heldSecret{id: "g", exposure: secretExposureEnv, name: "K_KEY", value: secretValue(testSecretValue), revoked: make(chan struct{})}
 	store.rebuildScrubLocked()
 	old := secretBeforeForget
-	secretBeforeForget = func(r *integrationOutputRedactor) { recordSecretTaint(repo, "refs/heads/orbit/leak", r, main) }
+	secretBeforeForget = func(r *integrationOutputRedactor) error {
+		return recordSecretTaint(repo, "refs/heads/orbit/leak", r, main)
+	}
 	defer func() { secretBeforeForget = old }()
 	store.remove("g")
 
@@ -609,5 +611,90 @@ func TestTaintEntryIsKeptWhenGitCannotAnswer(t *testing.T) {
 	repo := initRepo(t)
 	if taintEntryPresent(repo, entry) {
 		t.Fatal("an object git says is missing kept its entry")
+	}
+}
+
+// Review 7, OPEN 1: a removal whose record cannot be written does not forget what the value was in. Until a retry
+// records it, nothing is published from this runner: pushes, patches, uploads and commit-message calls all refuse.
+func TestRemovalWhoseRecordFailsKeepsEverythingRefusedUntilItIsWritten(t *testing.T) {
+	wt := sessionWorktree(t, "sSecretPending")
+	holdTestSecret(t, testSecretValue)
+	commitFile(t, wt.Path, "leak.env", "KEY="+testSecretValue+"\n", "add key")
+	runnerSecretStore.Store(nil)
+
+	failing := true
+	old := secretBeforeForget
+	secretBeforeForget = func(r *integrationOutputRedactor) error {
+		if failing {
+			return errors.New("disk quota exceeded")
+		}
+		return recordSecretTaint(wt.Path, "HEAD", r, wt.baseSha())
+	}
+	defer func() {
+		secretBeforeForget = old
+		secretTaintPending.Lock()
+		secretTaintPending.list = nil
+		secretTaintPending.Unlock()
+	}()
+	recordBeforeForget(newSecretRedactor([]string{testSecretValue}))
+
+	if refusal := secretPushRefusal(wt.Path, "HEAD", wt.baseSha()); refusal == "" {
+		t.Fatal("a push was allowed while a removal's record was unwritten")
+	}
+	if patches := withoutSecretPatches([]FilePatch{{Path: "clean.txt", Patch: "+clean\n"}}, "sSecretPending"); len(patches) != 0 {
+		t.Fatalf("patches were sent while a removal's record was unwritten: %+v", patches)
+	}
+	if !taintAppliesTo(wt.Path) {
+		t.Fatal("the commit message would go to the model while a removal's record was unwritten")
+	}
+	clean := filepath.Join(t.TempDir(), "clean.txt")
+	if err := os.WriteFile(clean, []byte("nothing secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(clean)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := refuseFileHoldingSecret(f, clean); !errors.Is(err, errFileHoldsOwnerSecret) {
+		t.Fatalf("an upload was allowed while a removal's record was unwritten: %v", err)
+	}
+
+	// The disk is free again: the retry records the commit, and only what held the value stays refused.
+	failing = false
+	retryPendingTaint()
+	if refusal := secretPushRefusal(wt.Path, "HEAD", wt.baseSha()); refusal == "" {
+		t.Fatal("the recorded commit was allowed after the retry")
+	}
+	if patches := withoutSecretPatches([]FilePatch{{Path: "clean.txt", Patch: "+clean\n"}}, "sSecretPending"); len(patches) != 1 {
+		t.Fatalf("a clean patch was still withheld after the retry: %+v", patches)
+	}
+	if err := refuseFileHoldingSecret(f, clean); err != nil {
+		t.Fatalf("a clean upload was refused after the retry: %v", err)
+	}
+}
+
+// Review 7, OPEN 2: a file held back for holding a value is refused by the upload doors after its grant has gone,
+// by its recorded blob id.
+func TestUploadRefusesARecordedBlobAfterTheGrantEnds(t *testing.T) {
+	wt := sessionWorktree(t, "sSecretUploadAfter")
+	holdTestSecret(t, testSecretValue)
+	path := filepath.Join(wt.Path, "run.env")
+	if err := os.WriteFile(path, []byte("KEY="+testSecretValue+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	liveDiff(wt) // the turn end holds it back and records its blob id
+	runnerSecretStore.Store(nil)
+
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := refuseFileHoldingSecret(f, path); !errors.Is(err, errFileHoldsOwnerSecret) {
+		t.Fatalf("the held-back file was uploadable after its grant ended: %v", err)
+	}
+	if b, _ := io.ReadAll(f); !strings.Contains(string(b), "KEY=") {
+		t.Fatal("the handle was not left at the start")
 	}
 }

@@ -288,9 +288,9 @@ func (s *secretStore) startup() {
 		case !entry.ExpiresAt.After(now):
 			// The value is still on disk here, and nowhere else once this deletes it: what a checkout copied of it is
 			// recorded first, as remove() does before it forgets a value (secretBeforeForget).
-			if state, size := inspectSecretFile(entry.Path, entry.Dev, entry.Ino); state == secretFileOurs && size <= secretValueMax && secretBeforeForget != nil {
+			if state, size := inspectSecretFile(entry.Path, entry.Dev, entry.Ino); state == secretFileOurs && size <= secretValueMax {
 				if data, err := os.ReadFile(entry.Path); err == nil && len(data) > 0 {
-					secretBeforeForget(newSecretRedactor([]string{string(data)}))
+					recordBeforeForget(newSecretRedactor([]string{string(data)}))
 				}
 			}
 			s.owe(entry.GrantID, s.removeFileEntry(entry))
@@ -342,6 +342,8 @@ func (s *secretStore) expire() {
 	if s == nil {
 		return
 	}
+	// Every minute: what a removal could not record yet is tried again.
+	retryPendingTaint()
 	s.reconcileMu.Lock()
 	now := s.now()
 	s.mu.Lock()
@@ -597,8 +599,8 @@ func (s *secretStore) remove(id string) string {
 		value = held.value
 	}
 	s.mu.Unlock()
-	if value != "" && secretBeforeForget != nil {
-		secretBeforeForget(newSecretRedactor([]string{string(value)}))
+	if value != "" {
+		recordBeforeForget(newSecretRedactor([]string{string(value)}))
 	}
 	s.mu.Lock()
 	held := s.held[id]

@@ -493,8 +493,10 @@ type erroringSecretAPI struct{}
 func (erroringSecretAPI) fetchSecretGrant(string) (*SecretGrantFetch, error) {
 	return nil, errors.New("unreachable")
 }
-func (erroringSecretAPI) ackSecretGrant(string, SecretGrantAck) error { return errors.New("unreachable") }
-func (erroringSecretAPI) removedSecretGrant(string, string) error   { return errors.New("unreachable") }
+func (erroringSecretAPI) ackSecretGrant(string, SecretGrantAck) error {
+	return errors.New("unreachable")
+}
+func (erroringSecretAPI) removedSecretGrant(string, string) error { return errors.New("unreachable") }
 
 func TestSecretRemovedIsRetriedUntilAcknowledged(t *testing.T) {
 	home := secretTestHome(t)
@@ -578,7 +580,7 @@ func TestSecretExpiredAtStartupIsScannedBeforeItIsForgotten(t *testing.T) {
 
 	var scanned []*integrationOutputRedactor
 	old := secretBeforeForget
-	secretBeforeForget = func(r *integrationOutputRedactor) { scanned = append(scanned, r) }
+	secretBeforeForget = func(r *integrationOutputRedactor) error { scanned = append(scanned, r); return nil }
 	defer func() { secretBeforeForget = old }()
 	later := newSecretStore(&erroringSecretAPI{}, ledger)
 	later.now = func() time.Time { return time.Now().Add(2 * time.Hour) }
