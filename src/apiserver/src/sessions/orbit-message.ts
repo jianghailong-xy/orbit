@@ -31,7 +31,8 @@ export function orbitMessageOf(
 ): OrbitMessageFrom | null {
   if (turn.senderSessionId) return null;
   const platformCard = cards !== undefined && (
-    cards.openItemDelivery !== undefined
+    cards.runQuestion !== undefined
+    || cards.openItemDelivery !== undefined
     || cards.ownerAnswer !== undefined
     || cards.coordinatorDelivery !== undefined
     || cards.taskStart !== undefined

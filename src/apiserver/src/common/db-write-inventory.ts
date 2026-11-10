@@ -103,6 +103,31 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'projects/project-open-item.service.ts#askOwner', shape: 'TX_RETRIED',
+    locks: 'Open item insert (rank 60), then the OPEN session_request CAS (rank 60); neither references the other with a foreign key.',
+    identity: 'Project and clientQuestionId dedupe key; the same request is linked to the same item on replay.', isolation: '', attempts: 4,
+    replay: 'Re-read the committed rows; rollback discards all linked writes and a committed outcome is never replaced.',
+    effects: 'Owner push after commit.',
+    answer: 'Typed 503 after retry exhaustion; the caller may retry the same request.',
+  },
+  {
+    at: 'projects/project-open-item.service.ts#answerOpenItem', shape: 'TX_RETRIED',
+    locks: 'Owner item CAS (rank 60), then linked OPEN session requests (rank 60).',
+    identity: 'Item id and OPEN predicate; one answer restarts the linked questions deadline.', isolation: '', attempts: 4,
+    replay: 'Re-read the committed rows; rollback discards all linked writes and a committed outcome is never replaced.',
+    effects: 'Answer delivery after commit.',
+    answer: 'Typed 503 after retry exhaustion; the caller may retry the same request.',
+  },
+  {
+    at: 'sessions/session-request.service.ts#reply', shape: 'TX_RETRIED',
+    locks: 'Request FOR UPDATE (rank 60), approval CAS, then request outcome. No cross-session lock.',
+    identity: 'Request id and OPEN predicate; approval must still be PENDING.', isolation: '', attempts: 4,
+    replay: 'Re-read the committed rows; rollback discards all linked writes and a committed outcome is never replaced.',
+    effects: 'Approval resolved and session updated frames after commit.',
+    answer: 'Typed 503 after retry exhaustion; the caller may retry the same request.',
+  },
+
+  {
     at: 'owner-requests/owner-requests.service.ts#settle',
     shape: 'TX_RETRIED',
     locks: "The owner_request row by id and owner, through the UPDATE predicated on state = 'PENDING' and the deadline not yet passed; then, only when that matched, one watch_delivery INSERT (enqueueResolutions), whose foreign key takes the same owner_request row FOR KEY SHARE, already held by the UPDATE. No trigger, and no other row.",
@@ -2931,10 +2956,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "projects/project-open-item.service.ts#handToOwner", class: "ONE_ROW_CAS", statements: 1, note: "Moves one item to the account owner when the conversation it was owed to has ended, or the project has none. The predicate repeats the assignment this delivery was for, so an item something else reassigned in the meantime is left exactly as that left it — and asks that the item is still owed (`openItemOwed`), so one about a candidate or a task that has moved on is left for the escalation tick's backstop to close rather than handed to a person." },
   { at: "projects/project-open-item.service.ts#handOver", class: "ONE_ROW_CAS", statements: 1, note: "The coordinator's deliberate hand-over: one conditional UPDATE of an OPEN COORDINATOR item, repeating its project/owner scope and assigned_at read so a competing fact, escalation or second press loses the CAS, and asking openItemOwed so work that moved on is not handed to a person. It writes OWNER/HANDED_OVER, the bounded explanation and the acting session history together, clears escalate_at for the owner-escalation CHECK, and the owner push is after commit; the session id is history rather than a foreign key." },
   { at: "projects/project-open-item.service.ts#resolveByFact", class: "MANY_ROWS", statements: 5, note: "Closes task-failure items, integration items, and delivery reviews whose task was reopened, cancelled or replaced, and revision 29's two (§10.7): a LANDING_UNOBSERVED whose task was replaced, cancelled, declared codeless, reopened or whose work landed, and a LANDED_WITHOUT_CONFIRMATION whose task was cancelled or replaced. Each statement matches only OPEN rows whose task already says so, and names the fact it found the way that item's door table does (`TASK_DONE` / `SUCCESSOR_FILED` / `TASK_CLOSED` / `RETRIED` / `CODELESS` / `LANDED`, the first being a task that is DONE and the second one a successor took over)." },
-  // The three writes a question to the account owner makes (§5.2 R7–R11). Asking and answering are
-  // each one statement outside any transaction, because neither is part of somebody else's fact: the
-  // question is the coordinator's own call, and the answer is the owner's.
-  { at: "projects/project-open-item.service.ts#askOwner", class: "INSERT", statements: 1, note: "The question itself: one createManyAndReturn with skipDuplicates against the partial unique index on (project, dedupe key) for OPEN items, so a tool call retried after a lost response files one question rather than asking the owner the same thing twice. The key is the caller's own `clientQuestionId`, or a fresh one when it sent none — one call, one question. Losing the race returns the row that won; a key held by a question that has since been ANSWERED matches neither and is refused, because filing nothing and reporting success is how a coordinator ends up waiting on an answer nobody was asked for." },
+  // Owner requests and item outcomes outside a transaction. Asking and answering coordinator
+  // questions are transaction units above: they also move a linked run question's deadline.
   // Owner request secrets (migration 0506, docs/design/owner-request-secrets.md): single-statement grant writes. Each is
   // a compare-and-set on the grant's state, so two replicas or a repeated call write once; owner_request_secret has no
   // trigger and these UPDATEs move no key.
@@ -2948,7 +2971,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'owner-requests/owner-secrets.service.ts#replaceSaved', class: 'ONE_ROW_BY_KEY', statements: 1, note: "Replacing a saved secret's value: one UPDATE by (id, owner) of its ciphertext." },
   { at: 'owner-requests/owner-secrets.service.ts#deleteSaved', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'Deleting a saved secret: one DELETE by (id, owner). Grants made from it are copies and stay.' },
   { at: "owner-requests/owner-requests.service.ts#file", class: "INSERT", statements: 1, note: "A session filing an owner request (migration 0503): one createManyAndReturn with skipDuplicates against the unique (asked_by_session_id, client_request_id), so a call retried after a lost response files one request; losing that race reads back the row that won, in whatever state it is now. Its one foreign key takes the user row FOR KEY SHARE and nothing else; the asking session and the project are history columns, not keys. The push is sent after the statement, never inside it." },
-  { at: "projects/project-open-item.service.ts#answerOpenItem", class: "ONE_ROW_CAS", statements: 1, note: "The owner's answer, and the end of the question in the same statement: an UPDATE whose predicate is the item and `state = 'OPEN'`, writing RESOLVED/ANSWERED with the answer beside it. A question gets one answer — a second press, or one racing another window, matches no row and is told so rather than replacing an answer the coordinator may already have acted on. The delivery that follows is `deliverAnswer`, after this has committed, because who is coordinating the project is read after the answer is a fact." },
   { at: "projects/project-open-item.service.ts#returnToCoordinator", class: "ONE_ROW_CAS", statements: 1, note: "The owner handing an escalated item back (§4.7), and the restart of its clock in the same statement: an UPDATE whose predicate is the item, `state = 'OPEN'` and the assignment the press was read from, writing COORDINATOR/DEFAULT with `assigned_at`, `waiting_since` and `escalate_at` moved together. A second press, or one racing the coordinator's own recovery on the same row, matches nothing and is told to read the project again rather than reporting a hand-back it did not make. The delivery that follows is `deliver`, after this has committed — and across the two reads the project's coordinator is resolved twice on purpose: the refusal in front of the write asks whether there is a conversation to hand the item TO, and the delivery asks which one it is NOW, which a rotation between them can have changed." },
   { at: "projects/project-open-item.service.ts#acceptOpenItem", class: "ONE_ROW_CAS", statements: 1, note: "The owner's Accept of work that reached the branch without their confirmation (§10.8): one conditional UPDATE whose predicate is the item in its project and account, the LANDED_WITHOUT_CONFIRMATION kind, `state = 'OPEN'` and `openItemOwed`, writing RESOLVED / ACCEPTED by the USER with the owner's id. A request from a session is refused before any read; a second press, or a task cancelled or replaced meanwhile, matches nothing and is told the item is no longer open, and the row's terminal guard refuses a rewrite either way." },
   { at: "projects/project-open-item.service.ts#resolveOpenItem", class: "ONE_ROW_CAS", statements: 1, note: "The assignee closing an item it handled (§4.7's \"mark handled\"), and the last ending of an item that no fact produces: an UPDATE whose predicate is the item and `state = 'OPEN'`, writing RESOLVED with the resolution the kind has (HANDLED, or WITHDRAWN for a question the conversation that asked it takes back), the moment, the side that pressed (USER with the owner id, or COORDINATOR with the acting session), and the reason — which is the whole of what a hand-closed item adds to the record, since the platform could not verify the ending. A second press, or one racing a platform fact on the same row, matches nothing and is told to read the project again rather than reporting a close it did not make; the row's own terminal guard refuses a rewrite under either." },
