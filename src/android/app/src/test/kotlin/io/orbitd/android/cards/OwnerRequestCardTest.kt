@@ -232,7 +232,7 @@ class OwnerRequestCardTest {
 
     /** A push's action (`orbit://owner-request/<id>`) opens the inbox with that request's card open and its input focused. */
     @Test fun theInboxOpensThePushedRequestOnItsInput() {
-        compose.setContent { OrbitTheme(darkTheme = false) { WaitingOnYouScreen(store, emptyList(), OwnerRequestFixture.SECRET_ID, 0) {} } }
+        compose.setContent { OrbitTheme(darkTheme = false) { WaitingOnYouScreen(store, emptyList(), OwnerRequestFixture.SECRET_ID, 0, {}) } }
         compose.waitForIdle()
         compose.onNodeWithTag("waiting-on-you:count", useUnmergedTree = true).assertTextEquals("4")
         compose.onNodeWithTag("waiting-on-you:row:${OwnerRequestFixture.SECRET_ID}:action").assertTextContains("Close")
@@ -242,9 +242,33 @@ class OwnerRequestCardTest {
         compose.waitUntil(5_000) { runCatching { tag(OwnerRequestFixture.SECRET_ID, "secret").assertIsFocused() }.isSuccess }
     }
 
+    /** The Open tab holds the coordinators' questions beside the requests, newest first, and the header counts both as one. */
+    @Test fun theInboxListsCoordinatorQuestionsBesideTheRequestsAndCountsThemAsOne() {
+        fixture.projects = buildJsonArray { add(OwnerRequestFixture.questionProject(20)) }
+        fixture.openItems[OwnerRequestFixture.PROJECT] = OwnerRequestFixture.questionItems(20)
+        OwnerRequestSnoozes.of(RuntimeEnvironment.getApplication()).snooze(OwnerRequestFixture.SECRET_ID, System.currentTimeMillis() + 3_600_000)
+        val answered = mutableListOf<OwnerRequests.CoordinatorQuestionRow>()
+        compose.setContent { OrbitTheme(darkTheme = false) { WaitingOnYouScreen(store, emptyList(), null, 0, {}) { answered += it } } }
+        val question = "waiting-on-you:row:question:${OwnerRequestFixture.QUESTION_ITEM}"
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(question, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        // Four requests, one put off for later, and one question.
+        compose.onNodeWithTag("waiting-on-you:count", useUnmergedTree = true).assertTextEquals("4")
+        compose.onNodeWithTag("$question:title", useUnmergedTree = true).assertTextEquals("Should the canary go to 5% or 20% of traffic?")
+        compose.onNodeWithTag("$question:detail", useUnmergedTree = true).assertTextEquals("Payments rollout · decision · recommended: 5%")
+        compose.onNodeWithTag("$question:age", useUnmergedTree = true).assertTextEquals("20m ago")
+        // Newest first: the secret (2m), the steps (14m), the question (20m), the decision (30m), the confirmation (45m).
+        val order = listOf("waiting-on-you:row:${OwnerRequestFixture.SECRET_ID}", "waiting-on-you:row:${OwnerRequestFixture.STEPS_ID}", question,
+            "waiting-on-you:row:${OwnerRequestFixture.DECISION_ID}", "waiting-on-you:row:${OwnerRequestFixture.CONFIRM_ID}")
+        val tops = order.map { compose.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot.top }
+        assertEquals(tops.sorted(), tops)
+        compose.onNodeWithTag("$question:action").assertTextContains("Answer").performClick()
+        assertEquals(OwnerRequestFixture.QUESTION_ITEM, answered.single().itemId)
+        assertEquals(OwnerRequestFixture.PROJECT, answered.single().projectId)
+    }
+
     @Test fun theInboxEndedTabsListResolvedLines() {
         val id = OwnerRequestFixture.STEPS_ID
-        compose.setContent { OrbitTheme(darkTheme = false) { WaitingOnYouScreen(store, emptyList(), null, 0) {} } }
+        compose.setContent { OrbitTheme(darkTheme = false) { WaitingOnYouScreen(store, emptyList(), null, 0, {}) } }
         compose.onNodeWithTag("waiting-on-you:row:$id:action").performClick()
         tag(id, "primary").performClick()
         posted("/api/owner-requests/$id/done")

@@ -21,11 +21,15 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
-import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
+import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.DirectoryRunner
+import io.orbitd.android.navigation.Destination
+import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.navigation.Origin
+import io.orbitd.android.navigation.projectRoot
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.rememberReaderLinkHandler
 import io.orbitd.android.ui.LocalOrbitColors
@@ -43,32 +47,46 @@ internal fun runnerNames(runners: List<DirectoryRunner>): (String?) -> String = 
     runners.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it.id, id) }?.let { it.displayName ?: it.name } ?: "this runner"
 }
 
-/** The inbox as the shell opens it: from the drawer, or from a push's action naming the request in [route]'s id. */
+/** The inbox as the shell opens it: from the drawer, or from a push's action naming the request in [route]'s id. A coordinator's
+ * question is answered on its card in the coordinator's conversation, where its push opens it too, brought into view there — or, with no
+ * coordinator in the session list, on the project's root page. */
 @Composable
-fun WaitingOnYouDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, runners: List<DirectoryRunner>, revision: Long,
+fun WaitingOnYouDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, data: DirectoryData, revision: Long,
     open: (OrbitRoute) -> Unit) {
     val store = remember(handle) { OwnerRequestStore.of(app.session, handle, app.processScope) }
     val links = rememberReaderLinkHandler(LocalReaderResources.current ?: return, open)
-    WaitingOnYouScreen(store, runners, route.id, revision, links)
+    WaitingOnYouScreen(store, data.runners, route.id, revision, links) { question ->
+        val coordinator = data.sessions["open"].orEmpty().firstOrNull {
+            it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, question.projectId)
+        }
+        if (coordinator != null) {
+            CardFocus.request(coordinator.id, "item:${question.itemId}")
+            open(OrbitRoute(Destination.SESSION, coordinator.id, origin = Origin.LINK))
+        } else open(projectRoot(question.projectId, data, null, Origin.LINK))
+    }
 }
 
 /**
- * Everything sessions have asked the owner to do, in one place (web `WaitingOnYouPage`): Open, Done and Declined. An Open row's
- * button opens its whole card under it; [focused] — the request a push's action named (`orbit://owner-request/<id>`) — is open from
- * the start, its input focused.
+ * Everything agents have asked the owner to do, in one place (web `WaitingOnYouPage`): Open, Done and Declined. The Open tab holds the
+ * owner requests and the questions coordinators asked through `ask_owner`, newest first. A request's button opens its whole card under
+ * it; [focused] — the request a push's action named (`orbit://owner-request/<id>`) — is open from the start, its input focused. A
+ * question's Answer goes to its card ([answer]).
  */
 @Composable
-fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>, focused: String?, revision: Long, open: (String) -> Unit) {
+fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>, focused: String?, revision: Long, open: (String) -> Unit,
+    answer: (OwnerRequests.CoordinatorQuestionRow) -> Unit = {}) {
     val state by store.state.collectAsState()
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
     var tab by rememberSaveable { mutableStateOf(WaitingTab.OPEN) }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
     LaunchedEffect(focused) { focused?.let { tab = WaitingTab.OPEN; expanded[OwnerRequests.key(it)] = true } }
     LaunchedEffect(tab, revision) { store.load(*setOf(OwnerRequestStore.OPEN, tab.filter).toTypedArray()) }
+    LaunchedEffect(revision) { store.loadQuestions(items = true) }
     val runner = remember(runners) { runnerNames(runners) }
     val now = Instant.now()
-    val count = OwnerRequests.waitingCount(state.open, snoozes, now)
-    val rows = state.list(tab.filter)
+    val count = OwnerRequests.waitingCount(state.open, state.projects, snoozes, now)
+    val ended = state.list(tab.filter)
+    val rows = if (tab == WaitingTab.OPEN) OwnerRequests.openRows(state.open, state.questions) else ended.map { OwnerRequests.OpenRow.Request(it) }
     Column(Modifier.fillMaxSize().testTag("waiting-on-you")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -87,58 +105,67 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
         else if (tab.filter in state.lists && rows.isEmpty()) Text(tab.empty, Modifier.padding(16.dp).testTag("waiting-on-you:empty"),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(rows, key = { it.id }) { request ->
-                if (tab == WaitingTab.OPEN) {
-                    val key = OwnerRequests.key(request.id)
-                    val isOpen = expanded[key] == true
-                    InboxRow(request, snoozes[key] ?: 0, now, isOpen) { expanded[key] = !isOpen }
-                    if (isOpen) Box(Modifier.padding(top = 8.dp)) {
-                        OwnerRequestCard(request, store, runner, open, now, focusInput = focused?.let(OwnerRequests::key) == key)
+            items(rows, key = { row -> when (row) { is OwnerRequests.OpenRow.Request -> row.request.id; is OwnerRequests.OpenRow.Question -> "question:${row.question.itemId}" } }) { row ->
+                when {
+                    row is OwnerRequests.OpenRow.Question -> row.question.let { question ->
+                        InboxRow("waiting-on-you:row:question:${question.itemId}", R.drawable.ic_question_bubble, question.question, question.detail,
+                            OwnerRequests.ago(question.waitingSince, now), OwnerRequests.inboxAction(OwnerRequests.DECISION)) { answer(question) }
                     }
-                } else OwnerRequestResolved(request, store, runner, now)
+                    tab == WaitingTab.OPEN -> (row as OwnerRequests.OpenRow.Request).request.let { request ->
+                        val key = OwnerRequests.key(request.id)
+                        val isOpen = expanded[key] == true
+                        val until = snoozes[key] ?: 0
+                        InboxRow("waiting-on-you:row:${request.id}", icon(request.kind), request.title, OwnerRequests.rowDetail(request, now),
+                            if (until > now.toEpochMilli()) OwnerRequests.reminder(OwnerReview.receiptTime(Instant.ofEpochMilli(until).toString(), now))
+                            else OwnerRequests.ago(request.createdAt, now),
+                            if (isOpen) "Close" else OwnerRequests.inboxAction(request.kind)) { expanded[key] = !isOpen }
+                        if (isOpen) Box(Modifier.padding(top = 8.dp)) {
+                            OwnerRequestCard(request, store, runner, open, now, focusInput = focused?.let(OwnerRequests::key) == key)
+                        }
+                    }
+                    else -> OwnerRequestResolved((row as OwnerRequests.OpenRow.Request).request, store, runner, now)
+                }
             }
         }
     }
 }
 
-/** One row of the Open tab: what kind of thing, its title, what it holds up, how old, and the button that opens its card. */
+private fun icon(kind: String) = when (kind) {
+    OwnerRequests.SECRET -> R.drawable.ic_key
+    OwnerRequests.MANUAL_STEP -> R.drawable.ic_reorder
+    OwnerRequests.DECISION -> R.drawable.ic_question_bubble
+    else -> R.drawable.ic_check_circle
+}
+
+/** One row of the Open tab: what kind of thing, its title, what it is about, how old, and its button. */
 @Composable
-private fun InboxRow(request: OwnerRequest, until: Long, now: Instant, open: Boolean, toggle: () -> Unit) {
+private fun InboxRow(tag: String, icon: Int, title: String, detail: String, age: String, action: String, press: () -> Unit) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    val tag = "waiting-on-you:row:${request.id}"
-    val icon = when (request.kind) {
-        OwnerRequests.SECRET -> R.drawable.ic_key
-        OwnerRequests.MANUAL_STEP -> R.drawable.ic_reorder
-        OwnerRequests.DECISION -> R.drawable.ic_question_bubble
-        else -> R.drawable.ic_check_circle
-    }
     Row(Modifier.fillMaxWidth().testTag(tag), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(36.dp).background(LocalOrbitColors.current.needsYou.copy(alpha = 0.14f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
             Icon(painterResource(icon), null, Modifier.size(18.dp), tint = LocalOrbitColors.current.needsYou)
         }
         Column(Modifier.weight(1f)) {
-            Text(request.title, Modifier.testTag("$tag:title"), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            Text(title, Modifier.testTag("$tag:title"), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
-            val detail = OwnerRequests.rowDetail(request, now)
             if (detail.isNotEmpty()) Text(detail, Modifier.testTag("$tag:detail"), style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 2)
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(if (until > now.toEpochMilli()) OwnerRequests.reminder(OwnerReview.receiptTime(Instant.ofEpochMilli(until).toString(), now))
-                else OwnerRequests.ago(request.createdAt, now), Modifier.testTag("$tag:age"), style = MaterialTheme.typography.labelSmall, color = secondary)
-            FilledTonalButton(onClick = toggle, Modifier.testTag("$tag:action"), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
-                Text(if (open) "Close" else OwnerRequests.inboxAction(request.kind))
+            Text(age, Modifier.testTag("$tag:age"), style = MaterialTheme.typography.labelSmall, color = secondary)
+            FilledTonalButton(onClick = press, Modifier.testTag("$tag:action"), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                Text(action)
             }
         }
     }
 }
 
-/** The drawer's count beside Waiting on you: open requests not put off for later. */
+/** The drawer's count beside Waiting on you: open requests not put off for later, and coordinators' open questions — one count. */
 @Composable
 fun WaitingOnYouDrawerCount(store: OwnerRequestStore, revision: Long) {
     val state by store.state.collectAsState()
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
-    LaunchedEffect(revision) { store.load(OwnerRequestStore.OPEN) }
-    val count = OwnerRequests.waitingCount(state.open, snoozes, Instant.now())
+    LaunchedEffect(revision) { store.load(OwnerRequestStore.OPEN); store.loadQuestions(items = false) }
+    val count = OwnerRequests.waitingCount(state.open, state.projects, snoozes, Instant.now())
     if (count > 0) Text("$count", Modifier.testTag("waiting-on-you-drawer-count").semantics { contentDescription = "$count waiting on you" },
         color = LocalOrbitColors.current.needsYou, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
 }

@@ -410,7 +410,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     land(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
-                                Destination.WAITING_ON_YOU -> WaitingOnYouDestination(app, signedIn.handle, route, data.runners, revision, ::open)
+                                Destination.WAITING_ON_YOU -> WaitingOnYouDestination(app, signedIn.handle, route, data, revision, ::open)
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
                         }

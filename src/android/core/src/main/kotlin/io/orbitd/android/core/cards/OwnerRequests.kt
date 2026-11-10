@@ -292,6 +292,52 @@ object OwnerRequests {
     fun waitingCount(requests: List<OwnerRequest>, snoozes: Map<String, Long>, now: Instant): Int =
         requests.count { it.pending && (snoozes[key(it.id)] ?: 0) <= now.toEpochMilli() }
 
+    /**
+     * The inbox's one count (web `waitingCount`): the requests not put off for later, and the questions coordinators asked through
+     * `ask_owner` — which stay on their own table (project open items) but are one list to the owner — as each open project's
+     * attention counts them.
+     */
+    fun waitingCount(requests: List<OwnerRequest>, projects: List<JsonObject>, snoozes: Map<String, Long>, now: Instant): Int =
+        waitingCount(requests, snoozes, now) + projects.sumOf(::openQuestionCount)
+
+    /** How many coordinator questions an open project (`GET /projects?status=OPEN`) says wait on the owner. */
+    fun openQuestionCount(project: JsonObject): Int = project.obj("attention")?.objects("ownerItems").orEmpty()
+        .filter { it.text("kind") == "COORDINATOR_QUESTION" }.sumOf { it.number("count") ?: 0 }
+
+    /** The open projects a coordinator has asked the owner something in: the ones whose open items are worth reading. */
+    fun projectsWithQuestions(projects: List<JsonObject>): List<JsonObject> = projects.filter { openQuestionCount(it) > 0 }
+
+    /** A coordinator's open question as an inbox row: what it asks, in plain words, the project it is about, and since when. */
+    data class CoordinatorQuestionRow(val projectId: String, val projectTitle: String, val itemId: String, val question: String,
+        val recommended: String?, val waitingSince: String) {
+        val detail get() = "$projectTitle · " + (recommended?.let { "decision · recommended: $it" } ?: "decision")
+    }
+
+    /** The questions on a project's open items (web `coordinatorQuestions`): only the owner's group, and only rows carrying a question. */
+    fun coordinatorQuestions(project: JsonObject, items: JsonObject?): List<CoordinatorQuestionRow> {
+        val projectId = project.text("id") ?: return emptyList()
+        val title = project.text("title").orEmpty()
+        return items?.objects("needsYou").orEmpty().mapNotNull { row ->
+            val question = row.obj("question")?.takeIf { row.text("kind") == "COORDINATOR_QUESTION" } ?: return@mapNotNull null
+            val itemId = row.text("itemId") ?: return@mapNotNull null
+            val recommended = question.number("recommendedOption")?.let { question.objects("options").getOrNull(it)?.text("label") }
+            CoordinatorQuestionRow(projectId, title, itemId, CoordinatorQuestions.lead(question), recommended,
+                row.text("waitingSince") ?: return@mapNotNull null)
+        }
+    }
+
+    /** One row of the inbox's Open tab: an owner request, or a coordinator's question. */
+    sealed interface OpenRow {
+        val at: String
+        data class Request(val request: OwnerRequest) : OpenRow { override val at get() = request.createdAt }
+        data class Question(val question: CoordinatorQuestionRow) : OpenRow { override val at get() = question.waitingSince }
+    }
+
+    /** The Open tab: requests and questions in one list, newest first by when each was asked. */
+    fun openRows(requests: List<OwnerRequest>, questions: List<CoordinatorQuestionRow>): List<OpenRow> =
+        (requests.map { OpenRow.Request(it) } + questions.map { OpenRow.Question(it) })
+            .sortedByDescending { parse(it.at) ?: Instant.MIN }
+
     /** The one spelling a request is kept under on this device (a push names the UUID, a read may name the short id). */
     fun key(id: String): String = canonicalId(id) ?: id
 

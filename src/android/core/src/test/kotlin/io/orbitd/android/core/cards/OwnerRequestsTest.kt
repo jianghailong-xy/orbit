@@ -3,6 +3,7 @@ package io.orbitd.android.core.cards
 import io.orbitd.android.core.protocol.Wire
 import java.time.Instant
 import java.time.ZoneOffset
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -67,5 +68,35 @@ class OwnerRequestsTest {
         // Either spelling of an id is one request.
         assertEquals(OwnerRequests.key("34sYUuoSpnReXXn6j28WR"), OwnerRequests.key(OwnerRequests.key("34sYUuoSpnReXXn6j28WR")))
         assertEquals(listOf(secret), OwnerRequests.forSession("s", listOf(secret), listOf(secret.copy(id = OwnerRequests.key(secret.id)))).map { it.copy(id = secret.id) })
+    }
+
+    /** The inbox's Open tab and its one count (web `WaitingOnYouPage`, `waitingCount`): the coordinators' questions beside the requests. */
+    @Test fun questionsJoinTheRequestsNewestFirstAndInTheCount() {
+        val project = Wire.json.parseToJsonElement("""{"id":"p1","title":"Payments rollout","attention":{"ownerItems":[
+            {"kind":"COORDINATOR_QUESTION","count":2},{"kind":"FUSE_PAUSED","count":1}]}}""").jsonObject
+        val quiet = Wire.json.parseToJsonElement("""{"id":"p2","title":"Quiet","attention":{"ownerItems":[]}}""").jsonObject
+        val items = Wire.json.parseToJsonElement("""{"needsYou":[
+            {"itemId":"q1","kind":"COORDINATOR_QUESTION","waitingSince":"2026-11-10T07:59:00Z",
+             "question":{"question":"Go **now**?","options":[{"label":"Yes"},{"label":"No"}],"recommendedOption":1}},
+            {"itemId":"q2","kind":"COORDINATOR_QUESTION","waitingSince":"2026-11-10T07:00:00Z","question":{"question":"Which?","options":[]}},
+            {"itemId":"x","kind":"COORDINATOR_QUESTION","waitingSince":"2026-11-10T07:00:00Z","question":null},
+            {"itemId":"f","kind":"FUSE_PAUSED","waitingSince":"2026-11-10T07:30:00Z"}]}""").jsonObject
+        assertEquals(listOf(project), OwnerRequests.projectsWithQuestions(listOf(project, quiet)))
+        val questions = OwnerRequests.coordinatorQuestions(project, items)
+        assertEquals(listOf("q1", "q2"), questions.map { it.itemId })
+        assertEquals("Go now?", questions[0].question)
+        assertEquals("Payments rollout · decision · recommended: No", questions[0].detail)
+        assertEquals("Payments rollout · decision", questions[1].detail)
+        // Requests at 07:58 (secret) and 06:00; questions at 07:59 and 07:00.
+        val early = secret.copy(id = "a", createdAt = "2026-11-10T06:00:00Z")
+        val rows = OwnerRequests.openRows(listOf(secret, early), questions)
+        assertEquals(listOf("q1", secret.id, "q2", "a"), rows.map {
+            when (it) { is OwnerRequests.OpenRow.Question -> it.question.itemId; is OwnerRequests.OpenRow.Request -> it.request.id }
+        })
+        // One count: the requests not put off for later, and every open question the projects' attention counts.
+        val snoozed = mapOf(OwnerRequests.key("a") to now.toEpochMilli() + 60_000)
+        assertEquals(3, OwnerRequests.waitingCount(listOf(secret, early), listOf(project, quiet), snoozed, now))
+        assertEquals(4, OwnerRequests.waitingCount(listOf(secret, early), listOf(project, quiet), emptyMap(), now))
+        assertEquals(0, OwnerRequests.waitingCount(emptyList(), listOf(quiet), emptyMap(), now))
     }
 }
