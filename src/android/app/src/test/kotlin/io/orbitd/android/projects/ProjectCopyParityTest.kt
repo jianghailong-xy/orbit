@@ -46,6 +46,45 @@ class ProjectCopyParityTest {
             "delivery", "deliveryPlatform", "deliveryAgentPush"))
     @Test fun markdownWords() = assertIn(ProjectMarkdown, swift("${kit}ShareMarkdown.swift"))
     @Test fun crossingsWords() = assertIn(ProjectCrossings, swift("${kit}ProjectCrossings.swift"))
+    @Test fun staleRequestWordsMatchWebAndNewestRowWins() {
+        val web = File(root, "src/web/src/lib/projectDone.ts").readText()
+        for ((key, words) in listOf("DONE_REQUEST_STALE_HEADING" to ProjectDone.staleHeading,
+            "DONE_REQUEST_STALE_DETAIL" to ProjectDone.staleDetail)) {
+            assertTrue(web.contains("export const $key = '$words';"))
+        }
+        fun items(extra: String = "") = Json.parseToJsonElement("""{"latestDoneRequestSuperseded":{"reason":"Task reopened.","supersededAt":"2026-11-10T12:00:00Z"}$extra}""").jsonObject
+        assertEquals("Task reopened. ${ProjectDone.staleDetail}", ProjectDone.staleRequest(items()))
+        assertEquals(null, ProjectDone.staleRequest(items(",\"doneRequest\":{}")))
+        assertEquals(null, ProjectDone.staleRequest(items(",\"latestDoneRequestDecline\":{\"declinedAt\":\"2026-11-10T13:00:00Z\"}")))
+        assertEquals(null, ProjectDone.staleRequest(null))
+    }
+    @Test fun derivedDoneWordsMatchWebLiteralsAndDate() {
+        val web = File(root, "src/web/src/lib/projectDone.ts").readText()
+        for ((key, words) in listOf("DONE_CARD_DERIVED_FROM" to ProjectDone.derivedFrom,
+            "DONE_CARD_DERIVED_REOPEN_HINT" to ProjectDone.derivedReopenHint, "DONE_CARD_REOPEN" to ProjectDone.reopenProject)) {
+            assertTrue(web.contains("export const $key = '$words';"))
+        }
+        assertEquals("From the criteria you confirmed on Oct 2. Not right? Reopen it.",
+            ProjectDone.derivedLine("2026-10-02T12:00:00Z", java.time.ZoneOffset.UTC))
+        assertEquals(null, ProjectDone.derivedLine(null))
+    }
+    @Test fun doneCheckWebWords() {
+        val web = File(root, "src/web/src/lib/projectDone.ts").readText()
+        assertTrue(web.contains("export const DONE_CHECK_NO_CRITERIA = '${ProjectDone.checkNoCriteria}';"))
+        assertTrue(web.contains("export const DONE_CHECK_UNMET = '${ProjectDone.checkUnmet}';"))
+        assertTrue(web.contains("export const DONE_CHECK_UNLANDED = '${ProjectDone.checkUnlanded}';"))
+        assertTrue(web.contains("export const DONE_CHECK_TASKS = '${ProjectDone.checkTasks}';"))
+        assertTrue(web.contains("export const DONE_CHECK_TASK = '${ProjectDone.checkTask}';"))
+        assertTrue(web.contains("export const DONE_CHECK_OWNER_ITEMS = '${ProjectDone.checkOwnerItems}';"))
+        assertTrue(web.contains("export const DONE_CHECK_LANDINGS = '${ProjectDone.checkLandings}';"))
+        assertTrue(web.contains("export const DONE_CARD_FINDINGS_HEADING = '${ProjectDone.findingsHeading}';"))
+        assertTrue(web.contains("export const DONE_CARD_FINDINGS_ACCEPTED = '${ProjectDone.findingsAccepted}';"))
+    }
+    @Test fun declineWordsMatchWeb() {
+        val web = File(root, "src/web/src/lib/projectDone.ts").readText()
+        assertTrue(web.contains("export const DONE_DECLINE_HEADING = '${ProjectDone.declineHeading}';"))
+        assertTrue(web.contains("export const DONE_DECLINE_HINT = '${ProjectDone.declineHint}';"))
+    }
     @Test fun doneWords() = assertIn(ProjectDone, swift("${kit}ProjectDone.swift"))
     @Test fun attentionWords() {
         val source = swift("${kit}ProjectAttention.swift")

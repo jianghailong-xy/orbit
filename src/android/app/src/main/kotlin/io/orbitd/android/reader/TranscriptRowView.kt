@@ -46,6 +46,12 @@ import kotlinx.serialization.json.*
 @Composable
 internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
     detailOnly: Boolean = false) {
+    if (row.steps.isNotEmpty()) {
+        Box(Modifier.background(if (highlighted) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)) {
+            StepsRowView(row, model, live, open, highlighted)
+        }
+        return
+    }
     val event = row.event
     val clipboard = LocalClipboardManager.current
     var expanded by rememberSaveable(row.key) { mutableStateOf(false) }

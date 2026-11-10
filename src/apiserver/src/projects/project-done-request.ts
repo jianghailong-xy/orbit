@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import { Logger } from '@nestjs/common';
+
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import type {
   AcceptedGap,
@@ -13,6 +15,10 @@ import type {
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import type { SessionsService } from '../sessions/sessions.service';
+import { storeDerivedProjectStatus, type StoreDerivedProjectStatusOptions } from './project-done-derived';
+import { tellCoordinatorDoneRequestSuperseded } from './project-started';
+
 import {
   IN_FLIGHT_JOB_STATES,
   LANDING_JOB_KINDS,
@@ -60,7 +66,7 @@ import { START_REQUEST_KIND } from './project-start-request';
  * key every request shares, under 0278's partial unique index on OPEN items). A newer request
  * supersedes the one open, and so does the project moving under it: a request names the seal of the
  * criteria and a digest of the tasks, their runs, where each criterion's work has landed and the
- * landings in flight, and one whose project has moved since is superseded the next time it is read
+ * landings in flight, and one whose project has moved since is superseded on the post-commit write edge
  * (`supersedeStaleDoneRequest`) — and refused at the owner's press before that. So nobody is shown
  * "Is this project done?" about a project that is no longer the one the coordinator checked.
  *
@@ -79,6 +85,7 @@ export const DONE_REQUEST_TITLE = 'Is this project done?';
 /** Only the conversation a project is coordinated from may ask to record it done. */
 export const DONE_REQUEST_COORDINATOR_ONLY = 'DONE_REQUEST_COORDINATOR_ONLY';
 export const DONE_REQUEST_NOT_READY = 'DONE_REQUEST_NOT_READY';
+export const DONE_REQUEST_UNCHANGED_SINCE_DECLINE = 'DONE_REQUEST_UNCHANGED_SINCE_DECLINE';
 /** The owner's Not yet… door can only end an OPEN DONE_REQUEST. */
 export const DONE_REQUEST_NOT_OPEN = 'DONE_REQUEST_NOT_OPEN';
 /** Validation code shared by the DTO-facing and direct service-facing doors. */
@@ -555,7 +562,7 @@ export async function doneRequestMoved(
  * Supersede this project's open done request if the project has moved under it: its criteria, its
  * tasks or their runs, or where the work has landed — or it is no longer OPEN.
  *
- * Called by every read that puts a request in front of somebody, before it reads the items, so the
+ * Called after writes that move the project, and before a read shows its items, so the
  * card is never drawn for a project that is not the one the coordinator checked. One conditional
  * statement: whatever else ended the request first — a newer request, the owner's DONE — leaves it
  * alone, since only an OPEN row matches.
@@ -564,6 +571,7 @@ export async function supersedeStaleDoneRequest(
   prisma: PrismaService,
   ownerId: string,
   projectId: string,
+  sessions?: SessionsService,
 ): Promise<boolean> {
   const open = await prisma.projectOpenItem.findFirst({
     where: { projectId, ownerId, kind: DONE_REQUEST_KIND, state: 'OPEN' },
@@ -589,7 +597,29 @@ export async function supersedeStaleDoneRequest(
       resolutionNote: note,
     },
   });
+  if (superseded.count > 0 && sessions) {
+    await tellCoordinatorDoneRequestSuperseded(prisma, sessions, {
+      ownerId, projectId, itemId: open.id, reason: note,
+    });
+  }
   return superseded.count > 0;
+}
+
+/** Refresh both done projections on the same post-commit edges. Neither can undo the write. */
+export async function refreshProjectDone(
+  prisma: PrismaService,
+  ownerId: string,
+  projectId: string,
+  options: StoreDerivedProjectStatusOptions = {},
+) {
+  try {
+    return await storeDerivedProjectStatus(prisma, ownerId, projectId, options);
+  } finally {
+    await supersedeStaleDoneRequest(prisma, ownerId, projectId, options.sessions).catch((error) =>
+      new Logger('ProjectDoneRequest').warn(`stale done request not reconciled: ${
+        error instanceof Error ? error.message : error}`),
+    );
+  }
 }
 
 /**
@@ -597,9 +627,8 @@ export async function supersedeStaleDoneRequest(
  * (`DONE_REQUEST`, `project_request_done`) — the projects whose coordinator conversation draws the
  * "Is this project done?" card, and whose row says "Ready to close" (`sessionWaitingKind`).
  *
- * One read. A request whose project has since moved is still OPEN here until the next read of the
- * open items supersedes it — the read that puts the card in front of the owner — exactly as a start
- * request's badge is (`projectsReadyToStart`).
+ * One read: post-commit write edges supersede requests whose project has moved, and the open-items
+ * read repairs a missed best-effort refresh.
  */
 export async function projectsReadyToClose(
   tx: Prisma.TransactionClient,

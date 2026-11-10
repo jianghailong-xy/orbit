@@ -1,3 +1,5 @@
+import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
+import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { readMergeRecovery, mergeRecoveryReady, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
@@ -623,6 +625,8 @@ interface IngestOutcome {
   /** The batch's events not stored because their seq holds another event, and the door they came by. */
   seqConflicts: RunEventSeqConflict[];
   door: RunEventDoor;
+  /** This batch stamped Session.engineStartedAt: the run left its starting state. */
+  engineStarted: boolean;
 }
 /**
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
@@ -5116,6 +5120,13 @@ export class RunnerApiController {
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
+      // M4: taking a notice up is its terminal outcome, in the turn delivery transaction.
+      if (isRunNotifyTurn(t.clientTurnId)) {
+        await tx.sessionRequest.updateMany({
+          where: { toSessionId: sessionId, id: t.clientTurnId!.slice('run-notify:v1:'.length).split(':')[0], kind: 'RUN_NOTIFY', state: 'OPEN' },
+          data: { state: 'READ', closedAt: new Date() },
+        });
+      }
       let attachments: TurnAttachment[] | undefined;
       // Who outside Orbit sent it, on the first delivery of a message only: the runner says so to the agent after the
       // words (docs/feishu-bot-design.md §8.2). A re-delivery's continuation is the platform's words, as below.
@@ -5270,6 +5281,8 @@ export class RunnerApiController {
         // best-effort, for the reason the replies are not: the block IS the turn. The same for an
         // evidence revision handed to the session that dispatched its task (tasks/evidence-review.ts).
         if (t.kind === 'message') {
+          content = (await appendRunQuestionContext(tx, t.clientTurnId, content)) ?? content;
+          content = (await runNotifyContent(tx, sessionId, t.clientTurnId)) ?? content;
           content = (await appendOwnerConfirmationReviewContext(tx, t.clientTurnId, content)) ?? content;
           content = (await appendConfirmationReturnContext(tx, t.clientTurnId, content)) ?? content;
         }
@@ -5595,6 +5608,7 @@ export class RunnerApiController {
           },
         })
       : null;
+    if (existing) return { id: existing.id, status: existing.status as ApprovalStatus };
     // A call this workspace has permanently allowed is answered here instead of waking a human
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
@@ -5626,36 +5640,77 @@ export class RunnerApiController {
     // and an in-turn MCP call has none (`sessions/abandoned-approvals.ts` reads it back against the
     // jobs the runner says are still up).
     const backgroundJobId = stripNul(dto.backgroundJobId ?? '').trim();
-    const approval =
-      existing ??
-      (await this.prisma.approval.create({
-        data: {
-          sessionId,
-          // Stripped for the same reason the event batch is (see strip-nul): a tool argument is
-          // whatever the workspace typed into it, Postgres refuses U+0000 in text and jsonb with
-          // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
-          // agent that waits for a card nobody can ever be shown.
-          toolName: stripNul(dto.toolName),
-          input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId },
-            dto.acceptsStartAfterCreate === true),
-          // Empty is no id at all, as the lookup above reads it. Stored as '', the session's second such
-          // card would fail on approval_session_id_tool_use_id_key, and the runner answers a card it
-          // could not file with a refusal nobody gave.
-          toolUseId: toolUseId || null,
-          turnId: openingTurn?.id ?? null,
-          backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
-          ...(allowedMessage
-            ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
-            : {}),
-        },
-      }));
+    const approvalData = {
+      sessionId,
+      // Stripped for the same reason the event batch is (see strip-nul): a tool argument is
+      // whatever the workspace typed into it, Postgres refuses U+0000 in text and jsonb with
+      // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
+      // agent that waits for a card nobody can ever be shown.
+      toolName: stripNul(dto.toolName),
+      input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId },
+        dto.acceptsStartAfterCreate === true),
+      // Empty is no id at all, as the lookup above reads it. Stored as '', the session's second such
+      // card would fail on approval_session_id_tool_use_id_key, and the runner answers a card it
+      // could not file with a refusal nobody gave.
+      toolUseId: toolUseId || null,
+      turnId: openingTurn?.id ?? null,
+      backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
+      ...(allowedMessage
+        ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
+        : {}),
+    };
+    let held = false;
+    let fallback: string | null = null;
+    let routed: Awaited<ReturnType<typeof this.prisma.approval.create>> | null = null;
+    if (!existing && !allowedMessage && dto.toolName === 'AskUserQuestion') {
+      const recipient = await questionRecipient(this.prisma, sessionId);
+      if (recipient) {
+        fallback = recipient.reason;
+        if (!fallback && this.sessions) {
+          const approvalId = randomUUID();
+          const createdAt = new Date();
+          const clientTurnId = `${RUN_QUESTION_PREFIX}${approvalId}`;
+          try {
+            await this.sessions.createTurn(session.ownerId, recipient.project.coordinatorSessionId!,
+              { clientTurnId, content: '', intent: 'NEXT_TURN' }, {
+                participateSendTransaction: async (tx) => {
+                  const fresh = await questionRecipient(tx, sessionId);
+                  if (!fresh || fresh.reason || fresh.project.coordinatorSessionId !== recipient.project.coordinatorSessionId) {
+                    throw new Error('question coordinator became unavailable');
+                  }
+                  routed = await tx.approval.create({ data: { ...approvalData, id: approvalId, createdAt } });
+                },
+                onTurnWritten: async (tx, turn) => {
+                  await tx.sessionRequest.create({ data: {
+                    ownerId: session.ownerId, fromSessionId: sessionId,
+                    toSessionId: recipient.project.coordinatorSessionId!, turnId: turn.id, clientTurnId,
+                    kind: 'RUN_QUESTION', approvalId, createdAt,
+                    requestPreview: String((approvalData.input as { questions?: Array<{ question?: string }> }).questions?.[0]?.question ?? '').slice(0, 200),
+                    replyBy: new Date(createdAt.getTime() + recipient.project.exceptionEscalationSeconds * 1000),
+                  } });
+                },
+              });
+            held = true;
+          } catch {
+            routed = null;
+            fallback = (await questionRecipient(this.prisma, sessionId))?.reason ?? 'UNREACHABLE';
+          }
+        }
+      }
+    }
+    const approval = existing ?? routed ?? await this.prisma.approval.create({
+      data: { ...approvalData, coordinatorFallback: fallback },
+    });
+
+    if (held) this.realtime.publishSessionUpdated(sessionId);
     // An already-answered approval raises no card and buzzes no phone: not interrupting is the
     // entire point of having granted it.
-    if (!existing && !allowedMessage) {
+    if (!existing && !allowedMessage && !held) {
       this.realtime.publish(sessionId, approvalRequestEvent(approval, new Date().toISOString()));
       // Fire-and-forget: nudge the owner's iOS devices that a reply is needed. Not awaited so a
       // slow APNs round-trip can't delay the runner's approval-create response.
-      void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
+      if (fallback) void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName, true);
+      else void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
   }
@@ -7839,7 +7894,9 @@ export class RunnerApiController {
       // publishBatch tells them after an ingest of its own.
       const notices = ingested.flatMap(({ batch, outcome }) => {
         if (!OPEN.includes(outcome.session.status)) return [];
-        const notice = runEventBatchNotice(instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)));
+        const notice = runEventBatchNotice(
+          instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted,
+        );
         return notice ? [notice] : [];
       });
       if (notices.length > 0) {
@@ -8061,6 +8118,8 @@ export class RunnerApiController {
         e.payload = withCoordinatorDelivery(e.payload, cards?.coordinatorDelivery ?? null);
         e.payload = withTaskStart(e.payload, cards?.taskStart ?? null);
         e.payload = withProjectStarted(e.payload, cards?.projectStarted ?? null);
+        delete e.payload.runQuestion;
+        if (cards?.runQuestion) e.payload.runQuestion = cards.runQuestion;
         e.payload = withConfirmationReviewRequest(e.payload, cards?.confirmationReviewRequest ?? null);
         e.payload = withConfirmationReturn(e.payload, cards?.confirmationReturn ?? null);
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
@@ -8330,9 +8389,8 @@ export class RunnerApiController {
       // it), so a redelivered batch cannot push the stamp later than the first arrival. A streamed
       // delta counts too: it is never stored, and a warm process's plain-text reply stores nothing
       // until it ends (engineStreamedIn).
-      if (!session.engineStartedAt && (engineTurnActive !== undefined || engineStreamedIn(events))) {
-        sessionData.engineStartedAt = new Date();
-      }
+      const engineStarted = !session.engineStartedAt && (engineTurnActive !== undefined || engineStreamedIn(events));
+      if (engineStarted) sessionData.engineStartedAt = new Date();
       Object.assign(sessionData, {
         ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
         ...(frontier ? { lastToolUse: frontier.tool } : {}),
@@ -8643,7 +8701,7 @@ export class RunnerApiController {
       }
       return {
         session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
-        seqConflicts, door: link ? 'link' : 'https',
+        seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };
     return ingest.call(this);
@@ -8701,9 +8759,13 @@ export class RunnerApiController {
       // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
       // as one batch: the other replicas hear of it once, not once per event (publishBatch). A merged
       // call's notice went with its transaction (ingestLinkEventCall), so only this replica is left.
+      // A batch that ended the starting state is followed by a session_updated: the clients read that
+      // state off the session row, and no event the engine sends re-reads it (controlTypeFor), so the
+      // "Getting the session ready" notice stayed up over the engine's tool calls until a list's
+      // one-minute safety read.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
-      if (merged) this.realtime.publishBatchHere(sessionId, published);
-      else this.realtime.publishBatch(sessionId, published);
+      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted);
+      else this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted);
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in

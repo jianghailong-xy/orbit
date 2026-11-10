@@ -2890,6 +2890,7 @@ final class AppModel {
     /// (`ProjectPage.drawsEnding`): the criteria document's own subject, the same read the
     /// conversation's settled card keeps.
     private(set) var projectSessionsDone: ProjectDoneSubject?
+    private(set) var projectSessionsConfirmedAt: String?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -3130,18 +3131,10 @@ final class AppModel {
     }
 
     /// One poll of what the page's start row needs (docs/mocks/project-start-sessions-page): the
-    /// project's open items — the coordinator's request to start among them — while the sidebar row
-    /// says nobody has started it. A started project, or one the row does not say about, reads
-    /// nothing more than before; a read that fails keeps the last answer rather than drawing none.
+    /// project's open items, including the start request and the owner's latest Not yet answer.
+    /// A failed read keeps the last answer rather than drawing none.
     func loadProjectStart(_ address: SessionProjectAddress) async {
         guard let api else { return }
-        let key = PublicID.storageKey(address.projectID)
-        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
-        // The start row needs the items only on a project nobody has started.
-        guard row?.status == .open, row?.started == false else {
-            projectSessionsOpenItems = nil
-            return
-        }
         let items = try? await api.projectOpenItems(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
         projectSessionsOpenItems = items
@@ -3163,7 +3156,16 @@ final class AppModel {
         }
         let document = try? await api.projectCriteria(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let document else { return }
+        let confirmedAt: String?
+        if document.doneBy == .derived {
+            let standing = try? await api.acceptanceConfirmation(projectID: address.projectID)
+            confirmedAt = standing?.confirmation?.confirmedAt
+        } else {
+            confirmedAt = nil
+        }
+        guard projectSessionsAddress == address, !Task.isCancelled else { return }
         projectSessionsDone = document.doneSubject
+        projectSessionsConfirmedAt = confirmedAt
     }
 
     /// A member may belong to another Workspace. Carry its record into the console's cache, which
@@ -3786,6 +3788,13 @@ final class AppModel {
         case .open(let route): self.route(to: route)
         case let .approve(sid, behavior): Task { await approveAll(sessionID: sid, behavior: behavior) }
         case let .reply(sid, text): Task { await reply(sessionID: sid, text: text) }
+        case let .openProject(projectID):
+            #if os(iOS)
+            settingsPresented = false
+            openProjectSessions(PublicID.toPublic(projectID), inColumn: false)
+            #else
+            openProject(PublicID.toPublic(projectID))
+            #endif
         case let .openProjectMerge(projectID, sid):
             #if os(iOS)
             // A push names its project by the stored UUID; every list row spells it base62.

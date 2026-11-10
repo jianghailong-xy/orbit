@@ -1,3 +1,4 @@
+import { visibleQuestions } from '../sessions/run-question';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Injectable, Logger } from '@nestjs/common';
@@ -235,11 +236,12 @@ export class FeishuTransport {
           this.prisma.approval.findMany({
             where: { sessionId, status: 'PENDING', session: { ownerId: target.ownerId } },
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-            select: { id: true, toolName: true, input: true },
+            select: { id: true, toolName: true, input: true, coordinatorFallback: true },
           }),
         ]);
-        if (!session || approvals.length === 0) return null;
-        return { kind: 'approval', sessionTitle: `${coordinatorFallback ? 'Not reviewed by the coordinator · ' : ''}${session.title ?? ''}`, approvals: approvals as FeishuApprovalItem[] };
+        const visible = await visibleQuestions(this.prisma, approvals);
+        if (!session || visible.length === 0) return null;
+        return { kind: 'approval', sessionTitle: `${coordinatorFallback || visible.some(a => a.coordinatorFallback) ? 'Not reviewed by the coordinator · ' : ''}${session.title ?? ''}`, approvals: visible as FeishuApprovalItem[] };
       },
     };
   }

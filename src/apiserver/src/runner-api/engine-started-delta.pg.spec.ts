@@ -3,7 +3,9 @@
  * `assistant` event that ends the reply; until then its batches carry only `text_delta` /
  * `thinking_delta`, which are never stored. engineStartedAt must still be stamped by the first of
  * them, or the session reads as "the engine has not started your message yet" under a reply the
- * reader can watch being written.
+ * reader can watch being written. And the clients have to hear of it: they read the starting state
+ * off the session row, which no engine event re-reads, so the stamp itself announces a session
+ * update, once.
  *
  * scripts/run-pg-spec.sh src/apiserver/src/runner-api/engine-started-delta.pg.spec.ts
  */
@@ -27,7 +29,7 @@ import { RunnerApiController } from './runner-api.controller';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
-test('a streamed delta stamps engineStartedAt; the runner\'s own echo does not', {
+test('a streamed delta stamps engineStartedAt and announces it; the runner\'s own echo does neither', {
   skip: !URL, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
@@ -36,11 +38,18 @@ test('a streamed delta stamps engineStartedAt; the runner\'s own echo does not',
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
   const db = prismaClientFor(URL!);
+  // Every batch published as having changed its session's row, by session id.
+  const updated: string[] = [];
   t.after(async () => { await db.$disconnect(); });
   const api = new RunnerApiController(
     db as unknown as PrismaService,
     { notifySessionQueued: () => undefined } as unknown as QueueService,
-    new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService,
+    new Proxy({}, {
+      get: (_target, name) => (...args: unknown[]) => {
+        // A batch that changed the row says so to publishBatch, which follows it with a session_updated.
+        if (name === 'publishBatch' && args[2] === true) updated.push(String(args[0]));
+      },
+    }) as unknown as RealtimeService,
     {} as never,
     {} as never,
     { expand: async (_ownerId: string, content?: string) => content } as never,
@@ -89,6 +98,13 @@ test('a streamed delta stamps engineStartedAt; the runner\'s own echo does not',
       ],
     });
     assert.ok(await engineStartedAt(s.id), 'the first streamed text proves the engine is on the message');
+    assert.deepEqual(updated.filter((id) => id === s.id), [s.id], 'the clients are told the row changed');
+    const stamp = await engineStartedAt(s.id);
+    await api.events({ id: runnerId }, s.id, {
+      events: [{ seq: 4, type: RunEventType.TEXT_DELTA, ts: ts(), payload: { text: ' and two' } }],
+    });
+    assert.deepEqual(await engineStartedAt(s.id), stamp, 'the stamp is one-shot per run');
+    assert.deepEqual(updated.filter((id) => id === s.id), [s.id], 'and so is its announcement');
     const stored = await sql.query(`SELECT count(*)::int AS n FROM run_event WHERE session_id = $1::uuid`, [s.id]);
     assert.equal(stored.rows[0].n, 0, 'the deltas themselves are still not stored');
   });
@@ -99,5 +115,16 @@ test('a streamed delta stamps engineStartedAt; the runner\'s own echo does not',
       events: [{ seq: 1, type: RunEventType.USER, ts: ts(), payload: { text: 'hello' } }],
     });
     assert.equal(await engineStartedAt(s.id), null);
+    assert.deepEqual(updated.filter((id) => id === s.id), [], 'nothing changed on the row to announce');
+  });
+
+  /** The case in the owner's second screenshot: a cold start, stamped by the runtime's `init`. */
+  await t.test('a runtime handshake stamps and announces it too', async () => {
+    const s = await claimedSession();
+    await api.events({ id: runnerId }, s.id, {
+      events: [{ seq: 1, type: RunEventType.SYSTEM, ts: ts(), payload: { subtype: 'init' } }],
+    });
+    assert.ok(await engineStartedAt(s.id));
+    assert.deepEqual(updated.filter((id) => id === s.id), [s.id]);
   });
 });

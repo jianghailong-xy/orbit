@@ -6,6 +6,49 @@ import XCTest
 /// held to the browser's own examples (`ProjectDoneSettlementCard.test.tsx`) and to the payloads the
 /// server serves. The words themselves are `ProjectDoneCopyParityTests`'.
 final class ProjectDoneTests: XCTestCase {
+    func testStaleRequestDecodesAndYieldsToAnOpenRequestOrNewerDecline() throws {
+        func items(_ extra: String = "") throws -> ProjectOpenItemsView {
+            let json = """
+            {"latestDoneRequestSuperseded":{"reason":"Task reopened.","supersededAt":"2026-11-10T12:00:00Z"}\(extra)}
+            """
+            return try JSONDecoder().decode(ProjectOpenItemsView.self, from: Data(json.utf8))
+        }
+        XCTAssertEqual(ProjectDone.staleRequest(try items()), "Task reopened. " + ProjectDone.staleDetail)
+        XCTAssertNil(ProjectDone.staleRequest(try items(#", "latestDoneRequestDecline":{"note":"Missing", "declinedAt":"2026-11-10T13:00:00Z"}"#)))
+        XCTAssertNotNil(ProjectDone.staleRequest(try items(#", "latestDoneRequestDecline":{"note":"Missing", "declinedAt":"2026-11-10T11:00:00Z"}"#)))
+        let stale = try items().latestDoneRequestSuperseded
+        let open = ProjectOpenItemRow(itemId: "new", kind: .unknown, title: "", waitingSince: "")
+        XCTAssertNil(ProjectDone.staleRequest(ProjectOpenItemsView(doneRequest: open, latestDoneRequestSuperseded: stale)))
+        XCTAssertNil(ProjectDone.staleRequest(nil))
+    }
+
+
+    func testDoneCheckFindingsUseShortLines() throws {
+        let json = #"""
+        {"findings":[
+          {"code":"DONE_TASKS_IN_FLIGHT","message":"long diagnostic","criterion":null,"tasks":[{"taskId":"a"},{"taskId":"b"}],"items":[],"jobs":[]},
+          {"code":"DONE_CRITERION_UNSATISFIED","message":"long diagnostic","criterion":{"ordinal":5},"tasks":[],"items":[],"jobs":[]},
+          {"code":"DONE_CRITERION_UNLANDED","message":"long diagnostic","criterion":{"ordinal":6},"tasks":[],"items":[],"jobs":[]}
+        ]}
+        """#
+        let check = try JSONDecoder().decode(ProjectDoneCheck.self, from: Data(json.utf8))
+        XCTAssertEqual(check.findings.map { $0.line(main: "main") }, [
+            "2 tasks are still running", "Criterion 5 is not met", "Criterion 6 is not on main"
+        ])
+        let empty = try JSONDecoder().decode(ProjectDoneCheck.self, from: Data(#"{"findings":[]}"#.utf8))
+        XCTAssertTrue(empty.findings.isEmpty)
+    }
+
+    func testRecordLabelUsesWhetherTheCoordinatorAsked() {
+        let met = closeout().counts
+        let unmet = ProjectDoneCounts(criteria: 2, met: 1, landed: 1, onMain: 1, byReason: [:])
+        for counts in [met, unmet, nil] {
+            XCTAssertEqual(ProjectDone.recordLabel(counts, asked: false), ProjectDone.recordAsDoneAnyway)
+        }
+        XCTAssertEqual(ProjectDone.recordLabel(met, asked: true), ProjectDone.recordAsDone)
+        XCTAssertEqual(ProjectDone.recordLabel(unmet, asked: true), ProjectDone.recordAsDoneAnyway)
+        XCTAssertEqual(ProjectDone.recordLabel(nil, asked: true), ProjectDone.recordAsDone)
+    }
 
     private let utc = TimeZone(identifier: "UTC")!
 
@@ -107,6 +150,7 @@ final class ProjectDoneTests: XCTestCase {
         let ownJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(own)) as? [String: Any])
         XCTAssertTrue(ownJSON["requestId"] is NSNull, "the request is sent as null, not left out")
         XCTAssertEqual(ownJSON["criteriaDigest"] as? String, "b")
+        XCTAssertEqual(own.acceptedGaps, [], "the server stores current findings itself")
         XCTAssertNil(ProjectDone.body(subject: subject, requestID: nil, request: nil, currentDigest: nil),
                      "no seal read yet is no press")
     }

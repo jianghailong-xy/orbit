@@ -408,7 +408,9 @@ import {
   type StartPageRow,
 } from '../lib/projectStart';
 import { PROJECT_DONE_COPY, type ProjectDoneDocument } from '../lib/projectDone';
-import { ProjectWhyNotDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
+import { ProjectDoneDeclineRow } from './ProjectDoneDeclineRow';
+import { ProjectStaleDoneRow } from './ProjectStaleDoneRow';
+import { ProjectSessionsDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -3044,12 +3046,12 @@ export function WorkspaceView({
   const pageSessionsError = (projectSessionsQ.error ?? completedProjectSessionsQ.error) as Error | null;
   // A project nobody has started (docs/mocks/project-start-sessions-page): its progress line says so,
   // and the start's row sits under it — by the project page's own rule (`startPageRow`), read off the
-  // sidebar's `startedAt` and the open items, which are read only while that holds.
+  // sidebar's `startedAt` and the open items, also read for the latest Not yet answer.
   const pageStarted = pageProject ? projectStarted(pageProject) : null;
   const pageNotStarted = pageProject?.status === 'OPEN' && pageStarted === false;
   const pageOpenItemsQ = useQuery({
     ...projectOpenItemsQuery(openProjectId ?? ''),
-    enabled: !!openProjectId && pageNotStarted,
+    enabled: !!openProjectId,
     refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const pageStart = pageNotStarted
@@ -8697,7 +8699,7 @@ export function WorkspaceView({
               card's place (docs/mocks/project-done-sessions-page) — the progress card itself would
               say nothing but the word Done. */}
           {openProjectId && pageSettledDoc && (
-            <ProjectWhyNotDoneCard project={pageSettledDoc} />
+            <ProjectSessionsDoneCard projectId={openProjectId} project={pageSettledDoc} />
           )}
           {openProjectId && !pageSettledDoc && (
             <>
@@ -8727,6 +8729,10 @@ export function WorkspaceView({
               onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
                 navigate(sessionPath(pageCoordinator.id), { state: stampFromList() })) : null} />
           )}
+          {openProjectId && <>
+            <ProjectStaleDoneRow view={pageOpenItemsQ.data} />
+            <ProjectDoneDeclineRow items={pageOpenItemsQ.data} />
+          </>}
           {openProjectId
             ? projectMembers.length === 0 && !loadingSessions && (
               <div className="session-project-empty">

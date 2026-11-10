@@ -253,7 +253,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     runningBgShells: true,
     approvals: {
       where: { status: 'PENDING', backgroundJobId: { not: null } },
-      select: { backgroundJobId: true },
+      select: { id: true, toolName: true, backgroundJobId: true },
     },
   });
 

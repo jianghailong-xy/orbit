@@ -18,8 +18,8 @@
  * project's open items and the coordinator conversation read back with SQL either side of a refusal.
  * Every later fact is produced the way the product produces it — criteria through
  * `ProjectsService.update`, tasks through `TasksService`, receipts through `MergeReceiptService`, the
- * confirmation through `ProjectAcceptanceService` — and the projection is never called directly: it
- * runs on those writers' own post-commit edges. The coordinator is told through a real
+ * confirmation through `ProjectAcceptanceService`. The concurrency regression below also calls the
+ * projection directly after committing its second connection, to witness that precise ordering. The coordinator is told through a real
  * `SessionsService`, so what it was told is the `conversation_turn` it will read.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/project-owner-done.pg.spec.ts
@@ -58,7 +58,7 @@ import {
 import { classifyCriteriaEdit } from './criteria-edit-classification';
 import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { readDerivedProjectDone } from './project-done-derived';
+import { readDerivedProjectDone, storeDerivedProjectStatus } from './project-done-derived';
 import {
   DONE_REQUEST_DEDUPE_KEY,
   DONE_REQUEST_KIND,
@@ -493,7 +493,9 @@ test('the owner records a project done in person, and the projection keeps that 
   await t.test('a request that is no longer open is 409, and writes nothing', async () => {
     // A request about the seal that stands, superseded since — what a newer request, or a task or a
     // landing moving under it, does to one.
-    await supersede(firstRequest);
+    assert.equal((await prisma.projectOpenItem.findUniqueOrThrow({
+      where: { id: firstRequest },
+    })).state, 'SUPERSEDED', 'the criteria edit already superseded the first request');
     const superseded = await fileDoneRequest(currentSeal);
     await supersede(superseded);
 
@@ -555,7 +557,7 @@ test('the owner records a project done in person, and the projection keeps that 
 
   // ═══ what does not take it away ════════════════════════════════════════════════════════════════
 
-  await t.test('a task write, a new task, a merge receipt and a confirmation leave it DONE', async () => {
+  await t.test('a task write, a settled new task, a merge receipt and a confirmation leave it DONE', async () => {
     assert.ok(recorded, 'the record above was written');
 
     await tasks.update(ownerId, rolloutWork, { title: 'roll the closing door out, again' } as never);
@@ -563,6 +565,7 @@ test('the owner records a project done in person, and the projection keeps that 
 
     // Filing is not an edge of its own; the write after it is, as in project-done-derived (4).
     const more = await servingTask(projectId, built.key, 'more work on the closing door');
+    await settle(more);
     await tasks.update(ownerId, more, { title: 'more work on the closing door, filed' } as never);
     assert.deepEqual(await record(), recorded, 'a newly filed task took the owner’s record away');
 
@@ -696,5 +699,59 @@ test('the owner records a project done in person, and the projection keeps that 
       done_criteria_digest: null,
       accepted_gaps: [],
     }, 'a DERIVED record is a reading, so new work against its criterion takes it back');
+  });
+
+  await t.test('a reopen begun before the owner DONE press and committed after it reopens on derivation', async () => {
+    const id = randomUUID();
+    await prisma.project.create({ data: { id, ownerId, title: 'Concurrent owner DONE' } });
+    const [criterion] = criteriaFromDefinitions((await projects.update(ownerId, id, {
+      acceptanceCriteriaItems: [{ text: BUILT, verificationMethod: METHOD }],
+    } as never)).acceptanceCriteriaItems);
+    assert.ok(criterion);
+    const work = await servingTask(id, criterion.key, 'Concurrent reopen');
+    await settle(work);
+    const digest = await seal(id);
+    const reopening = new Client({ connectionString: url });
+    await reopening.connect();
+    try {
+      await reopening.query('BEGIN');
+      await reopening.query(`UPDATE "task" SET "status" = 'OPEN' WHERE "id" = $1::uuid`, [work]);
+      await acceptance.recordProjectDone(ownerId, id, { criteriaDigest: digest, acceptedGaps: [] });
+      assert.equal((await record(id)).done_by, 'OWNER');
+      const captured = await prisma.project.findUniqueOrThrow({ where: { id }, select: { doneTaskEpochs: true } });
+      assert.equal((captured.doneTaskEpochs as Record<string, number>)[work], 0,
+        'the press captures the committed epoch, not the in-flight reopen');
+      await reopening.query('COMMIT');
+      const { rows: [timing] } = await sql.query(
+        `SELECT p."done_at", tp."epoch_started_at" FROM "project" p, "task_progress" tp
+          WHERE p."id" = $1::uuid AND tp."task_id" = $2::uuid`, [id, work]);
+      assert.ok(timing.epoch_started_at <= timing.done_at,
+        'the old timestamp comparison cannot see this committed reopen');
+      await storeDerivedProjectStatus(prisma as unknown as PrismaService, ownerId, id);
+      assert.equal((await record(id)).status, 'OPEN', 'the committed greater epoch takes back owner DONE');
+      const cleared = await prisma.project.findUniqueOrThrow({ where: { id }, select: { doneTaskEpochs: true } });
+      assert.equal(cleared.doneTaskEpochs, null);
+    } finally {
+      await reopening.query('ROLLBACK');
+      await reopening.end();
+    }
+  });
+
+  await t.test('a newly serving unsettled task takes back owner DONE', async () => {
+    const response = await press(projectId, { criteriaDigest: currentSeal, acceptedGaps: [] });
+    assert.equal(response.status, 201);
+    await servingTask(projectId, built.key, 'New unsettled serving work');
+    await storeDerivedProjectStatus(prisma as unknown as PrismaService, ownerId, projectId);
+    assert.equal((await record()).status, 'OPEN');
+  });
+
+  await t.test('legacy owner records retain timestamp reopen detection', async () => {
+    const response = await press(projectId, { criteriaDigest: currentSeal, acceptedGaps: [] });
+    assert.equal(response.status, 201);
+    await prisma.project.update({ where: { id: projectId }, data: {
+      doneTaskEpochs: Prisma.DbNull, doneAt: new Date('2000-01-01T00:00:00Z'),
+    } });
+    await storeDerivedProjectStatus(prisma as unknown as PrismaService, ownerId, projectId);
+    assert.equal((await record()).status, 'OPEN', 'legacy records still use epoch_started_at > done_at');
   });
 });

@@ -186,12 +186,19 @@ class ReaderIncrementsDeviceTest : IncrementDeviceTest() {
         openSession(thinking)
         fun labels() = compose.onAllNodesWithTag("thinking-fold").fetchSemanticsNodes()
             .map { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text }.orEmpty() }
+        // Each stretch is a steps line first; its reasoning rows are behind it.
+        fun openSteps(seq: Int) { compose.onNode(hasTestTag("steps-line") and hasAnyAncestor(hasTestTag("steps:$seq"))).performClick(); settle() }
+        await("the streamed block's steps line") { exists(hasTestTag("steps:16")) }
+        openSteps(16)
         await("the streamed block closed with its time") { labels().any { it == "Thought for 4s · 37 chars" } }
         capture("01-streamed-then-closed")
-        scrollTranscriptTo(hasTestTag("event:11"))
+        scrollTranscriptTo(hasTestTag("steps:11"))
+        openSteps(11)
         await("three timed blocks of 21k characters") { labels().any { it == "Thought for 1m 47s · 3 blocks · 21k chars" } }
         capture("02-21k-chars")
-        scrollTranscriptTo(hasTestTag("event:2"))
+        scrollTranscriptTo(hasTestTag("steps:2"))
+        verify("the first turn's steps line", exists(hasText("Thought for 1m 47s, ran 1 shell command")))
+        openSteps(2)
         await("the first turn's reasoning") { labels().any { it == "Thought for 1m 47s · 3 blocks · 20 chars" } }
         verify("a block the runner did not time states its size alone", labels().any { it == "Thought · 14 chars" })
         val fold = hasTestTag("thinking-fold") and hasText("Thought for 1m 47s · 3 blocks · 20 chars")

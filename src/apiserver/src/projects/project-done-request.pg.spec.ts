@@ -55,6 +55,7 @@ import {
   type IntegrationJobCommand,
   type IntegrationJobResultRequest,
   type ProjectDoneFinding,
+  type ProjectOpenItemsView,
   type ProjectDoneRequestFiled,
   type RequestProjectDoneBody,
 } from '@orbit/shared';
@@ -74,12 +75,12 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { criterionKeyOf } from './project-acceptance';
+import type { CompletionInputRouter } from './completion-input-router.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from './project-integration-job';
-import { readDoneState, supersedeStaleDoneRequest } from './project-done-request';
+import { doneReadiness, projectsReadyToClose, readDoneState, refreshProjectDone, supersedeStaleDoneRequest } from './project-done-request';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
-import { doneReadiness, readDoneState } from './project-done-request';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -520,6 +521,40 @@ test('a coordinator asks its owner to record the project done, and the project i
     (findings ?? [])
       .filter((finding) => finding.code === 'DONE_CRITERION_UNLANDED')
       .map((finding) => `${finding.criterion?.ordinal} ${finding.reason}`);
+
+  await t.test('Not yet refuses unchanged facts and keeps the note until a newer request', async () => {
+    const p = await project('declined-unchanged', ['The missing work is complete.']);
+    const criterion = p.criteria[0];
+    await task(p, 'initial work', { serves: criterion, status: 'DONE', codeless: true });
+    const filed = await ask(p.id, p.sessionId);
+    const note = 'Finish the second walkthrough first.';
+    await openItems.declineDoneRequest(ownerId, p.id, filed.itemId, { note });
+    const before = await requests(p.id);
+    const refusal = await refused(() => ask(p.id, p.sessionId, {
+      ...CALL, judgment: 'A differently worded call still has the same facts.',
+    }));
+    assert.equal(refusal.status, 409);
+    assert.equal(refusal.body.code, 'DONE_REQUEST_UNCHANGED_SINCE_DECLINE');
+    assert.equal(refusal.body.written, 0);
+    assert.ok(refusal.body.message?.includes(note));
+    assert.deepEqual(await requests(p.id), before, 'a refusal writes no item');
+    const view = await openItems.list(ownerId, p.id);
+    assert.equal(view.latestDoneRequestDecline?.note, note);
+    const declined = await prisma.projectOpenItem.findUniqueOrThrow({ where: { id: filed.itemId } });
+    assert.equal(view.latestDoneRequestDecline?.declinedAt.getTime(), declined.resolvedAt!.getTime());
+    const missing = await task(p, 'second walkthrough', { serves: criterion, codeless: true });
+    assert.equal((await refused(() => ask(p.id, p.sessionId))).body.code, 'DONE_REQUEST_NOT_READY');
+    await sql.query(
+      `UPDATE "task" SET "status" = 'DONE'
+        WHERE "id" = $1::uuid AND "completion_criterion" = 'EXECUTABLE'
+          AND "acceptance_command" = 'true' AND "acceptance_expected_exit_code" = 0`,
+      [missing.id],
+    );
+    const next = await ask(p.id, p.sessionId);
+    assert.notEqual(next.itemId, filed.itemId);
+    assert.equal((await requests(p.id)).length, before.length + 1);
+    assert.equal((await openItems.list(ownerId, p.id)).latestDoneRequestDecline, null);
+  });
 
   // ═══ (1) the refusals ══════════════════════════════════════════════════════════════════════════
 
@@ -1012,6 +1047,49 @@ test('a coordinator asks its owner to record the project done, and the project i
     const cancelled = await refused(() => ask(q.id, q.sessionId));
     assert.equal(cancelled.status, 409);
     assert.equal(cancelled.body.code, 'PROJECT_CANCELLED');
+  });
+
+  await t.test('(4c) reopening serving work supersedes and tells the coordinator on the write, without GET open-items', async () => {
+    const q = await project('stale-on-write', ['the work is finished']);
+    const work = await task(q, 'the serving work', { serves: q.criteria[0], status: 'DONE', codeless: true });
+    const request = await ask(q.id, q.sessionId);
+    assert.ok((await projectsReadyToClose(prisma as never, ownerId, [q.id])).has(q.id));
+    // Production's post-commit projection sits behind the completion router. Its deliveries are
+    // inert here; the task write, projection, request CAS and coordinator turn all use real rows.
+    const router = new Proxy({}, { get: () => async () => [] }) as CompletionInputRouter;
+    const writer = new TasksService(db, sessions, realtime, undefined, router);
+    await writer.update(ownerId, work.id, { status: 'OPEN' } as never);
+    const stale = await prisma.projectOpenItem.findUniqueOrThrow({ where: { id: request.itemId } });
+    assert.equal(stale.state, 'SUPERSEDED');
+    assert.equal(stale.resolvedBy, 'PLATFORM');
+    assert.ok(stale.resolvedAt);
+    assert.match(stale.resolutionNote!, /tasks/);
+    assert.equal((await projectsReadyToClose(prisma as never, ownerId, [q.id])).has(q.id), false);
+    const notices = () => prisma.conversationTurn.findMany({ where: {
+      sessionId: q.sessionId,
+      clientTurnId: `project-started:v1:done-request-superseded:${request.itemId}`,
+    } });
+    assert.equal((await notices()).length, 1, 'one turn delivered before any open-items read');
+    assert.ok((await notices())[0].content!.includes(stale.resolutionNote!));
+    assert.ok((await notices())[0].content!.includes('Ask again with project_request_done when the work settles.'));
+    await refreshProjectDone(db, ownerId, q.id, { sessions });
+    await writer.update(ownerId, work.id, { title: 'the serving work, checked again' } as never);
+    const view = await openItems.list(ownerId, q.id);
+    const receipt: ProjectOpenItemsView<Date>['latestDoneRequestSuperseded'] = view.latestDoneRequestSuperseded;
+    assert.deepEqual(receipt, {
+      reason: stale.resolutionNote, supersededAt: stale.resolvedAt,
+    });
+    assert.equal((await notices()).length, 1, 'repeat writes and reads do not deliver another turn');
+    const clock = t.mock.method(Date, 'now', () => stale.resolvedAt!.getTime() + 25 * 60 * 60 * 1000);
+    try {
+      assert.equal((await openItems.list(ownerId, q.id)).latestDoneRequestSuperseded, null);
+    } finally {
+      clock.mock.restore();
+    }
+    await sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [work.id]);
+    await ask(q.id, q.sessionId, { ...CALL, judgment: 'The reopened work has settled again.' });
+    assert.equal((await openItems.list(ownerId, q.id)).latestDoneRequestSuperseded, null,
+      'a newer request hides the stale row immediately');
   });
 
   // ═══ (5) who may ask, and what a gap is ════════════════════════════════════════════════════════

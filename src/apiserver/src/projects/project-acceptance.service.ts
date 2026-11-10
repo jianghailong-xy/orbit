@@ -7,6 +7,8 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { PushService } from '../push/push.service';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import {
   type DoneRequest,
@@ -40,12 +42,13 @@ import {
   refuseSessionAuthoredConfirmation,
 } from './coordinator-authority';
 import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
-import { NO_REOPEN_RECORD, storeDerivedProjectStatus } from './project-done-derived';
+import { NO_REOPEN_RECORD } from './project-done-derived';
 import { defaultStartLine, startProjectLine, type StartLineSettings } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
 import {
   DONE_REQUEST_KIND,
+  refreshProjectDone,
   answerDoneRequests,
   doneRequestMoved,
   readDoneState,
@@ -153,7 +156,19 @@ export class ProjectAcceptanceService {
      *  `@Optional()` because telling is never a condition of starting: every spec that builds this
      *  service by hand from a client alone confirms and starts exactly as before, and tells nobody. */
     @Optional() private readonly sessions?: SessionsService,
+    @Optional() private readonly push?: PushService,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
+
+  /** Resolve lazily: this shared evaluator's module also serves contexts without push wiring. */
+  private projectDonePush(): PushService | undefined {
+    if (this.push) return this.push;
+    try {
+      return this.moduleRef?.get(PushService, { strict: false });
+    } catch {
+      return undefined;
+    }
+  }
 
   /** Read the authored criteria. The delegate check is for unit-test doubles that stub Prisma with
    * only the tables the case is about; production schema always has it. */
@@ -341,8 +356,9 @@ export class ProjectAcceptanceService {
     // any transaction: it reads committed rows, it decides nothing about whether this
     // confirmation was allowed, and a projection that could not be recomputed must not undo a
     // confirmation that was.
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+    await refreshProjectDone(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
+      push: this.projectDonePush(),
     }).catch((error) =>
       this.logger.warn(`derived project status not re-projected after confirmation: ${
         (error as { message?: string })?.message ?? String(error)}`),
@@ -359,12 +375,10 @@ export class ProjectAcceptanceService {
 
   /** The owner's current check; no conversation's run is excluded. */
   async readProjectDoneCheck(ownerId: string, projectId: string): Promise<ProjectDoneCheck> {
-    return this.prisma.$transaction(async (tx) => {
-      const project = await tx.project.findFirst({ where: { id: projectId, ownerId } });
-      if (!project) throw new NotFoundException('project not found');
-      const state = await readDoneState(tx, ownerId, projectId, null);
-      return { ...state, findings: doneReadiness(state, []) };
-    });
+    const project = await this.prisma.project.findFirst({ where: { id: projectId, ownerId } });
+    if (!project) throw new NotFoundException('project not found');
+    const state = await readDoneState(this.prisma as unknown as Prisma.TransactionClient, ownerId, projectId, null);
+    return { ...state, findings: doneReadiness(state, []) };
   }
 
   /**
@@ -469,6 +483,14 @@ export class ProjectAcceptanceService {
         finding,
       }))];
 
+      // Read committed epochs without locking tasks: an in-flight reopen remains visible as a
+      // greater epoch on the next derivation, regardless of its transaction start time or clocks.
+      const serving = await tx.task.findMany({
+        where: { ownerId, projectId, criterionDefinitionId: { not: null } },
+        select: { id: true, progress: { select: { lifecycleEpoch: true } } },
+      });
+      const doneTaskEpochs = Object.fromEntries(serving.map((task) =>
+        [task.id, task.progress?.lifecycleEpoch ?? 0]));
       const at = new Date();
       await tx.project.update({
         where: { id: projectId },
@@ -477,6 +499,7 @@ export class ProjectAcceptanceService {
           doneBy: 'OWNER' satisfies ProjectDoneBy,
           doneAt: at,
           doneCriteriaDigest: version.digest,
+          doneTaskEpochs,
           acceptedGaps: acceptedGaps as unknown as Prisma.InputJsonValue,
           // This record is the owner's answer now, and it replaces any Reopen they pressed before it.
           ...NO_REOPEN_RECORD,
@@ -717,8 +740,9 @@ export class ProjectAcceptanceService {
           (error as { message?: string })?.message ?? String(error)}`),
       );
     }
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+    await refreshProjectDone(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
+      push: this.projectDonePush(),
     }).catch((error) =>
       this.logger.warn(`derived project status not re-projected after the start: ${
         (error as { message?: string })?.message ?? String(error)}`),

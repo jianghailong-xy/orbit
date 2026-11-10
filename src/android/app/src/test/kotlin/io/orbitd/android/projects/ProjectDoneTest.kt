@@ -75,6 +75,7 @@ class ProjectDoneTest {
         val own = ProjectDone.body(subject, null, null, "b")!!
         assertEquals("the request is sent as null, not left out", JsonNull, own["requestId"])
         assertEquals("b", own.text("criteriaDigest"))
+        assertTrue("the server stores current findings itself", own.objects("acceptedGaps").isEmpty())
         assertNull("no seal read yet is no press", ProjectDone.body(subject, null, null, null))
     }
 
