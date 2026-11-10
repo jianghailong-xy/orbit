@@ -51,6 +51,9 @@ import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.wiki.wikiEntered
 import io.orbitd.android.watch.WatchDestination
+import io.orbitd.android.cards.OwnerRequestStore
+import io.orbitd.android.cards.WaitingOnYouDestination
+import io.orbitd.android.cards.WaitingOnYouDrawerCount
 import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.MachineSetup
 import io.orbitd.android.composer.MachineSetupCopy
@@ -298,6 +301,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
+                        // What sessions asked the owner to do (web `WaitingOnYouPage`), with how many are waiting.
+                        NavigationDrawerItem(label = { Text(WAITING_ON_YOU) }, selected = navigation.section == WAITING_ON_YOU,
+                            icon = { Icon(painterResource(R.drawable.ic_bell), null) },
+                            onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
+                            badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, revision) },
+                            modifier = Modifier.testTag("drawer:waiting-on-you"))
                         SectionHeading("Workspaces")
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
                         if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))
@@ -401,6 +410,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     land(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
+                                Destination.WAITING_ON_YOU -> WaitingOnYouDestination(app, signedIn.handle, route, data.runners, revision, ::open)
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
                         }
@@ -452,6 +462,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_JOB -> "Run"
     Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"
     Destination.WATCH -> if (route.id == null) "Following" else "Watch"
+    Destination.WAITING_ON_YOU -> WAITING_ON_YOU
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
     Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)
@@ -524,3 +535,5 @@ private fun IdentityField(label: String, value: String) {
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }
+
+private const val WAITING_ON_YOU = io.orbitd.android.core.cards.OwnerRequests.waitingOnYou
