@@ -1502,6 +1502,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 after retry exhaustion. A caller that is not the request\'s reviewer, or no session, is a 403; outside a turn, a superseded request and one already reviewed are 409s; malformed input and needsYou after the owner decided are 400s.',
   },
   {
+    at: 'tasks/owner-confirmation-review.service.ts#recordReturn',
+    shape: 'TX_RETRIED',
+    locks: 'Run session FOR UPDATE (rank 30), then task FOR UPDATE (rank 50) in reviewerStanding, then one RETURN review record INSERT (rank 60).',
+    identity: 'The record UUID is minted before the closure; (review, kind) and reviewer turn identify a replay of the tool call.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Each attempt locks the run and task again and re-reads the return route. A rolled-back attempt leaves no return; a committed retry reads the standing record.',
+    effects: 'After commit only: deliver the durable return to the run, and publish the task and session refresh. An unavailable run waits for recovery.',
+    answer: 'Typed 503 after retry exhaustion; existing return-route refusals remain 400, 403 or 409. An owner confirmation racing the return becomes PROBLEMS.',
+  },
+  {
     at: 'tasks/owner-confirmation-review.service.ts#recordProblems',
     shape: 'TX_RETRIED',
     locks: 'task FOR UPDATE (rank 50) first (`reviewerStanding`), the rows of §8 B8\'s table read unlocked, then one PROBLEMS task_owner_confirmation_review_record INSERT (rank 60), timed with clock_timestamp() after the task lock.',
@@ -2594,8 +2605,8 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'tasks/owner-confirmation-review.ts#recordOwnerConfirmationReview', under: 'runnerApi.turnComplete — beside recordOwnerConfirmationRequest, under the rank-30 Session lock of the run that asked: one task_owner_confirmation_review child row per request (unique on the request), whose foreign keys take FOR KEY SHARE on the request just written and on the rank-50 task, and nothing else (docs/owner-confirmation-review-contract.md §2 D1)' },
   { at: 'tasks/owner-confirmation-review.ts#abandonUnansweredReviews', under: "runnerApi.turnComplete — beside closeUnansweredRequests, under the rank-30 Session lock of the reviewer that parked: one conditional UPDATE of the review rows (rank 60) it was handed, read and left unanswered, only while nothing will wake it (T5)" },
   { at: 'tasks/owner-confirmation-review.service.ts#bindReviewDelivery', under: "sessions.createTurn — `OwnerConfirmationReviewService.deliver` binds the review it delivers to DELIVERED in the turn's own transaction, under the reviewer's Session lock that transaction already holds, after re-reading D2's six conditions; a compare-and-set on the prior deliveryTurnClientId, so concurrent recovery binds one replacement for the unread turn" },
-  { at: 'tasks/owner-confirmation-review.service.ts#reviewerStanding', under: "ownerConfirmationReview.review, ownerConfirmationReview.recordProblems, and sessions.createTurn's participateSendTransaction hook for a return — the rank-50 task lock every review record of the task is written under, taken first in the two units and after createTurn's rank-30 Session lock of the run in the hook, as the owner's send-back takes it" },
-  { at: 'tasks/owner-confirmation-review.service.ts#writeReviewRecord', under: "ownerConfirmationReview.review, ownerConfirmationReview.recordProblems, and sessions.createTurn's participateSendTransaction hook for a return — one task_owner_confirmation_review_record child row under the rank-50 task lock reviewerStanding already took, so a return's record commits with the turn that carries it to the run" },
+  { at: 'tasks/owner-confirmation-review.service.ts#reviewerStanding', under: "ownerConfirmationReview.review, ownerConfirmationReview.recordProblems, and ownerConfirmationReview.recordReturn — the rank-50 task lock every review record of the task is written under, taken first for reviews and problems and after the rank-30 run Session lock for returns, as the owner's send-back takes it" },
+  { at: 'tasks/owner-confirmation-review.service.ts#writeReviewRecord', under: "ownerConfirmationReview.review, ownerConfirmationReview.recordProblems, and ownerConfirmationReview.recordReturn — one task_owner_confirmation_review_record child row under the rank-50 task lock reviewerStanding already took, so a durable return commits before delivery and remains recoverable while its run is paused" },
   { at: 'tasks/owner-confirmation-review-turn.ts#writeOwnerAnswersComment', under: 'taskOwnerConfirmation.confirm — one task_comment child row, keyed by the decision (skipDuplicates), under the rank-50 task lock the confirmation already holds: the answers are recorded in the transaction that records them (§7 Q5)' },
   // Unit L3's effect-time fence. Rank 40 only — the project row its callers already take at that
   // rank, in the same UUID order and the same mode — so it adds no edge to the lock graph, and the

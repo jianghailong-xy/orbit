@@ -7405,6 +7405,8 @@ export class RunnerApiController {
       await this.tasks?.deliverLooksFinishedOwedTo?.(sessionId);
       await this.evidenceQueue?.deliverOwedTo(sessionId);
       await this.evidenceReviews?.deliverOwedTo(sessionId);
+      await this.evidenceReviews?.deliverSendBacksOwedTo(sessionId);
+      await this.confirmationReviews?.deliverOwedTo(sessionId);
       // And the confirmation reviews it was to be handed whose delivery a crash cut off between their
       // commit and the hand-off (docs/owner-confirmation-review-contract.md §2 D5).
       await this.confirmationReviews?.deliverPendingFor(sessionId).catch((error) => this.logger.warn(

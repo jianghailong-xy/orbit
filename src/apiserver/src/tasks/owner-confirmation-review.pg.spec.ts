@@ -949,6 +949,72 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     assert.equal((await db.taskOwnerDecision.findUniqueOrThrow({ where: { id: sentBackReceipt.id } })).reviewState, 'UNDER_REVIEW');
   });
 
+  await t.test('returns and owner answers survive recipient outages and unread drains exactly once', async () => {
+    for (const outage of ['FAILED', 'RETRY', 'PENDING', 'ENDED'] as const) {
+      const paused = {
+        status: outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
+        retryAt: outage === 'RETRY' ? new Date(Date.now() + 3_600_000) : null,
+        completedAt: outage === 'ENDED' ? new Date() : null,
+      };
+      const back = await filedRun(`return outage ${outage}`);
+      const requestId = await declare(back, 'Done.');
+      await handOut(back.reviewer);
+      await db.session.update({ where: { id: back.sessionId }, data: paused });
+      const call = runnerDoor.returnToRun(runner, back.taskId, back.reviewer, {
+        requestId, reason: 'Fix the migration.', problems: [{ text: 'missing column' }],
+      });
+      if (outage === 'ENDED') {
+        assert.equal((await refusedWith(call, ConflictException)).code, 'CONFIRMATION_RETURN_RUN_ENDED');
+        assert.equal((await turnsKeyed(back.sessionId, RETURN_PREFIX)).length, 0);
+      } else {
+        const returned = await call;
+        assert.equal(returned.state, 'RETURNED');
+        assert.equal(await waitingOn(back.sessionId), 0, 'an outage does not ask the owner');
+        assert.equal((await db.task.findUniqueOrThrow({ where: { id: back.taskId } })).status, 'OPEN');
+        await recover(back.sessionId, `${RETURN_PREFIX}${returned.recordId}`);
+      }
+
+      const reviewed = await filedRun(`answers outage ${outage}`);
+      const reviewedRequest = await declare(reviewed, 'Done.');
+      await handOut(reviewed.reviewer);
+      const record = await runnerDoor.review(runner, reviewed.taskId, reviewed.reviewer, reviewInput(reviewedRequest));
+      await db.session.update({ where: { id: reviewed.reviewer }, data: paused });
+      const decision = await userDoor.decide(owner, reviewed.taskId, undefined, decide({
+        decision: 'CONFIRM', requestId: reviewedRequest, reviewRecordId: record.recordId,
+        answers: [{ key: 'n1', option: 0 }],
+      }));
+      const key = `owner-confirmation-answers:v1:${decision.id}`;
+      if (outage === 'ENDED') {
+        await reviews.deliverOwedTo(reviewed.reviewer);
+        assert.equal((await turnsKeyed(reviewed.reviewer, key)).length, 0);
+      } else {
+        assert.equal((await db.task.findUniqueOrThrow({ where: { id: reviewed.taskId } })).status, 'DONE');
+        await recover(reviewed.reviewer, key);
+      }
+    }
+
+    async function recover(sessionId: string, key: string) {
+      const before = await turnsKeyed(sessionId, key);
+      if (before.length) assert.equal(before[0].deliveredAt, null);
+      const retry = (await db.session.findUniqueOrThrow({ where: { id: sessionId } })).retryAt;
+      await reviews.deliverOwedTo(sessionId);
+      assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).retryAt?.getTime(), retry?.getTime());
+      await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, retryAt: null } });
+      await Promise.all([reviews.deliverOwedTo(sessionId), reviews.deliverOwedTo()]);
+      const [first] = await turnsKeyed(sessionId, key);
+      assert.ok(first);
+      assert.equal((await turnsKeyed(sessionId, key)).length, 1);
+      await db.conversationTurn.update({ where: { id: first.id }, data: { status: 'ANSWERED', answeredAt: new Date(), deliveredAt: null } });
+      await Promise.all([reviews.deliverOwedTo(), reviews.deliverOwedTo(sessionId)]);
+      const turns = await turnsKeyed(sessionId, key);
+      assert.equal(turns.length, 2, 'exactly one replacement for the unread drained turn');
+      assert.equal(turns[1].clientTurnId, `${key}:retry:${first.id}`);
+      await db.conversationTurn.update({ where: { id: turns[1].id }, data: { status: 'ANSWERED', deliveredAt: new Date(), answeredAt: new Date() } });
+      await reviews.deliverOwedTo(sessionId);
+      assert.equal((await turnsKeyed(sessionId, key)).length, 2, 'a read turn is never sent again');
+    }
+  });
+
   // (14) -----------------------------------------------------------------------------------------
   await t.test('(14) the reviewer returns it to the run: the run is told, the owner is not asked (B3, B5, B7, B8)', async () => {
     const back = await filedRun('returned by its reviewer');

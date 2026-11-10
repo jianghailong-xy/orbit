@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
+import { deliverOwedTaskTurn } from './owed-task-turn';
 import { readBlockSender } from '../sessions/session-message';
 import { SessionsService } from '../sessions/sessions.service';
 import {
@@ -136,12 +136,10 @@ export class EvidenceReviewService {
    * reason). In a project or out of it, and whoever decided: the revision's `sourceSessionId` is
    * always the run to carry on.
    *
-   * Called after the decision's commit, so a delivery that cannot be made — the run has ended, or
-   * a fault — is logged and never reported as a failed decision: the note is recorded, and stays
-   * readable on the revision in `task_evidence_list`. Keyed by the decision row, so the decide
-   * door's own replay replays the turn instead of delivering twice. A replay whose block would read
-   * differently now, its session's mode having moved, is refused by that key and logged like any
-   * other delivery that cannot be made: the turn already delivered stands.
+   * Called after the decision's commit. The decision remains the durable queue while the run is
+   * unavailable; turn-end and leader reconciliation recover it. Ended conversations receive no
+   * turn, and the note remains readable in task_evidence_list. Each unread drained delivery gets a
+   * replacement key derived from that turn, so concurrent recovery attempts share one key.
    *
    * `fromSessionId` is the session that decided, and null for the account owner's press in the app:
    * the block names it and its mode, as a session's message says who sent it (session-message.ts).
@@ -159,44 +157,23 @@ export class EvidenceReviewService {
     });
     if (!decision || decision.decision !== 'SEND_BACK' || !decision.note) return;
     const runSessionId = decision.evidence.sourceSessionId;
-    // Read before the turn for the log's sake: `createTurn` refuses an ended conversation itself,
-    // which the catch below would report as a fault where the reason is that it ended.
-    const run = await this.prisma.session.findFirst({
-      where: { id: runSessionId, ownerId },
-      select: SESSION_ENDING_SELECT,
-    });
-    if (!run || sessionHasEnded(run)) {
-      this.logger.log(`send-back of task ${taskId} was not handed to its run: the session has ended; `
-        + 'the note is on the revision in task_evidence_list');
-      return;
-    }
     const from = fromSessionId ? await readBlockSender(this.prisma, ownerId, fromSessionId, runSessionId) : null;
-    try {
-      await this.sessions.createTurn(
-        ownerId,
-        runSessionId,
-        {
-          clientTurnId: evidenceSendBackTurnId(decisionId),
-          content: evidenceSendBackMessage({
-            taskId,
-            taskTitle: decision.task.title,
-            revision: decision.evidence.revision.toString(),
-            decidedByType: decision.decidedByType,
-            note: decision.note,
-            from,
-          }),
-          intent: 'NEXT_TURN',
-        },
-        { steerIfLive: true },
-      );
-    } catch (error) {
-      if (error instanceof NotFoundException || error instanceof ConflictException
-        || error instanceof ForbiddenException || error instanceof BadRequestException) {
-        this.logger.warn(`send-back of task ${taskId} was not handed to its run: `
-          + `${error instanceof Error ? error.message : error}`);
-        return;
-      }
-      throw error;
+    await deliverOwedTaskTurn(this.prisma, this.sessions, ownerId, runSessionId,
+      evidenceSendBackTurnId(decisionId), evidenceSendBackMessage({
+        taskId, taskTitle: decision.task.title, revision: decision.evidence.revision.toString(),
+        decidedByType: decision.decidedByType, note: decision.note, from,
+      }));
+  }
+
+  async deliverSendBacksOwedTo(sessionId?: string): Promise<void> {
+    const decisions = await this.prisma.taskEvidenceDecision.findMany({
+      where: { decision: 'SEND_BACK', ...(sessionId ? { evidence: { sourceSessionId: sessionId } } : {}) },
+      select: { id: true, ownerId: true, taskId: true, decidedByType: true, decidingSessionId: true },
+      orderBy: { decidedAt: 'asc' },
+    });
+    for (const decision of decisions) {
+      await this.deliverSendBack(decision.ownerId, decision.taskId, decision.id,
+        decision.decidedByType === 'USER' ? null : decision.decidingSessionId);
     }
   }
 }

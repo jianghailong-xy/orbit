@@ -558,6 +558,50 @@ suite('outside a project the dispatching session settles the evidence, and the o
         assert.equal(await waitingOn(moved.run), 0);
       });
 
+    await t.test('SEND_BACK survives recipient outages, recovery races and unread drains', async () => {
+      for (const outage of ['FAILED', 'RETRY', 'PENDING', 'ENDED'] as const) {
+        const reviewer = await conversation(`send-back reviewer ${outage}`);
+        const work = await dispatched(`send-back run ${outage}`, reviewer);
+        await submit(work, 'Ready.');
+        await db.session.update({ where: { id: work.run }, data: {
+          status: outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
+          retryAt: outage === 'RETRY' ? new Date(Date.now() + 3_600_000) : null,
+          completedAt: outage === 'ENDED' ? new Date() : null,
+        } });
+        const decision = await evidence.decide(ownerId, work.taskId, agent, {
+          decidingSessionId: reviewer, evidenceRevision: '1', decision: 'SEND_BACK', note: 'Show the missing counts.',
+        });
+        assert.equal(await status(work.taskId), 'OPEN');
+        assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 2 * WINDOW_MS)), null);
+        const key = `evidence-send-back:v1:${decision.id}`;
+        const notices = () => db.conversationTurn.findMany({
+          where: { sessionId: work.run, clientTurnId: { startsWith: key } }, orderBy: { seq: 'asc' },
+        });
+        await reviews.deliverSendBacksOwedTo(work.run);
+        if (outage === 'ENDED') {
+          assert.equal((await notices()).length, 0);
+          continue;
+        }
+        const retry = (await db.session.findUniqueOrThrow({ where: { id: work.run } })).retryAt;
+        if (outage === 'RETRY') assert.ok(retry, 'delivery preserves the retry');
+        if (outage === 'FAILED' || outage === 'RETRY') assert.equal((await notices()).length, 0);
+        await db.session.update({ where: { id: work.run }, data: { status: RunStatus.AWAITING_INPUT, retryAt: null } });
+        await Promise.all([reviews.deliverSendBacksOwedTo(work.run), reviews.deliverSendBacksOwedTo()]);
+        const [first] = await notices();
+        assert.equal((await notices()).length, 1);
+        assert.match(first.content ?? '', /Show the missing counts/);
+        await db.conversationTurn.update({ where: { id: first.id }, data: { status: 'ANSWERED', answeredAt: new Date(), deliveredAt: null } });
+        await Promise.all([reviews.deliverSendBacksOwedTo(), reviews.deliverSendBacksOwedTo(work.run)]);
+        const turns = await notices();
+        assert.equal(turns.length, 2);
+        assert.equal(turns[1].clientTurnId, `${key}:retry:${first.id}`);
+        assert.equal(turns[1].content, first.content);
+        await db.conversationTurn.update({ where: { id: turns[1].id }, data: { status: 'ANSWERED', answeredAt: new Date(), deliveredAt: new Date() } });
+        await reviews.deliverSendBacksOwedTo(work.run);
+        assert.equal((await notices()).length, 2);
+      }
+    });
+
     // (8) -------------------------------------------------------------------------------------------
     await t.test('(8) a send-back leaves the task open, its note is handed to the run, and the next revision is held again',
       async () => {

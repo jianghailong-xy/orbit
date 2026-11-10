@@ -21,11 +21,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { openFuseEpisodeId } from '../projects/project-fuse';
 import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coordinator-evidence-queue';
 import { derivedUuid } from '../projects/project-dispatch-identity';
-import { SESSION_ENDING_SELECT, conversationIsOver, sessionHasEnded } from '../projects/project-open-item';
+import { SESSION_ENDING_SELECT, conversationIsOver } from '../projects/project-open-item';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { assertSessionMayReach } from '../sessions/session-reach';
 import { SessionsService } from '../sessions/sessions.service';
+import { deliverOwedTaskTurn } from './owed-task-turn';
 import { latestOwnerConfirmationRequest } from './owner-confirmation-read';
 import {
   CONFIRMATION_RETURNS_BEFORE_OWNER,
@@ -85,16 +86,6 @@ function refuse(status: 400 | 403 | 409, code: string, requiredAction: string, m
   if (status === 403) throw new ForbiddenException(body);
   if (status === 400) throw new BadRequestException(body);
   throw new ConflictException(body);
-}
-
-/** Thrown out of a turn hook when the locked re-read says the call was already answered. */
-class AlreadyRecorded extends Error {
-  constructor(
-    readonly standing: ReviewerStanding,
-    readonly record: { id: string; kind: 'REVIEW' | 'RETURN' | 'PROBLEMS' },
-  ) {
-    super('already recorded');
-  }
 }
 
 /** Thrown out of a return's turn hook when the owner confirmed while it was on its way: it is PROBLEMS now. */
@@ -306,9 +297,9 @@ export class OwnerConfirmationReviewService {
    * call records PROBLEMS instead and tells the owner (§9 L2, L5).
    *
    * B8's table is read without a lock first, to know which session the turn is written into: the
-   * turn's transaction has to take that session's row before anything else (rank 30), and the task's
-   * row (rank 50) inside it — the shape the owner's own Send back has. Every row of the table is asked
-   * again under both locks before the record is written.
+   * record transaction takes that session's row first (rank 30), then the task's row (rank 50).
+   * Every row of the table is asked again under both locks before the durable return is written;
+   * delivery follows the commit and can wait for the run to recover.
    */
   async returnToRun(
     ownerId: string,
@@ -347,7 +338,7 @@ export class OwnerConfirmationReviewService {
     };
   }
 
-  /** B3: the RETURN record and the turn that carries it to the run, in that turn's transaction. */
+  /** Persist the RETURN before delivery, so an unavailable run cannot lose its next instruction. */
   private async recordReturn(
     ownerId: string,
     taskId: string,
@@ -357,52 +348,31 @@ export class OwnerConfirmationReviewService {
     runSessionId: string,
   ): Promise<ConfirmationReturnReceipt> {
     const recordId = randomUUID();
-    const clientTurnId = confirmationReturnTurnId(recordId);
-    const held: { standing?: ReviewerStanding } = {};
-    try {
-      await this.sessions.createTurn(
-        ownerId,
-        runSessionId,
-        { clientTurnId, content: '', intent: 'NEXT_TURN' },
-        {
-          participateSendTransaction: async (tx) => {
-            const route = await returnRoute(tx, ownerId, taskId, session, requestId, raw, { lock: true });
-            if (route.kind === 'ALREADY') throw new AlreadyRecorded(route.standing, route.record);
-            if (route.kind === 'PROBLEMS') throw new ReturnBecameProblems();
-            // The session this turn is being written into is the request's own: a request belongs to
-            // one session, so the request still being the one returned is the turn still being right.
-            held.standing = route.standing;
-            await writeReviewRecord(tx, ownerId, taskId, route.standing, {
-              id: recordId,
-              kind: 'RETURN',
-              reviewedSha: route.input.reviewedSha,
-              reason: route.input.reason,
-              body: { problems: route.input.problems },
-              returnClientTurnId: clientTurnId,
-            });
-          },
-        },
-      );
-    } catch (error) {
-      if (error instanceof AlreadyRecorded) return this.alreadyReturned(taskId, error.standing, error.record);
-      // `createTurn` refuses a run that has ended or gone to Trash before the hook asks row 11.
-      if (error instanceof ConflictException && !isRefusalBody(error)) {
-        refuse(409, RETURN_RUN_ENDED_CODE, RECORD_A_REVIEW_FOR_THE_OWNER,
-          'the task\'s run has ended, so there is no session to send this back to; record a review for the '
-          + 'owner with what must change under needsYou or notChecked instead');
-      }
-      throw error;
+    const written = await withTransactionRetry(this.prisma, async (tx) => {
+      // Keep the established session-before-task lock order, even while no turn can be written.
+      await tx.$queryRaw`SELECT "id" FROM "session" WHERE "id" = ${runSessionId}::uuid FOR UPDATE`;
+      const route = await returnRoute(tx, ownerId, taskId, session, requestId, raw, { lock: true });
+      if (route.kind === 'ALREADY') return { route, recordId: route.record.id };
+      if (route.kind === 'PROBLEMS') throw new ReturnBecameProblems();
+      await writeReviewRecord(tx, ownerId, taskId, route.standing, {
+        id: recordId, kind: 'RETURN', reviewedSha: route.input.reviewedSha,
+        reason: route.input.reason, body: { problems: route.input.problems },
+        returnClientTurnId: confirmationReturnTurnId(recordId),
+      });
+      return { route, recordId };
+    }, loggedRetry(this.logger, 'ownerConfirmationReview.return'));
+    if (written.route.kind === 'ALREADY') {
+      return this.alreadyReturned(taskId, written.route.standing, written.route.record);
     }
-    if (!held.standing) {
-      // A replay of a turn already written under this key — impossible for a key minted above.
-      throw new Error(`return ${recordId} filed a turn without recording it`);
-    }
+    await this.deliverReturn(recordId).catch((error) => this.logger.warn(
+      `return ${recordId} delivery failed: ${error instanceof Error ? error.message : error}`,
+    ));
     this.publishMoved([{ ownerId, taskId, runSessionId }]);
     return {
       recordId,
-      requestId: held.standing.request.id,
+      requestId: written.route.standing.request.id,
       kind: 'RETURN',
-      state: await this.stateOf(taskId, held.standing.request),
+      state: await this.stateOf(taskId, written.route.standing.request),
       alreadyRecorded: false,
     };
   }
@@ -450,8 +420,8 @@ export class OwnerConfirmationReviewService {
 
   /**
    * Q5 2: tell the reviewer what the owner answered, after the decision committed. Only a reviewer
-   * that has not ended: it is not revived for this (ILC G6), and a crash between the commit and here
-   * loses only the reminder — the answers are on the decision row and the task's comment.
+   * that has not ended: it is not revived for this (ILC G6). The decision row and task comment keep
+   * the answers durable until delivery can be recovered by the turn-end hook or leader sweep.
    */
   async deliverAnswers(decisionId: string): Promise<void> {
     const decision = await this.prisma.taskOwnerDecision.findUnique({
@@ -470,9 +440,9 @@ export class OwnerConfirmationReviewService {
     if (!decision || !answers?.length || !reviewerSessionId) return;
     const reviewer = await this.prisma.session.findUnique({
       where: { id: reviewerSessionId },
-      select: SESSION_ENDING_SELECT,
+      select: COORDINATOR_PAUSE_SELECT,
     });
-    if (!reviewer || sessionHasEnded(reviewer)) return;
+    if (!reviewer || conversationIsOver(reviewer) || conversationIsPaused(reviewer)) return;
     const lists = decision.reviewRecord!.body as unknown as Partial<ConfirmationReviewLists>;
     const content = ownerAnswersMessage({
       taskId: decision.taskId,
@@ -481,16 +451,33 @@ export class OwnerConfirmationReviewService {
       answers,
       needsYou: (lists.needsYou ?? []) as ConfirmationNeedsYouItem[],
     });
-    try {
-      await this.sessions.createTurn(decision.ownerId, reviewerSessionId, {
-        clientTurnId: ownerConfirmationAnswersTurnId(decisionId),
-        content,
-        intent: 'NEXT_TURN',
-      });
-    } catch (error) {
-      this.logger.warn(`answers of decision ${decisionId} were not delivered to its reviewer: `
-        + `${error instanceof Error ? error.message : error}`);
-    }
+    await deliverOwedTaskTurn(this.prisma, this.sessions, decision.ownerId, reviewerSessionId,
+      ownerConfirmationAnswersTurnId(decisionId), content);
+  }
+
+  private async deliverReturn(recordId: string): Promise<void> {
+    const record = await this.prisma.taskOwnerConfirmationReviewRecord.findUnique({
+      where: { id: recordId },
+      select: { ownerId: true, kind: true, review: { select: { request: { select: { sessionId: true } } } } },
+    });
+    if (!record || record.kind !== 'RETURN') return;
+    await deliverOwedTaskTurn(this.prisma, this.sessions, record.ownerId, record.review.request.sessionId,
+      confirmationReturnTurnId(recordId), '');
+  }
+
+  /** Recover committed returns and owner answers on turn completion and the leader's sweep. */
+  async deliverOwedTo(sessionId?: string): Promise<void> {
+    const returns = await this.prisma.taskOwnerConfirmationReviewRecord.findMany({
+      where: { kind: 'RETURN', ...(sessionId ? { review: { request: { sessionId } } } : {}) },
+      select: { id: true }, orderBy: { recordedAt: 'asc' },
+    });
+    for (const record of returns) await this.deliverReturn(record.id);
+    const answers = await this.prisma.taskOwnerDecision.findMany({
+      where: { reviewRecordId: { not: null },
+        ...(sessionId ? { reviewRecord: { review: { reviewerSessionId: sessionId } } } : {}) },
+      select: { id: true }, orderBy: { decidedAt: 'asc' },
+    });
+    for (const decision of answers) await this.deliverAnswers(decision.id);
   }
 
   private async stateOf(
@@ -634,11 +621,6 @@ async function writeReviewRecord(
   return written.id;
 }
 
-function isRefusalBody(error: ConflictException): boolean {
-  const body = error.getResponse();
-  return typeof body === 'object' && body !== null && (body as { kind?: unknown }).kind === 'REFUSAL';
-}
-
 /**
  * §3.5 rows 2–3 (and B8's, which are the same): the request is this account's, it has a review row,
  * the caller is its reviewer, and the caller is in a turn. With `lock`, the task's row is taken FOR
@@ -766,7 +748,7 @@ async function returnRoute(
       `the task is ${standing.task.status}, so there is no open request to send back`);
   }
   const run = await tx.session.findUnique({ where: { id: standing.request.sessionId }, select: SESSION_ENDING_SELECT });
-  if (!run || sessionHasEnded(run)) {
+  if (!run || conversationIsOver(run)) {
     refuse(409, RETURN_RUN_ENDED_CODE, RECORD_A_REVIEW_FOR_THE_OWNER,
       'the task\'s run has ended, so there is no session to send this back to; record a review for the owner '
       + 'with what must change under needsYou or notChecked instead');

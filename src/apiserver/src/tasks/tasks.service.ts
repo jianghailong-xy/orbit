@@ -2587,6 +2587,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       .then(() => this.deliverLooksFinishedOwedTo())
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
       .then(() => this.evidenceReviews?.deliverOwedTo())
+      .then(() => this.evidenceReviews?.deliverSendBacksOwedTo())
+      .then(() => this.confirmationReviews?.deliverOwedTo())
       .then(() => this.confirmationReviews?.deliverPendingFor())
       .catch((e) =>
         this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
