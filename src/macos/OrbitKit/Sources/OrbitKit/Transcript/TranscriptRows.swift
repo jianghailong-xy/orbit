@@ -129,6 +129,10 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case escalatedItem(itemID: String)
         /// The pause on the coordinator, by the item the resume door takes (§6.3 F-T4, mock 6 ①).
         case fusePause(itemID: String)
+        /// One owner request this conversation filed (`OwnerRequests`), by its id: the whole card
+        /// while it is pending, its one line once it has ended — drawn where it was asked, by its own
+        /// `createdAt`, and re-read from the account's requests on every render.
+        case ownerRequest(requestID: String)
     }
 
     /// Where this row belongs, which is the whole difference between a question and a record.
@@ -215,6 +219,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // the pause card gives itself.
         case .escalatedItem(let itemID):          return "open-item-\(itemID)"
         case .fusePause(let itemID):              return "fuse-\(itemID)"
+        // The web card's DOM id, `owner-request-<id>`.
+        case .ownerRequest(let requestID):        return "owner-request-\(PublicID.storageKey(requestID))"
         }
     }
 }
@@ -381,7 +387,7 @@ public enum DeliveryAnchor {
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
-             .coordinatorQuestionRecord, .escalatedItem, .fusePause:
+             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest:
             return items.last?.id
         }
     }

@@ -420,6 +420,8 @@ func initGitRepo(dir string) error {
 	if _, err := git(dir, "add", "-A"); err != nil {
 		return err
 	}
+	// A file holding an owner-request secret stays out of the baseline (secret_git.go).
+	unstageHeldSecrets(dir, nil, "")
 	// Use the user's git identity; --no-verify keeps hooks from blocking the baseline,
 	// and --allow-empty gives even an empty dir a HEAD to fork.
 	_, err := git(dir, "commit", "--no-verify", "--allow-empty", "-m", "orbit: baseline")
@@ -930,6 +932,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	if err := stageForFinalize(wt.Path); err != nil {
 		return nil, nil, fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
 	}
+	// A file holding an owner-request secret is left out of the commit, and the session is told (secret_git.go).
+	unstageHeldSecrets(wt.Path, nil, wt.Session)
 	// `diff --cached --quiet` exits non-zero when something is staged → there's work to commit.
 	if _, err := git(wt.Path, "diff", "--cached", "--quiet"); err != nil {
 		var msg string
@@ -948,6 +952,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	}
 	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
 	freshenBaseSha(wt)
+	// The finished branch, recorded while the values are known (secret_taint.go).
+	recordWorktreeTaint(wt)
 	baseSha := wt.baseSha()
 	if baseSha == "" {
 		return nil, nil, nil
@@ -961,9 +967,9 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 			wt.Session, len(files), maxChangedFiles))
 		return files[:maxChangedFiles], nil, nil
 	}
-	patchOut, _ := git(wt.Path, "diff", baseSha+"..HEAD")
+	patchOut, _ := git(wt.Path, "diff", "--full-index", baseSha+"..HEAD")
 	// The committed pictures are what the checkout holds now: their placeholders come from it.
-	return files, withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), nil
+	return files, withoutSecretPatches(withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), wt.Session), nil
 }
 
 // reportAbsentCheckout is finalizeWorktree for a session ended while its checkout was known to be away
@@ -980,8 +986,8 @@ func reportAbsentCheckout(wt *Worktree) ([]ChangedFile, []FilePatch, error) {
 	if len(files) > maxChangedFiles {
 		return files[:maxChangedFiles], nil, nil
 	}
-	patchOut, _ := git(wt.RepoDir, "diff", baseSha+".."+tip)
-	return files, buildFilePatches(files, splitPatch(patchOut)), nil
+	patchOut, _ := git(wt.RepoDir, "diff", "--full-index", baseSha+".."+tip)
+	return files, withoutSecretPatches(buildFilePatches(files, splitPatch(patchOut)), wt.Session), nil
 }
 
 // finalizeWorktreeReport commits the work of an ending session (finalizeWorktree) and fills the
@@ -1085,6 +1091,9 @@ func diffFiles(dir, base, head string) []ChangedFile {
 // worktree's CURRENT state (uncommitted + untracked) vs its base — for the turn-boundary
 // reports (turn-complete/complete) that drive the on-demand file diffs.
 func liveDiff(wt *Worktree) ([]ChangedFile, []FilePatch) {
+	// At the end of a turn, while the values are known: a commit of this session holding one is recorded, so it is
+	// refused a merge or push after the grant has gone too (secret_taint.go).
+	recordWorktreeTaint(wt)
 	return stagedLiveDiff(wt, true)
 }
 
@@ -1157,6 +1166,8 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	if _, err := ops.runEnv(wt.Path, env, add...); err != nil {
 		return nil, nil
 	}
+	// The live diff's patches leave this machine: a file holding an owner-request secret is not in them.
+	unstageHeldSecrets(wt.Path, env, wt.Session)
 	numOut, err := ops.runEnv(wt.Path, env, "diff", "--cached", "--numstat", baseSha)
 	if err != nil {
 		return nil, nil
@@ -1178,8 +1189,9 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	}
 	// Same staged index → the full patch matches the numstat exactly. Best-effort: a patch
 	// failure just leaves the file list without diffs, the status bar still works.
-	patchOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", baseSha)
-	return files, withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut)))
+	patchOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", "--full-index", baseSha)
+	// A patch that leaves this machine holds no owner-request secret (secret_wire.go).
+	return files, withoutSecretPatches(withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), wt.Session)
 }
 
 // seedIndexFromCheckout fills the temp index at idx with HEAD's tree, as `read-tree HEAD` into an
@@ -1577,6 +1589,16 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	sourceSha, err := git(repoRoot, "rev-parse", "--verify", "refs/heads/"+req.Branch)
 	if err != nil || sourceSha == "" {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("could not resolve branch %q", req.Branch)}
+	}
+	// What this merge would publish holds no owner-request secret (secret_wire.go).
+	// Excluded is only what the destination already has: origin's target when origin tracks it, since the merge may
+	// be pushed there with whatever the local target holds that origin does not; the local target otherwise.
+	destination := "refs/heads/" + target
+	if _, err := git(repoRoot, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+target); err == nil {
+		destination = "refs/remotes/origin/" + target
+	}
+	if refusal := secretPushRefusalOf(repoRoot, []string{sourceSha, "refs/heads/" + target}, destination); refusal != "" {
+		return mergeOutcome{Status: "error", Message: refusal}
 	}
 
 	// `[K6]` §7, asked before anything is decided about how to advance the target: is the source
@@ -2388,6 +2410,7 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	if err := gitIndex(addAllArgs(wtPath)...); err != nil {
 		return fail(err)
 	}
+	unstageHeldSecrets(wtPath, nil, req.SessionID)
 	// `diff --cached --quiet` exits 0 when nothing is staged → the tree is already clean.
 	if _, err := git(wtPath, "diff", "--cached", "--quiet"); err == nil {
 		failedCommits.clear(req.SessionID)
@@ -2713,7 +2736,7 @@ const commitMsgModel = "sonnet"
 // that can take the whole minute below — and no test can assert on what a model writes anyway.
 var commitMsgEngine = "claude"
 
-// commitMsgPrompt instructs the one-shot Claude; the staged diff is appended verbatim.
+// commitMsgPrompt instructs the one-shot Claude; the staged diff follows it verbatim, on stdin.
 const commitMsgPrompt = `Generate a git commit message for the staged changes below.
 
 Rules:
@@ -2736,6 +2759,17 @@ func generateCommitMessage(wtPath, fallback string) string {
 	if err != nil || strings.TrimSpace(diff) == "" {
 		return fallback
 	}
+	// The diff goes to a model vendor. Not when it holds an owner-request secret, on either side of it — a removed
+	// line is in it as much as an added one — and not from a repository a commit holding one was recorded in, whose
+	// values this runner may no longer know (secret_taint.go).
+	if r := runnerSecrets().scrubber(); r != nil && r.holds([]byte(diff)) {
+		logln("commit message: the staged diff holds a secret the owner delivered to this runner; using the diffstat message")
+		return fallback
+	}
+	if taintAppliesTo(wtPath) {
+		logln("commit message: this repository has a commit recorded as holding a secret; using the diffstat message")
+		return fallback
+	}
 	const maxDiffRunes = 12000 // a few thousand tokens characterizes any change; keeps it quick
 	if r := []rune(diff); len(r) > maxDiffRunes {
 		diff = string(r[:maxDiffRunes]) + "\n…(diff truncated)"
@@ -2752,8 +2786,11 @@ func generateCommitMessage(wtPath, fallback string) string {
 	defer os.RemoveAll(tmp)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, commitMsgEngine, "-p", commitMsgPrompt+diff,
+	// The diff on stdin, which `claude -p` reads after its prompt, not on the command line, where every process of
+	// this user can read it.
+	cmd := exec.CommandContext(ctx, commitMsgEngine, "-p", commitMsgPrompt,
 		"--model", commitMsgModel, "--output-format", "text")
+	cmd.Stdin = strings.NewReader(diff)
 	cmd.Dir = tmp
 	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.Output()

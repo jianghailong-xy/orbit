@@ -745,6 +745,46 @@ public final class APIClient: @unchecked Sendable {
                        body: ProjectDoneDeclineBody(note: note))
     }
 
+    // MARK: owner requests — what a session asked the account owner to do
+
+    /// `state` is `open`, `done`, `declined` or `all`; newest first.
+    public func ownerRequests(state: String) async throws -> OwnerRequestList {
+        try await get("owner-requests", query: [URLQueryItem(name: "state", value: state)])
+    }
+
+    public func ownerRequest(_ id: String) async throws -> OwnerRequest {
+        try await get("owner-requests/\(id)")
+    }
+
+    /// The owner did what was asked; a decision says which option, or in what words.
+    public func completeOwnerRequest(_ id: String, _ body: OwnerRequestDoneBody) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/done", body: body)
+    }
+
+    public func declineOwnerRequest(_ id: String, reason: String) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/decline", body: OwnerRequestDeclineBody(reason: reason))
+    }
+
+    /// A SECRET request's key, in the body and nowhere else; the answer never carries it back.
+    public func submitOwnerSecret(_ id: String, _ body: OwnerRequestSecretBody) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/secret", body: body)
+    }
+
+    /// Take back a key that has not reached the runner yet.
+    public func cancelOwnerSecret(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/secret/cancel")
+    }
+
+    /// Revoke a delivered key: the runner removes it on its next heartbeat.
+    public func revokeOwnerSecret(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/secret/revoke")
+    }
+
+    /// The owner's saved secrets, by label: no route returns a value.
+    public func accountSecrets() async throws -> AccountSecretList {
+        try await get("account-secrets")
+    }
+
     // MARK: a project's owner items — the merge to confirm, and the coordinator's question
 
     /// What this project still owes somebody a decision about, split by who is expected to act

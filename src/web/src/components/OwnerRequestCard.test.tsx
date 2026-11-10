@@ -10,7 +10,12 @@ import {
   WaitingOnYouTaskBadge,
   useSessionOwnerRequestInserts,
 } from './OwnerRequestCard';
-import { resetSnoozesForTest, snoozeRequest, type OwnerRequest } from '../lib/ownerRequests';
+import {
+  resetSnoozesForTest,
+  snoozeRequest,
+  type OwnerRequest,
+  type OwnerRequestSecretGrant,
+} from '../lib/ownerRequests';
 
 vi.mock('../api', () => ({ api: vi.fn() }));
 const { api } = await import('../api');
@@ -39,6 +44,7 @@ function request(over: Partial<OwnerRequest> = {}): OwnerRequest {
     recommendedOption: null,
     steps: null,
     secretSpec: null,
+    secretGrant: null,
     verifyHint: null,
     expiresAt: null,
     askedBySessionId: SESSION,
@@ -85,8 +91,9 @@ async function press(target: HTMLElement) {
   await flush();
 }
 
-async function type(el: HTMLTextAreaElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+async function type(el: HTMLTextAreaElement | HTMLInputElement, value: string) {
+  const proto = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')!.set!;
   await act(async () => {
     setter.call(el, value);
     el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -101,6 +108,7 @@ beforeEach(() => {
     if (path === '/runners') return [{ id: 'run1', name: 'hpc-01', displayName: 'HPC' }] as never;
     if (path.startsWith('/tasks/')) return { title: 'M0 follow-up experiments' } as never;
     if (path.startsWith('/owner-requests?')) return { requests: [] } as never;
+    if (path === '/account-secrets') return { secrets: [] } as never;
     throw new Error(`unexpected ${path}`);
   });
 });
@@ -242,31 +250,218 @@ describe('SECRET', () => {
   const secret = request({
     kind: 'SECRET',
     title: 'Provide a DeepSeek API key',
+    expiresAt: new Date(NOW + 3 * DAY).toISOString(),
     secretSpec: { name: 'DeepSeek API key', runnerId: 'run1', envVar: 'DEEPSEEK_API_KEY' },
   });
+  const KEY = 'sk-canary-0123456789abcdef';
+  const keyInput = () => host.querySelector<HTMLInputElement>('.owner-request-field input')!;
+  const saveBox = () => host.querySelector<HTMLElement>('.owner-request-save [role="checkbox"]')!;
+  const grant = (over: Partial<OwnerRequestSecretGrant>): OwnerRequestSecretGrant => ({
+    state: 'PENDING_DELIVERY',
+    endReason: null,
+    exposure: 'ENV',
+    expiresAt: new Date(NOW + 7 * DAY).toISOString(),
+    deliveredAt: null,
+    removedAt: null,
+    removalNote: null,
+    runnerOnline: true,
+    runnerLastSeenAt: null,
+    ...over,
+  });
+  /** Answers the secret doors with the request in this state, and every read as before. */
+  const answering = (view: OwnerRequest, saved: { id: string; label: string }[] = []) => {
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === '/runners') return [{ id: 'run1', name: 'hpc-01', displayName: 'HPC' }] as never;
+      if (path === '/account-secrets') return { secrets: saved.map((s) => ({ ...s, createdAt: '', updatedAt: '' })) } as never;
+      if (path.startsWith('/owner-requests?')) return { requests: [] } as never;
+      if (path.startsWith('/owner-requests/req1/secret')) return view as never;
+      throw new Error(`unexpected ${path}`);
+    });
+  };
 
-  it('draws where the key goes and the design’s wording, with entry switched off for now', async () => {
+  it('draws where the key goes and the design’s wording, with the key entered in a field that keeps nothing', async () => {
     await mount(<OwnerRequestCard now={NOW} request={secret} />);
-    await flush();
     const text = host.textContent ?? '';
     expect(text).toContain('SECRET');
     expect(text).toContain('Runner HPC as DEEPSEEK_API_KEY');
     expect(text).toContain('When the task ends, or after 7 days');
     expect(text).toContain('Goes straight to HPC. Orbit keeps it out of this conversation and away from the agent; only commands the agent runs with it can use it.');
     expect(text).toContain('Use a key you can revoke.');
-    expect(host.querySelector<HTMLInputElement>('.owner-request-field input')!.disabled).toBe(true);
+    expect(keyInput().disabled).toBe(false);
+    expect(keyInput().type).toBe('password');
+    expect(keyInput().getAttribute('autocomplete')).toBe('off');
     expect(button('Provide key').disabled).toBe(true);
     expect(button('Decline…').disabled).toBe(false);
     // Starts unchecked: the secrets design's decision 3, not the mockup.
-    expect(host.querySelector('.owner-request-save [aria-checked="true"]')).toBeNull();
+    expect(saveBox().getAttribute('aria-checked')).toBe('false');
+    expect(host.textContent).not.toContain('Use saved');
   });
 
   it('a file destination says who can read it', async () => {
     await mount(<OwnerRequestCard now={NOW} request={{ ...secret, secretSpec: { name: 'Key', runnerId: 'run1', filePath: '/etc/key' } }} />);
-    await flush();
-    expect(host.textContent).toContain('Goes straight to HPC as a file.');
-    expect(host.textContent).toContain('can read the file until it is removed.');
+    expect(host.textContent).toContain('Goes straight to HPC as a file. Orbit keeps it out of this conversation, but any program running as');
+    expect(host.textContent).toContain('on HPC can read the file until it is removed. Use a key you can revoke.');
     expect(host.textContent).toContain('Runner HPC at /etc/key');
+  });
+
+  it('submits the key in the body only, clears the field, and keeps it nowhere', async () => {
+    answering({ ...secret, secretGrant: grant({}) });
+    await mount(<OwnerRequestCard now={NOW} request={secret} />);
+    await type(keyInput(), KEY);
+    expect(button('Provide key').disabled).toBe(false);
+    await press(button('Provide key'));
+    expect(apiMock).toHaveBeenCalledWith('/owner-requests/req1/secret', { method: 'POST', body: { value: KEY } });
+    for (const [path] of apiMock.mock.calls) expect(path).not.toContain(KEY);
+    expect(window.location.href).not.toContain(KEY);
+    expect(JSON.stringify({ ...localStorage })).not.toContain(KEY);
+    expect(JSON.stringify({ ...sessionStorage })).not.toContain(KEY);
+    expect(host.innerHTML).not.toContain(KEY);
+    // Submitted, the card waits for the runner rather than claiming the key is in.
+    expect(host.textContent).toContain('Key is on its way to HPC.');
+    expect(host.textContent).not.toContain('Key is in');
+  });
+
+  it('the field is empty again as soon as it is submitted, and when delivery fails it comes back with the reason', async () => {
+    answering({ ...secret, secretGrant: grant({ state: 'REMOVED', endReason: 'DELIVERY_FAILED', removalNote: 'PATH_TAKEN: a directory stands there' }) });
+    await mount(<OwnerRequestCard now={NOW} request={secret} />);
+    await type(keyInput(), KEY);
+    await press(button('Provide key'));
+    expect(keyInput().value).toBe('');
+    expect(host.textContent).toContain('The key did not reach HPC');
+    expect(host.textContent).toContain('PATH_TAKEN: a directory stands there');
+    expect(button('Provide key').disabled).toBe(true);
+  });
+
+  it('saving for later is asked for, with a name to save it under', async () => {
+    answering({ ...secret, secretGrant: grant({}) });
+    await mount(<OwnerRequestCard now={NOW} request={secret} />);
+    await type(keyInput(), KEY);
+    await press(saveBox());
+    const name = host.querySelector<HTMLInputElement>('input[aria-label="Name to save it under"]')!;
+    expect(name.value).toBe('DeepSeek API key');
+    await type(name, '');
+    expect(button('Provide key').disabled).toBe(true);
+    await type(name, 'DeepSeek personal');
+    await press(button('Provide key'));
+    expect(apiMock).toHaveBeenCalledWith('/owner-requests/req1/secret', {
+      method: 'POST',
+      body: { value: KEY, saveAs: 'DeepSeek personal' },
+    });
+  });
+
+  it('Use saved sends the saved secret’s id, not a value', async () => {
+    answering({ ...secret, secretGrant: grant({}) }, [{ id: 'acct1', label: 'DeepSeek personal' }]);
+    await mount(<OwnerRequestCard now={NOW} request={secret} />);
+    expect(host.textContent).toContain('Use saved:');
+    await press(button('DeepSeek personal'));
+    expect(host.textContent).toContain('Using saved “DeepSeek personal”');
+    await press(button('Provide key'));
+    expect(apiMock).toHaveBeenCalledWith('/owner-requests/req1/secret', { method: 'POST', body: { savedSecretId: 'acct1' } });
+  });
+
+  it('on its way to an offline runner: says until when it waits, and can be cancelled', async () => {
+    answering({ ...secret });
+    await mount(<OwnerRequestCard now={NOW} request={{ ...secret, secretGrant: grant({ runnerOnline: false }) }} />);
+    expect(host.textContent).toContain('Key is on its way to HPC.');
+    expect(host.textContent).toContain('HPC is offline. Orbit will deliver this when it comes back, until ');
+    expect(host.querySelector('.owner-request-field input')).toBeNull();
+    await press(button('Cancel'));
+    expect(apiMock).toHaveBeenCalledWith('/owner-requests/req1/secret/cancel', { method: 'POST' });
+    // Back to input.
+    expect(keyInput().disabled).toBe(false);
+  });
+
+  it('an earlier key the runner fetched and never confirmed: says removal is pending, and takes no new key yet', async () => {
+    answering({ ...secret });
+    await mount(<OwnerRequestCard now={NOW} request={{ ...secret, secretGrant: grant({ state: 'REMOVING', endReason: 'REVOKED' }) }} />);
+    expect(host.textContent).toContain('Removal pending: waiting for HPC to confirm');
+    expect(host.textContent).toContain('You can enter a key again once HPC confirms the earlier one is gone.');
+    expect(host.querySelector('.owner-request-field input')).toBeNull();
+  });
+});
+
+describe('a delivered secret', () => {
+  const ended = { resolvedAt: new Date(NOW - MINUTE).toISOString(), resolvedByUserId: 'me' };
+  const done = (secretGrant: Partial<OwnerRequestSecretGrant>) => request({
+    ...ended,
+    state: 'DONE',
+    kind: 'SECRET',
+    secretSpec: { name: 'k', runnerId: 'run1', envVar: 'K' },
+    secretGrant: {
+      state: 'ACTIVE',
+      endReason: null,
+      exposure: 'ENV',
+      expiresAt: new Date(NOW + 7 * DAY).toISOString(),
+      deliveredAt: new Date(NOW - MINUTE).toISOString(),
+      removedAt: null,
+      removalNote: null,
+      runnerOnline: true,
+      runnerLastSeenAt: null,
+      ...secretGrant,
+    },
+  });
+
+  it('ACTIVE: the key is in, until when, and Revoke ends it', async () => {
+    const revoking = done({ state: 'REMOVING', endReason: 'REVOKED' });
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === '/runners') return [{ id: 'run1', name: 'hpc-01', displayName: 'HPC' }] as never;
+      if (path === '/owner-requests/req1/secret/revoke') return revoking as never;
+      throw new Error(`unexpected ${path}`);
+    });
+    await mount(<OwnerRequestResolved now={NOW} request={done({})} />);
+    expect(host.textContent).toContain('Delivered to HPC as K');
+    expect(host.textContent).toContain('Key is in · expires');
+    await press(button('Revoke'));
+    expect(apiMock).toHaveBeenCalledWith('/owner-requests/req1/secret/revoke', { method: 'POST' });
+    expect(host.textContent).toContain('Removal pending: waiting for HPC to confirm');
+    expect(host.querySelector('button')).toBeNull();
+  });
+
+  it('REMOVING with the runner gone quiet says since when', async () => {
+    await mount(<OwnerRequestResolved now={NOW} request={done({ state: 'REMOVING', runnerOnline: false, runnerLastSeenAt: new Date(NOW - DAY).toISOString() })} />);
+    expect(host.textContent).toContain('Removal pending: HPC has not been online since ');
+  });
+
+  it('an ended request whose fetched key was never confirmed still says removal is pending', async () => {
+    const expired = { ...done({ state: 'REMOVING', endReason: 'EXPIRED', deliveredAt: null, runnerOnline: false, runnerLastSeenAt: new Date(NOW - DAY).toISOString() }), state: 'EXPIRED' as const };
+    await mount(<OwnerRequestResolved now={NOW} request={expired} />);
+    expect(host.textContent).toContain('Removal pending: HPC has not been online since ');
+    expect(host.querySelector('button')).toBeNull();
+  });
+
+  it('a fetched key whose runner was deleted says removal is unconfirmed, on an ended request and on a pending one', async () => {
+    const note = 'Removal unconfirmed: the runner was deleted before it could confirm.';
+    const withdrawn = { ...done({ state: 'REMOVED', endReason: 'RUNNER_DELETED', removalNote: note, deliveredAt: null }), state: 'WITHDRAWN' as const };
+    await mount(<OwnerRequestResolved now={NOW} request={withdrawn} />);
+    expect(host.textContent).toContain(note);
+    expect(host.textContent).not.toContain('removal unconfirmed. Removal unconfirmed');
+    const pending = { ...done({ state: 'REMOVED', endReason: 'REVOKED', removalNote: note, deliveredAt: null }), state: 'PENDING' as const, resolvedAt: null };
+    await mount(<OwnerRequestCard now={NOW} request={pending} />);
+    expect(host.textContent).toContain(note);
+    expect(host.querySelector('.owner-request-field input')).not.toBeNull();
+  });
+
+  it('says what ends the key: the task, or the session when there is no task', async () => {
+    const plain = { ...done({}), secretScope: 'SESSION' as const };
+    await mount(<OwnerRequestResolved now={NOW} request={plain} />);
+    host.innerHTML = '';
+    const pending = { ...done({}), state: 'PENDING' as const, resolvedAt: null, secretGrant: null, secretScope: 'SESSION' as const };
+    await mount(<OwnerRequestCard now={NOW} request={pending} />);
+    expect(host.textContent).toContain('When the session ends, or after 7 days');
+    expect(host.textContent).not.toContain('When the task ends');
+  });
+
+  it('a runner’s removal note is told on a request that did not end DONE', async () => {
+    const note = 'The file at ~/.config/x/key could not be deleted: permission denied';
+    const expired = { ...done({ state: 'REMOVED', endReason: 'EXPIRED', removalNote: note, deliveredAt: null }), state: 'EXPIRED' as const };
+    await mount(<OwnerRequestResolved now={NOW} request={expired} />);
+    expect(host.textContent).toContain(`Removed when it expired. ${note}`);
+  });
+
+  it('REMOVED says why, with the runner’s note', async () => {
+    await mount(<OwnerRequestResolved now={NOW} request={done({ state: 'REMOVED', endReason: 'TASK_ENDED', removalNote: 'a different file stands at /etc/key; left in place' })} />);
+    expect(host.textContent).toContain('Removed when the task ended. a different file stands at /etc/key; left in place');
+    expect(host.querySelector('button')).toBeNull();
   });
 });
 

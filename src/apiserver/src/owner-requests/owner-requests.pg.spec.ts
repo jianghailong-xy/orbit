@@ -54,10 +54,13 @@ import {
   type OwnerRequestState,
 } from './owner-request';
 import { OwnerRequestsService, type OwnerRequestView } from './owner-requests.service';
+import { OwnerSecretsService } from './owner-secrets.service';
 import type { FileOwnerRequestDto } from './dto';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
+// Filing a SECRET needs a store to keep its value in later (owner-secret-crypto.ts).
+process.env.PROVIDER_SECRET_KEY ??= 'owner-requests-pg-spec-key';
 
 interface Account {
   ownerId: string;
@@ -90,7 +93,7 @@ test('owner requests: any session files one, and every ending is final', {
   const prisma = db as unknown as PrismaService;
   const told: string[] = [];
   const push = { notifyOwnerRequest: async (id: string) => { told.push(id); } } as unknown as PushService;
-  const service = new OwnerRequestsService(prisma, push);
+  const service = new OwnerRequestsService(prisma, new OwnerSecretsService(prisma), push);
   const door = new RunnerOwnerRequestsController(prisma, service);
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
@@ -130,7 +133,7 @@ test('owner requests: any session files one, and every ending is final', {
     const secret = await file({
       kind: 'SECRET',
       title: 'Stripe test key',
-      secretSpec: { name: 'Stripe test key', runnerId: a.runner.id, envVar: 'STRIPE_KEY' },
+      secretSpec: { name: 'Stripe test key', envVar: 'STRIPE_KEY' },
       verifyHint: 'curl https://api.stripe.com/v1/balance answers 200',
     });
     const step = await file({
@@ -194,6 +197,11 @@ test('owner requests: any session files one, and every ending is final', {
       () => file({ kind: 'SECRET', secretSpec: { name: 'k', runnerId: a.runner.id } }),
       () => file({ kind: 'SECRET', secretSpec: { name: 'k', runnerId: a.runner.id, envVar: 'A', filePath: '/x' } }),
       () => file({ kind: 'SECRET', secretSpec: { name: 'k', runnerId: a.runner.id, envVar: 'not a name' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', envVar: 'PATH' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', envVar: 'ORBIT_SESSION_ID' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', envVar: 'LD_PRELOAD' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', filePath: 'relative/key' } }),
+      () => file({ kind: 'SECRET', secretSpec: { name: 'k', filePath: '~/a/../../etc/key' } }),
       () => file({ kind: 'CONFIRM', options: [{ label: 'x' }] }),
       () => file({ kind: 'DECISION', options: [{ label: 'x' }], recommendedOption: 1 }),
       () => file({ kind: 'CONFIRM', expiresAt: new Date(Date.now() - 1_000).toISOString() }),
@@ -203,9 +211,10 @@ test('owner requests: any session files one, and every ending is final', {
     const other = await account(db, 'other');
     await assert.rejects(file({ kind: 'CONFIRM', blocksTaskIds: [other.taskId] }), NotFoundException);
     await assert.rejects(file({ kind: 'CONFIRM', projectId: other.projectId }), NotFoundException);
+    // The runner is the asking session's own (design §4.1): naming another one is refused, never honoured.
     await assert.rejects(
       file({ kind: 'SECRET', secretSpec: { name: 'k', runnerId: other.runner.id, envVar: 'K' } }),
-      NotFoundException,
+      BadRequestException,
     );
     assert.equal(await db.ownerRequest.count({ where: { ownerId: a.ownerId } }), before);
   });
@@ -334,7 +343,7 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
       name: `owner-requests-runner-${label}`,
       tokenHash: `hash-${randomUUID()}`,
       status: RunnerStatus.ONLINE,
-      capabilities: [],
+      capabilities: ['owner-secret/v1'],
       capabilitiesReportedAt: new Date(),
       lastHeartbeatAt: new Date(),
     },

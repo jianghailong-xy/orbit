@@ -77,6 +77,7 @@ Usage:
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit file <command>              Keep files in Orbit instead of in the repository
+  orbit secret exec NAME -- CMD     Run CMD with a secret the owner delivered to this runner
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
   orbit login [--with-token]        Act as yourself: approve a personal access token in the browser
@@ -104,6 +105,7 @@ Env:
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
 var cmdHelp = map[string]string{
+	"secret": secretHelp,
 	"register": `orbit register — register this machine and install the background service
 
 Usage:
@@ -303,6 +305,11 @@ func main() {
 	// answers git and does nothing else.
 	if len(os.Args) > 1 && os.Args[1] == gitCredentialReadOnlyCommand {
 		os.Exit(runGitCredentialReadOnly(os.Args[2:]))
+	}
+	// `orbit secret exec NAME -- command…` (secret_exec.go), also ahead of everything below: the command's own
+	// arguments are not this CLI's flags (a `--help` among them is the command's), and its environment is the shell's.
+	if len(os.Args) > 1 && os.Args[1] == "secret" {
+		os.Exit(cmdSecret(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
 	// Services installed by an older Orbit release have a baked PATH that predates one or more
 	// official per-user engine directories. Refresh the current process too: doctor/install may
@@ -842,6 +849,11 @@ func cmdUnregister(bools map[string]bool) {
 	}
 
 	uninstallService() // stop + remove the background service first
+
+	// Every secret file this runner wrote goes with it (secret_store.go).
+	if n := removeLedgerSecrets(newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI)); n > 0 {
+		fmt.Printf("✓ removed %d secret file(s) the owner had delivered to this runner\n", n)
+	}
 
 	if err := newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI).deregister(); err != nil {
 		fmt.Fprintf(os.Stderr, "note: could not delete %q from the control plane (%s)\n", cfg.Name, firstLine(err.Error()))

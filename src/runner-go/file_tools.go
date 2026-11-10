@@ -160,6 +160,9 @@ type skippedFile struct {
 // name a quoted string cannot carry: busboy reads a plain filename as Latin-1.
 func (t *Transport) uploadFile(parent context.Context, sessionID string, file *os.File, name, mimeType string, fields map[string]string) (sessionFile, error) {
 	var out sessionFile
+	if err := refuseFileHoldingSecret(file, file.Name()); err != nil {
+		return out, err
+	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	for key, value := range fields {

@@ -12,7 +12,7 @@ import { openItemsNoLongerOwed } from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
-import { ownerRequestAlert, type OwnerRequestKind } from '../owner-requests/owner-request';
+import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
 import { settleAlert } from './settle-alert';
 import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
@@ -740,7 +740,7 @@ export class PushService {
    * A session filed an owner request (`OwnerRequestsService.file`). Sent once, after the row commits,
    * and only while it is still PENDING. The banner is the kind ("Decision needed") over the request's
    * own title, cut to a lock-screen line; collapsed on the request, so a replay never stacks a second
-   * one. The tap opens the session that asked. Best-effort: a failure is logged, never thrown.
+   * one. The tap opens the session that asked; the category's actions open the card itself. Best-effort: a failure is logged, never thrown.
    */
   async notifyOwnerRequest(requestId: string): Promise<void> {
     if (!this.enabled) return;
@@ -757,12 +757,15 @@ export class PushService {
         aps: {
           alert,
           sound: 'default',
+          // Per kind: the clients' actions open the card on its input, or put it off ("Later").
+          category: ownerRequestPushCategory(request.kind as OwnerRequestKind),
           'thread-id': `owner-request-${request.askedBySessionId}`,
         },
         kind: 'owner-request',
         sessionID: request.askedBySessionId,
         ...(request.projectId ? { projectID: request.projectId } : {}),
         ownerRequestID: requestId,
+        ownerRequestKind: request.kind,
       });
       this.background(this.feishuOther(feishu, {
         kind: 'owner-request', ...alert, collapseId: `owner-request-${requestId}`,

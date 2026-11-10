@@ -425,6 +425,12 @@ func newIntegrationOutputRedactor(extra ...string) *integrationOutputRedactor {
 	for _, value := range extra {
 		add(value)
 	}
+	// Every owner-request secret this runner holds, in each of its forms (secret_scrub.go).
+	if held := runnerSecrets().scrubber(); held != nil {
+		for _, form := range held.secrets {
+			add(form)
+		}
+	}
 	for _, entry := range os.Environ() {
 		name, value, ok := strings.Cut(entry, "=")
 		if ok && credentialEnvName(name) {
@@ -474,6 +480,10 @@ func (r *integrationOutputRedactor) carry() int {
 func (r *integrationOutputRedactor) redact(text string) string {
 	for _, secret := range r.secrets {
 		text = strings.ReplaceAll(text, secret, integrationOutputRedacted)
+	}
+	// An owner-request secret's scrubber (newSecretRedactor) replaces exact values only.
+	if r.urlCredential == nil {
+		return text
 	}
 	return r.urlCredential.ReplaceAllString(text, "${1}"+integrationOutputRedacted+"@")
 }
