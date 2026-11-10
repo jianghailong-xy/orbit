@@ -7319,6 +7319,8 @@ model OwnerRequestSecret {
   state       String       @default("PENDING_DELIVERY")
   endReason   String?      @map("end_reason")
   expiresAt   DateTime     @map("expires_at") @db.Timestamptz(3)
+  /// When the runner first fetched the value: a grant ended before its ack is REMOVING once fetched (§2).
+  fetchedAt   DateTime?    @map("fetched_at") @db.Timestamptz(3)
   deliveredAt DateTime?    @map("delivered_at") @db.Timestamptz(3)
   removedAt   DateTime?    @map("removed_at") @db.Timestamptz(3)
   removalNote String?      @map("removal_note")

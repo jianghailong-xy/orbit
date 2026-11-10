@@ -29,8 +29,13 @@ export async function endUndeliveredGrants(
   reason: 'EXPIRED' | 'WITHDRAWN' | 'REVOKED',
 ): Promise<void> {
   if (requestIds.length === 0) return;
+  // Fetched but not acknowledged: the runner may hold a copy, so it is REMOVING until the runner confirms (§2).
   await tx.ownerRequestSecret.updateMany({
-    where: { requestId: { in: requestIds }, state: 'PENDING_DELIVERY' },
+    where: { requestId: { in: requestIds }, state: 'PENDING_DELIVERY', fetchedAt: { not: null } },
+    data: { state: 'REMOVING', endReason: reason, valueEnc: null },
+  });
+  await tx.ownerRequestSecret.updateMany({
+    where: { requestId: { in: requestIds }, state: 'PENDING_DELIVERY', fetchedAt: null },
     data: { state: 'REMOVED', endReason: reason, valueEnc: null, removedAt: new Date() },
   });
 }

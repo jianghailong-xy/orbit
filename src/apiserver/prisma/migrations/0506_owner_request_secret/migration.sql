@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS "owner_request_secret" (
   "state"        TEXT NOT NULL DEFAULT 'PENDING_DELIVERY',
   "end_reason"   TEXT,
   "expires_at"   TIMESTAMPTZ(3) NOT NULL,
+  -- When the named runner first fetched the value. A grant ended before its ack is REMOVING, not REMOVED, once it
+  -- has been fetched: the runner may hold a copy until it confirms (§2).
+  "fetched_at"   TIMESTAMPTZ(3),
   "delivered_at" TIMESTAMPTZ(3),
   "removed_at"   TIMESTAMPTZ(3),
   "removal_note" TEXT,

@@ -301,11 +301,18 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
 
   /** The owner takes back a key that has not been delivered yet: the ciphertext goes, the card returns to its input. */
   async cancel(ownerId: string, requestId: string): Promise<void> {
-    const ended = await this.prisma.ownerRequestSecret.updateManyAndReturn({
-      where: { requestId, ownerId, state: 'PENDING_DELIVERY' },
+    // Fetched but not acknowledged: the runner may hold a copy, so REMOVING until it confirms (§2); else REMOVED.
+    const fetched = await this.prisma.ownerRequestSecret.updateManyAndReturn({
+      where: { requestId, ownerId, state: 'PENDING_DELIVERY', fetchedAt: { not: null } },
+      data: { state: 'REMOVING', endReason: 'REVOKED', valueEnc: null },
+      select: { runnerId: true },
+    });
+    const unfetched = await this.prisma.ownerRequestSecret.updateManyAndReturn({
+      where: { requestId, ownerId, state: 'PENDING_DELIVERY', fetchedAt: null },
       data: { state: 'REMOVED', endReason: 'REVOKED', valueEnc: null, removedAt: new Date() },
       select: { runnerId: true },
     });
+    const ended = [...fetched, ...unfetched];
     if (ended.length === 0) await this.requireRequest(ownerId, requestId, 'no key is waiting for delivery on this request');
     // A runner that fetched it before the cancel is told by its next reconcile, and by a 404 on its ack.
     if (ended[0]?.runnerId) this.realtime?.markRunnerChanged(ended[0].runnerId);
@@ -484,6 +491,11 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`secret grant ${grant.id} could not be decrypted and was ended KEY_UNREADABLE`);
       throw new NotFoundException('secret grant not found');
     }
+    // From here the runner may hold a copy: an ending before its ack waits for it to confirm (§2).
+    await this.prisma.ownerRequestSecret.updateMany({
+      where: { id: grant.id, fetchedAt: null },
+      data: { fetchedAt: new Date() },
+    });
     return {
       id: grant.id,
       requestId: grant.request_id,
@@ -575,12 +587,21 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
    * The values a runner may be holding right now, for the write-door check (§7.2). One indexed read; decrypts only on a
    * runner with a grant in hand. A value that cannot be decrypted is skipped — the fetch ends that grant.
    */
-  async valuesHeldBy(runner: { id: string; ownerId: string }): Promise<Array<{ name: string; value: string }>> {
+  async valuesHeldBy(runner: { id: string; ownerId: string }): Promise<{
+    values: Array<{ name: string; value: string }>;
+    /** A grant this runner may hold whose value could not be read here, so the check is incomplete. */
+    unreadable: boolean;
+  }> {
     const grants = await this.prisma.ownerRequestSecret.findMany({
       where: { runnerId: runner.id, ownerId: runner.ownerId, state: { in: ['PENDING_DELIVERY', 'ACTIVE'] } },
       select: { id: true, name: true, filePath: true, valueEnc: true },
     });
     const values: Array<{ name: string; value: string }> = [];
+    if (grants.length === 0) return { values, unreadable: false };
+    // A replica without the key cannot read any value: that says nothing about the grants, so it ends none of them
+    // and answers that it could not check.
+    if (!ownerSecretStoreAvailable()) return { values, unreadable: true };
+    let unreadable = false;
     for (const g of grants) {
       if (!g.valueEnc) continue;
       try {
@@ -589,11 +610,27 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
           value: openOwnerSecret(g.valueEnc, grantAad(g.id, runner.ownerId, runner.id)),
         });
       } catch {
-        // Unreadable: it cannot be delivered either, and the fetch ends it.
+        // The key changed, or the row was tampered with (§3.3): the grant ends KEY_UNREADABLE here, as at fetch, and
+        // the runner removes its copy on its next heartbeat. This check is incomplete for it meanwhile.
+        unreadable = true;
+        await this.endUnreadable(g.id, runner.id);
       }
     }
-    return values;
+    return { values, unreadable };
   }
+
+  /** §3.3: a grant whose ciphertext cannot be read ends KEY_UNREADABLE. Fetched copies wait for the runner. */
+  private async endUnreadable(grantId: string, runnerId: string): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "owner_request_secret"
+         SET "state" = CASE WHEN "state" = 'ACTIVE' OR "fetched_at" IS NOT NULL THEN 'REMOVING' ELSE 'REMOVED' END,
+             "removed_at" = CASE WHEN "state" = 'ACTIVE' OR "fetched_at" IS NOT NULL THEN NULL ELSE now() END,
+             "end_reason" = 'KEY_UNREADABLE', "value_enc" = NULL, "updated_at" = now()
+       WHERE "id" = ${grantId}::uuid AND "state" IN ('PENDING_DELIVERY', 'ACTIVE')`;
+    this.logger.warn(`secret grant ${grantId} could not be decrypted and was ended KEY_UNREADABLE`);
+    this.realtime?.markRunnerChanged(runnerId);
+  }
+
 
   // ─── Ending ─────────────────────────────────────────────────────────────────────────────────
 
@@ -605,8 +642,10 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
   async sweep(): Promise<number> {
     const ended = await this.prisma.$queryRaw<Array<{ runner_id: string | null }>>`
       UPDATE "owner_request_secret" g
-         SET "state" = CASE WHEN g."state" = 'ACTIVE' AND g."runner_id" IS NOT NULL THEN 'REMOVING' ELSE 'REMOVED' END,
-             "removed_at" = CASE WHEN g."state" = 'ACTIVE' AND g."runner_id" IS NOT NULL THEN NULL ELSE now() END,
+         SET "state" = CASE WHEN (g."state" = 'ACTIVE' OR g."fetched_at" IS NOT NULL) AND g."runner_id" IS NOT NULL
+                            THEN 'REMOVING' ELSE 'REMOVED' END,
+             "removed_at" = CASE WHEN (g."state" = 'ACTIVE' OR g."fetched_at" IS NOT NULL) AND g."runner_id" IS NOT NULL
+                                 THEN NULL ELSE now() END,
              "removal_note" = CASE WHEN g."state" = 'ACTIVE' AND g."runner_id" IS NULL THEN ${RUNNER_DELETED_NOTE}
                                    ELSE g."removal_note" END,
              "end_reason" = ${END_REASON},

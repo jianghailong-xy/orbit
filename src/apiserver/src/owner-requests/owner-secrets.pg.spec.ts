@@ -32,7 +32,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { BadRequestException, ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException, UnprocessableEntityException } from '@nestjs/common';
 import { RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
 import { Client } from 'pg';
 import { lastValueFrom, of } from 'rxjs';
@@ -318,6 +318,60 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
     await assert.rejects(secrets.fetch({ id: a.secondRunnerId, ownerId: a.ownerId }, otherGrant.id), NotFoundException);
     const ended = await db.ownerRequestSecret.findUniqueOrThrow({ where: { id: otherGrant.id } });
     assert.deepEqual([ended.state, ended.endReason, ended.valueEnc], ['REMOVED', 'KEY_UNREADABLE', null]);
+  });
+
+  await t.test('(e2) an unreadable grant ends KEY_UNREADABLE at the write door, which then refuses to store unchecked text', async () => {
+    const { grantId } = await deliver(await a.session());
+    const other = await fileSecret(await a.session());
+    await secrets.submit(a.ownerId, other.id, { value: canary() });
+    const donor = await grantOf(other.id);
+    // A ciphertext the key cannot open for this row (another row's): what a rotated key looks like to this grant.
+    await db.ownerRequestSecret.update({ where: { id: grantId }, data: { valueEnc: donor.valueEnc } });
+    const held = await secrets.valuesHeldBy(runnerA);
+    assert.equal(held.unreadable, true);
+    const ended = await db.ownerRequestSecret.findUniqueOrThrow({ where: { id: grantId } });
+    assert.deepEqual([ended.state, ended.endReason, ended.valueEnc], ['REMOVING', 'KEY_UNREADABLE', null]);
+    assert.ok((await secrets.reconcileFor(a.runnerId)).secretGrantsRemoving.includes(grantId));
+
+    // A replica without the key ends nothing, and reports that it could not check.
+    const key = process.env.PROVIDER_SECRET_KEY;
+    delete process.env.PROVIDER_SECRET_KEY;
+    try {
+      const blind = await secrets.valuesHeldBy(runnerA);
+      assert.equal(blind.unreadable, true);
+      assert.equal((await grantOf(other.id)).state, 'PENDING_DELIVERY', 'a missing key ends no grant');
+      const door = new SecretWriteDoorInterceptor(secrets);
+      const context = {
+        getType: () => 'http',
+        switchToHttp: () => ({ getRequest: () => ({ method: 'POST', path: '/api/runner/tasks/x/comments', body: { body: 'some text to store' }, runner: runnerA }) }),
+      } as never;
+      await assert.rejects(lastValueFrom(door.intercept(context, { handle: () => of('stored') })),
+        (e: unknown) => e instanceof ServiceUnavailableException);
+    } finally {
+      process.env.PROVIDER_SECRET_KEY = key;
+    }
+  });
+
+  await t.test('(e3) a grant the runner fetched but never acknowledged waits for the runner when its request ends', async () => {
+    for (const ending of ['WITHDRAWN', 'CANCELLED', 'EXPIRED'] as const) {
+      const sessionId = await a.session();
+      const request = await fileSecret(sessionId, { envVar: 'DEEPSEEK_API_KEY' }, new Date(Date.now() + 3_600_000).toISOString());
+      await secrets.submit(a.ownerId, request.id, { value: canary() });
+      const grant = await grantOf(request.id);
+      await secrets.fetch(runnerA, grant.id); // fetched, the ack lost
+      if (ending === 'WITHDRAWN') await requests.withdraw(a.ownerId, sessionId, request.id, undefined);
+      if (ending === 'CANCELLED') await secrets.cancel(a.ownerId, request.id);
+      if (ending === 'EXPIRED') {
+        await db.ownerRequest.update({ where: { id: request.id }, data: { expiresAt: new Date(Date.now() - 1_000) } });
+        await requests.expireDue(new Date());
+      }
+      const after = await db.ownerRequestSecret.findUniqueOrThrow({ where: { id: grant.id } });
+      assert.equal(after.state, 'REMOVING', `${ending}: a fetched grant is not claimed removed before the runner says so`);
+      assert.equal(after.valueEnc, null);
+      assert.ok((await secrets.reconcileFor(a.runnerId)).secretGrantsRemoving.includes(grant.id));
+      await secrets.removed(runnerA, grant.id, undefined);
+      assert.equal((await db.ownerRequestSecret.findUniqueOrThrow({ where: { id: grant.id } })).state, 'REMOVED');
+    }
   });
 
   await t.test('(f) what a submit takes, and when it may replace', async () => {

@@ -1,4 +1,4 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor, UnprocessableEntityException } from '@nestjs/common';
+import { CallHandler, ExecutionContext, Injectable, NestInterceptor, ServiceUnavailableException, UnprocessableEntityException } from '@nestjs/common';
 import { Observable, from, switchMap } from 'rxjs';
 import { OwnerSecretsService, OWNER_SECRET_MIN_BYTES } from './owner-secrets.service';
 
@@ -17,6 +17,7 @@ import { OwnerSecretsService, OWNER_SECRET_MIN_BYTES } from './owner-secrets.ser
  * at the event choke point and too frequent to search (heartbeat, events), are passed untouched.
  */
 export const SECRET_IN_TEXT = 'SECRET_IN_TEXT';
+export const SECRET_CHECK_UNAVAILABLE = 'SECRET_CHECK_UNAVAILABLE';
 
 const WRITES = new Set(['POST', 'PUT', 'PATCH']);
 
@@ -121,10 +122,18 @@ export class SecretWriteDoorInterceptor implements NestInterceptor {
     const runner = req.runner;
     const protocol = REDACTED.some((pattern) => pattern.test(route));
     return from(this.secrets.valuesHeldBy(runner)).pipe(
-      switchMap((held) => {
+      switchMap(({ values: held, unreadable }) => {
         if (protocol) {
           if (held.length > 0) req.body = redactHeldValues(req.body, held);
           return next.handle();
+        }
+        // A value this runner may hold could not be read here, so this text cannot be checked against it: refused,
+        // retryable, rather than stored unchecked (§7.2). The runner's own protocol is not refused (above).
+        if (unreadable && strings(req.body).some((t) => t.length >= OWNER_SECRET_MIN_BYTES)) {
+          throw new ServiceUnavailableException({
+            code: SECRET_CHECK_UNAVAILABLE,
+            message: 'Orbit could not check this text against a secret delivered to this runner; nothing was stored. Try again shortly',
+          });
         }
         const name = held.length > 0 ? secretInBody(req.body, held) : undefined;
         if (name) {
