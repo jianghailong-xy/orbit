@@ -79,6 +79,7 @@ export const DONE_REQUEST_TITLE = 'Is this project done?';
 /** Only the conversation a project is coordinated from may ask to record it done. */
 export const DONE_REQUEST_COORDINATOR_ONLY = 'DONE_REQUEST_COORDINATOR_ONLY';
 export const DONE_REQUEST_NOT_READY = 'DONE_REQUEST_NOT_READY';
+export const DONE_REQUEST_UNCHANGED_SINCE_DECLINE = 'DONE_REQUEST_UNCHANGED_SINCE_DECLINE';
 /** The owner's Not yet… door can only end an OPEN DONE_REQUEST. */
 export const DONE_REQUEST_NOT_OPEN = 'DONE_REQUEST_NOT_OPEN';
 /** Validation code shared by the DTO-facing and direct service-facing doors. */
