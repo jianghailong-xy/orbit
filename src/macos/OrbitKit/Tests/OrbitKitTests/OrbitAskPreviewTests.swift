@@ -330,6 +330,8 @@ final class OrbitAskPreviewTests: XCTestCase {
         XCTAssertTrue(s?.note.contains("every merge into release are checked as before") ?? false)
         XCTAssertEqual(s?.declineName, "Fix the refund rounding")
         XCTAssertEqual(SkipMergeCheckPreview.action, "Land it without the check")
+        XCTAssertEqual(SkipMergeCheckPreview.heading, "Land without the check?",
+                       "one line on a phone beside its badge")
 
         XCTAssertNil(Approvals.skipMergeCheckPreview(toolName: "orbit_project_update_integration", from: json("{}")))
     }
