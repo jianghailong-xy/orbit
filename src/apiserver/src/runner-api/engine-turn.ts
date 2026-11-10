@@ -65,6 +65,24 @@ export function engineTurnActiveAfter(events: EventLike[]): boolean | undefined 
   return decided?.active;
 }
 
+/** Streaming increments only an engine emits. They are never stored (NON_REPLAYABLE_EVENT_TYPES), so
+ *  engineTurnActiveAfter, which reads the stored part of a batch, never sees them. */
+const ENGINE_DELTAS: ReadonlySet<string> = new Set<string>([
+  RunEventType.TEXT_DELTA,
+  RunEventType.THINKING_DELTA,
+]);
+
+/**
+ * Whether a batch carries the engine streaming a reply — see Session.engineStartedAt.
+ *
+ * A warm reused process sends no handshake, and a plain-text reply stores nothing until the
+ * `assistant` event that ends it. Without this, a session streaming a long reply read as
+ * "the engine has not started your message yet" for the whole of it.
+ */
+export function engineStreamedIn(events: EventLike[]): boolean {
+  return events.some((e) => ENGINE_DELTAS.has(e.type));
+}
+
 /** The phases a runtime may name. One member: see Session.enginePhase for why it is not an enum. */
 const NAMED_PHASES: ReadonlySet<string> = new Set<string>(['compacting']);
 

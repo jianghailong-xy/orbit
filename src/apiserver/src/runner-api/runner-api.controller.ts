@@ -364,7 +364,7 @@ import {
 } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
-import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
+import { enginePhaseAfter, enginePhaseSinceAfter, engineStreamedIn, engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { bookedAfter, ownCost, ownModelUsage, reportsRunningTotals, runningTotalsBase } from './running-totals';
@@ -8312,8 +8312,10 @@ export class RunnerApiController {
       // was still booting. Every value it does return — a spawn handshake, a generation event
       // from a reused warm process, a turn ending — is the engine talking.
       // Fill only while unset, like runtimeSessionId above: one-shot per run (the claim clears
-      // it), so a redelivered batch cannot push the stamp later than the first arrival.
-      if (!session.engineStartedAt && engineTurnActive !== undefined) {
+      // it), so a redelivered batch cannot push the stamp later than the first arrival. A streamed
+      // delta counts too: it is never stored, and a warm process's plain-text reply stores nothing
+      // until it ends (engineStreamedIn).
+      if (!session.engineStartedAt && (engineTurnActive !== undefined || engineStreamedIn(events))) {
         sessionData.engineStartedAt = new Date();
       }
       Object.assign(sessionData, {
