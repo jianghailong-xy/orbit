@@ -1,3 +1,4 @@
+import { isRunNotifyTurn } from './run-notify';
 import {
   ConflictException,
   Inject,
@@ -127,6 +128,7 @@ interface ResendMessage {
   sessionReplies?: true;
   /** The key of a failed confirmation-review or return turn, which is re-sent as itself. */
   confirmationReviewTurn?: string;
+  runNotifyTurn?: string;
 }
 
 /**
@@ -750,14 +752,15 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         const resendsReplies = !!message.sessionReplies && await hasHeldSessionReplies(this.prisma, session.id);
         // A failed confirmation review or return turn is re-sent as itself, its block rendered again
         // from the rows (tasks/owner-confirmation-review-turn.ts) — nobody's words either.
+        const resendsNotice = message.runNotifyTurn ? `${message.runNotifyTurn.split(':retry:')[0]}:retry:${randomUUID()}` : null;
         const resendsReview = message.confirmationReviewTurn
           ? confirmationReviewRetryTurnId(message.confirmationReviewTurn, randomUUID())
           : null;
-        if (!content && !resendsReplies && !resendsReview) {
+        if (!content && !resendsReplies && !resendsReview && !resendsNotice) {
           // A reply turn or a confirmation review that is not held any more: the row says its kind
           // had something to say, and nothing of it is left. A continue would be a turn about
           // nothing, so the retry ends as it always has.
-          if (message.sessionReplies || message.confirmationReviewTurn) {
+          if (message.sessionReplies || message.confirmationReviewTurn || message.runNotifyTurn) {
             await this.disarm(session.id, session.status, session.retryAt, 'nothing to re-send');
             continue;
           }
@@ -852,7 +855,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               // again, so its outcomes are found, merged and drawn as what they are.
               clientTurnId: resendsReplies
                 ? `${SESSION_REPLY_TURN_PREFIX}retry:${randomUUID()}`
-                : resendsReview
+                : resendsNotice ?? resendsReview
                   // Orbit's words are re-sent as Orbit's (`ResendMessage.orbit`); the owner's as theirs.
                   ?? `${message.orbit ? AUTO_RETRY_ORBIT_TURN_KEY_PREFIX : AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
             },
@@ -1083,7 +1086,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     // or confirmation turn behind it IS re-sent by the sweep, and a card that read the two alike
     // would put Continue over a session that is about to say something of its own.
     const nothingToResend =
-      !message.content && !message.sessionReplies && !message.confirmationReviewTurn;
+      !message.content && !message.sessionReplies && !message.confirmationReviewTurn && !message.runNotifyTurn;
     if (!message.content || !message.senderSessionId) {
       return { text: message.content, ...(nothingToResend ? { nothingToResend: true as const } : {}) };
     }
@@ -1257,6 +1260,13 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           attachHeldReplies(tx, sessionId, turn.clientTurnId),
       };
     }
+    if (message.runNotifyTurn && message.turnId) {
+      const carriedBy = message.turnId;
+      return {
+        onTurnWritten: (tx: Prisma.TransactionClient, turn: { id: string }) =>
+          moveSessionRequestToTurn(tx, sessionId, carriedBy, turn.id),
+      };
+    }
     if (!message.senderSessionId) return undefined;
     const carriedBy = message.turnId;
     return {
@@ -1414,6 +1424,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // A confirmation request handed to its reviewer, or a reviewer's return handed to the run
         // (tasks/owner-confirmation-review-turn.ts), is re-sent as itself: stepping past it would
         // re-send a message the session already answered.
+        if (keyOfTurn && isRunNotifyTurn(keyOfTurn)) {
+          return { content: '', attachmentsOf: null, senderSessionId: null, turnId: turnOfEvent!.id, runNotifyTurn: keyOfTurn };
+        }
         if (keyOfTurn && isConfirmationReviewContentTurn(keyOfTurn)) {
           return { content: '', attachmentsOf: null, senderSessionId: null, turnId: null, confirmationReviewTurn: keyOfTurn };
         }
