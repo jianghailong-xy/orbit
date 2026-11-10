@@ -243,6 +243,8 @@ describe('the shared page, a page at a time', () => {
 
   it('fetches a clipped card whole when it is opened, and not before', async () => {
     await mountPage();
+    // The call sits behind its steps line; opening the line opens no card, so it fetches nothing.
+    for (const line of [...container.querySelectorAll<HTMLElement>('.chat-steps-line')]) await click(line);
     const card = [...container.querySelectorAll('.chat-tool-card')].find((c) =>
       c.textContent?.includes(rows.BASH_CALL.payload.input.description),
     );
