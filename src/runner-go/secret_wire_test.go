@@ -5,9 +5,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,6 +19,8 @@ import (
 // holdTestSecret makes this process a runner holding value as an ENV grant, until the test ends.
 func holdTestSecret(t *testing.T, value string) {
 	t.Helper()
+	// Whatever a held value makes the runner write (secret_taint.go) goes to this test's own Orbit directory.
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	store := newSecretStore(newFakeSecretAPI(), filepath.Join(t.TempDir(), "ledger.json"))
 	store.held["g"] = &heldSecret{id: "g", exposure: secretExposureEnv, name: "K_KEY", value: secretValue(value), fetched: true, acked: true, revoked: make(chan struct{})}
 	store.rebuildScrubLocked()
@@ -129,10 +133,165 @@ func TestMergeRefusesABranchWhoseHistoryHoldsASecret(t *testing.T) {
 	mustGit(t, repo, "checkout", "-b", "orbit/clean", mainBefore)
 	commitFile(t, repo, "ok.txt", "fine\n", "ok")
 	mustGit(t, repo, "checkout", "main")
-	if paths := secretHistoryPaths(repo, "refs/heads/orbit/clean", "refs/heads/main"); len(paths) != 0 {
-		t.Fatalf("a clean branch reads as holding a value: %v", paths)
+	r := runnerSecrets().scrubber()
+	if paths, err := secretHistoryScan(repo, "refs/heads/orbit/clean", r, "refs/heads/main"); err != nil || len(paths) != 0 {
+		t.Fatalf("a clean branch reads as holding a value: %v %v", paths, err)
 	}
-	if paths := secretHistoryPaths(repo, "refs/heads/orbit/leak", "refs/heads/main"); strings.Join(paths, ",") != "config.env" {
-		t.Fatalf("paths = %v", paths)
+	if paths, err := secretHistoryScan(repo, "refs/heads/orbit/leak", r, "refs/heads/main"); err != nil || strings.Join(paths, ",") != "config.env" {
+		t.Fatalf("paths = %v %v", paths, err)
+	}
+}
+
+// Review 2, OPEN 1: the blob scan sees what `git log -p` does not print — a value only in a merge commit's own
+// content, in a binary file, with diff.noprefix set — and refuses when it cannot run.
+func TestSecretHistoryScanSeesMergesBinariesAndNoprefix(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	mustGit(t, repo, "config", "diff.noprefix", "true")
+	main := mustGit(t, repo, "rev-parse", "main")
+	holdTestSecret(t, testSecretValue)
+	r := runnerSecrets().scrubber()
+
+	// A value introduced only by a merge commit's resolution.
+	mustGit(t, repo, "checkout", "-q", "-b", "side")
+	commitFile(t, repo, "side.txt", "side\n", "side")
+	mustGit(t, repo, "checkout", "-q", "-b", "orbit/merge", main)
+	commitFile(t, repo, "own.txt", "own\n", "own")
+	mustGit(t, repo, "merge", "--no-ff", "--no-commit", "side")
+	if err := os.WriteFile(filepath.Join(repo, "side.txt"), []byte("side "+testSecretValue+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "add", "-A")
+	mustGit(t, repo, "commit", "-q", "-m", "merge side")
+	if paths, err := secretHistoryScan(repo, "refs/heads/orbit/merge", r, "refs/heads/main"); err != nil || strings.Join(paths, ",") != "side.txt" {
+		t.Fatalf("merge commit: %v %v", paths, err)
+	}
+
+	// A binary file.
+	mustGit(t, repo, "checkout", "-q", "-b", "orbit/binary", main)
+	if err := os.WriteFile(filepath.Join(repo, "blob.bin"), append([]byte{0, 1, 2, 0}, []byte(testSecretValue)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "add", "-A")
+	mustGit(t, repo, "commit", "-q", "-m", "binary")
+	if refusal := secretPushRefusal(repo, "refs/heads/orbit/binary", "refs/heads/main"); !strings.Contains(refusal, "blob.bin") {
+		t.Fatalf("binary: %q", refusal)
+	}
+
+	// A scan that cannot run refuses.
+	if refusal := secretPushRefusal(repo, "0123456789012345678901234567890123456789", "refs/heads/main"); !strings.Contains(refusal, "could not check") {
+		t.Fatalf("failed scan: %q", refusal)
+	}
+	mustGit(t, repo, "checkout", "-q", "main")
+}
+
+// Review 2, OPEN 2: a commit recorded while the value was known is refused after the grant is gone, and a branch
+// whose history was rewritten without it is not.
+func TestTaintedCommitIsRefusedAfterTheGrantEnds(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	main := mustGit(t, repo, "rev-parse", "main")
+	mustGit(t, repo, "checkout", "-q", "-b", "orbit/leak")
+	commitFile(t, repo, "config.env", "KEY="+testSecretValue+"\n", "add key")
+	commitFile(t, repo, "more.txt", "more\n", "more")
+	mustGit(t, repo, "checkout", "-q", "main")
+
+	// While the value is known: the store removing the grant records the commit first.
+	store := newSecretStore(newFakeSecretAPI(), filepath.Join(t.TempDir(), "ledger.json"))
+	store.held["g"] = &heldSecret{id: "g", exposure: secretExposureEnv, name: "K_KEY", value: secretValue(testSecretValue), revoked: make(chan struct{})}
+	store.rebuildScrubLocked()
+	old := secretBeforeForget
+	secretBeforeForget = func(r *integrationOutputRedactor) { recordSecretTaint(repo, "refs/heads/orbit/leak", r, main) }
+	defer func() { secretBeforeForget = old }()
+	store.remove("g")
+
+	raw, _ := os.ReadFile(secretTaintPath())
+	if strings.Contains(string(raw), testSecretValue) || !strings.Contains(string(raw), "config.env") {
+		t.Fatalf("taint record: %s", raw)
+	}
+	if info, _ := os.Stat(secretTaintPath()); info.Mode().Perm() != 0o600 {
+		t.Fatalf("taint mode %v", info.Mode())
+	}
+
+	// No grant held any more.
+	if runnerSecrets() != nil {
+		t.Fatal("fixture: a store is installed")
+	}
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/leak", BaseSha: main})
+	if out.Status != "error" || !strings.Contains(out.Message, "config.env") {
+		t.Fatalf("merge after the grant ended = %+v", out)
+	}
+	if mustGit(t, repo, "rev-parse", "main") != main {
+		t.Fatal("main moved")
+	}
+	// A descendant is refused too; the history rewritten without the commit is not.
+	mustGit(t, repo, "checkout", "-q", "orbit/leak")
+	commitFile(t, repo, "later.txt", "later\n", "later")
+	if refusal := secretPushRefusal(repo, "refs/heads/orbit/leak", "refs/heads/main"); refusal == "" {
+		t.Fatal("a descendant of the recorded commit was allowed")
+	}
+	mustGit(t, repo, "checkout", "-q", "-B", "orbit/leak", main)
+	commitFile(t, repo, "clean.txt", "clean\n", "clean")
+	mustGit(t, repo, "checkout", "-q", "main")
+	if refusal := secretPushRefusal(repo, "refs/heads/orbit/leak", "refs/heads/main"); refusal != "" {
+		t.Fatalf("rewritten branch refused: %q", refusal)
+	}
+}
+
+// Review 2, OPEN 2: the end of a turn records the session's own commits while the grant is live.
+func TestTurnEndRecordsACommittedSecret(t *testing.T) {
+	wt := sessionWorktree(t, "sSecretTaint")
+	holdTestSecret(t, testSecretValue)
+	commitFile(t, wt.Path, "leak.env", "KEY="+testSecretValue+"\n", "add key")
+	liveDiff(wt)
+	runnerSecretStore.Store(nil)
+	if paths := taintedPaths(wt.Path, "HEAD", wt.baseSha()); strings.Join(paths, ",") != "leak.env" {
+		t.Fatalf("tainted = %v", paths)
+	}
+}
+
+// Review 2, OPEN 3: no upload door sends a file holding a value, the worktree artifact door included.
+func TestUploadDoorsRefuseAFileHoldingASecret(t *testing.T) {
+	holdTestSecret(t, testSecretValue)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("a file holding a value was uploaded to %s", r.URL.Path)
+	}))
+	defer srv.Close()
+	tr := NewTransport(srv.URL, "tok")
+	path := filepath.Join(t.TempDir(), "leak.log")
+	if err := os.WriteFile(path, []byte("log "+testSecretValue), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if _, err := tr.uploadSessionAttachmentFile(context.Background(), "s1", file, "text/plain", "leak.log"); !errors.Is(err, errFileHoldsOwnerSecret) {
+		t.Fatalf("attachment upload: %v", err)
+	}
+	if _, err := tr.uploadFile(context.Background(), "s1", file, "leak.log", "text/plain", nil); !errors.Is(err, errFileHoldsOwnerSecret) {
+		t.Fatalf("file upload: %v", err)
+	}
+}
+
+func TestIntegrationOutputRedactorIncludesHeldSecrets(t *testing.T) {
+	holdTestSecret(t, testSecretValue)
+	r := newIntegrationOutputRedactor()
+	if out := r.redact("check printed " + testSecretValue); strings.Contains(out, testSecretValue) {
+		t.Fatalf("integration output kept the value: %q", out)
+	}
+}
+
+func TestMergeRecoveryPreviewRefusesACandidateHoldingASecret(t *testing.T) {
+	repo, _, req := recoveryFixture(t)
+	mustGit(t, repo, "checkout", "-q", req.Branch)
+	commitFile(t, repo, "leak.env", "KEY="+testSecretValue+"\n", "add key")
+	mustGit(t, repo, "checkout", "-q", "main")
+	holdTestSecret(t, testSecretValue)
+	out := mergeToMain(req)
+	if out.Recovery == nil || out.Recovery.Patch != "" || strings.Contains(sprintAll(out), testSecretValue) ||
+		!strings.Contains(sprintAll(out), "leak.env") {
+		t.Fatalf("preview = %+v", out)
 	}
 }

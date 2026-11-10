@@ -6,6 +6,7 @@ import (
 	"io"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -61,14 +62,16 @@ func withoutSecretPatches(patches []FilePatch, sessionID string) []FilePatch {
 	return kept
 }
 
-// secretHistoryPaths is the paths whose added lines, in any commit reachable from tip and from none of exclude, hold a
-// held value: what a merge or a push of tip would publish. A ref in exclude that does not resolve is skipped.
-func secretHistoryPaths(repo, tip string, exclude ...string) []string {
-	r := runnerSecrets().scrubber()
+// secretHistoryScan is what a push or merge of tip would publish that holds a value r knows: every object reachable
+// from tip and from none of exclude (blobs whatever their content, trees, commits and their messages, merges
+// included) read whole through `git cat-file --batch`, so no diff option, binary file or user's diff configuration
+// hides one. It returns the paths, as `git rev-list --objects` names them ("commit <id>" for a commit), and an error
+// when the scan could not be completed: a caller refuses then, rather than push what it could not read.
+func secretHistoryScan(repo, tip string, r *integrationOutputRedactor, exclude ...string) ([]string, error) {
 	if r == nil || tip == "" {
-		return nil
+		return nil, nil
 	}
-	args := []string{"-C", repo, "log", "-p", "--no-color", "--no-ext-diff", "--no-renames", "--format=", tip}
+	args := []string{"rev-list", "--objects", tip}
 	var not []string
 	for _, ref := range exclude {
 		if ref == "" {
@@ -81,45 +84,128 @@ func secretHistoryPaths(repo, tip string, exclude ...string) []string {
 	if len(not) > 0 {
 		args = append(args, append([]string{"--not"}, not...)...)
 	}
-	cmd := exec.Command("git", args...)
+	listed, err := git(repo, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing the objects of %s: %w", tip, err)
+	}
+	var ids []string
+	names := map[string]string{}
+	for _, line := range strings.Split(listed, "\n") {
+		id, name, _ := strings.Cut(strings.TrimSpace(line), " ")
+		if id == "" {
+			continue
+		}
+		if _, seen := names[id]; !seen {
+			ids = append(ids, id)
+		}
+		names[id] = name
+	}
+	hits, err := objectsHolding(repo, ids, r)
+	if err != nil {
+		return nil, err
+	}
+	paths := map[string]bool{}
+	for _, hit := range hits {
+		switch name := names[hit.id]; {
+		case hit.kind == "commit":
+			paths["commit "+hit.id] = true
+		case name != "":
+			paths[name] = true
+		default:
+			paths[hit.kind+" "+hit.id] = true
+		}
+	}
+	out := make([]string, 0, len(paths))
+	for p := range paths {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+type objectHit struct{ id, kind string }
+
+// objectsHolding reads each object through one `git cat-file --batch` and returns those holding a value. Anything
+// short of reading every object is an error.
+func objectsHolding(repo string, ids []string, r *integrationOutputRedactor) ([]objectHit, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	cmd := exec.Command("git", "-C", repo, "cat-file", "--batch")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
-		return nil
+		return nil, err
 	}
-	hits := map[string]bool{}
-	reader := bufio.NewReaderSize(stdout, 64*1024)
-	path := ""
-	for {
-		line, err := reader.ReadString('\n')
-		switch {
-		case strings.HasPrefix(line, "diff --git "):
-			path = diffGitPath(strings.TrimRight(line, "\n"))
-		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++ "):
-			if path != "" && r.holds([]byte(line[1:])) {
-				hits[path] = true
+	go func() {
+		defer stdin.Close()
+		for _, id := range ids {
+			if _, err := io.WriteString(stdin, id+"\n"); err != nil {
+				return
 			}
 		}
+	}()
+	reader := bufio.NewReaderSize(stdout, 64*1024)
+	var hits []objectHit
+	var readErr error
+	for _, id := range ids {
+		header, err := reader.ReadString('\n')
 		if err != nil {
+			readErr = fmt.Errorf("reading object %s: %w", id, err)
 			break
+		}
+		fields := strings.Fields(header)
+		if len(fields) != 3 {
+			readErr = fmt.Errorf("object %s could not be read: %s", id, strings.TrimSpace(header))
+			break
+		}
+		size, err := strconv.ParseInt(fields[2], 10, 64)
+		if err != nil {
+			readErr = fmt.Errorf("object %s: %w", id, err)
+			break
+		}
+		content := make([]byte, size)
+		if _, err := io.ReadFull(reader, content); err != nil {
+			readErr = fmt.Errorf("reading object %s: %w", id, err)
+			break
+		}
+		_, _ = reader.ReadByte()
+		if r.holds(content) {
+			hits = append(hits, objectHit{id: fields[0], kind: fields[1]})
 		}
 	}
 	_, _ = io.Copy(io.Discard, reader)
-	_ = cmd.Wait()
-	paths := make([]string, 0, len(hits))
-	for p := range hits {
-		paths = append(paths, p)
+	if err := cmd.Wait(); err != nil && readErr == nil {
+		readErr = fmt.Errorf("git cat-file: %w", gitFailure(err))
 	}
-	sort.Strings(paths)
-	return paths
+	if readErr != nil {
+		return nil, readErr
+	}
+	return hits, nil
 }
 
-// diffGitPath is the b/ side of a `diff --git a/x b/x` header.
-func diffGitPath(header string) string {
-	if i := strings.LastIndex(header, " b/"); i >= 0 {
-		return header[i+3:]
+// secretPushRefusal is why tip may not be merged or pushed, "" when it may: its history holds a value this runner
+// holds, or holds a commit recorded as holding one while a value was still known (secret_taint.go). A scan that
+// cannot be completed refuses too.
+func secretPushRefusal(repo, tip string, exclude ...string) string {
+	if r := runnerSecrets().scrubber(); r != nil {
+		paths, err := secretHistoryScan(repo, tip, r, exclude...)
+		if err != nil {
+			return "Refused: Orbit could not check what this would publish for the secrets the owner delivered to this runner, so it does not merge or push it: " +
+				firstLine(err.Error())
+		}
+		if len(paths) > 0 {
+			return secretHistoryRefusal(paths)
+		}
+	}
+	if paths := taintedPaths(repo, tip, exclude...); len(paths) > 0 {
+		return secretHistoryRefusal(paths)
 	}
 	return ""
 }

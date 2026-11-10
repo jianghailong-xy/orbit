@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS "owner_request_secret" (
   "runner_id"    UUID,
   "session_id"   UUID NOT NULL,
   "task_id"      UUID,
+  -- The task's lifecycle epoch (task_progress.lifecycle_epoch) when the owner submitted: a task reopened since is a new
+  -- epoch, and does not get the secret back (§6.1).
+  "task_epoch"   INTEGER,
   "name"         TEXT,
   "exposure"     TEXT NOT NULL,
   "file_path"    TEXT,

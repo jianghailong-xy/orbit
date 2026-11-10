@@ -68,7 +68,8 @@ const LIVE = Prisma.sql`
        AND (s."assigned_runner_id" IS NULL OR s."assigned_runner_id" = g."runner_id")
        AND (g."task_id" IS NOT NULL OR (s."completed_at" IS NULL AND s."archived_at" IS NULL)))
   AND (g."task_id" IS NULL OR EXISTS (
-    SELECT 1 FROM "task" t WHERE t."id" = g."task_id" AND t."status"::text NOT IN ('DONE', 'CANCELLED', 'FAILED')))
+    SELECT 1 FROM "task" t WHERE t."id" = g."task_id" AND t."status"::text NOT IN ('DONE', 'CANCELLED', 'FAILED')
+      AND COALESCE((SELECT p."lifecycle_epoch" FROM "task_progress" p WHERE p."task_id" = t."id"), 0) = COALESCE(g."task_epoch", 0)))
   AND (g."state" <> 'PENDING_DELIVERY' OR EXISTS (
     SELECT 1 FROM "owner_request" r
      WHERE r."id" = g."request_id" AND r."state" = 'PENDING' AND (r."expires_at" IS NULL OR r."expires_at" > now())))`;
@@ -79,7 +80,8 @@ const END_REASON = Prisma.sql`
     WHEN g."runner_id" IS NULL THEN 'RUNNER_DELETED'
     WHEN g."expires_at" <= now() THEN 'EXPIRED'
     WHEN g."task_id" IS NOT NULL AND NOT EXISTS (
-      SELECT 1 FROM "task" t WHERE t."id" = g."task_id" AND t."status"::text NOT IN ('DONE', 'CANCELLED', 'FAILED'))
+      SELECT 1 FROM "task" t WHERE t."id" = g."task_id" AND t."status"::text NOT IN ('DONE', 'CANCELLED', 'FAILED')
+      AND COALESCE((SELECT p."lifecycle_epoch" FROM "task_progress" p WHERE p."task_id" = t."id"), 0) = COALESCE(g."task_epoch", 0))
       THEN 'TASK_ENDED'
     WHEN EXISTS (
       SELECT 1 FROM "session" s
@@ -269,6 +271,10 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
       if (existing) await tx.ownerRequestSecret.delete({ where: { requestId } });
       const [{ id }] = await tx.$queryRaw<Array<{ id: string }>>`SELECT gen_random_uuid()::text AS id`;
       const now = new Date();
+      // The task's epoch now: reopening the task later starts a new one, which the grant does not live into (§6.1).
+      const taskEpoch = session.taskId
+        ? (await tx.taskProgress.findUnique({ where: { taskId: session.taskId }, select: { lifecycleEpoch: true } }))?.lifecycleEpoch ?? 0
+        : null;
       await tx.ownerRequestSecret.create({
         data: {
           id,
@@ -277,6 +283,7 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
           runnerId: spec.runnerId,
           sessionId: request.asked_by_session_id,
           taskId: session.taskId,
+          taskEpoch,
           name: spec.envVar ?? null,
           exposure: spec.envVar ? 'ENV' : 'FILE',
           filePath: spec.envVar ? null : (spec.filePath ?? null),

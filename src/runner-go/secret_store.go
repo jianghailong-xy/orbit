@@ -583,6 +583,16 @@ func (s *secretStore) ackFailed(id, code, message string) {
 // remove drops one grant from this machine and returns the removal note, "" when there is nothing to say. An ENV
 // grant leaves memory and its leases are revoked; a FILE grant's file goes when it is still the one written.
 func (s *secretStore) remove(id string) string {
+	// While the value is still known: a commit holding it is recorded before it can no longer be recognised.
+	s.mu.Lock()
+	value := secretValue("")
+	if held := s.held[id]; held != nil {
+		value = held.value
+	}
+	s.mu.Unlock()
+	if value != "" && secretBeforeForget != nil {
+		secretBeforeForget(newSecretRedactor([]string{string(value)}))
+	}
 	s.mu.Lock()
 	held := s.held[id]
 	delete(s.held, id)

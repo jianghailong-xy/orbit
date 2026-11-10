@@ -7309,6 +7309,8 @@ model OwnerRequestSecret {
   runnerId    String?      @map("runner_id") @db.Uuid
   sessionId   String       @map("session_id") @db.Uuid
   taskId      String?      @map("task_id") @db.Uuid
+  /// The task's lifecycle epoch at submission (task_progress.lifecycle_epoch): a reopened task is a new epoch.
+  taskEpoch   Int?         @map("task_epoch")
   /// The environment variable, for ENV; NULL for FILE.
   name        String?
   exposure    String

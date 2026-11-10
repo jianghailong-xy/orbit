@@ -220,6 +220,16 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
       const { taskId } = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { taskId: true } });
       await db.task.update({ where: { id: taskId! }, data: { status: 'DONE' } });
     });
+    // A task that ended and was reopened before any sweep ran is a new epoch: its secret does not come back (§6.1).
+    await removal('TASK_ENDED', async () => {
+      const taskId = await a.task();
+      return { sessionId: await a.session({ taskId }) };
+    }, async ({ sessionId }) => {
+      const { taskId } = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { taskId: true } });
+      await db.task.update({ where: { id: taskId! }, data: { status: 'DONE' } });
+      await db.task.update({ where: { id: taskId! }, data: { status: 'IN_PROGRESS' } });
+      assert.equal((await db.task.findUniqueOrThrow({ where: { id: taskId! } })).status, 'IN_PROGRESS', 'reopened');
+    });
     await removal('SESSION_ENDED', async () => ({ sessionId: await a.session() }), async ({ sessionId }) => {
       await db.session.update({ where: { id: sessionId }, data: { completedAt: new Date() } });
     });

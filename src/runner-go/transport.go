@@ -1019,6 +1019,11 @@ func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID s
 	if info.Size() > maxSessionAttachmentBytes {
 		return "", errAttachmentTooLarge
 	}
+	// Every door that sends a file's bytes comes through here or uploadFile: none sends one holding an
+	// owner-request secret (local_file.go).
+	if err := refuseFileHoldingSecret(file, file.Name()); err != nil {
+		return "", err
+	}
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)

@@ -952,6 +952,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	}
 	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
 	freshenBaseSha(wt)
+	// The finished branch, recorded while the values are known (secret_taint.go).
+	recordWorktreeTaint(wt)
 	baseSha := wt.baseSha()
 	if baseSha == "" {
 		return nil, nil, nil
@@ -1089,6 +1091,9 @@ func diffFiles(dir, base, head string) []ChangedFile {
 // worktree's CURRENT state (uncommitted + untracked) vs its base — for the turn-boundary
 // reports (turn-complete/complete) that drive the on-demand file diffs.
 func liveDiff(wt *Worktree) ([]ChangedFile, []FilePatch) {
+	// At the end of a turn, while the values are known: a commit of this session holding one is recorded, so it is
+	// refused a merge or push after the grant has gone too (secret_taint.go).
+	recordWorktreeTaint(wt)
 	return stagedLiveDiff(wt, true)
 }
 
@@ -1586,8 +1591,8 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("could not resolve branch %q", req.Branch)}
 	}
 	// What this merge would publish holds no owner-request secret (secret_wire.go).
-	if paths := secretHistoryPaths(repoRoot, sourceSha, "refs/heads/"+target, "refs/remotes/origin/"+target); len(paths) > 0 {
-		return mergeOutcome{Status: "error", Message: secretHistoryRefusal(paths)}
+	if refusal := secretPushRefusal(repoRoot, sourceSha, "refs/heads/"+target, "refs/remotes/origin/"+target); refusal != "" {
+		return mergeOutcome{Status: "error", Message: refusal}
 	}
 
 	// `[K6]` §7, asked before anything is decided about how to advance the target: is the source

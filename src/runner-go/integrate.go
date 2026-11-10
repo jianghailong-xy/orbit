@@ -640,9 +640,9 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 	// mergeLock, not only the per-target lock above: this is the same repository root's refs that
 	// a session's own "merge to main" moves, and the two must not interleave.
 	// A landing that would publish an owner-request secret is refused (secret_wire.go).
-	if paths := secretHistoryPaths(repoRoot, tested, targetSha); len(paths) > 0 {
+	if refusal := secretPushRefusal(repoRoot, tested, targetSha); refusal != "" {
 		result.State, result.Phase, result.ErrorCode = "ERROR", "PUSH", "PUSH_REJECTED"
-		result.ErrorDetail = map[string]any{"detail": secretHistoryRefusal(paths)}
+		result.ErrorDetail = map[string]any{"detail": refusal}
 		return result
 	}
 	mergeLock.Lock()
@@ -987,9 +987,9 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 			})
 		}
 	}
-	if paths := secretHistoryPaths(repoRoot, tested, upstreamSha); len(paths) > 0 {
+	if refusal := secretPushRefusal(repoRoot, tested, upstreamSha); refusal != "" {
 		result.State, result.Phase, result.ErrorCode = "ERROR", "PUSH", "PUSH_REJECTED"
-		result.ErrorDetail = map[string]any{"detail": secretHistoryRefusal(paths)}
+		result.ErrorDetail = map[string]any{"detail": refusal}
 		return result
 	}
 	mergeLock.Lock()

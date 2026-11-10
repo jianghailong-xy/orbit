@@ -407,6 +407,14 @@ async function main() {
     assert.equal(existsSync(path.dirname(fileA)), false, 'the parent it created is removed too');
     await eventually('the grant to be REMOVED', async () => (await grantOf(r2.id)).state === 'REMOVED', 120_000, 1000);
   });
+  await check('once the grant is gone, the branch whose history held its value is still not merged', async () => {
+    await idle(s2.uuid);
+    const merged = await as('POST', `/sessions/${s2.id}/merge`, { waitSeconds: 90 });
+    log.harness(`merge after removal answered ${merged.status}: ${merged.text.slice(0, 2000)}\n`);
+    const mainLog = spawnSync('git', ['-C', A.work, 'log', '-p', 'main'], { encoding: 'utf8', maxBuffer: 1 << 28 });
+    assert.equal(mainLog.stdout.includes('committed-key.txt'), false, 'main took the branch after the grant ended');
+    for (const form of forms(fileSecretValue)) assert.equal(mainLog.stdout.includes(form), false, `main's history carries ${form}`);
+  });
 
   // ── E5 ────────────────────────────────────────────────────────────────────────────────────────
   say('==> E5 expiry with the control plane unreachable');
