@@ -413,7 +413,7 @@ struct ToolCardView: View {
         .overlay(alignment: .leading) { Rectangle().fill(d.tone.color).frame(width: 3) }
         .clipShape(RoundedRectangle(cornerRadius: isOpen ? 8 : 0))
         .overlay {
-            // Faded, not inserted — see ToolGroupCardView: a view appearing is a structural change,
+            // Faded, not inserted: a view appearing is a structural change,
             // and structural changes are what the List animates.
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.primary.opacity(0.12), lineWidth: 1)
@@ -903,104 +903,86 @@ struct ToolStatusGlyph: View {
     }
 }
 
-/// A run of consecutive tool calls, folded into one row (web parity: `ToolGroupView`).
+/// A stretch of work between two replies — its settled thinking and tool calls — folded into one
+/// muted line ("Thought for 15s, ran 2 shell commands"; web parity: `StepsLine`). A tap opens the
+/// rows it stands for and a second shuts them. A call still in flight is drawn under the line — what
+/// it is doing, then its command — and joins the line once it answers.
 ///
 /// Nothing opens it by itself. Opening on "something is running" would guarantee a collapse the
-/// moment that call lands — the condition is transient — and a group snapping from N rows back to
-/// one, at the live edge, is the transcript jumping under the reader's eyes. The row says what the
-/// run is doing instead; a tap says which calls.
-struct ToolGroupCardView: View {
-    let cards: [ToolCard]
+/// moment that call lands — the condition is transient — and a line snapping from N rows back to
+/// one, at the live edge, is the transcript jumping under the reader's eyes. A failure doesn't open
+/// it either: the line says how many failed, in red, and a tap says which.
+struct StepsRowView: View {
+    let items: [TranscriptItem]
     var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
     @State private var expanded = false
-    private let summary: ToolGroupSummary
+    private let summary: StepsSummary
 
-    init(cards: [ToolCard], fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
-        self.cards = cards
+    init(items: [TranscriptItem], fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
+        self.items = items
         self.fullPayload = fullPayload
-        self.summary = ToolGroupSummary.make(cards)
+        self.summary = StepsSummary.make(items)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            row
+            if !summary.line.isEmpty { line }
             if expanded {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(cards, id: \.id) { card in
-                        ToolCardView(card: card, fullPayload: fullPayload)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(items) { item in
+                        TranscriptItemView(item: item, fullPayload: fullPayload)
                     }
                 }
+                .padding(.leading, 10)
+                .overlay(alignment: .leading) { Rectangle().fill(Color.primary.opacity(0.14)).frame(width: 2) }
+            } else {
+                ForEach(summary.live) { call in liveLine(call) }
             }
         }
-        .padding(.leading, 11)
-        .padding(.trailing, 10)
-        .padding(.vertical, 6)
-        .background(expanded ? Color.gray.opacity(0.06) : Color.clear)
-        .overlay(alignment: .leading) { Rectangle().fill(summary.tone.color).frame(width: 3) }
-        .clipShape(RoundedRectangle(cornerRadius: expanded ? 8 : 0))
-        .overlay {
-            // Faded, not inserted. An `if` here adds and removes a view, and a structural change is
-            // one more thing for the List to animate at the same moment the row is re-measuring.
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
-                .opacity(expanded ? 1 : 0)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         // Open and close instantly. Animating this row means SwiftUI interpolating its contents
         // while the UICollectionView behind the List re-measures and animates the same cell —
         // both driving one height, which is the flicker. A single card gets away with it because
-        // its delta is one body; a run of nine cards appearing at once does not. Belt and braces:
-        // the explicit `withAnimation` is gone from the tap AND an animation inherited from an
-        // ancestor's transaction is refused here, so nothing off-screen can re-animate the fold.
+        // its delta is one body; a stretch of nine rows appearing at once does not. Belt and braces:
+        // the tap uses no `withAnimation` AND an animation inherited from an ancestor's
+        // transaction is refused here, so nothing off-screen can re-animate the fold.
         .animation(nil, value: expanded)
     }
 
-    private var row: some View {
-        HStack(spacing: 7) {
-            // Turned, not swapped — see ToolCardView: the two chevron symbols are different sizes,
-            // and the difference lands on every item to their right.
+    /// The muted sentence and its failures. Touch has no hover, so the chevron stays, faint, to say
+    /// the line opens.
+    private var line: some View {
+        HStack(spacing: 6) {
+            (Text(summary.line).foregroundColor(.secondary)
+                + Text(summary.failed > 0 ? " · \(summary.failed) failed" : "").foregroundColor(.red))
+                .font(.orbitLabel)
+                .lineLimit(2)
+            // Turned, not swapped — see ToolCardView: the two chevron symbols are different sizes.
             Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
                 .rotationEffect(.degrees(expanded ? 90 : 0))
-            Image(systemName: summary.symbol)
-                .font(.orbitMeta).foregroundStyle(summary.tone.color)
-                .frame(width: 20, height: 20)
-                .background(summary.tone.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
-            // One line, first claim on the width — see ToolCardView (`orbit · task_create × 3`).
-            Text(summary.title)
-                .font(.orbitMono.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1).layoutPriority(1)
-            counts
-            if let breakdown = summary.breakdown {
-                Text(breakdown)
-                    .font(.orbitMonoFine).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(Color.gray.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
-                    .layoutPriority(-1)   // the first thing to give way on a narrow phone
-            }
-            ToolStatusGlyph(status: summary.status)
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
         .onTapGesture { expanded.toggle() }
     }
 
-    /// `1 running · 5 succeeded`, plus the call the run is currently defined by — the one still in
-    /// flight, or the first that failed, which is what makes a red row worth opening.
-    private var leadTint: Color { summary.lead?.kind == .failed ? .red : .secondary }
-
-    @ViewBuilder private var counts: some View {
-        if let lead = summary.lead {
-            (Text(summary.counts + " · ").foregroundColor(.secondary)
-                + Text("\(lead.kind.rawValue): ").foregroundColor(leadTint)
-                + Text(lead.text).foregroundColor(leadTint))
-                .font(.orbitLabel)
-                .lineLimit(1).truncationMode(.tail)
-        } else {
-            Text(summary.counts)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .lineLimit(1).truncationMode(.tail)
+    /// `● Show prisma datasource config`, then `⎿ $ grep …` for a shell call that said what it does.
+    private func liveLine(_ call: StepsSummary.Live) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Circle().fill(Color.secondary).frame(width: 7, height: 7)
+                Text(call.text)
+                    .font(call.mono ? Font.orbitMono : Font.orbitLabel)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            if let command = call.command {
+                Text("⎿ $ \(command)")
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                    .padding(.leading, 4)
+            }
         }
     }
 }
