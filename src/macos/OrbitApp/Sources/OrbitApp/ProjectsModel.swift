@@ -355,8 +355,17 @@ final class ProjectDetailModel {
 
     /// What "Is this project done?" over the page needs beyond the page's reads: the seal standing
     /// now — what a press names when nobody asked — and when the owner confirmed it.
+    private(set) var doneCheck: ProjectDoneCheck?
+    private(set) var doneCheckError: String?
+
     func loadDoneCard() async {
         await loadStartCard()
+        do {
+            doneCheck = try await api.projectDoneCheck(projectID: projectID)
+            doneCheckError = nil
+        } catch {
+            doneCheckError = APIClient.failureReason(error)
+        }
     }
 
     /// Record the project done from the card over the page (`POST /projects/:id/done`) — the

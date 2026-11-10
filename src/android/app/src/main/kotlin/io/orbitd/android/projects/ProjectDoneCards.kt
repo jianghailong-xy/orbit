@@ -45,15 +45,15 @@ import java.time.Instant
 @Composable
 internal fun ProjectDoneCard(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, record: JsonObject?,
     sealRead: Boolean, now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit,
-    onNotYet: (suspend (String) -> Boolean)?, onReopen: (suspend () -> Unit)?, trailing: @Composable () -> Unit = {}) {
+    onNotYet: (suspend (String) -> Boolean)?, onReopen: (suspend () -> Unit)?, doneCheck: JsonObject? = null, trailing: @Composable () -> Unit = {}) {
     if (ProjectDone.recorded(doc, record)) ProjectDoneReceipt(doc, record, enabled, error, tag, onReopen, trailing)
-    else ProjectDoneQuestion(doc, request, confirmedAt, openItems, running, sealRead, now, enabled, error, tag, onRecord, onNotYet, trailing)
+    else ProjectDoneQuestion(doc, request, confirmedAt, openItems, running, sealRead, now, enabled, error, tag, onRecord, onNotYet, doneCheck, trailing)
 }
 
 @Composable
 private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, sealRead: Boolean,
     now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit, onNotYet: (suspend (String) -> Boolean)?,
-    trailing: @Composable () -> Unit) {
+    doneCheck: JsonObject?, trailing: @Composable () -> Unit) {
     val counts = ProjectDone.counts(doc)
     val asked = request?.obj("doneRequest")
     var recording by remember { mutableStateOf(false) }
@@ -97,13 +97,22 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
                 }
             }
         }
-        ProjectDoneGapList(doc, ProjectDone.gaps(doc, asked), tag)
+        if (asked != null) ProjectDoneGapList(doc, ProjectDone.gaps(doc, asked), tag)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("✓", Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelMedium, color = LocalOrbitColors.current.success)
             Text(ProjectDone.orbitCheckedLine(counts, confirmedAt, openItems, running), Modifier.testTag("$tag-orbit-checked"),
                 style = MaterialTheme.typography.labelMedium, color = muted)
         }
-        Text(ProjectDone.recordingExplanation, style = MaterialTheme.typography.bodyMedium)
+        val findings = doneCheck?.objects("findings").orEmpty()
+        if (asked == null && findings.isNotEmpty()) {
+            val red = MaterialTheme.colorScheme.error
+            Column(Modifier.fillMaxWidth().background(red.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                .border(1.dp, red.copy(alpha = 0.3f), RoundedCornerShape(10.dp)).padding(10.dp).testTag("$tag-findings")) {
+                Text(ProjectDone.findingsHeading.replace("{n}", "${findings.size}"), color = red, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                findings.forEach { Text(ProjectDone.findingLine(it, ProjectDone.mainBranch(doc)), color = red, style = MaterialTheme.typography.labelMedium) }
+            }
+            Text(ProjectDone.findingsAccepted, color = muted, style = MaterialTheme.typography.labelMedium)
+        } else if (asked != null) Text(ProjectDone.recordingExplanation, style = MaterialTheme.typography.bodyMedium)
         error?.let { Text(it, Modifier.testTag("$tag-error"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error) }
         if (notYetOpen && onNotYet != null) {
             OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth().testTag("$tag-note"), enabled = !sending,
@@ -124,7 +133,7 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
                 if (!sealRead || recording) return@Button
                 recording = true
                 scope.launch { try { onRecord() } finally { recording = false } }
-            }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-record"), enabled = enabled && sealRead && !recording) { Text(ProjectDone.recordLabel(counts)) }
+            }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-record"), enabled = enabled && sealRead && !recording) { Text(if (asked == null) ProjectDone.recordAsDoneAnyway else ProjectDone.recordLabel(counts)) }
             if (asked != null && onNotYet != null) OutlinedButton(onClick = { notYetOpen = true }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-not-yet"),
                 enabled = !recording) { Text(ProjectDone.notYet) }
         }
@@ -271,6 +280,12 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
     val slot = ProjectDone.slot(doc, live, detail.text("waitingKind"), record)
     if (doc == null || slot == ProjectDone.Slot.None) return
     val api = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
+    var doneCheck by remember(projectId) { mutableStateOf<JsonObject?>(null) }
+    LaunchedEffect(projectId, live?.text("itemId")) {
+        if (live == null) try { doneCheck = api.doneCheck(projectId) }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) { error = failureReason(failure) }
+    }
     val tag = "done:$projectId"
     /** One write at the project's door, owned by the app rather than this card; the conversation is read again either way. */
     suspend fun write(refusal: String, body: suspend () -> Unit): Boolean = app.processScope.async {
@@ -287,8 +302,8 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
         Column(Modifier.padding(16.dp)) {
             when (slot) {
                 is ProjectDone.Slot.Done -> ProjectDoneCard(doc, live, confirmation?.obj("confirmation")?.text("confirmedAt"), ProjectDone.openItemsCount(openItems),
-                    ProjectDone.runningCount(doc), record, sealRead = live?.obj("doneRequest") != null || confirmation?.obj("currentVersion")?.text("digest") != null,
-                    now = Instant.now(), enabled = fresh, error = error, tag = tag,
+                    ProjectDone.runningCount(doc), record, sealRead = live?.obj("doneRequest") != null || (confirmation?.obj("currentVersion")?.text("digest") != null && doneCheck != null),
+                    now = Instant.now(), enabled = fresh, error = error, tag = tag, doneCheck = doneCheck,
                     onRecord = {
                         val body = ProjectDone.body(doc, live?.text("itemId"), live?.obj("doneRequest"), confirmation?.obj("currentVersion")?.text("digest"))
                         if (body != null) write(ProjectDone.notRecorded) { api.done(projectId, body)?.let { record = it; readsAtRecord = reads } }
