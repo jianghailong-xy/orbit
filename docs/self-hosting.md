@@ -1565,8 +1565,8 @@ The broker enables and starts the account's instance, nothing asks for a passwor
     orbit status · orbit doctor · orbit unregister
 ```
 
-Of the commands this receipt names, hostd-e2e runs `orbit status` and `orbit unregister`, but not `orbit doctor`,
-which checks the machine's coding engines and their sign-in: its test machine has none installed and no network.
+hostd-e2e also runs the receipt's `orbit status`, `orbit unregister` and `orbit doctor`; the last reports missing
+coding engines on its test machine.
 
 Before it starts the instance, the broker takes down every older runner unit of the account (see
 [Migrating from per-user units](#migrating-from-per-user-units)), each drained on stop and confirmed down by systemd,
@@ -1666,9 +1666,50 @@ Registration puts the account's own copy in place and has the broker move its ru
 first, as above. Without arguments it asks the browser approval of [Register a runner](#4-register-a-runner) again and
 takes the machine's host name; add `--name` and the other flags it was registered with to keep them.
 
-Root's own runner, `orbit-runner-root.service`, is left as it is: the broker starts no runner for root, and setup does
-not touch it. If it runs `/usr/local/bin/orbit`, it runs the new file from its next restart, and its own updates keep
-the broker's binary current too. Both files are root's, so nothing crosses an account boundary.
+### Root's runner and its legacy unit
+
+Root is an ordinary account to hostd: root's register uses the same template, producing
+`orbit-runner@root.service`, running as uid 0 from `/root/.orbit/bin/orbit`. Run the registration command above
+in root's own shell, with a distinct runner name. For unattended registration with an enrollment token:
+
+```bash
+orbit register --server https://orbit.example.com --token <enrollment-token> --name <runner-name> --force
+```
+
+The root-access warning still applies.
+
+To move an existing `orbit-runner-root.service`, run as root, with the deployment's server origin:
+
+```bash
+/usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+Setup drains and confirms the legacy unit down before starting the instance, preserving the registration and runner
+id without new approval. It puts root's `~/.orbit/bin/orbit` in place from the checked machine binary if missing.
+The legacy unit file is removed. Its drop-ins are **not carried over**: they can override `User=` or `ExecStart=`.
+Setup leaves them in place and names them, including files under both
+`/etc/systemd/system/<unit>.d/` and `/etc/systemd/system.control/<unit>.d/` (written by
+`systemctl set-property`).
+
+Review the settings, then recreate the ones you need for the instance. For example, as root, recreate a PATH
+drop-in and a CPU weight:
+
+```bash
+mkdir -p /etc/systemd/system/orbit-runner@root.service.d
+printf '%s\n' '[Service]' 'Environment=PATH=/opt/node-v26/bin:/usr/local/bin:/usr/bin:/bin' > /etc/systemd/system/orbit-runner@root.service.d/path.conf
+systemctl daemon-reload
+systemctl set-property orbit-runner@root.service CPUWeight=200
+systemctl restart orbit-runner@root.service
+```
+
+After reviewing and recreating the settings, remove the old directories by hand:
+
+```bash
+rm -r /etc/systemd/system/orbit-runner-root.service.d /etc/systemd/system.control/orbit-runner-root.service.d
+```
+
+Root's runner then updates its own `/root/.orbit/bin/orbit` and asks hostd to update `/usr/local/bin/orbit`,
+like every account's runner. Hosts that are not set up keep root on the legacy `orbit-runner-root.service`.
 
 ### Migrating from per-user units
 
@@ -1687,8 +1728,8 @@ A unit is the account's by its `User=`, never by its name, so another account's 
 ### Updates
 
 Each account's runner updates its own copy, as on a machine that is not set up: offered a newer release, it installs
-it into its `~/.orbit/bin/orbit` and re-executes into it, without root and without asking the broker. Then it asks the
-broker once to bring its own binary along, and logs the answer:
+it into its `~/.orbit/bin/orbit` and re-executes into it, as its own account and without asking the broker. Then it
+asks the broker once to bring its own binary along, and logs the answer:
 
 ```text
 [orbit-runner 2026-11-01T02:48:12.402Z] installed orbit 0.1.250 into this runner's own copy; asked the host broker at /run/orbit/host.sock to update its own binary: it is installing orbit 0.1.250 as its own binary
@@ -1697,8 +1738,8 @@ broker once to bring its own binary along, and logs the answer:
 The request names nothing: no server, release or account. The broker reads the server from `/etc/orbit/config.json`
 and the release from its `/dl/version.json` as anybody reads it, without a runner's credential, and installs only a
 release newer than its binary, checked as every install is: the manifest's SHA-256, then the version and write
-contract the download reports, each run as the account that asked. It replaces only the binary
-`orbit-hostd.service` names, `/usr/local/bin/orbit`, and restarts no runner. Its journal, `orbit-hostd.service`,
+contract the download reports, each run as the account that asked, or as the unprivileged account `nobody` when root
+asks. It replaces only the binary `orbit-hostd.service` names, `/usr/local/bin/orbit`, and restarts no runner. Its journal, `orbit-hostd.service`,
 records it:
 
 ```text
@@ -1769,15 +1810,14 @@ note: the machine broker at /run/orbit/host.sock did not answer "enable" (dial u
   database, never from the request, and refuses a request that names a user or any other target. A user name
   becomes a unit name only through systemd's own escaping, which can be undone, so no account can name another's
   unit.
-- **Root runs one binary, and never one an account can change or a download.** hostd runs only
+- **hostd runs one binary, and never one an account can change or a download.** hostd runs only
   `/usr/local/bin/orbit`, held to the rule above. It never executes, reads or writes a file in an account's home:
   whether an account's `~/.orbit/bin/orbit` is there and executable is asked as that account. Checking a release
   means running it, to read its version and write contract, and each of those runs is dropped to the uid of the
-  account that asked.
-- **hostd never starts a runner as root.** Each instance runs as its account (`User=%I`), from that account's own
-  file, and hostd refuses to enable, start or restart uid 0's, so every runner it starts heartbeats
-  `runsAsRoot=false`. Root's own `orbit register` is refused by the broker and falls back to the legacy path, which
-  runs a root runner and warns that its agents have root access.
+  account that asked, or to `nobody` when root asks.
+- **Root is an ordinary instance.** Each instance runs as its account (`User=%I`), from that account's own
+  file. Only a caller with uid 0 can act on `orbit-runner@root.service`. Its heartbeat reports
+  `runsAsRoot=true`, and registration warns that its agents have root access.
 
 ### Known limitations
 
