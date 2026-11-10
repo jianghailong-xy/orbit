@@ -285,8 +285,16 @@ struct OwnerRequestCard: View {
         }
     }
 
+    /// Two rows, so a phone's width never breaks a button's words: what to do, then the ways out.
     private var actions: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) { doors }
+            HStack(spacing: 12) { exits }
+        }
+        .lineLimit(1)
+    }
+
+    @ViewBuilder private var doors: some View {
             if grant?.state == .pendingDelivery {
                 Button(OwnerRequests.cancel) { run { try await model.cancelSecret(request) } }
                     .buttonStyle(.bordered).disabled(busy)
@@ -295,7 +303,6 @@ struct OwnerRequestCard: View {
                     Text(OwnerRequests.primaryLabel(request.kind)).bold()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.primary)
                 .keyboardShortcut(.defaultAction)
                 .disabled(busy || grant?.state == .removing
                           || !OwnerRequests.canSubmit(request, draft: draft, option: chosen, text: text))
@@ -309,6 +316,9 @@ struct OwnerRequestCard: View {
                     .buttonStyle(.bordered)
                 }
             }
+    }
+
+    @ViewBuilder private var exits: some View {
             Button(OwnerRequests.declineLabel(request.kind)) {
                 declining = true
                 field = .reason
@@ -323,7 +333,6 @@ struct OwnerRequestCard: View {
             .fixedSize()
             .font(.orbitLabel)
             .disabled(OwnerRequests.snoozeChoices(request).isEmpty)
-        }
     }
 
     private var declineForm: some View {
@@ -458,9 +467,12 @@ struct OwnerRequestResolvedLine: View {
                 if let grant, let line = OwnerRequests.grantLine(grant, runner: runner) {
                     Text(line).font(.orbitLabel).foregroundStyle(.secondary)
                 }
+                Text([OwnerRequests.byLine(request), OwnerRequests.deviceLabel(request.resolvedClient)]
+                        .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
                 if let failure { Text(failure).font(.orbitLabel).foregroundStyle(.red) }
             }
-            Spacer(minLength: 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             if grant?.state == .active {
                 Button(OwnerRequests.revoke) {
                     busy = true
@@ -471,11 +483,6 @@ struct OwnerRequestResolvedLine: View {
                 }
                 .buttonStyle(.borderless).font(.orbitLabel).disabled(busy)
             }
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(OwnerRequests.byLine(request))
-                if let device = OwnerRequests.deviceLabel(request.resolvedClient) { Text(device) }
-            }
-            .font(.orbitLabel).foregroundStyle(.secondary)
         }
         .padding(12)
         .overlay(RoundedRectangle(cornerRadius: 10)
@@ -521,18 +528,18 @@ struct OwnerRequestInboxView: View {
                         .background(Color.ownerRequestAccent, in: Capsule())
                 }
                 Spacer()
-                Picker(OwnerRequests.waitingOnYou, selection: $model.tab) {
-                    ForEach(OwnerRequests.InboxTab.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
                 if let onClose {
                     Button { onClose() } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless)
                         .accessibilityLabel("Close")
                 }
             }
+            .padding([.horizontal, .top], 16)
+            Picker(OwnerRequests.waitingOnYou, selection: $model.tab) {
+                ForEach(OwnerRequests.InboxTab.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
             .padding(16)
             Divider()
             ScrollViewReader { proxy in
