@@ -125,6 +125,7 @@ const NOT_APPLICABLE: TaskIntegrationView<Date> = {
 const CHECK_NAMES: Record<string, string> = {
   TASK_ACCEPTANCE: 'the task’s acceptance command',
   MERGE_CHECK: 'the merge check',
+  LANDING_CHECK: 'the landing check',
 };
 
 /** The job running on the branch first, by its kind. A merge into main is into the project's main
