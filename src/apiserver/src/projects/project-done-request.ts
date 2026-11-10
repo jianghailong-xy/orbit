@@ -282,10 +282,10 @@ export async function readDoneState(
 }
 
 /**
- * What a done request was made about, apart from the criteria themselves: every task by its id, its
+ * What a done request was made about, apart from the criteria themselves: each serving task by its id, its
  * status, the criterion it serves and whether a run of it is going; every criterion by whether it is
  * met, where its work has landed and why not; and the landings in flight. Sorted, so the digest is a
- * property of the project and not of the order it was read in. A task filed, reopened, cancelled or
+ * property of the project and not of the order it was read in. A serving task filed, reopened, cancelled or
  * started, a receipt recorded, a landing queued or finished — each is a different state.
  */
 export function doneStateDigest(
@@ -294,8 +294,9 @@ export function doneStateDigest(
   jobs: DoneState['jobs'],
 ): string {
   const state = {
-    version: 1,
+    version: 2,
     tasks: tasks
+      .filter((task) => task.criterionDefinitionId !== null)
       .map((task) => `${task.id}:${task.status}:${task.criterionDefinitionId ?? ''}:${task.run ?? ''}`)
       .sort(),
     criteria: criteria
