@@ -220,3 +220,30 @@ func TestWriteSecretFileRefusesASymlinkSwappedInAfterTheCheck(t *testing.T) {
 		t.Fatalf("the owner's file was written: %q", data)
 	}
 }
+
+// The walk for a .git stops at the home: a repository above it is not the user's checkout (a shared /tmp may hold one
+// for a moment), while one at the home itself, a dotfiles repository, still refuses.
+func TestSecretFilePathLooksForAGitRepositoryUpToTheHomeOnly(t *testing.T) {
+	outer, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(outer, "home")
+	if err := os.MkdirAll(filepath.Join(home, ".orbit"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("ORBIT_HOME", filepath.Join(home, ".orbit"))
+	if err := os.Mkdir(filepath.Join(outer, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checkSecretFilePath("~/.config/tool/key", nil); err != nil {
+		t.Fatalf("a .git above the home refused the path: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(home, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checkSecretFilePath("~/.config/tool/key", nil); secretPathCode(err) != secretPathCodeRefused {
+		t.Fatalf("a .git at the home did not refuse the path: %v", err)
+	}
+}

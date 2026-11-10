@@ -314,16 +314,99 @@ func TestSecretFileWithoutAckIsAckedAfterRestart(t *testing.T) {
 	if r := restarted.scrubber(); r == nil || r.redact(testSecretValue+"-file") != integrationOutputRedacted {
 		t.Fatal("the file's value is not back in the scrubber")
 	}
+	path := filepath.Join(home, "keys", "api.key")
+	before, _ := os.Stat(path)
 	fetchedBefore, _, _ := api.calls()
 	restarted.reconcile(refs(file), nil)
-	if f, _, _ := api.calls(); f != fetchedBefore {
-		t.Fatal("a file in the ledger was fetched again")
+	// Fetched again for the scrubber (§6.4), and the file is not written again.
+	if f, _, _ := api.calls(); f != fetchedBefore+1 {
+		t.Fatalf("fetches %d -> %d", fetchedBefore, f)
+	}
+	if after, _ := os.Stat(path); !os.SameFile(before, after) || !after.ModTime().Equal(before.ModTime()) {
+		t.Fatal("the file was written again")
 	}
 	if acks := api.acks["g-file"]; len(acks) != 2 || acks[1].Outcome != secretAckDelivered {
 		t.Fatalf("acks = %#v", acks)
 	}
 	if entries := readLedgerForTest(t, ledger); len(entries) != 1 || !entries[0].Acked {
 		t.Fatalf("ledger = %#v", entries)
+	}
+	// Fetched once per process: the next heartbeat asks for nothing.
+	restarted.reconcile(refs(file), nil)
+	if f, _, _ := api.calls(); f != fetchedBefore+1 {
+		t.Fatal("a held FILE grant was fetched on every heartbeat")
+	}
+}
+
+// OPEN 3: after a restart the scrubber is rebuilt from the control plane's value, not from what the file holds now;
+// the file's content stands in only while the control plane cannot be reached.
+func TestSecretFileScrubberIsRefetchedAfterRestart(t *testing.T) {
+	home := secretTestHome(t)
+	ledger := filepath.Join(home, ".orbit", "secret-grants", "ledger.json")
+	api := newFakeSecretAPI()
+	file := fileGrant("g-file", "~/keys/api.key", time.Now().Add(time.Hour))
+	api.grants[file.ID] = file
+	newSecretStore(api, ledger).reconcile(refs(file), nil)
+	path := filepath.Join(home, "keys", "api.key")
+	// Rewritten in place (same inode) by something on the machine.
+	if err := os.WriteFile(path, []byte("edited-by-a-tool-0000"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	offline := newSecretStore(&erroringSecretAPI{}, ledger)
+	offline.startup()
+	offline.reconcile(refs(file), nil)
+	if r := offline.scrubber(); r == nil || r.redact("edited-by-a-tool-0000") != integrationOutputRedacted {
+		t.Fatal("unreachable: the file's own content is not the fallback")
+	}
+
+	restarted := newSecretStore(api, ledger)
+	restarted.startup()
+	restarted.reconcile(refs(file), nil)
+	if r := restarted.scrubber(); r == nil || r.redact(testSecretValue+"-file") != integrationOutputRedacted {
+		t.Fatal("the fetched value is not in the scrubber")
+	}
+	if data, _ := os.ReadFile(path); string(data) != "edited-by-a-tool-0000" {
+		t.Fatalf("the file was rewritten: %q", data)
+	}
+}
+
+// N8: stopped after the inode was recorded and before the value was written: cleaned up and delivered again, never
+// acknowledged as delivered with an empty file.
+func TestSecretRecordedButEmptyFileIsNotAckedDelivered(t *testing.T) {
+	home := secretTestHome(t)
+	ledger := filepath.Join(home, ".orbit", "secret-grants", "ledger.json")
+	target, err := checkSecretFilePath("~/keys/api.key", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crashed := newSecretStore(newFakeSecretAPI(), ledger)
+	expires := time.Now().Add(time.Hour)
+	var parents []string
+	_, _, _ = writeSecretFile(target, nil, func(dir string) error { parents = append(parents, dir); return nil },
+		func(dev, ino uint64) error {
+			return crashed.updateLedger("g-file", func(e *secretLedgerEntry) {
+				*e = secretLedgerEntry{GrantID: "g-file", Path: target.path, Dev: dev, Ino: ino, Written: true, Parents: parents, ExpiresAt: expires}
+			})
+		})
+	if info, err := os.Stat(target.path); err != nil || info.Size() != 0 {
+		t.Fatalf("fixture: %v %v", info, err)
+	}
+
+	api := newFakeSecretAPI()
+	file := fileGrant("g-file", "~/keys/api.key", expires)
+	api.grants[file.ID] = file
+	store := newSecretStore(api, ledger)
+	store.startup()
+	if _, err := os.Stat(target.path); !os.IsNotExist(err) {
+		t.Fatal("the empty file was kept")
+	}
+	store.reconcile(refs(file), nil)
+	if data, _ := os.ReadFile(target.path); string(data) != testSecretValue+"-file" {
+		t.Fatalf("not delivered again: %q", data)
+	}
+	if acks := api.acks["g-file"]; len(acks) != 1 || acks[0].Outcome != secretAckDelivered {
+		t.Fatalf("acks = %#v", acks)
 	}
 }
 

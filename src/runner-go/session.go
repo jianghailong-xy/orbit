@@ -1184,7 +1184,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// unavailable, and the agent keeps the engine-owned shells it has today.
 		logln("background job service unavailable for", sessionID+":", err)
 	} else {
-		defer stopBgJobService()
+		defer func() {
+			// The session ended, rather than this runner stopping or the session moving to another process:
+			// an `orbit secret exec` still running is told so (endSessionLeases).
+			if shutdownCtx.Err() == nil && ownershipCtx.Err() == nil {
+				endSessionLeases(sessionID)
+			}
+			stopBgJobService()
+		}()
 	}
 
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
@@ -1220,6 +1227,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// a queued follow-up is immediately ready; every other authoritative status
 	// releases this generation's permit (AWAITING_INPUT also starts the warm TTL).
 	completeTurn := func(req TurnCompleteRequest, providerContexts ...context.Context) error {
+		// Every owner-request secret's value out of its text and patches, before it is kept on disk or sent
+		// (secret_wire.go).
+		req = scrubTurnComplete(req, sessionID)
 		// Kept before anything else: the flush below sends no completion when it fails, and a runner that
 		// stops, or is killed, before the control plane answers leaves it to its next process.
 		completions.keep(req)

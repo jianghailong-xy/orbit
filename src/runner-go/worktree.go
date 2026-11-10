@@ -967,7 +967,7 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	}
 	patchOut, _ := git(wt.Path, "diff", baseSha+"..HEAD")
 	// The committed pictures are what the checkout holds now: their placeholders come from it.
-	return files, withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), nil
+	return files, withoutSecretPatches(withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), wt.Session), nil
 }
 
 // reportAbsentCheckout is finalizeWorktree for a session ended while its checkout was known to be away
@@ -985,7 +985,7 @@ func reportAbsentCheckout(wt *Worktree) ([]ChangedFile, []FilePatch, error) {
 		return files[:maxChangedFiles], nil, nil
 	}
 	patchOut, _ := git(wt.RepoDir, "diff", baseSha+".."+tip)
-	return files, buildFilePatches(files, splitPatch(patchOut)), nil
+	return files, withoutSecretPatches(buildFilePatches(files, splitPatch(patchOut)), wt.Session), nil
 }
 
 // finalizeWorktreeReport commits the work of an ending session (finalizeWorktree) and fills the
@@ -1185,7 +1185,8 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	// Same staged index → the full patch matches the numstat exactly. Best-effort: a patch
 	// failure just leaves the file list without diffs, the status bar still works.
 	patchOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", baseSha)
-	return files, withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut)))
+	// A patch that leaves this machine holds no owner-request secret (secret_wire.go).
+	return files, withoutSecretPatches(withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), wt.Session)
 }
 
 // seedIndexFromCheckout fills the temp index at idx with HEAD's tree, as `read-tree HEAD` into an
@@ -1583,6 +1584,10 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	sourceSha, err := git(repoRoot, "rev-parse", "--verify", "refs/heads/"+req.Branch)
 	if err != nil || sourceSha == "" {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("could not resolve branch %q", req.Branch)}
+	}
+	// What this merge would publish holds no owner-request secret (secret_wire.go).
+	if paths := secretHistoryPaths(repoRoot, sourceSha, "refs/heads/"+target, "refs/remotes/origin/"+target); len(paths) > 0 {
+		return mergeOutcome{Status: "error", Message: secretHistoryRefusal(paths)}
 	}
 
 	// `[K6]` §7, asked before anything is decided about how to advance the target: is the source

@@ -241,7 +241,7 @@ func runSecretExec(socket, name string, command []string, stdin io.Reader, stdou
 			}
 		}
 	}()
-	go holdSecretLease(socket, name, conn, dec, expires, retryEvery, exited, stop)
+	go holdSecretLease(socket, name, lease.GrantID, conn, dec, expires, retryEvery, exited, stop)
 
 	waitErr := cmd.Wait()
 	close(exited)
@@ -258,7 +258,7 @@ func runSecretExec(socket, name string, command []string, stdin io.Reader, stdou
 // holdSecretLease keeps the lease until the command exits. A revocation stops the command. A lost connection is a
 // runner that restarted, or is restarting: it is asked again every secretExecRetryEvery, a refusal then stops the
 // command, and with no answer the command stops at the grant's expiry.
-func holdSecretLease(socket, name string, conn net.Conn, dec *json.Decoder, expires time.Time, retryEvery time.Duration,
+func holdSecretLease(socket, name, grantID string, conn net.Conn, dec *json.Decoder, expires time.Time, retryEvery time.Duration,
 	exited <-chan struct{}, stop func(string)) {
 	for {
 		lost := make(chan leaseMessage, 1)
@@ -313,6 +313,13 @@ func holdSecretLease(socket, name string, conn net.Conn, dec *json.Decoder, expi
 				return
 			}
 			if err == nil {
+				// The same name may now be another grant (the owner asked again): not the one this command
+				// was started with.
+				if lease.GrantID != grantID {
+					next.Close()
+					stop("the secret " + name + " was replaced by another delivery; run the command again")
+					return
+				}
 				if at, perr := time.Parse(time.RFC3339Nano, lease.ExpiresAt); perr == nil {
 					expires = at
 				}
@@ -375,6 +382,8 @@ func (s *bgJobService) serveSecretLease(conn net.Conn, args map[string]interface
 	select {
 	case <-held.revoked:
 		_ = json.NewEncoder(conn).Encode(leaseMessage{Revoked: true, Reason: "the secret " + name + " was removed from this runner"})
+	case <-s.sessionEnded:
+		_ = json.NewEncoder(conn).Encode(leaseMessage{Revoked: true, Reason: "the session ended"})
 	case <-gone:
 	case <-s.leaseStop:
 	case <-ctx.Done():

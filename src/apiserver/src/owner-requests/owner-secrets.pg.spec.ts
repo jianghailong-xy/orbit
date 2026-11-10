@@ -376,13 +376,19 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
       && (e.getResponse() as { message?: string }).message?.includes('DEEPSEEK_API_KEY') === true
       && (e.getResponse() as { message?: string }).message?.includes(value) === false;
     const buf = Buffer.from(value);
-    for (const form of [value, buf.toString('base64'), buf.toString('base64url'), buf.toString('hex'), encodeURIComponent(value)]) {
+    for (const form of [value, buf.toString('base64'), buf.toString('base64url'), buf.toString('hex'), buf.toString('hex').toUpperCase(), encodeURIComponent(value)]) {
       await assert.rejects(send('/api/runner/tasks/x/comments', { body: `here: ${form}` }), refused);
     }
     await assert.rejects(send('/api/runner/tasks/x/evidence', { evidence: { claim: 'ok', checks: [{ ref: value }] } }), refused);
     await assert.rejects(send('/api/runner/notify', { message: value }), refused);
     assert.equal(await send('/api/runner/tasks/x/comments', { body: 'nothing secret here' }), 'stored');
     assert.equal(await send('/api/runner/heartbeat', { anything: value }), 'stored', 'the protocol\'s own routes pass');
+    // A turn completion is not refused (that would wedge the turn); what it carries has the value redacted.
+    const completion = { result: `final answer: ${value}`, error: `failed with ${buf.toString('base64')}`, nested: [{ text: value }] };
+    assert.equal(await send('/api/runner/sessions/s/turn-complete', completion), 'stored');
+    assert.equal(JSON.stringify(completion).includes(value), false);
+    assert.equal(JSON.stringify(completion).includes(buf.toString('base64')), false);
+    assert.equal(completion.result, 'final answer: [redacted]');
     assert.equal(await send('/api/runner/tasks/x/comments', { body: value }, { id: b.runnerId, ownerId: b.ownerId }), 'stored',
       'a runner holding no grant is not searched');
   });

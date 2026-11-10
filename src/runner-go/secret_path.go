@@ -201,11 +201,13 @@ func checkSecretFilePath(raw string, workDirs []string) (*secretFileTarget, erro
 			return nil, secretPathRefusal(secretPathCodeRefused, "%q is inside a coding engine's configuration directory (%s)", raw, dir)
 		}
 	}
+	// Up to the home and no further: the path is under it, and what this keeps the value out of is a checkout's
+	// `git add -A`, a repository at or below the home (the home's own .git included). Above it is not this user's.
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
 		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
 			return nil, secretPathRefusal(secretPathCodeRefused, "%q is inside a git repository (%s has a .git)", raw, dir)
 		}
-		if parent := filepath.Dir(dir); parent == dir {
+		if parent := filepath.Dir(dir); parent == dir || dir == home {
 			break
 		}
 	}

@@ -75,7 +75,10 @@ type heldSecret struct {
 	expiresAt time.Time
 	// Known for every ENV grant; for a FILE grant held across a restart, read back from the file when it is still ours.
 	value secretValue
-	acked bool
+	// Whether value came from the control plane in this process. A FILE grant held across a restart starts with
+	// the value read back from its file, a fallback the first reconcile replaces (refetchForScrub).
+	fetched bool
+	acked   bool
 	// Closed when the grant is removed: every open lease on it ends (secret_exec.go).
 	revoked chan struct{}
 }
@@ -277,6 +280,11 @@ func (s *secretStore) startup() {
 			}
 			removeEmptySecretParents(entry.Parents)
 			logln("secret grants: grant", entry.GrantID, "was being written when the runner stopped; the partial write was cleaned up")
+		case !entry.Acked && !secretFileComplete(entry):
+			// Stopped after the file was recorded and before its value was written and acknowledged: it is no
+			// delivery, and is cleaned up like an unwritten one. The grant is delivered again if still live.
+			s.removeFileEntry(entry)
+			logln("secret grants: grant", entry.GrantID, "was not completely written when the runner stopped; the partial write was cleaned up")
 		case !entry.ExpiresAt.After(now):
 			s.owe(entry.GrantID, s.removeFileEntry(entry))
 			logln("secret grants: grant", entry.GrantID, "expired while the runner was stopped; its file was removed")
@@ -425,16 +433,45 @@ func (s *secretStore) reconcile(listed *[]SecretGrantRef, removing []string) {
 				held.expiresAt = expires
 			}
 			s.mu.Unlock()
-			switch {
-			case held == nil:
+			if held == nil {
 				s.deliver(id)
-			case !held.acked:
+				continue
+			}
+			if held.exposure == secretExposureFile && !held.fetched {
+				s.refetchForScrub(held)
+			}
+			if !held.acked {
 				s.ack(held)
 			}
 		}
 	}
 	s.reconcileMu.Unlock()
 	s.flushRemoved()
+}
+
+// refetchForScrub fetches a FILE grant held across a restart again, for the scrubber only: the file is never written
+// again. When the control plane cannot be reached the value read back from the file stays in its place.
+func (s *secretStore) refetchForScrub(held *heldSecret) {
+	grant, err := s.api.fetchSecretGrant(held.id)
+	if err != nil || grant.ID != held.id || grant.Value == "" {
+		if err != nil && !isHTTPNotFound(err) {
+			logln("secret grants: fetching grant", held.id, "again failed; its file's own content is scrubbed until it can be:", secretErrorLine(err))
+		}
+		return
+	}
+	s.mu.Lock()
+	held.value, held.fetched = grant.Value, true
+	s.rebuildScrubLocked()
+	s.mu.Unlock()
+}
+
+// secretFileComplete reports whether a ledger entry's file is the one written, with something in it.
+func secretFileComplete(entry secretLedgerEntry) bool {
+	if !entry.Written {
+		return false
+	}
+	state, size := inspectSecretFile(entry.Path, entry.Dev, entry.Ino)
+	return state == secretFileOurs && size > 0
 }
 
 // deliver fetches one grant, materialises it and acks it. Caller holds reconcileMu.
@@ -453,7 +490,7 @@ func (s *secretStore) deliver(id string) {
 	}
 	held := &heldSecret{
 		id: id, exposure: grant.Exposure, sessionID: grant.SessionID, taskID: grant.TaskID,
-		expiresAt: expires, value: grant.Value, revoked: make(chan struct{}),
+		expiresAt: expires, value: grant.Value, fetched: true, revoked: make(chan struct{}),
 	}
 	switch grant.Exposure {
 	case secretExposureEnv:

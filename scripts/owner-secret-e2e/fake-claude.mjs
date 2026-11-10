@@ -64,10 +64,10 @@ lines.on('line', (line) => {
       permissionMode: 'bypassPermissions', claude_code_version: '2.1.200' });
   }
   const text = textOf(frame);
-  const run = /^RUN: (.+)$/m.exec(text);
+  const run = /^(RUN|SAY): (.+)$/m.exec(text);
   let answer = 'fake Claude: nothing to run.';
   if (run) {
-    const command = run[1];
+    const command = run[2];
     const id = `toolu_${randomUUID().replaceAll('-', '')}`;
     assistant([{ type: 'tool_use', id, name: 'Bash', input: { command } }]);
     const result = spawnSync('/bin/sh', ['-c', command], { encoding: 'utf8', env: process.env, timeout: 120_000 });
@@ -75,7 +75,7 @@ lines.on('line', (line) => {
     appendFileSync(log, `run\t${command}\texit=${result.status}\n`);
     write({ type: 'user', session_id: sessionId, parent_tool_use_id: null,
       message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: output, is_error: result.status !== 0 }] } });
-    answer = 'fake Claude: ran it.';
+    answer = run[1] === 'SAY' ? `fake Claude: it printed ${output}` : 'fake Claude: ran it.';
   }
   assistant([{ type: 'text', text: answer }]);
   write({ type: 'result', subtype: 'success', is_error: false, num_turns: 1, result: answer, session_id: sessionId,

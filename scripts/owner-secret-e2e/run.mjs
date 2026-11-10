@@ -198,6 +198,9 @@ async function main() {
   const ws = await as('POST', '/workspaces', { name: 'Owner secret E2E', runnerId: A.uuid, workDir: A.work });
   assert.equal(ws.status, 201, `workspace: ${ws.text}`);
   const workspaceId = ws.json.id;
+  // Each session on its own branch in its own worktree, so the end-of-turn commit, the stored patches and the merge run.
+  const isolated = await as('PATCH', `/workspaces/${workspaceId}`, { enableWorktree: true });
+  assert.equal(isolated.status, 200, `enableWorktree: ${isolated.text}`);
 
   const task = await as('POST', '/tasks', { title: 'Run the experiment', description: 'owner-secret e2e', assigneeId: workspaceId, completionCriterion: 'OWNER_CONFIRMED', ownerConfirmationReason: 'OWNER_TRADE_OFF', acceptanceCriteria: 'held open until the e2e cancels it' });
   assert.ok([200, 201].includes(task.status), `task: ${task.text}`);
@@ -222,10 +225,10 @@ async function main() {
     }
     return s && ['AWAITING_INPUT', 'COMPLETED'].includes(s.status);
   }, 120_000, 500);
-  /** One turn that runs `command` in the engine, and its tool result. */
-  const run = async (s, command) => {
+  /** One turn that runs `command` in the engine, and its tool result; `mode` SAY also makes its output the reply. */
+  const run = async (s, command, mode = 'RUN') => {
     const before = await toolResults(s.uuid);
-    const sent = await as('POST', `/sessions/${s.id}/turns`, { content: `RUN: ${command}`, clientTurnId: randomUUID() });
+    const sent = await as('POST', `/sessions/${s.id}/turns`, { content: `${mode}: ${command}`, clientTurnId: randomUUID() });
     assert.ok([200, 201].includes(sent.status), `turn: ${sent.text}`);
     return eventually(`the tool result of: ${command}`, async () => {
       const after = await toolResults(s.uuid);
@@ -306,6 +309,13 @@ async function main() {
   await check('a file the command writes into the checkout stays out of the commit', async () => {
     await run(s1, `${ORBIT} secret exec CANARY_KEY -- sh -c 'printf "%s\\n" "$CANARY_KEY" > leaked.txt'; echo wrote`);
     await idle(s1.uuid);
+    const { rows: diffs } = await sql.query(`SELECT to_jsonb(d)::text AS d FROM session_diff d WHERE session_id = $1`, [s1.uuid]);
+    for (const form of forms(envSecret)) assert.equal(diffs.some((d) => d.d.includes(form)), false, `a stored diff carries ${form}`);
+    const branch = spawnSync('git', ['-C', A.work, 'log', '-p', '--all'], { encoding: 'utf8', maxBuffer: 1 << 28 });
+    for (const form of forms(envSecret)) assert.equal(branch.stdout.includes(form), false, `a commit carries ${form}`);
+    // The agent cleans up after itself, so the sweep in E6 looks at what Orbit left, not at what the agent wrote.
+    await run(s1, 'rm -f leaked.txt && echo cleaned');
+    await idle(s1.uuid);
   });
   await check('an agent write carrying the value is refused SECRET_IN_TEXT', async () => {
     const res = await runnerCall(A, s1.uuid, 'POST', `/runner/tasks/${taskId}/comments`, { body: `the key is ${envSecret}` });
@@ -331,6 +341,42 @@ async function main() {
   });
   await check('runner B has no such file', async () => {
     assert.equal(existsSync(path.join(B.home, '.config/e2e-secret/key')), false);
+  });
+  await idle(s2.uuid);
+  await check('an agent that reads the FILE and quotes it: neither its tool result nor its final reply is stored with the value', async () => {
+    const result = await run(s2, `cat ${fileA}`, 'SAY');
+    for (const form of forms(fileSecretValue)) assert.equal(result.includes(form), false, `tool result carries ${form}`);
+    await idle(s2.uuid);
+    const { rows: [row] } = await sql.query(`SELECT to_jsonb(session)::text AS s FROM session WHERE id = $1`, [s2.uuid]);
+    const { rows: turns } = await sql.query(`SELECT to_jsonb(conversation_turn)::text AS t FROM conversation_turn WHERE session_id = $1`, [s2.uuid]);
+    for (const form of forms(fileSecretValue)) {
+      assert.equal(row.s.includes(form), false, `the session row carries ${form}`);
+      assert.equal(turns.some((t) => t.t.includes(form)), false, `a turn carries ${form}`);
+    }
+  });
+
+  await idle(s2.uuid);
+  await check('a value the agent commits itself reaches no stored patch, and the branch is not merged', async () => {
+    const result = await run(s2, `cp ${fileA} committed-key.txt && git add committed-key.txt && git -c user.email=e2e@example.invalid -c user.name=e2e commit -qm 'add key' && echo committed`);
+    assert.ok(result.includes('committed'), result);
+    await idle(s2.uuid);
+    const merged = await as('POST', `/sessions/${s2.id}/merge`, { waitSeconds: 90 });
+    log.harness(`merge answered ${merged.status}: ${merged.text.slice(0, 2000)}\n`);
+    assert.equal(merged.text.includes(fileSecretValue), false, 'the merge answer carries no value');
+    const mainLog = spawnSync('git', ['-C', A.work, 'log', '-p', 'main'], { encoding: 'utf8', maxBuffer: 1 << 28 });
+    assert.equal(mainLog.status, 0, mainLog.stderr);
+    for (const form of forms(fileSecretValue)) assert.equal(mainLog.stdout.includes(form), false, `main's history carries ${form}`);
+    assert.equal(mainLog.stdout.includes('committed-key.txt'), false, 'the branch holding the value was not merged into main');
+    const { rows: diffs } = await sql.query(`SELECT to_jsonb(d)::text AS d FROM session_diff d WHERE session_id = $1`, [s2.uuid]);
+    for (const form of forms(fileSecretValue)) assert.equal(diffs.some((d) => d.d.includes(form)), false, `a stored diff carries ${form}`);
+    // Deleting the file in a later commit does not clean the branch: its history still holds the value.
+    await idle(s2.uuid);
+    const removed = await run(s2, `git rm -q committed-key.txt && git -c user.email=e2e@example.invalid -c user.name=e2e commit -qm 'remove key' && echo removed`);
+    assert.ok(removed.includes('removed'), removed);
+    await idle(s2.uuid);
+    await as('POST', `/sessions/${s2.id}/merge`, { waitSeconds: 90 });
+    const after = spawnSync('git', ['-C', A.work, 'log', '-p', 'main'], { encoding: 'utf8', maxBuffer: 1 << 28 });
+    assert.equal(after.stdout.includes('committed-key.txt'), false, 'a branch whose history holds the value is still not merged');
   });
 
   // ── E3 ────────────────────────────────────────────────────────────────────────────────────────
@@ -425,10 +471,16 @@ async function main() {
     const { rows } = await sql.query(`SELECT payload::text AS p FROM run_event`);
     assert.deepEqual(found(rows.map((r) => r.p).join('\n')), []);
   });
-  await check('no git object of the checkout holds a value', async () => {
+  // The one value E2 has the agent commit on purpose stays in runner A's own object store, as the FILE itself sat on its
+  // disk: what must hold is that nothing that leaves the machine has it (the stored diffs above, main's history).
+  await check('no git object any ref reaches holds a value, but the one the agent committed on its own branch', async () => {
+    const needles = canaries.filter((c) => c !== fileSecretValue).flatMap(forms);
+    const found = (text) => needles.filter((n) => text.includes(n));
     const roots = [A.work, ...readdirSync(A.orbitHome, { recursive: true }).filter((p) => p.endsWith('.git')).map((p) => path.dirname(path.join(A.orbitHome, p)))];
     for (const root of roots) {
-      const objects = spawnSync('sh', ['-c', `git -C "${root}" cat-file --batch-all-objects --batch 2>/dev/null`], { encoding: 'latin1', maxBuffer: 1 << 30 });
+      // Every object a ref reaches: what a push, a merge or a patch could carry off the machine. A blob the end-of-turn
+      // `git add` wrote and the scrubber then unstaged is reachable from nothing and stays in the local store until gc.
+      const objects = spawnSync('sh', ['-c', `git -C "${root}" rev-list --objects --all | cut -d' ' -f1 | git -C "${root}" cat-file --batch 2>/dev/null`], { encoding: 'latin1', maxBuffer: 1 << 30 });
       assert.deepEqual(found(objects.stdout ?? ''), [], root);
     }
   });

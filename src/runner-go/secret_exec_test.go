@@ -20,6 +20,7 @@ type secretExecFixture struct {
 	sessionID string
 	api       *fakeSecretAPI
 	store     *secretStore
+	svc       *bgJobService
 	stop      func()
 }
 
@@ -62,6 +63,7 @@ func (f *secretExecFixture) serve(store *secretStore) {
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	f.svc = svc
 	f.stop = stop
 	f.t.Cleanup(stop)
 }
@@ -191,5 +193,38 @@ func TestSecretExecSaysWhatToDoWithoutASocket(t *testing.T) {
 	t.Setenv("ORBIT_SESSION_ID", "")
 	if run := runSecretCLI("exec", "CANARY_KEY", "--", "true"); run.code != 1 || !strings.Contains(run.stderr, "ORBIT_SESSION_ID") {
 		t.Fatalf("exit %d, stderr %q", run.code, run.stderr)
+	}
+}
+
+// N1: a session that ends revokes its leases; the command is not left asking until the grant expires.
+func TestSecretExecStopsWhenTheSessionEnds(t *testing.T) {
+	f := newSecretExecFixture(t, time.Now().Add(time.Hour))
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		f.svc.endSession()
+		f.stop()
+	}()
+	run := runSecretCLI("exec", "CANARY_KEY", "--", "sh", "-c", "sleep 30; echo finished")
+	if run.code != 128+15 || run.took > 5*time.Second || !strings.Contains(run.stderr, "the session ended") {
+		t.Fatalf("exit %d after %v, stderr %q", run.code, run.took, run.stderr)
+	}
+}
+
+// N2: asked again after a restart, a lease of the same name that is another grant stops the command.
+func TestSecretExecStopsWhenTheGrantWasReplaced(t *testing.T) {
+	f := newSecretExecFixture(t, time.Now().Add(time.Hour))
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		f.stop()
+		api := newFakeSecretAPI()
+		other := envGrant("g-other", "CANARY_KEY", decodeSessionID(secretExecSession), "", time.Now().Add(time.Hour))
+		api.grants[other.ID] = other
+		replaced := newSecretStore(api, filepath.Join(t.TempDir(), "ledger.json"))
+		replaced.reconcile(refs(other), nil)
+		f.serve(replaced)
+	}()
+	run := runSecretCLI("exec", "CANARY_KEY", "--", "sh", "-c", "sleep 30; echo finished")
+	if run.code != 128+15 || run.took > 10*time.Second || !strings.Contains(run.stderr, "replaced") {
+		t.Fatalf("exit %d after %v, stderr %q", run.code, run.took, run.stderr)
 	}
 }

@@ -542,6 +542,7 @@ func (t *Transport) postEvents(ctx context.Context, sessionID string, batch RunE
 func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFinalizeRequest) (bool, error) {
 	var r RunFinalizeResponse
 	b.LeaseOwner = t.leaseOwner
+	b = scrubRunFinalize(b, sessionID)
 	path := "/runner/sessions/" + sessionID + "/finalize"
 	if err := t.do(ctx, "POST", path, b, &r, 35*time.Second); err != nil {
 		return true, err
@@ -698,6 +699,8 @@ func takeoverClaimedSession(ctx context.Context, t *Transport, job *ClaimedSessi
 func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCompleteRequest) (string, error) {
 	var r TurnCompleteResponse
 	b.LeaseOwner = t.leaseOwner
+	// Every path a completion is sent by, a kept one an earlier process journaled included (secret_wire.go).
+	b = scrubTurnComplete(b, sessionID)
 	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
 		r = TurnCompleteResponse{}
 		return t.do(attemptCtx, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second)

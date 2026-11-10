@@ -589,6 +589,9 @@ func applyMergeRecovery(root string, req MergeCommand) mergeOutcome {
 		if err := recoveryLocalReady(root, r.TargetBranch, r.CandidateSha); err != nil {
 			return recoveryError(r, "LOCAL_CHECKOUT_BLOCKED", err.Error())
 		}
+		if paths := secretHistoryPaths(root, r.CandidateSha, "refs/heads/"+r.TargetBranch, "refs/remotes/origin/"+r.TargetBranch); len(paths) > 0 {
+			return recoveryError(r, "PUSH_FAILED", secretHistoryRefusal(paths))
+		}
 		if err := pushRecoveryCandidate(root, r.CandidateSha, r.TargetBranch); err != nil {
 			// A transport error may mean the push succeeded. Decide by reading the remote.
 			remote, readErr := recoveryRemoteTip(root, r.TargetBranch)

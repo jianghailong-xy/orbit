@@ -639,6 +639,12 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 	}
 	// mergeLock, not only the per-target lock above: this is the same repository root's refs that
 	// a session's own "merge to main" moves, and the two must not interleave.
+	// A landing that would publish an owner-request secret is refused (secret_wire.go).
+	if paths := secretHistoryPaths(repoRoot, tested, targetSha); len(paths) > 0 {
+		result.State, result.Phase, result.ErrorCode = "ERROR", "PUSH", "PUSH_REJECTED"
+		result.ErrorDetail = map[string]any{"detail": secretHistoryRefusal(paths)}
+		return result
+	}
 	mergeLock.Lock()
 	pushErr := integrationPush(repoRoot, scratch, remote, cmd.TargetRef, tested, targetSha, local)
 	if pushErr == nil {
@@ -980,6 +986,11 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 				"detail": "the synchronous PUSH report could not be delivered within the lease window; nothing was pushed",
 			})
 		}
+	}
+	if paths := secretHistoryPaths(repoRoot, tested, upstreamSha); len(paths) > 0 {
+		result.State, result.Phase, result.ErrorCode = "ERROR", "PUSH", "PUSH_REJECTED"
+		result.ErrorDetail = map[string]any{"detail": secretHistoryRefusal(paths)}
+		return result
 	}
 	mergeLock.Lock()
 	// The same push for both kinds, and it is a fast-forward either way: a merge commit and a rebased

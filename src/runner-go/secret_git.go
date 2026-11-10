@@ -140,24 +140,25 @@ func stagedBlobsHolding(dir string, env []string, names []string, red *integrati
 	return hits
 }
 
-// secretUnstagedWarning tells the session that path was left out of its commit, once per session and path. The value
-// and the secret's name are not in it: the path is enough to act on.
+// secretUnstagedWarning tells the session that path was left out of its commit.
 func secretUnstagedWarning(sessionID, path string, unstageErr error) {
-	key := decodeSessionID(sessionID)
 	if unstageErr != nil {
-		logln(fmt.Sprintf("secret grants: %s in session %s holds a secret's value and could not be unstaged: %v", path, key, unstageErr))
+		logln(fmt.Sprintf("secret grants: %s in session %s holds a secret's value and could not be unstaged: %v", path, decodeSessionID(sessionID), unstageErr))
 		return
 	}
-	if _, seen := secretWarned.LoadOrStore(key+"\x00"+path, true); seen {
+	secretFileWarning(sessionID, path, "secret_unstaged", fmt.Sprintf("%s holds the value of a secret the owner delivered to this runner, so Orbit left it out of the commit. Keep secrets out of the checkout; use orbit secret exec or the secret's own file instead.", path))
+}
+
+// secretFileWarning tells the session, once per session, kind and path, that path was kept back for holding a value.
+// The value and the secret's name are not in it: the path is enough to act on.
+func secretFileWarning(sessionID, path, subtype, message string) {
+	key := decodeSessionID(sessionID)
+	if _, seen := secretWarned.LoadOrStore(key+"\x00"+subtype+"\x00"+path, true); seen {
 		return
 	}
-	logln(fmt.Sprintf("secret grants: %s in session %s holds a secret's value; it was left out of the commit", path, key))
+	logln(fmt.Sprintf("secret grants: %s in session %s holds a secret's value (%s)", path, key, subtype))
 	if sink, ok := secretWarnSinks.Load(key); ok && key != "" {
-		sink.(*secretWarnSink).emit(evSystem, map[string]interface{}{
-			"subtype": "secret_unstaged",
-			"path":    path,
-			// `notice` is what every client already draws as the runner's heads-up (web Transcript NoticeNode).
-			"notice": fmt.Sprintf("%s holds the value of a secret the owner delivered to this runner, so Orbit left it out of the commit. Keep secrets out of the checkout; use orbit secret exec or the secret's own file instead.", path),
-		})
+		// `notice` is what every client already draws as the runner's heads-up (web Transcript NoticeNode).
+		sink.(*secretWarnSink).emit(evSystem, map[string]interface{}{"subtype": subtype, "path": path, "notice": message})
 	}
 }
