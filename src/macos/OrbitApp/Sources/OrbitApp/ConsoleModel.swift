@@ -4741,6 +4741,11 @@ final class ConsoleModel {
         return .onArrival(afterItemID: DeliveryAnchor.onArrival(of: .projectDone, items: state.items))
     }
 
+    func readProjectDoneCheck() async throws -> ProjectDoneCheck? {
+        guard let projectID else { return nil }
+        return try await api.projectDoneCheck(projectID: projectID)
+    }
+
     /// Record the project done from its card (`POST /projects/:id/done`, `ProjectDone.body`): the
     /// request the card answers and that request's own seal — or, unasked, the seal standing now —
     /// and the gaps the card shows. The card turns into its receipt in place; a request superseded

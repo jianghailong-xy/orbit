@@ -7,6 +7,33 @@ import XCTest
 /// server serves. The words themselves are `ProjectDoneCopyParityTests`'.
 final class ProjectDoneTests: XCTestCase {
 
+    func testDoneCheckFindingsUseShortLines() throws {
+        let json = #"""
+        {"findings":[
+          {"code":"DONE_TASKS_IN_FLIGHT","message":"long diagnostic","criterion":null,"tasks":[{"taskId":"a"},{"taskId":"b"}],"items":[],"jobs":[]},
+          {"code":"DONE_CRITERION_UNSATISFIED","message":"long diagnostic","criterion":{"ordinal":5},"tasks":[],"items":[],"jobs":[]},
+          {"code":"DONE_CRITERION_UNLANDED","message":"long diagnostic","criterion":{"ordinal":6},"tasks":[],"items":[],"jobs":[]}
+        ]}
+        """#
+        let check = try JSONDecoder().decode(ProjectDoneCheck.self, from: Data(json.utf8))
+        XCTAssertEqual(check.findings.map { $0.line(main: "main") }, [
+            "2 tasks are still running", "Criterion 5 is not met", "Criterion 6 is not on main"
+        ])
+        let empty = try JSONDecoder().decode(ProjectDoneCheck.self, from: Data(#"{"findings":[]}"#.utf8))
+        XCTAssertTrue(empty.findings.isEmpty)
+    }
+
+    func testRecordLabelUsesWhetherTheCoordinatorAsked() {
+        let met = closeout().counts
+        let unmet = ProjectDoneCounts(criteria: 2, met: 1, landed: 1, onMain: 1, byReason: [:])
+        for counts in [met, unmet, nil] {
+            XCTAssertEqual(ProjectDone.recordLabel(counts, asked: false), ProjectDone.recordAsDoneAnyway)
+        }
+        XCTAssertEqual(ProjectDone.recordLabel(met, asked: true), ProjectDone.recordAsDone)
+        XCTAssertEqual(ProjectDone.recordLabel(unmet, asked: true), ProjectDone.recordAsDoneAnyway)
+        XCTAssertEqual(ProjectDone.recordLabel(nil, asked: true), ProjectDone.recordAsDone)
+    }
+
     private let utc = TimeZone(identifier: "UTC")!
 
     /// The browser's fixture: two criteria, both met, one on main and one with nothing to land.
@@ -107,6 +134,7 @@ final class ProjectDoneTests: XCTestCase {
         let ownJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(own)) as? [String: Any])
         XCTAssertTrue(ownJSON["requestId"] is NSNull, "the request is sent as null, not left out")
         XCTAssertEqual(ownJSON["criteriaDigest"] as? String, "b")
+        XCTAssertEqual(own.acceptedGaps, [], "the server stores current findings itself")
         XCTAssertNil(ProjectDone.body(subject: subject, requestID: nil, request: nil, currentDigest: nil),
                      "no seal read yet is no press")
     }

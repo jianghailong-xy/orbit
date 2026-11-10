@@ -195,7 +195,7 @@ describe('the done cards, by the project’s main branch', () => {
     for (const doc of [lanes, on('main')]) {
       const card = renderToStaticMarkup(<ProjectDoneCard project={doc} onRecordDone={() => {}} onNotYet={() => {}} />);
       expect(card).toContain('3 met · 1 landed on main · 0 nothing to land');
-      expect(card).toContain('Orbit cannot prove this criterion is on main: Merged outside Orbit.');
+      expect(card).not.toContain('Orbit cannot prove this criterion');
       const why = renderToStaticMarkup(<ProjectWhyNotDoneCard project={doc} />);
       expect(why).toContain('3 criteria · 1 on main · 1 in flight · 1 merged outside Orbit');
       expect(why).toContain('Goes to main after the merge check — the coordinator is handling it.');
@@ -213,7 +213,7 @@ describe('the done cards, by the project’s main branch', () => {
     expect(landingReasonLabel('IN_FLIGHT', 'master')).toBe('In flight');
     const card = renderToStaticMarkup(<ProjectDoneCard project={on('master')} onRecordDone={() => {}} onNotYet={() => {}} />);
     expect(card).toContain('3 met · 1 landed on master · 0 nothing to land');
-    expect(card).toContain('Orbit cannot prove this criterion is on master: Merged outside Orbit.');
+    expect(card).not.toContain('Orbit cannot prove this criterion');
     expect(card).not.toContain('on main');
     const receipt = renderToStaticMarkup(<ProjectDoneCard project={{ ...on('master'), status: 'DONE', doneBy: 'OWNER' }} />);
     expect(receipt).toContain('3 criteria met · 1 landed on master · 0 nothing to land · 0 gaps accepted');

@@ -93,6 +93,15 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("DONE_CARD_COORDINATOR_CHECKED", ProjectDone.coordinatorChecked),
         ("DONE_CARD_ORBIT_CHECKED", ProjectDone.orbitChecked),
         ("DONE_CARD_RECORD", ProjectDone.recordAsDone),
+        ("DONE_CHECK_NO_CRITERIA", ProjectDone.checkNoCriteria),
+        ("DONE_CHECK_UNMET", ProjectDone.checkUnmet),
+        ("DONE_CHECK_UNLANDED", ProjectDone.checkUnlanded),
+        ("DONE_CHECK_TASKS", ProjectDone.checkTasks),
+        ("DONE_CHECK_TASK", ProjectDone.checkTask),
+        ("DONE_CHECK_OWNER_ITEMS", ProjectDone.checkOwnerItems),
+        ("DONE_CHECK_LANDINGS", ProjectDone.checkLandings),
+        ("DONE_CARD_FINDINGS_HEADING", ProjectDone.findingsHeading),
+        ("DONE_CARD_FINDINGS_ACCEPTED", ProjectDone.findingsAccepted),
         ("DONE_CARD_RECORD_ANYWAY", ProjectDone.recordAsDoneAnyway),
         ("DONE_CARD_NOT_YET", ProjectDone.notYet),
         ("DONE_CARD_MISSING", ProjectDone.missingBeforeDone),
@@ -313,11 +322,11 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ] {
             XCTAssertTrue(card.contains(part), "the Orbit checked line drifted: no \(part.debugDescription)")
         }
-        // A card nobody asked for carries Orbit's own gaps, in these two sentences — the first said of
-        // the project's main branch, main on a project on main.
-        XCTAssertTrue(card.contains("? `Orbit cannot prove this criterion is on ${main}: ${reason}.`"))
-        XCTAssertTrue(card.contains("const reason = landingReasonLabel(criterion.landingReason, main);"))
-        XCTAssertTrue(card.contains(": 'Orbit cannot prove this criterion is met by its work yet.',"))
+        // An unrequested card shows the server's findings rather than inferred criterion gaps.
+        XCTAssertTrue(card.contains("doneCheck.findings.length > 0"))
+        XCTAssertTrue(card.contains("doneFindingLine(finding, mainBranchName(project.integration?.upstreamRef))"))
+        XCTAssertTrue(card.contains("PROJECT_DONE_COPY.findingsAccepted"))
+        XCTAssertTrue(card.contains("acceptedGaps: doneRequest?.gaps ?? []"))
         // The section heads, the toggle, the gap's checked line and the record press.
         XCTAssertEqual(ProjectDone.doneWhenHead(Self.criteria), "Done when · 23 criteria")
         XCTAssertTrue(card.contains("{PROJECT_DONE_COPY.doneWhen} · {criteriaCount} criteria"))
@@ -333,7 +342,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                        "main has it · evidence a, b")
         XCTAssertTrue(card.contains("{criterion.satisfied ? 'met' : 'not met'} · {landingReasonLabel(criterion.landingReason, main)}"))
         XCTAssertTrue(card.contains(
-            "counts && counts.met < counts.criteria ? PROJECT_DONE_COPY.recordAsDoneAnyway : DONE_CARD_RECORD"))
+            "!doneRequest || (counts && counts.met < counts.criteria) ? PROJECT_DONE_COPY.recordAsDoneAnyway : DONE_CARD_RECORD"))
         XCTAssertEqual(ProjectDone.recordLabel(counts()), ProjectDone.recordAsDoneAnyway)
         XCTAssertEqual(ProjectDone.recordLabel(all), ProjectDone.recordAsDone)
         // The meta line: who asked and how long the request has waited — or nobody.

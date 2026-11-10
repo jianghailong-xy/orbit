@@ -2425,8 +2425,9 @@ private struct ProjectDoneSheet: View {
                 openItems: ProjectDone.openItemsCount(store.openItems),
                 running: ProjectDone.runningCount(subject),
                 record: record,
-                sealRead: row?.doneRequest != nil || digest != nil,
-                error: error,
+                sealRead: row?.doneRequest != nil || (digest != nil && store.doneCheck != nil),
+                error: error ?? store.doneCheckError,
+                doneCheck: store.doneCheck,
                 onRecord: { await recordDone(subject, row: row, digest: digest) },
                 onNotYet: notYet(row),
                 onReopen: { await reopen() })

@@ -111,8 +111,9 @@ afterEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
-async function mount(document: ProjectDoneDocument, openItems: Record<string, unknown>, element: ReactNode): Promise<void> {
+async function mount(document: ProjectDoneDocument, openItems: Record<string, unknown>, element: ReactNode, findings: Record<string, unknown>[] = []): Promise<void> {
   vi.mocked(api).mockImplementation((async (path: string) => {
+    if (path.endsWith('/done-check')) return { findings };
     if (path.endsWith('/open-items')) return openItems;
     if (path.includes('/acceptance/confirmation')) {
       return { state: 'CONFIRMED', confirmed: true, currentVersion: { digest: 'digest-1', material: [] }, confirmation: null };
@@ -241,5 +242,43 @@ describe('the receipt follows the project status only', () => {
     const html = renderToStaticMarkup(<ProjectDoneCard project={orbitDone('DERIVED')} />);
     expect(html).toContain(`${PROJECT_DONE_COPY.thisProjectIsDone} · ${PROJECT_DONE_COPY.recordedByOrbit}`);
     expect(html).not.toContain(PROJECT_DONE_COPY.receiptPrefix);
+  });
+});
+
+
+describe('owner-initiated done check', () => {
+  it('lists server refusals and warnings and sends no duplicate accepted gaps', async () => {
+    const findings = [
+      { severity: 'REFUSE', code: 'DONE_TASKS_IN_FLIGHT', message: '2 tasks are still running, queued for a runner or IN_PROGRESS, so the project is still moving', tasks: [{}, {}] },
+      { severity: 'WARN', code: 'DONE_CRITERION_UNLANDED', message: 'criterion 2 diagnostic; none of the gaps names it', criterion: { ordinal: 2 } },
+    ];
+    await mount(doc(), noItems, dialog(doc()), findings);
+    const box = window.document.querySelector('.project-done-findings');
+    expect(box?.textContent).toContain('Orbit can’t prove 2 things');
+    expect(box?.querySelectorAll('li')).toHaveLength(2);
+    expect(box?.textContent).toContain('2 tasks are still running');
+    expect(box?.textContent).toContain('Criterion 2 is not on main');
+    expect(box?.textContent).not.toContain('diagnostic');
+    expect(text()).toContain('These will be kept as the gaps you accepted.');
+    const button = Array.from(window.document.querySelectorAll('button')).find((b) => b.textContent === 'Record as done anyway');
+    expect(button?.disabled).toBe(false);
+    await act(async () => button?.click());
+    expect(vi.mocked(api)).toHaveBeenCalledWith(`/projects/${PROJECT}/done`, {
+      method: 'POST', body: { requestId: null, criteriaDigest: 'digest-1', acceptedGaps: [] },
+    });
+  });
+
+  it('omits the findings box and acceptance sentence when the check has no findings', async () => {
+    await mount(doc(), noItems, dialog(doc()), []);
+    expect(window.document.querySelector('.project-done-findings')).toBeNull();
+    expect(text()).not.toContain('These will be kept as the gaps you accepted.');
+  });
+
+  it('renders a stored PROJECT gap by its title without a missing criterion', () => {
+    const html = renderToStaticMarkup(<ProjectDoneCard project={doc({ status: 'DONE', doneBy: 'OWNER', acceptedGaps: [
+      { scope: 'PROJECT', criterionKey: `project:${PROJECT}`, title: '2 tasks are still running', whyNotProven: 'Work is in flight.' },
+    ] })} />);
+    expect(html).toContain('2 tasks are still running');
+    expect(html).not.toContain(`project:${PROJECT}`);
   });
 });

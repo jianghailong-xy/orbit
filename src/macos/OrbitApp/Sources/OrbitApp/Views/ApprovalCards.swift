@@ -2910,6 +2910,8 @@ private struct StartProjectCardView: View {
 /// is what puts `ApprovalReviewLayout` on its whole-card path.
 private struct ProjectDoneCardView: View {
     let console: ConsoleModel
+    @State private var doneCheck: ProjectDoneCheck?
+    @State private var checkError: String?
 
     var body: some View {
         if let subject = console.projectDone {
@@ -2923,11 +2925,18 @@ private struct ProjectDoneCardView: View {
                 running: ProjectDone.runningCount(subject),
                 record: console.doneRecord,
                 sealRead: row?.doneRequest != nil
-                    || console.acceptanceConfirmation?.currentVersion.digest != nil,
+                    || (console.acceptanceConfirmation?.currentVersion.digest != nil && doneCheck != nil),
+                error: checkError,
+                doneCheck: doneCheck,
                 onRecord: { await console.recordProjectDone() },
                 onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },
                 onReopen: { await console.reopenProject() })
                 .environment(\.approvalReviewTarget, nil)
+                .task(id: row?.itemId) {
+                    guard row == nil else { return }
+                    do { doneCheck = try await console.readProjectDoneCheck(); checkError = nil }
+                    catch { checkError = APIClient.failureReason(error) }
+                }
         }
     }
 }

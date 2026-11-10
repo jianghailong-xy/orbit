@@ -26787,7 +26787,7 @@ button.agent-progress-agent:hover {
   color: var(--text-3);
 }
 .ac-error {
-  color: var(--danger-solid, var(--danger));
+  color: var(--danger-solid, var(--error));
 }
 .ac-diff {
   max-height: 420px;
@@ -27084,3 +27084,14 @@ button.agent-progress-agent:hover {
   gap: 8px 16px;
   margin-top: 4px;
 }
+
+.project-done-findings {
+  padding: 10px 12px;
+  border: 1px solid var(--error);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  color: var(--error);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.project-done-findings ul { list-style: none; padding: 0; margin: 0; }
