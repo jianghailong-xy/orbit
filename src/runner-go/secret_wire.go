@@ -52,7 +52,16 @@ func withoutSecretPatches(patches []FilePatch, sessionID string) []FilePatch {
 	if len(patches) == 0 {
 		return patches
 	}
-	recorded := taintObjects("")
+	recorded, readable := taintObjectsChecked("")
+	if !readable {
+		// The record of what held a value cannot be read, so nothing here can tell which patch is safe: none is sent.
+		// The files stay in the list with their counts, as for any withheld patch.
+		for _, patch := range patches {
+			secretFileWarning(sessionID, patch.Path, "secret_patch_withheld", fmt.Sprintf(
+				"%s: Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports.", patch.Path))
+		}
+		return nil
+	}
 	if r == nil && len(recorded) == 0 {
 		return patches
 	}

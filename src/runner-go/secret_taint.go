@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -89,10 +90,23 @@ func writeSecretTaint(entries []secretTaintEntry) error {
 		tmp.Close()
 		return err
 	}
+	// On disk before it replaces the old record: a rename that a crash leaves pointing at unflushed bytes would leave
+	// an empty record, and an empty record has forgotten what it was for.
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path)
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return err
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		d.Close()
+	}
+	return nil
 }
 
 // secretRepoKey is the repository a checkout belongs to: its common git directory, the same for every worktree of it.
@@ -238,16 +252,32 @@ func taintedPaths(dir, tip string, exclude ...string) []string {
 }
 
 // taintEntryPresent reports whether anything an entry recorded is still an object of dir's repository.
+// Only git's own answer that an object is missing (`cat-file -e` exits 1) counts as gone. Any other failure — git not
+// starting, the repository unreadable — keeps the entry: pruning is the one thing here that must never guess.
 func taintEntryPresent(dir string, entry secretTaintEntry) bool {
-	if _, err := git(dir, "cat-file", "-e", entry.Commit); err == nil {
-		return true
+	ids := make([]string, 0, len(entry.Objects)+1)
+	if entry.Commit != "" {
+		ids = append(ids, entry.Commit)
 	}
 	for _, object := range entry.Objects {
-		if _, err := git(dir, "cat-file", "-e", object.ID); err == nil {
+		ids = append(ids, object.ID)
+	}
+	if len(ids) == 0 {
+		return true
+	}
+	for _, id := range ids {
+		_, err := git(dir, "cat-file", "-e", id)
+		if err == nil || !taintObjectMissing(err) {
 			return true
 		}
 	}
 	return false
+}
+
+// taintObjectMissing reports whether err is `git cat-file -e` saying the object does not exist (exit status 1).
+func taintObjectMissing(err error) bool {
+	var exit *exec.ExitError
+	return errors.As(err, &exit) && exit.ExitCode() == 1
 }
 
 // taintAppliesTo reports whether any recorded entry is of dir's repository, or whether the record cannot be read.
@@ -398,13 +428,20 @@ func taintObjectIDs(dir string) map[string]string {
 	return taintObjects(secretRepoKey(dir))
 }
 
-// taintObjects is every recorded object id of repo, or of every repository when repo is "".
+// taintObjects is every recorded object id of repo, or of every repository when repo is "". An unreadable record is
+// none: a caller that must fail closed asks taintObjectsChecked.
 func taintObjects(repo string) map[string]string {
+	ids, _ := taintObjectsChecked(repo)
+	return ids
+}
+
+// taintObjectsChecked is taintObjects, and whether the record could be read at all.
+func taintObjectsChecked(repo string) (map[string]string, bool) {
 	secretTaintMu.Lock()
 	entries, err := readSecretTaint()
 	secretTaintMu.Unlock()
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	ids := map[string]string{}
 	for _, entry := range entries {
@@ -415,7 +452,7 @@ func taintObjects(repo string) map[string]string {
 			ids[object.ID] = object.Path
 		}
 	}
-	return ids
+	return ids, true
 }
 
 // secretBeforeForget runs just before a grant's value is forgotten. A variable for the store's tests.

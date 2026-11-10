@@ -286,6 +286,13 @@ func (s *secretStore) startup() {
 			s.removeFileEntry(entry)
 			logln("secret grants: grant", entry.GrantID, "was not completely written when the runner stopped; the partial write was cleaned up")
 		case !entry.ExpiresAt.After(now):
+			// The value is still on disk here, and nowhere else once this deletes it: what a checkout copied of it is
+			// recorded first, as remove() does before it forgets a value (secretBeforeForget).
+			if state, size := inspectSecretFile(entry.Path, entry.Dev, entry.Ino); state == secretFileOurs && size <= secretValueMax && secretBeforeForget != nil {
+				if data, err := os.ReadFile(entry.Path); err == nil && len(data) > 0 {
+					secretBeforeForget(newSecretRedactor([]string{string(data)}))
+				}
+			}
 			s.owe(entry.GrantID, s.removeFileEntry(entry))
 			logln("secret grants: grant", entry.GrantID, "expired while the runner was stopped; its file was removed")
 		default:

@@ -561,3 +561,33 @@ func TestSecretValueNeverFormats(t *testing.T) {
 		t.Fatalf("a fetched grant formats its value: %s", s)
 	}
 }
+
+// Review 6, OPEN 2: a FILE grant that expired while the runner was stopped is scanned for before its file goes, as
+// remove() does, so what a checkout copied of it is recorded while the value can still be read.
+func TestSecretExpiredAtStartupIsScannedBeforeItIsForgotten(t *testing.T) {
+	home := secretTestHome(t)
+	ledger := filepath.Join(home, ".orbit", "secret-grants", "ledger.json")
+	api := newFakeSecretAPI()
+	file := fileGrant("g-file", "~/keys/api.key", time.Now().Add(time.Hour))
+	api.grants[file.ID] = file
+	newSecretStore(api, ledger).reconcile(refs(file), nil)
+	value, err := os.ReadFile(filepath.Join(home, "keys", "api.key"))
+	if err != nil || len(value) == 0 {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	var scanned []*integrationOutputRedactor
+	old := secretBeforeForget
+	secretBeforeForget = func(r *integrationOutputRedactor) { scanned = append(scanned, r) }
+	defer func() { secretBeforeForget = old }()
+	later := newSecretStore(&erroringSecretAPI{}, ledger)
+	later.now = func() time.Time { return time.Now().Add(2 * time.Hour) }
+	later.startup()
+
+	if len(scanned) != 1 || !scanned[0].holds(value) {
+		t.Fatalf("the expired grant was forgotten without a scan for its value (%d scans)", len(scanned))
+	}
+	if _, err := os.Stat(filepath.Join(home, "keys", "api.key")); !os.IsNotExist(err) {
+		t.Fatal("the expired file survived startup")
+	}
+}

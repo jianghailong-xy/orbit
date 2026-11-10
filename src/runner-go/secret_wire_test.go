@@ -580,3 +580,34 @@ func TestTaintOfACommitSurvivesARescanUnderAnotherValue(t *testing.T) {
 		t.Fatalf("the taint record holds a value: %s", raw)
 	}
 }
+
+// Review 6, OPEN 1: when the record of what held a value cannot be read, no patch is sent, as no push is.
+func TestUnreadableTaintRecordWithholdsEveryPatch(t *testing.T) {
+	wt := sessionWorktree(t, "sSecretUnreadable")
+	holdTestSecret(t, testSecretValue)
+	commitFile(t, wt.Path, "leak.env", "KEY="+testSecretValue+"\n", "add key")
+	liveDiff(wt)
+	runnerSecretStore.Store(nil)
+	if err := os.WriteFile(secretTaintPath(), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	patches := withoutSecretPatches([]FilePatch{{Path: "leak.env", Patch: "+KEY=" + testSecretValue + "\n"}, {Path: "clean.txt", Patch: "+clean\n"}}, "sSecretUnreadable")
+	if len(patches) != 0 {
+		t.Fatalf("an unreadable record sent patches: %+v", patches)
+	}
+	if refusal := secretPushRefusal(wt.Path, "HEAD", wt.baseSha()); refusal == "" {
+		t.Fatal("an unreadable record allowed a push")
+	}
+}
+
+// Review 6, note: only git's own "missing" answer prunes; a failure to ask keeps the entry.
+func TestTaintEntryIsKeptWhenGitCannotAnswer(t *testing.T) {
+	entry := secretTaintEntry{Commit: "1234567890123456789012345678901234567890"}
+	if !taintEntryPresent(filepath.Join(t.TempDir(), "not-a-repo"), entry) {
+		t.Fatal("an entry was pruned because git could not be asked")
+	}
+	repo := initRepo(t)
+	if taintEntryPresent(repo, entry) {
+		t.Fatal("an object git says is missing kept its entry")
+	}
+}
