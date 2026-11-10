@@ -339,6 +339,10 @@ RestartSec=5
 # provider drain + lease release + event flush + a racing finalization + margin.
 KillMode=mixed
 TimeoutStopSec=180
+# An OOM kill of one process in this unit — a session's tsc, chrome or Gradle, which run in the
+# runner's cgroup — must not stop the runner. systemd's default, stop, would drain and tear down
+# every running turn, and the restart would install a deferred release past the turn gate.
+OOMPolicy=continue
 # No Environment= lines here, deliberately. One template serves every instance, and the
 # home, the runner state dir and the login PATH each belong to the instance's own
 # account — while the specifiers that would fill them in (%h, %s) expand in a *system*

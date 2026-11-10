@@ -405,7 +405,9 @@ export async function readOwnerConfirmation(
       answers: (row.answers as OwnerConfirmationAnswer[] | null) ?? [],
     });
   }
-  const waiting = asked && latest
+  const held = latest && reviews.get(latest.id)?.reviewer.kind === 'PROJECT_COORDINATOR'
+    && reviews.get(latest.id)?.state === 'UNDER_REVIEW';
+  const waiting = asked && latest && !held
     ? {
       requestId: asked.requestId,
       sessionId: asked.sessionId,
