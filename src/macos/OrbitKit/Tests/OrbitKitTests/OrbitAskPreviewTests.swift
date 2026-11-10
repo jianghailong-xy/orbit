@@ -29,6 +29,7 @@ final class OrbitAskPreviewTests: XCTestCase {
         for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create",
                      "orbit_blocker_resolve", "orbit_provider_create", "orbit_provider_update",
                      "orbit_provider_delete", "orbit_project_update_integration",
+                     "orbit_integration_skip_merge_check",
                      "orbit_runner_delete", "orbit_agent_delete",
                      "orbit_agent_create", "orbit_agent_update"] {
             XCTAssertEqual(Approvals.rememberRules(toolName: tool, input: json("{}")), [],
@@ -306,6 +307,52 @@ final class OrbitAskPreviewTests: XCTestCase {
         for shown in ["Approvals.mergeCheckChangePreview(toolName:",
                       "mergeCheck.projectLine", "mergeCheck.currentLine", "mergeCheck.nextLine", "mergeCheck.timeoutLine",
                       "MergeCheckChangePreview.action", "mergeCheck.declineName"] {
+            XCTAssertTrue(card.contains(shown), "\(shown) is part of what this card shows and the press it offers")
+        }
+    }
+
+    // MARK: a skip of the merge check
+
+    /// The input as `runner-go/mcp.go`'s `skipMergeCheckFacts` files it, flat.
+    func testASkipShowsTheTaskTheCommandAndTheReason() {
+        let s = Approvals.skipMergeCheckPreview(toolName: "orbit_integration_skip_merge_check", from: json("""
+            {"projectId":"34vCfW","projectTitle":"Payments","taskId":"34vD","taskTitle":"Fix the refund rounding",
+             "checkCommand":"npm ci && npm test","failure":"3 tests failed in ledger.spec.ts",
+             "generation":"2","reason":"The ledger spec is **flaky** on main too.",
+             "mainBranch":"refs/heads/release"}
+            """))
+        XCTAssertEqual(s?.taskLine, "Fix the refund rounding")
+        XCTAssertEqual(s?.projectLine, "In Payments")
+        XCTAssertEqual(s?.checkCommand, "npm ci && npm test")
+        XCTAssertEqual(s?.failure, "3 tests failed in ledger.spec.ts")
+        XCTAssertEqual(s?.reason, "The ledger spec is **flaky** on main too.")
+        XCTAssertEqual(s?.mainBranch, "release", "a full ref reads as the branch's name")
+        XCTAssertTrue(s?.note.contains("every merge into release are checked as before") ?? false)
+        XCTAssertEqual(s?.declineName, "Fix the refund rounding")
+        XCTAssertEqual(SkipMergeCheckPreview.action, "Land it without the check")
+
+        XCTAssertNil(Approvals.skipMergeCheckPreview(toolName: "orbit_project_update_integration", from: json("{}")))
+    }
+
+    func testASkipWithNoNamesOrBranchSaysSoInWords() {
+        let s = Approvals.skipMergeCheckPreview(toolName: "orbit_integration_skip_merge_check", from: json("""
+            {"projectTitle":"","taskTitle":"","checkCommand":"make check","mainBranch":null}
+            """))
+        XCTAssertEqual(s?.taskLine, "This task")
+        XCTAssertNil(s?.projectLine, "no project name, no project row")
+        XCTAssertEqual(s?.failure, "")
+        XCTAssertEqual(s?.mainBranch, "main", "no repository bound reads as main, the way web reads it")
+        XCTAssertEqual(s?.declineName, "this landing")
+    }
+
+    /// The card reads the preview instead of the plain "Approve tool call" chrome, whose body showed
+    /// none of these fields, and it is one of Orbit's own asks.
+    func testASkipCardIsDrawnFromThePreview() throws {
+        XCTAssertTrue(Approvals.isOrbitAsk(toolName: "orbit_integration_skip_merge_check"))
+        let card = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift")
+        for shown in ["Approvals.skipMergeCheckPreview(toolName:", "SkipMergeCheckPreview.heading",
+                      "skipCheck.taskLine", "skipCheck.projectLine", "skipCheck.checkCommand", "skipCheck.failure",
+                      "skipCheck.reason", "skipCheck.note", "SkipMergeCheckPreview.action", "skipCheck.declineName"] {
             XCTAssertTrue(card.contains(shown), "\(shown) is part of what this card shows and the press it offers")
         }
     }
