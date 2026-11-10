@@ -112,12 +112,13 @@ class DeliveryModeCardTest {
     // MARK: How it runs
 
     private val writes = mutableListOf<JsonObject?>()
-    private fun runSettings(view: JsonObject) {
+    private fun runSettings(view: JsonObject, mergeLive: Boolean = false) {
         val state = ProjectPageState().apply { integration = view }
         val doc = j("""{"id":"$project","coordinatorEnabled":true,"configRevision":"3","maxConcurrentTasks":2,"pausedAt":null}""")
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                RunSettingsSection(state, doc, now, enabled = true, editMergeCheck = {}, integration = { writes += it }, automatic = {}, stepConcurrency = {}, pause = {})
+                RunSettingsSection(state, doc, now, enabled = true, editMergeCheck = {}, integration = { writes += it }, automatic = {}, stepConcurrency = {}, pause = {},
+                    mergeLive = { mergeLive })
             }
         } } }
         compose.waitForIdle()
@@ -157,5 +158,49 @@ class DeliveryModeCardTest {
         compose.onNodeWithTag("project-delivery:AGENT_PUSH").performScrollTo().assertIsNotEnabled()
         runSettings(view(null))
         compose.onNodeWithTag("project-delivery").assertDoesNotExist()
+    }
+
+    /** docs/mocks/agent-push-delivery: Delivery sits under the line, before Main branch; the merge check says it is the agent's while the
+     * agent pushes; and the Automatic sentence on a main line points at Delivery — or, with no Delivery row, says why it asks. */
+    @Test fun howItRunsPutsDeliveryUnderTheLineAndSaysWhoRunsTheCheck() {
+        runSettings(view("PLATFORM"))
+        val delivery = compose.onNodeWithTag("project-delivery").fetchSemanticsNode().positionInRoot.y
+        val mainBranch = compose.onNodeWithTag("project-main-branch", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
+        val line = compose.onNodeWithTag("project-line:MAIN").fetchSemanticsNode().positionInRoot.y
+        assertTrue("Delivery under the line", line < delivery)
+        assertTrue("and before Main branch", delivery < mainBranch)
+        shows(RunSettings.mergeCheckHint("main"))
+        shows(RunSettings.automaticHint("MAIN", "main"))
+        runSettings(view("AGENT_PUSH"))
+        shows(RunSettings.mergeCheckHintAgentPush("main"))
+        compose.onNodeWithText(RunSettings.mergeCheckHint("main")).assertDoesNotExist()
+        runSettings(view(null))
+        shows(RunSettings.automaticHint("MAIN", "main", hasDelivery = false))
+    }
+
+    /** Handing delivery to the agent while a merge into main is live asks first; Cancel writes nothing, and with no live merge it writes
+     * at once, as before. */
+    @Test fun switchingToTheAgentWhileAMergeIsLiveAsksFirst() {
+        runSettings(view("PLATFORM"), mergeLive = true)
+        compose.onNodeWithTag("project-delivery:AGENT_PUSH").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("project-delivery-confirm").assertExists()
+        compose.onNodeWithText(RunSettings.agentPushConfirmTitle("main")).assertExists()
+        compose.onNodeWithText(RunSettings.agentPushConfirmBody("main")).assertExists()
+        compose.onNodeWithTag("project-delivery-confirm:cancel").assert(hasText("Cancel")).performClick()
+        compose.onNodeWithTag("project-delivery-confirm").assertDoesNotExist()
+        assertTrue("Cancel writes nothing", writes.filterNotNull().isEmpty())
+
+        compose.onNodeWithTag("project-delivery:AGENT_PUSH").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("project-delivery-confirm:yes").assert(hasText(RunSettings.agentPushConfirm)).performClick()
+        assertEquals(listOf(j("""{"deliveryMode":"AGENT_PUSH"}""")), writes.filterNotNull())
+
+        // Back to Orbit's never asks.
+        writes.clear()
+        runSettings(view("AGENT_PUSH"), mergeLive = true)
+        compose.onNodeWithTag("project-delivery:PLATFORM").performScrollTo().performClick()
+        compose.onNodeWithTag("project-delivery-confirm").assertDoesNotExist()
+        assertEquals(listOf(j("""{"deliveryMode":"PLATFORM"}""")), writes.filterNotNull())
     }
 }

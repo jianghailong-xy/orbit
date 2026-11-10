@@ -372,10 +372,34 @@ extension RunSettings {
     }
 
     /// Automatic's sentence, for the line and the delivery the project stands on — what Automatic
-    /// does with a merge into main depends on both.
+    /// does with a merge into main depends on both. A server that reports no delivery draws no
+    /// Delivery row, so the main line's sentence there keeps its older words, which point at none.
     public static func automaticHint(_ view: ProjectIntegrationView, main: String) -> String {
-        delivery(of: view) == .agentPush ? automaticHintAgentPush(main)
-                                         : automaticHint(view.line == .main ? .main : .projectBranch, main: main)
+        if delivery(of: view) == .agentPush { return automaticHintAgentPush(main) }
+        if view.line == .main && !deliveryShown(view) { return automaticHintMainNoDelivery(main) }
+        return automaticHint(view.line == .main ? .main : .projectBranch, main: main)
+    }
+
+    /// The merge check's hint, for the delivery the project stands on: while the agent pushes, Orbit
+    /// runs no check — the agent runs it before it pushes.
+    public static func mergeCheckHint(_ view: ProjectIntegrationView, main: String) -> String {
+        delivery(of: view) == .agentPush ? mergeCheckHintAgentPush(main) : mergeCheckHint(main)
+    }
+
+    /// Whether a press on Delivery may have to ask first (owner decision 2026-11-10): a write that
+    /// moves a project Orbit lands for to the agent's way. It asks only when a merge into main is
+    /// also live (`mergeLive`), which takes a read this does not make.
+    public static func deliveryMayAsk(_ view: ProjectIntegrationView, to mode: DeliveryMode) -> Bool {
+        view.deliveryMode == .platform && mode == .agentPush && deliveryWrite(view, to: mode) != nil
+    }
+
+    /// A merge into main the owner may still be asked, or has answered and is under way: what the
+    /// switch to the agent's way leaves standing. Web's `LIVE_PROMOTION_STATES`.
+    public static func mergeLive(_ promotion: ProjectPromotionView?) -> Bool {
+        switch promotion?.state {
+        case .checking, .ready, .confirmed, .rechecking: return true
+        default: return false
+        }
     }
 
     /// The main branch a pick in How it runs writes: only while it can still move (L4 locks it with
