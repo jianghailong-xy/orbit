@@ -476,7 +476,7 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
     const [grant] = await this.prisma.$queryRaw<Array<{
       id: string; request_id: string; owner_id: string; runner_id: string; session_id: string; task_id: string | null;
       name: string | null; exposure: string; file_path: string | null; value_enc: string; expires_at: Date;
-      previously_fetched: boolean;
+      previously_fetched: boolean; fetched_at: Date;
     }>>`
       -- One statement, under the row's lock: the fetch is stamped (fetched_at) as it reads, so an ending of the grant
       -- either comes first, and nothing is handed out, or sees the fetch and waits for the runner (§2).
@@ -487,7 +487,8 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
              g."runner_id"::text AS runner_id, g."session_id"::text AS session_id, g."task_id"::text AS task_id,
              g."name", g."exposure", g."file_path", g."value_enc", g."expires_at",
              -- A subquery here reads the row as it stood before this statement: whether an earlier fetch handed it out.
-             (SELECT o."fetched_at" IS NOT NULL FROM "owner_request_secret" o WHERE o."id" = g."id") AS previously_fetched`;
+             (SELECT o."fetched_at" IS NOT NULL FROM "owner_request_secret" o WHERE o."id" = g."id") AS previously_fetched,
+             g."fetched_at"`;
     if (!grant) throw new NotFoundException('secret grant not found');
     let value: string;
     try {
@@ -495,7 +496,8 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
     } catch {
       // This fetch handed nothing out: if no earlier one did either, the grant was never fetched.
       if (!grant.previously_fetched) {
-        await this.prisma.ownerRequestSecret.updateMany({ where: { id: grant.id }, data: { fetchedAt: null } });
+        // Only the stamp this fetch wrote: a racing fetch that did hand the value out keeps its own.
+        await this.prisma.ownerRequestSecret.updateMany({ where: { id: grant.id, fetchedAt: grant.fetched_at }, data: { fetchedAt: null } });
       }
       await this.endUnreadable(grant.id, runner.id);
       throw new NotFoundException('secret grant not found');

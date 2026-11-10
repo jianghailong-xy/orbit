@@ -429,6 +429,18 @@ describe('a delivered secret', () => {
     expect(host.querySelector('button')).toBeNull();
   });
 
+  it('a fetched key whose runner was deleted says removal is unconfirmed, on an ended request and on a pending one', async () => {
+    const note = 'Removal unconfirmed: the runner was deleted before it could confirm.';
+    const withdrawn = { ...done({ state: 'REMOVED', endReason: 'RUNNER_DELETED', removalNote: note, deliveredAt: null }), state: 'WITHDRAWN' as const };
+    await mount(<OwnerRequestResolved now={NOW} request={withdrawn} />);
+    expect(host.textContent).toContain(note);
+    expect(host.textContent).not.toContain('removal unconfirmed. Removal unconfirmed');
+    const pending = { ...done({ state: 'REMOVED', endReason: 'REVOKED', removalNote: note, deliveredAt: null }), state: 'PENDING' as const, resolvedAt: null };
+    await mount(<OwnerRequestCard now={NOW} request={pending} />);
+    expect(host.textContent).toContain(note);
+    expect(host.querySelector('.owner-request-field input')).not.toBeNull();
+  });
+
   it('REMOVED says why, with the runner’s note', async () => {
     await mount(<OwnerRequestResolved now={NOW} request={done({ state: 'REMOVED', endReason: 'TASK_ENDED', removalNote: 'a different file stands at /etc/key; left in place' })} />);
     expect(host.textContent).toContain('Removed when the task ended. a different file stands at /etc/key; left in place');

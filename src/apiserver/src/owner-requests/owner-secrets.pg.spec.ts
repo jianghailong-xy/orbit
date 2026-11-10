@@ -374,6 +374,44 @@ test('owner request secrets: one runner, removed when the scope ends', { skip, c
     }
   });
 
+  await t.test('(e4) a key fetched before and then unreadable waits for its runner; one being removed refuses a new key', async () => {
+    const sessionId = await a.session();
+    const request = await fileSecret(sessionId);
+    await secrets.submit(a.ownerId, request.id, { value: canary() });
+    const grant = await grantOf(request.id);
+    await secrets.fetch(runnerA, grant.id); // handed out; the ack lost
+    const other = await fileSecret(await a.session());
+    await secrets.submit(a.ownerId, other.id, { value: canary() });
+    await db.ownerRequestSecret.update({ where: { id: grant.id }, data: { valueEnc: (await grantOf(other.id)).valueEnc } });
+    await assert.rejects(secrets.fetch(runnerA, grant.id), NotFoundException);
+    const ended = await db.ownerRequestSecret.findUniqueOrThrow({ where: { id: grant.id } });
+    assert.deepEqual([ended.state, ended.endReason], ['REMOVING', 'KEY_UNREADABLE'], 'an earlier fetch handed it out: the runner confirms');
+    assert.ok(ended.fetchedAt, 'the earlier stamp is kept');
+    await assert.rejects(secrets.submit(a.ownerId, request.id, { value: canary() }),
+      (e: unknown) => e instanceof ConflictException && /still being removed/.test(JSON.stringify((e as ConflictException).getResponse())));
+  });
+
+  await t.test('(e5) a fetched, unconfirmed key whose runner is deleted ends with the unconfirmed note', async () => {
+    const doomed = await db.runner.create({
+      data: {
+        id: randomUUID(), ownerId: a.ownerId, name: 'doomed-fetched', tokenHash: `hash-${randomUUID()}`, status: RunnerStatus.ONLINE,
+        capabilities: ['owner-secret/v1'], capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
+      },
+    });
+    const sessionId = await a.session({ on: doomed.id });
+    const request = await fileSecret(sessionId);
+    await secrets.submit(a.ownerId, request.id, { value: canary() });
+    const grant = await grantOf(request.id);
+    await secrets.fetch({ id: doomed.id, ownerId: a.ownerId }, grant.id);
+    await sql.query(`UPDATE "session" SET "assigned_runner_id" = NULL WHERE "id" = $1`, [sessionId]);
+    await sql.query(`DELETE FROM "runner" WHERE "id" = $1`, [doomed.id]);
+    await secrets.sweep();
+    const ended = await db.ownerRequestSecret.findUniqueOrThrow({ where: { id: grant.id } });
+    assert.equal(ended.state, 'REMOVED');
+    assert.equal(ended.endReason, 'RUNNER_DELETED');
+    assert.match(ended.removalNote ?? '', /^Removal unconfirmed/);
+  });
+
   await t.test('(f) what a submit takes, and when it may replace', async () => {
     const request = await fileSecret(await a.session());
     for (const value of ['short', 'x'.repeat(16 * 1024 + 1), `has\0nul-byte-inside`]) {

@@ -422,7 +422,12 @@ export function OwnerRequestCard({ request: given, now = Date.now() }: { request
               <p className="owner-request-notice">{`You can enter a key again once ${runner} confirms the earlier one is gone.`}</p>
             </div>
           ) : (
-            <SecretEntry spec={request.secretSpec} runner={runner} draft={draft} onDraft={setDraft} />
+            <>
+              {removalToTell(grant) ? (
+                <p className="owner-request-notice">{grantLine(grant!, runner, now)}</p>
+              ) : null}
+              <SecretEntry spec={request.secretSpec} runner={runner} draft={draft} onDraft={setDraft} />
+            </>
           )
         ) : null}
         {request.kind === 'DECISION' ? (
@@ -541,6 +546,16 @@ const GRANT_ENDINGS: Readonly<Record<string, string>> = {
   DELIVERY_FAILED: 'Delivery failed',
 };
 
+/**
+ * A removal the card must state on any request, not only a DONE one (design §6.1, §6.4): one still pending, or one
+ * that ended without the runner ever confirming it (its runner was deleted after it fetched the key).
+ */
+function removalToTell(grant: OwnerRequestSecretGrant | null | undefined): boolean {
+  if (!grant) return false;
+  if (grant.state === 'REMOVING') return true;
+  return grant.state === 'REMOVED' && (grant.endReason === 'RUNNER_DELETED' || /^Removal unconfirmed/.test(grant.removalNote ?? ''));
+}
+
 /** Where a delivered key stands now (design §6): in, being removed, or gone and why. */
 function grantLine(grant: OwnerRequestSecretGrant, runner: string, now: number): string | null {
   const at = (iso: string) => decisionReceiptTime(iso, new Date(now));
@@ -551,6 +566,8 @@ function grantLine(grant: OwnerRequestSecretGrant, runner: string, now: number):
       : `Removal pending: waiting for ${runner} to confirm`;
   }
   if (grant.state === 'REMOVED') {
+    // The server's own unconfirmed-removal note says it all; a runner's note follows the reason.
+    if (/^Removal unconfirmed/.test(grant.removalNote ?? '')) return grant.removalNote!;
     const why = (grant.endReason && GRANT_ENDINGS[grant.endReason]) || 'Removed';
     return grant.removalNote ? `${why}. ${grant.removalNote}` : why;
   }
@@ -568,10 +585,10 @@ const ENDING_ICON: Readonly<Record<string, ReactNode>> = {
 export function OwnerRequestResolved({ request: given, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
   const door = useSecretDoor(given);
   const request = door.current;
-  // A delivered key's whole story on a DONE request; on any other ending, only a removal still pending — a key the
-  // runner fetched and never confirmed (§2, §6.4) — so the card never says gone while a copy may remain.
+  // A delivered key's whole story on a DONE request; on any other ending, only a removal the owner must be told of —
+  // pending, or never to be confirmed (§2, §6.1, §6.4) — so the card never implies gone while a copy may remain.
   const held = request.kind === 'SECRET' ? request.secretGrant : null;
-  const grant = held && (request.state === 'DONE' || held.state === 'REMOVING') ? held : null;
+  const grant = held && (request.state === 'DONE' || removalToTell(held)) ? held : null;
   const runner = useRunnerName(request.kind === 'SECRET' ? request.secretSpec?.runnerId : undefined);
   const when = request.resolvedAt ? decisionReceiptTime(request.resolvedAt, new Date(now)) : null;
   const by = [endedBy(request), when].filter(Boolean).join(' · ');
