@@ -3064,6 +3064,7 @@ model Activity {
 /// intent, the criteria are what a check is run against. Merging them would make "is this done"
 /// a matter of interpreting a paragraph, which is the failure verification exists to avoid.
 model Project {
+  promotionRequests ProjectPromotionRequest[]
   id      String @id @default(uuid(7)) @db.Uuid
   title   String
   // Tenant scope: list/authorization always filter by this column (like tasks and task lists).
@@ -9099,4 +9100,19 @@ model FeishuDeploymentSetting {
   updatedById String?  @map("updated_by_id") @db.Uuid
 
   @@map("feishu_deployment_setting")
+}
+
+/// K7: a coordinator request remains pending until a candidate consumes it in its own transaction.
+model ProjectPromotionRequest {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// History references: deleting a conversation or promotion must not erase the request's provenance.
+  sessionId             String   @map("session_id") @db.Uuid
+  reason                String
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  consumedByPromotionId String?  @map("consumed_by_promotion_id") @db.Uuid
+
+  @@index([projectId, createdAt])
+  @@map("project_promotion_request")
 }

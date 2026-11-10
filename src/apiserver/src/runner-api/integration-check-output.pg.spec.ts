@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -357,6 +358,7 @@ test('a candidate\'s check holds to the same rule, on the candidate\'s row and o
         testedSha: sha('f'), testedTreeSha: sha('e'), landedSha: sha('f'), landedTreeSha: sha('e'), aheadOfUpstream: 1,
         checks: [{ ...RED_CHECK, exitCode: 0, outputTail: `dial ${ADDRESS}\nok\n` }],
       });
+      await seedPromotionRequest(stack.prisma, w.projectId);
       const made = await stack.promotions.considerCandidate(w.projectId);
       assert.ok(made, 'the landing made a candidate');
       await report(stack, w, await claim(stack, w, 'CHECK_PROMOTION'), answer);

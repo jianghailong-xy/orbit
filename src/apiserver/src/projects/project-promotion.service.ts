@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -54,6 +55,8 @@ import {
   promotionView,
 } from './project-promotion';
 
+import { readDerivedProjectDoneReading } from './project-done-derived';
+
 const logger = new Logger('ProjectPromotion');
 
 /** How many finished checks the "typical" a re-check is measured against is taken from (§3.6). */
@@ -78,10 +81,10 @@ const LANDING_SESSION_STATES: ReadonlySet<string> = new Set([
  *
  * WHAT IS HERE AND WHAT IS NOT
  * ----------------------------
- * Three things, and they are three because each is a different kind of write. `considerCandidate` is
- * the PLATFORM noticing that a branch is ready to be offered — it runs off a committed landing and
- * asks nobody. `confirm` / `decline` / `cancel` are the OWNER's doors, and the only place in this
- * file where authority is checked. `applyJobResult` is the RUNNER's report coming back through the
+ * `considerCandidate` is the PLATFORM noticing that a branch is ready to be offered under K7.
+ * `requestPromotion` records the current COORDINATOR's reason for offering it before all criteria
+ * are satisfied. `confirm` / `decline` / `cancel` remain the OWNER's doors. `applyJobResult` is the
+ * RUNNER's report coming back through the
  * integration queue, so it takes a transaction client rather than opening one: the promotion moving
  * to MERGED and the receipts that say so are one fact and commit together.
  *
@@ -115,8 +118,9 @@ export class ProjectPromotionService {
   /**
    * Offer the project branch's current tip to its owner, if there is anything to offer (M-F1).
    *
-   * Called after a landing commits, and after a promotion of its own finishes (M-F4) — both are "the
-   * queue just got shorter", which is the only fact that can make a candidate exist. It asks nobody
+   * Called after a landing commits, after an explicit coordinator request, and after a promotion
+   * finishes (M-F4). K7 requires all criteria to be satisfied with only CRITERION_UNLANDED
+   * withheld, or an unconsumed coordinator request. It asks nobody
    * and answers nothing: a project with work still queued, with a promotion already in flight, or
    * whose tip is already covered simply has no candidate yet, and that is the ordinary case.
    *
@@ -135,6 +139,30 @@ export class ProjectPromotionService {
       });
   }
 
+  /** K7: commit the coordinator's request before considering the project's current tip. */
+  async requestPromotion(ownerId: string, projectId: string, sessionId: string | undefined, reason: unknown) {
+    const request = await withTransactionRetry(this.prisma, async (tx) => {
+      // Serialize requests and candidate creation, and pin the current coordinator during the write.
+      const [project] = await tx.$queryRaw<Array<{ coordinator_session_id: string | null }>>`
+        SELECT coordinator_session_id FROM project
+        WHERE id = ${projectId}::uuid AND owner_id = ${ownerId}::uuid FOR NO KEY UPDATE`;
+      if (!project || !sessionId?.trim() || project.coordinator_session_id !== sessionId.trim()) {
+        throw new ForbiddenException({ code: 'INTEGRATION_REQUEST_PROMOTION_COORDINATOR_ONLY',
+          message: 'only this project’s current coordinator conversation may request a promotion.' });
+      }
+      const trimmed = typeof reason === 'string' ? reason.trim() : '';
+      if (!trimmed || [...trimmed].length > 2000) {
+        throw new BadRequestException({ code: 'INTEGRATION_REQUEST_PROMOTION_REASON_REQUIRED',
+          message: 'reason must contain 1 to 2000 characters after trimming whitespace.' });
+      }
+      return tx.projectPromotionRequest.create({
+        data: { projectId, sessionId: sessionId.trim(), reason: trimmed }, select: { id: true },
+      });
+    }, loggedRetry(this.logger, 'projectPromotion.requestPromotion'));
+    const candidate = await this.considerCandidate(projectId);
+    return { promotionRequestId: request.id, promotionId: candidate?.promotionId ?? null };
+  }
+
   private async candidateIn(
     tx: Prisma.TransactionClient,
     projectId: string,
@@ -148,6 +176,11 @@ export class ProjectPromotionService {
     // A MAIN-line project has no branch of its own to promote: its candidate is a task branch, made
     // where the task finishes (M-F2), not here.
     if (!codebase || codebase.integrationRef === codebase.upstreamRef) return null;
+
+    // The project row serializes the pending-request read and its eventual consumption.
+    const [project] = await tx.$queryRaw<Array<{ owner_id: string }>>`
+      SELECT owner_id FROM project WHERE id = ${projectId}::uuid FOR NO KEY UPDATE`;
+    if (!project) return null;
 
     const serialKey = integrationSerialKey({
       kind: 'LAND_TASK',
@@ -194,6 +227,16 @@ export class ProjectPromotionService {
     });
     if (includedTaskIds.length === 0) return null;
 
+    const request = await tx.projectPromotionRequest.findFirst({
+      where: { projectId, consumedByPromotionId: null },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { id: true },
+    });
+    if (!request) {
+      const { derived } = await readDerivedProjectDoneReading(tx, project.owner_id, projectId);
+      if (derived.withheld.length !== 1 || derived.withheld[0] !== 'CRITERION_UNLANDED'
+        || !derived.criteria.every((criterion) => criterion.satisfied)) return null;
+    }
+
     // M-T6: one live candidate per source. The older one is retired first, in this transaction, so
     // the index below never has two to choose between.
     await supersedeLiveCandidates(tx, projectId, codebase.integrationRef);
@@ -218,6 +261,10 @@ export class ProjectPromotionService {
       select: { id: true },
     });
     if (!created) return null;
+
+    if (request) await tx.projectPromotionRequest.update({
+      where: { id: request.id }, data: { consumedByPromotionId: promotionId },
+    });
 
     const checkJobId = await queuePromotionJob(tx, {
       kind: 'CHECK_PROMOTION',
