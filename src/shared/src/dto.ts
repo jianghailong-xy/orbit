@@ -3092,8 +3092,8 @@ export type IntegrationJobPhase =
 
 /** One command run on the combined tree before anything is pushed (§2.4 J-S5). */
 export interface IntegrationCheckSpec {
-  /** TASK_ACCEPTANCE is the task's own acceptance command; MERGE_CHECK is the project's. */
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  /** TASK_ACCEPTANCE is the task's own command; LANDING_CHECK and MERGE_CHECK are the project's layers. */
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
   timeoutSeconds: number;
@@ -3222,7 +3222,7 @@ export type IntegrationJobStep = 'WAITING_LOCAL_LOCK' | 'PREPARE';
 /** The check a v2 claim is running, as its progress reports name it (§2.1, §2.2 J-T4). The job
  *  row's `checks` holds FINISHED results in a different shape; this one is the check in flight. */
 export interface IntegrationJobCurrentCheck {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   /** Position of this check in the run, from 1, and how many the run has in all. */
   index: number;
   count: number;
@@ -3273,7 +3273,7 @@ export interface IntegrationJobProgressResponse {
 /** The check a chunk of output belongs to (POST /runner/integration-jobs/:jobId/output, contract
  *  §2.2 J-T4, §2.9 LS2). `index` is the check's position in the run, from 1. */
 export interface IntegrationJobOutputCheck {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   index: number;
 }
 

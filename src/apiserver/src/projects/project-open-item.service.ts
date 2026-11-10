@@ -986,6 +986,9 @@ export class ProjectOpenItemService {
       ...(body.upstreamRef != null ? { upstreamRef: body.upstreamRef } : {}),
       automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
+      ...(body.landingCheckCommand !== undefined ? { landingCheckCommand: body.landingCheckCommand } : {}),
+      ...(body.landingCheckTimeoutSeconds !== undefined
+        ? { landingCheckTimeoutSeconds: body.landingCheckTimeoutSeconds } : {}),
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
       // Named or not named, never defaulted: a suggestion of the one-hour default and no suggestion
       // at all read the same on the card — an empty box says "one hour unless set" — so inventing

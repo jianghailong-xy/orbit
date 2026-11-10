@@ -273,6 +273,8 @@ interface HeldClaim {
   acceptanceCommand: string | null;
   acceptanceExpectedExitCode: number | null;
   acceptanceTimeoutSeconds: number | null;
+  landingCheckCommand: string | null;
+  landingCheckTimeoutSeconds: number | null;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   cancelRequestedAt: Date | null;
@@ -763,6 +765,8 @@ const HELD_CLAIM_COLUMNS = Prisma.sql`
       t."acceptance_command" AS "acceptanceCommand",
       t."acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
       t."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+      cb."landing_check_command" AS "landingCheckCommand",
+      cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
       cb."merge_check_command" AS "mergeCheckCommand",
       cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
       j."cancel_requested_at" AS "cancelRequestedAt",
@@ -1413,7 +1417,7 @@ function progressReport(body: IntegrationJobProgressRequest): {
   let current: IntegrationJobCurrentCheck | null = null;
   if (check != null) {
     const name = check.name;
-    if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK') {
+    if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK' && name !== 'LANDING_CHECK') {
       throw new IntegrationJobRefused('INVALID_RESULT', `unknown check name ${name}`);
     }
     if (![check.index, check.count, check.budgetSeconds].every((n) => Number.isSafeInteger(n) && n >= 1)) {
@@ -1664,7 +1668,7 @@ function outputChunk(body: IntegrationJobOutputRequest): {
     );
   }
   const name = body.check?.name;
-  if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK') {
+  if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK' && name !== 'LANDING_CHECK') {
     throw new IntegrationJobRefused('INVALID_RESULT', `unknown check name ${String(name)}`);
   }
   const index = body.check.index;

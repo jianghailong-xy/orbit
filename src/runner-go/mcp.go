@@ -1868,7 +1868,7 @@ var ownerWaitTools = map[string]bool{
 // in an integration object — the line (`line`, `projectBranchName`, `upstreamRef`) and anything a
 // later version adds — belongs to the account owner, which is what `mergeCheckProposal` says by
 // refusing to cover it.
-var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeoutSeconds"}
+var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeoutSeconds", "landingCheckCommand", "landingCheckTimeoutSeconds"}
 
 // waitsForTheOwner says whether a call puts a card in front of the owner and blocks until it is
 // answered.
@@ -2221,7 +2221,8 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 	var project struct {
 		Title       string `json:"title"`
 		Integration struct {
-			MergeCheckCommand string `json:"mergeCheckCommand"`
+			MergeCheckCommand   string  `json:"mergeCheckCommand"`
+			LandingCheckCommand *string `json:"landingCheckCommand"`
 			// The project's main branch by name, which the card's note says every merge into is
 			// still checked; null with no repository bound.
 			UpstreamRef *string `json:"upstreamRef"`
@@ -2280,7 +2281,11 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 			"result is not accepted, so there is nothing for this door to take off: read the landing's "+
 			"own item, or the project's integration read", taskID, what)
 	}
-	if project.Integration.MergeCheckCommand == "" {
+	checkCommand := project.Integration.MergeCheckCommand
+	if project.Integration.LandingCheckCommand != nil {
+		checkCommand = *project.Integration.LandingCheckCommand
+	}
+	if checkCommand == "" {
 		return nil, fmt.Errorf("project %s has no merge check command, so this landing was never stopped "+
 			"by one and there is nothing to skip", projectID)
 	}
@@ -2295,7 +2300,7 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 		"taskTitle":    task.Title,
 		// The command that would NOT run, verbatim: the decision is about that command, and a card
 		// that paraphrased it would be asking about something nobody can see.
-		"checkCommand": project.Integration.MergeCheckCommand,
+		"checkCommand": checkCommand,
 		"failure":      summary,
 		"generation":   landing.Generation,
 		"reason":       reason,
@@ -2356,18 +2361,22 @@ func projectMergeCheckCard(t *Transport, projectID string, proposal map[string]i
 	var project struct {
 		Title       string `json:"title"`
 		Integration struct {
-			MergeCheckCommand        interface{} `json:"mergeCheckCommand"`
-			MergeCheckTimeoutSeconds interface{} `json:"mergeCheckTimeoutSeconds"`
+			LandingCheckCommand        interface{} `json:"landingCheckCommand"`
+			LandingCheckTimeoutSeconds interface{} `json:"landingCheckTimeoutSeconds"`
+			MergeCheckCommand          interface{} `json:"mergeCheckCommand"`
+			MergeCheckTimeoutSeconds   interface{} `json:"mergeCheckTimeoutSeconds"`
 		} `json:"integration"`
 	}
 	if err := json.Unmarshal(raw, &project); err != nil {
 		return nil, fmt.Errorf("read project %s: %w", projectID, err)
 	}
 	input := map[string]interface{}{
-		"projectId":                       projectID,
-		"projectTitle":                    project.Title,
-		"currentMergeCheckCommand":        project.Integration.MergeCheckCommand,
-		"currentMergeCheckTimeoutSeconds": project.Integration.MergeCheckTimeoutSeconds,
+		"projectId":                         projectID,
+		"projectTitle":                      project.Title,
+		"currentLandingCheckCommand":        project.Integration.LandingCheckCommand,
+		"currentLandingCheckTimeoutSeconds": project.Integration.LandingCheckTimeoutSeconds,
+		"currentMergeCheckCommand":          project.Integration.MergeCheckCommand,
+		"currentMergeCheckTimeoutSeconds":   project.Integration.MergeCheckTimeoutSeconds,
 	}
 	for key, value := range proposal {
 		input[key] = value
@@ -3727,13 +3736,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Where this project's finished tasks land, and what is " +
 						"checked before they do, as {line: MAIN | PROJECT_BRANCH, " +
 						"projectBranchName, upstreamRef, mergeCheckCommand, " +
-						"mergeCheckTimeoutSeconds}. The two halves are not the same decision. " +
+						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds}. " +
+						"Landing settings fall back to the merge settings when null. The two halves are not the same decision. " +
 						"THE LINE — line, projectBranchName, upstreamRef — is the account owner's " +
 						"to choose, and a request carrying one is refused whenever this tool is " +
 						"called from inside a session, which is every call you make: read it back " +
 						"from project_get, which carries it as `integration`, and say what you would " +
 						"change rather than changing it. THE MERGE CHECK — mergeCheckCommand, " +
-						"mergeCheckTimeoutSeconds — is yours to propose: this call first puts the " +
+						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds — " +
+						"are yours to propose: this call first puts the " +
 						"project, what the check is now and what it would become on a confirmation " +
 						"card and BLOCKS until the owner answers, and the change takes effect only " +
 						"if they approve it. Nothing is written if they decline, and a second " +
@@ -4041,6 +4052,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The command run on the combined tree before anything lands — on the " +
 						"project branch and again before main. Leave it out for none; with Automatic on a " +
 						"project branch that is a warning, since the branch would merge into main untested.",
+				},
+				"landingCheckCommand": map[string]interface{}{
+					"type": "string", "description": "The project landing check. Null falls back to the merge check.",
+				},
+				"landingCheckTimeoutSeconds": map[string]interface{}{
+					"type": "integer", "minimum": 1, "description": "Landing check budget in seconds; null falls back to the merge check budget.",
 				},
 				"mergeCheckTimeoutSeconds": map[string]interface{}{
 					"type":    "integer",

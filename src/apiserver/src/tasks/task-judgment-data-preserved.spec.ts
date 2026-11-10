@@ -2886,7 +2886,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0506_owner_request_secret',
       // 0507 only replaces the confirmation-review end trigger: open FAILED runs keep waiting.
       // No completion ledger, DONE fence or preserved trigger/function is changed.
-      '0507_confirmation_review_waits_for_pickup'],
+      '0507_confirmation_review_waits_for_pickup',
+      // 0508 adds mutable landing settings and extends the event/log check-name sets.
+      '0508_project_landing_check'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
