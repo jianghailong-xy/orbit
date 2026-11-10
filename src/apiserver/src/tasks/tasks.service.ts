@@ -132,7 +132,7 @@ import {
 } from '../projects/project-handoff.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import type { RunStop } from '../projects/task-run-stopped.producer';
-import { storeDerivedProjectStatus } from '../projects/project-done-derived';
+import { refreshProjectDone } from '../projects/project-done-request';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { criterionStandingRefusal, quotedCriterion } from './task-evidence-decision';
 import {
@@ -2247,7 +2247,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         select: { ownerId: true },
       }).catch(() => null);
       if (!project) continue;
-      await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId, {
+      await refreshProjectDone(this.prisma, project.ownerId, projectId, {
         sessions: this.sessions,
         push: this.push,
       }).catch((e) =>

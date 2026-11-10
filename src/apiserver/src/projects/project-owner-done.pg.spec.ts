@@ -493,7 +493,9 @@ test('the owner records a project done in person, and the projection keeps that 
   await t.test('a request that is no longer open is 409, and writes nothing', async () => {
     // A request about the seal that stands, superseded since — what a newer request, or a task or a
     // landing moving under it, does to one.
-    await supersede(firstRequest);
+    assert.equal((await prisma.projectOpenItem.findUniqueOrThrow({
+      where: { id: firstRequest },
+    })).state, 'SUPERSEDED', 'the criteria edit already superseded the first request');
     const superseded = await fileDoneRequest(currentSeal);
     await supersede(superseded);
 

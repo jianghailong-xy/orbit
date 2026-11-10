@@ -42,12 +42,13 @@ import {
   refuseSessionAuthoredConfirmation,
 } from './coordinator-authority';
 import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
-import { NO_REOPEN_RECORD, storeDerivedProjectStatus } from './project-done-derived';
+import { NO_REOPEN_RECORD } from './project-done-derived';
 import { defaultStartLine, startProjectLine, type StartLineSettings } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
 import {
   DONE_REQUEST_KIND,
+  refreshProjectDone,
   answerDoneRequests,
   doneRequestMoved,
   readDoneState,
@@ -355,7 +356,7 @@ export class ProjectAcceptanceService {
     // any transaction: it reads committed rows, it decides nothing about whether this
     // confirmation was allowed, and a projection that could not be recomputed must not undo a
     // confirmation that was.
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+    await refreshProjectDone(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
       push: this.projectDonePush(),
     }).catch((error) =>
@@ -739,7 +740,7 @@ export class ProjectAcceptanceService {
           (error as { message?: string })?.message ?? String(error)}`),
       );
     }
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+    await refreshProjectDone(this.prisma, ownerId, projectId, {
       sessions: this.sessions,
       push: this.projectDonePush(),
     }).catch((error) =>

@@ -732,6 +732,10 @@ public final class APIClient: @unchecked Sendable {
     /// the owner read and the gaps accepted, in one write (`ProjectDone.body`). The owner's own
     /// credential and no acting session — the door refuses one. A request that was superseded, or a
     /// seal that moved, is a 409 and nothing is written.
+    public func projectDoneCheck(projectID: String) async throws -> ProjectDoneCheck {
+        try await get("projects/\(projectID)/done-check")
+    }
+
     public func recordProjectDone(projectID: String,
                                   _ body: ProjectDoneRequestBody) async throws -> ProjectDoneRecord {
         try await post("projects/\(projectID)/done", body: body)

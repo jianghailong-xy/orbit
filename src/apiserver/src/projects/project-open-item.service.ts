@@ -502,6 +502,7 @@ export interface ProjectOpenItems {
   startRequest: OpenItemRow | null;
   doneRequest: OpenItemRow | null;
   latestDoneRequestDecline: { note: string; declinedAt: Date } | null;
+  latestDoneRequestSuperseded: { reason: string; supersededAt: Date } | null;
   settled: OpenItemRow[];
   closedQuestions: ProjectClosedQuestion<Date>[];
   /** The main branch a row's merge into main goes into; null with no repository bound. */
@@ -3089,7 +3090,7 @@ export class ProjectOpenItemService {
     // And a done request about a project that has moved since — its criteria, its tasks or where
     // their work has landed — for the same reason (`project-done-request.ts`).
     await this.guarded('supersedeStaleDoneRequest', async () => {
-      await supersedeStaleDoneRequest(this.prisma, ownerId, projectId);
+      await supersedeStaleDoneRequest(this.prisma, ownerId, projectId, this.sessions);
     });
     // Whether there is a conversation to ask again — the SAME predicate `returnToCoordinator`
     // refuses on, minus the switch, which is not part of it: the press is the owner's own, so a
@@ -3428,9 +3429,14 @@ export class ProjectOpenItemService {
     const latestRequest = await this.prisma.projectOpenItem.findFirst({
       where: { projectId, kind: DONE_REQUEST_KIND },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      select: { state: true, resolution: true, resolutionNote: true, resolvedAt: true },
+      select: { state: true, resolution: true, resolvedBy: true, resolutionNote: true, resolvedAt: true },
     });
     return {
+      latestDoneRequestSuperseded: latestRequest?.state === 'SUPERSEDED'
+        && latestRequest.resolvedBy === 'PLATFORM' && latestRequest.resolvedAt
+        && latestRequest.resolvedAt.getTime() > Date.now() - 24 * 60 * 60 * 1000
+        ? { reason: latestRequest.resolutionNote!, supersededAt: latestRequest.resolvedAt }
+        : null,
       latestDoneRequestDecline: latestRequest?.state === 'RESOLVED'
         && latestRequest.resolution === 'DECLINED' && latestRequest.resolvedAt
         ? { note: latestRequest.resolutionNote!, declinedAt: latestRequest.resolvedAt }
