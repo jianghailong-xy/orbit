@@ -87,6 +87,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
     /// also ask the other question: does the web declare a word this client has not got?
     private static let declarations: [(String, String)] = [
         ("DONE_CARD_HEADING", ProjectDone.heading),
+        ("DONE_REQUEST_STALE_HEADING", ProjectDone.staleHeading),
+        ("DONE_REQUEST_STALE_DETAIL", ProjectDone.staleDetail),
         ("DONE_CARD_COORDINATOR_CALL", ProjectDone.coordinatorCall),
         ("DONE_CARD_DONE_WHEN", ProjectDone.doneWhen),
         ("DONE_CARD_WHAT_ORBIT_CANT_PROVE", ProjectDone.whatOrbitCantProve),
