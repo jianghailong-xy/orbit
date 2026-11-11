@@ -847,14 +847,15 @@ struct NavigationDrawer: View {
 
     /// The header, on the iPad column's bar: the title drawn on the bar itself — off the shared glass
     /// (iOS 26), as the session list's workspace title is — and the search button beside the system's
-    /// sidebar toggle.
+    /// sidebar toggle. `.fixedSize()` because iOS 26 proposes a leading item far less than its width,
+    /// which drew the title as "Or…" (see `WorkspaceTitleSwitcher`).
     @ToolbarContentBuilder
     private var columnBar: some ToolbarContent {
         if #available(iOS 26.0, *) {
-            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+            ToolbarItem(placement: .topBarLeading) { drawerTitle.fixedSize() }
                 .sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+            ToolbarItem(placement: .topBarLeading) { drawerTitle.fixedSize() }
         }
         ToolbarItem(placement: .topBarTrailing) {
             searchButton { Image(systemName: "magnifyingglass") }

@@ -107,6 +107,8 @@ func init() {
 		sessionMoveCapabilityV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
+		wikiRepoOpFolderCapabilityV1,
+		wikiRepoOpProbeCapabilityV1,
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,

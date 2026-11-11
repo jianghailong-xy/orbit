@@ -19,6 +19,7 @@ import {
   wikiCallRow,
   wikiRunFootText,
   wikiRunRow,
+  wikiRunTier,
 } from '../lib/wikiRuns';
 
 /**
@@ -79,6 +80,7 @@ const runAnchor = (jobId: string): string => `wk-job-${jobId}`;
 function WikiRunItem({ job, now, open, onToggle }: { job: WikiJobView; now: number; open: boolean; onToggle: () => void }) {
   const log = useId();
   const row = wikiRunRow(job, now);
+  const tier = wikiRunTier(job);
   return (
     <li className={`wk-job${open ? ' open' : ''}`} id={runAnchor(job.id)}>
       <button type="button" className="wk-job-row" aria-expanded={open} aria-controls={log} onClick={onToggle}>
@@ -87,6 +89,14 @@ function WikiRunItem({ job, now, open, onToggle }: { job: WikiJobView; now: numb
         <span className={`s ${row.tone}`}>
           <b>{row.state}</b>
           {row.text ? ` · ${row.text}` : null}
+          {/* What the run read of the repository (design §7.4): its tier, and why when it read the sessions alone. */}
+          {tier && (
+            <>
+              {' '}
+              <span className={`wk-job-tier ${tier.tone}`}>{tier.tier}</span>
+              {tier.reason ? <span className={`wk-job-tier-why ${tier.tone}`}>{` ${tier.reason}`}</span> : null}
+            </>
+          )}
         </span>
         <span className="when">{row.when}</span>
         <RightOutlined className="chev" />

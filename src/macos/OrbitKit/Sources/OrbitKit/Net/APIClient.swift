@@ -1368,6 +1368,16 @@ public final class APIClient: @unchecked Sendable {
     public func updateWikiSpace(_ id: String, _ req: WikiSpaceUpdate) async throws -> WikiSpace {
         try await patch("wiki/spaces/\(id)", body: req)
     }
+    /// `POST /wiki/spaces/:id/maintenance/probe`: which tier a workspace's folder would be read on, in the words the
+    /// settings form draws under its picker (docs/wiki-repo-tiers-design.md §7.3). Refused to every session.
+    public func probeWikiMaintenance(spaceID: String, workspaceID: String) async throws -> WikiRepoProbeAnswer {
+        try await post("wiki/spaces/\(spaceID)/maintenance/probe", body: WikiWorkspaceAddRequest(workspaceId: workspaceID))
+    }
+    /// `POST /wiki/spaces/:id/maintenance/run`: Check again and run now — a run at once, counted against the day;
+    /// `acceptFolder` is Use this folder. 409 WIKI_MAINTENANCE_RUNNING while another run has not ended.
+    public func runWikiMaintenance(spaceID: String, acceptFolder: Bool) async throws -> WikiMaintenanceRunNow {
+        try await post("wiki/spaces/\(spaceID)/maintenance/run", body: WikiMaintenanceRunRequest(acceptFolder: acceptFolder ? true : nil))
+    }
     /// `GET /wiki/spaces/:id/workspaces`: who is in the wiki, and who can be added to it.
     public func wikiSpaceWorkspaces(_ spaceID: String) async throws -> WikiSpaceWorkspaces {
         try await get("wiki/spaces/\(spaceID)/workspaces")

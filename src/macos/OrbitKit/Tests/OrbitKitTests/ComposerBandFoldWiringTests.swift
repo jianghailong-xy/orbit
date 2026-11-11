@@ -3,9 +3,9 @@ import XCTest
 
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shell — CI's `client.yml` does.
 /// These hold a phone's folded composer band to the source (the owner, 2026-10-16): while the reader
-/// goes back through the history, the parking strip and the composer fold to one thin bar; a tap opens
-/// them where the reader is, the bar's ↓ is the jump to the latest, and coming back to the tail opens
-/// them again. When the band folds is `TailPinning.foldsBand`'s, proved in `TailPinningTests`; the
+/// goes back through the history, the parking strip and the composer fold to one small centred pill,
+/// as Safari's address bar does (2026-11-11); a tap opens them where the reader is, the jump to the
+/// latest waits for the band to open, and coming back to the tail opens them again. When the band folds is `TailPinning.foldsBand`'s, proved in `TailPinningTests`; the
 /// bar's words are `FoldedBand`'s, in `FoldedBandTests`. Each check reads the slice it is about.
 final class ComposerBandFoldWiringTests: XCTestCase {
     private struct SourceMissing: Error, CustomStringConvertible {
@@ -66,19 +66,13 @@ final class ComposerBandFoldWiringTests: XCTestCase {
     }
 
     /// The reading is the tracker's, off the very sample the pin is decided on, with the folded band's
-    /// inset — its bar, its foot and the screen's own bottom inset — handed to the tested rule.
+    /// inset — its pill and its foot off the screen's edge — handed to the tested rule.
     func testTheTrackerAsksTailPinningWhetherTheReaderIsBackFarEnough() throws {
         let tracker = try slice(try console, from: "private struct ScrollTracker", to: "private struct AnchorRow: ViewModifier {")
         XCTAssertTrue(tracker.contains("TailPinning.foldsBand(pinned: pinned, sample: now"),
                       "the fold is asked of the rule, with the pin this same reading decided")
-        XCTAssertTrue(tracker.contains("CGFloat.foldedBandBar + .composerBandFoot"),
-                      "the folded band keeps its bar and its foot over the list")
-        XCTAssertTrue(tracker.contains("window?.safeAreaInsets.bottom"),
-                      "over the screen's own bottom inset, which no bar or keyboard moves")
-        let band = code(try source("Views/ComposerView.swift"))
-        XCTAssertTrue(try slice(band, from: "struct ComposerBand<Content: View>: View {", to: "\n}\n")
-                        .contains(".padding(.bottom, .composerBandFoot)"),
-                      "the open band stands on the same foot the folded one is measured with")
+        XCTAssertTrue(tracker.contains("CGFloat.foldedBandPill + .foldedBandPillFoot"),
+                      "the folded band keeps its pill and its foot over the list, off the screen's edge")
     }
 
     /// Folded, not removed: the band stays in the tree behind its bar, so an open list, the branch
@@ -97,14 +91,31 @@ final class ComposerBandFoldWiringTests: XCTestCase {
         XCTAssertFalse(fold.contains("clipShape"))
     }
 
-    /// The bar stands in the band's gutter and on its foot, so the folded band is exactly what the
-    /// rule was told it keeps over the list.
-    func testTheBarStandsInTheBandsGutterAndOnItsFoot() throws {
+    /// The pill stands centred, its foot off the screen's edge: the band stands on the safe area, so
+    /// the pill reaches into it by the difference, and the folded band is exactly what the rule was
+    /// told it keeps over the list. It hugs what it says, and fades alone under Reduce Motion.
+    func testThePillStandsCentredOverTheHomeIndicator() throws {
         let band = try slice(try console, from: "private func composerBand(", to: "private func bandMembers(")
         XCTAssertTrue(band.contains("if #available(iOS 26.0, *), folded {"))
-        XCTAssertTrue(band.contains(".padding(.horizontal, 16)"))
-        XCTAssertTrue(band.contains(".padding(.bottom, .composerBandFoot)"))
-        XCTAssertTrue(try bar.contains(".frame(height: .foldedBandBar)"))
+        XCTAssertTrue(band.contains(".padding(.bottom, .foldedBandPillFoot - windowBottomInset)"))
+        XCTAssertTrue(band.contains("reduceMotion ? .opacity"))
+        let inset = try slice(try console, from: "private var windowBottomInset: CGFloat {", to: "\n    }")
+        XCTAssertTrue(inset.contains("safeAreaInsets.bottom"), "the window's own inset, which nothing moves")
+        let pill = try bar
+        XCTAssertTrue(pill.contains(".frame(height: .foldedBandPill)"))
+        XCTAssertTrue(pill.contains(".glassEffect(.regular.interactive(), in: Capsule())"))
+        XCTAssertFalse(pill.contains("maxWidth: .infinity"), "the pill hugs what it says")
+    }
+
+    /// One thing in the pill: a draft first, else the marks, else the placeholder (`FoldedBand.lead`);
+    /// a turn in flight is a dot at its head.
+    func testThePillLeadsWithTheDraftThenTheMarks() throws {
+        let pill = try bar
+        XCTAssertTrue(pill.contains("FoldedBand.lead(draft: draft, hasMarks:"))
+        for lead in ["case .draft(let words):", "case .marks:", "case .placeholder:"] {
+            XCTAssertTrue(pill.contains(lead), "the pill draws \(lead)")
+        }
+        XCTAssertTrue(pill.contains("if turnActive {\n                    Circle().fill(Color.accentColor)"))
     }
 
     /// A tap opens the band where the reader is, and so does putting the keyboard away; their next
@@ -122,17 +133,16 @@ final class ComposerBandFoldWiringTests: XCTestCase {
         XCTAssertTrue(tracker.contains("if phase == .interacting { dragged() }"), "a finger on the list, not its coast")
     }
 
-    /// While the band is folded its bar carries the jump: the floating disc gives way to it, and the
-    /// bar's ↓ makes the disc's own jump.
-    func testTheFloatingDiscGivesWayToTheBarsJump() throws {
+    /// While the band is folded only its pill stands there (the owner, 2026-11-11, Safari's one
+    /// pill): no jump in it, and the floating disc is back once the band opens.
+    func testThePillCarriesNoJumpAndTheDiscWaitsForTheBand() throws {
         let view = try console
         let overlay = try slice(view, from: ".overlay(alignment: .bottom) {", to: "scrollToBottomButton(proxy: proxy)")
         XCTAssertTrue(overlay.contains("!bandFolded"))
-        XCTAssertTrue(view.contains(".onChange(of: jumpRequest) { jumpToLatest(proxy) }"))
-        let disc = try slice(view, from: "private func scrollToBottomButton(", to: "} label: { pressed in")
-        XCTAssertTrue(disc.contains("jumpToLatest(proxy)"), "the disc and the bar make one jump")
+        XCTAssertFalse(view.contains("jumpRequest"))
+        XCTAssertFalse(try bar.contains("jump"), "the pill carries no jump")
         let band = try slice(view, from: "private func composerBand(", to: "private func bandMembers(")
-        XCTAssertTrue(band.contains("jump: { jumpRequest &+= 1 }"))
+        XCTAssertTrue(band.contains("FoldedBandBar(console: console, open: { bandOpened = true })"))
     }
 
     /// The marks read the cards' own logic, so the bar can't say what the cards don't.
@@ -140,8 +150,7 @@ final class ComposerBandFoldWiringTests: XCTestCase {
         let bar = try bar
         for use in ["WorktreeBarLogic.mode(", "WorktreeBarLogic.primary(", "WorktreeBarLogic.turnActive(",
                     "SessionTaskCard(created: console.createdTasks.snapshot",
-                    "FoldedBand.processes(console.state.background)", "FoldedBand.branch(",
-                    "if turnActive { TurnArc() }"] {
+                    "FoldedBand.processes(console.state.background)", "FoldedBand.branch("] {
             XCTAssertTrue(bar.contains(use), "the bar reads \(use)")
         }
         // `FoldedBand.branch` writes the merge slot's chips word for word; the slot has to still say them.
