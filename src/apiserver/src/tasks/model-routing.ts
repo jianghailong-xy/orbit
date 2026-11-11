@@ -425,6 +425,20 @@ export interface SubagentProviderEngine {
   /** The rows of a model space of the provider's own. Absent: the engine's runner-reported catalogue,
    *  which only the built-in tier table (DEFAULT_MODEL_TIER_TABLE) describes. */
   models?: readonly SubagentModelRow[];
+  /** For a key on that catalogue: USD per million output tokens by model id (models.dev). */
+  prices?: Readonly<Record<string, number>>;
+}
+
+/** One account of an account pool, as its quota and pause stand. */
+export interface SubagentPoolMember {
+  label: string;
+  /** Its fullest live window; null when every window it reported has room again. */
+  quota?: ModelRoutingEngineState['quota'];
+  paused?: boolean;
+  /** The endpoint refused its credential: no run can go to it. */
+  refused?: boolean;
+  /** Its quota could not be read: nothing was reported, or the endpoint will not report on it. */
+  unreadable?: boolean;
 }
 
 /** One provider the owner has, in the owner's order (provider_list). */
@@ -436,7 +450,9 @@ export interface SubagentProvider {
   inScope: boolean;
   engines: readonly SubagentProviderEngine[];
   /** A subscription's account on the parent's runner: its fullest window, and whether it is paused. */
-  account?: { quota?: ModelRoutingEngineState['quota']; paused?: boolean } | null;
+  account?: { quota?: ModelRoutingEngineState['quota']; paused?: boolean; refused?: boolean; unreadable?: boolean } | null;
+  /** An account pool: a subscription on its members' own credentials, whose headroom is its best member's. */
+  pool?: { members: readonly SubagentPoolMember[] };
 }
 
 /** The parent's runner's word on one engine. An engine absent from `SubagentRoutingInput.engines` was not reported. */
@@ -496,7 +512,15 @@ const OPTIMIZE_LABEL = { cost: 'Cost', balance: 'Balance', intelligence: 'Intell
  * table's efforts, the family's first model by catalogue priority (as routeTaskRun picks it), and Codex's
  * runner default at each effort. Every other engine's catalogue has no tier, model by model.
  */
-function builtinTierRows(engine: string, input: SubagentRoutingInput): SubagentModelRow[] {
+function builtinTierRows(
+  engine: string,
+  input: SubagentRoutingInput,
+  prices?: Readonly<Record<string, number>>,
+): SubagentModelRow[] {
+  return builtinRows(engine, input).map((row) => (prices ? { ...row, outputPricePerMTok: prices[row.model] ?? null } : row));
+}
+
+function builtinRows(engine: string, input: SubagentRoutingInput): SubagentModelRow[] {
   const catalog = input.modelCatalog?.[engine as AgentProvider] ?? [];
   if (engine === AgentProvider.CLAUDE) {
     const family = (prefix: string) => catalog
@@ -526,11 +550,14 @@ interface SubagentCandidate extends SubagentModelRow {
   engineIndex: number;
   /** The highest tier any row of this model reaches on this provider and engine. */
   ceiling: ModelRoutingLevel;
+  /** For a pool: the quota of its account with the most left, which is its headroom. */
+  quota?: ModelRoutingEngineState['quota'];
+  poolMember?: string;
 }
 
 /** Quota left on a subscription's account, in percent; a key has no quota to run out of. */
 const headroom = (c: SubagentCandidate): number =>
-  c.provider.billing === 'subscription' ? 100 - (c.provider.account?.quota?.utilization ?? 0) : 100;
+  c.provider.billing === 'subscription' ? 100 - (c.quota?.utilization ?? 0) : 100;
 /** What one more run costs at the margin: nothing on a subscription, the key's price otherwise. */
 const marginalPrice = (c: SubagentCandidate): number =>
   c.provider.billing === 'subscription' ? 0 : c.outputPricePerMTok ?? Infinity;
@@ -553,14 +580,37 @@ function compareCandidates(mode: ModelRoutingOptimizeFor, a: SubagentCandidate, 
 function pickLine(mode: ModelRoutingOptimizeFor, c: SubagentCandidate, level: ModelRoutingLevel): string {
   const what = `${c.model}${c.effort ? ` · ${c.effort}` : ''} on ${c.provider.slug} (${c.engine})`;
   const price = c.outputPricePerMTok != null ? `$${c.outputPricePerMTok} per million output tokens` : 'an unknown price';
-  const why = c.provider.billing === 'subscription'
-    ? `a subscription with ${headroom(c)}% of its quota left`
-    : `a metered key at ${price}`;
+  const why = c.poolMember
+    ? `a subscription pool whose account ${c.poolMember} has ${headroom(c)}% of its quota left`
+    : c.provider.billing === 'subscription'
+      ? `a subscription with ${headroom(c)}% of its quota left`
+      : `a metered key at ${price}`;
   const lead = mode === 'intelligence' ? `the strongest model in tier ${level} (reaches ${c.ceiling}), ${why}`
     : mode === 'balance' ? `the most quota headroom in tier ${level}, ${why}`
       : c.provider.billing === 'subscription' ? `${why}, used before any metered key`
         : `the cheapest in tier ${level}: ${why}`;
   return `Picked ${what} (${OPTIMIZE_LABEL[mode]}): ${lead}`;
+}
+
+/**
+ * The account an account pool would run on: of the members that can run — not refused, not paused, quota
+ * read and under ENGINE_QUOTA_LIMIT — the one with the most quota left. Otherwise why the pool can't run,
+ * in words that name its accounts.
+ */
+function bestPoolMember(members: readonly SubagentPoolMember[]): { member: SubagentPoolMember } | { reason: string } {
+  if (members.length === 0) return { reason: 'The pool has no account that can run' };
+  const live = members.filter((m) => !m.refused && !m.paused);
+  const eligible = live
+    .filter((m) => !m.unreadable && (m.quota?.utilization ?? 0) < ENGINE_QUOTA_LIMIT)
+    .sort((a, b) => (a.quota?.utilization ?? 0) - (b.quota?.utilization ?? 0));
+  if (eligible.length > 0) return { member: eligible[0] };
+  const unreadable = live.filter((m) => m.unreadable).map((m) => m.label);
+  if (unreadable.length > 0) {
+    return { reason: `The pool's quota cannot be read for ${unreadable.join(', ')}, and no other account in it can run` };
+  }
+  const each = members.map((m) => `${m.label} ${m.refused ? 'refused its key' : m.paused ? 'paused'
+    : `at ${m.quota!.utilization}% of its ${m.quota!.window} quota`}`);
+  return { reason: `Every account in the pool is at or above ${ENGINE_QUOTA_LIMIT}% of its quota or paused: ${each.join('; ')}` };
 }
 
 /**
@@ -653,16 +703,25 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
       const report = input.engines?.[engine];
       // A runner that reported nothing is not judged on it; one that reported others lacks this one.
       if (input.engines && !report?.installed) return drop(slug, engine, null, null, `${engine} is not installed on the parent's runner`);
-      if (provider.billing === 'subscription') {
+      let quota = provider.account?.quota;
+      let poolMember: string | undefined;
+      if (provider.pool) {
+        // A pool runs on its members' own credentials, not the runner's sign-in: its best member decides.
+        const best = bestPoolMember(provider.pool.members);
+        if ('reason' in best) return drop(slug, engine, null, null, best.reason);
+        quota = best.member.quota;
+        poolMember = best.member.label;
+      } else if (provider.billing === 'subscription') {
         if (report?.signedOut) return drop(slug, engine, null, null, `${engine} is signed out on the parent's runner`);
         if (report?.regionBlocked) return drop(slug, engine, null, null, `${engine} can’t use Anthropic on the parent's runner`);
-        const quota = provider.account?.quota;
         if (quota && quota.utilization >= ENGINE_QUOTA_LIMIT) {
           return drop(slug, engine, null, null, `The account is at ${quota.utilization}% of its ${quota.window} quota`);
         }
         if (provider.account?.paused) return drop(slug, engine, null, null, 'The account is paused');
+        if (provider.account?.refused) return drop(slug, engine, null, null, "The endpoint refused the account's key");
+        if (provider.account?.unreadable) return drop(slug, engine, null, null, "The account's quota cannot be read");
       }
-      const rows = models ?? builtinTierRows(engine, input);
+      const rows = models ?? builtinTierRows(engine, input, provider.engines[engineIndex].prices);
       if (rows.length === 0) return drop(slug, engine, null, null, `No models with a tier on ${engine}`);
       const ceilings = new Map<string, ModelRoutingLevel>();
       for (const row of rows) {
@@ -674,7 +733,10 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
         if (!row.level) {
           drop(slug, engine, row.model, row.effort, 'The model has no tier');
         } else if (row.level === level) {
-          pool.push({ ...row, provider, providerIndex, engine, engineIndex, ceiling: ceilings.get(row.model)! });
+          pool.push({
+            ...row, provider, providerIndex, engine, engineIndex, ceiling: ceilings.get(row.model)!,
+            quota, ...(poolMember ? { poolMember } : {}),
+          });
         }
       }
     });
@@ -687,6 +749,10 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   }
   const [best] = [...pool].sort((a, b) => compareCandidates(mode, a, b));
   reasons.push(pickLine(mode, best, level));
+  const priceless = new Set(pool
+    .filter((c) => c.provider.billing === 'key' && c.outputPricePerMTok == null)
+    .map((c) => `No price known for ${c.model} on ${c.provider.slug}; ordered after priced keys`));
+  reasons.push(...priceless);
   if (pool.length > 1) reasons.push(`${pool.length} candidates in tier ${level}; ties go by the owner's provider order`);
   if (removed.length > 0) reasons.push(`${removed.length} candidate${removed.length === 1 ? '' : 's'} removed, each with its reason`);
   return { ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort, reasons };

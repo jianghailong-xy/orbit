@@ -87,6 +87,13 @@ export interface ProviderPreset {
    * nothing about, so without this their list only changes when somebody edits this file.
    */
   catalog?: ProviderCatalogSource;
+  /**
+   * Where this vendor's prices come from when its model list does not (modelsFromRuntime): its
+   * models.dev provider id, and the USD per million output tokens of its current models as read there,
+   * which a refresh replaces. The SubAgent router orders a key on its native engine by these
+   * (docs/subagent-design.md §4.2); nothing else reads them.
+   */
+  prices?: { source: string; floor: Readonly<Record<string, number>> };
   /** Caveat shown under the Base URL (e.g. regional endpoint variants). */
   note?: string;
   /** Logo tile shown in the provider gallery and rows. */
@@ -114,6 +121,14 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'claude-opus-5',
     modelsFromRuntime: true,
+    // models.dev, read 2026-11-11.
+    prices: {
+      source: 'anthropic',
+      floor: {
+        'claude-fable-5-2': 40, 'claude-opus-5-5': 20, 'claude-sonnet-5-5': 10, 'claude-haiku-5-5': 0.5,
+        'claude-opus-5': 25, 'claude-sonnet-5': 10, 'claude-haiku-4-5-20251001': 5,
+      },
+    },
     brand: { mono: 'A', from: '#d97757', to: '#c15f3c' },
     keyUrl: 'https://console.anthropic.com/settings/keys',
   },
@@ -133,6 +148,11 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'gpt-5.1',
     modelsFromRuntime: true,
+    // models.dev, read 2026-11-11.
+    prices: {
+      source: 'openai',
+      floor: { 'gpt-5.6': 20, 'gpt-5.6-sol': 20, 'gpt-5.6-terra': 12, 'gpt-5.6-luna': 1.2, 'gpt-5.5': 30, 'gpt-5.1': 10 },
+    },
     brand: { mono: 'O', from: '#4b5158', to: '#1f2226' },
     keyUrl: 'https://platform.openai.com/api-keys',
   },

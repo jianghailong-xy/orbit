@@ -26,6 +26,7 @@ import { dispatchAllowedTools } from '../common/permission-rules';
 import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { QueueService } from '../queue/queue.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -51,6 +52,7 @@ export class RunnerSubagentsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
+    private readonly planUsage: ProviderPlanUsageService,
   ) {}
 
   private async assertParentOfRunner(sessionId: string, runner: Runner): Promise<void> {
@@ -162,6 +164,7 @@ export class RunnerSubagentsController {
         workspaceId: session.workspaceId,
         runnerId: session.assignedRunnerId,
         dto,
+        planUsage: this.planUsage,
         parent: { engine: provider, provider: session.provider ?? provider, model: resolvedExec.model, effort: effort ?? null },
       });
       const row =

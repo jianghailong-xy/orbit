@@ -60,6 +60,39 @@ export function catalogDefaultModel(preset: ProviderPreset): string {
   return live.get(preset.slug)?.[0]?.value ?? preset.defaultModel;
 }
 
+/** USD per million output tokens by model id, for each preset with a `prices` source, from the last refresh. */
+export type ModelPrices = Map<string, Map<string, number>>;
+
+let livePrices: ModelPrices = new Map();
+
+/** Install the prices a refresh read. */
+export function setModelPrices(next: ModelPrices): void {
+  livePrices = next;
+}
+
+/** What one more million output tokens of `model` cost on this preset's key: the last refresh, else the shipped floor. */
+export function presetModelPrice(preset: ProviderPreset, model: string): number | undefined {
+  return livePrices.get(preset.slug)?.get(model) ?? preset.prices?.floor[model];
+}
+
+/** The models.dev output price of every model of each preset with a `prices` source. Malformed entries are skipped. */
+export function parseModelPrices(payload: unknown, presets: ProviderPreset[] = PROVIDER_PRESETS): ModelPrices {
+  const prices: ModelPrices = new Map();
+  if (!payload || typeof payload !== 'object') return prices;
+  const vendors = payload as Record<string, { models?: Record<string, CatalogEntry> } | undefined>;
+  for (const preset of presets) {
+    const models = preset.prices ? vendors[preset.prices.source]?.models : undefined;
+    if (!models || typeof models !== 'object') continue;
+    const byModel = new Map<string, number>();
+    for (const m of Object.values(models)) {
+      const price = m?.cost?.output;
+      if (typeof m?.id === 'string' && typeof price === 'number' && Number.isFinite(price) && price >= 0) byModel.set(m.id, price);
+    }
+    if (byModel.size > 0) prices.set(preset.slug, byModel);
+  }
+  return prices;
+}
+
 /** What each preset offers right now, for the connect form — which is offering a vendor's models
  *  rather than resolving a saved row, and so can't get this from a provider. */
 export function presetCatalog(presets: ProviderPreset[] = PROVIDER_PRESETS): Record<string, PresetCatalogEntry> {

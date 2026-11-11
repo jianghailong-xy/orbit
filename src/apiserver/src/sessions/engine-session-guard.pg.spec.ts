@@ -155,7 +155,7 @@ async function connect(): Promise<Stack> {
     api,
     runnerSessions: new RunnerSessionsController(sessions, orchestration, receipts, attempts),
     runnerFiles: new RunnerFilesController(prisma, new FilesService(prisma)),
-    runnerSubagents: new RunnerSubagentsController(prisma, queue),
+    runnerSubagents: new RunnerSubagentsController(prisma, queue, null as never),
     queue,
     reaper: new ReaperService(prisma, realtime),
     providers: new ProvidersService(prisma, realtime, undefined as never),

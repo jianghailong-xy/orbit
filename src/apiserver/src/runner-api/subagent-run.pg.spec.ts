@@ -11,6 +11,8 @@
  *   4. The shadow decision (docs/subagent-design.md §4.1, §4.2): the row's decision names the tier, where it
  *      came from, Optimize For, the engine, provider, model and effort routing would pick, English reasons
  *      and each removed candidate with its reason — while the run's target is still the parent's model.
+ *      Under Cost an account pool whose best account has 80% left is picked over the runner's own Claude
+ *      sign-in at 70% used, and a Codex pool whose only account is at 96% is removed with its reason.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-run.pg.spec.ts
  *
@@ -26,6 +28,7 @@ import { ConflictException, ForbiddenException, NotFoundException } from '@nestj
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
+import { encryptSecret } from '../providers/provider-crypto';
 import { prismaClientFor } from '../prisma/prisma-client';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -36,6 +39,7 @@ import { RunnerSubagentsController } from './runner-subagents.controller';
 import { SubagentRunCreateDto, SubagentRunUpdateDto } from './subagent-run';
 
 const URL = process.env.COORDINATOR_PG_URL;
+process.env.PROVIDER_SECRET_KEY ??= 'subagent-run-spec';
 const skip = !URL;
 
 /** A collaborator whose every method answers nothing: the broadcasts the handler fires. */
@@ -71,7 +75,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     data: { id: runnerId, name: 'the machine the parent runs on', ownerId, tokenHash: sha256(`subagent-${runnerId}`) },
   })) as Runner;
   const door = new RunnerApiController(prisma as never, silent(), silent(), silent(), silent(), silent());
-  const subagents = new RunnerSubagentsController(prisma as never, silent());
+  const subagents = new RunnerSubagentsController(prisma as never, silent(), silent());
 
   /** A live parent session of that runner, under an agent with SubAgents on or off. */
   async function parentSession(opts: {
@@ -245,9 +249,12 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
   await t.test('the shadow decision: tier, source, Optimize For, the pick, English reasons and every removal with its reason', async () => {
     // The parent runs Sonnet on a machine with Claude signed in, Codex signed out and Kimi not installed.
     const machineId = randomUUID();
+    const inAnHour = new Date(Date.now() + 3_600_000).toISOString();
     const machine = (await prisma.runner.create({
       data: {
         id: machineId, name: 'the machine routing reads', ownerId, tokenHash: sha256(`subagent-route-${machineId}`),
+        // The runner's own Claude sign-in has 30% of its 5-hour window left.
+        planUsage: { claude: { fiveHour: { utilization: 70, resetsAt: inAnHour } } },
         engines: [
           { engine: 'claude', installed: true, auth: 'yes' },
           { engine: 'codex', installed: true, auth: 'no' },
@@ -279,11 +286,41 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
           presetSlug: 'qwen', followsPreset: true, ownerId: null },
       ],
     });
-    t.after(() => prisma.modelProvider.deleteMany({ where: { slug: { in: [deepseek, glm, shared, custom] } } }).then(() => undefined));
+    // A Claude account pool of two subscription tokens, and a Codex pool of one ChatGPT login.
+    const alice = `alice-${tag}`;
+    const bob = `bob-${tag}`;
+    const [aliceRow, bobRow] = await Promise.all([alice, bob].map((slug, index) => prisma.modelProvider.create({
+      data: { slug, label: index === 0 ? 'Alice' : 'Bob', runtime: 'claude', baseUrl: 'https://api.anthropic.com',
+        apiKeyEnc: encryptSecret(`sk-ant-oat01-${slug}`), models: [], ownerId },
+    })));
+    const team = await prisma.providerPool.create({ data: { slug: `team-${tag}`, label: 'Team', ownerId, engine: 'claude' } });
+    await prisma.providerPoolMember.createMany({
+      data: [aliceRow, bobRow].map((row) => ({ poolId: team.id, providerId: row.id, ownerId })),
+    });
+    const spent = await prisma.providerPool.create({ data: { slug: `codex-team-${tag}`, label: 'Codex team', ownerId, engine: 'codex' } });
+    await prisma.providerPoolPerson.create({ data: { poolId: spent.id, userId: ownerId, role: 'ADMIN' } });
+    await prisma.poolCodexLogin.create({
+      data: {
+        poolId: spent.id, userId: ownerId, accountId: `acct-${tag}`, email: 'carol@team.invalid',
+        accessTokenEnc: encryptSecret('access'), refreshTokenEnc: encryptSecret('refresh'), expiresAt: new Date(inAnHour),
+        usage: { sevenDay: { utilization: 96, resetsAt: inAnHour } },
+      },
+    });
+    t.after(async () => {
+      await prisma.providerPool.deleteMany({ where: { id: { in: [team.id, spent.id] } } });
+      await prisma.modelProvider.deleteMany({ where: { slug: { in: [deepseek, glm, shared, custom, alice, bob] } } });
+    });
+    // The pool members' quota as ProviderPlanUsageService's cache has it.
+    const quota: Record<string, number> = { [aliceRow.id]: 85, [bobRow.id]: 20 };
+    const planUsage = {
+      snapshot: (row: { id: string }) => (row.id in quota ? { fiveHour: { utilization: quota[row.id], resetsAt: inAnHour } } : null),
+      usageStanding: () => null,
+    };
+    const routed = new RunnerSubagentsController(prisma as never, silent(), planUsage as never);
     await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [glm] } } });
 
     const sessionId = await parentSession({ runnerId: machineId, model: 'claude-sonnet-5-5', effort: 'medium', optimizeFor: 'cost' });
-    const opened = await subagents.createSubagentRun(machine, sessionId, create({
+    const opened = await routed.createSubagentRun(machine, sessionId, create({
       toolUseId: 'toolu_01RoutedShadow', type: 'general', definitionSource: 'builtin',
       size: 'L', sizeReason: 'one service plus its spec',
     }));
@@ -298,15 +335,15 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(decision.tierSource, 'size');
     assert.equal(decision.optimizeFor, 'cost');
     assert.equal(decision.engine, 'claude');
-    assert.equal(decision.provider, 'claude', 'Cost: the subscription with headroom before the DeepSeek key');
+    assert.equal(decision.provider, team.slug, "Cost: the pool's 80% left before the sign-in's 30%, and both before the DeepSeek key");
     assert.equal(decision.model, 'claude-opus-5-5');
     assert.equal(decision.effort, 'high');
     assert.equal(decision.applied, false);
     assert.equal(decision.policyVersion, 'p2-shadow-1');
     assert.deepEqual(decision.reasons, [
       'Tier L, set by the caller: one service plus its spec',
-      'Picked claude-opus-5-5 · high on claude (claude) (Cost): a subscription with 100% of its quota left, used before any metered key',
-      '2 candidates in tier L; ties go by the owner\'s provider order',
+      `Picked claude-opus-5-5 · high on ${team.slug} (claude) (Cost): a subscription pool whose account Bob has 80% of its quota left, used before any metered key`,
+      '3 candidates in tier L; ties go by the owner\'s provider order',
       `${decision.candidates.length} candidates removed, each with its reason`,
       "Shadow decision: this SubAgent runs on the parent's model, claude-sonnet-5-5",
     ]);
@@ -320,6 +357,10 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       ['claude', 'house-coder', 'The model has no tier'],
       ['opencode', null, "opencode is not installed on the parent's runner"],
     ]);
+    assert.deepEqual(why(spent.slug), [['codex', null,
+      'Every account in the pool is at or above 90% of its quota or paused: carol@team.invalid at 96% of its weekly quota']]);
+    // The members are listed on their own too; with no model list of their own they have no tier.
+    assert.deepEqual(why(alice), [['claude', null, 'No models with a tier on claude']]);
     assert.deepEqual(why(deepseek), [
       ['opencode', null, "opencode is not installed on the parent's runner"],
       ['dsh', null, "dsh is not installed on the parent's runner"],

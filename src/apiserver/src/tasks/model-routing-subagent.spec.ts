@@ -10,6 +10,7 @@ import {
   routeSubagent,
   SUBAGENT_ROUTING_POLICY_VERSION,
   type SubagentModelRow,
+  type SubagentPoolMember,
   type SubagentProvider,
   type SubagentRoutingInput,
 } from './model-routing';
@@ -259,4 +260,70 @@ test("ties go by the owner's provider order", () => {
   assert.equal(subs.provider, 'codex', 'two subscriptions with the same headroom: the owner\'s first');
   const priceless = route(input({ providers: [key('x', [{ model: 'x', effort: null, level: 'M' }]), key('y', [{ model: 'y', effort: null, level: 'M' }])] }));
   assert.equal(priceless.provider, 'x', 'two keys of unknown price tie, and the owner\'s order decides');
+});
+
+const pool = (slug: string, members: SubagentPoolMember[], engine = 'claude'): SubagentProvider => ({
+  slug, billing: 'subscription', inScope: true, engines: [{ engine }], pool: { members },
+});
+
+test('Cost: an account pool with headroom before a single subscription with less', () => {
+  const team = pool('team-pool', [
+    { label: 'alice@team', quota: { utilization: 85, window: 'weekly' } },
+    { label: 'bob@team', quota: { utilization: 20, window: '5-hour' } },
+  ]);
+  const tight = claude({ account: { quota: { utilization: 70, window: 'weekly' } } });
+  const decision = route(input({ providers: [tight, team] }));
+  assert.deepEqual([decision.provider, decision.engine, decision.model, decision.effort], ['team-pool', 'claude', SONNET, 'medium']);
+  assert.match(decision.reasons.find((r) => r.startsWith('Picked'))!,
+    /a subscription pool whose account bob@team has 80% of its quota left, used before any metered key/);
+  // The pool's headroom is its best member's: one with less loses to the single account.
+  const worse = pool('worse-pool', [{ label: 'carol@team', quota: { utilization: 80, window: 'weekly' } }]);
+  assert.equal(route(input({ providers: [worse, tight] })).provider, 'claude');
+  // A paused or refused member does not count towards it.
+  const pausedBest = pool('paused-pool', [
+    { label: 'dan@team', quota: { utilization: 10, window: 'weekly' }, paused: true },
+    { label: 'erin@team', quota: { utilization: 80, window: 'weekly' }, refused: false },
+  ]);
+  assert.equal(route(input({ providers: [pausedBest, tight] })).provider, 'claude');
+});
+
+test('an exhausted account pool, and one whose quota cannot be read, is removed with its reason', () => {
+  const spent = pool('spent-pool', [
+    { label: 'alice@team', quota: { utilization: 95, window: 'weekly' } },
+    { label: 'bob@team', quota: { utilization: 40, window: 'weekly' }, paused: true },
+  ]);
+  const blind = pool('blind-pool', [{ label: 'carol@team', unreadable: true }], 'codex');
+  const empty = pool('empty-pool', []);
+  const decision = route(input({ providers: [spent, blind, empty, DEEPSEEK] }));
+  const why = (provider: string) => decision.candidates.filter((c) => c.provider === provider).map((c) => [c.engine, c.reason]);
+  assert.deepEqual(why('spent-pool'), [['claude',
+    'Every account in the pool is at or above 90% of its quota or paused: alice@team at 95% of its weekly quota; bob@team paused']]);
+  assert.deepEqual(why('blind-pool'), [['codex',
+    "The pool's quota cannot be read for carol@team, and no other account in it can run"]]);
+  assert.deepEqual(why('empty-pool'), [['claude', 'The pool has no account that can run']]);
+  assert.equal(decision.provider, 'deepseek');
+  // A pool on an engine the parent's runner lacks goes for that first.
+  const missing = route(input({ providers: [pool('far-pool', [{ label: 'x', quota: null }], 'kimi')] }));
+  assert.deepEqual(missing.candidates.map((c) => c.reason), ["kimi is not installed on the parent's runner"]);
+});
+
+test('Cost: a key on its native engine is ordered by its models.dev price among the other keys', () => {
+  const anthropic: SubagentProvider = {
+    slug: 'anthropic-key', billing: 'key', inScope: true,
+    engines: [{ engine: 'claude', prices: { [SONNET]: 10, [OPUS]: 20 } }],
+  };
+  const dear = key('dear-key', [{ model: 'dear', effort: null, level: 'M', outputPricePerMTok: 12 }]);
+  const cheap = key('cheap-key', [{ model: 'cheap', effort: null, level: 'M', outputPricePerMTok: 0.6 }]);
+  const between = route(input({ providers: [dear, anthropic] }));
+  assert.deepEqual([between.provider, between.model, between.effort], ['anthropic-key', SONNET, 'medium']);
+  assert.match(between.reasons.find((r) => r.startsWith('Picked'))!, /a metered key at \$10 per million output tokens/);
+  assert.equal(route(input({ providers: [dear, anthropic, cheap] })).provider, 'cheap-key');
+  // Tier L is Opus on that key, at Opus's price.
+  const tierL = route(input({ caller: { size: 'L' }, providers: [anthropic, key('l-key', [{ model: 'l', effort: null, level: 'L', outputPricePerMTok: 25 }])] }));
+  assert.deepEqual([tierL.provider, tierL.model, tierL.effort], ['anthropic-key', OPUS, 'high']);
+  // A model models.dev has no price for sorts after the priced keys, and the decision says so.
+  const unpriced: SubagentProvider = { slug: 'unpriced-key', billing: 'key', inScope: true, engines: [{ engine: 'claude', prices: {} }] };
+  const last = route(input({ providers: [unpriced, dear] }));
+  assert.equal(last.provider, 'dear-key');
+  assert.ok(last.reasons.includes(`No price known for ${SONNET} on unpriced-key; ordered after priced keys`), last.reasons.join('\n'));
 });

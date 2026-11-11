@@ -7,6 +7,7 @@ import {
   spentPlanUsage,
   type AccountEngine,
   type PlanUsage,
+  type PlanUsageSnapshot,
   type PlanUsageWindow,
   type RunnerModelCatalog,
 } from '@orbit/shared';
@@ -237,6 +238,27 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
 }
 
 /**
+ * The fullest live window of one account's snapshot, the one that caps the whole engine — a model family's
+ * own window (Opus weekly) is not one. Null when none is live: one past its reset has given its quota back.
+ */
+export function fullestWindow(snapshot: PlanUsageSnapshot | null | undefined, now: Date): ModelRoutingEngineState['quota'] {
+  const windows: Array<[PlanUsageWindow | undefined, string]> = snapshot
+    ? [
+      [snapshot.fiveHour, '5-hour'],
+      [snapshot.sevenDay, 'weekly'],
+      [snapshot.primary, windowName(snapshot.primary, 'primary')],
+      [snapshot.secondary, windowName(snapshot.secondary, 'secondary')],
+    ]
+    : [];
+  let quota: ModelRoutingEngineState['quota'] = null;
+  for (const [window, name] of windows) {
+    if (!window || Date.parse(window.resetsAt ?? '') <= now.getTime()) continue;
+    if (!quota || window.utilization > quota.utilization) quota = { utilization: window.utilization, window: name };
+  }
+  return quota;
+}
+
+/**
  * Where an engine stands on the target runner for the account a run there would use (§6) — the
  * account `sessions.create` would start it on (automaticAccount, runAccount), signed in as its
  * preflight judges it (signedOutEngineRefusal). The quota is the fullest window that caps the whole
@@ -268,20 +290,7 @@ export function engineState(
   }) !== null;
   const account = runAccount(engine, agent.env, accounts, runner, now);
   const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
-  const windows: Array<[PlanUsageWindow | undefined, string]> = snapshot
-    ? [
-      [snapshot.fiveHour, '5-hour'],
-      [snapshot.sevenDay, 'weekly'],
-      [snapshot.primary, windowName(snapshot.primary, 'primary')],
-      [snapshot.secondary, windowName(snapshot.secondary, 'secondary')],
-    ]
-    : [];
-  let quota: ModelRoutingEngineState['quota'] = null;
-  for (const [window, name] of windows) {
-    // One past its reset has given its quota back.
-    if (!window || Date.parse(window.resetsAt ?? '') <= now.getTime()) continue;
-    if (!quota || window.utilization > quota.utilization) quota = { utilization: window.utilization, window: name };
-  }
+  const quota = fullestWindow(snapshot, now);
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
   // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
   const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
