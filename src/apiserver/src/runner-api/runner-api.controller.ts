@@ -978,8 +978,8 @@ function repairCheckAfter(
 }
 // Tool-permission approvals: `orbit mcp`'s permission tool, which holds no link, blocks on this
 // long-poll over HTTPS until a human decides. DB-polled (approvals are low-frequency; no NOTIFY needed).
-export const APPROVAL_LONG_POLL_MS = 25_000;
-export const APPROVAL_POLL_INTERVAL_MS = 1_500;
+const APPROVAL_LONG_POLL_MS = 25_000;
+const APPROVAL_POLL_INTERVAL_MS = 1_500;
 // Spread over which quota retries are scattered past their reset. See retryPlanFor.
 const QUOTA_RETRY_JITTER_MS = 60_000;
 // The runtime tools whose call starts work that outlives it — see subStarted in the events ingest.

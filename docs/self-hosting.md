@@ -1100,12 +1100,13 @@ runner (`src/runner-go/idle_connections_test.go`) fails if a runner's client wou
 **How an apiserver stops.** On `docker stop`, so also when an upgrade or `docker compose up` recreates it, an apiserver
 stops by itself and loses nothing that is in flight (`src/apiserver/src/common/graceful-stop.ts`):
 
-1. It stops accepting connections, on port 3000 and on `RUNNER_LINK_INTERNAL_PORT`. The web gateway and the link
+1. It stops accepting connections, on port 3000 and on `RUNNER_LINK_INTERNAL_PORT`. It first takes in the connections
+   and requests that had already reached it, so that none of them is reset. The web gateway and the link
    gateway find the connection refused at once, and send the request to another apiserver. They do this for a POST too,
    since none of it was sent.
 2. Its session streams and control-plane streams end. The clients open them again on another apiserver: each session
    stream picks up after the last stored event it had.
-3. It finishes the requests in flight, for up to 27 seconds. Each answer tells the caller to close the connection, and
+3. It finishes the requests in flight, for up to 23 seconds. Each answer tells the caller to close the connection, and
    the apiserver closes it once the answer is sent. It closes idle connections at once.
 4. It then stops its background work and closes NATS, its coordination connection and the database. The leader's lock
    goes with that connection, so another apiserver takes over the reaper and the sweeps at its next poll.
@@ -1113,13 +1114,15 @@ stops by itself and loses nothing that is in flight (`src/apiserver/src/common/g
    session stream that opens again a moment later is sent to another apiserver at once. An address that no longer
    answers at all would make the web gateway wait out its 2-second connect timeout first.
 
-It exits 0 within 28 seconds, inside the grace period of 30 seconds that `docker-compose.yml` gives the apiserver
-(`stop_grace_period`; a second apiserver defined with `extends` takes it too). The requests that wait on purpose finish
-within that: a runner's approval long poll (25 seconds) and the Cursor key check (25 seconds). A request still unanswered
-after the 27 seconds is cut, and its caller asks again. Only a merge called with a longer `waitSeconds` can wait that
-long: the call then fails, but the merge stays queued and lands as usual, and `merge_receipts` reads its outcome. If the
-migration that runs before it starts is still running when the stop comes, Docker waits out the grace period and kills
-the container.
+It exits 0 within 25 seconds of getting the signal, inside the grace period of 30 seconds that `docker-compose.yml`
+gives the apiserver (`stop_grace_period`; a second apiserver defined with `extends` takes it too). The 5 seconds left
+over are for a signal that reaches the process late, as it does on a loaded host. A request still unanswered after the
+23 seconds is cut, and its caller asks again. Only the requests that wait on purpose take that long. A runner's approval
+long poll and the Cursor key check each wait 25 seconds: one that began more than about 3 seconds before the stop is
+answered, and a later one is cut. The approval's reader asks again 2 seconds later, and the person checking a Cursor
+key is told it could not be checked. A merge called with a longer `waitSeconds` fails the call, but the merge stays
+queued and lands as usual, and `merge_receipts` reads its outcome. If the migration that runs before the apiserver
+starts is still running when the stop comes, Docker waits out the grace period and kills the container.
 
 **How the session streams are spread:**
 

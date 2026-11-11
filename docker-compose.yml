@@ -170,8 +170,9 @@ services:
     restart: unless-stopped
     logging: *logging
     # How long `docker stop` waits before SIGKILL. The apiserver stops by itself well inside it
-    # (src/apiserver/src/common/graceful-stop.ts): the requests in flight are answered for up to 27 s, long polls included,
-    # and it exits by 28 s. A second apiserver defined with `extends` takes this with the rest.
+    # (src/apiserver/src/common/graceful-stop.ts): the requests in flight are answered for up to 23 s, and it exits by 25 s
+    # after it gets the signal, which leaves 5 s for a signal that comes late. A second apiserver defined with `extends`
+    # takes this with the rest.
     stop_grace_period: 30s
     environment:
       DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
