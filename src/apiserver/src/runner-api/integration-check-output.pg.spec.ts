@@ -21,6 +21,7 @@ import {
   enqueueForDoneTask,
 } from '../projects/project-integration-job';
 import { lastLandingCheck } from '../projects/project-integration-line';
+import { readIntegrationJobTimeline } from '../projects/project-integration-event';
 import { readProjectIntegrationLog } from '../projects/project-integration-log';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -62,6 +63,46 @@ const RED_CHECK: IntegrationCheckResult = {
   durationMs: 1_200,
   outputTail: 'FAIL\n',
 };
+
+test('baseline result events preserve scope and the timeline reads exact copy and legacy events', {
+  skip, concurrency: 1, timeout: 120_000,
+}, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'baseline-timeline');
+    await doneTask(stack, w, 'baseline-timeline');
+    const job = await claim(stack, w);
+    const baseline: IntegrationCheckResult = { ...RED_CHECK, name: 'LANDING_CHECK', scope: 'BASELINE' };
+    const checks: IntegrationCheckResult[] = [
+      baseline,
+      { ...baseline, exitCode: 7, expectedExitCode: 7 },
+      { ...baseline, timedOut: true },
+      { ...baseline, exitCode: null },
+      { ...RED_CHECK, name: 'LANDING_CHECK' },
+    ];
+    await report(stack, w, job, { ...CHECK_FAILED, checks });
+    const events = await stack.db.projectIntegrationJobEvent.findMany({
+      where: { jobId: job.jobId, kind: { in: ['CHECK_STARTED', 'CHECK_FINISHED'] } },
+    });
+    assert.equal(events.length, checks.length * 2);
+    for (const event of events) {
+      const data = event.data as { index: number; scope?: string };
+      assert.equal(data.scope, data.index <= 4 ? 'BASELINE' : undefined);
+    }
+    const timeline = await readIntegrationJobTimeline(stack.prisma, w.projectId, { jobId: job.jobId });
+    const finished = timeline.entries.filter((entry) => entry.kind === 'CHECK_FINISHED');
+    assert.deepEqual(finished.map((entry) => entry.text), [
+      'Checked the project branch with main, without this task · also fails',
+      'Checked the project branch with main, without this task · passes',
+      'Checked the project branch with main, without this task timed out after 0m 01s',
+      'Checked the project branch with main, without this task failed · no exit code · 0m 01s',
+      'Landing check failed · exit 1 · 0m 01s',
+    ]);
+    assert.equal(finished[4].data?.scope, undefined);
+  } finally {
+    await hangUp(stack);
+  }
+});
 
 type Answer = Omit<IntegrationJobResultRequest, 'claimGeneration' | 'leaseOwner'>;
 

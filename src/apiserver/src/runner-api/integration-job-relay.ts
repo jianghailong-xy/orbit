@@ -3023,6 +3023,7 @@ async function appendResultEvents(
       data: {
         name: check.name,
         index,
+        ...(check.scope ? { scope: check.scope } : {}),
         startedAt: startedAt.toISOString(),
         derivedFromDuration: true,
       },
@@ -3040,6 +3041,7 @@ async function appendResultEvents(
       data: {
         name: check.name,
         index,
+        ...(check.scope ? { scope: check.scope } : {}),
         ...(check.skipped ? { skipped: check.skipped, files: check.files } : {}),
         exitCode: check.exitCode,
         expectedExitCode: check.expectedExitCode,
