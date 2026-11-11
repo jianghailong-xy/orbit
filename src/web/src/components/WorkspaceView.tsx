@@ -920,7 +920,10 @@ type ListSection = {
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
 // The project's sessions column at the conversation's right edge: the list's widths, its own width.
 const PROJECT_COL_KEY = 'orbit.projectColWidth';
-const PROJECT_COLUMN_COPY = { label: 'Project sessions', close: 'Close project sessions' } as const;
+const PROJECT_COLUMN_COPY = { label: 'Project sessions', close: 'Hide project sessions' } as const;
+// Whether the user folded the project column by hand (owner 2026-11-11, board 4): kept per browser, and
+// it stays folded until the title bar's Project sessions button is pressed again.
+const PROJECT_COLUMN_FOLDED_KEY = 'orbit.projectColumnFolded';
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 320;
@@ -2534,6 +2537,11 @@ export function WorkspaceView({
     return saved >= SESSION_COL_MIN && saved <= SESSION_COL_MAX ? saved : SESSION_COL_DEFAULT;
   });
   const [resizing, setResizing] = useState<'list' | 'project' | null>(null);
+  const [projectColumnFolded, setProjectColumnFolded] = useState<boolean>(() => localStorage.getItem(PROJECT_COLUMN_FOLDED_KEY) === '1');
+  const foldProjectColumn = (folded: boolean): void => {
+    setProjectColumnFolded(folded);
+    localStorage.setItem(PROJECT_COLUMN_FOLDED_KEY, folded ? '1' : '0');
+  };
 
   // The list is scoped by `view`. Keep Completed loaded while one of its transcripts is
   // open; every other open session resolves from Open, where live sessions live.
@@ -3038,6 +3046,27 @@ export function WorkspaceView({
     [allProjectMembers],
   );
   const pageCoordinator = projectMembers.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
+  // The project of the open conversation, when it is the coordinator or a member of one: its title bar
+  // carries the Project sessions button (owner 2026-11-11, boards 2-4). At phone width the button is
+  // the bottom sheet's, not the column's.
+  const titleBarProjectId = isMobile ? null : (selectedSession?.projectMembership?.projectId ?? null);
+  // The button's count is the column header's "Project · N sessions". Where the column shows another
+  // project or none, the same two reads (one cache entry with the column's) count it.
+  const titleBarOwnRead = !!titleBarProjectId && titleBarProjectId !== openProjectId;
+  const titleBarOpenQ = useQuery({
+    ...projectSessionsQuery({ projectId: titleBarProjectId ?? '', view: 'open', includeLanding: true }),
+    enabled: titleBarOwnRead,
+  });
+  const titleBarCompletedQ = useQuery({
+    ...projectSessionsQuery({ projectId: titleBarProjectId ?? '', view: 'completed', includeLanding: true }),
+    enabled: titleBarOwnRead,
+  });
+  const titleBarSessionCount = !titleBarProjectId ? null
+    : !titleBarOwnRead ? (projectSessionsQ.isSuccess || completedProjectSessionsQ.isSuccess ? projectMembers.length : null)
+      : titleBarOpenQ.data || titleBarCompletedQ.data
+        ? new Set([...(titleBarOpenQ.data ?? []), ...(titleBarCompletedQ.data ?? [])]
+          .filter((s) => s.sessionKind !== 'LANDING').map((s) => s.id)).size
+        : null;
   const pageMenuCoordinator = pageCoordinator;
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
   const pageProjectDetailsQ = useQuery({
@@ -3270,6 +3299,22 @@ export function WorkspaceView({
   const sections = listProjectId ? projectSections : workspaceSections;
   // Beside a conversation of the project, or its Landings window; never over a new session's draft.
   const showProjectColumn = !!columnProjectId && (!!selectedId || !!landingsProjectId);
+  // Folded by hand, the column hides and ?project= stays, so the title bar's button brings it back.
+  const projectColumnOpen = showProjectColumn && !projectColumnFolded;
+  // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
+  useEffect(() => {
+    if (!projectColumnOpen) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing) return;
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && (focused.isContentEditable ||
+        focused.closest('input, textarea, select, [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'))) return;
+      setProjectColumnFolded(true);
+      localStorage.setItem(PROJECT_COLUMN_FOLDED_KEY, '1');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [projectColumnOpen]);
   // Whether the address named the column's project together with, or after, the conversation now open
   // (a project row, a member's mark, a link), rather than the selection having moved on under a column
   // already open. Read by the effect below, so it is written first.
@@ -5946,8 +5991,8 @@ export function WorkspaceView({
   useEffect(() => {
     if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId) &&
       !folderListing.projects.some((p) => p.id === menuOpenId) &&
-      !(showProjectColumn && projectMembers.some((s) => s.id === menuOpenId))) setMenuOpenId(null);
-  }, [menuOpenId, orderedSessions, folderListing.projects, showProjectColumn, projectMembers]);
+      !(projectColumnOpen && projectMembers.some((s) => s.id === menuOpenId))) setMenuOpenId(null);
+  }, [menuOpenId, orderedSessions, folderListing.projects, projectColumnOpen, projectMembers]);
   const deleteMut = useMutation({
     mutationFn: (session: SessionToastTarget) => deleteSession(session.id),
     onSuccess: (_d, session) => {
@@ -7718,12 +7763,22 @@ export function WorkspaceView({
       return next;
     }), { swapsPane: false });
   };
-  const closeProjectColumn = (): void => setSearchParams((current) => {
-    const next = new URLSearchParams(current);
-    next.delete('project');
-    next.delete('view');
-    return next;
-  });
+  // The title bar's Project sessions button (owner 2026-11-11, boards 2-4): it folds and unfolds the
+  // column of the open conversation's project, and opens that column where the address names none.
+  const toggleProjectColumn = (): void => {
+    if (!titleBarProjectId) return;
+    if (titleBarProjectId === columnProjectId) {
+      foldProjectColumn(projectColumnOpen);
+      return;
+    }
+    foldProjectColumn(false);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('project', encodeId(titleBarProjectId));
+      next.delete('view');
+      return next;
+    });
+  };
   const startNewFolder = (): void => setFolderEdit({ id: null, draft: '', error: null, saving: false });
   // New Folder… and Rename… save on Return (or when the field is left with a name in it); an empty
   // or unchanged name just closes the field. A name the workspace already has is said under it.
@@ -9479,6 +9534,15 @@ export function WorkspaceView({
           </div>
           {selected && !composing && (
             <>
+              {titleBarProjectId && !selectedTrashed && (
+                <Button variant="text" className="workspace-header-project"
+                  icon={<SidebarNavIcon name="projects" />}
+                  title={PROJECT_COLUMN_COPY.label} aria-label={PROJECT_COLUMN_COPY.label}
+                  aria-pressed={titleBarProjectId === columnProjectId && projectColumnOpen}
+                  onClick={toggleProjectColumn}>
+                  {titleBarSessionCount ?? undefined}
+                </Button>
+              )}
               <Menu
                 side="bottom"
                 align="end"
@@ -10512,7 +10576,7 @@ export function WorkspaceView({
         </>
         )}
       </div>
-      {showProjectColumn && columnProjectId && (
+      {projectColumnOpen && columnProjectId && (
         <>
           <div
             className={`session-resizer${resizing === 'project' ? ' resizing' : ''}`}
@@ -10522,10 +10586,10 @@ export function WorkspaceView({
           />
           {/* The project's sessions page, moved beside the conversation as it is (owner 2026-11-11,
               docs/mocks/project-sessions-column board 2): the row of the open conversation is the
-              selected one, and ✕ closes the column. */}
+              selected one, and ✕ folds the column (the button in the title bar brings it back). */}
           <aside className="session-col session-project-column" style={{ width: projectColWidth }}
             aria-label={PROJECT_COLUMN_COPY.label}>
-            {projectPageHead(closeProjectColumn, PROJECT_COLUMN_COPY.close, <CloseOutlined />)}
+            {projectPageHead(() => foldProjectColumn(true), PROJECT_COLUMN_COPY.close, <CloseOutlined />)}
             <div className="workspace-sessions session-col-list autohide-scrollbar">
               {projectPageTop(columnProjectId)}
               {projectPageEmpty}

@@ -3465,6 +3465,11 @@ button.toast--pill:focus-visible {
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
+/* The title bar's Project sessions button (docs/mocks/project-sessions-column, boards 2-4): a text
+   button, tinted like a selected row while the project column is open, plain grey while it is folded. */
+.workspace-header-project { flex: none; color: var(--text-2); }
+.workspace-header-project[aria-pressed='true'],
+.workspace-header-project[aria-pressed='true']:hover:where(:not(:disabled)) { color: var(--brand); background: var(--brand-tint); }
 .workspace-status-dot {
   width: 9px;
   height: 9px;

@@ -591,6 +591,10 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
 // Owner decisions of 2026-11-11 (docs/mocks/project-sessions-column, board 2): wider than a phone, a
 // project's row keeps the workspace's list and opens the coordinator, with the project's sessions in a
 // column at the conversation's right edge.
+/** The conversation title bar's Project sessions button, left of its ⋮ menu. */
+const projectSessionsButton = (): HTMLButtonElement | null =>
+  mounted().querySelector<HTMLButtonElement>('.workspace-header button[aria-label="Project sessions"]');
+
 describe('the project sessions column beside the conversation', { timeout: 60_000 }, () => {
   const column = (): HTMLElement | null => mounted().querySelector<HTMLElement>('aside.session-project-column');
   const columnTitles = (): string[] => [...(column()?.querySelectorAll('.session-row .session-title') ?? [])].map((el) => el.textContent ?? '');
@@ -626,15 +630,16 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     expect(column()!.querySelectorAll('.session-row.active')).toHaveLength(1);
   });
 
-  it('closes with its ✕, which takes ?project= off the address and leaves the conversation', async () => {
+  it('folds with its ✕, which keeps ?project= on the address so the title bar’s button brings it back', async () => {
     await mount();
     await click(projectRow(), 'the project row');
     await until(() => expect(column()).not.toBeNull());
     const close = column()!.querySelector('.session-project-page-header .session-folder-back')!;
-    expect(close.getAttribute('aria-label')).toBe('Close project sessions');
+    expect(close.getAttribute('aria-label')).toBe('Hide project sessions');
     await click(close, 'the column ✕');
     await until(() => expect(column()).toBeNull());
-    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+    expect(projectSessionsButton()?.getAttribute('aria-pressed')).toBe('false');
     expect(projectRows()).toHaveLength(1);
   });
 
@@ -760,6 +765,109 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     expect(column()).toBeNull();
     expect(mounted().querySelector('aside.session-col.session-project-page')).not.toBeNull();
     expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
+  });
+});
+
+describe('the title bar’s Project sessions button', { timeout: 60_000 }, () => {
+  const column = (): HTMLElement | null => mounted().querySelector<HTMLElement>('aside.session-project-column');
+  const button = (): HTMLButtonElement => {
+    const found = projectSessionsButton();
+    if (!found) throw new Error('no Project sessions button');
+    return found;
+  };
+  const pressEscape = async (): Promise<void> => {
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await settle();
+  };
+
+  it('sits left of ⋮ on the coordinator’s and a member’s conversation, with the glyph and the session count, and on no other', async () => {
+    await mount();
+    expect(projectSessionsButton()).toBeNull();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(button().getAttribute('title')).toBe('Project sessions');
+    expect(button().classList.contains('orbit-button')).toBe(true);
+    expect(button().querySelector('.orbit-button-icon svg, .orbit-button-icon .anticon, .orbit-button-icon img, .orbit-button-icon *')).not.toBeNull();
+    // Immediately left of the ⋮ More actions button.
+    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    // The column header counts the same sessions.
+    expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
+    // A member of the project carries it too.
+    await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(TASK.title));
+    expect(button().textContent).toBe('2');
+    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    // A session in no project has none.
+    await act(async () => routerNavigate(`/sessions/${LOOSE.id}`));
+    await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(LOOSE.title));
+    expect(projectSessionsButton()).toBeNull();
+  });
+
+  it('is pressed while the column is open, and a click folds the column and the next unfolds it', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('folds the column on Esc, but not while focus is in a field', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    const composer = mounted().querySelector<HTMLTextAreaElement>('textarea');
+    expect(composer, 'the composer').toBeTruthy();
+    await act(async () => composer!.focus());
+    await pressEscape();
+    expect(column()).not.toBeNull();
+    await act(async () => composer!.blur());
+    await pressEscape();
+    await until(() => expect(column()).toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+  });
+
+  it('opens the column of a project conversation whose column is closed, counting its sessions', async () => {
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(column()).toBeNull();
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('remembers a hand fold in this browser until the button is pressed again', async () => {
+    const stored = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => { stored.set(key, value); },
+      removeItem: (key: string) => { stored.delete(key); },
+    });
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    await click(column()!.querySelector('.session-project-page-header .session-folder-back'), 'the column ✕');
+    await until(() => expect(column()).toBeNull());
+    expect(stored.get('orbit.projectColumnFolded')).toBe('1');
+    // A fresh page (a reload) keeps it folded, the address still naming the project.
+    await act(async () => root!.unmount());
+    container!.remove();
+    await mount(() => expect(projectSessionsButton()?.textContent).toBe('2'), `/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+    expect(column()).toBeNull();
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).not.toBeNull());
+    expect(stored.get('orbit.projectColumnFolded')).toBe('0');
   });
 });
 
