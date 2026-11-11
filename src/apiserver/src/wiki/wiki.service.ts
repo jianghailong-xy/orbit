@@ -73,6 +73,8 @@ import {
   anchorReportEntry,
   anchorReportShape,
   anchorsChecked,
+  deferredAnchorsAllMissing,
+  WIKI_DEFERRED_NONE_EXIST,
   anchorsWithoutChecks,
   entryAnchorState,
   rebaselinedAnchors,
@@ -3709,7 +3711,10 @@ export class WikiService {
       const open = await tx.wikiChangesetOp.count({ where: { ownerId, entryId: entry.id, op: 'challenge', decision: 'pending' } });
       if (open === 0) {
         const system: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
-        const ops = [{ op: 'challenge', entryId: entry.id, reason: anchorChallengeReason(checked, ref) }];
+        // The first check of an entry learned with no code to read, finding none of its code anchors: another
+        // repository's knowledge, said as such (`anchorRules.deferred`).
+        const reason = deferredAnchorsAllMissing(anchors, checked) ? WIKI_DEFERRED_NONE_EXIST : anchorChallengeReason(checked, ref);
+        const ops = [{ op: 'challenge', entryId: entry.id, reason }];
         // Whose run checked it: the challenge names the server's wiki job (P8).
         const who = `the server's maintenance run (job ${uuidToBase62(caller.jobId)})`;
         const rationale = `Anchor re-verification on origin/main at ${ref.slice(0, 12)}, reported by ${who}: `

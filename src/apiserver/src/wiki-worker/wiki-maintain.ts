@@ -11,6 +11,7 @@ import {
 } from '@orbit/shared';
 import {
   answerField,
+  wikiImportDeferredAnchors,
   cutRunes,
   goTrimSpace,
   wikiImportFieldValue,
@@ -602,7 +603,8 @@ const DATE_IN_TEXT = /started (\d{4}-\d{2}-\d{2})/u;
  * Each entry checked the way the demo's extract.py validated it, and an add of the ones that hold up: a known
  * kind with its fields, sources that are lines of the dossier with their quotes copied from those lines, and
  * anchors that exist in the space's snapshot. An entry whose code anchors all point outside the repository is
- * another repository's knowledge, and is dropped.
+ * another repository's knowledge, and is dropped. With no snapshot (`repo` null) its code anchors are kept as
+ * `deferred` (contract `anchorRules.deferred`) rather than dropped.
  */
 export function buildWikiMaintainOps(
   entries: readonly WikiImportAnswerEntry[],
@@ -665,9 +667,12 @@ export function buildWikiMaintainOps(
     }
     const given = wikiImportIsObject(item.anchors) ? item.anchors : {};
     const named = wikiImportTextList(given.paths).length + wikiImportTextList(given.commits).length;
-    const anchors = repo?.anchors(item.anchors) ?? [];
+    // With no snapshot (the sessions tier), the anchors it names are kept, deferred to the first run that reads the
+    // code (docs/wiki-repo-tiers-design.md §5.2): nothing says yet whose they are.
+    const anchors: Array<Record<string, string | boolean>> = repo ? repo.anchors(item.anchors) : wikiImportDeferredAnchors(item.anchors);
     if (named > 0 && anchors.length === 0) {
-      // Every code anchor it names is outside this repository: the knowledge is another repository's.
+      // Every code anchor it names is outside this repository — or, with no snapshot, none reads as a path of a
+      // repository or a whole sha: the knowledge is another repository's.
       built.foreign += 1;
       continue;
     }

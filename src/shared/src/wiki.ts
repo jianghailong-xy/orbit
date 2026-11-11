@@ -931,11 +931,14 @@ export const WIKI_ANCHOR_SPECS: {
 
 // ── Wire types ─────────────────────────────────────────────────────────────────────────────────
 
-/** An anchor as a proposer writes it. */
+/**
+ * An anchor as a proposer writes it. A code anchor (path, symbol, commit) may carry `deferred: true`: it was learned
+ * when no code could be read and has been held to no tree yet (contract `anchorRules.deferred`); its first check drops it.
+ */
 export type WikiAnchorInput =
-  | { type: 'path'; path: string }
-  | { type: 'symbol'; path: string; symbol: string; regionSha256?: string }
-  | { type: 'commit'; sha: string }
+  | { type: 'path'; path: string; deferred?: true }
+  | { type: 'symbol'; path: string; symbol: string; regionSha256?: string; deferred?: true }
+  | { type: 'commit'; sha: string; deferred?: true }
   | { type: 'criterion'; criterionId: string; semanticHash?: string }
   | { type: 'merge_evidence'; contentHash: string }
   | { type: 'command'; command: string; expectedExit: number }
@@ -2027,8 +2030,11 @@ function checkAnchor(anchor: unknown, path: string, errors: WikiFieldError[]): v
     return;
   }
   const fields = WIKI_ANCHOR_SPECS[type as WikiAnchorType].fields;
-  unknownKeys(anchor, ['type', ...Object.keys(fields)], path, errors);
+  // A code anchor may say it was never held to a tree (`anchorRules.deferred`), and only ever say so as true.
+  const code = (WIKI_GIT_ANCHOR_TYPES as readonly string[]).includes(type);
+  unknownKeys(anchor, ['type', ...Object.keys(fields), ...(code ? ['deferred'] : [])], path, errors);
   for (const [key, schema] of Object.entries(fields)) checkField(schema, anchor[key], join(path, key), errors);
+  if (code && !absent(anchor.deferred) && anchor.deferred !== true) errors.push({ path: join(path, 'deferred'), message: 'is true when given' });
 }
 
 function checkSource(source: unknown, path: string, errors: WikiFieldError[]): void {

@@ -252,9 +252,31 @@ export function anchorsChecked(
         };
       }
     }
-    next[reported.index] = { ...anchor, check } as WikiAnchor;
+    // Checked on a tree at last: no longer deferred (`anchorRules.deferred`).
+    const { deferred: _deferred, ...held } = anchor as WikiAnchor & { deferred?: true };
+    next[reported.index] = { ...held, check } as WikiAnchor;
   }
   return next;
+}
+
+/** A code anchor learned when no code could be read and not checked on any tree since (contract `anchorRules.deferred`). */
+export function anchorDeferred(anchor: WikiAnchor): boolean {
+  return GIT_TYPES.has(anchor.type) && (anchor as { deferred?: unknown }).deferred === true && anchor.check === undefined;
+}
+
+/** The challenge's words when the first check of an entry's deferred code anchors finds none of them (`anchorRules.deferred`). */
+export const WIKI_DEFERRED_NONE_EXIST = 'None of its code anchors exist in this repository';
+
+/**
+ * Whether this check is the first of an entry whose code anchors were all deferred, and found every one of them
+ * missing: the knowledge is another repository's, as the extraction would have said had it read the code. The owner
+ * already accepted it, so it is challenged, never dropped.
+ */
+export function deferredAnchorsAllMissing(before: readonly WikiAnchor[], after: readonly WikiAnchor[]): boolean {
+  const code = before.map((anchor, index) => ({ anchor, index })).filter(({ anchor }) => GIT_TYPES.has(anchor.type));
+  return code.length > 0
+    && code.every(({ anchor }) => anchorDeferred(anchor))
+    && code.every(({ index }) => after[index]?.check?.state === 'missing');
 }
 
 /**

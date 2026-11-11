@@ -34,6 +34,8 @@ data class WikiAnchor(
     val type: String? = null, val path: String? = null, val symbol: String? = null, val regionSha256: String? = null,
     val sha: String? = null, val criterionId: String? = null, val semanticHash: String? = null, val contentHash: String? = null,
     val command: String? = null, val expectedExit: Int? = null, val ref: String? = null, val check: WikiAnchorCheck? = null,
+    /** A code anchor learned when no code could be read, held to no tree yet (contract `anchorRules.deferred`). */
+    val deferred: Boolean? = null,
 )
 
 // MARK: a space

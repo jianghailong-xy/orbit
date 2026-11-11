@@ -59,6 +59,7 @@ internal object WikiCopy {
     const val whereUsed = "Where it's used"
     const val history = "History"
     const val anchorsNote = "Checked again after every commit to main. If the anchored code changes, agents stop getting this entry until someone re-checks it."
+    const val anchorDeferred = "Not checked yet: the code could not be read when this was learned"
     fun pushedTo(sessions: Int, fetched: Int) =
         "Pushed to $sessions session${if (sessions == 1) "" else "s"} this week · fetched $fetched×"
     const val noUseYet = "No session has been shown this entry yet."

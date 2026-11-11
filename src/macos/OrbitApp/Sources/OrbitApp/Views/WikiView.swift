@@ -1235,6 +1235,10 @@ struct WikiEntryPage: View {
                     .font(.orbitMono)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
+                if WikiLogic.anchorDeferred(anchor) {
+                    Text(WikiCopy.anchorDeferred).font(.orbitLabel).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 WikiMarkText(mark: mark)
             }
         }

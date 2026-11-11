@@ -510,6 +510,20 @@ describe('wiki contract', () => {
     }
   });
 
+  it('lets a code anchor say it is deferred, only as true, and no other anchor say it (anchorRules.deferred)', () => {
+    const valid = (CONTRACT.vectors as Array<{ id: string; draft?: Record<string, unknown> }>).find((v) => v.id === 'decision-valid')!.draft!;
+    const withAnchors = (anchors: unknown[]) => validateWikiEntryDraft({ ...valid, anchors }).map((error) => error.path);
+    expect(withAnchors([{ type: 'path', path: 'src/app.go', deferred: true }, { type: 'commit', sha: 'f'.repeat(40), deferred: true },
+      { type: 'symbol', path: 'src/app.go', symbol: 'main', deferred: true }])).toEqual([]);
+    expect(withAnchors([{ type: 'path', path: 'src/app.go', deferred: false }])).toEqual(['anchors[0].deferred']);
+    expect(withAnchors([{ type: 'record', ref: 'orbit-task:abc', deferred: true }])).toEqual(['anchors[0].deferred']);
+    const deferred = CONTRACT.anchorRules.deferred as string;
+    expect(deferred).toMatch(/deferred: true/u);
+    expect(deferred).toContain('None of its code anchors exist in this repository');
+    expect(deferred).toContain('Not checked yet: the code could not be read when this was learned');
+    expect(CONTRACT.push.eligible.anchorDeferredNot).toMatch(/anchorRules\.deferred/u);
+  });
+
   it('ships the effect policy the contract states, and it keeps the design\'s promises', () => {
     const policy = CONTRACT.effectPolicy;
     expect(policy.origins).toEqual(WIKI_EFFECT_POLICY.origins);

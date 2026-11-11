@@ -85,6 +85,7 @@ public enum WikiCopy {
     public static let whereUsed = "Where it's used"                         // WIKI_SECTION_USED
     public static let history = "History"                                   // WIKI_SECTION_HISTORY
     public static let anchorsNote = "Checked again after every commit to main. If the anchored code changes, agents stop getting this entry until someone re-checks it."
+    public static let anchorDeferred = "Not checked yet: the code could not be read when this was learned"  // WIKI_ANCHOR_DEFERRED
     public static func pushedTo(sessions: Int, fetched: Int) -> String {    // wikiPushedTo
         "Pushed to \(sessions) session\(sessions == 1 ? "" : "s") this week · fetched \(fetched)×"
     }
@@ -520,6 +521,11 @@ public enum WikiLogic {
         case .missing?:  return WikiAnchorMark(word: "Missing", tone: .red)
         default:         return WikiAnchorMark(word: "Unchecked", tone: .muted)
         }
+    }
+
+    /// A code anchor marked deferred and not checked on any tree since (`wikiAnchorDeferred`, contract `anchorRules.deferred`).
+    public static func anchorDeferred(_ anchor: WikiAnchor) -> Bool {
+        anchor.deferred == true && anchor.check == nil
     }
 
     /// One anchor's own line (`wikiAnchorLabel`): the path, with its symbol when it has one, or the

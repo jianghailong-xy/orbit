@@ -234,6 +234,8 @@ internal object WikiLogic {
         "missing" -> WikiAnchorMark("Missing", WikiTone.RED)
         else -> WikiAnchorMark("Unchecked", WikiTone.MUTED)
     }
+    /** A code anchor marked deferred and not checked on any tree since (`wikiAnchorDeferred`, contract `anchorRules.deferred`). */
+    fun anchorDeferred(anchor: WikiAnchor): Boolean = anchor.deferred == true && anchor.check == null
     fun anchorLabel(anchor: WikiAnchor): String {
         anchor.path?.let { path -> return anchor.symbol?.let { "$path · $it" } ?: path }
         anchor.sha?.let { return shortSha(it) }
