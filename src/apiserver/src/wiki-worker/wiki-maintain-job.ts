@@ -70,7 +70,7 @@ import {
 } from './wiki-maintain-plan';
 import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
 import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
-import { type WikiAnchorCheckInput, type WikiAnchorDueEntry, type WikiRepoFileRead } from '@orbit/shared';
+import { type WikiAnchorCheckInput, type WikiAnchorDueEntry, type WikiRepoFileRead, type WikiRepoTier, type WikiRepoTierReason } from '@orbit/shared';
 import {
   readWikiRepoFiles,
   readWikiRepoReadiness,
@@ -220,6 +220,8 @@ export interface WikiMaintainReport {
    */
   anchors?: { entries: number; changed: number; missing: number; skipped: number };
   docs?: WikiMaintainDocsReport;
+  /** The repository tier the run read, and why it read less than git (contract `repoOps.tiers`); null on git. */
+  repo?: { tier: WikiRepoTier; reason: WikiRepoTierReason | null };
   tokens: { input: number; output: number; calls: number };
   seconds: number;
   cursorAdvanced?: boolean;
@@ -353,6 +355,12 @@ function extractionMaterial(dossier: WikiDossier): Record<string, unknown> {
   return file;
 }
 
+/**
+ * A snapshot that failed because the working directory is not a git checkout, in the words of every runner before the
+ * folder tier (`wikiRepoOpCheckout`: "<dir> is not a git checkout: …"): read as the reason `not_git` (repoOps.tiers).
+ */
+const NOT_GIT = / is not a git checkout\b/u;
+
 /** Why a run ends before it succeeded: the step, and what went wrong there. */
 class WikiMaintainStop extends Error {
   constructor(readonly step: string, readonly cause: Error, readonly kind: 'infra' | 'content') {
@@ -481,6 +489,9 @@ class WikiMaintainRun {
         error: null,
         failureKind: null,
         opsRefused: null,
+        // What the attempt before read of the repository: this attempt's probe writes its own.
+        repoTier: null,
+        repoReason: null,
         // Whether the run's endpoint is this machine's or a private one, which the day's counting reads
         // (`maintenance.job.catchUp.dailyLimit`): the System model's address, known only here.
         localEndpoint: this.deps.modelBaseUrl !== null && wikiMaintainEndpointIsLocal(this.deps.modelBaseUrl),
@@ -699,7 +710,7 @@ class WikiMaintainRun {
   private async steps(): Promise<WikiMaintainStop | null> {
     let step = 'repo';
     try {
-      await this.readSnapshot();
+      await this.probe();
       step = 'dossiers';
       const dossiers = await this.dossiers();
       let ops: WikiMaintainOp[] = [];
@@ -780,10 +791,18 @@ class WikiMaintainRun {
   }
 
   /**
-   * The space's repository, at one commit, read through the space's runner: a snapshot operation, then the
-   * space's snapshot row back for its index. A runner that cannot be asked is the platform's failure.
+   * Which tier of the repository the run reads (docs/wiki-repo-tiers-design.md §2–§3, contract `repoOps.tiers`), and on
+   * the git tier the repository at one commit, read through the space's runner: a snapshot operation, then the space's
+   * snapshot row back for its index.
+   *
+   * The repository is not the run's gate: the run learns from the sessions, which the server holds. A space whose
+   * runner cannot be asked at all (its readiness: no workspace, no machine, the machine away, or one with no repository
+   * capability), and a working directory the runner answers is not a git checkout — the words of every runner before the
+   * folder tier, read as `not_git` — run on the sessions tier: no snapshot, the dossiers through the advance and the
+   * verification as always, the code anchors and the documents left for a run that can read them. Any other failure of
+   * the snapshot is still the platform's (its classification is the next phase's).
    */
-  private async readSnapshot(): Promise<void> {
+  private async probe(): Promise<void> {
     const { prisma } = this.deps;
     const { job } = this.jobContext;
     const readiness = await readWikiRepoReadiness(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });
@@ -791,12 +810,17 @@ class WikiMaintainRun {
     // (`runner_upgrade` says to upgrade it, and `wholeFile` says which read this run gets) — while one with no
     // repository capability at all cannot, and waiting on it would wait out the whole limit to learn that.
     if (!wikiRepoStepsCanRun(readiness)) {
-      throw new WikiJobInfraError(`REPO_NOT_READY: the space's repository cannot be read now (${readiness.look})`);
+      await this.readTier('sessions', readiness.look as WikiRepoTierReason);
+      return;
     }
     // Whether this machine reads whole files (repoOps.cache, 0406): a bounded one is asked with the old limits.
     this.wholeFile = readiness.runner?.wholeFile === true;
     const held = await prisma.wikiRepoSnapshot.findFirst({ where: { spaceId: job.spaceId, ownerId: job.ownerId }, select: { sha: true } });
     const settled = await this.operation('snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of the default branch');
+    if (settled.state === 'failed' && NOT_GIT.test(settled.error ?? '')) {
+      await this.readTier('sessions', 'not_git');
+      return;
+    }
     if (settled.state !== 'succeeded') {
       throw new WikiJobInfraError(`REPO_OP_FAILED: the snapshot of the default branch ${settled.state}: ${settled.error ?? ''}`);
     }
@@ -816,7 +840,26 @@ class WikiMaintainRun {
       about: typeof raw.readme === 'string' ? cutRunes(raw.readme, WIKI_MAINTAIN_JOB.aboutMaxChars) : '',
       anchors: new WikiImportRepo({ files, commits: raw.commits ?? [] }, '', repositoryName(this.context.repo.urlNorm)),
     };
+    await this.readTier('git', null);
     this.jobContext.log(`the repository at ${snapshot.sha.slice(0, 12)} (${files.length} files)`);
+  }
+
+  /** The tier the probe found, on the report and the run row (migration 0514): what Activity and the health line read. */
+  private async readTier(tier: WikiRepoTier, reason: WikiRepoTierReason | null): Promise<void> {
+    this.report.repo = { tier, reason };
+    await this.deps.prisma.wikiMaintenanceRun.updateMany({ where: { id: this.runId }, data: { repoTier: tier, repoReason: reason } });
+    if (tier === 'sessions') {
+      this.jobContext.log(`the repository cannot be read (${reason}): the run learns from the sessions, and the code checks and documents wait`);
+    }
+  }
+
+  /**
+   * What the extraction is told the repository is (docs/wiki-repo-tiers-design.md §3): the README's first paragraph at
+   * the snapshot, and with no snapshot the space's title — which a space with no repository address is named by already.
+   */
+  private about(): string {
+    if (this.snapshot !== null) return this.snapshot.about;
+    return this.context.repo.urlNorm !== '' ? this.context.title : '';
   }
 
   /** One repository operation of the run, waited for holding the job's lease. */
@@ -992,7 +1035,7 @@ class WikiMaintainRun {
     const lines = wikiMaintainLines(dossier);
     const call = before?.call ?? {
       system: WIKI_MAINTAIN_SYSTEM_PROMPT,
-      prompt: wikiMaintainPrompt(this.context, this.snapshot?.about ?? '', dossier.text),
+      prompt: wikiMaintainPrompt(this.context, this.about(), dossier.text),
       maxTokens: WIKI_MAINTAIN_JOB.extractMaxTokens,
     };
     const answer = await this.ask(step, dossier.sessionId, call.system, call.prompt, call.maxTokens, extractionMaterial(dossier));
@@ -1101,7 +1144,7 @@ class WikiMaintainRun {
         dossier: { text: file!.text, sources: file!.sources, sessionId },
         refs,
         context: this.context,
-        about: this.snapshot?.about ?? '',
+        about: this.about(),
         repo: this.snapshot?.anchors ?? null,
         ask,
       });
@@ -1460,6 +1503,15 @@ class WikiMaintainRun {
    */
   private async anchors(): Promise<void> {
     const { job } = this.jobContext;
+    if (this.snapshot === null) {
+      // The sessions tier (repoOps.tiers): no code anchor can be checked, so none is sent and none written — each keeps
+      // its last check and stays due (anchorsDueAt) for the first run that reads the repository. The server's own
+      // anchors (criterion, record, merge_evidence) are checked on every tier, and no check writes them yet
+      // (anchorRules.verify.typesNote): there is nothing more for this step to do.
+      this.report.anchors = { entries: 0, changed: 0, missing: 0, skipped: 0 };
+      this.jobContext.log('the repository cannot be read: the code anchors keep their last checks and wait for a run that reads it');
+      return;
+    }
     const proof = await this.anchorProof();
     let after: string | null = null;
     let entries = 0;
@@ -1624,6 +1676,15 @@ class WikiMaintainRun {
       report.skipped = 'catching_up';
       this.jobContext.log('the space is catching up: its oldest fact not taken in is more than a day old, so no document was written and '
         + 'no change to the plan proposed — the first run after it has caught up writes what changed meanwhile');
+      return;
+    }
+    if (this.snapshot === null) {
+      // The sessions tier (repoOps.tiers): as a run made while catching up, the step is skipped whole, and the first run
+      // that reads the repository writes what changed meanwhile — the entries' sections from the server's own record, the
+      // repository's from the diff since each section's commit.
+      report.skipped = 'no_repository';
+      this.jobContext.log('the repository cannot be read: no document was written and no change to the plan proposed — '
+        + 'the first run that reads it writes what changed meanwhile');
       return;
     }
     const started = Date.now();

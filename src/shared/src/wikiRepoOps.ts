@@ -145,6 +145,27 @@ export const WIKI_REPO_LOOKS = [
 ] as const;
 export type WikiRepoLook = (typeof WIKI_REPO_LOOKS)[number];
 
+/**
+ * How much of the repository a maintenance run read (contract `repoOps.tiers`, docs/wiki-repo-tiers-design.md §2):
+ *
+ *   git               a git checkout of the space's repository, read at origin/main as always;
+ *   folder            a directory that is not a git checkout, scanned as it stands (P4: not read yet);
+ *   sessions          nothing could be read: the run learns from the sessions alone, and the code checks wait;
+ *   wrong_repository  what was read is another repository's (P4: not read yet).
+ *
+ * The tier is what the run found, not a setting: the run row keeps it (`wiki_maintenance_run.repo_tier`).
+ */
+export const WIKI_REPO_TIERS = ['git', 'folder', 'sessions', 'wrong_repository'] as const;
+export type WikiRepoTier = (typeof WIKI_REPO_TIERS)[number];
+
+/**
+ * Why a run is on the sessions tier, as P1 reads it (contract `repoOps.tiers.reasons`): the readiness that is not
+ * ready (`WIKI_REPO_LOOKS` but `ready`), and `not_git` — the snapshot answered that the working directory is not a
+ * git checkout, in the words of a runner from before the folder tier.
+ */
+export const WIKI_REPO_TIER_REASONS = ['no_workspace', 'runner_missing', 'runner_offline', 'runner_upgrade', 'not_git'] as const;
+export type WikiRepoTierReason = (typeof WIKI_REPO_TIER_REASONS)[number];
+
 /** What one `read` item asks for (contract `repoOps.kinds.read`). */
 export interface WikiRepoOpReadItem {
   /** The path at the sha. */

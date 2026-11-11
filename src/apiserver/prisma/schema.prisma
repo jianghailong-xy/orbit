@@ -8101,6 +8101,10 @@ model WikiMaintenanceRun {
   catchUp         String?   @map("catch_up")
   /// The provider the run was pinned to answers on this machine or a private network (`catchUp.localEndpoint`).
   localEndpoint   Boolean   @default(false) @map("local_endpoint")
+  /// `git` | `folder` | `sessions` | `wrong_repository` — the repository tier the run's latest attempt read (contract
+  /// `repoOps.tiers`, migration 0514), and why it read less than git (`repoOps.tiers.reasons`); NULL before its probe.
+  repoTier        String?   @map("repo_tier")
+  repoReason      String?   @map("repo_reason")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 

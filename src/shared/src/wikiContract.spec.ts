@@ -108,6 +108,8 @@ import {
 import {
   WIKI_REPO_OPS,
   WIKI_REPO_LOOKS,
+  WIKI_REPO_TIERS,
+  WIKI_REPO_TIER_REASONS,
   WIKI_REPO_OP_CAPABILITY,
   WIKI_REPO_OP_KINDS,
   WIKI_REPO_OP_READ_CAPABILITY,
@@ -342,6 +344,34 @@ describe('wiki contract', () => {
     expect(readFileSync(path.join(ROOT, repoOps.storedText.migration), 'utf8')).toContain('"content_encoding" TEXT NOT NULL DEFAULT \'text\'');
     expect(repoOps.unsettled.rule).toMatch(/INVALID_RESULT, 400.*UNSTORABLE_RESULT, 422/u);
     expect(repoOps.abandoned.seconds).toBe(WIKI_REPO_OPS.abandonedSeconds);
+  });
+
+  it('reads the repository by tier, and a repository that cannot be read is no gate for a maintenance run (repo tiers P1)', () => {
+    const tiers = CONTRACT.repoOps.tiers;
+    expect(tiers.names).toEqual([...WIKI_REPO_TIERS]);
+    expect(tiers.reasons).toEqual([...WIKI_REPO_TIER_REASONS]);
+    // Every readiness that is not ready is a reason, and so is the old runner's not-git answer.
+    expect([...WIKI_REPO_LOOKS.filter((look) => look !== 'ready'), 'not_git']).toEqual([...WIKI_REPO_TIER_REASONS]);
+    for (const name of WIKI_REPO_TIERS) expect(typeof tiers[name], name).toBe('string');
+    expect(existsSync(path.join(ROOT, tiers.migration)), `${tiers.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, tiers.migration), 'utf8');
+    expect(sql).toContain('"repo_tier" text');
+    expect(sql).toContain('"repo_reason" text');
+    for (const name of WIKI_REPO_TIERS) expect(sql).toContain(`'${name}'`);
+    expect(tiers.recorded).toMatch(/repo_tier and repo_reason/u);
+    const job = CONTRACT.maintenance.job;
+    const steps: string[] = job.run.steps;
+    const at = (name: string) => steps.findIndex((step) => step.startsWith(`${name}`));
+    // The probe is the first step after the context, and it no longer fails the run when the repository cannot be read.
+    expect(at('probe (stoppedAt repo):')).toBe(at('context:') + 1);
+    expect(at('snapshot:')).toBe(-1);
+    expect(steps[at('probe')]).toMatch(/run on tier sessions/u);
+    expect(steps[at('probe')]).toMatch(/not_git/u);
+    expect(steps[at('extract:')]).toMatch(/from the space's title/u);
+    expect(steps[at('anchors:')]).toMatch(/On tier sessions only the server's anchors \(criterion, record, merge_evidence\)/u);
+    expect(steps[at('docs:')]).toMatch(/docs\.skipped no_repository/u);
+    expect(job.docs.skipped).toContain('no_repository');
+    expect(job.report).toMatch(/repo \{tier, reason\}/u);
   });
 
   it('ships every closed set exactly as the contract lists it', () => {

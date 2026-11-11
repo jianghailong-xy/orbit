@@ -277,9 +277,10 @@ export const WIKI_MAINTENANCE_DOCS_RULES = {
 } as const;
 
 /**
- * Why a run wrote no document: the space has no confirmed plan, its server writes none yet, or the run was
- * made while the space was behind, whose documents wait until it has caught up (`maintenance.job.catchUp.docs`).
+ * Why a run wrote no document: the space has no confirmed plan, its server writes none yet, the run was
+ * made while the space was behind, whose documents wait until it has caught up (`maintenance.job.catchUp.docs`),
+ * or the run could not read the repository (tier sessions, `repoOps.tiers`), whose documents wait for a run that can.
  */
-export const WIKI_MAINTENANCE_DOCS_SKIPPED = ['no_confirmed_plan', 'no_server_support', 'catching_up'] as const;
+export const WIKI_MAINTENANCE_DOCS_SKIPPED = ['no_confirmed_plan', 'no_server_support', 'catching_up', 'no_repository'] as const;
 export type WikiMaintenanceDocsSkipped = (typeof WIKI_MAINTENANCE_DOCS_SKIPPED)[number];
 
