@@ -4,17 +4,18 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Runner } from '../components/TasksSidePanel';
-import { RunnerDetailPage } from './RunnerDetailPage';
+import type { Runner } from '../TasksSidePanel';
+import { SettingsWorkspacePage } from './SettingsInterimPages';
 
 /**
- * Where a sidebar Workspace row's Configure lands (docs/mocks/workspace-delete-web ⑧):
- * /runners/:id?workspace=<id> opens that workspace's editor on its row, brings the row into view, and
- * drops the parameter, so a reload or Back does not open the editor again.
+ * Where a sidebar Workspace row's Configure, and a Settings Workspaces row, land: /settings/workspaces/:id
+ * opens that workspace's editor on its row among its machine's workspaces and brings the row into view;
+ * /settings/workspaces/new?machine=<id> opens the create form on that machine. The old inline editor,
+ * until task s5's Workspaces page replaces it.
  */
 
-vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
-const { api } = await import('../api');
+vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
+const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 // Public ids, the spelling the web holds every id in (= uuidToBase62 of a v7 uuid).
@@ -105,7 +106,7 @@ async function mount(path: string, workspaces = [workspace(ORBIT, 'orbit'), work
       <QueryClientProvider client={qc}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>
-            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+            <Route path="/settings/workspaces/:id" element={<SettingsWorkspacePage />} />
           </Routes>
           <RouterProbe />
         </MemoryRouter>
@@ -120,29 +121,25 @@ async function mount(path: string, workspaces = [workspace(ORBIT, 'orbit'), work
 const editing = () =>
   [...document.body.querySelectorAll('.rd-workspace-editing .rd-workspace-name')].map((el) => el.textContent?.trim());
 
-describe('a runner’s page opened on one of its workspaces', () => {
-  it('opens that workspace’s editor, brings its row into view, and drops the parameter', async () => {
-    await mount(`/runners/${RUNNER_ID}?workspace=${SITE}`);
+describe('a workspace’s Settings address, until the Workspaces page', () => {
+  it('opens that workspace’s editor and brings its row into view', async () => {
+    await mount(`/settings/workspaces/${SITE}`);
     expect(editing()).toEqual(['site']);
     expect(document.body.querySelector('.rd-workspace-form')).not.toBeNull();
     expect(scrolledTo).toEqual([document.body.querySelector(`[data-workspace-id="${SITE}"]`)]);
-    expect(location).toBe(`/runners/${RUNNER_ID}`);
+    expect(location).toBe(`/settings/workspaces/${SITE}`);
   });
 
-  it('opens nothing for a workspace that is not on this machine', async () => {
-    const elsewhere = '33zx0JhRhJo8rd25d3qAQ';
-    await mount(`/runners/${RUNNER_ID}?workspace=${elsewhere}`, [
-      workspace(ORBIT, 'orbit'),
-      workspace(elsewhere, 'mac', '33zx0JhRhJo8rd25d3qAR'),
-    ]);
-    expect(editing()).toEqual([]);
+  it('says so for a workspace that does not exist, and opens nothing', async () => {
+    await mount(`/settings/workspaces/33zx0JhRhJo8rd25d3qAQ`);
+    expect(document.body.textContent).toContain("This workspace doesn't exist, or isn't yours.");
     expect(document.body.querySelector('.rd-workspace-form')).toBeNull();
     expect(scrolledTo).toEqual([]);
   });
 
-  it('opens nothing without the parameter', async () => {
-    await mount(`/runners/${RUNNER_ID}`);
+  it('opens the create form on the machine named', async () => {
+    await mount(`/settings/workspaces/new?machine=${RUNNER_ID}`);
     expect(editing()).toEqual([]);
-    expect(scrolledTo).toEqual([]);
+    expect(document.body.querySelector('.rd-workspace-form-new')).not.toBeNull();
   });
 });

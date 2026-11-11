@@ -5,12 +5,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerSelfUpdate } from '@orbit/shared';
-import type { Runner } from '../components/TasksSidePanel';
-import { runnerAttention, runnerCanUpdateNow, type RunnerAttentionInput } from '../lib/runnerAttention';
-import cases from '../lib/runnerAttention.cases.json';
-import { RunnerDetailPage } from './RunnerDetailPage';
-import { ToastViewport } from '../components/ToastViewport';
-import { clearToasts } from '../lib/toastStore';
+import type { Runner } from '../TasksSidePanel';
+import { runnerAttention, runnerCanUpdateNow, type RunnerAttentionInput } from '../../lib/runnerAttention';
+import cases from '../../lib/runnerAttention.cases.json';
+import { MachineSettingsPage } from './MachineSettingsPage';
+import { ToastViewport } from '../ToastViewport';
+import { clearToasts } from '../../lib/toastStore';
 
 /**
  * A runner that reports where its updates of itself stand (`selfUpdate`) gets the card its state
@@ -21,13 +21,13 @@ import { clearToasts } from '../lib/toastStore';
  * Update Runner Now.
  */
 
-vi.mock('../api', async (original) => ({
-  ...(await original<typeof import('../api')>()),
+vi.mock('../../api', async (original) => ({
+  ...(await original<typeof import('../../api')>()),
   api: vi.fn(),
 }));
-vi.mock('../lib/clipboard', () => ({ copyText: vi.fn(async () => true) }));
-const { api } = await import('../api');
-const { copyText } = await import('../lib/clipboard');
+vi.mock('../../lib/clipboard', () => ({ copyText: vi.fn(async () => true) }));
+const { api } = await import('../../api');
+const { copyText } = await import('../../lib/clipboard');
 const apiMock = vi.mocked(api);
 
 interface AttentionCase {
@@ -270,9 +270,9 @@ async function mount(input: RunnerAttentionInput, refuse?: string) {
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+        <MemoryRouter initialEntries={[`/settings/machines/${RUNNER_ID}`]}>
           <Routes>
-            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+            <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
           </Routes>
           <ToastViewport />
         </MemoryRouter>
@@ -305,15 +305,31 @@ const cards = () =>
   }));
 /** About's rows: the label, the value's own text, and the note beside it. */
 const about = () =>
-  $$('.rd-about .rd-kv').map((row) => {
-    const value = row.querySelector('.rd-kv-value')!.cloneNode(true) as HTMLElement;
+  $$('.machine-section-about .settings-row').map((row) => {
+    const value = row.querySelector('.machine-about-value')!.cloneNode(true) as HTMLElement;
     const note = text(value.querySelector('small'));
     value.querySelectorAll('small, button').forEach((el) => el.remove());
-    return [text(row.querySelector('.rd-kv-label')), text(value), note];
+    return [text(row.querySelector('.settings-row-title')), text(value), note];
   });
 const aboutRow = (label: string) => about().find(([name]) => name === label) ?? null;
-/** What About's head offers beside its title. */
-const aboutActions = () => $$('.rd-about .rd-section-head button').map(text);
+/** The header's ⋯, open: its items. */
+async function actionsMenu() {
+  await click(document.querySelector<HTMLElement>('.machine-more')!);
+  return $$('[role="menu"] [role="menuitem"]');
+}
+/** Update Runner Now, which sat in About's head and is in the header's ⋯ now (board-3 ①). */
+async function updateRunnerNow() {
+  return (await actionsMenu()).find((item) => text(item) === 'Update Runner Now')!;
+}
+/** Whether the ⋯ offers Update Runner Now; the menu closes again after. */
+async function aboutActions() {
+  const offered = (await actionsMenu()).map(text).filter((label) => label === 'Update Runner Now');
+  await act(async () => {
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+  await settle();
+  return offered;
+}
 
 describe('each selfUpdate state on a runner’s page', () => {
   it('dirNotWritable: the card says which folder, and Copy Command copies the upgrade', async () => {
@@ -330,7 +346,7 @@ describe('each selfUpdate state on a runner’s page', () => {
     ]);
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'Install folder isn’t writable']);
     // A check now would find the same folder: nothing to press but the command.
-    expect(aboutActions()).toEqual([]);
+    expect(await aboutActions()).toEqual([]);
     await click($$('.rd-attention-action button')[0]);
     expect(copyText).toHaveBeenCalledWith('sudo /usr/local/bin/orbit upgrade');
   });
@@ -349,7 +365,7 @@ describe('each selfUpdate state on a runner’s page', () => {
       },
     ]);
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'Updates are turned off']);
-    expect(aboutActions()).toEqual([]);
+    expect(await aboutActions()).toEqual([]);
   });
 
   it('failed: the card gives the reason and Update Runner Now, which asks the runner to check now', async () => {
@@ -365,7 +381,7 @@ describe('each selfUpdate state on a runner’s page', () => {
       },
     ]);
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'Runner update failed']);
-    expect(aboutActions()).toEqual(['Update Runner Now']);
+    expect(await aboutActions()).toEqual(['Update Runner Now']);
 
     await click($$('.rd-attention-action button')[0]);
     expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update` }]);
@@ -379,14 +395,14 @@ describe('each selfUpdate state on a runner’s page', () => {
     expect(cards()).toEqual([]);
     expect(document.querySelector('.rd-attention')).toBeNull();
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
-    expect(aboutActions()).toEqual(['Update Runner Now']);
+    expect(await aboutActions()).toEqual(['Update Runner Now']);
   });
 
   it('heldByRollout: no card — About says the release hasn’t rolled out to it yet', async () => {
     await mount(inputOf('selfUpdate heldByRollout and behind'));
     expect(cards()).toEqual([]);
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'not rolled out to it yet']);
-    expect(aboutActions()).toEqual(['Update Runner Now']);
+    expect(await aboutActions()).toEqual(['Update Runner Now']);
   });
 
   it('enabled: no card, though it runs as a regular user — it installs the release itself', async () => {
@@ -402,7 +418,7 @@ describe('each selfUpdate state on a runner’s page', () => {
       ['idle', 'Offline for 2 days', null],
     ]);
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', null]);
-    expect(aboutActions()).toEqual([]);
+    expect(await aboutActions()).toEqual([]);
   });
 
   it('dirNotWritable, offline: still says so — it is as true, and as fixable, while the machine is away', async () => {
@@ -435,7 +451,7 @@ describe('the last update, and Update Runner Now from About', () => {
       inputOf('selfUpdate waitingForIdle and behind'),
       'Runner is offline — it can only update while connected',
     );
-    await click($$('.rd-about .rd-section-head button')[0]);
+    await click(await updateRunnerNow());
     expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update` }]);
     expect(document.body.textContent).toContain("Couldn't start the runner update");
     expect(document.body.textContent).toContain('Runner is offline — it can only update while connected');
@@ -457,7 +473,7 @@ describe('a runner too old to report it', () => {
     ]);
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'Can’t update itself']);
     expect(aboutRow('Last Update')).toBeNull();
-    expect(aboutActions()).toEqual([]);
+    expect(await aboutActions()).toEqual([]);
   });
 
   it('a root one behind still installs when idle, with no card', async () => {
@@ -465,6 +481,6 @@ describe('a runner too old to report it', () => {
     expect(cards()).toEqual([]);
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
     expect(aboutRow('Last Update')).toBeNull();
-    expect(aboutActions()).toEqual([]);
+    expect(await aboutActions()).toEqual([]);
   });
 });

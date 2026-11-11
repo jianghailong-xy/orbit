@@ -5,8 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import type { Runner } from '../components/TasksSidePanel';
-import { RunnerDetailPage } from './RunnerDetailPage';
+import type { Runner } from '../TasksSidePanel';
+import { MachineWorkspacesEditor } from './MachineWorkspacesEditor';
+import { MachineSettingsPage } from './MachineSettingsPage';
 
 /**
  * A workspace picks which of its runner's Codex accounts its Codex sessions run on, under the
@@ -15,8 +16,8 @@ import { RunnerDetailPage } from './RunnerDetailPage';
  * account's id, which is all the control plane stores.
  */
 
-vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
-const { api } = await import('../api');
+vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
+const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 // Public ids, the spelling the web holds every id in (= uuidToBase62 of a v7 uuid).
@@ -114,7 +115,8 @@ afterEach(() => {
 });
 
 /** The runner's page, over one workspace. Every PATCH the page sends is collected. */
-function mount(r: Runner, ws: ReturnType<typeof workspace>) {
+/** `at`: the workspace editor (by default), or the machine's own Settings page. */
+function mount(r: Runner, ws: ReturnType<typeof workspace>, at = '/settings/workspaces') {
   const patches: Array<Record<string, unknown>> = [];
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     const method = options?.method ?? 'GET';
@@ -142,9 +144,10 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+        <MemoryRouter initialEntries={[at]}>
           <Routes>
-            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+            <Route path="/settings/workspaces" element={<MachineWorkspacesEditor runnerId={RUNNER_ID} workspaceId="" />} />
+            <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -304,7 +307,7 @@ describe('which Codex account a workspace runs on', () => {
 
 describe('a runner whose Codex Default is removed from Orbit', () => {
   it('draws the remaining accounts on its page, ending with Default’s line and the way back', async () => {
-    mount(withoutDefault([WORK]), workspace(null));
+    mount(withoutDefault([WORK]), workspace(null), `/settings/machines/${RUNNER_ID}`);
     await settle();
     // A group of one, as any group, starts folded: open it.
     await click(document.body.querySelector<HTMLElement>('.re-row[data-engine="codex"] .re-grp-toggle')!);

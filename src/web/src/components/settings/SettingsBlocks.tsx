@@ -31,16 +31,19 @@ export function SettingsSection({
   title,
   description,
   action,
+  className,
   children,
 }: {
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
+  /** A page's own name for the section, beside settings-section. */
+  className?: string;
   children: ReactNode;
 }) {
   const titleId = useId();
   return (
-    <section className="settings-section" aria-labelledby={titleId}>
+    <section className={className ? `settings-section ${className}` : 'settings-section'} aria-labelledby={titleId}>
       <div className="settings-section-head">
         <h2 className="settings-section-title" id={titleId}>
           {title}

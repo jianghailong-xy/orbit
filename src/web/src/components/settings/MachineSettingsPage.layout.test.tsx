@@ -1,34 +1,33 @@
 // @vitest-environment jsdom
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Runner } from '../components/TasksSidePanel';
-import type { RunnerAttentionInput } from '../lib/runnerAttention';
-import cases from '../lib/runnerAttention.cases.json';
-import { RunnerDetailPage } from './RunnerDetailPage';
-import { ToastViewport } from '../components/ToastViewport';
-import { clearToasts } from '../lib/toastStore';
+import type { Runner } from '../TasksSidePanel';
+import type { RunnerAttentionInput } from '../../lib/runnerAttention';
+import cases from '../../lib/runnerAttention.cases.json';
+import { MachineSettingsPage } from './MachineSettingsPage';
+import { SettingsWorkspacePage } from './SettingsInterimPages';
+import { ToastViewport } from '../ToastViewport';
+import { clearToasts } from '../../lib/toastStore';
 
 /**
- * A runner's page as web.png lays it out: the header, Needs Attention across the top, then the
- * machine's Engines and Workspaces beside its Capacity and About — one column on a phone, in the
- * iPhone page's order. Mounted over runnerAttention.cases.json's machines (wikova, the offline Mac
+ * A machine's Settings page as board-3 lays it out (docs/mocks/settings-redesign): one column — the
+ * name with its status pill and ⋯, Needs Attention, then Engines, Capacity, the workspaces on it
+ * (listed and linked only), About and Delete. Mounted over runnerAttention.cases.json's machines (wikova, the offline Mac
  * mini, and one with everything wrong at once), so every sentence asserted is the rule's own.
  */
 
-vi.mock('../api', async (original) => ({
-  ...(await original<typeof import('../api')>()),
+vi.mock('../../api', async (original) => ({
+  ...(await original<typeof import('../../api')>()),
   api: vi.fn(),
   // Called inside api.ts, where a mock of the exported `api` can't reach.
   cleanUpWorkspaceRepo: vi.fn(),
 }));
-vi.mock('../lib/clipboard', () => ({ copyText: vi.fn(async () => true) }));
-const { api, cleanUpWorkspaceRepo } = await import('../api');
-const { copyText } = await import('../lib/clipboard');
+vi.mock('../../lib/clipboard', () => ({ copyText: vi.fn(async () => true) }));
+const { api, cleanUpWorkspaceRepo } = await import('../../api');
+const { copyText } = await import('../../lib/clipboard');
 const apiMock = vi.mocked(api);
 
 interface AttentionCase {
@@ -65,11 +64,6 @@ function machine(prefix: string, over: Partial<Runner> = {}): Machine {
     latest: latestVersion,
   };
 }
-
-const css = readFileSync(
-  [resolve(process.cwd(), 'src/index.css'), resolve(process.cwd(), 'src/web/src/index.css')].find(existsSync)!,
-  'utf8',
-);
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -166,9 +160,11 @@ async function mount(m: Machine, counts: Array<{ workspaceId: string; running: n
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+        <MemoryRouter initialEntries={[`/settings/machines/${RUNNER_ID}`]}>
           <Routes>
-            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+            <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
+            {/* Where a workspace row and Add workspace go: until task s5, the old inline editor. */}
+            <Route path="/settings/workspaces/:id" element={<SettingsWorkspacePage />} />
             <Route path="*" element={<Arrived />} />
           </Routes>
           <ToastViewport />
@@ -226,15 +222,26 @@ const cards = () =>
     detail: text($('.rd-attention-detail', card)),
     action: text(card.querySelector('.rd-attention-action button')),
   }));
-const sectionTitles = (selector: string) => $$(`${selector} > .rd-section`).map((s) => text($('.rd-section-title', s)));
+const sectionTitles = () => $$('.machine-page .settings-section-title').map(text);
 /** About's rows: the label, the value's own text, and the note beside it. */
 const about = () =>
-  $$('.rd-about .rd-kv').map((row) => {
-    const value = $('.rd-kv-value', row).cloneNode(true) as HTMLElement;
+  $$('.machine-section-about .settings-row').map((row) => {
+    const value = $('.machine-about-value', row).cloneNode(true) as HTMLElement;
     const note = text(value.querySelector('small'));
     value.querySelectorAll('small, button').forEach((el) => el.remove());
-    return [text($('.rd-kv-label', row)), text(value), note];
+    return [text($('.settings-row-title', row)), text(value), note];
   });
+/** A Capacity row by its title. */
+const capacityRow = (title: string) => {
+  const found = $$('.machine-section-capacity .settings-row').find((row) => text($('.settings-row-title', row)) === title);
+  if (!found) throw new Error(`no Capacity row ${title}`);
+  return found;
+};
+/** Opens the header's ⋯ and reads what it holds. */
+async function openActions() {
+  await click($('.machine-more'));
+  return $$('[role="menuitem"]', $('[role="menu"]'));
+}
 
 /** Types into a number field the way a person does: the text changes, then focus leaves or Enter is
  *  pressed. */
@@ -261,48 +268,33 @@ async function keepFreeOptions() {
 }
 
 describe('a runner’s page, laid out as web.png', () => {
-  it('puts Needs Attention under the title, then Engines and Workspaces beside Capacity and About', async () => {
+  it('puts Needs Attention under the header, then Engines, Capacity, Workspaces, About and Delete in one column', async () => {
     await mount(machine('real wikova'));
-    const page = $('.rd-page');
+    const page = $('.machine-page');
     expect([...page.children].map((el) => el.className)).toEqual([
-      'rd-head',
-      'rd-title-row',
-      'rd-metaline',
-      'rd-attention',
-      'rd-cols',
+      'machine-head',
+      'rd-attention machine-attention',
+      'settings-section machine-section-engines',
+      'machine-capacity',
+      'settings-section machine-section-workspaces',
+      'settings-section machine-section-about',
+      'settings-section machine-section-delete',
     ]);
     expect($('.rd-attention').getAttribute('aria-label')).toBe('Needs Attention');
-    expect(sectionTitles('.rd-col-main')).toEqual(['Engines', 'Workspaces']);
-    expect(sectionTitles('.rd-col-side')).toEqual(['Capacity', 'About This Runner']);
-    // The header keeps its title and one line of who it is; the Details ▾ grid is gone — About has it.
-    expect(text($('.rd-title-row h1'))).toBe('wikova');
-    expect($$('.rd-metaline > span').map(text)).toEqual(['Online', '4 of 12 running', 'v0.1.197', 'vmi3129740']);
-    expect(document.body.textContent).not.toContain('Details');
-  });
-
-  it('is one column on a phone, in the iPhone page’s order', () => {
-    // The layout itself is CSS, which jsdom computes nothing of: the ≤640px block is read instead.
-    const phone = [...css.matchAll(/@media \(max-width: 640px\) \{\n([\s\S]*?)\n\}\n/g)]
-      .map((m) => m[1])
-      .filter((block) => block.includes('.rd-cols'));
-    expect(phone).toHaveLength(1);
-    const [block] = phone;
-    expect(block).toMatch(/\.rd-col \{\s*display: contents;\s*\}/);
-    // Every section the phone's full width — the desktop grid's `align-items: start` would size
-    // each one to its content instead.
-    expect(block).toMatch(/\.rd-cols \{\s*display: flex;\s*flex-direction: column;\s*align-items: stretch;\s*\}/);
-    expect(block).toMatch(/\.rd-attention \{\s*grid-template-columns: minmax\(0, 1fr\);\s*\}/);
-    const order = (section: string) => Number(new RegExp(`\\.${section} \\{\\s*order: (\\d+);`).exec(block)?.[1]);
-    const sections = ['rd-about', 'rd-workspaces', 'rd-capacity', 'rd-engines'];
-    expect(sections.every((section) => Number.isInteger(order(section)))).toBe(true);
-    expect([...sections].sort((a, b) => order(a) - order(b))).toEqual([
-      'rd-capacity',
-      'rd-engines',
-      'rd-workspaces',
-      'rd-about',
+    expect(sectionTitles()).toEqual([
+      'Engines',
+      'Capacity',
+      'Workspaces on this machine',
+      'About This Runner',
+      'Delete machine',
     ]);
-    // And two columns from 641px up, the settings column the narrower one.
-    expect(css).toMatch(/\.rd-cols \{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\) 290px;/);
+    // The header: its name, a status pill with how many of its sessions run, and who it is on one line.
+    expect(text($('.machine-title'))).toBe('wikova');
+    expect(text($('[data-testid="machine-status"]'))).toBe('Online · 4 of 12 running');
+    // Amber: something on it needs a person (the nav's dot says the same).
+    expect($('[data-testid="machine-status"]').className).toContain('machine-pill--attention');
+    expect(text($('.machine-metaline'))).toBe('vmi3129740 · v0.1.197 · Last Check-in just now');
+    expect(document.body.textContent).not.toContain('Details');
   });
 
   it('gives each item a card of its own, with the reset time in front of a quota', async () => {
@@ -354,7 +346,7 @@ describe('a runner’s page, laid out as web.png', () => {
 
     // Set a Reserve…: Capacity comes into view with Keep Free focused.
     await click(button('Set a Reserve…'));
-    expect(scrolledTo).toEqual([$('.rd-capacity')]);
+    expect(scrolledTo).toEqual([$('.machine-capacity')]);
     expect($('.rd-keep-free').contains(document.activeElement)).toBe(true);
 
     // Repair: asks first, in a session merge bar's words, then repairs through the first workspace.
@@ -369,7 +361,7 @@ describe('a runner’s page, laid out as web.png', () => {
     // view with its sign-in open.
     await click(button('Sign In'));
     expect(document.querySelector('[data-testid="arrived"]')).toBeNull();
-    const claude = $('.rd-engines [data-engine="claude"]');
+    const claude = $('.machine-section-engines [data-engine="claude"]');
     expect(claude.className).toContain('focused');
     expect(scrolledTo.at(-1)).toBe(claude);
     expect(text($('.re-panel .rsi-btn', claude))).toBe('Sign in to Claude Code');
@@ -405,10 +397,10 @@ describe('a runner’s page, laid out as web.png', () => {
 
   it('draws the disk its workspaces fill first, amber from 90%', async () => {
     await mount(machine('real wikova'));
-    expect(text($('.rd-disk .rd-kv-row'))).toBe('Disk187 of 197 GB used');
-    expect($('.rd-disk-bar').className).toBe('rd-disk-bar warn');
+    expect(text($('.settings-row-text', capacityRow('Disk')))).toBe('Disk187 of 197 GB used');
+    expect($('.rd-disk-bar', capacityRow('Disk')).className).toBe('rd-disk-bar machine-disk-bar warn');
     expect($<HTMLElement>('.rd-disk-bar > span').style.width).toBe('95%');
-    expect(text($('.rd-capacity .rd-hint'))).toBe(
+    expect(text($('.machine-section-capacity .rd-hint'))).toBe(
       'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task runs stop ' +
         'being sent here and finished worktrees are cleaned up sooner.',
     );
@@ -425,8 +417,8 @@ describe('a runner’s page, laid out as web.png', () => {
       ['Last Check-in', 'just now', null],
       ['Registered', new Date(ENROLLED).toLocaleDateString([], { month: 'short', day: 'numeric' }), null],
     ]);
-    expect(text($('.rd-about .rd-hint'))).toBe('Runs as root, so sessions here can’t use Bypass permissions.');
-    await click(button('Rename', $('.rd-about')));
+    expect(text($('.machine-section-about .rd-hint'))).toBe('Runs as root, so sessions here can’t use Bypass permissions.');
+    await click(button('Rename', $('.machine-section-about')));
     expect(nameOf($('[role="dialog"]'))).toBe('Rename runner');
   });
 
@@ -439,18 +431,18 @@ describe('a runner’s page, laid out as web.png', () => {
     host?.remove();
     await mount(machine('not root and behind'));
     expect(about()[2]).toEqual(['Version', '0.1.190', 'Can’t update itself']);
-    expect($('.rd-about small').className).toBe('warn');
+    expect($('.machine-section-about small').className).toBe('warn');
     expect(about()[3]).toEqual(['Runs As', 'regular user', null]);
-    expect(document.body.querySelector('.rd-about .rd-hint')).toBeNull();
+    expect(document.body.querySelector('.machine-section-about .rd-hint')).toBeNull();
   });
 
-  it('keeps Rename, Rotate token and Delete in Actions — Max Concurrent moved to Capacity', async () => {
+  it('keeps the machine’s actions in the header’s ⋯: Rename, the updates, Rotate token and Delete', async () => {
     const { sent } = await mount(machine('real wikova'));
-    await click(button('Actions'));
-    const menu = $('[role="menu"]');
-    expect($$('[role="menuitem"]', menu).map(text)).toEqual(['Rename', 'Rotate token', 'Delete']);
+    const items = await openActions();
+    // Update runner now only where a check can change something: wikova runs the latest release.
+    expect(items.map(text)).toEqual(['Rename', 'Update engines', 'Refresh models', 'Rotate token', 'Delete']);
     // Rotate token asks, then shows the new token once — the Runners list's own dialogs.
-    await click($$('[role="menuitem"]', menu)[1]);
+    await click(items[3]);
     const confirm = $('[role="alertdialog"]');
     expect(nameOf(confirm)).toBe('Rotate token for “wikova”?');
     await click(button('Rotate token', confirm));
@@ -458,22 +450,53 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(text($('.runner-token-box'))).toBe('orbit_rt_fresh');
   });
 
-  it('counts each workspace’s running sessions on its row', async () => {
+  it('renames from the ⋯, and deletes from it or from Delete machine once asked', async () => {
+    const { sent } = await mount(machine('real wikova'));
+    await click((await openActions())[0]);
+    expect(nameOf($('[role="dialog"]'))).toBe('Rename runner');
+    await click(button('Cancel', $('[role="dialog"]')));
+
+    await click((await openActions()).at(-1)!);
+    let confirm = $('[role="alertdialog"]');
+    expect(nameOf(confirm)).toBe('Delete “wikova”?');
+    await click(button('Cancel', confirm));
+    expect(sent).toEqual([]);
+
+    await click(button('Delete', $('.machine-section-delete')));
+    confirm = $('[role="alertdialog"]');
+    expect(descriptionOf(confirm)).toBe(
+      'This removes the runner and its workspaces from your account. Re-register the machine to add it back.',
+    );
+    await click(button('Delete', confirm));
+    expect(sent).toEqual([{ method: 'DELETE', path: `/runners/${RUNNER_ID}` }]);
+    // With no machine left, Settings' General.
+    expect(text($('[data-testid="arrived"]'))).toBe('/settings/general');
+  });
+
+  it('lists the workspaces on it, each a link to its own page, with its folder and running sessions', async () => {
     await mount(machine('real wikova'), [{ workspaceId: 'ws-orbit', running: 4 }]);
-    const rows = $$('.rd-workspace-row').map((row) => [
-      text($('.rd-workspace-name', row)),
+    const rows = $$('.machine-workspace-row').map((row) => [
+      text($('.settings-row-title', row)),
+      row.getAttribute('href'),
       text(row.querySelector('.rd-workspace-running')),
     ]);
-    expect(rows).toEqual([
+    expect(rows.map(([name, , running]) => [name, running])).toEqual([
       ['orbit', '4 running'],
       ['wikova-develop', null],
       ['wikova-prod', null],
     ]);
+    expect(rows.every(([, href]) => href?.startsWith('/settings/workspaces/'))).toBe(true);
+    // Listed and linked only: no workspace form on this page.
+    expect(document.querySelector('.rd-workspace-form')).toBeNull();
+    // Until task s5, a row opens the old inline editor on that workspace.
+    await click($('.machine-workspace-row'));
+    expect(text($('.rd-workspace-editing .rd-workspace-name'))).toBe('orbit');
   });
 
   it('the Mac mini, offline: when it was last seen, how to wake it, and the command that updates it', async () => {
     await mount(machine('real longdeMac-mini.local'));
-    expect(text($('.rd-metaline > span'))).toMatch(/^Offline · last seen /);
+    expect(text($('[data-testid="machine-status"]'))).toMatch(/^Offline · last seen /);
+    expect($('[data-testid="machine-status"]').className).toContain('machine-pill--offline');
     expect(cards().map(({ tone, title, action }) => [tone, title, action])).toEqual([
       ['idle', 'Offline for 14 days', null],
       ['warn', 'Can’t update itself', 'Copy Command'],
@@ -481,8 +504,8 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(cards()[0].detail).toBe('Start the runner on that machine — it reconnects within 30 seconds.');
     // Nothing on it can be updated, re-read or signed in from here while it is away, and the page
     // says why.
-    expect($$('.rd-engines button').filter((b) => !(b as HTMLButtonElement).disabled).map(text)).toEqual([]);
-    expect(text($('.rd-engines .rd-hint'))).toBe('Signing in and updating need the runner online.');
+    expect($$('.machine-section-engines button').filter((b) => !(b as HTMLButtonElement).disabled).map(text)).toEqual([]);
+    expect(text($('.machine-section-engines .rd-hint'))).toBe('Signing in and updating need the runner online.');
     expect(about()[2]).toEqual(['Version', '0.1.155', 'Can’t update itself']);
   });
 });
@@ -502,7 +525,7 @@ describe('a machine where no coding CLI is signed in', () => {
     ]);
     await click(button('Sign In'));
     expect(document.querySelector('[data-testid="arrived"]')).toBeNull();
-    const claude = $('.rd-engines [data-engine="claude"]');
+    const claude = $('.machine-section-engines [data-engine="claude"]');
     expect(claude.className).toContain('focused');
     expect(scrolledTo.at(-1)).toBe(claude);
     expect(text($('.re-panel .rsi-btn', claude))).toBe('Sign in to Claude Code');
@@ -540,25 +563,25 @@ describe('the Workspaces section of a machine with none', () => {
     expect(text($('.rd-empty'))).toContain('No workspaces on Austin box yet.');
   });
 
-  it('Add workspace steps back to a secondary button, and still opens the form', async () => {
+  it('Add workspace, a quiet button in the section’s head, opens the create form on this machine', async () => {
     await mount(machine('no CLI signed in and no workspace'));
     expect(addWorkspace().className).toContain('orbit-button-default');
-    expect(addWorkspace().className).not.toContain('orbit-button-primary');
     expect(button('Start a session').className).toContain('orbit-button-primary');
     await click(addWorkspace());
-    expect($('.rd-workspace-form')).toBeTruthy();
-    expect(document.querySelector('.rd-empty')).toBeNull();
+    // Until task s5, the old inline editor's create form, at the workspace's Settings address.
+    expect($('.rd-workspace-form-new')).toBeTruthy();
   });
 
-  it('with workspaces, Add workspace is the section’s primary action again, and nothing says Start a session', async () => {
+  it('with workspaces, nothing says Start a session', async () => {
     await mount(machine('real wikova'));
-    expect(addWorkspace().className).toContain('orbit-button-primary');
+    expect(addWorkspace()).toBeTruthy();
     expect($$('button').some((b) => text(b) === 'Start a session')).toBe(false);
   });
 });
 
-// The Add workspace form: a workspace made here says which folder it runs in (P0 of
-// docs/mocks/first-workspace-in-conversation, 04). A saved one is edited as it was.
+// The Add workspace form, reached from this page (until task s5, the old inline editor): a workspace
+// made here says which folder it runs in (P0 of docs/mocks/first-workspace-in-conversation, 04). A
+// saved one is edited as it was.
 describe('the Add workspace form', () => {
   const form = () => $('.rd-workspace-form');
   const field = (label: string) => {

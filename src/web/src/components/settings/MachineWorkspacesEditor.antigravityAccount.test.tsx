@@ -4,62 +4,61 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import type { Runner } from '../components/TasksSidePanel';
-import { RunnerDetailPage } from './RunnerDetailPage';
+import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
+import type { Runner } from '../TasksSidePanel';
+import { MachineWorkspacesEditor } from './MachineWorkspacesEditor';
 
 /**
- * A workspace picks which of its runner's Cursor CLI accounts its Cursor CLI sessions run on, under the
- * workspace form's Advanced — beside the other engines', shown once the runner has two (P4a). What the
- * save sends is the account's id (`cursorAccount`), which dispatch hands the runner as that account's
- * directory (ORBIT_CURSOR_ACCOUNT_DIR). Each account says what Cursor reports of it: a share used only
- * above 0, and no number at all otherwise.
+ * A workspace picks which of its runner's Antigravity (Google) accounts its Antigravity sessions run
+ * on, under the workspace form's Advanced — a third field beside Codex's and Claude's, shown once the
+ * runner has two accounts. What the save sends is the account's id (`antigravityAccount`).
  */
 
-vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
-const { api } = await import('../api');
+vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
+const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
 const WORKSPACE_ID = '33zx0JhRhJo8rd25d3qAN';
 
-const DEFAULT: RunnerEngineAccount = { id: 'default', home: '/root/.orbit/cursor/default', auth: 'yes' };
-const TEAM: RunnerEngineAccount = { id: '5c2e91a0', name: 'Team', home: '/root/.orbit/cursor-accounts/5c2e91a0', auth: 'yes' };
+const DEFAULT: RunnerEngineAccount = { id: 'default', home: '/root/.orbit/antigravity/google', auth: 'yes' };
+const WORK: RunnerEngineAccount = {
+  id: '5c2e91a0',
+  name: 'Work',
+  home: '/root/.orbit/antigravity-accounts/5c2e91a0',
+  auth: 'yes',
+};
 
-const cursor = (accounts: RunnerEngineAccount[]): RunnerEngineHealth => ({
-  engine: 'cursor',
+/** agy's buckets for Default and Work, on the engine's own health: what is left of each. */
+const antigravity = (accounts: RunnerEngineAccount[], over: Partial<RunnerEngineHealth> = {}): RunnerEngineHealth => ({
+  engine: 'antigravity',
   installed: true,
   auth: 'yes',
-  version: '2026.10.14-941492e',
+  authSource: 'google',
+  version: '1.3.0',
   accounts,
-});
-
-/** Default on the Free plan, which Cursor reports no share of; Team on Pro at 34%. */
-const USAGE: PlanUsage = {
-  cursor: {
-    provider: 'cursor' as never,
-    account: 'default',
-    planName: 'Free',
-    accounts: { [TEAM.id]: { provider: 'cursor' as never, planName: 'Pro', includedUsage: { percentUsed: 34 } } },
+  planUsage: {
+    provider: 'antigravity',
+    buckets: [{ id: 'gemini-weekly', window: 'weekly', remainingFraction: 0.72 }],
+    accounts: { [WORK.id]: { provider: 'antigravity', buckets: [{ id: 'gemini-5h', window: '5h', remainingFraction: 0.04 }] } },
   },
-};
+  ...over,
+});
 
 const runner = (engine: RunnerEngineHealth): Runner => ({
   id: RUNNER_ID,
   name: 'hpc',
   online: true,
-  capabilities: ['provider:cursor', 'cursor-account-login/v1'],
   engines: [{ engine: 'claude', installed: true, auth: 'yes' }, engine],
-  planUsage: USAGE,
 });
 
-const workspace = (cursorAccount: string | null, env: Record<string, string> = {}) => ({
+const workspace = (antigravityAccount: string | null) => ({
   id: WORKSPACE_ID,
   name: 'orbit',
   runnerId: RUNNER_ID,
   workDir: '/srv/orbit',
-  env,
-  cursorAccount,
+  env: {},
+  antigravityAccount,
   createdAt: '2026-09-23T08:00:00.000Z',
 });
 
@@ -120,9 +119,9 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+        <MemoryRouter initialEntries={['/settings/workspaces']}>
           <Routes>
-            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+            <Route path="/settings/workspaces" element={<MachineWorkspacesEditor runnerId={RUNNER_ID} workspaceId="" />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -165,7 +164,7 @@ async function openAdvanced() {
 
 const field = () =>
   [...document.body.querySelectorAll<HTMLElement>('.rd-form-field')].find(
-    (el) => el.querySelector('.rd-form-label')?.textContent === 'Cursor CLI account',
+    (el) => el.querySelector('.rd-form-label')?.textContent === 'Antigravity account',
   );
 
 /** The account picker, as its role names it. */
@@ -180,32 +179,38 @@ async function options() {
   });
 }
 
-describe('which Cursor CLI account a workspace runs on', () => {
-  it('offers each account with what Cursor reports of it, and saves the id picked', async () => {
-    const { patches } = mount(runner(cursor([DEFAULT, TEAM])), workspace(null));
+describe('which Antigravity account a workspace runs on', () => {
+  it('offers each Google account with what is left of its emptiest bucket, and saves the id picked', async () => {
+    const { patches } = mount(runner(antigravity([DEFAULT, WORK])), workspace(null));
     await openAdvanced();
     expect(picker()?.textContent).toContain('Automatic');
     const offered = await options();
     expect(offered.map((o) => o.text)).toEqual([
       ['Automatic', 'each new session starts on the account whose quota resets soonest'],
-      ['Default (~/.orbit/cursor/default)', 'Free plan · usage unavailable · signed in'],
-      ['Team', 'Monthly limit 34% · signed in'],
+      ['Default (~/.orbit/antigravity/google)', 'gemini-weekly 72% left · signed in'],
+      ['Work', 'gemini-5h 4% left · signed in'],
     ]);
-    // A conversation that has started stays on its account (D5): Automatic promises no move.
-    expect(field()?.querySelector('.rd-path-hint')?.textContent).toBe(
-      'Only applies to sessions that run Cursor CLI on this machine. Automatic starts each new session on the account whose quota resets soonest, so none of it goes unused.',
-    );
     await press(offered[2].el);
     await click(byText('button', 'Save'));
     expect(patches).toHaveLength(1);
-    expect(patches[0].cursorAccount).toBe(TEAM.id);
+    expect(patches[0].antigravityAccount).toBe(WORK.id);
+  });
+
+  it('says a Default on the runner’s Gemini key runs on that key', async () => {
+    mount(
+      runner(antigravity([{ ...DEFAULT, auth: 'no' }, WORK], { authSource: 'env_key' })),
+      workspace(null),
+    );
+    await openAdvanced();
+    const offered = await options();
+    expect(offered[1].text).toEqual(['Default (~/.orbit/antigravity/google)', 'env key · runs on your Gemini key']);
   });
 
   it('asks nothing of a runner with one account, and keeps the choice it never showed', async () => {
-    const { patches } = mount(runner(cursor([DEFAULT])), workspace(null));
+    const { patches } = mount(runner(antigravity([DEFAULT])), workspace(null));
     await openAdvanced();
     expect(field()).toBeUndefined();
     await click(byText('button', 'Save'));
-    expect(patches.at(-1)?.cursorAccount).toBeNull();
+    expect(patches.at(-1)?.antigravityAccount).toBeNull();
   });
 });

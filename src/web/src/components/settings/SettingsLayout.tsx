@@ -137,7 +137,7 @@ function SettingsNav() {
   // online, else the first one; with no machine at all, registering one comes first.
   const addWorkspace = () => {
     const runner = runners.find((r) => !runnerIsOffline(r, nowMs)) ?? runners[0];
-    navigate(runner ? `/settings/machines/${runner.id}?workspace=new` : '/runners/register');
+    navigate(runner ? `/settings/workspaces/new?machine=${runner.id}` : '/runners/register');
   };
 
   return (

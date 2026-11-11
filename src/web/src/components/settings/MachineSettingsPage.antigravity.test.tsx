@@ -4,12 +4,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../api';
-import type { Runner } from '../components/TasksSidePanel';
-import { SettingsVendorPage } from '../components/settings/SettingsProviderPages';
-import { InfrastructurePage } from './InfrastructurePage';
+import { api } from '../../api';
+import type { Runner } from '../TasksSidePanel';
+import { MachineSettingsPage } from './MachineSettingsPage';
+import { SettingsVendorPage } from './SettingsProviderPages';
 
-vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
+vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
 const apiMock = vi.mocked(api);
 const gemini = {
   id: 'gemini-key', slug: 'gemini', label: 'Gemini', presetSlug: 'gemini', runtime: 'antigravity',
@@ -31,7 +31,7 @@ const words = (el: Element | null | undefined) => {
   return copy.textContent?.replace(/\s+/g, ' ').trim() ?? null;
 };
 
-describe('Antigravity identity and readiness on the Infrastructure page and Gemini’s Settings page', () => {
+describe('Antigravity identity and readiness on a machine’s Settings page and Gemini’s', () => {
   let root: Root;
   let container: HTMLDivElement;
   let client: QueryClient;
@@ -63,8 +63,8 @@ describe('Antigravity identity and readiness on the Infrastructure page and Gemi
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  /** The machine's card on /infrastructure; the Gemini key on its vendor's Settings page. */
-  async function mount(runners: Runner[], at = '/infrastructure?runner=33zx0JhRhJo8rd25d3qAM&engine=antigravity') {
+  /** The machine's Settings page; the Gemini key on its vendor's Settings page. */
+  async function mount(runners: Runner[], at = '/settings/machines/33zx0JhRhJo8rd25d3qAM?engine=antigravity') {
     rows = runners;
     client.setQueryData(['runners'], rows);
     client.setQueryData(['providers', 'mine'], [gemini]);
@@ -74,7 +74,7 @@ describe('Antigravity identity and readiness on the Infrastructure page and Gemi
       root.render(<MemoryRouter initialEntries={[at]}>
         <QueryClientProvider client={client}>
           <Routes>
-            <Route path="/infrastructure" element={<InfrastructurePage />} />
+            <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
             <Route path="/settings/providers/:vendor" element={<SettingsVendorPage />} />
           </Routes>
         </QueryClientProvider>
