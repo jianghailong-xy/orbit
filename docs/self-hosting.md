@@ -1030,6 +1030,9 @@ stops by itself and loses nothing that is in flight (`src/apiserver/src/common/g
    the apiserver closes it once the answer is sent. It closes idle connections at once.
 4. It then stops its background work and closes NATS, its coordination connection and the database. The leader's lock
    goes with that connection, so another apiserver takes over the reaper and the sweeps at its next poll.
+5. It exits, but no sooner than 4 seconds after the stop began. Until then its address refuses connections, so a
+   session stream that opens again a moment later is sent to another apiserver at once. An address that no longer
+   answers at all would make the web gateway wait out its 2-second connect timeout first.
 
 It exits 0 within 9 seconds, inside Docker's default grace period of 10 seconds. A request still unanswered after the
 6 seconds is cut, and its caller asks again. Only the slow ones wait that long, such as a merge called with

@@ -17,6 +17,13 @@ import { type MonoTypeOperatorFunction, ReplaySubject, takeUntil } from 'rxjs';
  *   5. Then Nest's shutdown hooks stop the background work and close NATS, the LISTEN client, the leader's lock and
  *      the database: Nest runs every onModuleDestroy before it closes the HTTP server, which is why steps 1 to 4 are
  *      done here first.
+ *   6. The process stays, its listeners closed, until LINGER_MS after the stop began, and then exits. While it is
+ *      there its address refuses connections at once, and the web gateway and the link gateway move on to another
+ *      apiserver and pass this one over (nginx for 10 s, the link gateway for 5 s). Once it has exited, its address
+ *      answers nothing: a caller that still has it, as nginx does until it next looks the name up (10 s), waits out
+ *      its connect timeout first (2 s), and measured on the staging stack (2026-11-11), nine session streams opening
+ *      again a second after an apiserver had stopped in 12 ms got 504s that way. Waiting covers the clients that
+ *      open their stream again after it ended: the web app after 2 to 2.5 s.
  *
  * All of it ends within STOP_MS, inside the apiserver's stop grace period: docker-compose.yml sets none for it, so
  * `docker stop` and Compose give it Docker's default, 10 s, before SIGKILL. A stop that has not ended by STOP_MS exits
@@ -25,6 +32,7 @@ import { type MonoTypeOperatorFunction, ReplaySubject, takeUntil } from 'rxjs';
  * callers ask again, as after any lost connection.
  */
 export const DRAIN_MS = 6_000;
+export const LINGER_MS = 4_000;
 export const STOP_MS = 9_000;
 
 const stopping = new ReplaySubject<void>(1);

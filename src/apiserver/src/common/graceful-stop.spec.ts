@@ -9,7 +9,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { interval, map } from 'rxjs';
 
 import { KeptAliveConnection } from '../test-support/kept-alive';
-import { DRAIN_MS, drainable, endStreams, STOP_MS, untilStopping } from './graceful-stop';
+import { DRAIN_MS, drainable, endStreams, LINGER_MS, STOP_MS, untilStopping } from './graceful-stop';
 import { holdIdleConnections } from './idle-connections';
 
 /**
@@ -120,5 +120,6 @@ test('the whole stop ends inside the grace period docker stop gives the apiserve
   // None set is Docker's default, 10 s.
   const graceMs = set ? Number(set[1]) * 1_000 : 10_000;
   assert.ok(DRAIN_MS < STOP_MS, `the drain (${DRAIN_MS} ms) leaves the shutdown hooks no time before ${STOP_MS} ms`);
+  assert.ok(LINGER_MS < STOP_MS, `the stop waits ${LINGER_MS} ms before it exits, past ${STOP_MS} ms`);
   assert.ok(STOP_MS < graceMs, `a stop may take ${STOP_MS} ms, and Docker SIGKILLs the apiserver after ${graceMs} ms`);
 });

@@ -1,10 +1,11 @@
 import 'reflect-metadata';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { Logger, ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
-import { drainable, type DrainableServer, DRAIN_MS, endStreams, STOP_MS } from './common/graceful-stop';
+import { drainable, type DrainableServer, DRAIN_MS, endStreams, LINGER_MS, STOP_MS } from './common/graceful-stop';
 import { holdIdleConnections } from './common/idle-connections';
 import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
@@ -114,7 +115,8 @@ async function bootstrap() {
 /**
  * On SIGTERM (`docker stop`) or SIGINT, the stop common/graceful-stop.ts describes: both listeners stop accepting,
  * the streams end, what is in flight is answered for up to DRAIN_MS, then Nest's shutdown hooks close the rest. It
- * exits 0 once stopped, and 1 if it has not stopped within STOP_MS. A second signal changes nothing.
+ * exits 0 once stopped and LINGER_MS has passed, and 1 if it has not stopped within STOP_MS. A second signal changes
+ * nothing.
  */
 function stopOnSignals(ready: Promise<{ app: INestApplication; listeners: DrainableServer[] }>): void {
   const log = new Logger('Stop');
@@ -139,6 +141,8 @@ function stopOnSignals(ready: Promise<{ app: INestApplication; listeners: Draina
     );
     await app.close();
     log.log(`stopped in ${Date.now() - began} ms`);
+    // Refusing connections rather than gone, for the callers still sending here (graceful-stop.ts, step 6).
+    await sleep(Math.max(0, began + LINGER_MS - Date.now()));
     process.exit(0);
   };
   for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void stop(signal));

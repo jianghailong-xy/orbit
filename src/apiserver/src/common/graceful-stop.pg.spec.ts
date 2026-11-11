@@ -9,7 +9,7 @@
  *   - the idle connections are closed, and the session stream ends cleanly (a whole chunked answer, not a reset);
  *   - the busy request, its body finished after the stop began, is answered with `Connection: close`, and its
  *     connection closes after the answer rather than keepAliveTimeout (120 s) later;
- *   - the process exits 0 by itself within STOP_MS, its shutdown hooks run;
+ *   - the process exits 0 by itself within STOP_MS, its shutdown hooks run, no sooner than LINGER_MS;
  *   - the stream, opened again on the second apiserver from the last seq it had, gets the event stored meanwhile.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/common/graceful-stop.pg.spec.ts
@@ -31,7 +31,7 @@ import { startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { KeptAliveConnection } from '../test-support/kept-alive';
-import { STOP_MS } from './graceful-stop';
+import { LINGER_MS, STOP_MS } from './graceful-stop';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -187,6 +187,8 @@ test('SIGTERM: a real apiserver refuses new connections, ends its streams, answe
   assert.equal(signal, null, `the apiserver was ended by ${signal}:\n${stopping.output().slice(-4_000)}`);
   assert.equal(code, 0, `the apiserver exited ${code}:\n${stopping.output().slice(-4_000)}`);
   assert.ok(took < STOP_MS, `the stop took ${took} ms`);
+  // It stayed, refusing connections, rather than vanish while callers still had its address (graceful-stop.ts, step 6).
+  assert.ok(took >= LINGER_MS - 100, `the apiserver exited ${took} ms after SIGTERM, before LINGER_MS (${LINGER_MS} ms)`);
   assert.match(stopping.output(), /SIGTERM: stopping; no new connections, \d+ request\(s\) in flight, streams ending/);
   assert.match(stopping.output(), /every request answered/);
   assert.match(stopping.output(), /stopped in \d+ ms/);
