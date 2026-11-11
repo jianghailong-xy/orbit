@@ -76,6 +76,14 @@ object OrbitTurnCards {
 
     fun answered(card: JsonObject) = card.text("answeredBy") == "SESSION" || card.text("answeredBy") == "OWNER"
 
+    /**
+     * The card to draw: the turn's card was read when it was handed out, before anyone answered, so while it names no answerer its
+     * request's card as it stands now (`GET /session-requests/:id` → `runQuestion`, web `live ?? stored`) is drawn over it. Once the
+     * stored card names who answered, that never changes and the request is neither read nor used.
+     */
+    fun runQuestionShown(stored: JsonObject, request: JsonObject?): JsonObject =
+        request?.obj("runQuestion")?.takeIf { !answered(stored) && isRunQuestion(it) } ?: stored
+
     /** One question as the card lists it: each option, whether it was picked, and any answer in the person's own words. */
     data class Option(val label: String, val picked: Boolean)
     data class Question(val text: String, val options: List<Option>, val ownWords: List<String>)

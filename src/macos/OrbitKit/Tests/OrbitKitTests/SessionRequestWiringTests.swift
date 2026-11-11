@@ -89,6 +89,16 @@ final class SessionRequestWiringTests: XCTestCase {
         XCTAssertTrue(status.contains { $0.contains("owesReplyTo") })
     }
 
+    func testTheRunQuestionCardIsReadLiveUntilItSaysWhoAnswered() throws {
+        let file = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/OrbitTurnCardViews.swift")
+        let view = statements(try section(file, from: "struct RunQuestionCardView: View", to: "struct RunNoticeCardView"))
+        XCTAssertTrue(view.contains("private var card: RunQuestionCard { RunQuestionCard.drawn(stored: stored, live: live) }"))
+        XCTAssertTrue(view.contains("if let fresh = try? await api.sessionRequest(stored.requestId) { live = fresh }"))
+        XCTAssertTrue(view.contains(".task(id: refreshKey) { if stored.readsLive { await load() } }"))
+        XCTAssertTrue(view.contains("if RunQuestionCard.keepsReading(live) { await load() }"))
+        XCTAssertTrue(view.contains { $0.contains("model.session(id: $0.toSessionId)") })
+    }
+
     func testTheReplyCardOpensTheOriginalRequestAndOffersNothingToAnswer() throws {
         let file = try source(Self.replyCardPath)
         let card = statements(try section(file, from: "struct SessionReplyCardView: View", to: "\n}\n"))

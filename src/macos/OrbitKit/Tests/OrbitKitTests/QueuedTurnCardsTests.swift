@@ -93,7 +93,7 @@ final class QueuedTurnCardsTests: XCTestCase {
     private static let notCards: Set<String> = [
         "id", "text", "attachments", "ts", "clientTurnId", "turnId", "pending", "queued", "undelivered",
         "note", "authoredByOrbit", "steer", "delivery", "withdrawable", "shell",
-        "receipt", "deliveryCode", "deliveryReason",
+        "receipt", "deliveryCode", "deliveryReason", "opensTurn",
     ]
 
     /// What the agent reads on such a turn: words written for it, which no card is read out of.

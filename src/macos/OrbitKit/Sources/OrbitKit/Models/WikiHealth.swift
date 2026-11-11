@@ -149,20 +149,62 @@ public enum WikiRepoLook: String, Codable, Sendable, CaseIterable {
     public static let contractOrder: [WikiRepoLook] = [.ready, .noWorkspace, .runnerMissing, .runnerOffline, .runnerUpgrade]
 }
 
-/// The repository half of the health read (P2): the look, and how many of the space's repository operations wait.
+/// What a maintenance run read of the repository (contract `repoOps.tiers`, docs/wiki-repo-tiers-design.md §7.1): a
+/// git checkout, a folder that is not one, the sessions alone, or another repository's folder.
+public enum WikiRepoTier: String, Codable, Sendable, CaseIterable {
+    case git
+    case folder
+    case sessions
+    case wrongRepository = "wrong_repository"
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiRepoTier(rawValue: raw) ?? .unknown
+    }
+
+    /// The four the contract names, in its order (`WIKI_REPO_TIERS`).
+    public static let contractOrder: [WikiRepoTier] = [.git, .folder, .sessions, .wrongRepository]
+
+    /// The reasons somebody has to set right (`WIKI_REPO_ATTENTION_REASONS`): another repository's folder, or a
+    /// credential the remote refused. The line draws them red.
+    public static let attentionReasons: [String] = ["wrong_repository", "root_mismatch", "path_overlap", "fetch_refused"]
+
+    /// A reason is one somebody has to set right (`wikiRepoReasonNeedsAttention`).
+    public static func reasonNeedsAttention(_ reason: String?) -> Bool { attentionReasons.contains(reason ?? "") }
+}
+
+/// The repository half of the health read (P2): the look, how many of the space's repository operations wait, and —
+/// from the repository tiers on — what the latest maintenance run read of it (§7.2). Each tier field is absent from an
+/// older control plane, and nil while no run has read the repository.
 public struct WikiSpaceRepoHealth: Codable, Equatable, Sendable {
     public let look: WikiRepoLook
     public let pending: Int
+    public let tier: WikiRepoTier?
+    /// Why it read less than git (contract `repoOps.reasons`); nil on git and the folder.
+    public let reason: String?
+    /// That reason as one English sentence, redacted; on the folder what the folder is; nil on git.
+    public let detail: String?
+    public let checkedAt: String?
 
-    public init(look: WikiRepoLook, pending: Int = 0) {
+    public init(look: WikiRepoLook, pending: Int = 0, tier: WikiRepoTier? = nil, reason: String? = nil,
+                detail: String? = nil, checkedAt: String? = nil) {
         self.look = look
         self.pending = pending
+        self.tier = tier
+        self.reason = reason
+        self.detail = detail
+        self.checkedAt = checkedAt
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         look = (try? c.decodeIfPresent(WikiRepoLook.self, forKey: .look)) ?? .unknown
         pending = (try? c.decodeIfPresent(Int.self, forKey: .pending)) ?? 0
+        tier = try? c.decodeIfPresent(WikiRepoTier.self, forKey: .tier)
+        reason = try? c.decodeIfPresent(String.self, forKey: .reason)
+        detail = try? c.decodeIfPresent(String.self, forKey: .detail)
+        checkedAt = try? c.decodeIfPresent(String.self, forKey: .checkedAt)
     }
 }
 

@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -28,11 +29,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.reader.personWords
+import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.ui.LocalOrbitColors
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -77,8 +81,9 @@ internal fun OrbitTurnCardView(card: InteractionCard, event: RunEvent?, open: (S
             tag = "turn-run-question", tone = MaterialTheme.colorScheme.primary,
             icon = R.drawable.ic_question_bubble, head = OrbitTurnCards.questionFromRun, ts = ts,
         ) {
-            TaskTitle(OrbitTurnCards.runTaskTitle(source), source.text("taskId"), open)
-            OrbitTurnCards.runQuestions(source).forEach { question ->
+            val shown = liveRunQuestion(card)
+            TaskTitle(OrbitTurnCards.runTaskTitle(shown), shown.text("taskId"), open)
+            OrbitTurnCards.runQuestions(shown).forEach { question ->
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(question.text, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
                     question.options.forEach { option ->
@@ -90,8 +95,8 @@ internal fun OrbitTurnCardView(card: InteractionCard, event: RunEvent?, open: (S
                     }
                 }
             }
-            StateText(OrbitTurnCards.runQuestionState(source))
-            if (!OrbitTurnCards.answered(source)) source.text("runSessionId")?.let { OpenTaskSession(it, open) }
+            StateText(OrbitTurnCards.runQuestionState(shown))
+            if (!OrbitTurnCards.answered(shown)) shown.text("runSessionId")?.let { OpenTaskSession(it, open) }
             if (undelivered) Undelivered()
             event?.let { BlockFold("${card.key}:told", it, OrbitTurnCards.coordinatorTold) }
         }
@@ -106,6 +111,28 @@ internal fun OrbitTurnCardView(card: InteractionCard, event: RunEvent?, open: (S
             event?.let { BlockFold("${card.key}:told", it, OrbitTurnCards.coordinatorTold) }
         }
     }
+}
+
+/**
+ * A task run's question as it stands now: its request's card ([OrbitTurnCards.runQuestionShown]), read only while the stored card names
+ * no answerer, gated and refreshed as the session message's request state (`TranscriptCardView`). Unread or unreadable, the stored card.
+ */
+@Composable
+private fun liveRunQuestion(card: InteractionCard): JsonObject {
+    val stored = card.source
+    val resources = LocalReaderResources.current
+    val app = LocalContext.current.applicationContext as? OrbitApplication
+    val live = app?.realtime?.state?.collectAsState()?.value
+    val authorized = resources != null && live?.handle === resources.handle && live?.session?.id == resources.sessionId && live?.session?.fresh == true && live?.session?.accessDenied == false
+    var request by remember(card.key) { mutableStateOf<JsonObject?>(null) }
+    val requestId = stored.text("requestId").takeIf { !OrbitTurnCards.answered(stored) }
+    LaunchedEffect(resources, requestId, authorized, live?.session?.snapshotReads) {
+        if (!authorized || requestId == null) return@LaunchedEffect
+        try { request = CardAuthority(resources!!.auth, resources.handle).get(listOf("session-requests", requestId)) as? JsonObject }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (_: Exception) { }
+    }
+    return OrbitTurnCards.runQuestionShown(stored, request)
 }
 
 /** Whether a card is one of the five this file draws: the row is then only that card (and the opening, only its line). */

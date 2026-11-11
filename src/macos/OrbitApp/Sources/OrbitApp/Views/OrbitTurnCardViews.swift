@@ -204,13 +204,59 @@ struct EvidenceSentBackCardView: View {
 }
 
 struct RunQuestionCardView: View {
-    let card: RunQuestionCard
+    /// The card the echo stored: read when the turn was handed out, before anyone answered.
+    let stored: RunQuestionCard
     let told: String
     var ts: String?
     var undelivered: Bool = false
     var onCancelQueued: (() -> Void)?
 
+    @Environment(AppModel.self) private var model
+    /// The request as it stands now (`GET /session-requests/:id`): its `runQuestion` is the card
+    /// answered, by whom, or passed to the owner, and is drawn over the stored one.
+    @State private var live: SessionRequestView?
+
+    init(card: RunQuestionCard, told: String, ts: String? = nil, undelivered: Bool = false,
+         onCancelQueued: (() -> Void)? = nil) {
+        self.stored = card
+        self.told = told
+        self.ts = ts
+        self.undelivered = undelivered
+        self.onCancelQueued = onCancelQueued
+    }
+
+    private var card: RunQuestionCard { RunQuestionCard.drawn(stored: stored, live: live) }
+
+    /// What moves when the question does: the coordinator's row, as the list and the live summaries
+    /// keep it (as `SessionRequestStatusView` reads it).
+    private var refreshKey: String {
+        let row = live.flatMap { model.session(id: $0.toSessionId) }
+        let owed = row?.owesReplyTo?.map(\.requestId).joined(separator: ",") ?? "-"
+        return "\(stored.requestId)|\(owed)|\(row?.lastTurnAt ?? "-")"
+    }
+
     var body: some View {
+        content
+            .task(id: refreshKey) { if stored.readsLive { await load() } }
+            .task(id: stored.requestId) {
+                guard stored.readsLive else { return }
+                // While it waits, for the coordinator or for the owner once passed on, look again
+                // now and then.
+                while !Task.isCancelled {
+                    await VisibilityGate.app.pause(60)   // not while the app cannot be seen
+                    if Task.isCancelled { break }
+                    if RunQuestionCard.keepsReading(live) { await load() }
+                }
+            }
+    }
+
+    private func load() async {
+        guard let baseURL = model.baseURL else { return }
+        let api = APIClient(baseURL: baseURL, tokenStore: model.tokenStore)
+        if let fresh = try? await api.sessionRequest(stored.requestId) { live = fresh }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
             OrbitTurnCardHead(symbol: "questionmark.circle", title: OrbitTurnCardCopy.questionFromTaskRun,
                               tone: .accentColor, ts: ts)
@@ -273,24 +319,24 @@ struct SessionOpeningRowView: View {
     var onCancelQueued: (() -> Void)?
 
     @State private var open = false
-    @Environment(\.openURL) private var openURL
+
+    private var sentence: Text {
+        guard let target = card.linkedTarget else { return Text(card.lead).foregroundColor(.secondary) }
+        var title = AttributedString(target.title)
+        if let url = target.url { title.link = url }
+        // The copy ends at its last word; the space before the target is the sentence's.
+        return Text(card.lead + " ").foregroundColor(.secondary) + Text(title).foregroundColor(.accentColor)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "smallcircle.filled.circle").font(.orbitMeta).foregroundStyle(.secondary)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(card.lead).foregroundStyle(.secondary)
-                    if let target = card.linkedTarget {
-                        if let url = target.url {
-                            Button { openURL(url) } label: { Text(target.title) }
-                                .buttonStyle(.plain).foregroundStyle(.tint)
-                        } else {
-                            Text(target.title)
-                        }
-                    }
-                }
-                .font(.orbitSubtext)
+                // One Text, so the target wraps inside the sentence rather than beside it; its link
+                // opens through the environment's openURL like every other link in the app.
+                sentence
+                    .font(.orbitSubtext)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 6)
                 if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Button(open ? OrbitTurnCardCopy.hideBrief : OrbitTurnCardCopy.showBrief) { open.toggle() }

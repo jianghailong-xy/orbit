@@ -3354,7 +3354,12 @@ final class AppModel {
         agents?.applyMovedSession(id, folderID: folderID)
     }
 
-    // MARK: moving a session to another workspace (iOS — docs/session-folders-move-design.md §4, §5)
+    #endif
+
+    // MARK: moving a session to another workspace (docs/session-folders-move-design.md §4, §5)
+    //
+    // The Move panel is iOS's; reading the targets and moving are both platforms', for the project
+    // page's Change (docs/mocks/coordinator-move-workspace/04-change).
 
     /// What the Move panel's second group lists and its confirmation says (`GET /sessions/:id/
     /// move-targets`): each other workspace with whether the session can go there and why not, and
@@ -3364,6 +3369,7 @@ final class AppModel {
         return try await api.sessionMoveTargets(id)
     }
 
+    #if os(iOS)
     /// New Folder… on a workspace's page in the Move panel: a folder in the workspace the session is
     /// about to move to, which the confirmation then files it in. Throws the server's refusal — a name
     /// that workspace already has is a 409 — for the page to put into words.
@@ -3373,6 +3379,8 @@ final class AppModel {
         if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
         return folder
     }
+
+    #endif
 
     /// Move a session to another workspace, filed in one of its folders or in none — the
     /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
@@ -3397,7 +3405,9 @@ final class AppModel {
         defer { Task { await reloadSessionLists() } }
         switch outcome {
         case .moved:
+            #if os(iOS)
             patchSessionWorkspace(id, to: target, folder: folderID)
+            #endif
             showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
                       tone: .info, icon: "folder")
             return nil
@@ -3406,6 +3416,7 @@ final class AppModel {
         }
     }
 
+    #if os(iOS)
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`
     /// writes a folder: the Open snapshot — whose agent filter is what takes the row out of the
     /// workspace's Open list — the pane's own Completed rows, and the detail cache.

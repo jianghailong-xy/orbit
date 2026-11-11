@@ -4,6 +4,9 @@ import kotlinx.serialization.json.*
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 /**
  * The review on an owner-confirmation card (A08-1; OrbitKit `OwnerConfirmationReview`, contract
@@ -295,9 +298,10 @@ object OwnerReview {
         ConfirmationAnswer(question, answer, row["notShown"] == JsonPrimitive(true))
     }
 
-        fun receiptTime(iso: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String? {
+        /** The reader's own short clock — the one the transcript's own times use (`ExchangeFold`, web `decisionReceiptTime`) — and the day before it when it was another day. */
+        fun receiptTime(iso: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
         val at = parse(iso)?.atZone(zone) ?: return null
-        val clock = "%02d:%02d".format(at.hour, at.minute)
+        val clock = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).format(at)
         return if (at.toLocalDate() == ZonedDateTime.ofInstant(now, zone).toLocalDate()) clock else "${at.monthValue}/${at.dayOfMonth} $clock"
     }
 

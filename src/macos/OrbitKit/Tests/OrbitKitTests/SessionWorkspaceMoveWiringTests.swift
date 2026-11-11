@@ -97,8 +97,8 @@ final class SessionWorkspaceMoveWiringTests: XCTestCase {
         XCTAssertTrue(greyed.contains("targetRow(row)"))
         XCTAssertFalse(greyed.contains("NavigationLink"), "only a row the session can go to opens")
         XCTAssertTrue(group.contains("Text(SessionMoveCopy.anotherWorkspaceGroup)"))
-        XCTAssertTrue(group.contains("if let reason = SessionWorkspaceMoveLogic.groupReason(targets) { Text(reason) }"),
-                      "the group says why the session can't leave, under it")
+        XCTAssertTrue(group.contains("if let footer = SessionWorkspaceMoveLogic.groupFooter(targets) { Text(footer) }"),
+                      "the group says why the session can't leave, or that a project's coordination goes with it")
         XCTAssertTrue(group.contains("if !targets.targets.isEmpty {"), "no other workspace, no group")
         XCTAssertTrue(group.contains("Text(targetsFailure)"))
         XCTAssertTrue(group.contains("Text(SessionMoveCopy.loadingWorkspaces)"))
@@ -168,7 +168,7 @@ final class SessionWorkspaceMoveWiringTests: XCTestCase {
     /// server's answer, Cancel and Move — or End and Move for a session that has to end first.
     func testATapAsksMoveToTheWorkspace() throws {
         let page = code(try appSource("Views/SessionMoveTargetPage.swift"))
-        let alert = try slice(page, from: ".alert(SessionMoveCopy.confirmTitle(current), isPresented: confirming, presenting: picked) { pick in",
+        let alert = try slice(page, from: ".alert(SessionMoveCopy.confirmTitle(current, answer), isPresented: confirming, presenting: picked) { pick in",
                               to: "Text(SessionMoveCopy.confirmMessage(answer, to: current, from: workspace.name))")
         let order = try positions(["Button(SessionMoveCopy.cancel, role: .cancel) {}",
                                    "Button(SessionMoveCopy.confirmAction(answer)) { move(pick) }",
@@ -243,13 +243,18 @@ final class SessionWorkspaceMoveWiringTests: XCTestCase {
     }
 
     /// The whole second group compiles for iOS alone, like the rest of the panel: the Mac has no Move.
+    /// Reading the targets and the move itself are both platforms', for the project page's Change
+    /// workspace (docs/mocks/coordinator-move-workspace/04-change); only the list patch is iOS's.
     func testTheWorkspaceMoveIsCompiledForIOSOnly() throws {
         let app = code(try appSource("AppModel.swift"))
-        for part in ["func sessionMoveTargets(_ id: String) async throws -> SessionMoveTargets",
-                     "func createTargetFolder(named name: String, inWorkspace workspaceID: String)",
-                     "func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?,",
-                     "private func patchSessionWorkspace("] {
+        for part in ["func createTargetFolder(named name: String, inWorkspace workspaceID: String)",
+                     "private func patchSessionWorkspace(",
+                     "            patchSessionWorkspace(id, to: target, folder: folderID)"] {
             XCTAssertEqual(try branches(of: part, in: app), ["os(iOS)"], "`\(part)` is iOS only")
+        }
+        for part in ["func sessionMoveTargets(_ id: String) async throws -> SessionMoveTargets",
+                     "func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?,"] {
+            XCTAssertEqual(try branches(of: part, in: app), [], "`\(part)` is both platforms'")
         }
         let model = code(try appSource("AgentsModel.swift"))
         XCTAssertEqual(try branches(of: "func applyMovedSession(_ id: String, toWorkspace workspaceID: String)", in: model),
