@@ -96,7 +96,7 @@ class LandingSessionCopyParityTest {
             assertTrue("LandingSessionPage.swift no longer says $it", page.contains(it))
         }
         val view = File(root, "${views}LandingSessionPageView.swift").readText()
-        // Both clients' card lines go red on the same fact: the attempt stopped on a failure, or timed out.
+        // Since 308a40d62 the Swift head is one line whose mark is red for a failure or a timeout, as Android's head is.
         assertTrue(view.contains("line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,"))
     }
 
