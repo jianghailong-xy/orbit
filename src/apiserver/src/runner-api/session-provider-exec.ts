@@ -20,13 +20,19 @@ import { ADMIN_ONLY_PROVIDER_ERROR, PROVIDER_UNAVAILABLE_ERROR } from './runner-
  * provider-switch reload (RunnerApiController.reloadProviderEnv) and by a SubAgent run on the parent's own
  * engine and credential (RunnerSubagentsController). Empty when the session is gone; `refusal` when nothing
  * can run its credential, in the claim's words.
+ *
+ * With `target`, the same read for another engine, provider and model on this session's runner: a SubAgent's
+ * next candidate after its account hit a limit (docs/subagent-design.md §4.3). A built-in engine's sign-in or a
+ * key the owner configured; an account pool is refused, because choosing its member is written onto the
+ * session it runs for, and this one is the parent's.
  */
 export async function sessionProviderExec(
   tx: Prisma.TransactionClient,
   queue: Pick<QueueService, 'resolveLoginPool' | 'resolvePoolMember' | 'resolveSharedPool'>,
   sessionId: string,
+  target?: { engine: string; provider: string; model: string },
 ): Promise<{ exec?: ReturnType<typeof resolveProviderExec>; customRow?: ModelProviderRow | null; refusal?: string }> {
-  const session = await tx.session.findUnique({
+  const read = await tx.session.findUnique({
     where: { id: sessionId },
     select: {
       id: true,
@@ -58,7 +64,20 @@ export async function sessionProviderExec(
       },
     },
   });
-  if (!session) return {};
+  if (!read) return {};
+  const session = target
+    ? {
+      ...read,
+      provider: target.provider,
+      providerBuiltin: (Object.values(AgentProvider) as string[]).includes(target.provider),
+      engine: target.engine,
+      model: target.model,
+      usesRuntimeDefaultModel: false,
+      poolMemberProviderId: null,
+      poolKeyId: null,
+      poolCodexAccountId: null,
+    }
+    : read;
   // The claim's words for a credential nothing holds: a member's session on a shared provider is told
   // only an admin can run it, any other to check the configuration — asked of the slug the credential
   // names, which on OpenCode is the key its model names.
@@ -78,6 +97,9 @@ export async function sessionProviderExec(
   // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
   // session's default DeepSeek key when its workspace holds no key itself.
   const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
+  if (target && !keyRow && !isBuiltinProvider(session.provider, session.providerBuiltin)) {
+    return { refusal: `${target.provider} is an account pool, which a SubAgent cannot move to yet` };
+  }
   const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
     ? keyRow
     : (keyRow ??

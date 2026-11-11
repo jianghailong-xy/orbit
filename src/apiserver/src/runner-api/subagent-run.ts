@@ -1,6 +1,11 @@
 import {
+  isUsageLimitErrorText,
   PermissionMode,
   SUBAGENT_RUN_STATUSES,
+  type SubagentAttempt,
+  type SubagentAttemptOutcome,
+  type SubagentCandidateTarget,
+  type SubagentFallbackRequest,
   type RunnerModelCatalog,
   type SubagentDecision,
   type SubagentRunStatus,
@@ -21,7 +26,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import type { SubagentRoutingDecision } from '../tasks/model-routing';
+import { MODEL_AT_CAPACITY_ERROR_MARKER, type SubagentRoutingDecision } from '../tasks/model-routing';
 import { stripNul } from './strip-nul';
 
 /**
@@ -106,6 +111,74 @@ export class SubagentRunUpdateDto implements SubagentRunUpdateRequest {
   @IsOptional()
   @IsObject()
   usage?: Record<string, unknown>;
+}
+
+export class SubagentFallbackDto implements SubagentFallbackRequest {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(20_000)
+  error!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  readonly?: boolean;
+
+  @IsOptional()
+  @IsIn(Object.values(PermissionMode))
+  permissionMode?: string;
+}
+
+/** How many times one delegate call may move to another candidate after a usage limit or capacity (§4.3). */
+export const SUBAGENT_MAX_MOVES = 2;
+
+/** How much of a failed attempt's error `subagent_run.attempts` keeps. */
+export const SUBAGENT_ATTEMPT_ERROR_MAX = 500;
+
+/**
+ * A child's failure as §4.3 moves it: a spent quota (USAGE_LIMIT_ERROR_MARKERS, opening the text) or a model at
+ * capacity (MODEL_AT_CAPACITY_ERROR_MARKER). Null for every other failure, which goes back to the parent as is.
+ */
+export function limitFailure(error: string): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY'> | null {
+  if (isUsageLimitErrorText(error)) return 'USAGE_LIMIT';
+  return error.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER) ? 'AT_CAPACITY' : null;
+}
+
+/** The first entry of a run's attempts: where it was opened to run. */
+export function firstAttempt(target: SubagentCandidateTarget, at = new Date()): SubagentAttempt {
+  return { ...target, attempt: 1, outcome: 'RUNNING', startedAt: at.toISOString() };
+}
+
+/** `subagent_run.attempts` as written; [] on a row from before attempts were kept. */
+export function attemptsOf(value: unknown): SubagentAttempt[] {
+  return Array.isArray(value) ? (value as SubagentAttempt[]).map((a) => ({ ...a })) : [];
+}
+
+/** The candidates a run may move to, in rank order, from the decision it opened with: the pick, then the rest of its tier. */
+export function fallbackCandidates(decision: Pick<SubagentDecision, 'engine' | 'provider' | 'model' | 'effort' | 'fallbacks'>): SubagentCandidateTarget[] {
+  const pick = decision.engine && decision.provider && decision.model
+    ? [{ engine: decision.engine, provider: decision.provider, model: decision.model, effort: decision.effort }]
+    : [];
+  return [...pick, ...(decision.fallbacks ?? [])];
+}
+
+/**
+ * NO_SUBAGENT_PROVIDER's message: no candidate left to move to, with each provider's reason — the ones whose
+ * account hit its limit on an attempt, the ones the router removed, and the ones that could not be started.
+ */
+export function noProviderMessage(
+  decision: Pick<SubagentDecision, 'level' | 'candidates'>,
+  attempts: readonly SubagentAttempt[],
+  skipped: readonly string[] = [],
+): string {
+  const tier = decision.level ? ` in tier ${decision.level}` : '';
+  const lines = [
+    ...attempts.filter((a) => a.outcome === 'USAGE_LIMIT' || a.outcome === 'AT_CAPACITY').map((a) =>
+      `${a.provider} (${a.engine}), ${a.model}: ${a.outcome === 'AT_CAPACITY' ? 'the model was at capacity' : 'the account hit its limit'}`),
+    ...(decision.candidates ?? []).map((c) =>
+      `${c.provider}${c.engine ? ` (${c.engine})` : ''}${c.model ? `, ${c.model}${c.effort ? ` · ${c.effort}` : ''}` : ''}: ${c.reason}`),
+    ...skipped,
+  ];
+  return `No provider is left to run this SubAgent${tier}.` + (lines.length ? ` Each provider's reason:\n- ${lines.join('\n- ')}` : '');
 }
 
 /** How much of a SubAgent's result `subagent_run.result_summary` keeps. */

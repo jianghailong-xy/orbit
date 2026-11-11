@@ -127,7 +127,11 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 ### 4.3 失败
 
 - **额度 / 容量失败**（`USAGE_LIMIT_ERROR_MARKERS`、`MODEL_AT_CAPACITY_ERROR_MARKER`）：同档下一个候选重开，
-  Why 追加 `Retried on <model> after <model>'s account hit its limit`。同一次 `delegate` 最多换 2 次。
+  Why 追加 `Moved to <model> after <model>'s account hit its limit`（容量：`… was at capacity`）。同一次 `delegate` 最多换 2 次。
+  runner 问 `POST /runner/sessions/:id/subagents/:runId/fallback`（带子进程的原话）；服务端从开跑时存下的决策里取
+  候选（选中的那个 + `decision.fallbacks`，同档按排序剩下的），跳过已经撞过限额的 Provider，所以影子模式下同样生效。
+  每次尝试记进 `subagent_run.attempts`（引擎、Provider、模型、结果、原话）。账号池暂不作为换去的目标（选池成员会写到
+  会话上）；换第 3 次时回 `SUBAGENT_FALLBACK_SPENT`，不是额度失败回 `SUBAGENT_NOT_A_LIMIT_FAILURE`。
 - **活本身失败**：不升档、不重跑，交回父 Agent，结果里写明。父 Agent 决定加档再派，还是自己做。
 - 池子是空的：`delegate` 立刻返回错误 `NO_SUBAGENT_PROVIDER`，并列出每个 Provider 被去掉的原因。
 

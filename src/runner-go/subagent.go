@@ -687,21 +687,46 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, def s
 	}
 	var res ExecResult
 	var err error
-	if runChild, ok := subagentChildRunners[run.engine]; !ok {
-		err = fmt.Errorf("SubAgents cannot run on the %s engine on this runner", run.engine)
-	} else {
-		var conversation string
-		res, conversation, err = runChild(withSubagentApprovals(ctx, run.id), subagentChild{
-			t: s.t, parent: s.job, exec: exec, def: def, runID: run.id, engineSession: run.engineSession, resume: resume,
-			cwd: s.execDir, scratch: dir, stateDir: run.stateDir, prompt: prompt, emit: emit,
-		})
-		if conversation != "" && conversation != run.engineSession {
-			// The conversation the engine opened, which a resume continues.
-			s.subagents.mu.Lock()
-			run.engineSession = conversation
-			s.subagents.mu.Unlock()
-			_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: conversation, Type: run.kind, StateDir: run.stateDir})
+	// A child that fails on a usage limit or capacity is started again, with the same prompt, on the next
+	// candidate the server names (§4.3), at most subagentMaxMoves times; any other end is the run's result.
+	limit, limitNote := "", ""
+	scratch := dir
+	// Every attempt's spend is the run's: a limit failure can still have cost something.
+	spent := 0.0
+	for attempt := 1; ; attempt++ {
+		res, err = s.runSubagentChild(ctx, run, exec, def, prompt, resume, scratch, dir, emit)
+		spent += res.CostUsd
+		if ctx.Err() != nil {
+			break
 		}
+		var limited bool
+		if limit, limited = subagentLimitFailure(res, err); !limited {
+			break
+		}
+		if attempt > subagentMaxMoves {
+			limitNote = fmt.Sprintf("It hit a usage limit or capacity on %d candidates in a row and was moved %d times, the most one delegate call is.", attempt, subagentMaxMoves)
+			break
+		}
+		next, ferr := s.nextSubagentCandidate(run.id, limit, def)
+		if ferr != nil {
+			limitNote = "It was not moved to another candidate: " + ferr.Error()
+			break
+		}
+		// A new conversation on the next candidate, in a scratch dir of its own; a resume continues it.
+		scratch = subagentAttemptDir(dir, next.Attempt)
+		_ = os.MkdirAll(scratch, 0o700)
+		engineSession := ""
+		engine := subagentEngine(next.Exec, s.job)
+		if engine == providerClaude {
+			if engineSession, err = randomUUID(); err != nil {
+				break
+			}
+		}
+		s.subagents.mu.Lock()
+		run.engine, run.model, run.engineSession, run.stateDir = engine, next.Exec.Model, engineSession, scratch
+		s.subagents.mu.Unlock()
+		_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: engine, EngineSession: engineSession, Type: run.kind, StateDir: scratch})
+		exec, resume, limit = next.Exec, false, ""
 	}
 	status, result := subagentStatusDone, strings.TrimSpace(res.Result)
 	switch {
@@ -710,6 +735,9 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, def s
 		if result == "" {
 			result = "The SubAgent was stopped because the session ended."
 		}
+	case limit != "":
+		status = subagentStatusFailed
+		result = strings.TrimSpace("The SubAgent failed: " + limit + "\n" + limitNote)
 	case err != nil:
 		status = subagentStatusFailed
 		result = strings.TrimSpace("The SubAgent failed: " + err.Error() + "\n" + result)
@@ -733,7 +761,7 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, def s
 	if notes := sameFileNotes(self, others); len(notes) > 0 {
 		result = strings.TrimSpace(result + "\n\n" + strings.Join(notes, "\n"))
 	}
-	run.status, run.result, run.costUsd = status, result, res.CostUsd
+	run.status, run.result, run.costUsd = status, result, spent
 	report := run.reportLocked()
 	s.subagents.mu.Unlock()
 
@@ -782,6 +810,31 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, def s
 		}
 		time.Sleep(time.Duration(attempt) * bgWakeRetryDelay)
 	}
+}
+
+// runSubagentChild runs one attempt of a run: its engine's child runner in the parent's cwd, with scratch as the
+// attempt's own dir, and records the conversation the engine opened, which a resume continues.
+func (s *bgJobService) runSubagentChild(ctx context.Context, run *subagentRun, exec AgentExecConfig, def subagentDefinition,
+	prompt string, resume bool, scratch, dir string, emit emitFn) (ExecResult, error) {
+	s.subagents.mu.Lock()
+	engine, engineSession, stateDir := run.engine, run.engineSession, run.stateDir
+	s.subagents.mu.Unlock()
+	runChild, ok := subagentChildRunners[engine]
+	if !ok {
+		return ExecResult{}, fmt.Errorf("SubAgents cannot run on the %s engine on this runner", engine)
+	}
+	res, conversation, err := runChild(withSubagentApprovals(ctx, run.id), subagentChild{
+		t: s.t, parent: s.job, exec: exec, def: def, runID: run.id, engineSession: engineSession, resume: resume,
+		cwd: s.execDir, scratch: scratch, stateDir: stateDir, prompt: prompt, emit: emit,
+	})
+	if conversation != "" && conversation != engineSession {
+		// The conversation the engine opened, which a resume continues.
+		s.subagents.mu.Lock()
+		run.engineSession = conversation
+		s.subagents.mu.Unlock()
+		_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: engine, EngineSession: conversation, Type: run.kind, StateDir: stateDir})
+	}
+	return res, err
 }
 
 // patchSubagent reports a run's end. Asked again while the control plane does not answer: the run's cost reaches
