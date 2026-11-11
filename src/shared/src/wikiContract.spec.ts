@@ -119,6 +119,10 @@ import {
   WIKI_REPO_OP_CAPABILITY,
   WIKI_REPO_OP_KINDS,
   WIKI_REPO_OP_READ_CAPABILITY,
+  WIKI_REPO_OP_FOLDER_CAPABILITY,
+  WIKI_REPO_FOLDER,
+  WIKI_REPO_SNAPSHOT_SOURCES,
+  wikiRepoPathOverlap,
   WIKI_REPO_OP_STATES,
   WIKI_STORED_TEXT_ENCODINGS,
 } from './wikiRepoOps';
@@ -377,6 +381,31 @@ describe('wiki contract', () => {
     expect(steps[at('docs:')]).toMatch(/docs\.skipped no_repository/u);
     expect(job.docs.skipped).toContain('no_repository');
     expect(job.report).toMatch(/repo \{tier, reason\}/u);
+  });
+
+  it('reads a working directory that is not git as a folder, for a runner that declares it (repo tiers P4)', () => {
+    const repoOps = CONTRACT.repoOps;
+    expect(repoOps.folderCapability).toBe(WIKI_REPO_OP_FOLDER_CAPABILITY);
+    expect(WIKI_REPO_OP_FOLDER_CAPABILITY).toBe('wiki-repo-op-folder/v1');
+    // The runner's twin of the capability and of the exclusions (src/runner-go/wiki_repo_folder.go).
+    const runner = readFileSync(path.join(ROOT, 'src/runner-go/wiki_repo_folder.go'), 'utf8');
+    expect(runner).toContain(`const wikiRepoOpFolderCapabilityV1 = "${WIKI_REPO_OP_FOLDER_CAPABILITY}"`);
+    expect(runner).toContain(`var wikiRepoFolderMaxFiles = ${repoOps.folder.maxFiles}`);
+    for (const pattern of repoOps.folder.exclude) expect(runner, pattern).toContain(`"${pattern}"`);
+    expect(repoOps.folder.exclude).toEqual([...WIKI_REPO_FOLDER.exclude]);
+    expect(repoOps.folder.maxFiles).toBe(WIKI_REPO_FOLDER.maxFiles);
+    expect(repoOps.folder.minPathOverlap).toBe(WIKI_REPO_FOLDER.minPathOverlap);
+    expect(repoOps.folder.treeHash).toMatch(/sha1 of the lines `path NUL size NUL sha256\(content\) LF`/u);
+    expect(repoOps.kindRuns.snapshot).toMatch(/input\.allowFolder/u);
+    expect(repoOps.tiers.folder).toMatch(/commit anchors are not checked/u);
+    const sql = readFileSync(path.join(ROOT, repoOps.folder.migration), 'utf8');
+    expect(sql).toContain(`"source" text NOT NULL DEFAULT 'git'`);
+    for (const source of WIKI_REPO_SNAPSHOT_SOURCES) expect(sql).toContain(`'${source}'`);
+    expect(CONTRACT.anchorRules.verify.skip).toMatch(/check\.source 'folder'/u);
+    // |new ∩ last| / |last|, and nothing to compare with reads as all of it.
+    expect(wikiRepoPathOverlap(['a', 'b', 'c', 'd'], ['a', 'x'])).toBe(0.25);
+    expect(wikiRepoPathOverlap(['a', 'b'], ['a', 'b', 'c'])).toBe(1);
+    expect(wikiRepoPathOverlap([], ['a'])).toBe(1);
   });
 
   it('classifies a repository failure by its reason: a premise is never retried, a transient one up to probe.maxAttempts (repo tiers §6)', () => {

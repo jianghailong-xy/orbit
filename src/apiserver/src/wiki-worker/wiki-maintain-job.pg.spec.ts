@@ -158,7 +158,7 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps, type WikiRepoOpWake } from './wiki-repo-ops';
-import { toUuid, WIKI_ANCHOR_RULES, WIKI_DOCS_BUILD_JOB, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_MAINTENANCE_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS, WIKI_REPO_PROBE } from '@orbit/shared';
+import { toUuid, WIKI_ANCHOR_RULES, WIKI_DOCS_BUILD_JOB, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_MAINTENANCE_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_FOLDER_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS, WIKI_REPO_PROBE } from '@orbit/shared';
 import { WikiJobExecutor, WikiJobInfraError, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
@@ -355,6 +355,8 @@ async function fixture(
     activeEntries?: number;
     /** The machine reads whole files (`wiki-repo-op-read/v1`), as production's runners do since 0.1.225. */
     wholeFile?: boolean;
+    /** The machine's capabilities, when a case names them: `wholeFile` is then not read. */
+    capabilities?: string[];
     /** The files the snapshot adds, the commits it reaches, and sizes its index gives where they are not the text's. */
     snapshot?: { files: Record<string, string>; commits: string[]; sizes?: Record<string, number> };
     /** The space's title: the spec's own `app` unless a case names one. */
@@ -373,7 +375,7 @@ async function fixture(
   await h.prisma.runner.create({
     data: {
       id: runnerId, name: `maintain-${runnerId.slice(0, 8)}`, ownerId: h.ownerId, tokenHash: `hash-${runnerId}`,
-      capabilities: over.wholeFile === true ? [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY] : [WIKI_REPO_OP_CAPABILITY],
+      capabilities: over.capabilities ?? (over.wholeFile === true ? [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY] : [WIKI_REPO_OP_CAPABILITY]),
       capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
     },
   });
@@ -608,6 +610,11 @@ interface RunnerPlay {
   diffs?: Record<string, { files: Array<{ status: string; path: string; from?: string }>; docs: string[] }>;
   /** Every diff fails, as on a checkout git cannot diff in. */
   failDiffs?: boolean;
+  /**
+   * Every snapshot answers with this index, settled through the real result route (`applyWikiRepoOps.applyWikiRepoOpResult`):
+   * what the space keeps of it — or does not — is the server's own settle, the folder's path overlap among it.
+   */
+  snapshotIndex?: Record<string, unknown>;
 }
 
 /**
@@ -627,6 +634,27 @@ async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
       continue;
     }
     if (over.holdSnapshots === true && row.kind === 'snapshot') continue;
+    if (over.snapshotIndex !== undefined && row.kind === 'snapshot') {
+      const lease = randomUUID();
+      const claimed = await h.sql.query<{ claim_generation: number }>(
+        `UPDATE "wiki_repo_op" SET "state"='running', "lease_owner"=$2::uuid, "claim_generation"="claim_generation"+1,
+                "claimed_at"=now(), "heartbeat_at"=now() WHERE "id"=$1 RETURNING "claim_generation"`,
+        [row.id, lease],
+      );
+      const index = JSON.stringify(over.snapshotIndex);
+      await h.repoOps.applyWikiRepoOpResult({
+        id: row.id,
+        body: {
+          claimGeneration: Number(claimed.rows[0]!.claim_generation), leaseOwner: lease, state: 'succeeded',
+          result: {
+            sha: over.snapshotIndex.sha, index, bytes: Buffer.byteLength(index, 'utf8'),
+            digest: createHash('sha256').update(index, 'utf8').digest('hex'), fragments: 1,
+          },
+        },
+      });
+      for (const listener of [...settledListeners]) listener(row.id);
+      continue;
+    }
     if (over.snapshotError !== undefined && row.kind === 'snapshot') {
       await h.sql.query(
         `UPDATE "wiki_repo_op" SET "state"='failed', "error"=$2, "result"=$3::jsonb, "ended_at"=now() WHERE "id"=$1`,
@@ -1160,6 +1188,178 @@ test('a git checkout\'s run is on tier git with no reason, and still checks its 
   assert.equal((report.entries as Record<string, number>).foreign, 1, 'with a snapshot, an entry anchored outside it is still foreign');
   assert.equal((report.anchors as Record<string, number>).entries, 2);
   assert.equal((report.docs as Record<string, unknown>).skipped, 'no_confirmed_plan');
+});
+
+// ── The folder tier (docs/wiki-repo-tiers-design.md §2.3, §4, §5.1, §5.3; P4) ─────────────────────────────────
+
+/** A runner that reads folders, whole files and all, as a runner from P4 on declares. */
+const FOLDER_RUNNER = [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OP_FOLDER_CAPABILITY];
+/** Two tree hashes of the folder: as it is, and a moment later. */
+const TREE_ONE = createHash('sha1').update('the folder as it is').digest('hex');
+const TREE_TWO = createHash('sha1').update('the folder a moment later').digest('hex');
+const FOLDER_APP = 'package app\n\n// main starts the app.\nfunc main() {\n\tserve()\n}\n';
+
+/** A folder's index as the runner builds it (wiki_repo_folder.go): source folder, a hash a file, and no commits. */
+function folderIndex(sha: string, paths: readonly string[] = REPO.paths): Record<string, unknown> {
+  return {
+    sha, date: '2026-11-11T00:00:00Z', source: 'folder',
+    files: paths.map((path) => ({ path, size: 100, hash: createHash('sha256').update(path).digest('hex') })),
+    docs: [{ path: 'docs/README.md', title: 'App', headings: [{ level: 1, text: 'App' }] }],
+    symbols: { 'src/app.go': ['main()'] }, contracts: null, commits: [], readme: REPO.readme,
+  };
+}
+
+/** The space holds the folder's snapshot at `sha`, as the result route leaves one (`source` folder, migration 0521). */
+async function holdFolderSnapshot(h: Harness, spaceId: string, sha: string): Promise<void> {
+  const index = JSON.stringify(folderIndex(sha));
+  await h.sql.query(`DELETE FROM "wiki_repo_snapshot" WHERE "space_id" = $1`, [spaceId]);
+  await h.sql.query(
+    `INSERT INTO "wiki_repo_snapshot"("space_id","owner_id","sha","digest","size_bytes","fragment_count","source")
+     VALUES ($1,$2,$3,$4,$5,1,'folder')`,
+    [spaceId, h.ownerId, sha, createHash('sha256').update(index).digest('hex'), Buffer.byteLength(index, 'utf8')],
+  );
+  await h.sql.query(`INSERT INTO "wiki_repo_snapshot_fragment"("space_id","ordinal","content") VALUES ($1,0,$2)`, [spaceId, index]);
+}
+
+/** A confirmed plan of one document whose one section cites src/app.go: what the documents step writes and compares. */
+async function planCitingTheApp(h: Harness, spaceId: string): Promise<void> {
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: [{
+          position: 0, category: 'dev', slug: 'startup', title: 'Startup', question: 'How does the app start?',
+          audience: ['a new developer'], scopeIn: ['startup'], lengthMin: 400, lengthMax: 4000,
+          sections: {
+            create: [{
+              position: 0, key: 'main', title: 'main', kind: 'flow', covers: 'what main does.', length: 400,
+              sources: { docs: [], code: [{ path: 'src/app.go', symbols: [] }], contracts: [], sessions: null },
+            }],
+          },
+        }],
+      },
+    },
+  });
+}
+
+test('a folder that is not git, on a runner that reads folders: tier folder; its path and symbol anchors are checked there and recorded at its tree hash, a commit anchor keeps its check, and a section written at another tree is left to its fingerprint', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { capabilities: FOLDER_RUNNER, snapshotRow: false });
+  await holdFolderSnapshot(h, fx.spaceId, TREE_ONE);
+  noDossiers(h, fx);
+  const commitCheck = checkedOn('verified', {}, ANCHOR_REPO.commit);
+  const [pathEntry, symbolEntry, commitEntry] = await anchoredEntries(h, fx.spaceId, 'f01de401', [
+    [{ type: 'path', path: 'src/app.go' }, { type: 'path', path: 'src/gone.go' }],
+    [{ type: 'symbol', path: 'src/app.go', symbol: 'main' }],
+    [{ type: 'commit', sha: ANCHOR_REPO.commit, check: commitCheck }, { type: 'path', path: 'README.md' }],
+  ]);
+  await planCitingTheApp(h, fx.spaceId);
+  h.model.answer = (hit) => writerAnswer(hit.prompt);
+  const at = (sha: string): RunnerPlay => ({ snapshotSha: sha, filesAt: { [sha]: { 'src/app.go': FOLDER_APP } }, checkAnchor: runnerAt(['src/gone.go']) });
+  const settled = (jobId: string) => async () => ['succeeded', 'failed'].includes((await jobOf(h, jobId)).state);
+
+  await pass(h, worker(h), settled(fx.jobId), at(TREE_ONE));
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual(await runTier(h, fx.runId), { repo_tier: 'folder', repo_reason: null });
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.repo, { tier: 'folder', reason: null });
+  // Every operation of the run allowed the folder: the runner declared it.
+  const ops = await h.sql.query<{ kind: string; allow: boolean | null }>(
+    `SELECT "kind", ("input"->>'allowFolder')::boolean AS "allow" FROM "wiki_repo_op" WHERE "job_id" = $1`, [fx.jobId]);
+  assert.ok(ops.rows.length >= 3 && ops.rows.every((op) => op.allow === true), JSON.stringify(ops.rows));
+  // The path and symbol anchors went to the folder; the commit anchor did not.
+  assert.deepEqual((await anchorsAsked(h, fx.jobId)).sort(),
+    ['path README.md', 'path src/app.go', 'path src/gone.go', 'symbol src/app.go#main'].sort());
+  const checksOf = async (entryId: string) => (await entryAnchors(h, entryId) as Array<{ check?: Record<string, unknown> }>).map((anchor) => anchor.check);
+  const paths = await checksOf(pathEntry!);
+  assert.deepEqual(paths.map((check) => [check?.state, check?.ref, check?.source]), [['verified', TREE_ONE, 'folder'], ['missing', TREE_ONE, 'folder']]);
+  const [symbol] = await checksOf(symbolEntry!);
+  assert.deepEqual([symbol?.state, symbol?.ref, symbol?.source, symbol?.regionSha256], ['verified', TREE_ONE, 'folder', ANCHOR_REPO.regionOf('main')]);
+  const [commit, readme] = await checksOf(commitEntry!);
+  assert.deepEqual(commit, commitCheck, 'a commit anchor is not checked on a folder: it keeps the check it had');
+  assert.deepEqual([readme?.state, readme?.ref, readme?.source], ['verified', TREE_ONE, 'folder']);
+  const docs = report.docs as { sections: Record<string, number>; error?: string };
+  assert.equal(docs.error, undefined, String(docs.error));
+  assert.ok(docs.sections.written >= 1, JSON.stringify(docs));
+  const written = await h.sql.query<{ repo_sha: string }>(
+    `SELECT x."repo_sha" FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1 AND x."key" = 'main'`, [fx.spaceId]);
+  assert.deepEqual(written.rows.map((row) => row.repo_sha), [TREE_ONE], 'the section is written at the tree hash');
+
+  // The same tree again: every check holds there, so nothing is sent.
+  const same = await runAgain(h, fx);
+  await pass(h, worker(h), settled(same.jobId), at(TREE_ONE));
+  assert.equal((await jobOf(h, same.jobId)).state, 'succeeded');
+  assert.equal(await anchorsSent(h, same.jobId), 0, 'checks made on a folder hold at the same tree hash');
+
+  // The folder moved on: every path and symbol is checked again at the new tree hash, and the section written at the old
+  // one is taken as changed — its material read at the new tree is the same, so its fingerprint leaves it unwritten.
+  await holdFolderSnapshot(h, fx.spaceId, TREE_TWO);
+  const calls = h.model.hits.length;
+  const moved = await runAgain(h, fx);
+  await pass(h, worker(h), settled(moved.jobId), at(TREE_TWO));
+  const movedJob = await jobOf(h, moved.jobId);
+  assert.equal(movedJob.state, 'succeeded', movedJob.error ?? '');
+  assert.equal(await anchorsSent(h, moved.jobId), 5 - 1, 'the path and symbol anchors, not the commit one');
+  assert.deepEqual((await checksOf(pathEntry!)).map((check) => check?.ref), [TREE_TWO, TREE_TWO]);
+  assert.deepEqual((await checksOf(commitEntry!))[0], commitCheck);
+  const movedDocs = ((await runRow(h, moved.runId)).report as { docs: { affected: Record<string, number>; sections: Record<string, number>; error?: string } }).docs;
+  assert.equal(movedDocs.error, undefined, String(movedDocs.error));
+  assert.equal(movedDocs.affected.byRepo, 1, 'written at another tree hash, the section is taken as changed');
+  assert.equal(movedDocs.sections.written, 0, JSON.stringify(movedDocs));
+  assert.ok(movedDocs.sections.unchanged >= 1, JSON.stringify(movedDocs));
+  assert.equal(h.model.hits.length, calls, 'its fingerprint held: no writer call');
+});
+
+test('a runner that cannot read folders is not allowed one: a folder that is not git is tier sessions for not_git, and the run says to upgrade the runner', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { wholeFile: true });
+  noDossiers(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state),
+    { snapshotError: '/tmp/maintain-spec is not a git checkout: exit status 128', snapshotReason: 'not_git' });
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded');
+  assert.deepEqual(await runTier(h, fx.runId), { repo_tier: 'sessions', repo_reason: 'not_git' });
+  const ops = await h.sql.query<{ input: Record<string, unknown> }>(`SELECT "input" FROM "wiki_repo_op" WHERE "job_id" = $1`, [fx.jobId]);
+  assert.ok(ops.rows.every((op) => op.input.allowFolder === undefined), JSON.stringify(ops.rows));
+  assert.ok(runLog.some((line) => line.includes('Upgrade the runner to read folders')), 'the run says to upgrade the runner');
+});
+
+test('a space with a repository address whose folder shares less than half of the last snapshot\'s paths: wrong_repository for path_overlap, and the snapshot is not kept; one that shares half is', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  // The space holds the git snapshot an earlier run left: REPO.paths, three of them.
+  const fx = await fixture(h, { capabilities: FOLDER_RUNNER });
+  noDossiers(h, fx);
+  const other = folderIndex(TREE_ONE, ['README.md', 'other/main.go', 'other/notes.md']);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), { snapshotIndex: other });
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual(await runTier(h, fx.runId), { repo_tier: 'wrong_repository', repo_reason: 'path_overlap' });
+  const held = await h.prisma.wikiRepoSnapshot.findFirstOrThrow({ where: { spaceId: fx.spaceId }, select: { sha: true, source: true } });
+  assert.deepEqual(held, { sha: REPO.sha, source: 'git' }, 'the folder\'s snapshot did not replace the space\'s');
+  const op = await h.sql.query<{ state: string; error: string; result: Record<string, unknown> }>(
+    `SELECT "state", "error", "result" FROM "wiki_repo_op" WHERE "job_id" = $1 AND "kind" = 'snapshot'`, [fx.jobId]);
+  assert.equal(op.rows.length, 1, 'a premise is asked once');
+  assert.equal(op.rows[0]!.state, 'failed');
+  assert.equal(op.rows[0]!.result.reason, 'path_overlap');
+  assert.match(op.rows[0]!.error, /^\/tmp\/maintain-spec shares 33% of its files with the last snapshot of github\.com\/example\/app-[0-9a-f]{8}: /u);
+  // No code anchor was asked about, as on tier sessions.
+  assert.equal(await anchorsSent(h, fx.jobId), 0);
+
+  // Half of the last snapshot's paths is enough: the folder's snapshot is kept, source folder, and the run is on tier folder.
+  const half = folderIndex(TREE_TWO, ['README.md', 'src/app.go', 'other/main.go']);
+  const again = await runAgain(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, again.jobId)).state), { snapshotIndex: half });
+  assert.equal((await jobOf(h, again.jobId)).state, 'succeeded');
+  assert.deepEqual(await runTier(h, again.runId), { repo_tier: 'folder', repo_reason: null });
+  assert.deepEqual(
+    await h.prisma.wikiRepoSnapshot.findFirstOrThrow({ where: { spaceId: fx.spaceId }, select: { sha: true, source: true } }),
+    { sha: TREE_TWO, source: 'folder' },
+  );
 });
 
 // ── The code anchors of a run that could not read the repository (docs/wiki-repo-tiers-design.md §5.2, Q2) ──────
