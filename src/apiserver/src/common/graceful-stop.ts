@@ -25,15 +25,17 @@ import { type MonoTypeOperatorFunction, ReplaySubject, takeUntil } from 'rxjs';
  *      again a second after an apiserver had stopped in 12 ms got 504s that way. Waiting covers the clients that
  *      open their stream again after it ended: the web app after 2 to 2.5 s.
  *
- * All of it ends within STOP_MS, inside the apiserver's stop grace period: docker-compose.yml sets none for it, so
- * `docker stop` and Compose give it Docker's default, 10 s, before SIGKILL. A stop that has not ended by STOP_MS exits
- * 1 rather than wait for that. The requests an apiserver answers take milliseconds; the few that wait on purpose (a
- * merge's `waitSeconds`, the approval long poll over HTTPS, the Cursor key check) are cut at DRAIN_MS, and their
- * callers ask again, as after any lost connection.
+ * All of it ends within STOP_MS, inside the apiserver's stop grace period: docker-compose.yml sets 30 s for it (the
+ * account owner's decision of 2026-11-11, card 34vneMIw93BkO20LqQJnS), after which `docker stop` and Compose SIGKILL it.
+ * A stop that has not ended by STOP_MS exits 1 rather than wait for that. The requests an apiserver answers take
+ * milliseconds; the few that wait on purpose are answered too, because DRAIN_MS outlasts their own wait: the approval
+ * long poll over HTTPS (25 s, and up to one 1.5 s poll interval past it) and the Cursor key check (25 s). A merge's
+ * `waitSeconds` can ask for up to 300 s: one still waiting at DRAIN_MS is cut, and its caller is told the call failed
+ * while the merge stays queued and lands as usual (merge_receipts reads its outcome).
  */
-export const DRAIN_MS = 6_000;
+export const DRAIN_MS = 27_000;
 export const LINGER_MS = 4_000;
-export const STOP_MS = 9_000;
+export const STOP_MS = 28_000;
 
 const stopping = new ReplaySubject<void>(1);
 

@@ -8,6 +8,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { interval, map } from 'rxjs';
 
+import { CURSOR_KEY_CHECK_WAIT_MS } from '../providers/cursor-key-check-relay';
+import { APPROVAL_LONG_POLL_MS, APPROVAL_POLL_INTERVAL_MS } from '../runner-api/runner-api.controller';
 import { KeptAliveConnection } from '../test-support/kept-alive';
 import { DRAIN_MS, drainable, endStreams, LINGER_MS, STOP_MS, untilStopping } from './graceful-stop';
 import { holdIdleConnections } from './idle-connections';
@@ -122,4 +124,11 @@ test('the whole stop ends inside the grace period docker stop gives the apiserve
   assert.ok(DRAIN_MS < STOP_MS, `the drain (${DRAIN_MS} ms) leaves the shutdown hooks no time before ${STOP_MS} ms`);
   assert.ok(LINGER_MS < STOP_MS, `the stop waits ${LINGER_MS} ms before it exits, past ${STOP_MS} ms`);
   assert.ok(STOP_MS < graceMs, `a stop may take ${STOP_MS} ms, and Docker SIGKILLs the apiserver after ${graceMs} ms`);
+});
+
+test('the long polls an apiserver holds end inside the drain, so a stop answers them rather than cut them', () => {
+  // One that began just before the stop: its own wait, then at most one poll interval and its read.
+  const approval = APPROVAL_LONG_POLL_MS + APPROVAL_POLL_INTERVAL_MS;
+  assert.ok(approval < DRAIN_MS, `the approval long poll may take ${approval} ms, and the drain cuts at ${DRAIN_MS} ms`);
+  assert.ok(CURSOR_KEY_CHECK_WAIT_MS < DRAIN_MS, `the Cursor key check waits ${CURSOR_KEY_CHECK_WAIT_MS} ms, and the drain cuts at ${DRAIN_MS} ms`);
 });
