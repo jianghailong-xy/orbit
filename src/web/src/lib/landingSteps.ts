@@ -17,7 +17,7 @@ export const LANDING_STEP_COPY = {
   RESULT: 'Result',
 } as const;
 
-export type LandingStepKey = 'queue' | 'claim' | 'sync' | 'check:TASK_ACCEPTANCE' | 'check:MERGE_CHECK' | 'push';
+export type LandingStepKey = 'queue' | 'claim' | 'sync' | 'check:TASK_ACCEPTANCE' | 'check:LANDING_CHECK' | 'check:BASELINE' | 'check:MERGE_CHECK' | 'push';
 
 export interface LandingStep {
   key: LandingStepKey;
@@ -31,7 +31,7 @@ export interface LandingStep {
   at: string;
 }
 
-const ORDER: readonly LandingStepKey[] = ['queue', 'claim', 'sync', 'check:TASK_ACCEPTANCE', 'check:MERGE_CHECK', 'push'];
+const ORDER: readonly LandingStepKey[] = ['queue', 'claim', 'sync', 'check:TASK_ACCEPTANCE', 'check:LANDING_CHECK', 'check:BASELINE', 'check:MERGE_CHECK', 'push'];
 
 /** The kinds a step's folded row prefers to say: how it ended. A hand-off (`Asked the coordinator to fix it`) is what
  *  happened after, not how the step ended, so it is never a step's summary. */
@@ -44,6 +44,8 @@ const VERDICTS = new Set<string>([
 const PUSHED_STATES = new Set<string>(['LANDED', 'ALREADY_LANDED', 'NOTHING_TO_LAND', 'READY', 'OBSERVED']);
 
 function checkKey(entry: IntegrationTimelineEntry): LandingStepKey {
+  if (entry.data?.scope === 'BASELINE') return 'check:BASELINE';
+  if (entry.check?.name === 'LANDING_CHECK') return 'check:LANDING_CHECK';
   return entry.check?.name === 'TASK_ACCEPTANCE' ? 'check:TASK_ACCEPTANCE' : 'check:MERGE_CHECK';
 }
 
@@ -70,7 +72,7 @@ function stepOf(entry: IntegrationTimelineEntry, current: LandingStepKey | null)
     case 'CHECK_FINISHED':
       return checkKey(entry);
     case 'SKIPPED_CHECK':
-      return 'check:MERGE_CHECK';
+      return checkKey(entry);
     case 'PUSH_REFUSED':
       return 'push';
     case 'RESULT':
@@ -108,6 +110,8 @@ function stepName(key: LandingStepKey, kind: IntegrationJobKind): string {
     case 'claim': return LANDING_STEP_COPY.CLAIM;
     case 'sync': return LANDING_STEP_COPY.SYNC;
     case 'check:TASK_ACCEPTANCE': return landingCheckLabel('TASK_ACCEPTANCE');
+    case 'check:BASELINE':
+    case 'check:LANDING_CHECK': return landingCheckLabel('LANDING_CHECK');
     case 'check:MERGE_CHECK': return landingCheckLabel('MERGE_CHECK');
     case 'push':
       return kind === 'LAND_TASK' ? LANDING_STEP_COPY.PUSH

@@ -154,6 +154,21 @@ internal fun StartProjectCard(
                 MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
             }
             HorizontalDivider()
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(LandingCheckCopy.label)
+                if (draft.line == "MAIN") Text(LandingCheckCopy.main) else {
+                    OutlinedTextField(draft.landingCheckCommand, { onDraft(draft.copy(landingCheckCommand = it)) },
+                        enabled = editable, placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, label = { Text(LandingCheckCopy.command) })
+                    Text(LandingCheckCopy.hint, style = MaterialTheme.typography.labelMedium)
+                    if (draft.landingCheckCommand.isBlank()) Text(LandingCheckCopy.inheritedCommand(draft.mergeCheckCommand.takeIf { it.isNotBlank() }))
+                    OutlinedTextField(draft.landingCheckTimeoutSeconds?.toString().orEmpty(),
+                        { if (it.isEmpty() || (it.toIntOrNull() ?: 0) > 0) onDraft(draft.copy(landingCheckTimeoutSeconds = it.toIntOrNull())) },
+                        enabled = editable, placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, label = { Text(LandingCheckCopy.timeout) })
+                    Text(LandingCheckCopy.timeoutHint, style = MaterialTheme.typography.labelMedium)
+                    if (draft.landingCheckTimeoutSeconds == null) Text(LandingCheckCopy.inheritedTimeout(draft.mergeCheckTimeoutSeconds))
+                }
+            }
+            HorizontalDivider()
             MergeCheckRow(draft, editable, tag, onDraft)
             HorizontalDivider()
             Row(Modifier.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically,
@@ -263,7 +278,8 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
                     enabled = fresh && CardVerb.START in card.actions && !result.uncertain && !result.settled, starting = result.busy, error = error,
                     tag = card.key, startTag = "${card.key}:${CardVerb.START.name}",
                     onStart = { submit(CardVerb.START, CardInput(settings = ProjectStartSettings(draft.line, draft.automatic, draft.maxConcurrentTasks,
-                        draft.mergeCheckCommand, request.settings.projectBranchName, draft.upstream?.let(RunSettings::mainBranchRef), draft.deliveryMode))) },
+                        draft.mergeCheckCommand, request.settings.projectBranchName, draft.upstream?.let(RunSettings::mainBranchRef), draft.deliveryMode, draft.landingCheckCommand.takeIf { it.isNotBlank() },
+                        draft.landingCheckTimeoutSeconds, draft.mergeCheckTimeoutSeconds))) },
                     // The tasks the plan names, on the project's page (the browser's link when there is no list to open).
                     onViewTasks = { card.projectId?.let { open("orbit-project:$it") } },
                     onChatAbout = chat, chatEnabled = fresh && !result.busy,

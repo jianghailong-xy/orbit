@@ -181,6 +181,13 @@ public struct OpenItemHandling: Codable, Equatable, Sendable {
 }
 
 /// One exception item as `GET /projects/:id/open-items` serves it (§4.8).
+public struct OpenItemBaseline: Codable, Equatable, Sendable {
+    public let upstreamSha: String
+    public let targetSha: String
+    public let mergeTreeSha: String
+    public let check: LandingCheckResult
+}
+
 public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// Where this item is on its way to the coordinator (§4.4), which is the address `Open
     /// coordinator` reaches. Read for the same reason as every other field here: a press is drawn
@@ -327,6 +334,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let facts: OpenItemFacts?
     /// The rerun or observation handling it while that is in flight (§4.7 H1, §10.8), or nil — for
     /// none, and from a server that predates it.
+    public let baseline: OpenItemBaseline?
+    public let heldTaskIds: [String]
     public let handling: OpenItemHandling?
 
     public var id: String { itemId }
@@ -343,7 +352,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 primaryAction: ProjectOpenItemAction? = nil, handledBy: [OpenItemFixTask]? = nil,
                 question: CoordinatorQuestion? = nil,
                 startRequest: ProjectStartRequest? = nil, doneRequest: DoneRequest? = nil,
-                facts: OpenItemFacts? = nil, handling: OpenItemHandling? = nil) {
+                facts: OpenItemFacts? = nil, handling: OpenItemHandling? = nil,
+                baseline: OpenItemBaseline? = nil, heldTaskIds: [String] = []) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -370,6 +380,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.doneRequest = doneRequest
         self.facts = facts
         self.handling = handling
+        self.baseline = baseline
+        self.heldTaskIds = heldTaskIds
     }
 
     public init(from decoder: Decoder) throws {
@@ -406,6 +418,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                                                forKey: .startRequest)) ?? nil
         doneRequest = (try? c.decodeIfPresent(DoneRequest.self, forKey: .doneRequest)) ?? nil
         facts = try c.decodeIfPresent(OpenItemFacts.self, forKey: .facts)
+        baseline = try c.decodeIfPresent(OpenItemBaseline.self, forKey: .baseline)
+        heldTaskIds = try c.decodeIfPresent([String].self, forKey: .heldTaskIds) ?? []
         handling = (try? c.decodeIfPresent(OpenItemHandling.self, forKey: .handling)) ?? nil
     }
 }

@@ -140,6 +140,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             } else if (verb == CardVerb.SEND_BACK && noteAction != verb) "Chat about this"
             // The batch's yes names its count, because the question above it scrolls away (iOS `batchCreateAction`).
             else if (verb == CardVerb.CREATE_BATCH && batchPreview != null) BatchReview.createAction(batchPreview.number("taskCount") ?: BatchReview.tasks(batchPreview).size)
+            else if (verb == CardVerb.ALLOW && card.source.text("toolName") == ApprovalRules.mergeCheckChange) LandingCheckCopy.confirmAction
             else if (verb == CardVerb.ALLOW && skip != null) SkipMergeCheckCards.action
             else verb.label
             OutlinedButton(onClick = {

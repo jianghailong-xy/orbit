@@ -61,6 +61,8 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
                 HorizontalDivider()
                 AtMostSetting(state, doc, enabled, stepConcurrency)
                 HorizontalDivider()
+                LandingCheckSetting(view, enabled, integration)
+                HorizontalDivider()
                 MergeCheckSetting(view, doc, enabled, main, editMergeCheck)
                 view.number("escalationSeconds")?.let { seconds -> HorizontalDivider(); EscalationSetting(view, seconds, enabled, integration) }
                 HorizontalDivider()
@@ -523,4 +525,48 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
             }
         }
     }
+}
+
+/** Landing settings use the same integration PATCH as merge settings. Null inherits independently. */
+@Composable
+private fun LandingCheckSetting(view: JsonObject, enabled: Boolean, write: (JsonObject?) -> Unit) {
+    var editing by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().testTag("project-landing-check"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(LandingCheckCopy.label)
+        if (view.text("line") == "MAIN") Note(LandingCheckCopy.main) else {
+            TextButton(onClick = { editing = true }, enabled = enabled) {
+                Text(view.text("landingCheckCommand") ?: LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
+            }
+            Note(view.number("landingCheckTimeoutSeconds")?.let { "$it seconds" }
+                ?: LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
+            Note(LandingCheckCopy.hint)
+        }
+    }
+    if (editing) {
+        var command by remember { mutableStateOf(view.text("landingCheckCommand").orEmpty()) }
+        var timeout by remember { mutableStateOf(view.number("landingCheckTimeoutSeconds")?.toString().orEmpty()) }
+        val valid = timeout.isEmpty() || (timeout.toIntOrNull() ?: 0) > 0
+        AlertDialog(onDismissRequest = { editing = false }, title = { Text(LandingCheckCopy.label) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(command, { command = it }, label = { Text(LandingCheckCopy.command) },
+                    placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, modifier = Modifier.testTag("landing-check-command"))
+                if (command.isBlank()) Note(LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
+                OutlinedTextField(timeout, { timeout = it }, label = { Text(LandingCheckCopy.timeout) },
+                    placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, modifier = Modifier.testTag("landing-check-timeout"))
+                Note(LandingCheckCopy.timeoutHint)
+                if (timeout.isEmpty()) Note(LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
+            } }, confirmButton = { TextButton(onClick = {
+                write(landingCheckWrite(view, command, timeout.toIntOrNull())); editing = false
+            }, enabled = enabled && valid && landingCheckWrite(view, command, timeout.toIntOrNull()) != null) { Text(RunSettings.save) } },
+            dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } })
+    }
+}
+
+internal fun landingCheckWrite(view: JsonObject, command: String, timeout: Int?): JsonObject? {
+    val next = command.takeIf { it.isNotBlank() }
+    val body = buildJsonObject {
+        if (next != view.text("landingCheckCommand")) put("landingCheckCommand", next?.let(::JsonPrimitive) ?: JsonNull)
+        if (timeout != view.number("landingCheckTimeoutSeconds")) put("landingCheckTimeoutSeconds", timeout?.let(::JsonPrimitive) ?: JsonNull)
+    }
+    return body.takeIf { it.isNotEmpty() }
 }

@@ -194,7 +194,7 @@ public extension LandingPageCopy {
 
     /// `Merge check` / `Task acceptance`, the names the check rows use.
     public static func checkLabel(_ name: String?) -> String {
-        name == "MERGE_CHECK" ? LandingPageCopy.mergeCheck : LandingPageCopy.taskAcceptance
+        name == "LANDING_CHECK" ? LandingCheckCopy.label : name == "MERGE_CHECK" ? LandingPageCopy.mergeCheck : LandingPageCopy.taskAcceptance
     }
 
     /// The attempt's section of the timeline, when the view carries one.

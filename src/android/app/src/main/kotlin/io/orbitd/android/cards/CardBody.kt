@@ -44,6 +44,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
     when (card.family) {
         CardFamily.TOOL, CardFamily.PROVIDER -> {
             val input = row.obj("input") ?: JsonObject(emptyMap())
+            if (row.text("toolName") == ApprovalRules.mergeCheckChange) { IntegrationCheckBody(input); return }
             if (row.text("toolName") == SkipMergeCheckCards.tool) { SkipMergeCheckCardBody(SkipMergeCheckCards.read(input), open); return }
             input.text("command")?.let { CodeText(it, "sh") }
             if (input.text("command") == null) listOf("file_path", "notebook_path", "url", "pattern", "path").firstNotNullOfOrNull { input.text(it) }?.let { Text(it) }
@@ -282,4 +283,22 @@ internal fun redactProvider(value: JsonElement, provider: Boolean): JsonElement 
     })
     is JsonArray -> JsonArray(value.map { redactProvider(it, true) })
     else -> value
+}
+
+@Composable
+private fun IntegrationCheckBody(input: JsonObject) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        listOf("landing", "merge").forEach { layer ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(if (layer == "landing") LandingCheckCopy.label else "Merge check", style = MaterialTheme.typography.titleSmall)
+                Text(if (layer == "landing") LandingCheckCopy.hint else "Runs before merging into main.")
+                listOf(false, true).forEach { after ->
+                    Text(if (after) "after" else "now", style = MaterialTheme.typography.labelMedium)
+                    CodeText(IntegrationCheckProposal.command(input, layer, after), "sh")
+                    Text("${LandingCheckCopy.timeout}: ${IntegrationCheckProposal.timeout(input, layer, after)}")
+                }
+            }
+        }
+        Text(LandingCheckCopy.applies, style = MaterialTheme.typography.labelMedium)
+    }
 }

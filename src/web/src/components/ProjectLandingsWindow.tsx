@@ -39,6 +39,8 @@ import {
   landingAttemptCard,
   landingCheckLabel,
   landingCheckPassed,
+  landingTimelineText,
+  scopedLandingEntries,
   landingEntryOk,
   landingGates,
   landingHeaderTitle,
@@ -1128,7 +1130,7 @@ function LandingSteps({
       ))}
       {timeline.sections.map((section, sectionIndex) => {
         const current = section.jobId === currentJobId;
-        const steps = landingSteps(section.entries, section.kind);
+        const steps = landingSteps(scopedLandingEntries(section.entries, landing, section.jobId), section.kind);
         const live = current && attempt?.state === 'RUNNING' && !attempt.timedOut;
         const statuses = steps.map((step, index): StepStatus => {
           const last = index === steps.length - 1;
@@ -1205,10 +1207,12 @@ const STEP_ICON: Record<string, ReactNode> = {
   sync: <BranchesOutlined />,
   'check:TASK_ACCEPTANCE': <CodeOutlined />,
   'check:MERGE_CHECK': <CodeOutlined />,
+  'check:LANDING_CHECK': <CodeOutlined />,
+  'check:BASELINE': <CodeOutlined />,
   push: <CloudUploadOutlined />,
 };
 const STEP_TONE: Record<string, string> = {
-  queue: 'default', claim: 'read', sync: 'read', 'check:TASK_ACCEPTANCE': 'exec', 'check:MERGE_CHECK': 'exec', push: 'write',
+  queue: 'default', claim: 'read', sync: 'read', 'check:TASK_ACCEPTANCE': 'exec', 'check:MERGE_CHECK': 'exec', 'check:LANDING_CHECK': 'exec', 'check:BASELINE': 'exec', push: 'write',
 };
 
 /** One step as the chat's tool row: caret, icon, its name, its summary line and its mark — no time on the row, as the chat
@@ -1246,7 +1250,7 @@ function LandingStepRow({
         <span className="chat-tool-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
         <span className="chat-tool-icon">{STEP_ICON[step.key]}</span>
         <span className="chat-tool-name">{step.name}</span>
-        <span className="chat-tool-summary">{step.summary.text}</span>
+        <span className="chat-tool-summary">{landingTimelineText(step.summary)}</span>
         {status === 'failed' ? <CloseCircleFilled className="chat-tool-status err" />
           : status === 'running' ? <LoadingOutlined className="chat-tool-status running" spin />
             : status === 'pending' ? <ClockCircleOutlined className="chat-tool-status pending" />
@@ -1302,7 +1306,7 @@ function TimelineLine({
       <span className="landing-timeline-time">{clockTime(entry.at)}</span>
       <span className={`landing-timeline-glyph is-${mark.tone}`} aria-hidden="true">{mark.glyph}</span>
       <span className="landing-timeline-body">
-        <span className="landing-timeline-text">{entry.text}</span>
+        <span className="landing-timeline-text">{landingTimelineText(entry)}</span>
         {entry.reason && !entry.text.includes(entry.reason)
           ? <span className="landing-timeline-sub">{entry.reason}</span>
           : null}
@@ -1366,6 +1370,7 @@ function entryGlyph(
   entries: readonly IntegrationTimelineEntry[],
   index: number,
 ): { glyph: string; tone: TimelineTone } {
+  if (entry.data?.skipped === 'PATHS_EXEMPT') return { glyph: '≡', tone: 'queued' };
   switch (entry.kind) {
     case 'TAKEN_OVER':
       return { glyph: '↗', tone: 'takeover' };

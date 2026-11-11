@@ -1,5 +1,7 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.core.cards.LandingCheckCopy
+
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectPage
@@ -213,7 +215,7 @@ data class LandingFact(val kind: String, val text: String)
 data class LandingTimeline(val sections: List<LandingSection>, val facts: List<LandingFact>, val truncated: Boolean)
 
 /** One finished check's result, as the runner reports it (`LandingCheckResult`). */
-data class LandingCheckResult(val name: String?, val exitCode: Int?, val expectedExitCode: Int?, val timedOut: Boolean, val durationMs: Int?) {
+data class LandingCheckResult(val name: String?, val exitCode: Int?, val expectedExitCode: Int?, val timedOut: Boolean, val durationMs: Int?, val scope: String? = null) {
     /** No timeout, and the exit code the command declared (or none reported). */
     val passed: Boolean get() = !timedOut && (exitCode == null || exitCode == expectedExitCode)
 }
@@ -347,7 +349,7 @@ object LandingSessionModel {
             episode = json.number("episode") ?: 1, openedAt = json.text("openedAt").orEmpty(), settledAt = json.text("settledAt"),
             settledAs = json.text("settledAs"),
             checks = json.objects("checks").map {
-                LandingCheckResult(it.text("name"), it.number("exitCode"), it.number("expectedExitCode"), it.flag("timedOut"), it.number("durationMs"))
+                LandingCheckResult(it.text("name"), it.number("exitCode"), it.number("expectedExitCode"), it.flag("timedOut"), it.number("durationMs"), it.text("scope"))
             },
             currentAttempt = attempt, timeline = timeline,
         )
@@ -409,7 +411,20 @@ object LandingSessionModel {
     }
 
     /** `Merge check` / `Task acceptance`, the names the check rows use. */
-    fun checkLabel(name: String?) = if (name == "MERGE_CHECK") LandingSessionCopy.MERGE_CHECK else LandingSessionCopy.TASK_ACCEPTANCE
+    /** Older events omit scope. The result array belongs only to the newest claim/round. */
+    fun scopedEntries(entries: List<LandingEntry>, view: LandingView, jobId: String): List<LandingEntry> {
+        val attempt = view.currentAttempt?.takeIf { it.jobId == jobId } ?: return entries
+        return entries.map { entry ->
+            if (entry.claim != attempt.claim || entry.round != attempt.round || entry.checkName != "LANDING_CHECK"
+                || view.checks.getOrNull((entry.checkIndex ?: 0) - 1)?.scope != "BASELINE") entry
+            else entry.copy(data = buildJsonObject { entry.data?.forEach { (key, value) -> put(key, value) }; put("scope", "BASELINE") })
+        }
+    }
+
+    fun timelineText(entry: LandingEntry) = if (entry.kind == "CHECK_FINISHED" && entry.data?.text("scope") == "BASELINE")
+        LandingCheckCopy.attribution(checkPassed(entry)) else entry.text
+
+    fun checkLabel(name: String?) = if (name == "LANDING_CHECK") LandingCheckCopy.label else if (name == "MERGE_CHECK") LandingSessionCopy.MERGE_CHECK else LandingSessionCopy.TASK_ACCEPTANCE
 
     private fun section(view: LandingView, jobId: String) = view.timeline?.sections?.firstOrNull { it.jobId == jobId }
 

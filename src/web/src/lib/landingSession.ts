@@ -1,3 +1,4 @@
+import { baselineAttribution } from './landingCheck';
 import type {
   IntegrationJobKind,
   IntegrationTimelineEntry,
@@ -77,6 +78,7 @@ export const LANDING_PAGE_COPY = {
   UPDATE_UNAVAILABLE: 'Update unavailable',
   TASK_ACCEPTANCE: 'Task acceptance',
   MERGE_CHECK: 'Merge check',
+  LANDING_CHECK: 'Landing check',
   RUNNING: 'running',
   CHECKS_FAILED: 'checks failed',
   EXIT: 'exit',
@@ -524,7 +526,7 @@ export function landingAttemptCard(
 }
 
 function checkLabel(name: string): string {
-  return name === 'MERGE_CHECK' ? LANDING_PAGE_COPY.MERGE_CHECK : LANDING_PAGE_COPY.TASK_ACCEPTANCE;
+  return name === 'LANDING_CHECK' ? LANDING_PAGE_COPY.LANDING_CHECK : name === 'MERGE_CHECK' ? LANDING_PAGE_COPY.MERGE_CHECK : LANDING_PAGE_COPY.TASK_ACCEPTANCE;
 }
 
 /** `Merge check` / `Task acceptance`, the names the check rows use. */
@@ -996,3 +998,20 @@ export function landingEntryOk(entry: IntegrationTimelineEntry, kind: Integratio
   }
 }
 
+
+/** Attribution uses the measured scope; older events without scope keep their recorded text. */
+export function landingTimelineText(entry: IntegrationTimelineEntry): string {
+  return entry.kind === 'CHECK_FINISHED' && entry.data?.scope === 'BASELINE'
+    ? baselineAttribution(landingCheckPassed(entry)) : entry.text;
+}
+
+/** Result events from older servers omit scope. Only the newest claim/round has matching check results. */
+export function scopedLandingEntries(entries: readonly IntegrationTimelineEntry[], landing: SessionLandingView, jobId: string): IntegrationTimelineEntry[] {
+  const attempt = landing.currentAttempt;
+  if (attempt?.jobId !== jobId) return [...entries];
+  return entries.map((entry) => {
+    if (entry.claim !== attempt.claim || entry.round !== attempt.round || entry.check?.name !== 'LANDING_CHECK') return entry;
+    const check = landing.checks[entry.check.index - 1];
+    return check?.scope === 'BASELINE' ? { ...entry, data: { ...entry.data, scope: 'BASELINE' } } : entry;
+  });
+}

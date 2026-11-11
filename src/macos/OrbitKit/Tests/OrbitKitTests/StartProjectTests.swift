@@ -314,7 +314,8 @@ final class StartProjectTests: XCTestCase {
         XCTAssertEqual(branch["mergeCheckCommand"] as? String, "npm test")
         XCTAssertEqual(branch["requestId"] as? String, "item-1")
         XCTAssertEqual(Set(branch.keys), ["criteriaDigest", "line", "projectBranchName", "automatic",
-                                          "maxConcurrentTasks", "mergeCheckCommand", "requestId"])
+                                          "maxConcurrentTasks", "mergeCheckCommand", "requestId",
+                                          "landingCheckCommand", "landingCheckTimeoutSeconds", "mergeCheckTimeoutSeconds"])
 
         draft = StartSettingsDraft(line: .main, automatic: true, maxConcurrentTasks: 3,
                                    mergeCheckCommand: "   ")

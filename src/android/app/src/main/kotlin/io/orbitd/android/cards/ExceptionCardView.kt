@@ -131,7 +131,7 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                 ?.text("conflictingSessionId")?.takeIf { it.isNotBlank() }?.let { LinkButton("Open the run", "orbit-session:$it", open) }
             if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         }
-        ExceptionFacts(card.key, row)
+        ExceptionFacts(card.key, row, open)
         // §4.7 H1: what is handling it while that runs — a rerun, or an observation of the line — and the reason it was asked for.
         ExceptionCards.handlingLine(row, main = main)?.let { line ->
             Column(Modifier.testTag("${card.key}:handling"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -186,7 +186,7 @@ private fun Weighted(tier: ExceptionCards.PressTier, label: String, enabled: Boo
 /** What happened, in the rows of the item's payload — or, for a row whose payload this build cannot read, what escalated and the
  * fact that opened it. The failed check's log hangs under the Check row it belongs to. */
 @Composable
-private fun ExceptionFacts(key: String, row: JsonObject) {
+private fun ExceptionFacts(key: String, row: JsonObject, open: (String) -> Unit) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     when (val facts = ExceptionCards.facts(row)) {
         is ExceptionCards.Facts.DetailLine -> Column(Modifier.testTag("$key:facts"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -200,6 +200,12 @@ private fun ExceptionFacts(key: String, row: JsonObject) {
             }
         }
     }
+    if (row.obj("baseline") != null) {
+        var heldOpen by remember { mutableStateOf(false) }
+        TextButton(onClick = { heldOpen = !heldOpen }) { Text(LandingCheckCopy.viewHeld) }
+        if (heldOpen) row.strings("heldTaskIds").forEach { id -> TextButton(onClick = { open("orbit-task:$id") }) { Text(id) } }
+    }
+
 }
 
 /** One fact: its label, and its value in the faces the model gave each run — a command in mono, a check's verdict in red. */

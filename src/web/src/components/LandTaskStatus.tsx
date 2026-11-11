@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY } from '../lib/landingCheck';
 import {
   INTEGRATION_CLAIM_STALE_MS,
   type IntegrationJobLiveness,
@@ -175,7 +176,9 @@ export function LandTaskStatus({
       </div>
       {job?.blockingReason ? (
         <div className="land-task-reason" data-blocking-reason={job.blockingReason.code}>
-          {job.blockingReason.summary}
+          {job.blockingReason.code === 'WAITING_BASELINE' && <strong>{LANDING_CHECK_COPY.WAITING}</strong>}
+          <div>{job.blockingReason.summary}</div>
+          {job.blockingReason.code === 'WAITING_BASELINE' && <div>{LANDING_CHECK_COPY.RESUMES}</div>}
         </div>
       ) : null}
       {!job && integration.state === 'QUEUED' ? (

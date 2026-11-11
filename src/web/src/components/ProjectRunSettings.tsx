@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, inheritedLandingCommand, inheritedLandingTimeout } from '../lib/landingCheck';
 import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { DeliveryMode, IntegrationLine, ProjectIntegrationView, ProjectPauseState, PromotionState } from '@orbit/shared';
@@ -140,6 +141,8 @@ interface IntegrationSettingsBody {
   /** The main branch as a full ref; sent only while the line can still move (L4 locks both). */
   upstreamRef?: string;
   mergeCheckCommand?: string | null;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
   exceptionEscalationSeconds?: number;
   /** How the work reaches main (§10.5 O-L1); AGENT_PUSH only with a main line. */
   deliveryMode?: DeliveryMode;
@@ -190,6 +193,8 @@ interface RunSettingsDraft {
   automatic: boolean;
   maxConcurrentTasks: number | null;
   mergeCheckCommand: string;
+  landingCheckCommand: string;
+  landingCheckTimeoutSeconds: number | null;
   escalationSeconds: number;
   /** How the work reaches main, as last chosen in this block; it counts only on a main line. */
   deliveryMode: DeliveryMode;
@@ -212,6 +217,8 @@ function storedDraft(view: ProjectIntegrationView, project: RunSettingsProject):
     automatic: project.coordinatorEnabled,
     maxConcurrentTasks: project.maxConcurrentTasks,
     mergeCheckCommand: view.mergeCheckCommand ?? '',
+    landingCheckCommand: view.landingCheckCommand ?? '',
+    landingCheckTimeoutSeconds: view.landingCheckTimeoutSeconds ?? null,
     escalationSeconds: view.escalationSeconds,
     deliveryMode: view.deliveryMode ?? 'PLATFORM',
   };
@@ -231,13 +238,17 @@ function runSettingsWrites(
   view: Pick<
     ProjectIntegrationView,
     'line' | 'repository' | 'upstreamRef' | 'lastMainBranch' | 'locked' | 'mergeCheckCommand' | 'escalationSeconds'
-    | 'deliveryMode'
+    | 'deliveryMode' | 'landingCheckCommand' | 'landingCheckTimeoutSeconds'
   >,
   project: RunSettingsProject,
   draft: RunSettingsDraft,
 ): { integration: IntegrationSettingsBody | null; authorization: AuthorizationBody | null } {
   const check = draft.mergeCheckCommand.trim() === '' ? null : draft.mergeCheckCommand;
+  const landing = draft.landingCheckCommand.trim() === '' ? null : draft.landingCheckCommand;
   const integration: IntegrationSettingsBody = {
+    ...(landing !== (view.landingCheckCommand ?? null) ? { landingCheckCommand: landing } : {}),
+    ...(draft.landingCheckTimeoutSeconds !== (view.landingCheckTimeoutSeconds ?? null)
+      ? { landingCheckTimeoutSeconds: draft.landingCheckTimeoutSeconds } : {}),
     ...(!view.locked && draft.line !== null && draft.line !== view.line ? { line: draft.line } : {}),
     ...(!view.locked && draft.upstream !== null && draft.upstream !== storedUpstream(view)
       ? { upstreamRef: mainBranchRef(draft.upstream) }
@@ -346,7 +357,8 @@ export function ProjectRunSettings({
   const set = (patch: Partial<RunSettingsDraft>) => setEdits((current) => ({ ...current, ...patch }));
   const writes = runSettingsWrites(view, project, draft);
   const dirty = writes.integration !== null || writes.authorization !== null;
-  const complete = draft.maxConcurrentTasks !== null;
+  const complete = draft.maxConcurrentTasks !== null
+    && (draft.landingCheckTimeoutSeconds === null || (Number.isInteger(draft.landingCheckTimeoutSeconds) && draft.landingCheckTimeoutSeconds > 0));
   const missingCheck = draft.line !== null && runMergeCheckMissing({ ...draft, line: draft.line });
   const branch = view.line === 'PROJECT_BRANCH' && view.ref ? view.ref : `project/${projectId}`;
   const now = Date.now();
@@ -530,6 +542,27 @@ export function ProjectRunSettings({
 
         <div className="project-run-settings-group">
           <div className="project-run-settings-group-head">{RUN_INTEGRATION}</div>
+
+          <div className="project-integration-setting">
+            <div className="project-integration-setting-label">{LANDING_CHECK_COPY.LABEL}</div>
+            <div>
+              {draft.line === 'MAIN' ? <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.MAIN}</div> : <>
+                <label>{LANDING_CHECK_COPY.COMMAND}</label>
+                <Input value={draft.landingCheckCommand} aria-label={LANDING_CHECK_COPY.LABEL}
+                  placeholder={LANDING_CHECK_COPY.COMMAND_PLACEHOLDER}
+                  onChange={(event) => set({ landingCheckCommand: event.target.value })} />
+                <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.HINT}</div>
+                {!draft.landingCheckCommand.trim() && <div className="project-integration-setting-hint">{inheritedLandingCommand(draft.mergeCheckCommand || null)}</div>}
+                <label>{LANDING_CHECK_COPY.TIMEOUT}</label>
+                <NumberInput min={1} precision={0} value={draft.landingCheckTimeoutSeconds}
+                  aria-label={`${LANDING_CHECK_COPY.LABEL} ${LANDING_CHECK_COPY.TIMEOUT}`}
+                  placeholder={LANDING_CHECK_COPY.TIMEOUT_PLACEHOLDER}
+                  onValueChange={(value) => set({ landingCheckTimeoutSeconds: value })} />
+                <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.TIMEOUT_HINT}</div>
+                {draft.landingCheckTimeoutSeconds === null && <div className="project-integration-setting-hint">{inheritedLandingTimeout(view.mergeCheckTimeoutSeconds)}</div>}
+              </>}
+            </div>
+          </div>
 
           <div className={missingCheck ? 'project-integration-setting is-warn' : 'project-integration-setting'}>
             <div className="project-integration-setting-label">{RUN_MERGE_CHECK}</div>

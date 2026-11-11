@@ -1,6 +1,7 @@
 package io.orbitd.android.reader
 
 import io.orbitd.android.core.cards.text
+import io.orbitd.android.core.cards.LandingCheckCopy
 
 // A landing's timeline read as the session chat reads a turn (owner 2026-11-11, docs/mocks/landings-chat-tools-native): one attempt's
 // lines gathered into a few steps — the queue, the claim, the sync onto the line, each check, and the push (or the merge into main) —
@@ -27,7 +28,7 @@ internal data class LandingStep(val key: String, val name: String, val entries: 
     val summary: LandingEntry, val at: String)
 
 internal object LandingSteps {
-    private val ORDER = listOf("queue", "claim", "sync", "check:TASK_ACCEPTANCE", "check:MERGE_CHECK", "push")
+    private val ORDER = listOf("queue", "claim", "sync", "check:TASK_ACCEPTANCE", "check:LANDING_CHECK", "check:BASELINE", "check:MERGE_CHECK", "push")
 
     /** The kinds a step's folded row prefers to say: how it ended. */
     private val VERDICTS = setOf("CHECK_FINISHED", "SKIPPED_CHECK", "RESULT", "RESULT_FALLBACK", "PUSH_REFUSED",
@@ -39,7 +40,7 @@ internal object LandingSteps {
     /** The lines that say a step stopped short. */
     private val FAILURES = setOf("STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED")
 
-    private fun checkKey(entry: LandingEntry) = if (entry.checkName == "TASK_ACCEPTANCE") "check:TASK_ACCEPTANCE" else "check:MERGE_CHECK"
+    private fun checkKey(entry: LandingEntry) = if (entry.data?.text("scope") == "BASELINE") "check:BASELINE" else if (entry.checkName == "LANDING_CHECK") "check:LANDING_CHECK" else if (entry.checkName == "TASK_ACCEPTANCE") "check:TASK_ACCEPTANCE" else "check:MERGE_CHECK"
 
     /** Which step a line belongs to; [current] is the step the attempt was last in. */
     private fun stepOf(entry: LandingEntry, current: String?): String = when (entry.kind) {
@@ -47,7 +48,7 @@ internal object LandingSteps {
         "CLAIMED", "TAKEN_OVER", "RELEASED" -> "claim"
         "ROUND", "RECHECK_ON_MOVED_MAIN" -> "sync"
         "CHECK_STARTED", "CHECK_FINISHED" -> checkKey(entry)
-        "SKIPPED_CHECK" -> "check:MERGE_CHECK"
+        "SKIPPED_CHECK" -> checkKey(entry)
         "PUSH_REFUSED" -> "push"
         // A result that landed or merged belongs to the push; one that stopped (a failed check, a conflict, an error) to the step it
         // stopped in, so no Push row says it failed to push.
@@ -67,6 +68,7 @@ internal object LandingSteps {
         "claim" -> LandingStepCopy.CLAIM
         "sync" -> LandingStepCopy.SYNC
         "check:TASK_ACCEPTANCE" -> LandingSessionModel.checkLabel("TASK_ACCEPTANCE")
+        "check:LANDING_CHECK", "check:BASELINE" -> LandingCheckCopy.label
         "check:MERGE_CHECK" -> LandingSessionModel.checkLabel("MERGE_CHECK")
         else -> when (kind) {
             "LAND_TASK" -> LandingStepCopy.PUSH
@@ -94,7 +96,7 @@ internal object LandingSteps {
 
     /** A step stopped short: one of its lines is a stop or a refusal, or a check or result that did not end well. */
     fun failed(step: LandingStep, kind: String): Boolean = step.entries.any { (_, entry) ->
-        entry.kind in FAILURES || (entry.kind in setOf("CHECK_FINISHED", "RESULT", "RESULT_FALLBACK") && !LandingSessionModel.entryOk(entry, kind))
+        entry.data?.text("skipped") != "PATHS_EXEMPT" && (entry.kind in FAILURES || (entry.kind in setOf("CHECK_FINISHED", "RESULT", "RESULT_FALLBACK") && !LandingSessionModel.entryOk(entry, kind)))
     }
 
     /** How long a landing's checks took together; null when none recorded a duration. */

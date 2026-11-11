@@ -97,3 +97,17 @@ describe('landingSteps', () => {
     expect(steps.map((step) => step.name)).toEqual(['Task acceptance', 'Merge check']);
   });
 });
+
+it.each([
+  ['Landing check passed · 14m', { exitCode: 0, expectedExitCode: 0 }],
+  ['Landing check failed · exit 1 · 14m', { exitCode: 1, expectedExitCode: 0 }],
+  ['Landing check skipped · only exempt paths changed', { skipped: 'PATHS_EXEMPT' }],
+])('keeps the landing verdict separate from baseline attribution: %s', (text, data) => {
+  const entries = [line('CHECK_FINISHED', text, { check: { name: 'LANDING_CHECK', index: 1 }, data }),
+    line('CHECK_FINISHED', 'Checked the project branch with main, without this task · also fails', {
+      check: { name: 'LANDING_CHECK', index: 2 }, data: { scope: 'BASELINE', exitCode: 1, expectedExitCode: 0 },
+    })];
+  expect(landingSteps(entries, 'LAND_TASK').map((step) => [step.key, step.summary.text])).toEqual([
+    ['check:LANDING_CHECK', text], ['check:BASELINE', entries[1]!.text],
+  ]);
+});

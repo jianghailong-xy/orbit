@@ -221,7 +221,7 @@ describe('How it runs — what the block says', () => {
     expect(node.querySelector('.project-open-items-title')?.textContent).toBe('How it runs');
     expect(node.querySelector('.project-open-items-hint')?.textContent).toBe(RUN_APPLIES_FROM_NEXT_TASK);
     expect(RUN_APPLIES_FROM_NEXT_TASK).toBe('applies from the next task');
-    expect(labels(node)).toEqual(['Tasks land on', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(labels(node)).toEqual(['Tasks land on', 'Automatic', 'At most', 'Landing check', 'Merge check', 'Escalate after']);
     // The lines by their start-card names, the branch shortened the way every line names one.
     expect(settingRow(node, 'Tasks land on').textContent).toContain('A project branch · project/34Wvw…');
     expect(settingRow(node, 'Tasks land on').textContent).toContain('Directly into main');
@@ -467,7 +467,7 @@ describe('How it runs — the main branch', () => {
   it('draws Main branch under Tasks land on, says a save there is the repository’s next default, and names it everywhere', async () => {
     server.view = onMaster();
     const node = await mount();
-    expect(labels(node)).toEqual(['Tasks land on', 'Main branch', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(labels(node)).toEqual(['Tasks land on', 'Main branch', 'Automatic', 'At most', 'Landing check', 'Merge check', 'Escalate after']);
     expect(shown(node)).toBe('master');
     expect(field(node).disabled).toBe(false);
     expect(settingRow(node, 'Main branch').querySelector('.project-integration-setting-hint')?.textContent).toBe(
@@ -479,7 +479,7 @@ describe('How it runs — the main branch', () => {
     expect(settingRow(node, 'Automatic').textContent).toContain(
       'merges the branch into master once the merge check passes — with a receipt you can revert');
     expect(settingRow(node, 'Merge check').textContent).toContain(
-      'Runs on the combined tree before anything lands — on the project branch and again before master.');
+      'Runs before merging into master.');
     expect(node.textContent).toContain('Stops new tasks, wake-ups and merges into master. Running tasks finish.');
     expect(node.textContent).not.toMatch(/\bmain\./u);
   });
@@ -550,7 +550,7 @@ describe('How it runs — the main branch', () => {
   it('draws no Main branch for a project with no repository, and keeps why the line is locked under the line', async () => {
     server.view = viewOf({ repository: null, branches: null });
     const node = await mount();
-    expect(labels(node)).toEqual(['Tasks land on', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(labels(node)).toEqual(['Tasks land on', 'Automatic', 'At most', 'Landing check', 'Merge check', 'Escalate after']);
     expect(settingRow(node, 'Tasks land on').textContent).toContain(runLineLocked('2h ago'));
     expect(node.querySelector('.main-branch-select')).toBeNull();
   });
@@ -565,7 +565,7 @@ describe('How it runs — how the work reaches main', () => {
   it('offers the agent pushing on a main line, even once it started, and writes the choice alone', async () => {
     server.view = viewOf({ line: 'MAIN', ref: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
     const node = await mount();
-    expect(labels(node)).toEqual(['Tasks land on', 'Delivery', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(labels(node)).toEqual(['Tasks land on', 'Delivery', 'Automatic', 'At most', 'Landing check', 'Merge check', 'Escalate after']);
     expect(deliveryInput(node, 'PLATFORM').checked).toBe(true);
     // The line is locked; the delivery mode is not (O-L1).
     expect(lineInput(node, 'MAIN').disabled).toBe(true);
@@ -658,7 +658,7 @@ describe('How it runs — how the work reaches main', () => {
     });
     const node = await mount();
     expect(labels(node)).toEqual(
-      ['Tasks land on', 'Delivery', 'Main branch', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+      ['Tasks land on', 'Delivery', 'Main branch', 'Automatic', 'At most', 'Landing check', 'Merge check', 'Escalate after']);
     expect(settingRow(node, 'Delivery').id).toBe(RUN_DELIVERY_ANCHOR);
   });
 
@@ -733,4 +733,37 @@ describe('How it runs — switching to the agent while a merge is waiting', () =
       expect(deliveryInput(node, 'AGENT_PUSH').checked).toBe(true);
     });
   }
+});
+
+describe('Landing check settings', () => {
+  it('reads independent inheritance, writes the exact command and timeout through integration PATCH', async () => {
+    server.view = viewOf({ landingCheckCommand: null, landingCheckTimeoutSeconds: null, mergeCheckTimeoutSeconds: 900 });
+    const node = await mount();
+    const row = settingRow(node, 'Landing check');
+    expect(row.textContent).toContain('Runs when a task lands on the project branch.');
+    expect(row.textContent).toContain('Uses merge check:');
+    expect(row.textContent).toContain('Uses merge check timeout: 900 seconds');
+    expect(row.textContent).toContain('Leave blank to use the merge check timeout.');
+    await type(row.querySelector<HTMLInputElement>('input[aria-label="Landing check"]')!, '  make quick  ');
+    await type(row.querySelector<HTMLInputElement>('input[aria-label="Landing check Timeout (seconds)"]')!, '600');
+    await save(node, 1);
+    expect(writes).toEqual([{ method: 'PATCH', path: `/projects/${PROJECT}/integration`,
+      body: { landingCheckCommand: '  make quick  ', landingCheckTimeoutSeconds: 600 } }]);
+  });
+  it('sends explicit nulls to restore independent inheritance', async () => {
+    server.view = viewOf({ landingCheckCommand: 'make quick', landingCheckTimeoutSeconds: 600 });
+    const node = await mount();
+    const row = settingRow(node, 'Landing check');
+    await type(row.querySelector<HTMLInputElement>('input[aria-label="Landing check"]')!, ' ');
+    await type(row.querySelector<HTMLInputElement>('input[aria-label="Landing check Timeout (seconds)"]')!, '');
+    await save(node, 1);
+    expect(writes[0]?.body).toEqual({ landingCheckCommand: null, landingCheckTimeoutSeconds: null });
+  });
+  it('keeps MAIN read-only and does not urge configuring checks when both are absent', async () => {
+    server.view = viewOf({ line: 'MAIN', landingCheckCommand: null, mergeCheckCommand: null });
+    const node = await mount();
+    expect(settingRow(node, 'Landing check').textContent).toContain('Not used when tasks land directly on main.');
+    expect(settingRow(node, 'Landing check').querySelector('input')).toBeNull();
+    expect(node.textContent).not.toContain('Set a landing check or merge check command.');
+  });
 });
