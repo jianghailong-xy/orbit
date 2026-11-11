@@ -84,6 +84,9 @@ async function key(name: string): Promise<void> {
   await settle();
 }
 
+// The reply's screenshot comes from a tool call, which folds into the turn's steps line like any
+// other read (512db0583); the viewer pages what is drawn, so open the line to draw it.
+const openSteps = () => click(container.querySelector('.chat-steps-line')!);
 const bubble = (seq: number) => container.querySelector<HTMLElement>(`.chat-user[data-seq="${seq}"]`)!;
 const thumbnails = (scope: Element) => [...scope.querySelectorAll<HTMLButtonElement>('button.chat-image-btn')];
 const viewer = () => document.querySelector<HTMLElement>('[role="dialog"]');
@@ -153,6 +156,7 @@ describe('the viewer', () => {
     await land('tall');
     await land('wide');
     await fail('missing');
+    await openSteps();
 
     await click(thumbnails(bubble(1))[1]);
     expect(viewer()).not.toBeNull();
@@ -179,6 +183,7 @@ describe('the viewer', () => {
     await land('diagram');
     await land('later');
     await fail('missing');
+    await openSteps();
 
     const picture = thumbnails(container.querySelector('.chat-assistant .md')!)[0];
     expect(picture.querySelector('img')!.className).toBe('md-image');
@@ -224,6 +229,26 @@ describe('the viewer', () => {
     await key('ArrowLeft');
     expect(shown()).toBe('blob:today');
     expect(position()).toBe('1 / 3');
+  });
+
+  it('draws an upload linked by name as a picture when its name is one, and keeps a document a chip', async () => {
+    await draw([
+      {
+        seq: 1,
+        type: 'assistant',
+        turnId: 't1',
+        ts: at,
+        payload: { text: '- [01 Worktree session](orbit-attachment:shot "01-worktree-session.png")\n- [The plan](orbit-attachment:doc "plan.pdf")' },
+      },
+    ]);
+    expect(resolver.mock.calls.map(([id]) => id)).toEqual(['shot']);
+    await land('shot');
+    const reply = container.querySelector('.chat-assistant .md')!;
+    const pictures = thumbnails(reply);
+    expect(pictures.map((button) => button.querySelector('img')!.getAttribute('alt'))).toEqual(['01 Worktree session']);
+    expect(reply.querySelector('.chat-file-name')?.textContent).toBe('plan.pdf');
+    await click(pictures[0]);
+    expect(shown()).toBe('blob:shot');
   });
 
   it('opens a queued turn’s picture on its own, since a queued turn is drawn outside the conversation', async () => {

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ConfirmationAnswersCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
@@ -166,6 +167,13 @@ const RETURNED: ConfirmationReturnCard = {
   reason: 'Two of the six findings are not fixed on the branch.',
   problems: [{ key: 'p1', text: 'P1-3 still sends the reply twice' }],
 };
+const ANSWERS: ConfirmationAnswersCard = {
+  decisionId: '01a0cca7-0000-7000-8000-0000000000c1',
+  taskId: '01a0cca7-0000-7000-8000-0000000000c2',
+  title: 'Welcome email for new accounts',
+  decidedAt: '2026-11-11T05:13:08.000Z',
+  answers: [{ key: 'n1', question: 'How should it reach main?', choice: 'Merge to main now', text: null, notShown: false }],
+};
 const FROM: SessionMessageCard = {
   fromSessionId: '01a0cca7-8609-70ed-a0e2-d4b55b832b61',
   fromTitle: 'Worker: migration review',
@@ -190,6 +198,7 @@ const EVERY_CARD: Required<TurnCards> = {
   projectStarted: STARTED,
   confirmationReviewRequest: REVIEW_REQUEST,
   confirmationReturn: RETURNED,
+  confirmationAnswers: ANSWERS,
   sessionMessage: FROM,
   sessionReplies: [REPLY],
 };
@@ -202,8 +211,9 @@ const ACCEPTED_ONE_CARD_EACH: { field: keyof TurnCards; content: string; drawnAs
   { field: 'coordinatorDelivery', content: 'From Orbit · project “Queue parity” has finished work that has not landed on main', drawnAs: '.coordinator-delivery' },
   { field: 'taskStart', content: BRIEF, drawnAs: '.tsc' },
   { field: 'projectStarted', content: 'The owner started this project.', drawnAs: '.psc' },
-  { field: 'confirmationReviewRequest', content: '<orbit-confirmation-review/>', drawnAs: '.crc:not(.is-returned)' },
+  { field: 'confirmationReviewRequest', content: '<orbit-confirmation-review/>', drawnAs: '.crc:not(.is-returned):not(.is-confirmed)' },
   { field: 'confirmationReturn', content: '<orbit-confirmation-return/>', drawnAs: '.crc.is-returned' },
+  { field: 'confirmationAnswers', content: '<orbit-confirmation-answers/>', drawnAs: '.crc.is-confirmed' },
   { field: 'sessionMessage', content: 'please review the migration before I merge it', drawnAs: '.smc' },
   { field: 'sessionReplies', content: 'what did the coordinator say?', drawnAs: '.src-wrap' },
 ];

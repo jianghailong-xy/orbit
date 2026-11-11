@@ -28,6 +28,10 @@ fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
         }
         addProjection("confirmationReviewRequest", "Review requested", CardFamily.REVIEW, listOf("requestId", "taskId", "title", "runSessionId"))
         addProjection("confirmationReturn", "Sent back by the reviewer", CardFamily.REVIEW, listOf("requestId", "reason"))
+        // The owner's answers handed to the reviewer once they confirmed (contract §7 Q5): "You confirmed", with at least one answer.
+        if (payload.obj("confirmationAnswers")?.let(OwnerReview::confirmationAnswers)?.isNotEmpty() == true) {
+            addProjection("confirmationAnswers", OwnerReview.youConfirmed, CardFamily.REVIEW, listOf("taskId", "title", "decidedAt"))
+        }
         addProjection("taskStart", "Task started", CardFamily.SESSION_REQUEST, listOf("taskId", "title"))
         addProjection("projectStarted", "Project started", CardFamily.SESSION_REQUEST, listOf("projectId", "projectTitle", "by"))
         addProjection("openItemDelivery", "Project item delivered", CardFamily.SESSION_REQUEST, listOf("itemId", "kind", "title"))

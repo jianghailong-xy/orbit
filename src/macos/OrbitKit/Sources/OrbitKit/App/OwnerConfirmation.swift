@@ -708,6 +708,10 @@ public enum OwnerConfirmations {
     public static let beforeReview = "Before the review came in"
     /// The card the reviewer's own conversation draws for the turn that asks it to review (§2 D7).
     public static let reviewRequested = "Review requested"
+    /// The card the reviewer's conversation draws for the owner's answers handed to it (§7 Q5).
+    public static let youConfirmed = "You confirmed"
+    public static let answersSentToReviewer = "Your answers, sent to this reviewer"
+    public static let reviewerWasTold = "What the reviewer was told"
     /// The press onto the run's session — the exception card's words for the same door.
     public static let openTaskSession = "Open task session"
 

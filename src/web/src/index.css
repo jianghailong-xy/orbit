@@ -10244,12 +10244,40 @@ button.chat-jump-start:hover {
   border-left: 2px solid var(--border);
   padding-left: 10px;
 }
+/* Folded by default, so it reads as the row a settled block shows (.chat-think-head): what moves
+   is the clock, the count and a faint sweep over the word. */
 .chat-think-live-head {
   display: flex;
   align-items: center;
   gap: 6px;
+  font: inherit;
   font-size: 12.5px;
   color: var(--text-3);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.chat-think-live-word {
+  background: linear-gradient(90deg, var(--text-3) 35%, var(--text-4) 50%, var(--text-3) 65%) 0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: chat-think-sweep 2.4s linear infinite;
+}
+@keyframes chat-think-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-think-live-word {
+    animation: none;
+  }
 }
 .chat-think-port {
   max-height: 11em;
@@ -10266,6 +10294,11 @@ button.chat-jump-start:hover {
 }
 .chat-think-port::-webkit-scrollbar {
   display: none;
+}
+/* Following the newest line leaves the top line cut through its middle; fade that edge instead. */
+.chat-think-port.is-scrolled {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2.5em);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 2.5em);
 }
 .chat-think-meta {
   color: var(--text-4);
@@ -10531,6 +10564,149 @@ button.chat-jump-start:hover {
   margin: 6px 0 4px 2px;
   padding-left: 12px;
   border-left: 2px solid var(--border);
+}
+/* A turn Orbit opened, folded with the agent's answer into one muted line (OrbitExchangeFold):
+   what happened, then the first line of the reply, then the time. Two or more in a row fold into one
+   group line, which opens to them by task. Same tone as the steps line: nothing here is the
+   reader's, and nothing asks for them. */
+.orbit-exchange-root,
+.orbit-exchanges {
+  margin: 2px 0 8px;
+  padding: 0 12px;
+}
+.orbit-exchange-line,
+.orbit-exchanges-line,
+.orbit-branch-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
+}
+.orbit-exchange-line:hover,
+.orbit-exchanges-line:hover,
+.orbit-branch-line:hover {
+  color: var(--text-2);
+}
+.orbit-exchange-line:focus-visible,
+.orbit-exchanges-line:focus-visible,
+.orbit-branch-line:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.orbit-exchange-mark {
+  flex: none;
+  width: 12px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.orbit-exchange-what {
+  flex: none;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.orbit-exchanges-count {
+  flex: none;
+  color: var(--text-2);
+}
+.orbit-exchange-reply {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orbit-exchange-line .orbit-exchange-reply::before {
+  content: '— ';
+}
+.orbit-exchanges-kinds::before,
+.orbit-branch-meta::before {
+  content: '· ';
+}
+.orbit-exchange-time {
+  flex: none;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.orbit-exchange-caret,
+.orbit-branch-caret {
+  flex: none;
+  font-size: 10px;
+}
+.orbit-exchange-caret {
+  width: 10px;
+  opacity: 0;
+}
+.orbit-exchange-line:hover .orbit-exchange-caret,
+.orbit-exchanges-line:hover .orbit-exchange-caret,
+.orbit-exchange.is-open > .orbit-exchange-line .orbit-exchange-caret,
+.orbit-exchanges.is-open > .orbit-exchanges-line .orbit-exchange-caret {
+  opacity: 1;
+}
+.orbit-exchanges-body {
+  margin: 2px 0 4px 2px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+.orbit-branch-caret {
+  width: 12px;
+}
+.orbit-branch-title {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-weight: 500;
+}
+.orbit-branch-body {
+  margin-left: 5px;
+  padding-left: 14px;
+  border-left: 1px dashed var(--border);
+}
+.orbit-exchange-detail {
+  margin: 6px 0 10px 2px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+/* A phone has no room for both halves on one row: what happened and when, then the reply under it. */
+@media (max-width: 600px) {
+  .orbit-exchange-line,
+  .orbit-branch-line {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .orbit-exchange-line .orbit-exchange-what,
+  .orbit-branch-title {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+  }
+  .orbit-exchange-line .orbit-exchange-reply,
+  .orbit-branch-meta {
+    order: 5;
+    flex-basis: 100%;
+    padding-left: 20px;
+  }
+  .orbit-exchange-line .orbit-exchange-reply::before,
+  .orbit-branch-meta::before {
+    content: '';
+  }
+  .orbit-exchange-line .orbit-exchange-caret,
+  .orbit-branch-line .orbit-exchange-caret,
+  .orbit-exchanges-kinds,
+  .orbit-branch.is-open > .orbit-branch-line .orbit-branch-meta {
+    display: none;
+  }
 }
 .chat-steps-live {
   margin-top: 6px;
@@ -23733,8 +23909,8 @@ div.landing-jobs-open {
   flex-basis: 100%;
   white-space: normal;
 }
-/* A confirmation review's two turns (`ConfirmationReviewTurnCards.tsx`): the request a reviewer is
-   handed, and the reviewer's return handed to the run. Orbit's turns, drawn as the started card is. */
+/* A confirmation review's three turns (`ConfirmationReviewTurnCards.tsx`): the request a reviewer is
+   handed, the reviewer's return handed to the run, and the owner's answers handed to the reviewer. Orbit's turns, drawn as the started card is. */
 .crc-wrap {
   display: flex;
   justify-content: flex-end;
@@ -23752,6 +23928,10 @@ div.landing-jobs-open {
   border-color: var(--warning-border);
   background: var(--warning-bg);
 }
+.crc.is-confirmed {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
 .crc.is-queued {
   border-style: dashed;
 }
@@ -23764,6 +23944,9 @@ div.landing-jobs-open {
 }
 .crc.is-returned .crc-head {
   color: var(--warning);
+}
+.crc.is-confirmed .crc-head {
+  color: var(--success);
 }
 .crc-when {
   margin-left: auto;
@@ -23812,6 +23995,51 @@ div.landing-jobs-open {
   color: var(--warning);
   font-size: 12px;
   line-height: 1.6;
+}
+.crc-lead {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.crc-answers {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.crc-answers li {
+  margin-top: 5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.crc-answer-question {
+  color: var(--text-2);
+}
+.crc-answer {
+  font-weight: 600;
+}
+.crc-answer-note {
+  color: var(--warning);
+  font-size: 12px;
+}
+.crc-raw {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.crc-raw summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.crc-raw pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .crc-undelivered {
   margin-top: 4px;

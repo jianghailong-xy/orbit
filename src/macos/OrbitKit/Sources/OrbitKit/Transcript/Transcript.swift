@@ -212,6 +212,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// cards. Nil for every other turn.
     public var reviewRequest: ConfirmationReviewRequestCard?
     public var reviewReturn: ConfirmationReturnCard?
+    /// The owner's answers handed to this reviewer once they confirmed (`confirmationAnswers`, §7 Q5):
+    /// drawn as `You confirmed`. Nil for every other turn.
+    public var reviewAnswers: ConfirmationAnswersCard?
     /// The control plane wrote this queued turn itself (`QueuedTurnInfo.authoredByOrbit`), so nobody
     /// typed it: taken off the queue unrun, it hands nothing back to the composer.
     public var authoredByOrbit: Bool
@@ -260,6 +263,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 authoredByOrbit: Bool = false,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
                 reviewReturn: ConfirmationReturnCard? = nil,
+                reviewAnswers: ConfirmationAnswersCard? = nil,
                 shell: Bool = false, receipt: Bool = false,
                 deliveryCode: String? = nil, deliveryReason: String? = nil) {
         self.id = id
@@ -286,6 +290,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.authoredByOrbit = authoredByOrbit
         self.reviewRequest = reviewRequest
         self.reviewReturn = reviewReturn
+        self.reviewAnswers = reviewAnswers
         self.shell = shell
         self.receipt = receipt
         self.deliveryCode = deliveryCode
@@ -298,7 +303,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
         case note, steer, delivery, itemCard, ownerAnswer, coordinatorDelivery, taskStart, startedCard
         case sessionMessage, externalSender, sessionReplies
-        case authoredByOrbit, reviewRequest, reviewReturn, withdrawable, shell
+        case authoredByOrbit, reviewRequest, reviewReturn, reviewAnswers, withdrawable, shell
         case receipt, deliveryCode, deliveryReason
     }
     public init(from decoder: Decoder) throws {
@@ -336,6 +341,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // And for a review's two turns: a snapshot from before they existed keeps its reading.
         reviewRequest = try? c.decodeIfPresent(ConfirmationReviewRequestCard.self, forKey: .reviewRequest)
         reviewReturn = try? c.decodeIfPresent(ConfirmationReturnCard.self, forKey: .reviewReturn)
+        reviewAnswers = try? c.decodeIfPresent(ConfirmationAnswersCard.self, forKey: .reviewAnswers)
         shell = (try? c.decodeIfPresent(Bool.self, forKey: .shell)) ?? false
         // A snapshot from before receipts were drawn held none.
         receipt = (try? c.decodeIfPresent(Bool.self, forKey: .receipt)) ?? false
