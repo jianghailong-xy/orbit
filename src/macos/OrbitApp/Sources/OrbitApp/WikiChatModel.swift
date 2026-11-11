@@ -98,6 +98,11 @@ final class WikiChatModel {
     var refusal: String?
     /// A new chat being made.
     private(set) var creating = false
+    /// The panel was shown by the page opening (board 45), not by a press: a phone-width window folds it away and a
+    /// wide one brings it back, where a panel the owner opened stays a sheet.
+    private(set) var openedByDefault = false
+    /// The history the title opens over the whole panel (board 45 ④), nil while the chat shows.
+    var history: WikiChatHistory?
 
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
@@ -274,6 +279,9 @@ final class WikiChatModel {
     /// The round button (design §3): the space's chat that needs the owner, else its newest open one, else a new one —
     /// and, once its cards are read, straight to the first card that needs the owner.
     func openFromButton(spaceID: String) {
+        // The button undoes ✕ (Q1 A): pages open with the panel shown again.
+        setHiddenByOwner(spaceID, false)
+        openedByDefault = false
         enter(spaceID: spaceID)
         chat = WikiChatLogic.toOpen(list(spaceID)?.chats)
         focusCard = nil
@@ -294,6 +302,50 @@ final class WikiChatModel {
     func close() {
         presented = false
         asking = nil
+        history = nil
+    }
+
+    // MARK: open by default (board 45 ①②, owner 11-11)
+
+    /// The spaces whose panel the owner hid with ✕, kept on this device until the button opens it again (Q1 A).
+    private static let hiddenKey = "orbit.wikiChat.hidden"
+
+    func hiddenByOwner(_ spaceID: String) -> Bool {
+        (UserDefaults.standard.dictionary(forKey: Self.hiddenKey)?[PublicID.storageKey(spaceID)] as? Bool) == true
+    }
+
+    private func setHiddenByOwner(_ spaceID: String, _ hidden: Bool) {
+        var all = UserDefaults.standard.dictionary(forKey: Self.hiddenKey) ?? [:]
+        if hidden { all[PublicID.storageKey(spaceID)] = true } else { all.removeValue(forKey: PublicID.storageKey(spaceID)) }
+        UserDefaults.standard.set(all, forKey: Self.hiddenKey)
+    }
+
+    /// ✕, or the column dismissed: the owner saying no. Kept until the button opens the panel again (Q1 A).
+    func closeByOwner() {
+        if let spaceID { setHiddenByOwner(spaceID, true) }
+        openedByDefault = false
+        close()
+    }
+
+    /// A Wiki page of `spaceID` shows the panel where it is the third column, on the chat the button would open,
+    /// unless the owner hid it (`WikiChatLogic.opensByDefault`). Called once the chats are read and whenever the
+    /// width or the page changes; a panel already open is left as it is.
+    func openByDefault(spaceID: String, settingsOnTop: Bool) {
+        let fits = WikiChatLogic.opensByDefault(sheet: asSheet, settingsOnTop: settingsOnTop, hiddenByOwner: hiddenByOwner(spaceID))
+        if presented {
+            // Narrowed to a phone's width, or turned to Settings: a panel the page opened folds away with it.
+            if openedByDefault && !fits { presented = false }
+            return
+        }
+        guard fits, let read = list(spaceID) else { return }
+        // Widened again after a narrow window folded it: the same chat comes back. Otherwise the button's choice.
+        let returning = openedByDefault && self.spaceID == spaceID
+        enter(spaceID: spaceID)
+        if !returning { chat = WikiChatLogic.toOpen(read.chats) }
+        focusCard = nil
+        openedByDefault = true
+        presented = true
+        Task { await focusFirstCardThatNeedsYou() }
     }
 
     /// Before the page opens a sheet of its own: a phone's chat sheet folds away first, since one sheet shows at a
@@ -304,8 +356,9 @@ final class WikiChatModel {
         return true
     }
 
-    /// The chat the title's history menu picked.
+    /// The chat the history picked.
     func pick(chat sessionID: String) {
+        history = nil
         chat = sessionID
         focusCard = nil
         Task { await loadCards(chat: sessionID) }
@@ -313,6 +366,7 @@ final class WikiChatModel {
 
     /// `+`: a new chat in the same space.
     func newChat() {
+        history = nil
         chat = WikiChatLogic.newChat
         focusCard = nil
         pickedWorkspace = nil
@@ -333,6 +387,76 @@ final class WikiChatModel {
         guard chat != WikiChatLogic.newChat else { return }
         await loadCards(chat: chat)
         focusCard = openChatCards.first { WikiChatLogic.cardNeedsYou($0.card) }.map { PublicID.storageKey($0.id) }
+    }
+
+    // MARK: the history (board 45 ④, owner 11-11: Q3 A, Q4 A)
+
+    /// The title pressed: the history over the whole panel, or back to the chat.
+    func toggleHistory() {
+        if history != nil { history = nil; return }
+        history = WikiChatHistory()
+        Task { await loadHistory() }
+    }
+
+    /// The history's first page for its words (`?q=`), read again from the top.
+    func searchHistory(_ words: String) {
+        guard history != nil else { return }
+        history?.query = words
+        Task { await loadHistory() }
+    }
+
+    /// The next page (`Show more`).
+    func moreHistory() {
+        guard let read = history, read.more, !read.loading else { return }
+        Task { await loadHistory(offset: read.rows.count) }
+    }
+
+    func loadHistory(offset: Int = 0) async {
+        guard let spaceID, let asked = history?.query else { return }
+        history?.loading = true
+        let read = try? await api.wikiChats(spaceID: spaceID, q: asked, offset: offset)
+        // A newer search, or the history closed, while this was read: drop it.
+        guard history?.query == asked else { return }
+        history?.loading = false
+        guard let read else { history?.failed = offset == 0; return }
+        history?.failed = false
+        let seen = offset == 0 ? [] : Set((history?.rows ?? []).map { PublicID.storageKey($0.sessionId) })
+        let fresh = read.chats.filter { !seen.contains(PublicID.storageKey($0.sessionId)) }
+        history?.rows = (offset == 0 ? [] : history?.rows ?? []) + fresh
+        history?.more = read.more
+        history?.loaded = true
+        if offset == 0, lists[spaceID] != nil, read.fab != lists[spaceID]?.fab { await load(spaceID: spaceID) }
+    }
+
+    /// A row's ⋯ (the session list's own doors): Rename…, Complete, Move to Trash, and Undo's way back to Open. Each
+    /// reads the history and the space's chats again; the error, when a door refused, is the caller's to say.
+    func renameChat(_ sessionID: String, title: String) async -> Error? {
+        await act { try await self.api.renameSession(sessionID, title: title) }
+    }
+
+    func completeChat(_ sessionID: String) async -> Error? {
+        await act { try await self.api.completeSession(sessionID) }
+    }
+
+    func trashChat(_ sessionID: String) async -> Error? {
+        let error = await act { try await self.api.deleteSession(sessionID) }
+        // The chat shown went to Trash: the panel turns to a new chat, the history stays.
+        if error == nil, PublicID.storageKey(sessionID) == PublicID.storageKey(chat) {
+            chat = WikiChatLogic.newChat
+            focusCard = nil
+        }
+        return error
+    }
+
+    func restoreChat(_ sessionID: String) async -> Error? {
+        await act { try await self.api.restoreSession(sessionID) }
+    }
+
+    private func act(_ door: @escaping () async throws -> Void) async -> Error? {
+        do { try await door() } catch { return error }
+        if let spaceID { await load(spaceID: spaceID) }
+        if history != nil { await loadHistory() }
+        return nil
     }
 
     // MARK: the attachments
@@ -451,4 +575,14 @@ final class WikiChatModel {
         guard WikiChatLogic.needsSeen(card) else { return }
         Task { await press(card, .seen) }
     }
+}
+
+/// The history over the panel (board 45 ④): its words, the pages read so far, and whether more match.
+struct WikiChatHistory: Equatable {
+    var query = ""
+    var rows: [WikiChatRow] = []
+    var more = false
+    var loading = false
+    var loaded = false
+    var failed = false
 }
