@@ -10532,6 +10532,149 @@ button.chat-jump-start:hover {
   padding-left: 12px;
   border-left: 2px solid var(--border);
 }
+/* A turn Orbit opened, folded with the agent's answer into one muted line (OrbitExchangeFold):
+   what happened, then the first line of the reply, then the time. Two or more in a row fold into one
+   group line, which opens to them by task. Same tone as the steps line: nothing here is the
+   reader's, and nothing asks for them. */
+.orbit-exchange-root,
+.orbit-exchanges {
+  margin: 2px 0 8px;
+  padding: 0 12px;
+}
+.orbit-exchange-line,
+.orbit-exchanges-line,
+.orbit-branch-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
+}
+.orbit-exchange-line:hover,
+.orbit-exchanges-line:hover,
+.orbit-branch-line:hover {
+  color: var(--text-2);
+}
+.orbit-exchange-line:focus-visible,
+.orbit-exchanges-line:focus-visible,
+.orbit-branch-line:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.orbit-exchange-mark {
+  flex: none;
+  width: 12px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.orbit-exchange-what {
+  flex: none;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.orbit-exchanges-count {
+  flex: none;
+  color: var(--text-2);
+}
+.orbit-exchange-reply {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orbit-exchange-line .orbit-exchange-reply::before {
+  content: '— ';
+}
+.orbit-exchanges-kinds::before,
+.orbit-branch-meta::before {
+  content: '· ';
+}
+.orbit-exchange-time {
+  flex: none;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.orbit-exchange-caret,
+.orbit-branch-caret {
+  flex: none;
+  font-size: 10px;
+}
+.orbit-exchange-caret {
+  width: 10px;
+  opacity: 0;
+}
+.orbit-exchange-line:hover .orbit-exchange-caret,
+.orbit-exchanges-line:hover .orbit-exchange-caret,
+.orbit-exchange.is-open > .orbit-exchange-line .orbit-exchange-caret,
+.orbit-exchanges.is-open > .orbit-exchanges-line .orbit-exchange-caret {
+  opacity: 1;
+}
+.orbit-exchanges-body {
+  margin: 2px 0 4px 2px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+.orbit-branch-caret {
+  width: 12px;
+}
+.orbit-branch-title {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-weight: 500;
+}
+.orbit-branch-body {
+  margin-left: 5px;
+  padding-left: 14px;
+  border-left: 1px dashed var(--border);
+}
+.orbit-exchange-detail {
+  margin: 6px 0 10px 2px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+/* A phone has no room for both halves on one row: what happened and when, then the reply under it. */
+@media (max-width: 600px) {
+  .orbit-exchange-line,
+  .orbit-branch-line {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .orbit-exchange-line .orbit-exchange-what,
+  .orbit-branch-title {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+  }
+  .orbit-exchange-line .orbit-exchange-reply,
+  .orbit-branch-meta {
+    order: 5;
+    flex-basis: 100%;
+    padding-left: 20px;
+  }
+  .orbit-exchange-line .orbit-exchange-reply::before,
+  .orbit-branch-meta::before {
+    content: '';
+  }
+  .orbit-exchange-line .orbit-exchange-caret,
+  .orbit-branch-line .orbit-exchange-caret,
+  .orbit-exchanges-kinds,
+  .orbit-branch.is-open > .orbit-branch-line .orbit-branch-meta {
+    display: none;
+  }
+}
 .chat-steps-live {
   margin-top: 6px;
   font-size: 13.5px;

@@ -36,7 +36,7 @@ import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft
 import { checkDuration } from '../lib/checkDuration';
 import { quotaWindowKind } from '../lib/quotaWindow';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
-import type { ComponentProps, ReactNode } from 'react';
+import type { ComponentProps, ContextType, ReactNode } from 'react';
 import {
   AgentProvider,
   apiErrorRetryAt,
@@ -86,8 +86,10 @@ import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
-import { WatchWakeCard } from './WatchWakeCard';
-import { BackgroundWakeCard } from './BackgroundWakeCard';
+import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
+import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
+import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
+import { replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { WikiContextNote } from './WikiContextNote';
@@ -108,6 +110,7 @@ import { OwnerAnswerLine } from './OwnerAnswerLine';
 import { parseCoordinatorDelivery } from '../lib/coordinatorDelivery';
 import type { CoordinatorDeliveryCard as CoordinatorDelivery } from '@orbit/shared';
 import { CoordinatorDeliveryLine } from './CoordinatorDeliveryLine';
+import { coordinatorDeliverySentence } from '../lib/coordinatorDelivery';
 import { parseTaskStartCard } from '../lib/taskStartCard';
 import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
@@ -1716,29 +1719,182 @@ function NodeList({
   // In a wiki chat a drafting call is its card, which no run summary may fold away (`isGroupableTool`).
   const chat = useContext(WikiDraftCardCtx) !== null;
   const items = useMemo(() => groupToolRuns(nodes, chat), [nodes, chat]);
+  const exporting = useContext(ExportCtx) !== null;
+  const wakeName = useContext(WatchWakeNamesCtx);
+  const renderItem = (item: NodeListItem) => {
+    const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+    // The row a turn opens with, under its message and over everything the turn writes.
+    const head =
+      item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
+        <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
+      ) : null;
+    return [
+      item.kind === 'steps' ? (
+        <StepsLine key={item.key} nodes={item.nodes} live={live} />
+      ) : (
+        <NodeView key={item.node.seq} node={item.node} live={live} />
+      ),
+      head,
+      ...seqs
+        .flatMap((seq) => placed?.get(seq) ?? [])
+        .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
+    ];
+  };
+  // A static export has no way to open a fold, so it draws every turn as it always has.
+  const blocks = useMemo(
+    () => (exporting ? items.map((item) => ({ kind: 'item' as const, item })) : foldOrbitExchanges(items, wakeName)),
+    [items, exporting, wakeName],
+  );
   return (
     <>
-      {items.flatMap((item) => {
-        const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
-        // The row a turn opens with, under its message and over everything the turn writes.
-        const head =
-          item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
-            <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
-          ) : null;
+      {blocks.flatMap((block) => {
+        if (block.kind === 'item') return renderItem(block.item);
+        const withBody = block.exchanges.map((ex) => ({
+          ...ex.summary,
+          body: () => <>{ex.items.flatMap(renderItem)}</>,
+        }));
         return [
-          item.kind === 'steps' ? (
-            <StepsLine key={item.key} nodes={item.nodes} live={live} />
+          withBody.length === 1 ? (
+            <OrbitExchangeSolo key={`exchange-${withBody[0].seq}`} ex={withBody[0]} />
           ) : (
-            <NodeView key={item.node.seq} node={item.node} live={live} />
+            <OrbitExchangeGroup key={`exchanges-${withBody[0].seq}`} exchanges={withBody} />
           ),
-          head,
-          ...seqs
-            .flatMap((seq) => placed?.get(seq) ?? [])
-            .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
         ];
       })}
     </>
   );
+}
+
+// ── Turns Orbit opened, folded (components/OrbitExchangeFold, lib/orbitExchangeFold) ─────────────
+
+type WakeName = ContextType<typeof WatchWakeNamesCtx>;
+type FoldedExchange = { summary: OrbitExchangeSummary; items: NodeListItem[] };
+type FoldBlock = { kind: 'item'; item: NodeListItem } | { kind: 'exchanges'; exchanges: FoldedExchange[] };
+
+/** Facts a coordinator is told that are bad news: they stay in view, as they always were drawn. */
+const LOUD_DELIVERIES: ReadonlySet<string> = new Set(['TASK_DISPATCH_REFUSED', 'PROJECT_BLOCKER_RAISED', 'TASK_RUN_STOPPED']);
+
+/**
+ * What a turn's opening node says happened, when Orbit opened the turn and it is one the reader
+ * can be spared: a fact told to a coordinator, a watch or a background job coming back, another
+ * session's reply. Null for everything else, and for those that went wrong — a refused start, a
+ * blocker, a stopped run, a failed target or job, a delivery nobody confirmed — which stay drawn.
+ */
+function orbitTurnOf(
+  node: Node,
+  wakeName: WakeName,
+): Omit<OrbitExchangeSummary, 'seq' | 'lastSeq' | 'reply'> | null {
+  if (node.kind !== 'user' || !node.turnHead || node.steer) return null;
+  if (node.delivery === 'failed' || node.delivery === 'unconfirmed') return null;
+  if (node.sessionMessage || node.itemCard || node.ownerAnswer || node.taskStart || node.startedCard) return null;
+  if (node.reviewRequest || node.reviewReturn) return null;
+  const ts = node.ts;
+  if (node.sessionReplies) {
+    if (node.text.trim() !== '' || node.sessionReplies.length !== 1) return null;
+    const reply = node.sessionReplies[0];
+    return {
+      ts,
+      what: `Reply from ${reply.fromTitle}`,
+      category: 'reply',
+      target: { kind: 'SESSION', id: reply.fromSessionId, title: reply.fromTitle },
+    };
+  }
+  const delivery = node.coordinatorDelivery;
+  if (delivery) {
+    if (LOUD_DELIVERIES.has(delivery.kind)) return null;
+    const what = coordinatorDeliverySentence(delivery);
+    const task = delivery.task;
+    return {
+      ts,
+      what,
+      whatInTask: task ? what.replace(`: ${task.title}`, '') : undefined,
+      category: delivery.kind.startsWith('EVIDENCE_') ? 'evidence' : delivery.kind === 'DEPENDENT_READY' ? 'ready' : 'project',
+      target: task ? { kind: 'TASK', id: task.id, title: task.title } : null,
+    };
+  }
+  const wake = parseWatchWake(node.text);
+  if (wake) {
+    if (wake.changedTargets.some((t) => t.status === 'FAILED')) return null;
+    const one = wake.changedTargets.length === 1 ? wake.changedTargets[0] : null;
+    const name = one ? wakeName?.(wake.watchId, one) : undefined;
+    const title = watchWakeTitle(wake.kind);
+    return {
+      ts,
+      what: name ? `${title}: ${name}` : title,
+      whatInTask: title,
+      category: 'watch',
+      target: one && (one.kind === 'TASK' || one.kind === 'SESSION') ? { kind: one.kind, id: one.id, title: name } : null,
+    };
+  }
+  const background = parseBackgroundWake(node.note);
+  if (background) {
+    if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
+    const title = backgroundWakeTitle(background);
+    const name = backgroundWakeName(background);
+    return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
+  }
+  return null;
+}
+
+/** A turn that asks the reader something, or went wrong, stays in view whatever opened it. */
+function turnNeedsReader(items: NodeListItem[]): boolean {
+  return items.some((item) =>
+    (item.kind === 'steps' ? item.nodes : [item.node]).some(
+      (node) =>
+        node.kind === 'error'
+        || node.kind === 'authError'
+        || (node.kind === 'tool' && /(^|__|\.)(ask_owner|request_owner_action)$/.test(node.name)),
+    ),
+  );
+}
+
+/**
+ * The list cut into turns — each opens at a top-level message — with the turns Orbit opened folded,
+ * runs of them together. The last turn never folds: it is what the reader opened the conversation
+ * to see, and it may still be running.
+ */
+function foldOrbitExchanges(
+  items: NodeListItem[],
+  wakeName: WakeName,
+): FoldBlock[] {
+  const turns: NodeListItem[][] = [];
+  for (const item of items) {
+    const opens = item.kind === 'node' && item.node.kind === 'user' && !!item.node.turnHead;
+    if (opens || turns.length === 0) turns.push([item]);
+    else turns[turns.length - 1].push(item);
+  }
+  const out: FoldBlock[] = [];
+  let run: FoldedExchange[] = [];
+  const flush = () => {
+    if (run.length) out.push({ kind: 'exchanges', exchanges: run });
+    run = [];
+  };
+  turns.forEach((turn, i) => {
+    const first = turn[0];
+    const orbit = i < turns.length - 1 && first.kind === 'node' ? orbitTurnOf(first.node, wakeName) : null;
+    const replies = turn.flatMap((item) =>
+      item.kind === 'node' && item.node.kind === 'assistant' && item.node.text.trim() ? [item.node.text] : [],
+    );
+    // An exchange is the turn and its answer: one the agent has not answered yet is already the
+    // single line its card draws, and folding it would only take that line away.
+    if (orbit && replies.length > 0 && !turnNeedsReader(turn)) {
+      const seqs = turn.flatMap((item) => (item.kind === 'steps' ? item.nodes : [item.node]).map((node) => node.seq));
+      run.push({
+        summary: {
+          ...orbit,
+          seq: (first as { node: Node }).node.seq,
+          lastSeq: Math.max(...seqs.filter(Number.isFinite)),
+          reply: replyGist(replies[replies.length - 1] ?? ''),
+        },
+        items: turn,
+      });
+      return;
+    }
+    flush();
+    turn.forEach((item) => out.push({ kind: 'item', item }));
+  });
+  flush();
+  return out;
 }
 
 /**
