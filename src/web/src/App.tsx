@@ -7,6 +7,9 @@ import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
+import { SettingsLayout } from './components/settings';
+import { SettingsMachinePage, SettingsWorkspacePage } from './components/settings/SettingsInterimPages';
+import { useRememberOutsideSettings } from './lib/settingsReturn';
 import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
 import { WorkspaceConsole } from './components/WorkspaceConsole';
 import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
@@ -122,6 +125,8 @@ function DefaultLanding() {
 
 export function App() {
   const authed = !!getToken();
+  // Where Settings' Back to Orbit returns to.
+  useRememberOutsideSettings();
   const notFound = (
     <DocView>
       <NotFoundPage />
@@ -180,67 +185,38 @@ export function App() {
               workspace's session list — the bare root resolves it via <DefaultLanding>, and login
               redirects to it too; the task list lives at "/tasks". Each view wraps itself in its
               layout contract (DocView = page gutter + scroll, FlushView = full-bleed). */}
+          {/* Settings takes over the window (owner's choice A1, docs/mocks/settings-redesign): its own nav
+              of four groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines,
+              Providers and Workspaces open the pages that manage them today until each has its own. */}
+          <Route path="settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="/settings/general" replace />} />
+            <Route path="general" element={<SettingsPage />} />
+            <Route path="notifications" element={<SettingsPage />} />
+            <Route path="appearance" element={<SettingsPage />} />
+            <Route path="storage" element={<SettingsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            {/* Old account-settings link, now Profile. Keep the redirect so existing
+                bookmarks/deep links don't 404. */}
+            <Route path="account" element={<Navigate to="/settings/profile" replace />} />
+            {/* Every public link this account has made: Active / Paused / Ended. */}
+            <Route path="shared-links" element={<SharedLinksPage />} />
+            {/* The personal access tokens this account has issued: issue, list, revoke. */}
+            <Route path="access-tokens" element={<AccessTokensPage />} />
+            {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
+            <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
+            {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
+            <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
+            <Route path="machines/:id" element={<SettingsMachinePage />} />
+            <Route path="providers/pools" element={<InfrastructurePage section="pools" />} />
+            <Route path="providers/:vendor" element={<InfrastructurePage section="keys" />} />
+            <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
+          </Route>
           <Route element={<AppShell />}>
             <Route index element={<DefaultLanding />} />
             {/* One element for all three, so the list is one instance across them (TaskRoute). */}
             <Route path="tasks" element={<TaskRoute />} />
             <Route path="tasks/:id" element={<TaskRoute />} />
             <Route path="lists/:key" element={<TaskRoute />} />
-            <Route
-              path="settings/profile"
-              element={
-                <DocView>
-                  <ProfilePage />
-                </DocView>
-              }
-            />
-            {/* Old account-settings link, now Profile. Keep the redirect so existing
-                bookmarks/deep links don't 404. */}
-            <Route path="settings/account" element={<Navigate to="/settings/profile" replace />} />
-            <Route
-              path="settings"
-              element={
-                <DocView>
-                  <SettingsPage />
-                </DocView>
-              }
-            />
-            {/* Every public link this account has made: Active / Paused / Ended. */}
-            <Route
-              path="settings/shared-links"
-              element={
-                <DocView>
-                  <SharedLinksPage />
-                </DocView>
-              }
-            />
-            {/* The personal access tokens this account has issued: issue, list, revoke. */}
-            <Route
-              path="settings/access-tokens"
-              element={
-                <DocView>
-                  <AccessTokensPage />
-                </DocView>
-              }
-            />
-            {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
-            <Route
-              path="settings/integrations/feishu"
-              element={
-                <DocView>
-                  <FeishuIntegrationPage />
-                </DocView>
-              }
-            />
-            {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
-            <Route
-              path="settings/integrations/feishu/connect-group"
-              element={
-                <DocView>
-                  <FeishuConnectGroupPage />
-                </DocView>
-              }
-            />
             <Route
               path="admin"
               element={

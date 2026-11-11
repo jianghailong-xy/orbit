@@ -245,9 +245,11 @@ const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
 // Runner detail / settings page. Clicking a runner lands here (not the chat
 // console) — you manage the runner and the workspaces that run under it. The live
 // conversation belongs to a workspace, reached via each workspace's "对话" button.
-export function RunnerDetailPage() {
-  // /runners/<base62> — decode the route param to the runner's UUID.
-  const runnerId = routeId(useParams().id);
+export function RunnerDetailPage({ runnerId: givenRunnerId, workspaceId }: { runnerId?: string; workspaceId?: string } = {}) {
+  // /runners/<base62> — decode the route param to the runner's UUID. Settings' workspace page names
+  // the runner and the workspace to open instead (SettingsWorkspacePage).
+  const params = useParams();
+  const runnerId = routeId(givenRunnerId ?? params.id);
   const navigate = useNavigate();
   const [confirm, confirmation] = useConfirm();
   const message = useToast();
@@ -655,8 +657,22 @@ export function RunnerDetailPage() {
   // once the row is drawn (rows draw once the runner is known), and the parameter goes, so a reload
   // or Back does not open it again.
   const [searchParams, setSearchParams] = useSearchParams();
-  const configureParam = searchParams.get('workspace');
-  const configureTarget = runner && configureParam ? workspaces.find((a) => a.id === routeId(configureParam)) : undefined;
+  const configureParam = workspaceId ?? searchParams.get('workspace');
+  const configureTarget =
+    runner && configureParam && configureParam !== 'new'
+      ? workspaces.find((a) => a.id === routeId(configureParam))
+      : undefined;
+  // Settings' Workspaces + lands here as ?workspace=new until it has a page of its own: the create form opens.
+  const createRequested = !!runner && configureParam === 'new';
+  useEffect(() => {
+    if (!createRequested) return;
+    openCreate();
+    setSearchParams((params) => {
+      params.delete('workspace');
+      return params;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createRequested]);
   const scrollToEditor = useRef<string | null>(null);
   useEffect(() => {
     if (!configureTarget) return;

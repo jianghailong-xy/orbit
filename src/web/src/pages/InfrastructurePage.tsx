@@ -44,7 +44,7 @@ import type { Runner } from '../components/TasksSidePanel';
  * The head's Add makes any of the three. `/runners` and `/providers` land here (App.tsx), and
  * `#keys` / `#pools` bring that section into view.
  */
-export function InfrastructurePage() {
+export function InfrastructurePage({ section }: { section?: 'keys' | 'pools' } = {}) {
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -91,7 +91,9 @@ export function InfrastructurePage() {
 
   // A section named in the address comes into view once everything above it has its height.
   const settled = !runners.isPending && !providers.isPending && !pools.isPending && !shared.isPending;
-  const target = hash === '#keys' ? keySection : hash === '#pools' ? poolSection : null;
+  // Settings' Providers rows name the section themselves, in place of the hash.
+  const focus = section ?? (hash === '#keys' ? 'keys' : hash === '#pools' ? 'pools' : null);
+  const target = focus === 'keys' ? keySection : focus === 'pools' ? poolSection : null;
   const arrived = target !== null && settled;
   useEffect(() => {
     if (arrived) target?.current?.scrollIntoView({ block: 'start' });
