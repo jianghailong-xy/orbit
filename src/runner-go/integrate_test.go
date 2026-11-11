@@ -2280,10 +2280,14 @@ func TestIntegrationLandingPathsExempt(t *testing.T) {
 }
 
 func TestIntegrationBaselineAttribution(t *testing.T) {
-	for _, scenario := range []string{"baseline-red", "task-red", "no-absorb", "timed-out", "baseline-timed-out", "source-absorb"} {
+	for _, scenario := range []string{"baseline-red", "task-red", "no-absorb", "timed-out", "baseline-timed-out", "source-absorb", "baseline-unprepared", "baseline-worktree-failed"} {
 		t.Run(scenario, func(t *testing.T) {
 			r := newIntegrationRepo(t)
-			r.writeIn("scripts/worktree-overlay.sh", "#!/bin/sh\nmkdir -p node_modules\ntouch node_modules/ready\n")
+			recipe := "#!/bin/sh\nmkdir -p node_modules\ntouch node_modules/ready\n"
+			if scenario == "baseline-unprepared" {
+				recipe = "#!/bin/sh\ntest -f task.txt || exit 2\nmkdir -p node_modules\ntouch node_modules/ready\n"
+			}
+			r.writeIn("scripts/worktree-overlay.sh", recipe)
 			r.commit("environment recipe")
 			r.push("main")
 			r.checkoutNew("project/line", "main")
@@ -2314,6 +2318,9 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 			if scenario == "timed-out" {
 				command = "sleep 5"
 			}
+			if scenario == "baseline-worktree-failed" {
+				command = "mkdir .baseline; echo obstruct > .baseline/file; exit 1"
+			}
 			if scenario == "baseline-timed-out" {
 				command = "if test -f task.txt; then exit 1; fi; sleep 5"
 			}
@@ -2322,8 +2329,14 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 			if result.State != "CHECK_FAILED" || result.BaselineRed != (scenario == "baseline-red") {
 				t.Fatalf("result: %+v", result)
 			}
+			if scenario == "baseline-unprepared" || scenario == "baseline-worktree-failed" {
+				original := result.Checks[0]
+				if original.ExitCode == nil || *original.ExitCode != 1 || original.Scope != "" || result.ErrorCode != "" {
+					t.Fatalf("original landing result lost: %+v", result)
+				}
+			}
 			expected := 2
-			if scenario == "no-absorb" || scenario == "timed-out" {
+			if scenario == "no-absorb" || scenario == "timed-out" || scenario == "baseline-unprepared" || scenario == "baseline-worktree-failed" {
 				expected = 1
 			}
 			if len(result.Checks) != expected {

@@ -604,6 +604,7 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 			// item says (§4.2's `branchUnchanged`).
 			result.State, result.Phase = "CHECK_FAILED", "CHECK"
 			if spec.Name == "LANDING_CHECK" && outcome.ExitCode != nil && !outcome.TimedOut && base != targetSha {
+				// Attribution failures leave the combined CHECK_FAILED verdict intact.
 				// Nest it under this job so scratch sweeping protects both trees together.
 				baseline := filepath.Join(scratch, ".baseline")
 				baselineSha := base
@@ -611,14 +612,12 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 					baselineSha = targetSha
 				}
 				if _, err := git(repoRoot, "worktree", "add", "--detach", baseline, baselineSha); err != nil {
-					markUnprepared(&result, err)
 					return result
 				}
 				defer removeIntegrationWorktree(repoRoot, baseline)
 				// Rebuild M from T0 and U: a source-side absorb can contain task commits.
 				if absorbedBySource {
 					if _, _, err := integrationMerge(baseline, upstreamSha, "Baseline upstream merge"); err != nil {
-						markUnprepared(&result, err)
 						return result
 					}
 				}
@@ -626,7 +625,6 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 					if stopped, ok := integrationStopResult(err, "CHECK"); ok {
 						return stopped
 					}
-					markUnprepared(&result, err)
 					return result
 				}
 				attribution, err := runIntegrationCheckTracked(stop, baseline, spec, len(result.Checks)+1, len(cmd.Checks)+1, progress)
