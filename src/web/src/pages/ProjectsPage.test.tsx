@@ -284,8 +284,8 @@ describe('ProjectsPage', () => {
       // the one thing that clears `NO_LANDING_WORKSPACE` — and an empty object otherwise, which is
       // what lets the server borrow the workspace this project's work already runs in.
       "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
-      // The other half of that pair — the replace door — moved to components/StartCoordinatorIn.tsx
-      // with the Move panel's "Start new here…", and is held there (below). Its body names a
+      // The other half of that pair — the replace door — moved to components/CoordinatorChange.tsx
+      // with the coordinator's Change, and is held there (below). Its body names a
       // workspace only when the reader picked one: "start the next coordinator THERE".
       // No Automatic PATCH here any more: the switch moved off the coordinator card into How it
       // runs (`ProjectRunSettings`), which writes `automatic` with the rest of the settings the
@@ -312,7 +312,7 @@ describe('ProjectsPage', () => {
       // is what proves there is no THIRD task-page spelling and no sixth endpoint in the file.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`',
     ]);
-    const startSource = readFileSync(fileURLToPath(new URL('../components/StartCoordinatorIn.tsx', import.meta.url)), 'utf8');
+    const startSource = readFileSync(fileURLToPath(new URL('../components/CoordinatorChange.tsx', import.meta.url)), 'utf8');
     expect([...startSource.matchAll(API_CALL)].map((m) => m[1].trim().replace(/,$/, ''))).toEqual([
       "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
     ]);
