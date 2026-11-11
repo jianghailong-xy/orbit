@@ -155,6 +155,70 @@ test('§4.3 parallel tool calls: both calls and both results, the error flag fol
   assert.deepEqual(said.content, [{ type: 'output_text', text: 'Running two.' }]);
 });
 
+test('§4.3 recorded parallel.json with its tool_results in completion order: the outputs follow the call order', () => {
+  const asRecorded = posts('parallel', 'main')[1].body!;
+  const reversed = structuredClone(asRecorded);
+  const last = (reversed.messages as Json[]).at(-1)!;
+  last.content = [...(last.content as Json[])].reverse();
+  assert.deepEqual(((last.content as Json[]).map((b) => b.tool_use_id)), ['toolu_par2', 'toolu_par1']);
+  const translated = toResponsesRequest(reversed, CTX).request;
+  assert.deepEqual(ofType(translated, 'function_call_output').map((o) => o.call_id), ['toolu_par1', 'toolu_par2']);
+  // the whole input is what the call-ordered recording translates to.
+  assert.deepEqual(translated, toResponsesRequest(asRecorded, CTX).request);
+});
+
+/** An assistant turn calling `calls` in that order, then one user message carrying `results`. */
+function toolTurn(calls: string[], results: Json[]): Json {
+  return {
+    model: 'claude-sonnet-4-5',
+    messages: [
+      { role: 'user', content: 'Read the three files.' },
+      { role: 'assistant', content: calls.map((id) => ({ type: 'tool_use', id, name: 'Read', input: { file_path: `${id}.txt` } })) },
+      { role: 'user', content: results },
+    ],
+  };
+}
+const result = (id: string, text = `contents of ${id}`): Json => ({ type: 'tool_result', tool_use_id: id, content: text });
+
+test('§4.3 completion-ordered tool_results go out in the call order; the text after them stays after them', () => {
+  const body = toolTurn(['calc', 'readme', 'notes'], [
+    result('notes'),
+    result('readme'),
+    result('calc'),
+    { type: 'text', text: '<system-reminder>after</system-reminder>' },
+  ]);
+  const tail = items(toResponsesRequest(body, CTX).request).slice(-4);
+  assert.deepEqual(tail, [
+    { type: 'function_call_output', call_id: 'calc', output: 'contents of calc' },
+    { type: 'function_call_output', call_id: 'readme', output: 'contents of readme' },
+    { type: 'function_call_output', call_id: 'notes', output: 'contents of notes' },
+    { type: 'message', role: 'user', content: [{ type: 'input_text', text: '<system-reminder>after</system-reminder>' }] },
+  ]);
+  // the request body itself is not reordered.
+  assert.deepEqual(((body.messages as Json[])[2].content as Json[]).slice(0, 3).map((b) => b.tool_use_id), ['notes', 'readme', 'calc']);
+});
+
+test('§4.3 a single tool_result goes out as it came', () => {
+  const body = toolTurn(['only'], [{ type: 'text', text: 'before' }, result('only'), { type: 'text', text: 'after' }]);
+  assert.deepEqual(items(toResponsesRequest(body, CTX).request).slice(-3), [
+    { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'before' }] },
+    { type: 'function_call_output', call_id: 'only', output: 'contents of only' },
+    { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'after' }] },
+  ]);
+});
+
+test('§4.3 results for calls not in the preceding turn keep their order and place; the known ones are put in call order', () => {
+  const body = toolTurn(['a', 'b'], [result('stray2'), result('b'), result('stray1'), result('a')]);
+  assert.deepEqual(ofType(toResponsesRequest(body, CTX).request, 'function_call_output').map((o) => o.call_id), [
+    'stray2',
+    'a',
+    'stray1',
+    'b',
+  ]);
+  const unknownOnly = toolTurn(['a'], [result('z'), result('y')]);
+  assert.deepEqual(ofType(toResponsesRequest(unknownOnly, CTX).request, 'function_call_output').map((o) => o.call_id), ['z', 'y']);
+});
+
 test('§4.3 a tool_result with an image goes as input parts with a data URL; a user image too', () => {
   const second = posts('image-r2', 'main')[1].body!;
   const [output] = ofType(toResponsesRequest(second, CTX).request, 'function_call_output');
