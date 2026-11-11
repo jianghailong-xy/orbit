@@ -38,6 +38,8 @@
 .h-it p { margin: 2px 0 0 30px; color: var(--text-2); font-size: 12.5px; line-height: 1.6; }
 .h-count { color: var(--text-3); font-size: 12.5px; margin: -4px 0 12px; }
 
+.tag.done { background: #d9f2df; color: #1a6b33; }
+.b-gone { font-size: 13px; color: #c0392b; text-decoration: line-through; padding: 5px 10px; border: 1px dashed #e8a29b; border-radius: 8px; background: #fff5f4; }
 /* frame captions */
 .b-cap { font-size: 15px; font-weight: 700; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
 .b-cap .n { width: 24px; height: 24px; border-radius: 50%; background: #16161a; color: #fff; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
@@ -79,6 +81,55 @@
 .b-land li { margin-bottom: 8px; }
 .b-src { font-size: 12px; color: #77777f; margin-top: 10px; line-height: 1.6; }
 .b-src a { color: #0a5ca8; text-decoration: none; }
+
+/* v2: New entry, history */
+.b-ne { width: 1180px; flex: none; display: flex; gap: 22px; align-items: flex-start; }
+.b-ne-col { flex: 1; background: #fff; border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.b-ne-h { font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+.b-ne-bar { display: flex; gap: 10px; justify-content: flex-end; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 10px; font: 14px/1.6 var(--ui); }
+.b-ne-sub { font-size: 13px; color: #55555e; margin-top: 10px; line-height: 1.6; }
+.b-ne-arrow { font-size: 28px; color: #9a9aa2; padding-top: 60px; }
+.b-ne-chat { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; font: 13px/1.6 var(--ui); }
+.b-ne-chat .c-user { align-self: flex-end; background: #eef1f6; border-radius: 12px; padding: 8px 12px; max-width: 360px; }
+.b-ne-chat .c-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; box-shadow: 0 2px 8px rgba(31,35,41,.06); }
+.b-ne-chat .c-k { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--brand); }
+.b-ne-chat .c-ti { font-weight: 600; margin: 3px 0 8px; }
+.b-ne-chat .c-acts { display: flex; gap: 6px; }
+.b-h3 { display: grid; grid-template-columns: repeat(3, 400px); gap: 40px; }
+.b-h3 .fr { display: flex; flex-direction: column; }
+.b-h3 .cap { font-size: 13px; color: #4a4a52; margin-top: 10px; line-height: 1.6; }
+.b-solo { width: 400px; height: 560px; border: 1px solid #d5d6db; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06); overflow: visible; font-family: var(--ui); color: var(--text-1); }
+.b-dim { opacity: .45; }
+.h-drop { padding: 4px 6px; border-bottom: 1px solid var(--border-subtle); max-height: 40%; }
+.h-r { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+.h-r .t { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.h-r.on { background: var(--brand-tint); color: var(--brand); }
+.h-r .bd { min-width: 18px; height: 18px; border-radius: 9px; background: var(--warning-solid); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+.h-search2 { margin: 10px 12px 4px; border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 13px; color: var(--text-4); display: flex; gap: 8px; align-items: center; }
+.h-list { padding: 4px 8px; }
+.h-g { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-3); padding: 10px 8px 4px; }
+.h-g span { font-weight: 500; }
+.h-row { position: relative; padding: 6px 8px 7px; border-radius: 8px; }
+.h-row .t { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 26px; }
+.h-row .m { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
+.h-row .amb { color: var(--warning); font-weight: 600; }
+.h-row .blu { color: var(--brand); }
+.h-row .spin { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #bcd3ff; border-top-color: var(--brand); }
+.h-row.on { background: var(--brand-tint); }
+.h-row.on .t { color: var(--brand); font-weight: 600; }
+.h-row.hov { background: var(--bg-hover); }
+.h-row .dots { position: absolute; right: 8px; top: 10px; width: 22px; height: 22px; border-radius: 5px; background: #e6e8eb; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--text-2); }
+.h-more { margin: 14px 8px 0; font-size: 12.5px; color: var(--brand); display: inline-flex; gap: 6px; align-items: center; padding: 2px 4px; }
+.h-menu { position: absolute; left: 196px; top: 250px; width: 186px; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(31,35,41,.16); padding: 5px; font-size: 13px; z-index: 4; }
+.h-menu div { padding: 6px 10px; border-radius: 6px; }
+.h-menu div:first-child { background: var(--bg-hover); }
+.h-menu hr { border: 0; border-top: 1px solid var(--border-subtle); margin: 4px 2px; }
+.h-menu .red { color: var(--error); }
+.h-toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px; background: #1f2329; color: #fff; font-size: 13px; border-radius: 8px; padding: 7px 14px; display: flex; gap: 16px; white-space: nowrap; }
+.h-toast b { color: #8fb4ff; }
+.b-2col { columns: 2; column-gap: 40px; }
+.b-2col li { break-inside: avoid; }
+.b-qs { grid-template-columns: 1fr 1fr 1fr !important; }
 </style>
 </head>
 <body>
@@ -86,10 +137,10 @@
 <script src="wiki-p2-icons.js"></script>
 <script src="wiki-p3-icons.js"></script>
 <div class="board">
-<h1 class="b-h1">45 · Wiki 右边的聊天面板：打开 wiki 时就是展开的</h1>
+<h1 class="b-h1">45 · Wiki 右边的聊天面板：打开就展开、去掉 New entry、历史聊天怎么管</h1>
 <p class="b-sub">你的要求：「wiki 右边的聊天框需要默认展开」。现在打开 wiki，面板是收起的，要点右下角的圆按钮才出来；打开过的状态只记在当前标签页（<code>sessionStorage</code>），新开标签或重启 app 又是收起的。
-<b>这张图只改「什么时候默认展开、关掉后怎么记」，面板本身（图 42、43）一个像素不动。</b>窗口按你截图的 Home 页画，正文是示意文字。</p>
-<div class="b-legend"><span><span class="tag new">新</span>这次要改的</span><span><span class="tag keep">沿用</span>照旧</span><span><span class="tag ask">待你定</span>两个选择，各有推荐</span><span><span class="tag demo">示意</span>演示用的内容</span></div>
+<b>第二版（11-11）：</b>你定了 Q1 选 A、Q2 选 A；又加了两条：<b>去掉 New entry</b>（见 ② 和 第 3 部分），<b>历史聊天怎么展示和管理</b>（第 4 部分）。面板的输入框和卡片（图 42、43）不动。窗口按你截图的 Home 页画，正文和聊天标题都是示意。</p>
+<div class="b-legend"><span><span class="tag new">新</span>这次要改的</span><span><span class="tag keep">沿用</span>照旧</span><span><span class="tag ask">待你定</span>两个选择，各有推荐</span><span><span class="tag done">已定</span>owner 11-11 定了</span><span><span class="tag demo">示意</span>演示用的内容</span></div>
 
 <section class="b-part">
 <div class="band"><span class="bn">1</span>打开 wiki：今天 vs 提议 <small>· 窗口 ≥ 1200 时</small></div>
@@ -135,10 +186,10 @@
 <div class="b-gap"></div>
 <div class="row">
   <div>
-    <div class="b-cap"><span class="n">②</span>提议 <span class="tag new">新</span><small>· 打开 wiki，面板已经在右边</small></div>
+    <div class="b-cap"><span class="n">②</span>提议 <span class="tag new">新</span><small>· 打开 wiki，面板已经在右边；页头没有 New entry</small></div>
     <div class="o-win" style="width:1180px">
       <div class="o-wtop"><span class="t">Wiki</span><span class="o-space">orbit<svg class="ic"><use href="#i-caret-down"/></svg></span><span class="grow"></span>
-        <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+        <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="b-gone mk" data-n="4">New entry</span></div>
       <div class="o-wbody">
         <nav class="o-dir">
           <div class="it on"><svg class="ic"><use href="#i-home"/></svg>Home</div>
@@ -177,7 +228,8 @@
   <div class="notes" style="padding-top:34px"><ol>
     <li><span class="n">1</span><span class="tag new">新</span>窗口 ≥ 1200 时，打开 wiki 任何一页（Settings 除外），面板<b>已经停靠在右边</b>，挤开正文、不盖正文。圆按钮照旧在面板打开时藏起来。</li>
     <li><span class="n">2</span><span class="tag keep">沿用</span><b>展开到哪一场</b>和点圆按钮一样（<code>wikiChatToOpen</code>）：有等你处理的那场先开，否则继续最近还开着的一场，都没有就是 New chat。不另造一条规则。</li>
-    <li><span class="n">3</span><span class="tag new">新</span>点 <b>✕</b> 就是你说「不要」：<b>记住收起</b>，之后打开 wiki 不再自动展开，直到你再点一次圆按钮。只按 space 记，各个 wiki 互不影响。记多久见 <b>4 · Q1</b>。</li>
+    <li><span class="n">3</span><span class="tag done">已定</span>点 <b>✕</b> 就是你说「不要」：<b>记住收起</b>，存在本机，新标签、重启 app 都还是收起，直到你再点一次圆按钮（Q1 A）。只按 space 记，各个 wiki 互不影响。收起后照旧是右下角圆按钮（Q2 A）。</li>
+    <li><span class="n">4</span><span class="tag new">新</span>页头去掉 <b>New entry</b>，只剩 <code>Activity</code>、<code>Settings</code>。手写条目改成在聊天里说，见第 3 部分。</li>
     <li><span class="n dot">·</span><span class="tag keep">沿用</span>面板宽度、拖宽、目录在 1200–1439 折进 Contents，都照旧（图 42 ⑥）。<b>默认展开不会改变「点开后」的任何样子</b>，只是省掉那一下点击。</li>
     <li><span class="n dot">·</span>首屏要等聊天列表读回再决定开哪一场，否则面板会先显示 New chat 再跳到进行中的那场。等待时先按面板宽度把正文排好，正文不跳。</li>
   </ol></div>
@@ -193,14 +245,102 @@
   <tr><td>窗口 640–1199（面板盖在正文右侧）</td><td>收起</td><td>收起，不变。这时面板会盖住正文，默认盖住等于每次都要先关掉它</td></tr>
   <tr><td>手机 &lt; 640（底部 sheet）</td><td>收起</td><td>收起，不变</td></tr>
   <tr><td>Settings 页、分享链接</td><td>没有面板</td><td>没有面板，不变</td></tr>
-  <tr><td>你点过 ✕</td><td>这个标签页收起；新标签又是收起</td><td class="chg">记住收起，不再自动展开；点圆按钮打开后，忘掉这条，回到默认展开</td></tr>
+  <tr><td>你点过 ✕</td><td>这个标签页收起；新标签又是收起</td><td class="chg">记住收起（本机，跨标签、跨重启），不再自动展开；点圆按钮打开后，忘掉这条，回到默认展开</td></tr>
   <tr><td>地址里带 <code>?chat=…</code>（活动、通知点进来）</td><td>打开那一场</td><td>打开那一场，不变；就算你点过 ✕ 也打开，因为这是你明确点的</td></tr>
   <tr><td>把窗口从 1300 拉窄到 1000</td><td>开着的面板改为盖在正文上</td><td class="chg">如果是<b>自动展开</b>的：随之收起，拉宽回来再展开。你自己点开的：照旧改为盖在正文上</td></tr>
 </table>
 </section>
 
+
 <section class="b-part">
-<div class="band"><span class="bn">3</span>同类产品怎么做 <small>· 只摘和「默认展开、怎么收起」有关的部分</small></div>
+<div class="band"><span class="bn">3</span>去掉 New entry：手写条目改在聊天里说 <small>· 页头只剩 Activity、Settings</small></div>
+<div class="row">
+  <div class="b-ne">
+    <div class="b-ne-col"><div class="b-ne-h">今天的页头</div><div class="b-ne-bar"><span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+      <div class="b-ne-sub">点了弹出表单：选 principle / convention / concept，填标题、摘要、字段。</div></div>
+    <div class="b-ne-arrow">→</div>
+    <div class="b-ne-col"><div class="b-ne-h">提议 <span class="tag new">新</span></div><div class="b-ne-bar"><span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span></div>
+      <div class="b-ne-chat">
+        <div class="c-user">记一条约定：wiki 里的界面文案一律用英文，正文按原文。</div>
+        <div class="c-card"><div class="c-k">Entry · convention</div><div class="c-ti">UI copy is English; article text keeps its source language</div><div class="c-acts"><span class="o-btn pri sm">Apply</span><span class="o-btn sm">Edit</span><span class="o-btn sm">Discard</span></div></div>
+      </div>
+      <div class="b-ne-sub">在面板里说一句，agent 起草一张条目卡（图 42 第 4 部分的 ① 知识），按 Apply 才写。</div></div>
+  </div>
+  <div class="notes"><ol>
+    <li><span class="n dot">·</span><span class="tag done">已定</span>页头去掉 <b>New entry</b>（web 桌面与手机 web 的 <code>+</code>）。iOS、macOS、Android 本来就没有这个按钮，不用改。</li>
+    <li><span class="n dot">·</span><b>为什么能去</b>：设计文档 11-02 的数：三个 space 里 28,489 条有效条目，<b>你亲手写的 0 条</b>。面板默认展开以后，「说一句」比表单近。</li>
+    <li><span class="n dot">·</span><b>能力不少</b>：聊天起草的卡由你按 Apply 写入，算你自己的写（服务端 <code>reviewModes.chat.floors</code>），所以只有你能写的 principle 也能走这条路。</li>
+    <li><span class="n dot">·</span><span class="tag keep">沿用</span>条目抽屉里改一条已有条目的表单不动，这次只去掉「新建」的入口。</li>
+  </ol></div>
+</div>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">4</span>历史聊天：怎么展示、怎么管理 <small>· 默认展开以后，面板会自动接上某一场，找回其它场就更常用了</small></div>
+<div class="b-h3">
+  <div class="fr"><div class="b-cap"><span class="n">①</span>今天 <small>· 点标题，下拉一条</small></div>
+    <aside class="c-panel b-solo">
+      <div class="c-head"><span class="t">心跳为什么是 90 秒</span><svg class="ic caret" style="transform:rotate(180deg)"><use href="#i-caret-down"/></svg><span class="c-ib"><svg class="ic"><use href="#i-plus"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-arrow-right"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-close"/></svg></span></div>
+      <div class="h-drop">
+        <div class="h-r on"><span class="t">心跳为什么是 90 秒</span><span class="bd">1</span></div>
+        <div class="h-r"><span class="t">第 4 章拆成两篇</span></div>
+        <div class="h-r"><span class="t">记一条约定：界面文案英文</span></div>
+        <div class="h-r"><span class="t">runner 注册那节少了离线重试</span></div>
+        <div class="h-r"><span class="t">术语表加 worktree</span></div>
+      </div>
+      <div class="c-body b-dim"><div class="c-user" style="align-self:flex-end;background:#eef1f6;border-radius:12px;padding:8px 12px">这句少了原因……</div><div style="font-size:13px;color:var(--text-2)">agent 的回答……</div></div>
+    </aside>
+    <div class="cap">按<b>创建时间</b>排，最多 50 场，只有标题和「等你」的数字。看不出哪场在跑、哪场结束了、多久前说过；没有搜索，也不能改名、完成或删除，只能到 session 列表里去管。</div>
+  </div>
+
+  <div class="fr"><div class="b-cap"><span class="n">②</span>提议 <span class="tag new">新</span><small>· 整个面板换成列表</small></div>
+    <aside class="c-panel b-solo">
+      <div class="c-head"><span class="t mk l" data-n="1">Chats</span><svg class="ic caret" style="transform:rotate(180deg)"><use href="#i-caret-down"/></svg><span class="c-ib"><svg class="ic"><use href="#i-plus"/></svg></span><span class="c-ib" style="opacity:.35"><svg class="ic"><use href="#i-arrow-right"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-close"/></svg></span></div>
+      <div class="h-search2 mk" data-n="2"><svg class="ic"><use href="#i-search"/></svg>Search chats</div>
+      <div class="h-list">
+        <div class="h-g mk l" data-n="3">Open <span>4</span></div>
+        <div class="h-row"><div class="t">心跳为什么是 90 秒</div><div class="m"><span class="amb">1 needs you</span> · 5m ago</div></div>
+        <div class="h-row"><div class="t">第 4 章拆成两篇</div><div class="m"><span class="spin"></span><span class="blu">Working…</span></div></div>
+        <div class="h-row on"><div class="t">记一条约定：界面文案英文</div><div class="m">2h ago</div></div>
+        <div class="h-row"><div class="t">runner 注册那节少了离线重试</div><div class="m">Yesterday</div></div>
+        <div class="h-g mk l" data-n="4">Completed <span>12</span><svg class="ic" style="margin-left:auto;transform:rotate(-90deg)"><use href="#i-caret-down"/></svg></div>
+        <div class="h-more mk" data-n="5">Trash is in Sessions <svg class="ic"><use href="#i-arrow-right"/></svg></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="fr"><div class="b-cap"><span class="n">③</span>每一行的 ⋯ <span class="tag new">新</span><small>· 动作照搬 session 列表</small></div>
+    <aside class="c-panel b-solo" style="position:relative">
+      <div class="c-head"><span class="t">Chats</span><svg class="ic caret" style="transform:rotate(180deg)"><use href="#i-caret-down"/></svg><span class="c-ib"><svg class="ic"><use href="#i-plus"/></svg></span><span class="c-ib" style="opacity:.35"><svg class="ic"><use href="#i-arrow-right"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-close"/></svg></span></div>
+      <div class="h-search2"><svg class="ic"><use href="#i-search"/></svg>Search chats</div>
+      <div class="h-list">
+        <div class="h-g">Open <span>4</span></div>
+        <div class="h-row"><div class="t">心跳为什么是 90 秒</div><div class="m"><span class="amb">1 needs you</span> · 5m ago</div></div>
+        <div class="h-row hov"><div class="t">第 4 章拆成两篇</div><div class="m"><span class="spin"></span><span class="blu">Working…</span></div><span class="dots mk" data-n="6">⋯</span></div>
+        <div class="h-row"><div class="t">记一条约定：界面文案英文</div><div class="m">2h ago</div></div>
+        <div class="h-row"><div class="t">runner 注册那节少了离线重试</div><div class="m">Yesterday</div></div>
+        <div class="h-g">Completed <span>12</span><svg class="ic" style="margin-left:auto;transform:rotate(-90deg)"><use href="#i-caret-down"/></svg></div>
+      </div>
+      <div class="h-menu"><div>Rename…</div><div>Open as session</div><div>Complete</div><hr><div class="red">Move to Trash</div></div>
+      <div class="h-toast mk" data-n="7">Moved to Trash <b>Undo</b></div>
+    </aside>
+  </div>
+</div>
+<div class="row" style="margin-top:22px">
+  <div class="notes"><ol class="b-2col">
+    <li><span class="n">1</span><span class="tag new">新</span><b>点标题，整个面板换成列表</b>，标题变成 <code>Chats</code>，再点或按 Esc 回到原来那场。面板只有 400 宽，下拉条只占 40% 高，列表一长就挤；整块换掉才放得下搜索、分组和菜单（Q3）。<code>+</code> 和 <code>✕</code> 照旧，<code>↗</code> 在列表里不可点。</li>
+    <li><span class="n">2</span><span class="tag new">新</span><b>搜索</b>按标题过滤，只在这个 space 的聊天里找。超过 50 场时，往下滚自动再取 50 场。</li>
+    <li><span class="n">3</span><span class="tag new">新</span><b>Open</b>：先是等你处理的，再是正在跑的，其余按<b>最后说话的时间</b>排（今天按创建时间）。每行第二行是灰字：<code>1 needs you</code>（橙）、<code>Working…</code>（蓝点转圈），或者多久前说过。正在看的那场是浅蓝底。</li>
+    <li><span class="n">4</span><span class="tag new">新</span><b>Completed</b> 默认折着，点开按时间列。完成的聊天还能打开看、接着说，规则和 session 列表里 Completed 的会话一样。</li>
+    <li><span class="n">5</span><span class="tag keep">沿用</span><b>Trash 不在面板里</b>：删掉的聊天在 session 列表的 Trash，30 天内能恢复。面板底部一行链接过去，不再做第二个回收站。</li>
+    <li><span class="n">6</span><span class="tag new">新</span>悬停一行出现 <b>⋯</b>：<code>Rename…</code>、<code>Open as session</code>、<code>Complete</code>、<code>Move to Trash</code>。名字和行为与 session 列表的同名项一样，调用同一组接口。</li>
+    <li><span class="n">7</span><span class="tag keep">沿用</span><b>Move to Trash 不弹确认</b>，底部出 Undo，和 session 列表一样；聊天开了公开链接时才先确认（链接会暂停）。删掉的是正在看的那场，面板回到 New chat。</li>
+    <li><span class="n dot">·</span><b>默认展开接哪一场</b>：只在 Open 里挑（等你的 → 最近开着的 → New chat）。Completed 的不会被自动接上，所以「完成」也是「别再自动弹给我」的意思。</li>
+  </ol></div>
+</div>
+</section>
+<section class="b-part">
+<div class="band"><span class="bn">5</span>同类产品怎么做 <small>· 上排：默认展开与收起；下排：历史聊天</small></div>
 <div class="b-peers">
   <div class="b-peer"><h3>VS Code / Cursor</h3><div class="k">右侧 secondary side bar 放 Chat</div>
     <div class="b-mini"><div style="width:30px">栏</div><div style="flex:1">编辑器</div><div class="ai" style="width:70px">Chat</div></div>
@@ -220,30 +360,48 @@
     <div class="take"><b>借（以后）：</b>选区 Ask 的对话直接进侧栏，我们图 42 已经是这样。<span class="skip"><b>不借：</b>模式切换。多一个设置，对你的用法没帮助。</span></div></div>
 </div>
 <div class="b-src">来源：<a href="https://code.visualstudio.com/docs/configure/custom-layout">VS Code Custom Layout</a> · <a href="https://github.com/microsoft/vscode-docs/pull/9540">vscode-docs#9540（1.104 默认改为 visibleInWorkspace）</a> · <a href="https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-new-features-december-2024/">Google：NotebookLM 三栏</a> · <a href="https://9to5google.com/2024/12/13/notebooklm-redesign-plus-tier/">9to5Google</a> · <a href="https://jira.atlassian.com/browse/ROVO-1249">ROVO-1249</a> · <a href="https://support.atlassian.com/rovo/docs/chat/">Atlassian：Rovo Chat</a> · <a href="https://www.notion.com/help/notion-agent">Notion Agent</a>。NotebookLM 的 rail 细节和 Notion 的默认模式没找到官方说明，按评测文章写的。</div>
+<div class="b-peers" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:16px">
+  <div class="b-peer"><h3>Cursor · 聊天历史</h3><div class="k">在聊天面板里看历史</div>
+    聊天面板头上有历史按钮，点了整个面板换成可搜索的列表，选一场回到对话。每行悬停有改名和删除。
+    <div class="take"><b>借：</b>历史就在面板里，<b>整块换成列表</b>，不另开页面，不挤成下拉条。</div></div>
+  <div class="b-peer"><h3>ChatGPT / Claude.ai</h3><div class="k">左侧栏的对话列表</div>
+    按 Today、Yesterday、Previous 7 days 分组；每行 ⋯ 里有 Rename、Archive、Delete（各家措辞略有不同）。
+    <div class="take"><b>借：</b>⋯ 菜单放管理动作。<span class="skip"><b>不借：</b>按日期分组。wiki 聊天更像带待办的会话，先看「开着、要我处理」的，所以按 Open / Completed 分（Q4）。</span></div></div>
+  <div class="b-peer"><h3>Orbit 自己的 session 列表</h3><div class="k">Open · Completed · Trash</div>
+    已经有 <code>Rename…</code>、<code>Complete</code>、<code>Move to Trash</code>（带 Undo），Trash 30 天后清空，可以恢复。wiki 聊天本来就是 session，也出现在 workspace 的会话列表里。
+    <div class="take"><b>借：</b>动作、名字、规则全部照搬，不造第二套。在面板里 Complete 的聊天，在 session 列表里也是 Completed。</div></div>
+</div>
+<div class="b-src">下排三家按产品当前的样子写，没有逐条查文档。</div>
 </section>
 
 <section class="b-part">
-<div class="band"><span class="bn">4</span>待你定 <small>· 两个问题，各有推荐</small></div>
+<div class="band"><span class="bn">6</span>已定与待你定</div>
 <div class="b-qs">
-  <div class="b-q"><h3>Q1 · 点了 ✕ 以后，「收起」记多久？</h3>
-    <div class="opt rec"><b>A · 一直记住，直到你再点圆按钮</b> <span class="tag ask">推荐</span><br>存在本机（<code>localStorage</code>），按 space 记；新标签、重启 app 都还是收起。和 VS Code 按 workspace 记一样。你关它是有原因的，不该每次打开又弹出来。</div>
-    <div class="opt"><b>B · 只记到这个标签页关掉</b><br>存在 <code>sessionStorage</code>，和今天记「开着哪一场」一样；新标签又默认展开。好处是不会「关了一次就永远看不到」；坏处是不想要它的人每次都得再关一遍。</div>
+  <div class="b-q"><h3>已定（11-11）</h3>
+    <div class="opt rec"><b>Q1 → A</b>：点 ✕ 后一直记住收起（本机，按 space），直到再点圆按钮。</div>
+    <div class="opt rec"><b>Q2 → A</b>：收起后照旧是右下角圆按钮。</div>
+    <div class="opt rec"><b>去掉 New entry</b>：手写条目改在聊天里说。</div>
   </div>
-  <div class="b-q"><h3>Q2 · 收起以后长什么样？</h3>
-    <div class="opt rec"><b>A · 照旧：右下角圆按钮</b> <span class="tag ask">推荐</span>
-      <div class="row2"><div class="b-strip"><i class="pg"></i><i class="fab"></i></div><div>图 42 已定，带四种状态（Working、needs you…）。不改，零成本。</div></div></div>
-    <div class="opt"><b>B · 缩成右边一条窄条（NotebookLM 的 rail）</b>
-      <div class="row2"><div class="b-strip"><i class="pg" style="right:34px"></i><i class="rl"><i></i><i></i></i></div><div>收起后右边留 40 宽的一条，放展开键和状态。更像「面板一直在」，但要重画状态、和条目抽屉的关系也要重想。</div></div></div>
+  <div class="b-q"><h3>Q3 · 历史列表放在哪？</h3>
+    <div class="opt rec"><b>A · 整个面板换成列表（图 ②）</b> <span class="tag ask">推荐</span><br>放得下搜索、分组、⋯ 菜单；Cursor 也是这样。代价是看列表时看不到当前对话，选一场或按 Esc 就回来。</div>
+    <div class="opt"><b>B · 保留下拉条，只加状态和时间</b><br>改动最小，边看对话边选。但只有 40% 高，放不下搜索和分组，管理动作只能再塞一个菜单。</div>
+  </div>
+  <div class="b-q"><h3>Q4 · 列表怎么分组？</h3>
+    <div class="opt rec"><b>A · Open / Completed，跟 session 列表一样</b> <span class="tag ask">推荐</span><br>先看要处理的；「完成」同时管「不再自动接上」。</div>
+    <div class="opt"><b>B · 按时间：Today / Yesterday / Previous 7 days</b><br>ChatGPT 的做法，找「前天那场」快；但等你处理的会埋在中间，完成与否也看不出。</div>
   </div>
 </div>
 </section>
 
 <section class="b-part">
-<div class="band"><span class="bn">5</span>落地（按代价排） <small>· 按 Q1 A、Q2 A 估</small></div>
+<div class="band"><span class="bn">7</span>落地（按代价排） <small>· 按 Q3 A、Q4 A 估，只改 web 和服务端</small></div>
 <div class="b-land"><ol>
-  <li><b>web，一处改动</b>：<code>src/web/src/lib/wikiChat.ts</code> 加「按 space 记住收起」（<code>localStorage</code>，键 <code>orbit.wikiChat.closed</code>）；<code>WikiChatHost</code>（<code>components/WikiChat.tsx</code>）在地址和标签页都没说开哪场、窗口停靠（<code>wikiChatDocks</code>）、也没记住收起时，聊天列表读回后用 <code>wikiChatToOpen</code> 打开。✕ 写入「收起」，圆按钮清掉它。</li>
-  <li><b>测试</b>：<code>wikiChat.test.ts</code> 加记住/清掉；<code>WikiChat.test.tsx</code> 加：1440 打开即展开、1000 不展开、点 ✕ 后刷新仍收起、点圆按钮后恢复、<code>?chat=</code> 优先于「收起」、自动展开的面板在窗口拉窄时收起。</li>
-  <li><b>不在这次</b>：iPad、macOS 的第三栏和 Android 平板。等 web 用几天再定要不要跟（安卓跟 iOS）。</li>
+  <li><b>默认展开</b>：<code>src/web/src/lib/wikiChat.ts</code> 加按 space 记住收起（<code>localStorage</code>）；<code>WikiChatHost</code> 在地址和标签页都没说开哪场、窗口停靠、也没记住收起时，聊天列表读回后用 <code>wikiChatToOpen</code> 打开。✕ 写入收起，圆按钮清掉。</li>
+  <li><b>去掉 New entry</b>：<code>WikiPage.tsx</code> 页头去掉 <code>WikiNewEntryButton</code>，删掉不再用的 <code>WikiNewEntry.tsx</code> 和 <code>WIKI_NEW_ENTRY</code>；改 <code>WikiPage.test.tsx</code>、<code>WikiActivityPage.test.tsx</code>，以及 macOS 的 <code>WikiCopyParityTests</code>（它按顺序断言页头有这个按钮）。</li>
+  <li><b>聊天列表接口</b>（<code>GET /api/wiki/spaces/:id/chats</code>）：按最后说话时间排；加 <code>q</code>（标题搜索）和游标翻页；行里带上 <code>lastTurnAt</code>、<code>working</code>、<code>completed</code>。改共享契约和 pg spec。</li>
+  <li><b>历史列表</b>：重写 <code>WikiChatHistory</code>（<code>WikiChatPanel.tsx</code>）为整块视图：搜索、Open/Completed、⋯ 菜单。改名、完成、删除用 session 列表现有的 <code>renameSession</code>、<code>completeSession</code>、<code>deleteSession</code>/<code>restoreSession</code> 和 Undo toast。</li>
+  <li><b>测试</b>：默认展开那 6 种情况；历史列表的排序、搜索、翻页、四个动作、删掉正在看的那场回到 New chat。</li>
+  <li><b>不在这次</b>：iPad、macOS 第三栏和 Android 平板的默认展开与历史列表，等 web 用几天再跟。</li>
 </ol></div>
 </section>
 
