@@ -345,6 +345,7 @@ import { appendEvidenceReviewContext } from '../tasks/evidence-review';
 import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-review.service';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
 import {
+  withConfirmationAnswers,
   withConfirmationReturn,
   withConfirmationReviewRequest,
   withControlPlaneNote,
@@ -8122,6 +8123,7 @@ export class RunnerApiController {
         if (cards?.runQuestion) e.payload.runQuestion = cards.runQuestion;
         e.payload = withConfirmationReviewRequest(e.payload, cards?.confirmationReviewRequest ?? null);
         e.payload = withConfirmationReturn(e.payload, cards?.confirmationReturn ?? null);
+        e.payload = withConfirmationAnswers(e.payload, cards?.confirmationAnswers ?? null);
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);

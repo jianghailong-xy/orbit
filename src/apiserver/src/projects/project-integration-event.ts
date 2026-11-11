@@ -173,7 +173,7 @@ export function minutesText(seconds: number | null | undefined): string {
 }
 
 /** What queued an attempt, which the enqueue event's own text says. */
-export type EnqueueCause = 'DONE' | 'RETRY' | 'BACKFILL' | 'BEHIND_WORK' | 'DECISION' | 'AUTOMATIC';
+export type EnqueueCause = 'DONE' | 'RETRY' | 'BACKFILL' | 'BEHIND_WORK' | 'BASELINE_HELD' | 'DECISION' | 'AUTOMATIC';
 
 export function enqueuedText(input: {
   kind: IntegrationJobKind;
@@ -197,6 +197,8 @@ export function enqueuedText(input: {
       return `Queued again to land on ${target}`;
     case 'BACKFILL':
       return `Queued to land on ${target} · the project started integrating`;
+    case 'BASELINE_HELD':
+      return `Queued to land on ${target} · waiting for the baseline to be fixed`;
     case 'BEHIND_WORK':
       return `Queued to land on ${target} · the task's work ended on another branch`;
     default:

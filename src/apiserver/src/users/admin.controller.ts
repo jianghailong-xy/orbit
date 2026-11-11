@@ -22,6 +22,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { PatService } from '../auth/pat.service';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { WELCOME } from '../email/email-outbox';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminRoleGuard } from './admin-role.guard';
 import { CreateUserDto, ImpersonateDto, SetDisabledDto, UpdateRoleDto } from './dto';
@@ -76,7 +77,8 @@ export class AdminController {
    * Every account, oldest first, each with how it signs in, when it was disabled, null while it is
    * not (docs/google-sign-in-design.md §6), when it last used Orbit (`lastActiveOf`), and when its
    * profile photo was set — the version the list fetches it by (`users/:id/avatar`), null while it
-   * has none, as on `me`.
+   * has none, as on `me` — and its welcome email's status, last error and last attempt, null when it
+   * has none.
    */
   @Get('users')
   async listUsers() {
@@ -92,14 +94,17 @@ export class AdminController {
         ...SIGN_IN_METHODS_SELECT,
         clientVersions: { select: { kind: true, lastSeenAt: true } },
         personalAccessTokens: { where: { lastUsedAt: { not: null } }, orderBy: { lastUsedAt: 'desc' }, take: 1, select: { lastUsedAt: true } },
+        emailOutbox: { where: { kind: WELCOME }, select: { status: true, lastError: true, lastAttemptAt: true, updatedAt: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
-    return users.map(({ avatar, passwordHash, identities, clientVersions, personalAccessTokens, ...user }) => ({
+    return users.map(({ avatar, passwordHash, identities, clientVersions, personalAccessTokens, emailOutbox, ...user }) => ({
       ...user,
       avatarUpdatedAt: avatar?.updatedAt ?? null,
       signInMethods: signInMethodsOf({ passwordHash, identities }),
       lastActive: lastActiveOf(clientVersions, personalAccessTokens),
+      // The account's welcome email (docs/welcome-email-design.md §3.5); null for one created before the outbox.
+      welcomeEmail: emailOutbox[0] ?? null,
     }));
   }
 
@@ -121,8 +126,8 @@ export class AdminController {
   /** Create a user, or reset an existing one's password (force). Returns the generated
    *  password once when none was supplied — the admin shows it to the new user. */
   @Post('users')
-  createUser(@Body() dto: CreateUserDto) {
-    return createOrResetUser(this.prisma, dto);
+  createUser(@CurrentUser() admin: AuthUser, @Body() dto: CreateUserDto) {
+    return createOrResetUser(this.prisma, dto, admin.userId);
   }
 
   @Patch('users/:id/role')

@@ -45,7 +45,12 @@ import kotlinx.serialization.json.*
 
 @Composable
 internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
-    detailOnly: Boolean = false) {
+    detailOnly: Boolean = false, target: Long? = null) {
+    // The turns Orbit opened, folded with their answers (ExchangeFold): [target] opens the way down to a record a link landed on.
+    if (row.exchanges.isNotEmpty()) {
+        ExchangeFoldView(row, target) { folded -> TranscriptRowView(folded, model, live, open, folded.contains(target ?: -1), target = target) }
+        return
+    }
     if (row.steps.isNotEmpty()) {
         Box(Modifier.background(if (highlighted) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)) {
             StepsRowView(row, model, live, open, highlighted)

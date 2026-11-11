@@ -57,6 +57,12 @@ final class QueuedTurnCardsTests: XCTestCase {
             {"requestId": "cr-1", "recordId": "rec-1", "reviewerTitle": "Reviewer",
              "reason": "The evidence cites no run", "problems": [{"key": "p1", "text": "No TOOL_CALL resolves"}]}
             """),
+        ("reviewAnswers", "confirmationAnswers", """
+            {"decisionId": "dc-1", "taskId": "task-1", "title": "Welcome email for new accounts",
+             "decidedAt": "2026-11-11T05:13:08.000Z",
+             "answers": [{"key": "n1", "question": "How should it reach main?", "choice": "Merge to main now",
+                          "text": null, "notShown": false}]}
+            """),
     ]
 
     /// Everything on a `UserBubble` that is not a card: the turn's words and inputs, and how far it got.
@@ -178,6 +184,7 @@ final class QueuedTurnCardsTests: XCTestCase {
             XCTAssertEqual(b.sessionReplies?.first?.replyText, "全部只读执行")
             XCTAssertEqual(b.reviewRequest?.runSessionId, "s-run")
             XCTAssertEqual(b.reviewReturn?.problems.map(\.text), ["No TOOL_CALL resolves"])
+            XCTAssertEqual(b.reviewAnswers?.answers.map(\.shown), ["Merge to main now"])
         }
     }
 

@@ -16,6 +16,7 @@ import {
   COORDINATOR_LEAD_KINDS,
   type DoneRequest,
   type OpenItemChat,
+  type ProjectOpenItemRow,
   type OpenItemFacts,
   type OpenItemHandling,
   type OpenItemOutcome,
@@ -354,6 +355,9 @@ export interface OpenItemRow {
   /** What the item's payload holds, as the rows its card draws (§7.5); null when the payload is
    *  not a shape this build reads, which leaves the card drawing what it drew before. */
   facts: OpenItemFacts | null;
+  /** K4: the measured baseline and the tasks held by its shared item. */
+  baseline?: ProjectOpenItemRow['baseline'];
+  heldTaskIds?: string[];
   /** The coordinator's rerun of it while that rerun is QUEUED or RUNNING (§4.7 H1), else null. */
   handling: OpenItemHandling<Date> | null;
   /** How it ended, on a row of `settled` (§4.7 H5); null on every open row. */
@@ -2108,18 +2112,22 @@ export class ProjectOpenItemService {
         : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
-        select: { id: true, kind: true, assignee: true, assigneeReason: true },
+        select: { id: true, kind: true, assignee: true, assigneeReason: true, integrationJobId: true, payload: true },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
       const ownerBlockers = await tx.projectBlocker.findMany({
         where: { projectId, subjectType: 'TASK', subjectId: taskId, owner: 'USER', resolvedAt: null },
         select: { id: true, kind: true },
       });
+      const baselineItem = openItems.find((item) => baselineFields(item.payload).baseline !== null);
+      const baselineFailure = baselineItem?.integrationJobId
+        ? await tx.projectIntegrationJob.findUniqueOrThrow({ where: { id: baselineItem.integrationJobId } })
+        : null;
       const decision = decideIntegrationRetry({
         requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
         taskStatus: locked.status,
-        newestLanding: newestLanding && { ...newestLanding, timedOut: silent?.timedOut === true },
+        newestLanding: baselineFailure ?? (newestLanding && { ...newestLanding, timedOut: silent?.timedOut === true }),
         openItems,
         ownerBlockers,
       });
@@ -2132,6 +2140,26 @@ export class ProjectOpenItemService {
         });
       }
 
+      if (baselineItem && baselineFailure) {
+        const queued = await tx.projectIntegrationJob.findFirstOrThrow({
+          where: { taskId, kind: 'LAND_TASK', state: 'QUEUED' },
+          orderBy: [{ generation: 'desc' }],
+        });
+        const landing = queued.landingId
+          ? await tx.projectLanding.findUnique({ where: { id: queued.landingId }, select: { sessionId: true } })
+          : null;
+        const closed = await tx.projectOpenItem.updateMany({
+          where: { id: baselineItem.id, state: 'OPEN' },
+          data: { state: 'RESOLVED', resolution: 'RETRIED', resolvedAt: new Date(),
+            resolvedBy: ownerRequester ? 'USER' : 'COORDINATOR',
+            resolvedBySessionId: ownerRequester ? null : asking!, resolvedByUserId: ownerRequester,
+            resolutionNote: reason },
+        });
+        if (closed.count === 0) throw new ConflictException('the baseline item is no longer open');
+        return { taskId, jobId: queued.id, generation: queued.generation, sourceRef: queued.sourceRef,
+          landingSessionId: landing?.sessionId ?? null, retryOfJobId: baselineFailure.id,
+          failureClass: decision.failureClass, reason, handlingItemIds: [] };
+      }
       const queued = await queueLandingRetry(tx, {
         ownerId,
         projectId,
@@ -3026,6 +3054,7 @@ export class ProjectOpenItemService {
            AND i."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS.map((kind) => Prisma.sql`${kind}`))})
            AND i."state" = 'OPEN'
            AND t."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+           AND i."dedupe_key" NOT LIKE 'ICB:%'
            AND (t."status" = 'CANCELLED' OR t."superseded_by_task_id" IS NOT NULL)`);
       // A delivery review is answered when the task leaves the DONE delivery it describes. A
       // landing itself is handled by the receipt-aware wake service, while reopen/cancel/replace
@@ -3303,6 +3332,7 @@ export class ProjectOpenItemService {
         question,
         startRequest,
         doneRequest,
+        ...baselineFields(row.payload),
         facts: openItemFacts(
           row.kind,
           row.payload,
@@ -3397,6 +3427,7 @@ export class ProjectOpenItemService {
         question: null,
         startRequest: null,
         doneRequest: null,
+        ...baselineFields(row.payload),
         facts: openItemFacts(
           row.kind,
           row.payload,
@@ -3844,6 +3875,7 @@ async function landingConditionStands(
   projectId: string,
   item: RefusedItem,
 ): Promise<boolean> {
+  if (baselineFields(item.payload).baseline) return false;
   if (observationFailureItem(item)) return hasPendingObservation(prisma, projectId);
   const [row] = await prisma.$queryRaw<Array<{ stands: boolean }>>(Prisma.sql`
     SELECT EXISTS (
@@ -3988,4 +4020,13 @@ function howInEnglish(how: string | undefined): string {
     default:
       return 'The task failed';
   }
+}
+
+/** K4 / §4.8. These mutable fields never enter openItemMessage (G6). */
+function baselineFields(payload: unknown): {
+  baseline: NonNullable<ProjectOpenItemRow['baseline']> | null;
+  heldTaskIds: string[];
+} {
+  const value = payload as Pick<ProjectOpenItemRow, 'baseline' | 'heldTaskIds'> | null;
+  return { baseline: value?.baseline ?? null, heldTaskIds: value?.heldTaskIds ?? [] };
 }

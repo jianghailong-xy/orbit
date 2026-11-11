@@ -72,6 +72,10 @@
 ### 4.1 面板
 
 - **头：** 标题（点开是这个 space 的聊天历史）、`+` 新开、`↗` 换成完整会话页、`✕` 收起。
+- **默认展开（owner 11-11 定，效果图 45 ①②，契约 `chat.panel.openByDefault`）：** 窗口宽到面板停靠（≥ 1200）时，Settings 以外的 wiki 页打开就显示面板，接上圆按钮会打开的那一场（等你的 → 最近说过话、还开着的 → New chat）。点 `✕` 就记住收起：存在本机、按 space 记，新标签和重启都不再自动展开，直到再点一次圆按钮（Q1 A）；收起后照旧是圆按钮（Q2 A）。地址带 `?chat=` 的照样打开。自动展开不写地址：窗口拉窄到不停靠时随之收起，拉宽回来再展开。聊天列表读回之前，正文先按面板宽度排好，不跳。
+- **历史（owner 11-11 定，效果图 45 ④，契约 `chat.panel.history`、`chat.list.page`）：** 点标题，整个面板换成列表（Q3 A），标题变成 `Chats`，再点或按 Esc 回到原来那场，正在输入的字不丢。顶上按标题搜索（服务端 `?q=`），每页 50 场，`Show more` 再取下一页（`?offset=`）。分 Open 和 Completed（Q4 A，同 session 列表）：Open 里先是等你的，再是正在跑的，其余按最后说话的时间；Completed 默认折着，搜索时一起列出。每行第二行是灰字：`1 needs you`、`Working…` 或多久前说过。行的 `⋯` 是 session 列表的 `Rename…`、`Open as a full session`、`Complete`、`Move to Trash`，走同一组接口，带 Undo；Trash 在 session 列表里，面板底部一行字说明（session 列表的 Trash 没有可链接的地址）。删掉的是正在看的那场，面板回到 New chat。
+- **iPad 与 macOS（owner 11-11 定）：** 同样默认展开与历史。面板是第三栏（iPad 常规宽度、Mac）时打开 wiki 就显示，接上圆按钮会打开的那一场；`✕` 或收起这一栏都按 space 记在本机（UserDefaults），直到再点圆按钮。iPad 变窄成 sheet 时，自动展开的面板随之收起，变宽再回来。点标题整栏换成历史：搜索、Open / Completed、每行 `⋯` 与右键菜单里的 `Rename…`、`Open as a full session`、`Complete`、`Move to Trash`，带 Undo。iPhone 的 sheet 不自动展开，标题仍是原来的菜单。
+- **页头没有 New entry（owner 11-11 定，效果图 45 ③）：** 手写条目在聊天里说，卡片按 Apply 写入算 owner 自己的写。
 - **Runs in（owner 11-07 定，效果图 43 ②）：** 新聊天时标题下一行是 `Runs in`，只放 workspace，只在新聊天出现，发出第一句后收起。聊天开始以后不再显示 workspace，session 页也是开了就不能换。机器离线时照旧另写一行（§5.1）。
 - **地址：** 带 `?chat=<session>`，翻页不关，刷新还在。
 - **输入框（owner 11-07 定，效果图 43 ②④⑤）：** 就是 session 页的 composer，是同一个组件，不是照着仿一个：附件行、输入框、工具栏、斜杠菜单，运行中的排队、插话与 Stop。工具栏和 session 页一样：`+`（图片、文件、命令、技能）、模式、模型与思考强度、用量圈、发送。发送键在运行中且输入框为空时变成 `Stop`；这时再发的消息按 session 页的规则插进这一轮，按住发送键或 ⌥Enter 排到下一轮，排队和插话中的消息在输入框上方，可以收回。以后 session 页改了，面板跟着变。

@@ -1,6 +1,7 @@
 import { readRunQuestionCard } from './run-question';
 import type { Prisma, SessionRunSource } from '@prisma/client';
 import type {
+  ConfirmationAnswersCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
@@ -22,6 +23,7 @@ import {
 } from '../projects/project-open-item';
 import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import {
+  readConfirmationAnswersCard,
   readConfirmationReturnCard,
   readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
@@ -37,7 +39,8 @@ import { readSessionReplyCards, readTurnRequestIds } from './session-request';
  * A turn the control plane opened is drawn as a card rather than as the owner's own message: an
  * exception item's delivery, the owner's answer handed to the coordinator, a fact the coordinator is
  * told and the answer to a session's criteria proposal, a task run's brief, a project's start, a
- * confirmation request handed to its reviewer and a reviewer's return handed to the run, another
+ * confirmation request handed to its reviewer, a reviewer's return handed to the run and the owner's
+ * answers handed to the reviewer, another
  * Orbit session's message, and the outcomes of this session's own requests handed back to it. It is
  * drawn twice — while it waits
  * (`SessionsService.listQueuedTurns`, both views) and once the runner echoes it (the event ingest,
@@ -55,6 +58,7 @@ export interface TurnCards {
   projectStarted?: ProjectStartedCard;
   confirmationReviewRequest?: ConfirmationReviewRequestCard;
   confirmationReturn?: ConfirmationReturnCard;
+  confirmationAnswers?: ConfirmationAnswersCard;
   sessionMessage?: SessionMessageCard;
   sessionReplies?: SessionReplyCard[];
   /** Somebody outside Orbit sent the turn (a Feishu group's member, migration 0502): who, never their open_id. */
@@ -128,13 +132,16 @@ export async function readTurnCards(
     const projectStarted = await readProjectStartedCard(db, session.ownerId, start);
     if (projectStarted) add(turn.id, { projectStarted });
   }
-  // A confirmation request handed to its reviewer, and a reviewer's return handed to the run
-  // (docs/owner-confirmation-review-contract.md D7, B3), by the turn's own key.
+  // A confirmation request handed to its reviewer, a reviewer's return handed to the run, and the
+  // owner's answers handed to the reviewer (docs/owner-confirmation-review-contract.md D7, B3, Q5),
+  // by the turn's own key.
   for (const turn of turns) {
     const confirmationReviewRequest = await readConfirmationReviewRequestCard(db, turn.clientTurnId);
     if (confirmationReviewRequest) add(turn.id, { confirmationReviewRequest });
     const confirmationReturn = await readConfirmationReturnCard(db, turn.clientTurnId);
     if (confirmationReturn) add(turn.id, { confirmationReturn });
+    const confirmationAnswers = await readConfirmationAnswersCard(db, turn.clientTurnId);
+    if (confirmationAnswers) add(turn.id, { confirmationAnswers });
   }
   // The turns another Orbit session sent (`session_send` / `project_send`), and who sent each — read
   // off the turn's sender column (session-message.ts, contract §2.3). A message that asked for a reply

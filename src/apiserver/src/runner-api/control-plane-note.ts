@@ -1,4 +1,5 @@
 import type {
+  ConfirmationAnswersCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
@@ -231,5 +232,17 @@ export function withConfirmationReturn(
   const stored = { ...payload };
   delete stored.confirmationReturn;
   if (card !== null) stored.confirmationReturn = card;
+  return stored;
+}
+
+/** The same rule for the owner's answers handed to the reviewer (`confirmationAnswers`, §7 Q5). */
+export function withConfirmationAnswers(
+  payload: Record<string, unknown>,
+  card: ConfirmationAnswersCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.confirmationAnswers;
+  if (card !== null) stored.confirmationAnswers = card;
   return stored;
 }

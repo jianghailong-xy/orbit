@@ -916,6 +916,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   const notKnown = Prisma.raw(`(${taskLandingSql('owed_task')}) = 'NOT_KNOWN'`);
   return Prisma.sql`(CASE
+      WHEN ${item}."kind" = 'INTEGRATION_CHECK_FAILED' AND ${item}."dedupe_key" LIKE 'ICB:%' THEN true
       WHEN ${item}."kind" = 'LANDING_UNOBSERVED' THEN EXISTS (
         SELECT 1 FROM "task" owed_task
          WHERE owed_task."id" = ${item}."task_id"
@@ -1130,7 +1131,7 @@ export interface OwnerHeldItem {
  * Open the item for an integration that did not land, in the transaction that wrote the job's
  * terminal state (§2.6, §4.2).
  *
- * The platform does not retry a conflict or a red check by itself (J5), so this item IS the retry
+ * Except for K5 baseline holds, the platform does not retry a conflict or red check (J5): this item IS the retry
  * mechanism: it names somebody, and what they decide is what happens next. Never escalated past the
  * coordinator by this function — a conflict has no chain limit, because there is no chain: one
  * failed job is one generation, and a second generation only exists because somebody asked.
@@ -1194,6 +1195,18 @@ export async function recordIntegrationFailure(
     skipDuplicates: true,
     select: { id: true },
   });
+  if (!created && failure.dedupeKey.startsWith('ICB:') && failure.taskId) {
+    const [held] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
+      UPDATE "project_open_item"
+         SET "payload" = jsonb_set("payload", '{heldTaskIds}',
+           COALESCE("payload"->'heldTaskIds', '[]'::jsonb) ||
+           CASE WHEN COALESCE("payload"->'heldTaskIds', '[]'::jsonb) @> ${JSON.stringify([failure.taskId])}::jsonb
+                THEN '[]'::jsonb ELSE ${JSON.stringify([failure.taskId])}::jsonb END)
+       WHERE "project_id" = ${failure.projectId}::uuid AND "dedupe_key" = ${failure.dedupeKey}
+         AND "state" = 'OPEN'
+       RETURNING "id", "assignee"`);
+    return held ? { itemId: held.id, projectId: failure.projectId, taskId: failure.taskId, assignee: held.assignee } : null;
+  }
   if (!created) return null;
   return {
     itemId: created.id,
@@ -1220,7 +1233,7 @@ export async function resolveIntegrationItemsOnLanding(
   taskId: string,
 ): Promise<void> {
   await tx.projectOpenItem.updateMany({
-    where: { taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
+    where: { taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN', NOT: { dedupeKey: { startsWith: 'ICB:' } } },
     data: {
       state: 'RESOLVED' satisfies OpenItemState,
       resolution: 'LANDED' satisfies OpenItemResolution,
@@ -1232,7 +1245,8 @@ export async function resolveIntegrationItemsOnLanding(
 
 /**
  * §4.4 X-D4 (5), revision 13: a task filed to fix an exception has landed, so that exception goes
- * back in front of the coordinator, which closes it or reruns what it is about.
+ * back in front of the coordinator, which closes it or reruns what it is about. K5 baseline items
+ * are resolved LANDED instead when the fix lands on the failed job's serial key.
  *
  * Called in the transaction that wrote the fix's landing receipt. The item is about ANOTHER task's
  * work, and whether that work reached the line with the fix is a question about commits this server
@@ -1245,9 +1259,20 @@ export async function resolveIntegrationItemsOnLanding(
 export async function rearmItemFixedBy(
   tx: Prisma.TransactionClient,
   taskId: string,
+  serialKey?: string,
 ): Promise<string | null> {
   const fix = await tx.task.findUnique({ where: { id: taskId }, select: { fixesOpenItemId: true } });
   if (!fix?.fixesOpenItemId) return null;
+  if (serialKey) {
+    const closed = await tx.$executeRaw(Prisma.sql`
+      UPDATE "project_open_item" i SET "state" = 'RESOLVED', "resolution" = 'LANDED',
+             "resolved_by" = 'PLATFORM', "resolved_at" = now()
+        FROM "project_integration_job" f
+       WHERE i."id" = ${fix.fixesOpenItemId}::uuid AND i."state" = 'OPEN'
+         AND i."kind" = 'INTEGRATION_CHECK_FAILED' AND f."id" = i."integration_job_id"
+         AND f."baseline_red" = true AND f."serial_key" = ${serialKey}`);
+    if (closed > 0) return null;
+  }
   const rearmed = await tx.projectOpenItem.updateMany({
     where: { id: fix.fixesOpenItemId, state: 'OPEN', assignee: 'COORDINATOR', promotionId: null },
     data: { assignedAt: new Date() },

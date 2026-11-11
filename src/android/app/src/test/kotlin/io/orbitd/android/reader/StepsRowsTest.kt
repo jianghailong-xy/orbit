@@ -53,11 +53,11 @@ class StepsRowsTest {
         assertEquals("AskUserQuestion", rows[1].event.fields.string("name"))
     }
 
-    @Test fun aReadersOwnShellCommandAndAPictureStayOutOfTheFold() {
+    @Test fun aReadersOwnShellCommandStaysOutOfTheFoldAndAPictureFolds() {
         val shell = event(1, "tool_use", """{"id":"shell-1","name":"Bash","input":{"command":"ls"}}""")
         val picture = event(3, "tool_result", """{"toolUseId":"t2","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}}]}""")
         val rows = steps(shell, call(2, "Read", """{"file_path":"/tmp/s.png"}"""), picture)
-        assertTrue(rows.all { it.steps.isEmpty() })
+        assertEquals(listOf(0, 1), rows.map { it.steps.size })
     }
 
     @Test fun failuresAreCountedNotOpened() {

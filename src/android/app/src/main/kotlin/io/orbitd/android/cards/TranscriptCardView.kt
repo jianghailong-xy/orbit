@@ -40,6 +40,11 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     if (card.family == CardFamily.REVIEW && (card.key.endsWith(":confirmationReviewRequest") || card.key.endsWith(":confirmationReturn"))) {
         ReviewTurnCard(card, ts, open); return
     }
+    // So are the owner's answers handed to the reviewer once they confirmed (contract §7 Q5): "You confirmed", never the reader's bubble.
+    if (card.family == CardFamily.REVIEW && card.key.endsWith(":confirmationAnswers")) {
+        val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
+        YouConfirmedCard(card, event, open, undelivered = delivery == "failed" || delivery == "unconfirmed"); return
+    }
     // A background job's news or a wakeup coming due is a line in the agent's stream (A08-11), not a card of fields.
     if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":wake")) {
         val fields = event?.fields

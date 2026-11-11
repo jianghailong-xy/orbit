@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Owner answers turn · web card</title>
+<style>
+:root{
+  --bg-base:#fff;--bg-subtle:#fafbfc;--fill-inset:rgba(0,0,0,.05);--border:#dee0e3;--border-subtle:#eceef1;
+  --text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;
+  --brand:#3370ff;--brand-tint:#eaf1ff;--brand-border:#bcd3ff;
+  --success:#1a7f37;--success-bg:#e8f6ec;--success-border:#b6e7c4;
+  --warning:#c2710c;--warning-bg:#fff4e6;--warning-border:#ffd591;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#eef0f3;color:var(--text-1);
+  font-family:-apple-system,BlinkMacSystemFont,'Inter','PingFang SC','Noto Sans SC',sans-serif;font-size:14px;line-height:1.55}
+.board{width:1480px;padding:36px 40px 44px;background:#eef0f3}
+h1{margin:0 0 4px;font-size:24px}
+.sub{color:var(--text-2);margin:0 0 24px;font-size:14px}
+.row{display:flex;gap:24px;align-items:flex-start;margin-bottom:24px}
+.frame{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.frame-cap{padding:10px 14px;border-bottom:1px solid var(--border-subtle);font-weight:600;font-size:13px;background:var(--bg-subtle);display:flex;gap:8px;align-items:center}
+.frame-cap .tag{font-weight:500;font-size:11px;padding:1px 7px;border-radius:9px;background:#f1f1f4;color:var(--text-2)}
+.frame-cap .tag.new{background:var(--success-bg);color:var(--success)}
+.frame-cap .tag.bad{background:#fdecec;color:#d83931}
+.frame-body{padding:16px 18px}
+.today img{display:block;width:100%}
+.ann{font-size:12.5px;color:var(--text-2);padding:10px 14px;border-top:1px solid var(--border-subtle);background:var(--bg-subtle)}
+.ann ol{margin:0;padding-left:18px}
+.ann b{color:var(--text-1)}
+
+/* ---- transcript bits (copied from index.css) ---- */
+.t-assist{font-size:14px;color:var(--text-1);margin:0 0 6px}
+.t-assist ul{margin:4px 0;padding-left:20px}
+.t-foot{color:var(--text-3);font-size:12px;margin:2px 0 10px}
+.t-worked{color:var(--text-3);font-size:12.5px;margin-top:14px}
+.sticky{border:1.5px solid var(--brand);border-radius:8px;padding:7px 12px;margin:-4px 0 12px;font-size:13.5px;background:#f7f8fa}
+.sticky .lbl{color:var(--text-3);margin-right:8px}
+
+.crc-wrap{display:flex;justify-content:flex-end;margin:8px 0}
+.crc{width:min(560px,88%);padding:10px 12px;border:1px solid var(--brand-border);border-radius:12px;background:var(--brand-tint);color:var(--text-1)}
+.crc.is-confirmed{border-color:var(--success-border);background:var(--success-bg)}
+.crc.is-queued{border-style:dashed}
+.crc-head{display:flex;align-items:center;gap:6px;color:var(--brand);font-weight:600}
+.crc.is-confirmed .crc-head{color:var(--success)}
+.crc-when{margin-left:auto;color:var(--text-3);font-size:11px;font-weight:400}
+.crc-title{margin:4px 0 2px;font-weight:600}
+.crc-title a{color:var(--brand);text-decoration:none}
+.crc-lead{margin-top:6px;font-size:12px;color:var(--text-2)}
+.crc-answers{margin:4px 0 0;padding:0;list-style:none;font-size:13px}
+.crc-answers li{margin-top:5px;line-height:1.5}
+.crc-answers .q{color:var(--text-2)}
+.crc-answers .a{font-weight:600}
+.crc-answers .note{color:var(--warning);font-size:12px}
+.crc-undelivered{margin-top:4px;color:var(--warning);font-size:12px}
+.crc-raw{margin-top:8px;font-size:12px}
+.crc-raw summary{color:var(--text-2);cursor:pointer}
+.crc-raw pre{max-height:320px;margin:6px 0 0;padding:8px;overflow:auto;border-radius:6px;background:var(--fill-inset);font-size:11px;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,'JetBrains Mono',Menlo,monospace}
+.crc-queued{margin-top:6px;color:var(--text-3);font-size:12px}
+.ico{display:inline-block;width:14px;height:14px}
+
+/* marks */
+.mk{position:relative}
+.mk::after{content:attr(data-mk);position:absolute;left:-34px;top:0;width:20px;height:20px;border-radius:50%;background:#d83931;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+/* notes */
+.notes{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.panel{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px 20px}
+.panel h3{margin:0 0 10px;font-size:15px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+td,th{border-top:1px solid var(--border-subtle);padding:6px 8px;text-align:left;vertical-align:top}
+th{color:var(--text-2);font-weight:600;border-top:none}
+code{font-family:ui-monospace,'JetBrains Mono',Menlo,monospace;font-size:11.5px;background:#f1f1f4;padding:0 4px;border-radius:4px}
+.decide li{margin-bottom:8px}
+.decide .rec{color:var(--success);font-weight:600}
+.phone{width:393px;flex:none}
+.phone .frame-body{padding:12px}
+.phone .crc{width:94%}
+</style>
+</head>
+<body>
+<div class="board">
+<h1>Owner answers turn · from a user bubble to an Orbit card</h1>
+<p class="sub">The turn <code>owner-confirmation-answers:v1:&lt;decisionId&gt;</code> in the reviewer's session. Today it has no card, so it's drawn as a message the reader typed. Proposal: it becomes the third card of a confirmation review, after <b>Review requested</b> and <b>Sent back by the reviewer</b>.</p>
+
+<!-- Row 1: today vs proposal -->
+<div class="row">
+  <div class="frame today" style="width:720px">
+    <div class="frame-cap">① 现在（owner 截图） <span class="tag bad">user bubble</span></div>
+    <img src="00-today-owner-screenshot.png" alt="today">
+    <div class="ann"><ol>
+      <li>右侧蓝色气泡 = 「我说的话」，内容却在用第三人称讲 owner。</li>
+      <li>给 agent 的协议块原样露出：<code>&lt;orbit-confirmation-answers task="34vXI…"&gt;</code>、裸 id、UTC 时间。</li>
+      <li>答案带选项序号 <code>0.</code>。</li>
+    </ol></div>
+  </div>
+
+  <div class="frame" style="width:660px">
+    <div class="frame-cap">② 提案 · 收起 <span class="tag new">new card</span></div>
+    <div class="frame-body">
+      <div class="sticky"><span class="lbl">✓ You confirmed</span>Welcome email for new accounts (Resend, Admin → Email)</div>
+      <div class="t-assist"><b>Two small things left, nothing to do for now:</b>
+        <ul><li>The mock PNG still shows the removed "Get the apps" row.</li><li>Each send runs inside one DB transaction, up to ~10 s.</li></ul></div>
+      <div class="t-foot">⧉ 1:08 PM</div>
+
+      <div class="crc-wrap">
+        <div class="crc is-confirmed">
+          <div class="crc-head mk" data-mk="1">
+            <svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="currentColor"/><path d="M4.6 8.2l2.3 2.3 4.5-4.7" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>You confirmed</span><span class="crc-when">1:13 PM</span>
+          </div>
+          <div class="crc-title mk" data-mk="2"><a href="#">Welcome email for new accounts (Resend, Admin → Email)</a></div>
+          <div class="crc-lead mk" data-mk="3">Your answers, sent to this reviewer</div>
+          <ul class="crc-answers">
+            <li><div class="q">This task is in no project, so nothing merges commit 39f5017e2 into main by itself, and your deployment needs it before the real send. How should it reach main?</div>
+                <div class="a mk" data-mk="4">Merge to main now, then I do the real send</div></li>
+          </ul>
+          <details class="crc-raw mk" data-mk="5"><summary>What the reviewer was told</summary></details>
+        </div>
+      </div>
+      <div class="t-worked">Worked for 1m 21s<br>Used 3 tools · <span style="color:#d83931">1 failed</span></div>
+    </div>
+    <div class="ann"><ol>
+      <li><b>You confirmed</b> + 本地时间。绿色（success）与 Review requested（蓝）、Sent back（橙）区分。也是吸顶条的锚。</li>
+      <li>任务标题，链到任务页，取代 <code>task="…"</code> 裸 id。</li>
+      <li>小字引导一句，说明这些答案已经交给本会话。</li>
+      <li>问题灰色，答案加粗，不带选项序号；自由作答照原话加引号。</li>
+      <li>原始协议块收进折叠，和 <code>ProjectStartedCard</code> 的 <i>What the coordinator was told</i> 同样画法。</li>
+    </ol></div>
+  </div>
+</div>
+
+<!-- Row 2: open fold, edge cases, phone -->
+<div class="row">
+  <div class="frame" style="width:520px">
+    <div class="frame-cap">③ 展开原文</div>
+    <div class="frame-body">
+      <div class="crc-wrap" style="justify-content:stretch">
+        <div class="crc is-confirmed" style="width:100%">
+          <div class="crc-head"><svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="currentColor"/><path d="M4.6 8.2l2.3 2.3 4.5-4.7" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>You confirmed</span><span class="crc-when">1:13 PM</span></div>
+          <div class="crc-title"><a href="#">Welcome email for new accounts (Resend, Admin → Email)</a></div>
+          <div class="crc-lead">Your answers, sent to this reviewer</div>
+          <ul class="crc-answers"><li><div class="q">This task is in no project, so nothing merges commit 39f5017e2 into main by itself… How should it reach main?</div><div class="a">Merge to main now, then I do the real send</div></li></ul>
+          <details class="crc-raw" open><summary>What the reviewer was told</summary><pre>&lt;orbit-confirmation-answers task="34vXI18539ffXKTPxmYUb"&gt;
+The task “Welcome email for new accounts (Resend, Admin → Email)” you reviewed: the owner confirmed it at 2026-11-11T05:13:08Z.
+Their answers to your questions:
+- This task is in no project, so nothing merges commit 39f5017e2 into main by itself, and your deployment needs it before the real send. How should it reach main? → 0. Merge to main now, then I do the real send
+&lt;/orbit-confirmation-answers&gt;</pre></details>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame" style="width:520px">
+    <div class="frame-cap">④ 边界情况</div>
+    <div class="frame-body">
+      <div style="font-size:12px;color:var(--text-3);margin-bottom:2px">a · 多个问题：选项 / 原话 / 没给你看过的问题</div>
+      <div class="crc-wrap" style="justify-content:stretch">
+        <div class="crc is-confirmed" style="width:100%">
+          <div class="crc-head"><svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="currentColor"/><path d="M4.6 8.2l2.3 2.3 4.5-4.7" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>You confirmed</span><span class="crc-when">Yesterday 9:40 PM</span></div>
+          <div class="crc-title"><a href="#">Rate-limit the public share endpoint</a></div>
+          <div class="crc-lead">Your answers, sent to this reviewer</div>
+          <ul class="crc-answers">
+            <li><div class="q">Keep the old 60/min limit for signed-in users?</div><div class="a">Yes, keep it</div></li>
+            <li><div class="q">Where should the 429 page link to?</div><div class="a">“The status page, not the docs”</div></li>
+            <li><div class="q">Ship behind a flag first?</div><div class="a">No — ship directly</div><div class="note">Not shown to you — the recommended answer was recorded.</div></li>
+          </ul>
+          <details class="crc-raw"><summary>What the reviewer was told</summary></details>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text-3);margin:10px 0 2px">b · 排队中（审查方正在跑）/ 未确认送达</div>
+      <div class="crc-wrap" style="justify-content:stretch">
+        <div class="crc is-confirmed is-queued" style="width:100%">
+          <div class="crc-head"><svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="currentColor"/><path d="M4.6 8.2l2.3 2.3 4.5-4.7" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>You confirmed</span><span class="crc-when">just now</span></div>
+          <div class="crc-title"><a href="#">Welcome email for new accounts (Resend, Admin → Email)</a></div>
+          <div class="crc-lead">Your answers, sent to this reviewer</div>
+          <ul class="crc-answers"><li><div class="q">How should it reach main?</div><div class="a">Merge to main now, then I do the real send</div></li></ul>
+          <div class="crc-undelivered">The session has not confirmed it received this.</div>
+          <div class="crc-queued">Queued · sent when the current turn ends</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame phone">
+    <div class="frame-cap">⑤ 窄屏 393</div>
+    <div class="frame-body">
+      <div class="t-assist" style="font-size:13.5px">Two small things left, nothing to do for now…</div>
+      <div class="t-foot">⧉ 1:08 PM</div>
+      <div class="crc-wrap">
+        <div class="crc is-confirmed">
+          <div class="crc-head"><svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="currentColor"/><path d="M4.6 8.2l2.3 2.3 4.5-4.7" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>You confirmed</span><span class="crc-when">1:13 PM</span></div>
+          <div class="crc-title"><a href="#">Welcome email for new accounts (Resend, Admin → Email)</a></div>
+          <div class="crc-lead">Your answers, sent to this reviewer</div>
+          <ul class="crc-answers"><li><div class="q">This task is in no project, so nothing merges commit 39f5017e2 into main by itself, and your deployment needs it before the real send. How should it reach main?</div><div class="a">Merge to main now, then I do the real send</div></li></ul>
+          <details class="crc-raw"><summary>What the reviewer was told</summary></details>
+        </div>
+      </div>
+      <div class="t-worked">Worked for 1m 21s</div>
+    </div>
+  </div>
+</div>
+
+<!-- Notes -->
+<div class="notes">
+  <div class="panel">
+    <h3>规则</h3>
+    <table>
+      <tr><th>情况</th><th>画法</th></tr>
+      <tr><td>轮次带 <code>confirmationAnswers</code> 卡片</td><td>绿卡 <b>You confirmed</b>，不是用户气泡，不进「你自己的话」（不会被放回输入框）</td></tr>
+      <tr><td>答案是选项</td><td>只写选项 label，不写序号</td></tr>
+      <tr><td>答案是原话</td><td>照原话，加弯引号 “…”，与回执 <i>Your answers</i> 一致</td></tr>
+      <tr><td><code>source = NOT_SHOWN</code></td><td>答案下橙色小字 <i>Not shown to you — the recommended answer was recorded.</i>（复用 <code>ANSWER_NOT_SHOWN</code>）</td></tr>
+      <tr><td>排队 / 未送达</td><td>虚线边 + 队列行；<i>The session has not confirmed it received this.</i>（同另两张卡）</td></tr>
+      <tr><td>上线前已发出的旧轮次</td><td>保持现在的气泡：卡片在回显时写进 payload，旧轮次没有（不做回填）</td></tr>
+      <tr><td>吸顶条</td><td>本卡成为锚：<i>✓ You confirmed · 任务标题</i></td></tr>
+    </table>
+  </div>
+  <div class="panel">
+    <h3>会改的文件</h3>
+    <table>
+      <tr><td>shared</td><td><code>ConfirmationAnswersCard</code> 类型 {taskId, title, decidedAt, answers[{question, answer, notShown}]}</td></tr>
+      <tr><td>apiserver</td><td><code>turn-cards.ts</code> 按 <code>owner-confirmation-answers:v1:</code> 读决定行出卡；<code>orbit-message.ts</code> platformCard；<code>control-plane-note.ts</code> + runner-api 写进 payload</td></tr>
+      <tr><td>web</td><td><code>lib/confirmationReviewTurns.ts</code> parse；<code>ConfirmationReviewTurnCards.tsx</code> 新卡；<code>Transcript.tsx</code> 分支 + <code>readersOwnWords</code>；<code>index.css</code> <code>.crc.is-confirmed</code></td></tr>
+      <tr><td>iOS / macOS</td><td><code>ConfirmationReviewTurns.swift</code>、<code>ConfirmationReviewTurnCardViews.swift</code></td></tr>
+      <tr><td>Android</td><td><code>TranscriptCards.kt</code>、<code>OwnerReviewViews.kt</code></td></tr>
+      <tr><td>契约</td><td><code>owner-confirmation-review-contract.md</code> §8 补第三张卡</td></tr>
+    </table>
+    <h3 style="margin-top:16px">待你定</h3>
+    <ol class="decide">
+      <li>抬头文案：<span class="rec">You confirmed（推荐）</span> / Your answers / Answers sent to the reviewer</li>
+      <li>颜色：<span class="rec">绿 success（推荐，表示"已确认"）</span> / 和 Review requested 一样的蓝</li>
+      <li>原文折叠标题：<span class="rec">What the reviewer was told（推荐，对齐 ProjectStartedCard）</span></li>
+      <li>范围：<span class="rec">web + iOS/macOS + Android 一起（推荐）</span> / 先 web</li>
+    </ol>
+  </div>
+</div>
+</div>
+</body>
+</html>

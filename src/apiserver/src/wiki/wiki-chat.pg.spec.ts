@@ -280,8 +280,8 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     assert.equal(answer.status, 201, answer.text);
     firstChat = toUuid(answer.json.sessionId);
     assert.deepEqual(
-      { ...withoutTwins(answer.json.chat), sessionId: toUuid(answer.json.chat.sessionId), createdAt: typeof answer.json.chat.createdAt, updatedAt: typeof answer.json.chat.updatedAt, title: typeof answer.json.chat.title },
-      { sessionId: firstChat, title: 'string', status: 'PENDING', open: true, createdAt: 'string', updatedAt: 'string', drafts: 0, needsYou: 0 },
+      { ...withoutTwins(answer.json.chat), sessionId: toUuid(answer.json.chat.sessionId), createdAt: typeof answer.json.chat.createdAt, updatedAt: typeof answer.json.chat.updatedAt, lastActiveAt: typeof answer.json.chat.lastActiveAt, title: typeof answer.json.chat.title },
+      { sessionId: firstChat, title: 'string', status: 'PENDING', open: true, completed: false, working: true, createdAt: 'string', updatedAt: 'string', lastActiveAt: 'string', drafts: 0, needsYou: 0 },
       'the answer is the chat as the list serves it',
     );
 
@@ -323,6 +323,7 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     );
     assert.deepEqual(listed.json.fab, { needsYou: 0, working: true, updated: 0 }, 'a turn is queued');
     assert.deepEqual(listed.json.chats.map((c: { sessionId: string }) => toUuid(c.sessionId)), [firstChat]);
+    assert.equal(listed.json.more, false, 'one chat, one page');
     assert.equal(toUuid(await remembered() as string), wsDev, "and the space's settings say so");
 
     const read = await api('GET', `/api/sessions/${pub(firstChat)}`, ownerToken);
@@ -762,5 +763,48 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
       [[picture, 'image/png', 'lease-timeline.png'], [log, 'text/plain', 'runner.log']],
       'both files, in the order they were uploaded',
     );
+  });
+
+  await t.test('10. one page of the chats: the one last spoken in first, a title search, offset and more; the counts over all (board 45 ④)', async () => {
+    const all = await list();
+    assert.equal(all.status, 200, all.text);
+    const ids: string[] = all.json.chats.map((c: { sessionId: string }) => toUuid(c.sessionId));
+    assert.ok(ids.length >= 3, `several chats by now: ${ids.length}`);
+    // Spoken in, oldest first, as their ids came: the last one listed is the one spoken in last.
+    const base = Date.parse('2026-11-01T00:00:00.000Z');
+    for (const [i, id] of ids.entries()) {
+      await sql.query(`UPDATE "session" SET "title" = $2, "last_turn_at" = $3, "completed_at" = NULL WHERE "id" = $1::uuid`,
+        // As UTC text: the raw client would write a Date in this machine's zone into the zoneless column.
+        [id, `${i % 2 === 0 ? 'Lease' : 'heartbeat'} chat ${i}`, new Date(base + i * 60_000).toISOString().replace('T', ' ').replace('Z', '')]);
+    }
+    await sql.query(`UPDATE "session" SET "completed_at" = now() WHERE "id" = $1::uuid`, [ids[0]]);
+    const newestFirst = [...ids].reverse();
+
+    const read = await list();
+    assert.equal(read.status, 200, read.text);
+    assert.deepEqual(read.json.chats.map((c: { sessionId: string }) => toUuid(c.sessionId)), newestFirst, 'the one last spoken in first');
+    const byId = new Map(read.json.chats.map((c: { sessionId: string }) => [toUuid(c.sessionId), c]));
+    assert.equal((byId.get(ids[0]) as { completed: boolean }).completed, true, 'Complete files it in Completed');
+    assert.equal((byId.get(ids[1]) as { completed: boolean }).completed, false);
+    assert.equal((byId.get(ids[1]) as { lastActiveAt: string }).lastActiveAt, new Date(base + 60_000).toISOString(), 'its last turn');
+    assert.equal(read.json.more, false);
+
+    const found = await api('GET', `${chats}?q=${encodeURIComponent('  HEARTBEAT ')}`, ownerToken);
+    assert.equal(found.status, 200, found.text);
+    assert.deepEqual(found.json.chats.map((c: { sessionId: string }) => toUuid(c.sessionId)), newestFirst.filter((id) => ids.indexOf(id) % 2 === 1),
+      "the chats whose title holds the words, without case");
+    assert.deepEqual(found.json.fab, read.json.fab, 'the counts are over every chat whatever the page');
+
+    const none = await api('GET', `${chats}?q=nothing-is-called-this`, ownerToken);
+    assert.deepEqual([none.status, none.json.chats, none.json.more], [200, [], false]);
+
+    const second = await api('GET', `${chats}?offset=1`, ownerToken);
+    assert.equal(second.status, 200, second.text);
+    assert.deepEqual(second.json.chats.map((c: { sessionId: string }) => toUuid(c.sessionId)), newestFirst.slice(1), 'passes over one');
+
+    for (const bad of ['offset=-1', 'offset=one', 'offset=1.5', `q=${'x'.repeat(201)}`, 'offset=1&offset=2']) {
+      const refused = await api('GET', `${chats}?${bad}`, ownerToken);
+      assert.equal(refused.status, 400, `${bad}: ${refused.text}`);
+    }
   });
 });

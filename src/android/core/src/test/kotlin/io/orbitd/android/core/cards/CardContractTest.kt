@@ -110,6 +110,35 @@ class CardContractTest {
         assertTrue(transcriptCards(RunEvent("assistant", 3, source)).isEmpty())
     }
 
+    @Test fun ownerAnswersHandedToTheReviewerAreAYouConfirmedCard() {
+        fun answers(vararg rows: JsonObject, over: JsonObjectBuilder.() -> Unit = {}) = buildJsonObject {
+            putJsonObject("confirmationAnswers") {
+                put("decisionId", "d"); put("taskId", "t"); put("title", "Welcome email"); put("decidedAt", "2026-11-11T05:13:08Z")
+                putJsonArray("answers") { rows.forEach { add(it) } }
+                over()
+            }
+            put("text", "<orbit-confirmation-answers task=\"t\">…</orbit-confirmation-answers>")
+        }
+        val chosen = buildJsonObject { put("key", "n1"); put("question", "How should it reach main?"); put("choice", "Merge to main now"); put("text", JsonNull); put("notShown", false) }
+        val said = buildJsonObject { put("key", "n2"); put("question", "Where should it link?"); put("choice", JsonNull); put("text", "The status page"); put("notShown", false) }
+        val unseen = buildJsonObject { put("key", "n3"); put("question", "Behind a flag?"); put("choice", "No"); put("notShown", true) }
+        val card = transcriptCards(RunEvent("user", 4, answers(chosen, said, unseen))).single()
+        assertEquals(CardFamily.REVIEW, card.family)
+        assertEquals(OwnerReview.youConfirmed, card.title)
+        assertTrue(card.key.endsWith(":confirmationAnswers"))
+        assertEquals(listOf(
+            OwnerReview.ConfirmationAnswer("How should it reach main?", "Merge to main now", false),
+            OwnerReview.ConfirmationAnswer("Where should it link?", "“The status page”", false),
+            OwnerReview.ConfirmationAnswer("Behind a flag?", "No", true),
+        ), OwnerReview.confirmationAnswers(card.source))
+        // Malformed: no answers, an answer with neither choice nor text, or a missing title — no card, so no half a card.
+        assertTrue(transcriptCards(RunEvent("user", 5, answers())).isEmpty())
+        assertTrue(transcriptCards(RunEvent("user", 6, answers(buildJsonObject { put("question", "Q?") }))).isEmpty())
+        assertTrue(transcriptCards(RunEvent("user", 7, answers(chosen) { put("title", JsonNull) })).isEmpty())
+        // Only a user turn carries it.
+        assertTrue(transcriptCards(RunEvent("assistant", 8, answers(chosen))).isEmpty())
+    }
+
     @Test fun ordinaryDiscussionCarriesTheDisplayedSealAndDoesNotAnswerADoor() {
         val card = cardList().single { it.family == CardFamily.ACCEPTANCE }
         val context = CardDiscussion.context(card)!!

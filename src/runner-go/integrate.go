@@ -627,11 +627,16 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 					}
 					return result
 				}
+				baselineTree, err := git(baseline, "rev-parse", "HEAD^{tree}")
+				if err != nil {
+					return result
+				}
 				attribution, err := runIntegrationCheckTracked(stop, baseline, spec, len(result.Checks)+1, len(cmd.Checks)+1, progress)
 				if err != nil {
 					return integrationStepEnded(err, "CHECK")
 				}
 				attribution.Scope = "BASELINE"
+				attribution.TreeSha = strings.TrimSpace(baselineTree)
 				result.Checks = append(result.Checks, attribution)
 				result.BaselineRed = !attribution.TimedOut && attribution.ExitCode != nil && *attribution.ExitCode != spec.ExpectedExitCode
 			}

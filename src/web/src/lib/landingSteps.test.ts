@@ -36,8 +36,8 @@ describe('landingSteps', () => {
     expect(steps.map((step) => [step.name, step.summary.text, step.entries.length])).toEqual([
       ['Queue', 'Task marked done · queued to land on project/p1', 1],
       ['Claim', 'Claimed by runner workstation-gpu · claim 1', 2],
-      ['Sync', 'Preparing the combined tree', 5],
-      ['Merge check', 'Merge check passed · 0m 16s', 4],
+      ['Sync', 'Preparing the combined tree', 6],
+      ['Merge check', 'Merge check passed · 0m 16s', 3],
       ['Push', 'Landed on project/p1 · 9afb7d1', 3],
     ]);
     // Every line is kept, each once.
@@ -57,6 +57,27 @@ describe('landingSteps', () => {
     ], 'LAND_TASK');
     expect(steps.map((step) => step.name)).toEqual(['Queue', 'Claim', 'Merge check']);
     expect(steps[2].summary.text).toBe('Check failed · nothing was pushed');
+  });
+
+  it('says how a failed check ended, not the hand-off after it, and draws no step for a check that never ran', () => {
+    // The owner's 2026-11-11 screenshot: task acceptance failed, the coordinator was asked, and the merge check never started.
+    const acceptance = { name: 'TASK_ACCEPTANCE' as const, index: 1 };
+    const steps = landingSteps([
+      line('ENQUEUED', 'Task marked done'),
+      line('CLAIMED', 'Claimed by runner workstation-gpu · claim 1'),
+      line('STEP', 'Rebasing onto project/p1', { phase: 'REBASE' }),
+      line('STEP', 'Running the checks', { phase: 'CHECK' }),
+      line('STEP', 'Preparing the combined tree', { phase: 'CHECK' }),
+      line('CHECK_STARTED', 'Task acceptance started', { check: acceptance }),
+      line('CHECK_FINISHED', 'Task acceptance failed · exit 1', { check: acceptance, data: { exitCode: 1, expectedExitCode: 0 } }),
+      line('HANDED_TO', 'Asked the coordinator to fix it'),
+    ], 'LAND_TASK');
+    expect(steps.map((step) => [step.name, step.summary.text])).toEqual([
+      ['Queue', 'Task marked done'],
+      ['Claim', 'Claimed by runner workstation-gpu · claim 1'],
+      ['Sync', 'Preparing the combined tree'],
+      ['Task acceptance', 'Task acceptance failed · exit 1'],
+    ]);
   });
 
   it('names a merge round’s last step Merge, and a check round’s Result', () => {
