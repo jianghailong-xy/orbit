@@ -1,4 +1,4 @@
-<!-- 2026-11-11 · draft for the owner's review. Board: docs/mocks/claude-openai-gateway/01-architecture.html (+ PNGs). No project or task exists for it yet. -->
+<!-- 2026-11-11 · owner took D1–D8 as recommended; project 34vZPMzFs7c8OTMPJYYHn. Board: docs/mocks/claude-openai-gateway/01-architecture.html (+ PNGs). §8 answered by P0. -->
 
 # Claude Code on an OpenAI key, through Orbit's own gateway
 
@@ -96,6 +96,8 @@ claude ── Messages (SSE) ──▶ /api/gw/anthropic/v1/messages
   - `POST /v1/messages`: the turn, streamed or not.
   - `POST /v1/messages/count_tokens`: a count (§4.6).
   - Anything else gets a refusal in Anthropic's error shape, the way `gatewayAllows` refuses unlisted Codex paths.
+    That includes the `HEAD <base>/api/hello` the CLI sends before its first request. The recorder answered it 404
+    and the session ran normally (P0, `fixtures/claude-cli-2.1.322/basic.json` request 1).
 - **Translator.** A pure module, `src/apiserver/src/providers/anthropic-gateway/`: `toResponsesRequest(body, ctx)`
   and a stream converter fed Responses SSE bytes that emits Messages SSE bytes. It does no I/O, so it can be tested
   against recorded fixtures alone.
@@ -128,7 +130,9 @@ claude ── Messages (SSE) ──▶ /api/gw/anthropic/v1/messages
   The sign-in preflight already treats `ANTHROPIC_AUTH_TOKEN` as the session's own credential
   (`engine-signin-preflight.ts`), so it does not refuse the session for the runner's missing Claude login.
 - **Runner.** No change expected: it already reaches `PUBLIC_ORIGIN` for `gw/codex`, and the region check already
-  passes non-Anthropic hosts. P0 confirms both.
+  passes non-Anthropic hosts. The region check is confirmed from the code: `claudeTurnIsAnthropicBound` returns false
+  for any `ANTHROPIC_BASE_URL` that `isAnthropicHost` does not name. Reaching the gateway from a real runner is
+  P1's end-to-end run.
 - **Prompt suggestions** stay off: the gateway is not a measured endpoint (`prompt-suggestions-switch.ts`). Turning
   them on is later work.
 
@@ -140,17 +144,22 @@ the server keeps nothing. Reasoning comes back encrypted and travels inside the 
 | Anthropic request | Responses request |
 |---|---|
 | `system` (string or text blocks) | `instructions` (blocks joined; `cache_control` dropped) |
-| user `text` / `image` (base64 or URL) | `message` item, `input_text` / `input_image` (data URL) |
+| the `system` block `x-anthropic-billing-header: cc_version=…` (always the first block, P0) | dropped |
+| a message with `role: "system"` (the CLI puts its environment and tool notices between user turns, P0) | `message` item, role `developer`, `input_text`, in place |
+| user `text` / `image` (base64 or URL) / `document` (PDF) | `message` item, `input_text` / `input_image` (data URL) / `input_file` |
 | assistant `text` | `message` item, role assistant, `output_text` |
-| assistant `tool_use {id, name, input}` | `function_call {call_id: id, name, arguments: JSON}` |
-| user `tool_result {tool_use_id, content, is_error}` | `function_call_output {call_id, output}`; error flag folded into the text |
-| assistant `thinking {thinking, signature}` whose signature carries an Orbit envelope | `reasoning {id, encrypted_content, summary}` decoded from the envelope |
+| assistant `tool_use {id, name, input}` | `function_call {call_id: id, name, arguments: JSON}` (no item `id`) |
+| user `tool_result {tool_use_id, content, is_error}` | `function_call_output {call_id, output}`; error flag folded into the text as `Error: …`; a result with images is a list of `input_text` / `input_image` parts (§8) |
+| `tool_result` content `tool_reference {tool_name}` (ToolSearch's answer) | the line `Tool loaded: <name>`, and the named tool is declared from then on |
+| assistant `thinking {thinking, signature}` whose signature carries an Orbit envelope | `reasoning {encrypted_content, summary}` decoded from the envelope; sent without the item `id`, as Codex does, since with `store: false` OpenAI has no item to look an id up against |
 | `thinking` / `redacted_thinking` without an envelope (from an earlier Anthropic or DeepSeek turn) | dropped |
 | `tools[]` (custom) | `{type: function, name, description, parameters: input_schema, strict: false}` |
-| `tools[]` server tool `web_search_*` | decision D5 |
-| `tool_choice` auto / any / tool / none | `auto` / `required` / `{type: function, name}` / `none` |
+| `tools[]` with `defer_loading: true` | left out until a `tool_reference` names it; `DeferredToolPlaceholder` is never sent |
+| `tools[]` server tool `web_search_*` | dropped and reported to the caller: decision D5 |
+| `tool_choice` auto / any / tool / none | `auto` / `required` / `{type: function, name}` / `none`; `disable_parallel_tool_use` → `parallel_tool_calls: false` |
 | `max_tokens` | `max_output_tokens` |
-| effort (`output_config.effort`, or a `thinking` budget) | `reasoning.effort`: low, medium, high, xhigh; `max` → `xhigh` |
+| effort (`output_config.effort`, or a `thinking` budget when no effort is sent) | `reasoning: {effort, summary: "auto"}`: low, medium, high, xhigh; `max` → `xhigh`; held to the model's highest declared level; no effort and no thinking → no `reasoning` |
+| `thinking: {type: "adaptive", display: "updates"}`, `context_management` | dropped |
 | `temperature`, `top_p`, `top_k`, `stop_sequences` | dropped (reasoning models reject them) |
 | `metadata.user_id` | not sent; `prompt_cache_key` = the session id, so OpenAI's own caching keeps one prefix per session |
 | `model` | §4.5 |
@@ -162,7 +171,10 @@ the server keeps nothing. Reasoning comes back encrypted and travels inside the 
 gateway stateless across several API servers (`gateway/several-apiservers`), restarts and resumes, and a session that
 switches its model away and back loses nothing it could still use.
 
-Which effort fields Claude Code sends for a non-Claude model id is not yet known. P0 records it (§7).
+The translator is `src/apiserver/src/providers/anthropic-gateway/` (`toResponsesRequest`, `toInputTokensRequest`,
+`MessagesStreamConverter`, `assembleMessage`, `upstreamModel`), tested by `providers/anthropic-gateway.spec.ts` against
+requests claude 2.1.322 really sent (`providers/fixtures/claude-cli-2.1.322/`, recorded with
+`scripts/claude-gateway-recorder/`). What the CLI sends for effort is in §8.
 
 ### 4.4 Stream mapping (Responses → Messages)
 
@@ -172,13 +184,16 @@ Which effort fields Claude Code sends for a non-Claude model id is not yet known
 | `response.output_item.added` message | `content_block_start {type: text}` |
 | `response.output_text.delta` | `content_block_delta {text_delta}` |
 | `response.output_item.added` reasoning | `content_block_start {type: thinking}` |
-| `response.reasoning_summary_text.delta` | `content_block_delta {thinking_delta}` |
+| `response.reasoning_summary_text.delta` | `content_block_delta {thinking_delta}`; a second and later summary part (`reasoning_summary_part.added`) is preceded by a blank line |
 | `response.output_item.done` reasoning | `content_block_delta {signature_delta: orbit1.…}`, then `content_block_stop` |
 | `response.output_item.added` function_call | `content_block_start {type: tool_use, id: call_id, name, input: {}}` |
 | `response.function_call_arguments.delta` | `content_block_delta {input_json_delta}` |
+| `response.output_item.done` function_call that had no argument deltas | one `input_json_delta` with its `arguments`, then `content_block_stop` |
 | `response.output_item.done` (others) | `content_block_stop` |
-| `response.completed` / `.incomplete` | `message_delta {stop_reason, usage}`, then `message_stop` |
+| `response.output_item.added` of any other item (`web_search_call`, …) | nothing |
+| `response.completed` / `.incomplete` | blocks still open are stopped, then `message_delta {stop_reason, usage}`, then `message_stop` |
 | `response.failed`, stream `error` | an Anthropic `error` event (§5.4) |
+| the upstream ends without any of the above | an `error` event `api_error`, never a silent end |
 
 - **Stop reason:** a function call in the output → `tool_use`; `incomplete` for `max_output_tokens` → `max_tokens`;
   a content filter → `refusal`; otherwise `end_turn`.
@@ -191,10 +206,13 @@ Which effort fields Claude Code sends for a non-Claude model id is not yet known
 ### 4.5 Models
 
 - **The session model** (a GPT id) passes through as `model`.
-- **Background requests.** Claude Code sends some requests on its "haiku" slot: titles, WebFetch summaries, small
-  side questions. Dispatch sets `ANTHROPIC_DEFAULT_HAIKU_MODEL` to the key's small model: the preset's mini model, or
-  the row's own choice. As a backstop, the gateway also rewrites any `claude-*haiku*` id to that model, and any other
-  `claude-*` id to the session model, so no request reaches OpenAI with a Claude id.
+- **Background requests.** Claude Code sends some requests on its "haiku" slot: WebFetch summaries, small side
+  questions. P0 recorded one (a WebFetch summary, `tools: []`, no `thinking`). With `ANTHROPIC_DEFAULT_HAIKU_MODEL`
+  unset it carried the session model (`gpt-5.5`), not a Claude id; with it set, that model
+  (`toolsearch-r2.json`, `toolsearch-haikur2.json`). A headless runner session sent no title request. Subagents ran on
+  the session model (`subagent-r2.json`). Dispatch sets `ANTHROPIC_DEFAULT_HAIKU_MODEL` to the key's small model: the
+  preset's mini model, or the row's own choice. As a backstop, the gateway also rewrites any `claude-*haiku*` id to
+  that model, and any other `claude-*` id to the session model, so no request reaches OpenAI with a Claude id.
 - **Context windows.** The `openai` preset's models (`providerPresets.ts`) need a `contextWindow`, so
   `CLAUDE_CODE_MAX_CONTEXT_TOKENS` is set. Without it the CLI assumes 200k.
 - **Catalog and effort levels** come from the key's models, as for any other key on Claude Code
@@ -202,12 +220,16 @@ Which effort fields Claude Code sends for a non-Claude model id is not yet known
 
 ### 4.6 count_tokens and compaction
 
-- `POST /v1/messages/count_tokens` translates the body as in §4.3 and asks OpenAI's input-token count endpoint. If
-  that endpoint is not there (to be verified in P0), it answers an estimate of characters ÷ 4. An over-count only
-  makes the CLI compact a little early.
+- `POST /v1/messages/count_tokens?beta=true` translates the body as in §4.3 (`toInputTokensRequest`) and asks OpenAI's
+  input-token count endpoint. If that endpoint fails, it answers an estimate of characters ÷ 4
+  (`estimateInputTokens`). An over-count only makes the CLI compact a little early. P0 saw the CLI call it only for
+  `/context`: 23 calls, each `{model, messages, tools}` with no `system`, one per prompt section, one for the tool
+  set, and one per deferred tool alone (`context-x.json`). Ordinary turns and compaction never called it. So a slow or
+  estimated count costs nothing on the turn path.
 - **Overflow.** An upstream `context_length_exceeded` is answered as Anthropic's 400 `invalid_request_error`
-  "prompt is too long: N tokens > M maximum", the wording Claude Code reacts to by compacting. P0 checks that the
-  CLI still matches that wording.
+  "prompt is too long: N tokens > M maximum", the wording Claude Code reacts to by compacting
+  (`anthropicError`; M is the declared window, N the estimate, at least M + 1). P0 confirmed the wording on 2.1.322
+  (§8).
 
 ## 5. Security, quota and failure
 
@@ -285,14 +307,66 @@ Each phase depends on the one before it.
 | **P2 Production behaviour** | Error and quota mapping (§5.4), rate-limit waits, key marking, usage and cost (§5.5), count_tokens, haiku mapping, load check (§5.6). | Each row of §5.4 has a test that drives the real CLI through the gateway against a fake upstream. 20 concurrent sessions stay within the server's memory budget. |
 | **P3 Quality and release** | The same task set on `codex` + GPT and on `claude` + GPT; web search mapping (D5); copy, docs and the connection-form line. | The owner reads the comparison and decides whether to turn the flag on. |
 
-## 8. What this design does not settle yet
+## 8. What P0 answered
 
-These are questions, not decisions. P0 answers them.
+These were the open questions. P0 answered them on 2026-11-11 by recording **claude 2.1.322**, the version this
+runner installs, against a fake Anthropic endpoint. The run used the runner's own flags (`claude_spawn.go`) and the
+`claudeEnv` block of `injectedEnv`: `CLAUDE_CODE_INLINE_TOOLS=false`, `CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP=1`,
+`CLAUDE_CODE_MAX_CONTEXT_TOKENS`, `ENABLE_CLAUDEAI_MCP_SERVERS=0`, an `orbit-gwk-` bearer token, and `--model gpt-5.5`.
+The recordings are in `src/apiserver/src/providers/fixtures/claude-cli-2.1.322/`, and the recipe is
+`scripts/claude-gateway-recorder/`.
 
-- Which effort fields Claude Code sends for a non-Claude model id, and whether `--effort` reaches the request at all.
-- Whether OpenAI's input-token count endpoint accepts the same body as `/responses`.
-- Whether a `function_call_output` may carry images, which tool results with screenshots need. If not, they go as a
-  following user message.
-- Whether Claude Code accepts an arbitrary string as a `thinking` signature from a non-Anthropic host. DeepSeek's
-  endpoint suggests it does, but nobody has measured it.
-- The exact "prompt is too long" wording the CLI matches in the version the runner ships.
+No OpenAI API key was available to P0: the account has none, and the environment has none. The questions about
+OpenAI's side are therefore answered from OpenAI's API reference and stay marked as not measured. The P1/P2
+end-to-end run against OpenAI settles them.
+
+1. **Which effort fields Claude Code sends for a non-Claude id, and whether `--effort` reaches the request.**
+   It does. Every request carries `output_config: {effort}`, with the `--effort` level verbatim: `low`, `medium`,
+   `high`, `xhigh`, `max`. With no flag it is `high`. Beside it the request carries
+   `thinking: {type: "adaptive", display: "updates"}` and the `effort-2025-11-24` beta header, at every level.
+   No `budget_tokens` is ever sent (`effort-{low,medium,high,xhigh,max,none}.json`). The translator maps the effort
+   as §4.3 says. `CLAUDE_CODE_EFFORT_LEVEL=unset` was not recorded. `custom-provider.ts` documents it as the CLI's
+   spelling for "send no effort parameter". With no effort and no thinking in the request, the translator sends no
+   `reasoning`.
+2. **Whether OpenAI's input-token count endpoint accepts the same body as `/responses`.** Not measured: no key.
+   OpenAI's reference documents `POST /v1/responses/input_tokens`, taking the same `model`, `input`,
+   `instructions` and `tools`, and the translator builds exactly that body (`toInputTokensRequest`). The
+   recordings make the question matter less than assumed. The CLI calls count_tokens only for `/context`, never on
+   a turn or a compaction (`context-x.json`), so the ÷ 4 fallback is a safe answer whenever the endpoint refuses.
+3. **Whether a `function_call_output` may carry images.** The CLI side is recorded. Read on a PNG returns a
+   `tool_result` whose content is `[{type: "image", source: {type: "base64", media_type: "image/png", data}}]`
+   (`image-r2.json`). OpenAI's reference documents `function_call_output.output` as a string or a list of
+   `input_text` / `input_image` / `input_file` parts. The translator sends that list, so no extra user message is
+   needed. Not measured against OpenAI: no key. If the live API refuses it, the fallback in the earlier draft (a
+   following user message) is a change local to `translateToolResult`.
+4. **Whether Claude Code accepts an arbitrary string as a `thinking` signature from a non-Anthropic host.**
+   It does. The recorder answered thinking blocks whose signature was `orbit1.<base64url JSON>`. The CLI kept each
+   one byte for byte and sent it back on the next request of the same turn (`thinking.json`) and on later user
+   turns (`thinkturns.json`: the third request carries both earlier thinking blocks). It also sends
+   `context_management: {edits: [{type: "clear_thinking_20251015", keep: "all"}]}`, which asks the server to keep
+   every thinking block. The translator drops that field and keeps them all.
+5. **The exact "prompt is too long" wording the CLI matches.** It is a case-insensitive substring match: the CLI
+   checks for `prompt is too long` (or `input is too long for requested model`) in the error message. It reads the
+   two numbers with `prompt is too long[^0-9]*(\d+)\s*tokens?\s*>\s*(\d+)`, and its list of known API messages holds
+   `^prompt is too long: \d+ tokens > \d+ maximum$` (strings of the 2.1.322 binary). Behaviour, recorded:
+   - On a 400 `invalid_request_error` "prompt is too long: 250000 tokens > 200000 maximum" in the second turn, the
+     CLI sent a compaction request ("…create a detailed summary of the conversation…"), wrote an automatic
+     `compact_boundary` and retried the turn on the compacted conversation (`toolong-r2.json`).
+   - The same 400 on the very first exchange ends the turn with `terminal_reason: "prompt_too_long"`: "A
+     single-exchange conversation cannot be compacted" (`toolong.json`).
+   - OpenAI's own wording, "Your input exceeds the context window of this model…", made the CLI re-send the same
+     request once and never compact (`toolong-openai.json`). So the gateway must rewrite `context_length_exceeded`
+     into the Anthropic wording, as §4.6 says.
+
+**What else the recordings changed in this design:**
+- The CLI sends `role: "system"` messages inside `messages`, and an `x-anthropic-billing-header` block first in
+  `system`. Both rows were added to §4.3.
+- Deferred tools come as `defer_loading: true` plus a `DeferredToolPlaceholder`, and ToolSearch answers with
+  `tool_reference` blocks that Anthropic's server expands (`toolsearch-r2.json`). The translator now does that
+  expansion itself (§4.3).
+- The CLI sends `HEAD <base>/api/hello` before its first request (§4.1).
+- The headers are `authorization: Bearer <token>`, `anthropic-version: 2023-06-01`, a long `anthropic-beta` list,
+  `x-app: cli`, `user-agent: claude-cli/2.1.322 (external, sdk-cli)` and `x-claude-code-session-id`. No `x-api-key`
+  is sent (`basic.json`).
+- Subagents send the main request's shape on the session model, with `cc_is_subagent=true` in the billing block
+  (`subagent-r2.json`).
