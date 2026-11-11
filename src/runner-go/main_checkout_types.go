@@ -159,6 +159,7 @@ type MainCheckoutActionResult struct {
 	TargetBranch    string   `json:"targetBranch,omitempty"`
 	Paths           []string `json:"paths,omitempty"`
 	State           string   `json:"state,omitempty"`
+	Ahead           *int     `json:"ahead,omitempty"`
 	Behind          *int     `json:"behind,omitempty"`
 	GitMessage      string   `json:"gitMessage,omitempty"`
 	RunnerName      string   `json:"runnerName,omitempty"`

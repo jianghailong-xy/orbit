@@ -135,7 +135,7 @@ already points to it is skipped, and the rescue branch name derives from a conte
 - Present when status is not `done`: `code`.
 - Depending on kind and code: `branch`, `fileCount`, `remaining` (move: changed files left in the
   checkout), `rescueBranch`, `head`, `subject`, `upstream`, `remoteBefore`, `remoteAfter`,
-  `targetSessionId`, `targetBranch`, `paths`, `state`, `behind`, `gitMessage`, `runnerName`,
+  `targetSessionId`, `targetBranch`, `paths`, `state`, `ahead`, `behind`, `gitMessage`, `runnerName`,
   `minutes`.
 
 `gitMessage` is git's own reason: one line, with credentials and URL userinfo removed.

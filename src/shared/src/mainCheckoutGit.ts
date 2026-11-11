@@ -190,6 +190,8 @@ export interface MainCheckoutActionResult {
   paths?: string[];
   /** CHECKOUT_BLOCKED: the state in the way ('rebase', 'merge', 'unmerged', ...). */
   state?: string;
+  /** PUSH_REJECTED: commits the branch has that upstream doesn't. */
+  ahead?: number;
   /** PUSH_REJECTED: commits upstream has that the branch doesn't. */
   behind?: number;
   /** PUSH_*, RESCUE_FAILED: git's own reason, one line, with credentials and URLs' userinfo removed. */

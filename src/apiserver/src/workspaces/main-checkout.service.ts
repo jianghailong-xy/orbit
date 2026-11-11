@@ -736,7 +736,7 @@ const RESULT_STRINGS = [
   'branch', 'rescueBranch', 'head', 'subject', 'upstream', 'remoteBefore', 'remoteAfter', 'targetSessionId', 'targetBranch',
   'state', 'gitMessage', 'runnerName',
 ] as const;
-const RESULT_COUNTS = ['fileCount', 'remaining', 'behind', 'minutes'] as const;
+const RESULT_COUNTS = ['fileCount', 'remaining', 'ahead', 'behind', 'minutes'] as const;
 
 /** A runner's result, re-read field by field: it crosses the runner boundary and is rendered as a sentence. */
 function validRunnerResult(body: unknown, row: RequestRow): MainCheckoutActionResult {
