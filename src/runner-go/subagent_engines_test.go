@@ -267,3 +267,14 @@ func TestKimiOrbitMCPToolTimeoutCoversTheLongestWait(t *testing.T) {
 		t.Fatalf("toolTimeoutMs = %d, longest wait %s", ms, longest)
 	}
 }
+
+// Codex splits an MCP call's name into server and tool; its delegate call takes the name the control plane counts a
+// running SubAgent by and the clients draw a SubAgent block for. Its other Orbit tools keep Codex's own spelling.
+func TestCodexDelegateCardTakesTheCanonicalName(t *testing.T) {
+	if got := codexToolItemName(map[string]interface{}{"server": "orbit", "tool": "delegate"}); got != delegateEngineToolName {
+		t.Fatalf("delegate card = %q", got)
+	}
+	if got := codexToolItemName(map[string]interface{}{"server": "orbit", "tool": "task_list"}); got != "orbit__task_list" {
+		t.Fatalf("task_list card = %q", got)
+	}
+}

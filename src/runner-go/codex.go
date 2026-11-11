@@ -836,6 +836,11 @@ func codexToolItemName(item map[string]interface{}) string {
 	}
 	tool := firstString(item, "tool")
 	if server := firstString(item, "server"); server != "" && tool != "" {
+		if server == codexOrbitMCPServer && tool == delegateToolName {
+			// The name the control plane counts a running SubAgent by and the clients draw its block for
+			// (delegateEngineToolName), as every other engine spells it.
+			return delegateEngineToolName
+		}
 		return server + "__" + tool
 	}
 	return tool
