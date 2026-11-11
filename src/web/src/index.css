@@ -20365,6 +20365,13 @@ div.landing-jobs-open {
 .landings-window-entry.is-outlined .landings-window-reply {
   box-shadow: inset 2px 0 0 var(--brand);
 }
+/* No focus box round the sentence after a press; the keyboard's focus is the outline's own left rule. */
+.landings-window-reply:focus {
+  outline: none;
+}
+.landings-window-reply:focus-visible {
+  box-shadow: inset 2px 0 0 var(--brand);
+}
 /* The landing's ⋯ in its turn foot, where the chat's copy button stands. */
 .landings-window-more {
   flex: none;
