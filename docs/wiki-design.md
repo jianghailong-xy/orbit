@@ -492,6 +492,8 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
 
 ### 8.2 维护作业「Wiki maintenance」（阶段 2）
 
+> 2026-11-11 起，读不到 git 仓库不再拦住整次运行：仓库按 git / 文件夹 / 只有会话分档，见 `docs/wiki-repo-tiers-design.md`。下面「锚点复验」一步按档位执行。
+
 - **开关**：在 space 设置或首页的设置卡里打开维护，指定 workspace（决定从哪台 runner 读仓库）和每日运行次数（`dailyRunLimit`）。
   - 模型是部署配置的 System model：不再选 provider（P11 起 provider 不是设置），不花账号自己的 key、订阅或账号池，也不占 runner 槽位。
 - **触发（事实驱动，不用时钟）**

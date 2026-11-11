@@ -117,7 +117,7 @@
 <div class="x44-board">
   <h1 class="x44-title">44 · 没有 git 也能维护 wiki：仓库分三档</h1>
   <p class="x44-sub">2026-11-11 · 起因：一个 space 的工作目录不再是 git checkout，维护从 11-04 起停了 6 天，健康行只显示「behind」。
-    owner 已定：工作目录可以当事实来源。界面文字是英文（产品文案），注释是中文。</p>
+    owner 已定：工作目录可以当事实来源。设计文档：<span class="x44-code">docs/wiki-repo-tiers-design.md</span>。界面文字是英文（产品文案），注释是中文。</p>
 
   <!-- ─────────────────────────── part 1 ─────────────────────────── -->
   <section class="x44-part" id="part-1">
@@ -243,13 +243,14 @@
       <div class="x44-lane"><h3>快照的标识与 diff</h3>
         <ul class="x44-facts">
           <li>标识 = 树哈希（见第 2 部分）。文件没变，哈希就不变：<span class="x44-code">skipSha</span> 照样省掉重传。</li>
-          <li>快照的文件条目多一个 <span class="x44-code">hash</span>（内容 sha256）。两份文件夹快照之间的 diff 由<b>服务端比对两份索引</b>得出，runner 不用存历史。</li>
+          <li>快照的文件条目多一个 <span class="x44-code">hash</span>（内容 sha256）。</li>
+          <li>文件夹档<b>没有 diff</b>：树哈希变了，路径/符号锚点整条重核（只是 stat 和查找，不调模型）；文档节一律当作可能变了，交给节的指纹判断，材料没变就不重写。</li>
           <li>索引多一个 <span class="x44-code">source: "git" | "folder"</span>；<span class="x44-code">commits</span> 为空。</li>
           <li>读原文：按 (space, 树哈希, path) 缓存，和今天的 (space, sha, path) 是同一张表。</li>
         </ul></div>
       <div class="x44-lane"><h3>可信度怎么标</h3>
         <ul class="x44-facts">
-          <li>锚点复验结果的 <span class="x44-code">ref</span> 记成 <span class="x44-code">folder:&lt;树哈希&gt;</span>，<span class="x44-code">wiki_get</span> 能看出它是在文件夹上核的，不是在某个提交上。</li>
+          <li>锚点检查记录的 <span class="x44-code">ref</span> 仍是 40 位树哈希，另带 <span class="x44-code">source: "folder"</span>，<span class="x44-code">wiki_get</span> 能看出它是在文件夹上核的，不是在某个提交上。</li>
           <li>文件夹上的内容可能是还没提交的改动：锚点后来不见了，复验时会是 <span class="x44-code">missing</span>，走今天的 challenge 流程，不需要新机制。</li>
           <li>以后目录变成 git checkout，就自动回到第 2 档；文件夹上核过的锚点下一次在 origin/main 上重核。</li>
         </ul></div>
@@ -343,7 +344,7 @@
 
   <!-- ─────────────────────────── part 7 ─────────────────────────── -->
   <section class="x44-part" id="part-7">
-    <h2 class="x44-h2"><span class="x44-no">7</span>待定 · 要你拍板</h2>
+    <h2 class="x44-h2"><span class="x44-no">7</span>已定 · owner 2026-11-11：三项都选 A</h2>
     <div class="x44-q"><b>Q1　space 有仓库地址，但工作目录不是 git（就是这次的情况）：要不要也走文件夹档？</b>
       <div class="x44-dec">
         <div class="x44-opt rec"><h5>方案 A：走文件夹档 <span class="x44-tag good">推荐</span></h5>
@@ -354,7 +355,7 @@
     <div class="x44-q"><b>Q2　第 0 档（读不到代码）抽出来的条目怎么处理？</b>
       <div class="x44-dec">
         <div class="x44-opt rec"><h5>方案 A：照常进 Review，代码锚点标「待核」 <span class="x44-tag good">推荐</span></h5>
-          owner 能照常确认；但锚点没核过的条目先不进 <span class="x44-code">&lt;orbit_wiki_context&gt;</span> 推送块（今天的规则本来就是「锚点有效」才推）。核过之后自动进。</div>
+          owner 能照常确认；但锚点没核过的条目先不进 <span class="x44-code">&lt;orbit_wiki_context&gt;</span> 推送块。今天的推送只排除 changed / missing，未核的也会推；这里只对「抽取时没对着任何代码检查过」的锚点加一条排除。核过之后自动进。</div>
         <div class="x44-opt"><h5>方案 B：去掉代码锚点再提交</h5>
           条目马上能推，但丢了「这条知识依赖哪段代码」，以后代码变了也不会发 challenge。</div>
       </div></div>
@@ -375,7 +376,6 @@
       <li><b>失败分类和健康行。</b>runner 的错误带上类别（降档 / 前提 / 瞬时）；health 契约加 <span class="x44-code">repo.tier</span> 和 <span class="x44-code">repo.reason</span>；web、iOS、Android 三端的句子一起改，由 fixture 约束。</li>
       <li><b>Settings：开启前的探测，以及「Check again and run now」。</b>新的 owner 路由，建一次运行，计入每日次数。</li>
       <li><b>runner：文件夹快照。</b>新的能力 <span class="x44-code">wiki-repo-op-folder/v1</span>：扫目录、排除表、树哈希，路径/符号锚点在文件上核；read 操作支持 <span class="x44-code">folder:</span> 引用。旧 runner 不声明这个能力，就停在第 0 档，健康行提示升级 runner。</li>
-      <li><b>服务端：文件夹快照之间的 diff</b>（比对两份索引的 hash），给锚点复验和文档跟进用。</li>
       <li>设计文档 <span class="x44-code">docs/wiki-design.md</span> §8.2、<span class="x44-code">docs/wiki-server-execution-design.md</span> §5.5 / §7 和 <span class="x44-code">contracts/wiki.contract.json</span> 同步改。</li>
     </ol>
   </section>
