@@ -1933,6 +1933,10 @@ export async function applyIntegrationJobResult(
       throw new IntegrationJobRefused('INVALID_RESULT', 'a skipped landing check names PATHS_EXEMPT and its files');
     }
   }
+  if (body.baselineRed === true && (state !== 'CHECK_FAILED'
+    || !body.checks?.some((check) => check.scope === 'BASELINE'))) {
+    throw new IntegrationJobRefused('INVALID_RESULT', 'baselineRed requires CHECK_FAILED and a BASELINE check');
+  }
   // J2, said before the database says it, so the runner gets the reason rather than a constraint.
   if (state === 'LANDED' && (!body.landedTreeSha || body.landedTreeSha !== body.testedTreeSha)) {
     throw new IntegrationJobRefused(
@@ -2063,6 +2067,9 @@ export async function applyIntegrationJobResult(
       || (input.runnerId != null && job.runnerId !== input.runnerId)
     )) {
       throw new IntegrationJobRefused('STALE_CLAIM');
+    }
+    if (body.baselineRed === true && job.kind !== 'LAND_TASK') {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'only LAND_TASK may report baselineRed');
     }
     // §10.6: OBSERVED and OBSERVE are an observation's alone, and an observation ends only OBSERVED,
     // ERROR or CANCELLED — said by the kind of the row, now that it is read.
