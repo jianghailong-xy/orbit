@@ -1,3 +1,5 @@
+-- Renumbered to keep migration numbers unique. CREATE OR REPLACE permits replay
+-- in environments that already applied this function under the earlier number.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 -- A landing's lease renewal no longer moves the Open list's version (0484/0487).
 --

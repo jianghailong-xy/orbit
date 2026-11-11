@@ -218,6 +218,7 @@ test('a decided criteria proposal is answered back to the session that proposed 
   // The production wiring over one client. Only the two notification transports are stand-ins:
   // what this file counts is rows, and a runner being told to look is not one.
   const prisma = db as unknown as PrismaService;
+  const push = new Proxy({}, { get: () => () => Promise.resolve() }) as unknown as PushService;
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
@@ -232,8 +233,7 @@ test('a decided criteria proposal is answered back to the session that proposed 
       [ProjectOpenItemService, new ProjectOpenItemService(prisma, sessions)],
       [CoordinatorConvergenceService, new CoordinatorConvergenceService(prisma)],
       [CoordinatorEvidenceQueueService, evidenceQueueOver(prisma, sessions)],
-      // @Optional on ProjectsService (9afb7d156): no push transport here, as in a module without one.
-      [PushService, undefined],
+      [PushService, push],
     ])),
   };
 
@@ -649,6 +649,7 @@ test('the coordinator asks the owner, and the answer reaches the coordinator of 
   });
 
   const prisma = db as unknown as PrismaService;
+  const push = new Proxy({}, { get: () => () => Promise.resolve() }) as unknown as PushService;
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
@@ -665,8 +666,7 @@ test('the coordinator asks the owner, and the answer reaches the coordinator of 
       [ProjectOpenItemService, items],
       [CoordinatorConvergenceService, new CoordinatorConvergenceService(prisma)],
       [CoordinatorEvidenceQueueService, evidenceQueueOver(prisma, sessions)],
-      // @Optional on ProjectsService (9afb7d156): no push transport here, as in a module without one.
-      [PushService, undefined],
+      [PushService, push],
     ])),
   };
   const owner = await accountOwner(stack);
