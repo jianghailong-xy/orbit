@@ -1575,15 +1575,17 @@ export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TA
 type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
 const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
 
-function StreamingDrafts({ live }: { live?: boolean }) {
+function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
   // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
   // each time a block settles, and a reader who opened one wants the next block of the same turn
-  // open too. A turn's end puts it back to folded.
+  // open too. A turn's end puts it back to folded. Read off the transcript's last `turn_end` rather
+  // than off `live`: a reply sent right after a turn ends starts the next one before the session's
+  // status says it ever stopped. Its seq, not a count, so loading older pages changes nothing.
   const [thinkOpen, setThinkOpen] = useState(false);
   useEffect(() => {
-    if (!live) setThinkOpen(false);
-  }, [live]);
+    setThinkOpen(false);
+  }, [lastTurnEnd]);
   if (!drafts) return null;
   return (
     <>
@@ -1771,6 +1773,10 @@ export const Transcript = memo(function Transcript({
     }
     return at < 0 || at >= nodes.length ? [nodes, [] as Node[]] : [nodes.slice(0, at), nodes.slice(at)];
   }, [nodes, streamingAfterSeq]);
+  const lastTurnEnd = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'turn_end') return events[i].seq;
+    return 0;
+  }, [events]);
   const body = (
     <TaskLookupCtx.Provider value={taskLookup}>
       <ImagePreviewProvider>
@@ -1778,7 +1784,7 @@ export const Transcript = memo(function Transcript({
           <Fragment key={insert.key}>{insert.element}</Fragment>
         ))}
         <NodeList nodes={before} live={live} placed={placed} />
-        <StreamingDrafts live={live} />
+        <StreamingDrafts lastTurnEnd={lastTurnEnd} />
         {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
       </ImagePreviewProvider>
     </TaskLookupCtx.Provider>

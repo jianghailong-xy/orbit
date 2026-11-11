@@ -126,6 +126,7 @@ import {
   wikiChatHistoryGroups,
   wikiChatHistoryLine,
   wikiChatOffline,
+  wikiChatPanelMax,
   wikiChatQuoteCounts,
   wikiChatRemove,
   wikiChatRunsIn,
@@ -328,7 +329,7 @@ function WikiChatResizer({ width, onResize }: { width: number; onResize: (width:
       aria-orientation="vertical"
       aria-label={WIKI_CHAT_RESIZE}
       aria-valuemin={WIKI_CHAT_WIDTH.panel.min}
-      aria-valuemax={WIKI_CHAT_WIDTH.panel.max}
+      aria-valuemax={wikiChatPanelMax(typeof window === 'undefined' ? WIKI_CHAT_WIDTH.wide : window.innerWidth)}
       aria-valuenow={width}
       onPointerDown={(event) => {
         start.current = { x: event.clientX, width };
