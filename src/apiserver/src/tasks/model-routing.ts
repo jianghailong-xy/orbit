@@ -500,8 +500,19 @@ export interface SubagentRoutingDecision {
   effort: string | null;
   reasons: string[];
   candidates: SubagentRemovedCandidate[];
+  /** The rest of the tier's pool after the pick, in the order it was ranked: where a SubAgent whose account
+   *  hit its limit moves next (§4.3). Empty when the model was named rather than routed. */
+  fallbacks: SubagentFallback[];
   /** SUBAGENT_ROUTING_POLICY_VERSION. */
   policyVersion: string;
+}
+
+/** One candidate a SubAgent may move to after a usage-limit or capacity failure (§4.3). */
+export interface SubagentFallback {
+  engine: string;
+  provider: string;
+  model: string;
+  effort: string | null;
 }
 
 const levelIndex = (level: ModelRoutingLevel): number => MODEL_ROUTING_LEVELS.indexOf(level);
@@ -623,7 +634,10 @@ function bestPoolMember(members: readonly SubagentPoolMember[]): { member: Subag
  */
 export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecision {
   const mode = input.optimizeFor;
-  const base = { optimizeFor: mode, candidates: [] as SubagentRemovedCandidate[], policyVersion: SUBAGENT_ROUTING_POLICY_VERSION };
+  const base = {
+    optimizeFor: mode, candidates: [] as SubagentRemovedCandidate[], fallbacks: [] as SubagentFallback[],
+    policyVersion: SUBAGENT_ROUTING_POLICY_VERSION,
+  };
   const parentPick = { engine: input.parent.engine, provider: input.parent.provider, model: input.parent.model, effort: input.parent.effort };
 
   // Rows 1 and 2: a named model is used as named, at its engine's default effort, on the first provider in
@@ -747,7 +761,7 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
     return { ...decision, engine: null, provider: null, model: null, effort: null,
       reasons: [...reasons, `No provider can run tier ${level}: a routed SubAgent would be refused with NO_SUBAGENT_PROVIDER`] };
   }
-  const [best] = [...pool].sort((a, b) => compareCandidates(mode, a, b));
+  const [best, ...rest] = [...pool].sort((a, b) => compareCandidates(mode, a, b));
   reasons.push(pickLine(mode, best, level));
   const priceless = new Set(pool
     .filter((c) => c.provider.billing === 'key' && c.outputPricePerMTok == null)
@@ -755,5 +769,6 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   reasons.push(...priceless);
   if (pool.length > 1) reasons.push(`${pool.length} candidates in tier ${level}; ties go by the owner's provider order`);
   if (removed.length > 0) reasons.push(`${removed.length} candidate${removed.length === 1 ? '' : 's'} removed, each with its reason`);
-  return { ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort, reasons };
+  const fallbacks = rest.map((c) => ({ engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort }));
+  return { ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort, reasons, fallbacks };
 }

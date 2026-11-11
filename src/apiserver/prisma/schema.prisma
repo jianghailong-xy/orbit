@@ -2852,7 +2852,8 @@ model SubagentRun {
   status           String    @default("RUNNING")
   /// level, tierSource, optimizeFor, engine, provider, model, effort, reasons[], candidates, policyVersion
   decision         Json
-  /// Candidates tried after a quota failure, in order.
+  /// Every child process the run started, in order (SubagentAttempt): the first where it opened, then each
+  /// candidate it moved to after a usage-limit or capacity failure (§4.3). [] on rows written before attempts were kept.
   attempts         Json      @default("[]")
   resultSummary    String?   @map("result_summary")
   changedFiles     String[]  @default([]) @map("changed_files")

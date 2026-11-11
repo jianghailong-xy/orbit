@@ -327,3 +327,15 @@ test('Cost: a key on its native engine is ordered by its models.dev price among 
   assert.equal(last.provider, 'dear-key');
   assert.ok(last.reasons.includes(`No price known for ${SONNET} on unpriced-key; ordered after priced keys`), last.reasons.join('\n'));
 });
+
+test('fallbacks: the rest of the tier after the pick, in rank order (§4.3); none for a named model', () => {
+  const cheap = key('cheap-key', [{ model: 'cheap', effort: null, level: 'M', outputPricePerMTok: 0.1 }]);
+  const dear = key('dear-key', [{ model: 'dear', effort: null, level: 'M', outputPricePerMTok: 9 }]);
+  const decision = route(input({ providers: [dear, codex({ account: { quota: { utilization: 60, window: 'weekly' } } }), cheap] }));
+  assert.deepEqual([decision.provider, decision.model], ['codex', GPT]);
+  assert.deepEqual(decision.fallbacks.map((f) => [f.provider, f.engine, f.model, f.effort]), [
+    ['cheap-key', 'claude', 'cheap', null],
+    ['dear-key', 'claude', 'dear', null],
+  ]);
+  assert.deepEqual(route(input({ caller: { model: 'deepseek-v4-pro' } })).fallbacks, []);
+});
