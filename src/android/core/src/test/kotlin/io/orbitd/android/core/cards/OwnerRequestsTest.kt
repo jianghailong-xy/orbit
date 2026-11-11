@@ -40,7 +40,7 @@ class OwnerRequestsTest {
     @Test fun theResolvedLineSaysHowWhoAndWhen() {
         val done = secret.copy(state = "DONE", resolvedAt = "2026-11-10T07:59:00Z", resolvedByUserId = "u", resolvedClient = "android")
         assertEquals("Delivered to mini as STRIPE_API_KEY", OwnerRequests.outcomeLine(done, "mini"))
-        assertEquals("by you · 07:59 · via Android", OwnerRequests.byLine(done, now, ZoneOffset.UTC))
+        assertEquals("by you · 7:59\u202FAM · via Android", OwnerRequests.byLine(done, now, ZoneOffset.UTC))
         val decision = done.copy(kind = "DECISION", options = listOf(OwnerRequestOption("Ship"), OwnerRequestOption("Wait")),
             answer = OwnerRequestAnswer(1, " soon "))
         assertEquals("Wait: “soon”", OwnerRequests.outcomeLine(decision, "mini"))
@@ -48,7 +48,7 @@ class OwnerRequestsTest {
         assertEquals("Expired before anyone answered", OwnerRequests.outcomeLine(done.copy(state = "EXPIRED"), "mini"))
         assertEquals("", OwnerRequests.byLine(done.copy(state = "EXPIRED", resolvedAt = null, resolvedClient = null), now))
         val removing = OwnerRequestSecretGrant("REMOVING", runnerOnline = false, runnerLastSeenAt = "2026-11-10T06:00:00Z")
-        assertEquals("Removal pending: mini has not been online since 06:00", OwnerRequests.grantLine(removing, "mini", now, ZoneOffset.UTC))
+        assertEquals("Removal pending: mini has not been online since 6:00\u202FAM", OwnerRequests.grantLine(removing, "mini", now, ZoneOffset.UTC))
         assertTrue(OwnerRequests.removalToTell(removing))
         assertEquals("Removed: you revoked it", OwnerRequests.grantLine(OwnerRequestSecretGrant("REMOVED", endReason = "REVOKED"), "mini", now))
         assertFalse(OwnerRequests.removalToTell(OwnerRequestSecretGrant("REMOVED", endReason = "REVOKED")))

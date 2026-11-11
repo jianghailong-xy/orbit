@@ -4,6 +4,9 @@ import kotlinx.serialization.json.*
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 /**
  * The review on an owner-confirmation card (A08-1; OrbitKit `OwnerConfirmationReview`, contract
@@ -50,6 +53,10 @@ object OwnerReview {
     const val answerNotShown = "Not shown to you — the recommended answer was recorded."
     const val beforeReview = "Before the review came in"
     const val reviewRequested = "Review requested"
+    /** The card the reviewer's conversation draws for the owner's answers handed to it (contract §7 Q5; web `YouConfirmedCard`). */
+    const val youConfirmed = "You confirmed"
+    const val answersSentToReviewer = "Your answers, sent to this reviewer"
+    const val reviewerWasTold = "What the reviewer was told"
     const val openTaskSession = "Open task session"
     const val confirmedHeading = "Confirmed done"
     const val sentBackHeading = "Asked for more"
@@ -280,9 +287,21 @@ object OwnerReview {
 
     /** The moment as every review surface writes it: "16:00", or "9/10 16:00" on another day — a fixed 24-hour clock in the
      * device's zone (OrbitKit `receiptTime`); null for an instant it cannot read. */
-    fun receiptTime(iso: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String? {
+/** One answer on a `confirmationAnswers` card: the question, what the owner gave — the option's label, or their own words in
+     * quotes — and whether their app never showed the question. */
+    data class ConfirmationAnswer(val question: String, val answer: String, val notShown: Boolean)
+
+    /** The answers a `confirmationAnswers` payload carries; an entry with no question or no answer is left out. */
+    fun confirmationAnswers(card: JsonObject): List<ConfirmationAnswer> = card.objects("answers").mapNotNull { row ->
+        val question = row.text("question") ?: return@mapNotNull null
+        val answer = row.text("choice") ?: row.text("text")?.let { "“$it”" } ?: return@mapNotNull null
+        ConfirmationAnswer(question, answer, row["notShown"] == JsonPrimitive(true))
+    }
+
+        /** The reader's own short clock — the one the transcript's own times use (`ExchangeFold`, web `decisionReceiptTime`) — and the day before it when it was another day. */
+        fun receiptTime(iso: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
         val at = parse(iso)?.atZone(zone) ?: return null
-        val clock = "%02d:%02d".format(at.hour, at.minute)
+        val clock = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).format(at)
         return if (at.toLocalDate() == ZonedDateTime.ofInstant(now, zone).toLocalDate()) clock else "${at.monthValue}/${at.dayOfMonth} $clock"
     }
 

@@ -20,6 +20,7 @@ import {
   wikiChatLayout,
   wikiChatOffline,
   wikiChatPageSection,
+  wikiChatPanelMax,
   wikiChatPanelWidth,
   wikiChatQuoteCounts,
   wikiChatReading,
@@ -37,6 +38,11 @@ import {
   type WikiChatRow,
   type WikiChatSentence,
   type WikiChatWorkspace,
+  readWikiChatClosed,
+  wikiChatAgo,
+  wikiChatHistoryGroups,
+  wikiChatHistoryLine,
+  writeWikiChatClosed,
 } from './wikiChat';
 import { wikiDocSectionAnchor, wikiDocSectionOfAnchor } from './wikiDocs';
 
@@ -116,14 +122,21 @@ describe("the panel's place", () => {
     expect(['wide', 'docked', 'over', 'sheet'].map((layout) => wikiChatFoldsDirectory(layout as never))).toEqual([false, true, true, true]);
   });
 
-  it('is 400 wide by default, dragged between 320 and 560 where it is wide, and as wide as the window as a sheet', () => {
-    expect(wikiChatPanelWidth('wide', null)).toBe(400);
-    expect(wikiChatPanelWidth('wide', 480)).toBe(480);
-    expect(wikiChatPanelWidth('wide', 200)).toBe(320);
-    expect(wikiChatPanelWidth('wide', 900)).toBe(560);
-    expect(wikiChatPanelWidth('docked', 520)).toBe(400);
-    expect(wikiChatPanelWidth('over', 520)).toBe(400);
-    expect(wikiChatPanelWidth('sheet', 520)).toBeNull();
+  it('is a third of the window between 400 and 720 by default, dragged between 320 and half the window where it is wide', () => {
+    // Owner 11-11: 400 whatever the window was too narrow on a wide one.
+    expect(wikiChatPanelWidth('wide', null, 1440)).toBe(480);
+    expect(wikiChatPanelWidth('wide', null, 2055)).toBe(685);
+    expect(wikiChatPanelWidth('wide', null, 3008)).toBe(720);
+    expect(wikiChatPanelWidth('docked', null, 1200)).toBe(400);
+    expect(wikiChatPanelWidth('docked', 900, 1300)).toBe(433);
+    expect(wikiChatPanelWidth('over', null, 900)).toBe(400);
+    expect(wikiChatPanelWidth('wide', 480, 2055)).toBe(480);
+    expect(wikiChatPanelWidth('wide', 200, 2055)).toBe(320);
+    expect(wikiChatPanelWidth('wide', 1400, 2055)).toBe(1027);
+    expect(wikiChatPanelWidth('wide', 1400, 3008)).toBe(1400);
+    expect(wikiChatPanelWidth('wide', 2000, 3008)).toBe(1504);
+    expect(wikiChatPanelWidth('sheet', 520, 600)).toBeNull();
+    expect(wikiChatPanelMax(1440)).toBe(720);
   });
 
   it('is named in the address, every other key kept: ?chat=<session>', () => {
@@ -320,5 +333,53 @@ describe('the section a document page attaches (design §4.2, C15)', () => {
     expect(wikiDocSectionOfAnchor(`#${wikiDocSectionAnchor('s9')}`)).toBe('s9');
     expect(wikiDocSectionOfAnchor('#sec-turn%20delivery')).toBe('turn delivery');
     for (const hash of ['', '#', '#sec-', '#wk-fnref-3', '#rv-C1-0', '#sec-%E0%A4%A']) expect(wikiDocSectionOfAnchor(hash), hash).toBeNull();
+  });
+});
+
+describe('the history and the panel shown by default (board 45, owner 11-11)', () => {
+  const row = (sessionId: string, more: Partial<WikiChatRow> = {}): WikiChatRow => ({
+    sessionId, title: sessionId, status: 'AWAITING_INPUT', open: true, completed: false, working: false,
+    createdAt: '2026-11-01T00:00:00.000Z', updatedAt: '2026-11-01T00:00:00.000Z', lastActiveAt: '2026-11-01T00:00:00.000Z',
+    drafts: 0, needsYou: 0, ...more,
+  });
+
+  it('files Open as needs-you, then working, then the server’s order; Completed as served', () => {
+    const groups = wikiChatHistoryGroups([
+      row('a'), row('b', { working: true }), row('c', { completed: true }), row('d', { needsYou: 2 }), row('e'),
+    ]);
+    expect(groups.open.map((one) => one.sessionId)).toEqual(['d', 'b', 'a', 'e']);
+    expect(groups.completed.map((one) => one.sessionId)).toEqual(['c']);
+    expect(wikiChatHistoryGroups([row('old', { completed: undefined })]).open).toHaveLength(1);
+  });
+
+  it('says a row’s second line in the button’s own words, else how long ago', () => {
+    const now = Date.parse('2026-11-11T12:00:00.000Z');
+    expect(wikiChatHistoryLine(row('a', { needsYou: 1 }), now)).toEqual({ tone: 'needs_you', text: WIKI_CHAT_COPY.fab.needsYouOne });
+    expect(wikiChatHistoryLine(row('a', { needsYou: 3 }), now).text).toBe('3 need you');
+    expect(wikiChatHistoryLine(row('a', { working: true }), now)).toEqual({ tone: 'working', text: WIKI_CHAT_COPY.fab.working });
+    const ago = (iso: string) => wikiChatAgo(iso, now);
+    expect([ago('2026-11-11T11:59:30.000Z'), ago('2026-11-11T11:55:00.000Z'), ago('2026-11-11T09:00:00.000Z'),
+      ago('2026-11-10T09:00:00.000Z'), ago('2026-11-07T12:00:00.000Z'), ago('2026-10-21T12:00:00.000Z'), ago('not a time')])
+      .toEqual(['Just now', '5m ago', '3h ago', 'Yesterday', '4d ago', '3w ago', 'Just now']);
+  });
+
+  it('keeps ✕ per space on the device, and the button clears it', () => {
+    const items = new Map<string, string>();
+    const real = globalThis.localStorage;
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => void items.set(k, v) },
+    });
+    try {
+      expect(readWikiChatClosed('orbit')).toBe(false);
+      writeWikiChatClosed('orbit', true);
+      expect([readWikiChatClosed('orbit'), readWikiChatClosed('wikova')]).toEqual([true, false]);
+      writeWikiChatClosed('orbit', false);
+      expect(readWikiChatClosed('orbit')).toBe(false);
+      items.set('orbit.wikiChat.closed', 'not json');
+      expect(readWikiChatClosed('orbit')).toBe(false);
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: real });
+    }
   });
 });

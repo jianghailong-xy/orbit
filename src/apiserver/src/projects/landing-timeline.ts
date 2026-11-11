@@ -4,6 +4,7 @@ import type {
   IntegrationTimelineEntry,
   IntegrationTimelineFact,
   IntegrationTimelineSection,
+  IntegrationTimelineTrigger,
   SessionLandingTimeline,
 } from '@orbit/shared';
 
@@ -93,6 +94,8 @@ const TIMELINE_JOB_COLUMNS = {
   targetRef: true,
   upstreamRef: true,
   sourceRef: true,
+  sourceSha: true,
+  sessionId: true,
   phase: true,
   round: true,
   promotionId: true,
@@ -152,13 +155,13 @@ export async function readLandingTimeline(
       ? prisma.projectPromotion.findMany({
         where: { id: { in: promotionIds } },
         select: { id: true, state: true, blockedReason: true, confirmedByUserId: true,
-          confirmedAutomatically: true, confirmedAt: true, upstreamRef: true },
+          confirmedAutomatically: true, confirmedAt: true, upstreamRef: true, sourceSha: true },
       })
       : Promise.resolve([]),
     subject.subject === 'TASK' && subject.taskId
       ? prisma.task.findFirst({
         where: { id: subject.taskId },
-        select: { fixesOpenItemId: true },
+        select: { fixesOpenItemId: true, deliveredSha: true },
       })
       : Promise.resolve(null),
   ]);
@@ -381,6 +384,11 @@ export async function readLandingTimeline(
     entries.sort(compareEntries);
     const ordinal = (sectionOrdinals.get(job.kind) ?? 0) + 1;
     sectionOrdinals.set(job.kind, ordinal);
+    // What queued it — the turn's opening message in a client. The commit is the source its runner
+    // reported; a task's newest attempt not reported yet names the commit the task delivered.
+    const newestTaskAttempt = job.kind === 'LAND_TASK' && job.id === jobs.at(-1)?.id;
+    const sourceSha = job.sourceSha
+      ?? (job.kind === 'LAND_TASK' ? (newestTaskAttempt ? task?.deliveredSha ?? null : null) : promotion?.sourceSha ?? null);
     return {
       title: sectionTitle(job.kind, ordinal),
       jobId: job.id,
@@ -388,6 +396,7 @@ export async function readLandingTimeline(
       generation: ordinal,
       state: job.state,
       entries,
+      trigger: sectionTrigger(job, events.get(job.id) ?? [], sourceSha),
     };
   });
 
@@ -413,6 +422,37 @@ export async function readLandingTimeline(
     });
   }
   return { sections, facts, truncated };
+}
+
+/** What put one attempt on the queue, from its own row and its enqueue fact (docs/mocks/landings-chat-trigger). */
+function sectionTrigger(
+  job: TimelineJob,
+  entries: readonly IntegrationTimelineEntry<Date>[],
+  sourceSha: string | null,
+): IntegrationTimelineTrigger<Date> {
+  const base = { at: job.createdAt, sourceRef: job.sourceRef, sourceSha, sessionId: null, reason: null };
+  if (job.retryOfJobId) {
+    const coordinator = job.retryRequestedBySessionId;
+    return {
+      ...base,
+      cause: 'RETRY',
+      by: coordinator ? 'COORDINATOR' : job.retryRequestedByUserId ? 'OWNER' : 'ORBIT',
+      sessionId: coordinator ?? null,
+      reason: job.retryReason,
+    };
+  }
+  if (job.kind === 'LAND_PROMOTION') {
+    return { ...base, cause: 'CONFIRMED', by: job.confirmedAutomatically ? 'AUTOMATIC' : 'OWNER' };
+  }
+  if (job.kind === 'CHECK_PROMOTION') return { ...base, cause: 'CHECK', by: 'ORBIT' };
+  if (job.kind === 'OBSERVE_LANDING') return { ...base, cause: 'OBSERVE', by: 'ORBIT' };
+  const enqueued = entries.find((entry) => entry.kind === 'ENQUEUED');
+  const cause = enqueued?.data?.cause;
+  if (cause === 'BACKFILL' || cause === 'BEHIND_WORK') {
+    return { ...base, cause, by: 'ORBIT', sessionId: job.sessionId };
+  }
+  if (cause === 'RETRY') return { ...base, cause: 'RETRY', by: 'ORBIT', sessionId: job.sessionId };
+  return { ...base, cause: 'DONE', by: 'TASK', sessionId: job.sessionId };
 }
 
 /** A line derived at read time: no event row, and the flag says so. */

@@ -173,32 +173,16 @@ final class TranscriptRowsTests: XCTestCase {
         XCTAssertEqual(shell.map(\.id), ["t1", "shell-1", "t2", "transcript-bottom"])
     }
 
-    // A picture can only be read off the result, never the name — and the steps line is the one
-    // fold the card can't open through. An image result therefore leaves the run and splits it,
-    // instead of vanishing into a closed line.
-    func testAnImageResultLeavesTheRunAndSplitsIt() {
+    // An agent reading a screenshot is a step like any other read (owner, 11-11): the image result
+    // folds into the run around it instead of standing out as a card of its own.
+    func testAnImageResultFoldsIntoTheRun() {
         let shot = TranscriptItem.toolCall(ToolCard(id: "img1", name: "Read", input: .null, result: nil,
                                                     resultImages: [Data([0x89, 0x50])], resultHasImage: true,
                                                     status: .ok))
-        let r = built([toolItem("t1"), toolItem("t2"), toolItem("t3"), shot,
-                       toolItem("t4"), toolItem("t5"), toolItem("t6")])
-
-        XCTAssertEqual(r.map(\.id), ["t1", "img1", "t4", "transcript-bottom"])
-        guard case .item(.toolCall(let card)) = r[1] else { return XCTFail("expected run · image · run") }
-        XCTAssertEqual(ids(r[0]), ["t1", "t2", "t3"])
-        XCTAssertEqual(card.id, "img1")
-        XCTAssertEqual(ids(r[2]), ["t4", "t5", "t6"])
-    }
-
-    // The server strips an oversized image's bytes and keeps the block, and only an open card
-    // refetches them — so this one, with nothing decoded to show yet, is the card that most needs
-    // to stay out of the fold.
-    func testAnImageStrippedOfItsBytesStillLeavesTheRun() {
-        let shot = TranscriptItem.toolCall(ToolCard(id: "img1", name: "Read", input: .null, result: nil,
-                                                    resultImages: [], resultHasImage: true, status: .ok))
         let r = built([toolItem("t1"), toolItem("t2"), shot, toolItem("t3")])
 
-        XCTAssertEqual(r.map(\.id), ["t1", "img1", "t3", "transcript-bottom"])
+        XCTAssertEqual(r.map(\.id), ["t1", "transcript-bottom"])
+        XCTAssertEqual(ids(r[0]), ["t1", "t2", "img1", "t3"])
     }
 
     func testEveryRowIdStaysUniqueWithFoldedRuns() {

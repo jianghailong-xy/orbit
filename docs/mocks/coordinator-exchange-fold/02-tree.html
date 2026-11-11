@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>协调会话 · Orbit 来回按上下游收成树</title>
+<style>
+  body { margin: 0; background: #eceef2; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', sans-serif; color: #1d2330; }
+  .board { width: 2240px; padding: 48px; box-sizing: border-box; background: #eceef2; }
+  h1 { font-size: 34px; margin: 0 0 8px; }
+  .sub { font-size: 17px; color: #5b6475; margin-bottom: 28px; line-height: 1.6; }
+  .row { display: flex; gap: 28px; align-items: flex-start; margin-bottom: 32px; }
+  .frame { background: #fff; border-radius: 14px; padding: 18px 18px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .frame h2 { font-size: 19px; margin: 0 0 4px; }
+  .frame .cap { font-size: 14px; color: #5b6475; margin: 0 0 12px; line-height: 1.55; max-width: 640px; }
+  .frame img { display: block; border: 1px solid #e3e6eb; border-radius: 8px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; vertical-align: 2px; background: #e3f0ff; color: #1757c2; }
+  .panel { background: #fff; border-radius: 14px; padding: 22px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 15px; line-height: 1.65; }
+  .panel h2 { font-size: 20px; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid #e8eaee; }
+  th { color: #5b6475; font-weight: 600; background: #f6f7f9; }
+  code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; background: #f1f3f6; padding: 1px 5px; border-radius: 4px; }
+  pre { font-family: 'JetBrains Mono', ui-monospace, 'Noto Sans SC', monospace; font-size: 13.5px; background: #f6f7f9; border-radius: 8px; padding: 12px 14px; margin: 8px 0; line-height: 1.6; }
+  .q { background: #fff8e6; border: 1px solid #f3d27a; border-radius: 10px; padding: 14px 18px; }
+  .q b { color: #8a5a00; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>协调会话 · 组里的 Orbit 来回按任务上下游收成一棵树</h1>
+  <div class="sub">
+    接 01-board 的方案 A。这里把“上下位”理解为<b>任务的上下游</b>：组里每条 Orbit 来回挂到它所说的那个任务下面；下游任务挂在解锁它的上游任务下面（B1 落地 → B4 可以开工 → B4b、B5 建在 B4 上）。和任务无关的（后台作业、定时唤醒）放在 “Not about a task”。<br>
+    同一个任务的来回（证据第 1 版 → watch 提醒 → 证据第 2 版）不再分散在时间线上，而是排在一起。截图来自真实 Web 控制台，对话与 01-board 相同。
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2><span class="tag">⑦ 点开组：树全部展开</span>任务 › 下游任务 › 每条来回</h2>
+      <p class="cap">任务行显示标题、本层有几条、最后时间；下面是这个任务自己的来回（去掉了重复的任务名），再下面是它的下游任务。虚线是层级引导线。</p>
+      <img src="shots/T-open.png" width="683">
+    </div>
+    <div style="display:flex; flex-direction:column; gap:28px;">
+      <div class="frame">
+        <h2><span class="tag">⑧ 点开组：只展开第一层</span>每个根任务一行，概括整棵子树</h2>
+        <p class="cap">收起的任务行写成 <code>B1 Targeted hints over NATS · 6 updates · 3 downstream · last: 我核实了 B5… · 6:44 PM</code>：条数和最后一句都按整棵子树算，一行就知道这一支最新走到哪。</p>
+        <img src="shots/T-shut.png" width="683">
+      </div>
+      <div class="frame">
+        <h2><span class="tag">⑨ 叶子点开</span>回到今天的完整样子</h2>
+        <p class="cap">点叶子（某一条来回）就是原来的胶囊 + 步骤 + 整段回复，与 01-board ④ 相同。</p>
+        <img src="shots/T-leaf.png" width="683" style="height:900px; object-fit:cover; object-position:top">
+      </div>
+    </div>
+    <div class="frame">
+      <h2><span class="tag">⑩ 手机</span>树全部展开</h2>
+      <p class="cap">每条来回两行（发生了什么 + 时间 / 回复第一句）；展开的任务行不再重复 “N updates”。层级缩进每层 14px，三层以内够用。</p>
+      <img src="shots/T-phone.png" width="390">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel" style="flex:1.3">
+      <h2>树怎么建</h2>
+      <table>
+        <tr><th style="width:28%">问题</th><th>规则</th></tr>
+        <tr><td>一条来回挂到哪个任务</td><td>协调者通知：通知里写明的任务（证据、可开工、启动失败、阻塞、run 停止）。watch 提醒：watch 盯的目标；目标是会话时，挂到这个会话所属的任务。会话回信：发信会话所属的任务。其余（后台作业、定时唤醒、“N 条未落地”这类项目级通知）放到 <code>Not about a task</code>。</td></tr>
+        <tr><td>谁是谁的上游</td><td>项目的依赖图（Web 已有 <code>GET /projects/:id/dependency-graph</code>，项目页在用）。只看<b>同一组里出现的</b>任务：上游不在组里，这个任务就是根。</td></tr>
+        <tr><td>一个任务有多个上游</td><td>挂在组里最先出现的那个上游下面，不重复画。</td></tr>
+        <tr><td>排序</td><td>同层按第一条来回的时间排；任务自己的来回在前，下游任务在后；<code>Not about a task</code> 永远在最后。</td></tr>
+        <tr><td>组里只有一个任务</td><td>不画树，直接列来回（就是 01-board 的样子）。</td></tr>
+        <tr><td>依赖图读不到（不是项目的协调会话、离线）</td><td>退回按任务平铺：每个任务一组，不分上下游。</td></tr>
+        <tr><td>01-board 的规则</td><td>照旧：你的消息、最新一轮、要你处理的、坏消息、其他会话发来的消息都不进组，也就不进树。</td></tr>
+      </table>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:24px;">
+      <div class="panel">
+        <h2>结构示意</h2>
+<pre>⋯ 7 Orbit updates handled · 5:14 PM – 6:49 PM
+  ∨ B1 Targeted hints over NATS
+      └ Evidence revision 2 submitted — 我确认了 B1…
+      └ Watch matched — 这是之前设的提醒…
+      ∨ B4 Link gateway v1
+          └ Can start now — B4 已经开工…
+          └ Watch matched — 这是 10-25 设的一个提醒…
+          ∨ B4b Approval hints on the link
+              └ Evidence revision 1 submitted — 我把 B4b 的第 1 版退回了…
+          ∨ B5 Event intake rework
+              └ Evidence revision 1 submitted — 我核实了 B5…
+  ∨ Not about a task
+      └ Background job ended — runner 0.1.237 已经进了 main…</pre>
+      </div>
+      <div class="panel">
+        <h2>改动范围（在 01-board 之上）</h2>
+        <ul style="margin:0; padding-left:20px">
+          <li>Web：<code>Transcript.tsx</code> 组内建树（ExchangeTree / TaskBranch），读项目依赖图；<code>index.css</code>；测试。</li>
+          <li>不改服务端：通知卡片里已有任务 id，watch 唤醒里已有目标 id。</li>
+        </ul>
+      </div>
+      <div class="q">
+        <b>待你定</b>
+        <ol style="margin:6px 0 0; padding-left:20px;">
+          <li><b>“上下位”是不是这个意思？</b>我按任务上下游（依赖关系）理解。如果你指的是别的层级（比如项目 › 任务，或者 Orbit 消息 › 协调者回复），告诉我，我改图。</li>
+          <li><b>点开组时默认展开到哪一层？</b>推荐 ⑧（只展开根任务）：组里任务多时，一屏就能扫完所有支；⑦ 适合组小的时候。也可以按条数自动选：≤8 条全展开，更多只展开第一层。</li>
+          <li>01-board 的三个问题（A/B、先做哪端、只在协调会话还是所有会话）仍然待定；树只在方案 A 的组里出现。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

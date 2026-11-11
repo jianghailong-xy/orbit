@@ -119,15 +119,16 @@ final class TailPinningWiringTests: XCTestCase {
         XCTAssertFalse(mac.contains("atBottom"), "the Mac's band shows at the tail too, as web's does")
     }
 
-    /// With the capsule in the bar the phone switched the top edge to its hard style on its own — a
-    /// frosted strip and a hairline over the rows (the owner, 2026-10-16: not that, with the capsule
-    /// either). The transcript holds the soft one.
-    func testTheTopEdgeStaysSoftUnderTheCapsule() throws {
+    /// No scroll-edge effect at the top of the transcript. With the capsule in the bar the phone
+    /// switched the top edge to its hard style on its own — a frosted strip and a hairline (the owner,
+    /// 2026-10-16: not that) — and the soft style drew a blur-to-clear gradient under the bar (the
+    /// owner, 2026-11-11: not that either). The transcript hides the effect.
+    func testTheTopEdgeHasNoScrollEdgeEffect() throws {
         let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
         let list = try section(source, from: "private var rowsList: some View {", to: "private func follows(")
-        XCTAssertTrue(list.contains(".softTopEdge()"), "the transcript asks for the soft top edge")
-        let edge = try section(source, from: "@ViewBuilder func softTopEdge()", to: "#else")
-        XCTAssertTrue(edge.contains("scrollEdgeEffectStyle(.soft, for: .top)"), "and it is the soft one")
+        XCTAssertTrue(list.contains(".noTopEdgeEffect()"), "the transcript turns the top edge effect off")
+        let edge = try section(source, from: "@ViewBuilder func noTopEdgeEffect()", to: "#else")
+        XCTAssertTrue(edge.contains("scrollEdgeEffectHidden(true, for: .top)"), "by hiding it")
     }
 
     /// The jump-to-latest button answers "is the tail out of view?", not only "did the reader scroll

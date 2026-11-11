@@ -543,7 +543,9 @@ final class AcceptedTurnPlaceholderTests: XCTestCase {
             openItemDelivery: .object([:]), ownerAnswer: .object([:]), coordinatorDelivery: .object([:]),
             taskStart: .object([:]), projectStarted: .object([:]),
             sessionMessage: .object([:]), externalSender: .object([:]), sessionReplies: .array([]), authoredByOrbit: true,
-            confirmationReviewRequest: .object([:]), confirmationReturn: .object([:]), runQuestion: .object([:]),
+            confirmationReviewRequest: .object([:]), confirmationReturn: .object([:]), confirmationAnswers: .object([:]),
+            evidenceReview: .object([:]), evidenceSendBack: .object([:]),
+            runQuestion: .object([:]), runNotice: .object([:]), sessionOpening: .object([:]),
             placement: "accepted", createdAt: Self.filedAt, targetTurnId: "t-a", delivery: "failed",
             deliveryCode: "CODE", deliveryReason: "reason")
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(full)) as? [String: Any])

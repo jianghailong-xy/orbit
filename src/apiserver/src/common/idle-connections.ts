@@ -26,11 +26,9 @@ import type { Server } from 'node:http';
  * (idle-connections.spec.ts holds an idle connection past both). Kept above it, neither could close an idle connection
  * before keepAliveTimeout does, were it ever to count that wait.
  *
- * Stopping takes no longer. An apiserver closes no listener when it stops: a SIGTERM ends the process at once, and
- * `docker stop` ends its container with SIGKILL after the grace period, since the image's `sh` is PID 1 and ignores
- * SIGTERM. Its idle connections end with it. A `server.close()` would close the idle ones at once too, but a
- * connection answering a request when close() is called stays open after its answer for up to keepAliveTimeout. A
- * graceful stop added later must close those itself.
+ * Stopping takes no longer. A stop (graceful-stop.ts) closes the idle connections at once, and answers each request in
+ * flight with `Connection: close` and closes its connection once the answer is sent: a connection busy when
+ * `server.close()` is called would otherwise stay open after its answer for keepAliveTimeout.
  */
 export function holdIdleConnections(server: Server): Server {
   server.keepAliveTimeout = 120_000;

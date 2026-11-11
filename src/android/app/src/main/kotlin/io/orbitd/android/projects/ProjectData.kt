@@ -115,7 +115,13 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
         if (!writable()) throw FeatureWriteRefused()
         return Wire.decode(auth.request(handle, ApiRequest(listOf("projects", id, "coordinator"), HttpMethod.POST)).body, JsonObject.serializer())
     }
-    suspend fun replaceCoordinator(id: String, revision: String) = send(revision, listOf("projects", id, "coordinator", "replace")) as? JsonObject
+    /** A [workspaceId] opens the new coordinator there ("Start a new coordinator in…"), and the project is coordinated from there
+     * afterwards; none opens it where the last one ran. */
+    suspend fun replaceCoordinator(id: String, revision: String, workspaceId: String? = null) = send(revision, listOf("projects", id, "coordinator", "replace"),
+        body = workspaceId?.let { buildJsonObject { put("workspaceId", it) } }) as? JsonObject
+    /** The owner's workspaces and runners, for Start a new coordinator in…'s picker. */
+    suspend fun workspaces(): List<JsonObject> = (read(listOf("workspaces")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+    suspend fun runners(): List<JsonObject> = (read(listOf("runners")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
 }
 
 /** What `GET /projects/:id/integration` says about the project's main branch (`ProjectIntegrationView`, contract L6): the
