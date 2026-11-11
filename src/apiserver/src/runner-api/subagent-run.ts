@@ -73,11 +73,21 @@ export class SubagentRunCreateDto implements SubagentRunCreateRequest {
   @IsOptional()
   @IsBoolean()
   readonly?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1_000)
+  description?: string;
 }
 
 export class SubagentRunUpdateDto implements SubagentRunUpdateRequest {
-  @IsIn(SUBAGENT_RUN_STATUSES.filter((s) => s !== 'RUNNING'))
+  /** `RUNNING` only with `wake: true` (the controller refuses it otherwise): the call stopped waiting. */
+  @IsIn([...SUBAGENT_RUN_STATUSES])
   status!: SubagentRunUpdateRequest['status'];
+
+  @IsOptional()
+  @IsBoolean()
+  wake?: boolean;
 
   /** Truncated to SUBAGENT_RESULT_SUMMARY_MAX on write, so a long result is not refused. */
   @IsOptional()

@@ -232,6 +232,7 @@ import {
   stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
+import { fileSubagentWake, interruptOrphanedSubagentRuns } from './subagent-wake';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
@@ -4185,7 +4186,9 @@ export class RunnerApiController {
         throw new ConflictException('session is no longer open');
       }
       const currentOwner = owned[0].inboxLeaseOwner;
-      if (currentOwner === leaseOwner) return { status: owned[0].status, orphanedApprovals: [] };
+      if (currentOwner === leaseOwner) {
+        return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[] };
+      }
       if (
         pendingWorktreeOperationMayBeExecuting(
           owned[0].mergeStatus,
@@ -4268,8 +4271,23 @@ export class RunnerApiController {
       const orphanedApprovals = currentOwner
         ? await reapApprovalsOfReplacedSupervisor(tx, sessionId)
         : [];
-      return { status: owned[0].status, orphanedApprovals };
+      // The SubAgents the predecessor hosted went with it, as its background shells did, and none of them will
+      // report an end: each still RUNNING ends INTERRUPTED here, owing the parent a wake that says why
+      // (subagent-wake.ts), filed once this commits. A predecessor that stopped in good order reported them
+      // itself, and none is left RUNNING.
+      const interruptedSubagents = currentOwner ? await interruptOrphanedSubagentRuns(tx, sessionId) : [];
+      return { status: owned[0].status, orphanedApprovals, interruptedSubagents };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeases'));
+    if (taken.interruptedSubagents.length > 0 && this.sessions) {
+      for (const runId of taken.interruptedSubagents) {
+        try {
+          await fileSubagentWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          // The wake sweep files it on its next pass.
+          this.logger.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+    }
     // After commit, and one frame per card: a client holds these from the `approval_request` it was
     // sent live, and nothing it can see changes at a takeover, so without this the card it is
     // drawing stays answerable-looking until the session is next opened from scratch.
@@ -8488,10 +8506,21 @@ export class RunnerApiController {
       // would be a second row. Only a report carrying a `kind` counts — that is what marks a
       // runner-hosted job, as background-jobs-context.ts reads it too — because an engine's own
       // shell carries none, and that shell died with its engine.
+      // A SubAgent still running, reported again behind a `resumed` handshake (runner-go subagent.go
+      // announceSubagents): its delegate call goes back into the running SubAgents, never the job sets.
+      const subRunning = events
+        .filter((e) => {
+          if (e.type !== RunEventType.BACKGROUND_TASK) return false;
+          const { status, subagentRunId } = e.payload as { status?: unknown; subagentRunId?: unknown };
+          return status === 'running' && typeof subagentRunId === 'string' && subagentRunId !== '';
+        })
+        .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
+        .filter(Boolean);
       const bgRunningReports = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
-          const { status, kind } = e.payload as { status?: unknown; kind?: unknown };
+          const { status, kind, subagentRunId } = e.payload as { status?: unknown; kind?: unknown; subagentRunId?: unknown };
+          if (typeof subagentRunId === 'string' && subagentRunId !== '') return false;
           return status === 'running' && typeof kind === 'string' && kind !== '';
         })
         .map((e) => {
@@ -8547,6 +8576,7 @@ export class RunnerApiController {
       // Same fold, narrower set: a shell an engine launched is in `shells` and never here.
       for (const id of bgJobRunning) if (!jobs.includes(id)) jobs = [...jobs, id];
       for (const id of subStarted) subagents = [...subagents.filter((v) => v !== id), id];
+      for (const id of subRunning) if (!subagents.includes(id)) subagents = [...subagents, id];
       // A terminal background_task id belongs to either a background shell or a sub-workspace;
       // removing from the set that doesn't hold it is a no-op, so clear from both.
       for (const id of bgEnded) {

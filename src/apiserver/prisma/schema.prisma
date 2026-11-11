@@ -2856,6 +2856,14 @@ model SubagentRun {
   usage            Json?
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   endedAt          DateTime? @map("ended_at") @db.Timestamptz(3)
+  /// The delegate call's own 3-to-8-word description, which the wake for its end names.
+  description      String?
+  /// The parent is to be woken when the run ends: a background run, or a foreground call that stopped waiting
+  /// (runner-api/subagent-wake.ts). Held here so a runner restart cannot lose it.
+  wakeOwed         Boolean   @default(false) @map("wake_owed")
+  /// When the owed wake was filed as a turn of the parent, or dropped because the parent had ended.
+  /// Partial index subagent_run_wake_unfiled_idx (migration 0527) serves the sweep.
+  wakeFiledAt      DateTime? @map("wake_filed_at") @db.Timestamptz(3)
 
   @@unique([sessionId, toolUseId])
   @@index([sessionId, status])

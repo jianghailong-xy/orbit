@@ -173,6 +173,19 @@ type bgTailer struct {
 	// (holdFor/releaseHold, which call the worktree hold registry), so a probe that took b.mu
 	// under p.mu would close that cycle. It reads no lock at all.
 	monitorsLive atomic.Int64
+	// subagentsLive is how many SubAgents of this session are running (subagent.go): the pool's probe defers the
+	// idle park on it, lock-free for the reason monitorsLive is. stopSubagents ends them, for a reason
+	// (subagentStop…); installed once by startSessionBgJobService, nil where no job service is at stake.
+	subagentsLive atomic.Int64
+	stopSubagents func(reason string)
+	// announceSubagents reports every SubAgent still running again, behind a `resumed` handshake, as
+	// announceRunningJobs does a job (subagent.go); installed with stopSubagents. subagentHandoff reports
+	// whether the session is ending because another runner process took it over, which stops its SubAgents
+	// owing the parent a wake; nil reads as no. parentEdits is what the parent's own edit tools wrote, and when,
+	// which a stopped SubAgent's hold leaves to the parent (subagent_tree.go).
+	announceSubagents func()
+	subagentHandoff   func() bool
+	parentEdits       parentEditLog
 	// jobs are the background processes this runner spawned and waits on itself
 	// (background_job.go), keyed by the id the runner issued. Retained after they
 	// finish: an agent that comes back to a job asks by that id, and "no such job"
@@ -502,6 +515,11 @@ func (b *bgTailer) expireMonitor(toolUseID string, after time.Duration) {
 // the pool under p.mu, so it takes no lock: b.mu would invert against holdFor.
 func (b *bgTailer) hasLiveMonitors() bool {
 	return b.monitorsLive.Load() > 0
+}
+
+// hasRunningSubagents reports whether a SubAgent of this session is running. Lock-free, as hasLiveMonitors is.
+func (b *bgTailer) hasRunningSubagents() bool {
+	return b.subagentsLive.Load() > 0
 }
 
 // startTail begins tailing path for the given background shell (no-op if already tailing
@@ -953,6 +971,22 @@ func (b *bgTailer) stopAll() {
 	// drained job still has a terminal event to emit. (A runner that has begun to stop
 	// is already draining — drainOnRunnerShutdown — and this drain's kills are filed as
 	// that stop's too.)
+	//
+	// SubAgents first: they write the checkout as the engine does, and the finalize that follows must not
+	// capture what one is half-way through (docs/subagent-design.md §5.2). A runner that is stopping
+	// interrupts them; anything else is the session ending, which stops them.
+	b.mu.Lock()
+	stopSubagents := b.stopSubagents
+	reason := subagentStopSessionEnded
+	if b.runnerStoppingLocked() {
+		reason = subagentStopRunnerStopped
+	} else if b.subagentHandoff != nil && b.subagentHandoff() {
+		reason = subagentStopHandedOver
+	}
+	b.mu.Unlock()
+	if stopSubagents != nil {
+		stopSubagents(reason)
+	}
 	b.drainJobs(bgDrainWaitCap)
 	b.mu.Lock()
 	// A job started while that drain was waiting is in no snapshot of it, and cancelling b.ctx
