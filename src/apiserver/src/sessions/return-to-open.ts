@@ -81,24 +81,31 @@ export async function returnWaitingSessionsToOpen(
   const ids = scope.sessionIds ? orderedIds([...scope.sessionIds]) : null;
   if (ids && ids.length === 0) return [];
   return withTransactionRetry(prisma, async (tx) => {
+    // Driven from the questions, which are a handful of rows read through partial indexes (0532's on
+    // owner_request, 0386's on PENDING moves), and only then joined to the sessions they light: a filed session is most of
+    // the table, and almost none of them has anything waiting.
     const waiting = await tx.$queryRaw<ReturnedSession[]>(Prisma.sql`
+      WITH lit AS (
+        SELECT r."asked_by_session_id" AS "id", r."owner_id" FROM "owner_request" r
+         WHERE r."state" = 'PENDING' AND (r."expires_at" IS NULL OR r."expires_at" > now())
+           ${scope.ownerId ? Prisma.sql`AND r."owner_id" = ${scope.ownerId}::uuid` : Prisma.empty}
+           ${ids ? Prisma.sql`AND r."asked_by_session_id" = ANY(${ids}::uuid[])` : Prisma.empty}
+        UNION
+        SELECT h."requested_by_session_id", h."owner_id" FROM "project_handoff_approval" h
+         WHERE h."kind" = 'MOVE_TASK' AND h."state" = 'PENDING'
+           ${scope.ownerId ? Prisma.sql`AND h."owner_id" = ${scope.ownerId}::uuid` : Prisma.empty}
+           ${ids ? Prisma.sql`AND h."requested_by_session_id" = ANY(${ids}::uuid[])` : Prisma.empty}
+        UNION
+        SELECT p."coordinator_session_id", h."owner_id" FROM "project_handoff_approval" h
+          JOIN "project" p ON p."id" = h."to_project_id"
+         WHERE h."kind" = 'MOVE_TASK' AND h."state" = 'PENDING' AND p."coordinator_session_id" IS NOT NULL
+           ${scope.ownerId ? Prisma.sql`AND h."owner_id" = ${scope.ownerId}::uuid` : Prisma.empty}
+           ${ids ? Prisma.sql`AND p."coordinator_session_id" = ANY(${ids}::uuid[])` : Prisma.empty}
+      )
       SELECT s."id", s."owner_id" AS "ownerId" FROM "session" s
+        JOIN lit ON lit."id" = s."id" AND lit."owner_id" = s."owner_id"
        WHERE s."kind" <> ${SESSION_KIND_LANDING}
          AND (s."completed_at" IS NOT NULL OR s."archived_at" IS NOT NULL OR s."deleted_at" IS NOT NULL)
-         ${scope.ownerId ? Prisma.sql`AND s."owner_id" = ${scope.ownerId}::uuid` : Prisma.empty}
-         ${ids ? Prisma.sql`AND s."id" = ANY(${ids}::uuid[])` : Prisma.empty}
-         AND (
-           EXISTS (SELECT 1 FROM "owner_request" r
-                    WHERE r."asked_by_session_id" = s."id" AND r."owner_id" = s."owner_id"
-                      AND r."state" = 'PENDING' AND (r."expires_at" IS NULL OR r."expires_at" > now()))
-           OR EXISTS (SELECT 1 FROM "project_handoff_approval" h
-                       WHERE h."requested_by_session_id" = s."id" AND h."owner_id" = s."owner_id"
-                         AND h."kind" = 'MOVE_TASK' AND h."state" = 'PENDING')
-           OR EXISTS (SELECT 1 FROM "project_handoff_approval" h
-                        JOIN "project" p ON p."id" = h."to_project_id"
-                       WHERE p."coordinator_session_id" = s."id" AND h."owner_id" = s."owner_id"
-                         AND h."kind" = 'MOVE_TASK' AND h."state" = 'PENDING')
-         )
        ORDER BY s."id"
        LIMIT ${limit}
        FOR UPDATE OF s SKIP LOCKED`);

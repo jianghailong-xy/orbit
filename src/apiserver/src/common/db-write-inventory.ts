@@ -1631,7 +1631,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'sessions/return-to-open.ts#returnWaitingSessionsToOpen',
     shape: 'TX_RETRIED',
-    locks: 'Filed (Completed or Trash) non-landing session rows that still have a PENDING owner request they asked, a PENDING MOVE_TASK they asked, or a PENDING MOVE_TASK into a project they coordinate — FOR UPDATE OF session SKIP LOCKED (rank 30), in id order, at most 500; then one UPDATE clearing completed_at, archived_at and deleted_at on them. The owner_request, project_handoff_approval and project rows are only read.',
+    locks: 'Filed (Completed or Trash) non-landing session rows that still have a PENDING owner request they asked, a PENDING MOVE_TASK they asked, or a PENDING MOVE_TASK into a project they coordinate — FOR UPDATE OF session SKIP LOCKED (rank 30), in id order, at most 500; then one UPDATE clearing completed_at, archived_at and deleted_at on them. The owner_request, project_handoff_approval and project rows are only read. Driven from the pending side: a UNION of the PENDING rows, read through partial indexes (owner_request_pending_asker_idx, migration 0532; project_handoff_approval_pending_move_idx, migration 0386), joined to session by primary key, so the every-tick global sweep never scans session.',
     identity: 'None needed: the rows are chosen by what is true of them now, and a session already in Open matches nothing. Called after commit by sessions.complete, sessions.remove, sessions.completeProjectSessions and reaper.endParked (scoped to the sessions they filed), and by the reaper tick over every account, whose first run after boot is the backfill for sessions filed away before this existed.',
     isolation: '',
     attempts: 4,
