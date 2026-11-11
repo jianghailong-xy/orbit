@@ -6,16 +6,18 @@ import Foundation
 /// the same.
 ///
 /// iOS and macOS have no room for web's trailing meta on the row itself (board 03): the second line
-/// carries the type, tier, model and, once the run has ended, how long it took. A background run puts
-/// `Background` in the type's place — the same fact web draws as a tag beside the call.
+/// carries the type, tier and model, and, once the run has ended, how long it took and what it cost —
+/// the same ' · <duration> · $<cost>' web appends to its meta. A background run puts `Background` in
+/// the type's place — the same fact web draws as a tag beside the call.
 public struct SubagentBlock: Equatable, Sendable {
     public static let toolName = "mcp__orbit__delegate"
 
     /// `explore`, `general`, or a definition file's name; `general` when the call named none.
     public let type: String
     public let background: Bool
-    /// `<type> · <tier> · <model> · <duration>`, or `Background` in the type's place. Nil when the
-    /// call has not been answered yet by a run and named no type of its own.
+    /// `<type> · <tier> · <model> · <duration> · <cost>` (Background in the type's place), with the
+    /// duration and cost only once the run has ended. Nil when the call has not been answered yet by
+    /// a run and named no type of its own.
     public let detailLine: String?
     /// The router's reasons in order, joined — the opened block's Why line. Nil when it gave none.
     public let why: String?
@@ -32,6 +34,7 @@ public struct SubagentBlock: Equatable, Sendable {
         if let level = nonEmpty(run?.level) { parts.append(level) }
         if let model = nonEmpty(run?.modelLabel) ?? nonEmpty(run?.model) { parts.append(model) }
         if let duration = duration(run) { parts.append(duration) }
+        if let cost = cost(run) { parts.append(cost) }
 
         let reasons = (run?.reasons ?? []).filter { !$0.isEmpty }
         return SubagentBlock(
@@ -50,6 +53,13 @@ public struct SubagentBlock: Equatable, Sendable {
             return nil
         }
         return WikiRunsLogic.duration(end.timeIntervalSince(start))
+    }
+
+    /// What the run cost, once it has ended: `$0.03` in cents, or `<$0.01` when it came to less.
+    private static func cost(_ run: SubagentRunView?) -> String? {
+        guard let run, !run.isRunning else { return nil }
+        guard run.costUsd >= 0.01 else { return "<$0.01" }
+        return String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), run.costUsd)
     }
 }
 

@@ -10,12 +10,12 @@ final class SubagentBlockTests: XCTestCase {
     private func run(
         type: String = "explore", background: Bool = false, status: String = "DONE",
         level: String? = "S", model: String? = "deepseek-chat", modelLabel: String? = "DeepSeek Chat",
-        effort: String? = nil, reasons: [String] = [], resultSummary: String? = nil,
+        effort: String? = nil, reasons: [String] = [], costUsd: Double = 0.21, resultSummary: String? = nil,
         createdAt: String = "2026-11-11T08:00:00.000Z", endedAt: String? = "2026-11-11T08:00:41.000Z"
     ) -> SubagentRunView {
         SubagentRunView(toolUseId: "toolu_sa", type: type, background: background, status: status,
                         level: level, model: model, modelLabel: modelLabel, effort: effort,
-                        reasons: reasons, costUsd: 0.21, resultSummary: resultSummary,
+                        reasons: reasons, costUsd: costUsd, resultSummary: resultSummary,
                         createdAt: createdAt, endedAt: endedAt)
     }
 
@@ -38,15 +38,15 @@ final class SubagentBlockTests: XCTestCase {
 
     // MARK: - the second line
 
-    func testTheSecondLineCarriesTypeTierModelAndDuration() {
+    func testTheSecondLineCarriesTypeTierModelDurationAndCost() {
         let block = SubagentBlock.describe(input: call, run: run(), status: .ok)
-        XCTAssertEqual(block.detailLine, "explore · S · DeepSeek Chat · 41s")
+        XCTAssertEqual(block.detailLine, "explore · S · DeepSeek Chat · 41s · $0.21")
         XCTAssertEqual(block.type, "explore")
         XCTAssertFalse(block.background)
         XCTAssertFalse(block.running)
     }
 
-    func testARunningRunHasNoDurationYet() {
+    func testARunningRunHasNoDurationOrCostYet() {
         let block = SubagentBlock.describe(
             input: call,
             run: run(status: "RUNNING", endedAt: nil),
@@ -55,9 +55,19 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertTrue(block.running)
     }
 
+    func testACostUnderACentReadsAsLessThanACent() {
+        let block = SubagentBlock.describe(input: call, run: run(costUsd: 0.004), status: .ok)
+        XCTAssertEqual(block.detailLine, "explore · S · DeepSeek Chat · 41s · <$0.01")
+    }
+
+    func testAZeroCostAlsoReadsAsLessThanACent() {
+        let block = SubagentBlock.describe(input: call, run: run(costUsd: 0), status: .ok)
+        XCTAssertEqual(block.detailLine, "explore · S · DeepSeek Chat · 41s · <$0.01")
+    }
+
     func testTheModelFallsBackToTheIdWhenTheTableNamesNone() {
         let block = SubagentBlock.describe(input: call, run: run(modelLabel: nil), status: .ok)
-        XCTAssertEqual(block.detailLine, "explore · S · deepseek-chat · 41s")
+        XCTAssertEqual(block.detailLine, "explore · S · deepseek-chat · 41s · $0.21")
     }
 
     func testTheCallSaysWhatItKnowsBeforeARunIsRead() {
@@ -97,6 +107,19 @@ final class SubagentBlockTests: XCTestCase {
         let block = SubagentBlock.describe(input: call, run: run(background: true), status: .ok)
         XCTAssertTrue(block.background)
         XCTAssertTrue(block.detailLine?.hasPrefix("Background · ") == true, "\(block.detailLine ?? "nil")")
+    }
+
+    func testAFinishedBackgroundBlockAddsItsDurationAndCost() {
+        let input = obj(["description": .string("Write the backoff spec"),
+                         "type": .string("general"),
+                         "background": .bool(true)])
+        let block = SubagentBlock.describe(
+            input: input,
+            run: run(type: "general", background: true, status: "DONE", level: "M",
+                     model: "gpt-5.6-sol", modelLabel: "GPT-5.6 Sol", costUsd: 0.03),
+            status: .ok)
+        XCTAssertFalse(block.running)
+        XCTAssertEqual(block.detailLine, "Background · M · GPT-5.6 Sol · 41s · $0.03")
     }
 
     // MARK: - Why
