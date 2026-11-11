@@ -134,7 +134,9 @@ const mounted = (): HTMLDivElement => {
   return container;
 };
 const projectRows = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.session-project-row')];
-const titles = (): string[] => [...mounted().querySelectorAll('.session-row .session-title')].map((el) => el.textContent ?? '');
+// The session list's rows, not the project sessions column's beside the conversation.
+const titles = (): string[] => [...(mounted().querySelector('.session-col:not(.session-project-column)') ?? mounted())
+  .querySelectorAll('.session-row .session-title')].map((el) => el.textContent ?? '');
 const projectRow = (): HTMLElement => {
   const found = projectRows()[0];
   if (!found) throw new Error('no project row');
@@ -391,11 +393,14 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     expect(projectRow().querySelector('.session-project-progress-bar')).toBeNull();
   });
 
-  it('opens the project sessions page when the project entry is clicked', async () => {
+  it('opens the coordinator with the project sessions column when the project entry is clicked', async () => {
     await mount();
     await click(projectRow(), 'the project entry');
-    await until(() => expect(mounted().querySelector('.session-project-page')).not.toBeNull());
+    await until(() => expect(mounted().querySelector('.session-project-column')).not.toBeNull());
+    expect(location.split('?')[0]).toBe(`/sessions/${COORDINATOR.id}`);
     expect(new URLSearchParams(location.split('?')[1]).get('project')).toBeTruthy();
+    expect(mounted().querySelector('.session-project-page')).toBeNull();
+    expect(projectRows()).toHaveLength(1);
   });
 
   it('files all project members under the coordinator folder, including members filed elsewhere', async () => {
@@ -667,18 +672,19 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     expect(mark?.getAttribute('title')).toBe('Part of Project Alpha · open its sessions');
   });
 
-  it('opens the project’s sessions page from the mark, and the member from the rest of its row', async () => {
+  it('opens the project’s sessions column from the mark, and the member from the rest of its row', async () => {
     rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
     await mount(() => expect(titles()).toEqual(THREE));
     await click(sessionRow('Build the package').querySelector('.session-project-progress'), 'the member’s mark');
-    await until(() => expect(mounted().querySelector('.session-project-page')).not.toBeNull());
-    // The column changes page and the open session stays: the press did not reach the row.
-    const [path, search] = location.split('?');
-    expect(path).toBe(`/sessions/${LOOSE.id}`);
-    expect(new URLSearchParams(search).get('project')).toBe(encodeId(PROJECT_ID));
-    await click(mounted().querySelector('.session-folder-back'), 'the project page back');
-    await until(() => expect(mounted().querySelector('.session-project-page')).toBeNull());
+    const column = (): Element | null => mounted().querySelector('.session-project-column');
+    await until(() => expect(column()).not.toBeNull());
+    // The member opens with its project's column beside it, and the list stays this workspace's.
+    await until(() => expect(location.split('?')[0]).toBe(`/sessions/${TASK.id}`));
+    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(encodeId(PROJECT_ID));
+    expect(titles()).toEqual(THREE);
+    await click(column()!.querySelector('.session-folder-back'), 'the column ✕');
+    await until(() => expect(column()).toBeNull());
     await until(() => expect(titles()).toEqual(THREE));
     await click(sessionRow('Build the package').querySelector('.session-title'), 'the member’s title');
     await until(() => expect(location).toBe(`/sessions/${TASK.id}`));

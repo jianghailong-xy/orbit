@@ -7643,14 +7643,15 @@ export function WorkspaceView({
     setFolderParam(null, replace);
   };
   // At phone width the project's sessions page takes the list's place. Wider, the list stays as it
-  // is: the project's coordinator opens, with the page in the column beside it (owner 2026-11-11);
-  // without a coordinator to name, the column opens one of the project's members itself.
-  const enterProjectSessions = (projectId: string, coordinatorId?: string | null): void => {
+  // is: the session named opens (a project row's coordinator, a member whose mark was pressed), with
+  // the page in the column beside it (owner 2026-11-11); with none named, the column opens one of the
+  // project's members itself.
+  const enterProjectSessions = (projectId: string, openId?: string | null): void => {
     setSwipeOpen(null);
     setMenuOpenId(null);
     if (!isMobile) {
-      if (coordinatorId) {
-        navigate(`/sessions/${encodeId(coordinatorId)}?project=${encodeId(projectId)}${
+      if (openId) {
+        navigate(`/sessions/${encodeId(openId)}?project=${encodeId(projectId)}${
           folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`, { state: stampFromList() });
         return;
       }
@@ -9067,7 +9068,7 @@ export function WorkspaceView({
                               setSwipeOpen(null);
                               return;
                             }
-                            enterProjectSessions(mark.projectId);
+                            enterProjectSessions(mark.projectId, s.id);
                           }}
                         >
                           {mark.taskCounts ? (
