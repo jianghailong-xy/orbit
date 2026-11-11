@@ -15,7 +15,10 @@ import { WorkspaceConsole } from './components/WorkspaceConsole';
 import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { Spinner } from './components/ui/Spinner';
 import { ProfilePage } from './pages/ProfilePage';
-import { SettingsPage } from './pages/SettingsPage';
+import { GeneralSettingsPage } from './pages/settings/GeneralPage';
+import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
+import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
+import { StorageSettingsPage } from './pages/settings/StoragePage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
@@ -190,10 +193,10 @@ export function App() {
               Providers and Workspaces open the pages that manage them today until each has its own. */}
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />
-            <Route path="general" element={<SettingsPage />} />
-            <Route path="notifications" element={<SettingsPage />} />
-            <Route path="appearance" element={<SettingsPage />} />
-            <Route path="storage" element={<SettingsPage />} />
+            <Route path="general" element={<GeneralSettingsPage />} />
+            <Route path="notifications" element={<NotificationsSettingsPage />} />
+            <Route path="appearance" element={<AppearanceSettingsPage />} />
+            <Route path="storage" element={<StorageSettingsPage />} />
             <Route path="profile" element={<ProfilePage />} />
             {/* Old account-settings link, now Profile. Keep the redirect so existing
                 bookmarks/deep links don't 404. */}

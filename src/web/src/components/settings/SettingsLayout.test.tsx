@@ -41,10 +41,17 @@ vi.mock('../AppShell', async () => {
   };
 });
 vi.mock('../../pages/TaskRoute', () => ({ TaskRoute: () => <p data-page="tasks">the task list</p> }));
-vi.mock('../../pages/SettingsPage', async () => {
-  const { useLocation } = await import('react-router-dom');
-  return { SettingsPage: () => <p data-page={useLocation().pathname}>settings page</p> };
-});
+// Each Personal page says the address it answered at.
+const { atPath } = vi.hoisted(() => ({
+  atPath: async () => {
+    const { useLocation } = await import('react-router-dom');
+    return () => <p data-page={useLocation().pathname}>settings page</p>;
+  },
+}));
+vi.mock('../../pages/settings/GeneralPage', async () => ({ GeneralSettingsPage: await atPath() }));
+vi.mock('../../pages/settings/NotificationsPage', async () => ({ NotificationsSettingsPage: await atPath() }));
+vi.mock('../../pages/settings/AppearancePage', async () => ({ AppearanceSettingsPage: await atPath() }));
+vi.mock('../../pages/settings/StoragePage', async () => ({ StorageSettingsPage: await atPath() }));
 vi.mock('../../pages/ProfilePage', () => ({ ProfilePage: () => <p data-page="profile">profile</p> }));
 vi.mock('../../pages/SharedLinksPage', () => ({ SharedLinksPage: () => <p data-page="shared-links">links</p> }));
 vi.mock('../../pages/AccessTokensPage', () => ({ AccessTokensPage: () => <p data-page="access-tokens">tokens</p> }));

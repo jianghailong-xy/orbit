@@ -1,2 +1,2 @@
 export { SettingsLayout } from './SettingsLayout';
-export { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
+export { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from './SettingsBlocks';
