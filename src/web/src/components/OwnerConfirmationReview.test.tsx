@@ -586,6 +586,7 @@ describe('coordinator raised cards', () => {
     fallback.reviewer.kind = 'PROJECT_COORDINATOR';
     const html = renderToStaticMarkup(<OwnerConfirmationCard view={view()} waiting={waiting({ review: fallback })} onDecide={() => {}} onSendBack={() => {}} />);
     expect(html).toContain('Not reviewed by the coordinator');
+    expect(html).toContain('owner-confirmation-review is-coordinator-fallback');
     expect(html.indexOf('Not reviewed by the coordinator')).toBeLessThan(html.indexOf('WHAT THE AGENT SAID'));
   });
 });

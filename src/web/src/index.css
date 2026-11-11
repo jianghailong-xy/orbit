@@ -11274,6 +11274,14 @@ button.chat-jump-start:hover {
   border-radius: 8px;
   background: var(--bg-raised);
 }
+.owner-confirmation-review.is-coordinator-fallback {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.owner-confirmation-review.is-coordinator-fallback .owner-confirmation-review-status,
+.owner-confirmation-review.is-coordinator-fallback .owner-confirmation-review-status .anticon {
+  color: var(--warning);
+}
 .owner-confirmation-review-head {
   display: flex;
   align-items: baseline;

@@ -35,10 +35,13 @@ import kotlinx.serialization.json.JsonObject
 @Composable
 internal fun ReviewBarView(review: JsonObject, place: OwnerReview.Place, answers: (@Composable () -> Unit)? = null,
     reopen: (() -> Unit)? = null) {
+    val coordinatorFallback = review.text("state") == "NOT_REVIEWED" && review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR"
+    val fallbackTone = LocalOrbitColors.current.needsYou
     val bar = OwnerReview.bar(review, place) { OwnerReview.receiptTime(it) }
     val items = remember(review) { OwnerReview.itemsByKey(review) }
     var oldOpen by rememberSaveable(review.text("reviewId")) { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().testTag("review-bar").background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+    Column(Modifier.fillMaxWidth().testTag("review-bar").background(if (coordinatorFallback) fallbackTone.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+        .then(if (coordinatorFallback) Modifier.border(1.dp, fallbackTone.copy(alpha = 0.4f), RoundedCornerShape(8.dp)) else Modifier)
         .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ReviewBarHead(bar, review.text("state") == "REVIEWED" && review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR" && place == OwnerReview.Place.CARD)
         val raised = review.text("state") == "REVIEWED" && review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR" && place == OwnerReview.Place.CARD
@@ -48,7 +51,7 @@ internal fun ReviewBarView(review: JsonObject, place: OwnerReview.Place, answers
             var checksOpen by rememberSaveable(review.text("reviewId")) { mutableStateOf(false) }
             Disclosure("${record?.objects("checked")?.size ?: 0} checked · ${record?.objects("notChecked")?.size ?: 0} not checked · ${record?.objects("leftOpen")?.size ?: 0} left open", checksOpen, "review-bar:checks") { checksOpen = !checksOpen }
             if (checksOpen) bar.lines.filter { it.kind == "ROW" }.forEach { ReviewBarLine(it, items, answers) }
-        } else bar.lines.forEach { ReviewBarLine(it, items, answers) }
+        } else bar.lines.forEach { ReviewBarLine(if (coordinatorFallback && it.kind == "STATUS") it.copy(warn = true) else it, items, answers) }
         if (bar.folded.isNotEmpty()) {
             Disclosure(OwnerReview.showOldReview, oldOpen, "review-bar:old") { oldOpen = !oldOpen }
             if (oldOpen) bar.folded.forEach { ReviewBarLine(it, items, null) }

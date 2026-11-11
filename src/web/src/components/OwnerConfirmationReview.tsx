@@ -475,7 +475,7 @@ export function OwnerConfirmationReviewBar({
     />
   );
   return (
-    <div className="owner-confirmation-review" data-review-state={review.state}>
+    <div className={`owner-confirmation-review${review.state === 'NOT_REVIEWED' && review.reviewer.kind === 'PROJECT_COORDINATOR' ? ' is-coordinator-fallback' : ''}`} data-review-state={review.state}>
       <div className="owner-confirmation-review-head">
         <span className="owner-confirmation-review-who">
           <span className="owner-confirmation-key">{review.lead && place === 'CARD' ? 'Coordinator' : `${REVIEW_HEADING} · `}</span>

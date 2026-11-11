@@ -1808,6 +1808,10 @@ private struct OwnerConfirmationReviewBarView: View {
     /// Reopen task, when the task has settled; the bar draws it only where it offers it.
     var reopen: (() -> Void)? = nil
 
+    private var coordinatorFallback: Bool {
+        review.state == .notReviewed && review.reviewer.kind == "PROJECT_COORDINATOR"
+    }
+
     @State private var oldOpen = false
 
     var body: some View {
@@ -1851,8 +1855,13 @@ private struct OwnerConfirmationReviewBarView: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.05),
+        .background(coordinatorFallback ? Color.orange.opacity(0.12) : Color.primary.opacity(0.05),
                     in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+        .overlay {
+            if coordinatorFallback {
+                RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius).stroke(Color.orange.opacity(0.4))
+            }
+        }
     }
 
     /// `REVIEW · <reviewer> · <time>`, the reviewer's name giving way before the label or the time,
@@ -1893,7 +1902,7 @@ private struct OwnerConfirmationReviewBarView: View {
                 }
                 Text(line.text)
                     .font(.orbitProse.weight(.semibold))
-                    .foregroundStyle(line.warn == true ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.primary))
+                    .foregroundStyle((line.warn == true || coordinatorFallback) ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.primary))
                 Spacer(minLength: 0)
             }
         case .note, .footer:
