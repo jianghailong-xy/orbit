@@ -50,7 +50,8 @@ final class WikiChatWiringTests: XCTestCase {
 
     /// On a phone the panel is a sheet of two heights whose half height leaves the page readable and scrollable
     /// (design §9: `presentationBackgroundInteraction`, iOS 17); on an iPad or a Mac it is the third column beside
-    /// the page (docs/wiki-design.md §12.3.5), 400 wide by default between 320 and 560 as the web's docked panel.
+    /// the page (docs/wiki-design.md §12.3.5), a third of the Wiki's width between 400 and 720 by default and dragged
+    /// between 320 and half of it, as the web's docked panel (owner 11-11).
     func testThePanelIsATwoHeightSheetOnAPhoneAndTheThirdColumnElsewhere() throws {
         let views = code(try source("Views/WikiChatViews.swift"))
         let host = try slice(views, from: "struct WikiChatHost: ViewModifier {", to: "extension View {")
@@ -61,7 +62,9 @@ final class WikiChatWiringTests: XCTestCase {
                             ".presentationDragIndicator(.visible)"], "the phone's sheet")
         // Dismissing the column is the owner's ✕ (board 45): kept until the button opens it again.
         XCTAssertTrue(host.contains(".inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.closeByOwner() } })) {"))
-        XCTAssertTrue(host.contains("panel.inspectorColumnWidth(min: 320, ideal: 400, max: 560)"))
+        XCTAssertTrue(host.contains("panel.inspectorColumnWidth(min: CGFloat(WikiChatLogic.Column.min), ideal: CGFloat(WikiChatLogic.Column.ideal(Double(available))),"))
+        XCTAssertTrue(host.contains("max: CGFloat(WikiChatLogic.Column.max(Double(available))))"))
+        XCTAssertTrue(host.contains(".onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in available = width }"))
         XCTAssertTrue(host.contains("return hSize == .compact"), "a sheet exactly where the width is compact")
         // The deployment target is iOS 17, where every one of these exists.
         let project = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()

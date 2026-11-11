@@ -16,7 +16,7 @@ import Foundation
 
 /// What kind of turn an exchange opened with, as the group row counts them.
 public enum ExchangeCategory: String, Equatable, Sendable, CaseIterable {
-    case evidence, ready, project, watch, job, reply
+    case evidence, ready, project, watch, job, notice, message, reply
 }
 
 /// What an exchange is about, as far as a tree can place it.
@@ -88,10 +88,9 @@ public struct ExchangeTreeLookup: Sendable {
 
 /// A task in a group's tree: its own exchanges, then the tasks after it in the same group.
 public struct ExchangeBranch: Identifiable, Equatable, Sendable {
-    /// Unique within the tree: the task's id, `session:<id>`, or `other`.
+    /// Unique within the tree: the task's id (`idKey`), or `other`.
     public let key: String
-    /// The task's id as the exchanges spelled it; nil for a session no task is known to run, and for
-    /// the branch of everything else.
+    /// The task's id as the exchanges spelled it; nil for the branch of everything else.
     public let taskId: String?
     public var title: String
     public var exchanges: [OrbitExchange]
@@ -129,6 +128,8 @@ public enum OrbitExchangeFold {
         (.project, "project update", "project updates"),
         (.watch, "watch", "watches"),
         (.job, "background job", "background jobs"),
+        (.notice, "run notice", "run notices"),
+        (.message, "message", "messages"),
         (.reply, "reply", "replies"),
     ]
 
@@ -140,10 +141,32 @@ public enum OrbitExchangeFold {
         }.joined(separator: ", ")
     }
 
-    /// Facts a coordinator is told that are bad news: they stay in view, as they always were drawn.
+    /// Facts a coordinator is told that are bad news: they stay in view, as they always were drawn. A
+    /// stopped run is not one of them: in real coordinators every such notice was a run waiting on
+    /// purpose, and what needs the owner reaches them as a card of its own.
     public static let loudDeliveries: Set<CoordinatorDelivery.Kind> = [
-        .taskDispatchRefused, .projectBlockerRaised, .taskRunStopped,
+        .taskDispatchRefused, .projectBlockerRaised,
     ]
+
+    /// A task run's `notify` handed to its coordinator because it could not reach the owner (apiserver
+    /// sessions/run-notify.ts `<orbit-run-notice>`): the task it is about, by id and title. Recorded as
+    /// the turn's control-plane note with no card beside it, so it is read off the words (web
+    /// `parseRunNotice`). Nil for anything else.
+    public static func parseRunNotice(_ note: String?) -> (taskId: String?, taskTitle: String?)? {
+        guard let note = note?.trimmingCharacters(in: .whitespacesAndNewlines),
+              note.contains("</orbit-run-notice>"),
+              let head = try? NSRegularExpression(pattern: #"^<orbit-run-notice task="([^"]*)" run-session="[^"]*"[^>]*>\n"#),
+              let m = head.firstMatch(in: note, range: NSRange(note.startIndex..., in: note)),
+              let idRange = Range(m.range(at: 1), in: note) else { return nil }
+        let id = String(note[idRange])
+        var title: String?
+        if let re = try? NSRegularExpression(pattern: #"A run of the task “([\s\S]*?)” used notify\."#),
+           let t = re.firstMatch(in: note, range: NSRange(note.startIndex..., in: note)),
+           let r = Range(t.range(at: 1), in: note) {
+            title = String(note[r])
+        }
+        return (id.isEmpty ? nil : id, title)
+    }
 
     // MARK: Reading a turn
 
@@ -176,10 +199,27 @@ public enum OrbitExchangeFold {
                                  watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil) -> OrbitExchange? {
         if bubble.steer || bubble.queued || bubble.undelivered { return nil }
         if bubble.delivery == "failed" || bubble.delivery == "unconfirmed" { return nil }
-        if bubble.sessionMessage != nil || bubble.itemCard != nil || bubble.ownerAnswer != nil
+        if bubble.itemCard != nil || bubble.ownerAnswer != nil
             || bubble.taskStart != nil || bubble.startedCard != nil
             || bubble.reviewRequest != nil || bubble.reviewReturn != nil { return nil }
         let ts = bubble.ts
+        // Another session's message: a task's run reporting to its coordinator, folded under that task.
+        // The agent's answer under it says what it did; anything the owner must decide comes as a card.
+        if let card = bubble.sessionMessage {
+            let task: String? = card.fromTaskId == nil ? nil
+                : (card.fromTitle.hasPrefix("Task: ") ? String(card.fromTitle.dropFirst("Task: ".count)) : card.fromTitle)
+            let target: ExchangeTarget = card.fromTaskId.map { .task(id: $0, title: task) }
+                ?? .session(id: card.fromSessionId, title: card.fromTitle)
+            return OrbitExchange(id: bubble.id, ts: ts, what: "Message from \(task ?? card.fromTitle)",
+                                 whatInTask: "Message", reply: "", category: .message, target: target)
+        }
+        // A task run's notify that could not reach the owner, handed to the coordinator.
+        if let notice = parseRunNotice(bubble.note ?? bubble.text) {
+            return OrbitExchange(id: bubble.id, ts: ts,
+                                 what: notice.taskTitle.map { "Run notice: \($0)" } ?? "Run notice",
+                                 whatInTask: "Run notice", reply: "", category: .notice,
+                                 target: notice.taskId.map { .task(id: $0, title: notice.taskTitle) })
+        }
         if let replies = bubble.sessionReplies {
             guard bubble.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   replies.count == 1, let reply = replies.first else { return nil }
@@ -346,8 +386,8 @@ public enum OrbitExchangeFold {
 
     /// A group's exchanges as a tree of the tasks they are about: each exchange under its task, and a
     /// task under the task it waits on when that task is in the same group too (the first one to
-    /// appear, when it waits on several). A task whose prerequisites are not in the group is a root. A
-    /// session no task is known to run is a branch of its own; exchanges about nothing gather in one
+    /// appear, when it waits on several). A task whose prerequisites are not in the group is a root.
+    /// Exchanges about no task — a background job, a session no task is known to run — gather in one
     /// branch, last. Nil when the group is about one thing only.
     public static func tree(_ exchanges: [OrbitExchange], lookup: ExchangeTreeLookup) -> [ExchangeBranch]? {
         var branches: [String: ExchangeBranch] = [:]
@@ -360,12 +400,14 @@ public enum OrbitExchangeFold {
             switch exchange.target {
             case .task(let id, let t)?:
                 key = idKey(id); taskId = id; title = t
-            case .session(let id, let t)?:
-                if let task = lookup.taskOfSession(id) {
-                    key = idKey(task.id); taskId = task.id; title = task.title
-                } else {
-                    key = "session:\(idKey(id))"; taskId = nil; title = t
+            case .session(let id, _)?:
+                // A session no task is known to run (a landing, another project's conversation)
+                // places nothing: it joins everything else rather than a branch named after an id.
+                guard let task = lookup.taskOfSession(id) else {
+                    other.append(exchange)
+                    continue
                 }
+                key = idKey(task.id); taskId = task.id; title = task.title
             case nil:
                 other.append(exchange)
                 continue
@@ -392,9 +434,8 @@ public enum OrbitExchangeFold {
         }
         for key in order {
             var branch = branches[key]!
-            if branch.title.isEmpty {
-                let raw = branch.taskId ?? String(key.dropFirst("session:".count))
-                branch.title = "\(branch.taskId != nil ? "Task" : "Session") \(String(PublicID.toPublic(raw).suffix(8)))"
+            if branch.title.isEmpty, let raw = branch.taskId {
+                branch.title = "Task \(String(PublicID.toPublic(raw).suffix(8)))"
                 branches[key] = branch
             }
             guard let taskId = branch.taskId else { continue }

@@ -51,6 +51,7 @@ import {
   MAX_API_ERROR_RETRIES,
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
+  delegateLaunchReceipt,
   progressBadge,
   QUESTION_RECORD_COPY,
   questionAnswerLine,
@@ -61,8 +62,10 @@ import {
   workflowTitle,
   type AskedQuestion,
   type QuestionOutcome,
+  type SubagentRunView,
   type TaskProgress,
 } from '@orbit/shared';
+import { DELEGATE_TOOL, delegateResultText, subagentMeta, subagentWhy } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import {
@@ -89,7 +92,7 @@ import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
-import { replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
+import { parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { WikiContextNote } from './WikiContextNote';
@@ -127,8 +130,27 @@ import type {
   ConfirmationAnswersCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
+  EvidenceReviewCard,
+  EvidenceSendBackCard,
+  RunNoticeCard,
+  RunQuestionCard,
+  SessionOpeningCard,
 } from '@orbit/shared';
 import { ReviewRequestedCard, SentBackByReviewerCard, YouConfirmedCard } from './ConfirmationReviewTurnCards';
+import {
+  EvidenceSentBackCard,
+  EvidenceToReviewCard,
+  RunNoticeTurnCard,
+  RunQuestionTurnCard,
+  SessionOpeningLine,
+} from './OrbitTurnCards';
+import {
+  parseEvidenceReview,
+  parseEvidenceSendBack,
+  parseRunNotice as parseRunNoticeCard,
+  parseRunQuestion,
+  parseSessionOpening,
+} from '../lib/orbitTurnCards';
 import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
@@ -597,6 +619,12 @@ type TextNode = {
   reviewReturn?: ConfirmationReturnCard;
   /** The owner's answers handed to the reviewer (§7 Q5): drawn as `You confirmed`. */
   reviewAnswers?: ConfirmationAnswersCard;
+  /** Five more of Orbit's own turns, each drawn as its card (OrbitTurnCards.tsx). */
+  evidenceReview?: EvidenceReviewCard;
+  evidenceSendBack?: EvidenceSendBackCard;
+  runQuestion?: RunQuestionCard;
+  runNotice?: RunNoticeCard;
+  sessionOpening?: SessionOpeningCard;
   // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
   // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
   // Only a top-level message opens one: a steer joins the turn already running, and a message
@@ -900,6 +928,11 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.reviewRequest
   && !node.reviewReturn
   && !node.reviewAnswers
+  && !node.evidenceReview
+  && !node.evidenceSendBack
+  && !node.runQuestion
+  && !node.runNotice
+  && !node.sessionOpening
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !parseBackgroundWake(node.note);
@@ -1218,6 +1251,11 @@ function buildTranscript(
         const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
         const reviewReturn = parseConfirmationReturn(p) ?? undefined;
         const reviewAnswers = parseConfirmationAnswers(p) ?? undefined;
+        const evidenceReview = parseEvidenceReview(p) ?? undefined;
+        const evidenceSendBack = parseEvidenceSendBack(p) ?? undefined;
+        const runQuestion = parseRunQuestion(p) ?? undefined;
+        const runNotice = parseRunNoticeCard(p) ?? undefined;
+        const sessionOpening = parseSessionOpening(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -1257,6 +1295,11 @@ function buildTranscript(
             reviewRequest,
             reviewReturn,
             reviewAnswers,
+            evidenceReview,
+            evidenceSendBack,
+            runQuestion,
+            runNotice,
+            sessionOpening,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1535,15 +1578,21 @@ export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TA
 type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
 const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
 
-function StreamingDrafts({ live }: { live?: boolean }) {
+/** The session's SubAgent runs by `delegate` call (lib/subagentRuns.ts). Empty where nothing reads them: a
+ *  share page, an export. */
+export const SubagentRunsCtx = createContext<ReadonlyMap<string, SubagentRunView>>(new Map());
+
+function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
   // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
   // each time a block settles, and a reader who opened one wants the next block of the same turn
-  // open too. A turn's end puts it back to folded.
+  // open too. A turn's end puts it back to folded. Read off the transcript's last `turn_end` rather
+  // than off `live`: a reply sent right after a turn ends starts the next one before the session's
+  // status says it ever stopped. Its seq, not a count, so loading older pages changes nothing.
   const [thinkOpen, setThinkOpen] = useState(false);
   useEffect(() => {
-    if (!live) setThinkOpen(false);
-  }, [live]);
+    setThinkOpen(false);
+  }, [lastTurnEnd]);
   if (!drafts) return null;
   return (
     <>
@@ -1682,12 +1731,14 @@ export const Transcript = memo(function Transcript({
   // progress frame re-renders those and nothing else.
   const activity = useContext(TaskActivityCtx);
   const ended = useMemo(() => endedTaskProgress(events), [events]);
+  // A SubAgent runs for as long as its run says so: a background one's call answered at once.
+  const subagentRuns = useContext(SubagentRunsCtx);
   const taskLookup = useMemo<TaskLookup>(
     () => ({
       progress: (id) => activity.live.get(id) ?? ended.get(id) ?? null,
-      running: (id) => activity.running.has(id),
+      running: (id) => activity.running.has(id) || subagentRuns.get(id)?.status === 'RUNNING',
     }),
-    [activity, ended],
+    [activity, ended, subagentRuns],
   );
   // Where each insert goes: after the last top-level card at or before its seq, keyed by that
   // card's seq. Whichever half of the split holds the card draws it, so nothing is drawn twice,
@@ -1731,6 +1782,10 @@ export const Transcript = memo(function Transcript({
     }
     return at < 0 || at >= nodes.length ? [nodes, [] as Node[]] : [nodes.slice(0, at), nodes.slice(at)];
   }, [nodes, streamingAfterSeq]);
+  const lastTurnEnd = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'turn_end') return events[i].seq;
+    return 0;
+  }, [events]);
   const body = (
     <TaskLookupCtx.Provider value={taskLookup}>
       <ImagePreviewProvider>
@@ -1738,7 +1793,7 @@ export const Transcript = memo(function Transcript({
           <Fragment key={insert.key}>{insert.element}</Fragment>
         ))}
         <NodeList nodes={before} live={live} placed={placed} />
-        <StreamingDrafts live={live} />
+        <StreamingDrafts lastTurnEnd={lastTurnEnd} />
         {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
       </ImagePreviewProvider>
     </TaskLookupCtx.Provider>
@@ -1833,8 +1888,12 @@ type WakeName = ContextType<typeof WatchWakeNamesCtx>;
 type FoldedExchange = { summary: OrbitExchangeSummary; items: NodeListItem[] };
 type FoldBlock = { kind: 'item'; item: NodeListItem } | { kind: 'exchanges'; exchanges: FoldedExchange[] };
 
-/** Facts a coordinator is told that are bad news: they stay in view, as they always were drawn. */
-const LOUD_DELIVERIES: ReadonlySet<string> = new Set(['TASK_DISPATCH_REFUSED', 'PROJECT_BLOCKER_RAISED', 'TASK_RUN_STOPPED']);
+/**
+ * Facts a coordinator is told that are bad news: they stay in view, as they always were drawn. A
+ * stopped run is not one of them: in real coordinators every such notice was a run waiting on
+ * purpose, and what needs the owner reaches them as a card of its own.
+ */
+const LOUD_DELIVERIES: ReadonlySet<string> = new Set(['TASK_DISPATCH_REFUSED', 'PROJECT_BLOCKER_RAISED']);
 
 /**
  * What a turn's opening node says happened, when Orbit opened the turn and it is one the reader
@@ -1848,9 +1907,35 @@ function orbitTurnOf(
 ): Omit<OrbitExchangeSummary, 'seq' | 'lastSeq' | 'reply'> | null {
   if (node.kind !== 'user' || !node.turnHead || node.steer) return null;
   if (node.delivery === 'failed' || node.delivery === 'unconfirmed') return null;
-  if (node.sessionMessage || node.itemCard || node.ownerAnswer || node.taskStart || node.startedCard) return null;
+  if (node.itemCard || node.ownerAnswer || node.taskStart || node.startedCard) return null;
   if (node.reviewRequest || node.reviewReturn) return null;
   const ts = node.ts;
+  // Another session's message: a task's run reporting to its coordinator, folded under that task.
+  // The agent's answer under it says what it did; anything the owner must decide comes as a card.
+  if (node.sessionMessage) {
+    const card = node.sessionMessage;
+    const task = card.fromTaskId ? card.fromTitle.replace(/^Task: /, '') : null;
+    return {
+      ts,
+      what: `Message from ${task ?? card.fromTitle}`,
+      whatInTask: 'Message',
+      category: 'message',
+      target: card.fromTaskId
+        ? { kind: 'TASK', id: card.fromTaskId, title: task ?? undefined }
+        : { kind: 'SESSION', id: card.fromSessionId, title: card.fromTitle },
+    };
+  }
+  // A task run's notify that could not reach the owner, handed to the coordinator (lib/orbitExchangeFold).
+  const notice = parseRunNotice(node.note ?? node.text);
+  if (notice) {
+    return {
+      ts,
+      what: notice.taskTitle ? `Run notice: ${notice.taskTitle}` : 'Run notice',
+      whatInTask: 'Run notice',
+      category: 'notice',
+      target: notice.taskId ? { kind: 'TASK', id: notice.taskId, title: notice.taskTitle ?? undefined } : null,
+    };
+  }
   if (node.sessionReplies) {
     if (node.text.trim() !== '' || node.sessionReplies.length !== 1) return null;
     const reply = node.sessionReplies[0];
@@ -2268,6 +2353,38 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
+          />
+        );
+      }
+      // Five more of Orbit's own turns (OrbitTurnCards.tsx): a revision to review, a send-back, a task
+      // run's question and its notify, and the opening of a session Orbit opened. Each is drawn as
+      // what happened; the block the agent read — the turn's words, or its note when the turn has
+      // none — folds at the card's foot, and any other note rides under it as it always did.
+      if (node.evidenceReview || node.evidenceSendBack || node.runQuestion || node.runNotice) {
+        const hasWords = node.text.trim() !== '';
+        const told = hasWords ? node.text : node.note ?? '';
+        const props = {
+          seq,
+          ts: node.ts,
+          undelivered: node.delivery === 'failed' || node.delivery === 'unconfirmed',
+          told,
+          attached: hasWords && node.note
+            ? <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />
+            : undefined,
+          queued,
+        };
+        if (node.evidenceReview) return <EvidenceToReviewCard card={node.evidenceReview} {...props} />;
+        if (node.evidenceSendBack) return <EvidenceSentBackCard card={node.evidenceSendBack} {...props} />;
+        if (node.runQuestion) return <RunQuestionTurnCard card={node.runQuestion} {...props} />;
+        return <RunNoticeTurnCard card={node.runNotice!} {...props} />;
+      }
+      if (node.sessionOpening) {
+        return (
+          <SessionOpeningLine
+            card={node.sessionOpening}
+            brief={node.text}
+            seq={seq}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
           />
         );
       }
@@ -4004,9 +4121,10 @@ function resultRepeatsBody(node: ToolNode): boolean {
   return !!batchTasks(node);
 }
 
-/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow. */
+/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow — and
+ *  Orbit's own SubAgent (`delegate`). */
 function isBackgroundTaskCall(name: string): boolean {
-  return name === 'Agent' || name === 'Task' || name === 'Workflow';
+  return name === 'Agent' || name === 'Task' || name === 'Workflow' || name === DELEGATE_TOOL;
 }
 
 /**
@@ -4019,6 +4137,7 @@ function isLaunchReceipt(node: ToolNode): boolean {
   const content = node.result?.content;
   if (!content || node.result?.isError) return false;
   if (node.name === 'Workflow') return !!workflowLaunchReceipt(content);
+  if (node.name === DELEGATE_TOOL) return !!delegateLaunchReceipt(content);
   return (node.name === 'Agent' || node.name === 'Task') && isAsyncAgentLaunchAck(content);
 }
 
@@ -4095,11 +4214,16 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // events are appended, and a refetched payload is held in state), so this holds the computed
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
-  const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
+  const { label, summary, summaryMono, body, icon, tone, path, meta: toolMeta, tag } = useMemo(
     () => describeTool(node.name, input, isShell, outcome),
     [node.name, input, isShell, outcome],
   );
-  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent';
+  // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
+  const isDelegate = node.name === DELEGATE_TOOL;
+  const run = useContext(SubagentRunsCtx).get(node.id);
+  const meta = isDelegate ? subagentMeta(run) ?? undefined : toolMeta;
+  const why = isDelegate ? subagentWhy(run) : null;
+  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent' || isDelegate;
   const isBackgroundTask = isBackgroundTaskCall(node.name);
   const launchReceipt = isLaunchReceipt(node);
   // A workflow is named by its launch receipt once that lands — see describeTool.
@@ -4152,6 +4276,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         ) : (
           title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
         )}
+        {tag && <span className="chat-tool-tag">{tag}</span>}
         {isBackgroundTask ? (
           <TaskBadgeAndStatus node={node} live={live} meta={meta} />
         ) : outcome?.kind === 'replied' ? (
@@ -4174,6 +4299,11 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
       )}
       {hasDetail && open && (
         <div className="chat-tool-detail">
+          {why && (
+            <div className="chat-subagent-why">
+              <b>Why</b> · {why}
+            </div>
+          )}
           {/* A failed call is opened to find out why, and the input is rarely the answer — a
               heredoc alone clamps to sixteen lines, which is enough to push the reason off the
               bottom of the card. Put the error first when there is one; everywhere else the
@@ -4208,9 +4338,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           {/* A sub-agent's totals close its transcript rather than open it. */}
           {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
           {/* A question's result, once read, is only the replay above said again. */}
-          {node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
-            <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
-          )}
+          {isDelegate
+            ? node.result && !node.result.isError && (
+                <DelegateResult content={resultContent} run={run} seq={node.seq} steps={node.children} />
+              )
+            : node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
+                <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
+              )}
           {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
         </div>
       )}
@@ -4410,6 +4544,15 @@ function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
   return null;
 }
 
+/** What a SubAgent handed back, as Markdown: its call's result, or a background run's once it ended — unless
+ *  the child's own last message, drawn just above it, already says it word for word. */
+function DelegateResult({ content, run, seq, steps }: { content: unknown; run?: SubagentRunView; seq: number; steps: Node[] }) {
+  const text = delegateResultText(content, run);
+  const last = steps[steps.length - 1];
+  if (!text || (last?.kind === 'assistant' && last.text.trim() === text.trim())) return null;
+  return <ToolResult seq={seq} content={text} compact markdown />;
+}
+
 /** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */
 function TaskProgressDetail({ id, fallback }: { id: string; fallback?: ReactNode }) {
   const progress = useContext(TaskLookupCtx).progress(id);
@@ -4477,6 +4620,7 @@ type ToolDesc = {
   tone?: Tone; // colour family for the icon chip + card left rail
   path?: string; // a file path → rendered as bold filename + dimmed parent dir
   meta?: string; // small trailing badge (line range, edit count)
+  tag?: string; // a word set apart after the summary (a SubAgent's `Background`)
 };
 
 // Codex's shell calls carry no `description`, and it wraps every one of them as
@@ -4613,6 +4757,16 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
             <MD>{String(i.prompt)}</MD>
           </div>
         ) : undefined,
+      };
+    // Orbit's SubAgent (docs/subagent-design.md §6.4): the same purple card as Agent. Its tier, model, time
+    // and cost come from its run (ToolView); opened, it is the child's steps and the result — no prompt.
+    case DELEGATE_TOOL:
+      return {
+        label: 'SubAgent',
+        icon: <span className="chat-subagent-icon">✦</span>,
+        tone: 'agent',
+        summary: [i.type || 'general', i.description].filter(Boolean).join(' · '),
+        tag: i.background === true ? 'Background' : undefined,
       };
     case 'Workflow':
       // A team of agents the runtime runs in the background. Named by the script's own meta

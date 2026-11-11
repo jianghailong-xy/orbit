@@ -25,6 +25,11 @@ public struct TurnCards: Equatable, Sendable {
     public var reviewRequest: ConfirmationReviewRequestCard?
     public var reviewReturn: ConfirmationReturnCard?
     public var reviewAnswers: ConfirmationAnswersCard?
+    public var evidenceReview: EvidenceReviewCard?
+    public var evidenceSendBack: EvidenceSendBackCard?
+    public var runQuestion: RunQuestionCard?
+    public var runNotice: RunNoticeCard?
+    public var sessionOpening: SessionOpeningCard?
 
     public init(itemCard: OpenItemDelivery? = nil, ownerAnswer: OwnerAnswer? = nil,
                 coordinatorDelivery: CoordinatorDelivery? = nil, taskStart: TaskStart? = nil,
@@ -33,7 +38,12 @@ public struct TurnCards: Equatable, Sendable {
                 sessionReplies: [SessionReply]? = nil,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
                 reviewReturn: ConfirmationReturnCard? = nil,
-                reviewAnswers: ConfirmationAnswersCard? = nil) {
+                reviewAnswers: ConfirmationAnswersCard? = nil,
+                evidenceReview: EvidenceReviewCard? = nil,
+                evidenceSendBack: EvidenceSendBackCard? = nil,
+                runQuestion: RunQuestionCard? = nil,
+                runNotice: RunNoticeCard? = nil,
+                sessionOpening: SessionOpeningCard? = nil) {
         self.itemCard = itemCard
         self.ownerAnswer = ownerAnswer
         self.coordinatorDelivery = coordinatorDelivery
@@ -45,6 +55,11 @@ public struct TurnCards: Equatable, Sendable {
         self.reviewRequest = reviewRequest
         self.reviewReturn = reviewReturn
         self.reviewAnswers = reviewAnswers
+        self.evidenceReview = evidenceReview
+        self.evidenceSendBack = evidenceSendBack
+        self.runQuestion = runQuestion
+        self.runNotice = runNotice
+        self.sessionOpening = sessionOpening
     }
 }
 
@@ -58,7 +73,8 @@ extension UserBubble {
                       sessionMessage: sessionMessage, externalSender: externalSender,
                       sessionReplies: sessionReplies,
                       reviewRequest: reviewRequest, reviewReturn: reviewReturn,
-                      reviewAnswers: reviewAnswers)
+                      reviewAnswers: reviewAnswers,
+                      evidenceReview: evidenceReview, evidenceSendBack: evidenceSendBack, runQuestion: runQuestion, runNotice: runNotice, sessionOpening: sessionOpening)
         }
         set {
             itemCard = newValue.itemCard
@@ -72,6 +88,11 @@ extension UserBubble {
             reviewRequest = newValue.reviewRequest
             reviewReturn = newValue.reviewReturn
             reviewAnswers = newValue.reviewAnswers
+            evidenceReview = newValue.evidenceReview
+            evidenceSendBack = newValue.evidenceSendBack
+            runQuestion = newValue.runQuestion
+            runNotice = newValue.runNotice
+            sessionOpening = newValue.sessionOpening
         }
     }
 }

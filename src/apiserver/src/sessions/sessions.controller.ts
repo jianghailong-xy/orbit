@@ -951,6 +951,16 @@ export class SessionsController {
   }
 
   /**
+   * The session's SubAgent runs (docs/subagent-design.md §6.1, §6.4), oldest first, each keyed by its
+   * `delegate` call: what the transcript's SubAgent block shows beside the call — tier, model, Why, time, cost.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/subagents')
+  subagentRuns(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.listSubagentRuns(user.userId, id);
+  }
+
+  /**
    * The authoritative, complete list of background shells the session ever launched (every
    * Bash(run_in_background), with output recovered from the workspace's Read polls). Derived over ALL
    * persisted events, so the "Background processes" tray shows the same complete list on every
