@@ -91,6 +91,25 @@ export class SubagentRunCreateDto implements SubagentRunCreateRequest {
   @IsString()
   @MaxLength(1_000)
   description?: string;
+
+  /** A workspace to run on, by name (docs/subagent-design.md §10.1). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  workspace?: string;
+
+  /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1). */
+  @IsOptional()
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  @ArrayMaxSize(32)
+  needs?: string[];
+
+  /** The brief, which a remote run's target runner needs (§10.2). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(400_000)
+  prompt?: string;
 }
 
 export class SubagentRunUpdateDto implements SubagentRunUpdateRequest {
@@ -247,6 +266,8 @@ export function subagentRunView(
     resultSummary: string | null;
     createdAt: Date;
     endedAt: Date | null;
+    /** The workspace a remote run went to (§10), read beside the row; absent for one on the parent's machine. */
+    workspace?: { name: string } | null;
   },
   labels?: ReadonlyMap<string, string>,
 ): SubagentRunView {
@@ -266,6 +287,8 @@ export function subagentRunView(
     reasons: Array.isArray(decision.reasons) ? decision.reasons.filter((r) => typeof r === 'string') : [],
     costUsd: row.costUsd,
     resultSummary: row.resultSummary,
+    // The workspace's name now, else the one the decision recorded (a workspace deleted since leaves the column null).
+    workspaceName: row.workspace?.name ?? decision.workspace?.name ?? null,
     createdAt: row.createdAt.toISOString(),
     endedAt: row.endedAt ? row.endedAt.toISOString() : null,
   };

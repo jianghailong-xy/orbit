@@ -1344,6 +1344,7 @@ model Workspace {
   position            Int?      @map("position")
 
   sessions      Session[]
+  subagentRuns  SubagentRun[] // remote SubAgent runs that ran here (docs/subagent-design.md §10)
   assignedTasks Task[] // tasks assigned to run in this workspace
   foremanFor    TaskList[] @relation("TaskListForeman") // lists whose coordination runs here
   coordinatorForProjects Project[] @relation("ProjectCoordinatorWorkspace") // projects coordinated here
@@ -2869,10 +2870,42 @@ model SubagentRun {
   /// When the owed wake was filed as a turn of the parent, or dropped because the parent had ended.
   /// Partial index subagent_run_wake_unfiled_idx (migration 0527) serves the sweep.
   wakeFiledAt      DateTime? @map("wake_filed_at") @db.Timestamptz(3)
+  /// A remote SubAgent (docs/subagent-design.md §10): the workspace it runs on, another of the parent's repository.
+  /// Null for one on the parent's own machine.
+  workspaceId      String?   @map("workspace_id") @db.Uuid
+  workspace        Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  /// The runner a remote run was handed to: the only one that may claim it, relay its events, ask its cards and
+  /// report its end (§10.3). No foreign key, so a deleted runner leaves the run remote, for the offline sweep to end.
+  targetRunnerId   String?   @map("target_runner_id") @db.Uuid
+  /// What the target runner needs that the parent's machine had locally: prompt, readonly, permissionMode, needs.
+  remote           Json?
+  /// When the target runner claimed it.
+  claimedAt        DateTime? @map("claimed_at") @db.Timestamptz(3)
+  /// When the parent asked a remote run to stop; the target's heartbeat is told until it reports an end.
+  stopRequestedAt  DateTime? @map("stop_requested_at") @db.Timestamptz(3)
+  relayEvents      SubagentRelayEvent[]
 
   @@unique([sessionId, toolUseId])
   @@index([sessionId, status])
+  @@index([targetRunnerId, status])
   @@map("subagent_run")
+}
+
+/// One event a remote SubAgent's target runner relayed (docs/subagent-design.md §10.3), stored rewritten as the
+/// parent's stream carries it: nested under the delegate call, child tool ids prefixed with the run id. The parent's
+/// runner numbers its session's events, so it reads these and emits them into its own stream; `seq` is the run's
+/// own numbering, from 1, and a batch sent again writes nothing twice.
+model SubagentRelayEvent {
+  id        String      @id @default(uuid(7)) @db.Uuid
+  runId     String      @map("run_id") @db.Uuid
+  run       SubagentRun @relation(fields: [runId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  seq       Int
+  type      String
+  payload   Json
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([runId, seq])
+  @@map("subagent_relay_event")
 }
 
 /// A wakeup a session asked the control plane to hold (runner-api/scheduled-wakeup.ts), because Claude

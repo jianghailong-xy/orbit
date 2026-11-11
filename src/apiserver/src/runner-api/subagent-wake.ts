@@ -149,7 +149,7 @@ async function dropSubagentWake(prisma: PrismaClient, runId: string): Promise<bo
  * End every run of the session its runner left RUNNING, as INTERRUPTED, owing the parent a wake. Called when a
  * different runner process takes the session over: the process that hosted those runs is gone, and their child
  * engines with it, so none of them will report an end. Returns the run ids, whose wakes the caller files once
- * this transaction has committed.
+ * this transaction has committed. A remote run is left alone: its target runner hosts it, not the process replaced.
  */
 export async function interruptOrphanedSubagentRuns(tx: Prisma.TransactionClient, sessionId: string): Promise<string[]> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>`
@@ -159,6 +159,8 @@ export async function interruptOrphanedSubagentRuns(tx: Prisma.TransactionClient
         "ended_at" = now(),
         "wake_owed" = true
     WHERE "session_id" = ${sessionId}::uuid AND "status" = 'RUNNING'
+      -- A remote run (docs/subagent-design.md §10) lives on its target runner, which a takeover of the parent leaves running.
+      AND "target_runner_id" IS NULL
     RETURNING "id"
   `;
   return rows.map((row) => row.id);

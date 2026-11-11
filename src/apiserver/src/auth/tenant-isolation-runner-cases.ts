@@ -737,6 +737,22 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
     + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only '
     + '(runner-api/runner-subagents.controller.ts:303); subagent-fallback.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/subagent-runs/:runId/claim':
+    'the run is read by id and refused 404 unless it is a remote run of the runner\'s own account, 403 '
+    + 'SUBAGENT_RUN_NOT_TARGET unless this runner is its target_runner_id (runner-api/subagent-remote.ts:403); '
+    + 'subagent-remote.pg.spec.ts sends another runner of the account',
+  'POST /runner/subagent-runs/:runId/events':
+    'the same check as the claim (runner-api/subagent-remote.ts:403) before anything is written; subagent-remote.pg.spec.ts '
+    + 'sends the parent\'s runner, another runner of the account and another account\'s runner, and finds no event stored',
+  'PATCH /runner/subagent-runs/:runId':
+    'the same check as the claim (runner-api/subagent-remote.ts:403), then the end is written by (id, the run\'s own session); '
+    + 'subagent-remote.pg.spec.ts sends another runner of the account',
+  'GET /runner/sessions/:id/subagents/:runId/events':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 (runner-api/runner-subagents.controller.ts:153), and the '
+    + 'run is matched by (id, that session) only (runner-api/runner-subagents.controller.ts readRelayedSubagentEvents)',
+  'POST /runner/sessions/:id/subagents/:runId/stop':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 (runner-api/runner-subagents.controller.ts:153), and the '
+    + 'run is matched by (id, that session) only (runner-api/runner-subagents.controller.ts stopRemoteSubagentRun)',
   'POST /runner/tasks/:taskId/owner-confirmation':
     'refused 403 to every caller — the owner\'s own machine included — before the task or anything else is read: only '
     + 'the account owner confirms, through the app (task-owner-confirmation.service.ts:205 → '
@@ -1514,6 +1530,12 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
     reading: 'the whole request, for how it arrived: X-Orbit-Request-Host, X-Orbit-Request-Proto, X-Forwarded-For and '
       + 'X-Real-IP, none of them an id. They choose only the link address the answer names, for this runner\'s own token '
       + '(runner-api/runner-link-token.controller.ts:61, sameOriginLinkUrl in runner-link-token.ts)',
+  },
+  'POST /runner/subagent-runs/:runId/events body events[].payload.*': {
+    reads: [],
+    reading: 'a remote SubAgent child\'s own engine event, stored rewritten for its parent\'s stream: its tool ids '
+      + '(id, toolUseId, parentToolUseId) are the engine\'s keys, prefixed with the run id and nested under the run\'s own '
+      + 'delegate call, never looked up (runner-api/subagent-remote.ts:364)',
   },
   'POST /runner/wiki/repo-ops/:id/result body result.*': {
     reads: [],

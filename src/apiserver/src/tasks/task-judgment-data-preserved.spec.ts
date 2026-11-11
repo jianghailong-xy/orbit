@@ -2923,7 +2923,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0528 adds the nullable approval.subagent_run_id only; no preserved row, trigger or DONE fence change.
       '0528_approval_subagent_run',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
-      '0530_wiki_repo_probe'],
+      '0530_wiki_repo_probe',
+      // 0536 adds five nullable subagent_run columns, an index and the subagent_relay_event table; no preserved row, trigger or DONE fence change.
+      '0536_subagent_run_remote'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

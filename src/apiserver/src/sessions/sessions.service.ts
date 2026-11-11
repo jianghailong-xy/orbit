@@ -5304,7 +5304,11 @@ export class SessionsService {
       select: { assignedRunner: { select: { modelCatalog: true } } },
     });
     if (!session) throw new NotFoundException('session not found');
-    const rows = await this.prisma.subagentRun.findMany({ where: { sessionId: id }, orderBy: { createdAt: 'asc' } });
+    const rows = await this.prisma.subagentRun.findMany({
+      where: { sessionId: id },
+      orderBy: { createdAt: 'asc' },
+      include: { workspace: { select: { name: true } } },
+    });
     if (rows.length === 0) return [];
     // The owner's keys and the shared rows anyone may pick: only their model names are read.
     const providers = await this.prisma.modelProvider.findMany({

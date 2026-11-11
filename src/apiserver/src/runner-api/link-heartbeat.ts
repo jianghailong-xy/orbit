@@ -197,6 +197,16 @@ export const HEARTBEAT_DELIVERIES = {
     writers: ['wiki-worker/wiki-repo-ops.ts#enqueueWikiRepoOp'],
     pending: 'an operation of the runner queued or running',
   },
+  remoteSubagentRuns: {
+    how: 'MARKED',
+    writers: ['runner-api/runner-subagents.controller.ts#openRemoteSubagentRun'],
+    pending: 'a remote SubAgent run of the runner RUNNING: every beat lists it to claim, or to stop once its parent stopped or ended',
+  },
+  stopSubagentRunIds: {
+    how: 'MARKED',
+    writers: ['runner-api/runner-subagents.controller.ts#stopRemoteSubagentRun'],
+    pending: "a remote SubAgent run of the runner RUNNING, whose parent's end is read on every beat (remoteSubagentHeartbeat)",
+  },
   managedSleep: { how: 'FULL_ONLY', reads: 'a managed runner is admitted by RunnerAuthGuard and reconciles in full on every beat' },
   cursorKeyChecks: {
     how: 'IN_PROCESS',
@@ -795,8 +805,8 @@ function diskBytes(value: unknown): string | null {
 /**
  * What a full reconcile left in flight that a beat renews, settles, redelivers or claims — one statement, read after the
  * reconcile: a merge or commit pending on a session of the runner (whichever process holds it), a Codex reset of the
- * runner still active, an integration job or a repository operation of its workspaces queued or running, a relay slot
- * of its own in flight. Any of them keeps the runner reconciling in full on every beat, as it would over HTTPS.
+ * runner still active, an integration job or a repository operation of its workspaces queued or running, a remote
+ * SubAgent run it is the target of still RUNNING, a relay slot of its own in flight. Any of them keeps the runner reconciling in full on every beat, as it would over HTTPS.
  */
 export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$queryRaw'>, runnerId: string): Promise<boolean> {
   const rows = await prisma.$queryRaw<Array<{ pending: boolean }>>`
@@ -819,6 +829,10 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
       OR EXISTS (
         SELECT 1 FROM "owner_request_secret" g
          WHERE g."runner_id" = ${runnerId}::uuid AND g."state" IN ('PENDING_DELIVERY', 'REMOVING')
+      )
+      OR EXISTS (
+        SELECT 1 FROM "subagent_run" sr
+         WHERE sr."target_runner_id" = ${runnerId}::uuid AND sr."status" = 'RUNNING'
       )
       OR EXISTS (
         SELECT 1 FROM "wiki_repo_op" o
@@ -852,6 +866,8 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || (answer.artifactRequests?.length ?? 0) > 0
     || (answer.integrationJobs?.length ?? 0) > 0
     || (answer.wikiRepoOps?.length ?? 0) > 0
+    || (answer.remoteSubagentRuns?.length ?? 0) > 0
+    || (answer.stopSubagentRunIds?.length ?? 0) > 0
     || (answer.cursorKeyChecks?.length ?? 0) > 0
     || (answer.secretGrantsRemoving?.length ?? 0) > 0
     || answer.loginRequest !== undefined

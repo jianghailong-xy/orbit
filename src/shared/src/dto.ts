@@ -1151,6 +1151,12 @@ export interface StorageBudget {
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
+  /** Remote SubAgent runs this runner is the target of and has not claimed (docs/subagent-design.md §10.2):
+   *  claim each with POST /runner/subagent-runs/:runId/claim. Absent when there are none. */
+  remoteSubagentRuns?: string[];
+  /** Remote SubAgent runs on this runner to stop, because their parent stopped them or ended (§10.3): stop the
+   *  child (10 s grace, then kill) and report STOPPED. Absent when there are none. */
+  stopSubagentRunIds?: string[];
   /** Supervised sessions that no longer belong to this exact runner process.
    *  Kept separate from durable user cancellation: a cold supervisor detaches
    *  without finalizing, while active/warm engines observe their endpoint fence. */
@@ -2131,6 +2137,17 @@ export interface SubagentDecision {
   /** What it runs on instead while `applied` is false: the parent's model and effort. Absent on older rows. */
   runModel?: string | null;
   runEffort?: string | null;
+  /** The workspace a remote SubAgent runs on (§10.1) and why it was chosen. Absent for one on the parent's machine. */
+  workspace?: SubagentWorkspaceChoice;
+}
+
+/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
+export interface SubagentWorkspaceChoice {
+  /** The workspace's id, as the runner has it (a UUID). */
+  id: string;
+  name: string;
+  /** How it was chosen, English: named by the call, or the capabilities it was asked to have. */
+  reason: string;
 }
 
 /** One engine, provider, model and effort a SubAgent may run on. */
@@ -2192,6 +2209,8 @@ export interface SubagentRunView {
   costUsd: number;
   /** What it handed back, truncated: the result of a background run, whose call only returned its receipt. */
   resultSummary: string | null;
+  /** The workspace a remote SubAgent ran on, which the block names as `on <workspace>`; null on the parent's machine. */
+  workspaceName: string | null;
   createdAt: string;
   endedAt: string | null;
 }
@@ -2220,6 +2239,12 @@ export interface SubagentRunCreateRequest {
   permissionMode?: string;
   /** The delegate call's description, which the wake for the run's end names. */
   description?: string;
+  /** A workspace to run on, by name (§10.1 row 1): another workspace of the parent's repository. */
+  workspace?: string;
+  /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1 row 2): the call's and its definition's. */
+  needs?: string[];
+  /** The brief. Sent for a call that may run remotely: the target runner needs it, the parent's machine has it. */
+  prompt?: string;
 }
 
 export interface SubagentRunCreateResponse {
@@ -2228,6 +2253,59 @@ export interface SubagentRunCreateResponse {
   decision: SubagentDecision;
   /** How to run the child: the same shape a session claim hands the runner. */
   exec: AgentExecConfig;
+}
+
+/**
+ * The answer for a delegate call that runs on another workspace (§10): no `exec`, because the parent's machine
+ * runs nothing and the target's credential never reaches it. The parent reads the run's events from
+ * `GET /runner/sessions/:id/subagents/:runId/events` and its end from the run.
+ */
+export interface SubagentRemoteRunCreateResponse {
+  runId: string;
+  status: SubagentRunStatus;
+  decision: SubagentDecision;
+  remote: { workspaceId: string; workspaceName: string };
+}
+
+/** A remote SubAgent run as its target runner claims it (§10.2): what to run, where, and how. */
+export interface RemoteSubagentClaim {
+  runId: string;
+  /** The parent session; events and cards of the run are written under it. */
+  sessionId: string;
+  /** The delegate call: the parent's events nest under it. */
+  toolUseId: string;
+  workspaceId: string;
+  /** The target workspace's work dir, which the runner makes a temporary detached worktree of. */
+  workDir: string | null;
+  type: string;
+  definitionSource: string;
+  description: string | null;
+  background: boolean;
+  prompt: string;
+  /** How to run the child: the target workspace's own default engine and model, as a session claim hands it. */
+  exec: AgentExecConfig;
+}
+
+/** One child event the target runner relays (§10.3), numbered by the run from 1. */
+export interface RemoteSubagentEvent {
+  seq: number;
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+export interface RemoteSubagentEventBatch {
+  events: RemoteSubagentEvent[];
+}
+
+/**
+ * The relayed events as the parent's runner reads them, in seq order and already rewritten: nested under the
+ * delegate call (`parentToolUseId`), every child tool id prefixed with the run id. The parent's runner emits them
+ * into its own stream, which it numbers. `status` is the run's, so a reader knows when no more will come.
+ */
+export interface RemoteSubagentEventsPage {
+  events: RemoteSubagentEvent[];
+  status: SubagentRunStatus;
+  resultSummary: string | null;
 }
 
 /**

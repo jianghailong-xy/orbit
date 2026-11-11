@@ -233,6 +233,7 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 import { fileSubagentWake, interruptOrphanedSubagentRuns } from './subagent-wake';
+import { remoteSubagentHeartbeat } from './subagent-remote';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
@@ -2244,6 +2245,15 @@ export class RunnerApiController {
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: repository operations skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
     }
+    // Remote SubAgent runs this runner is the target of (docs/subagent-design.md §10.2, §10.3): the ones to claim —
+    // none to a draining process, whose successor takes them — and the claimed ones whose parent stopped or ended.
+    // Reads only, on its own try: a failure costs this beat's lists, and the next beat lists them again.
+    let remoteSubagents: Awaited<ReturnType<typeof remoteSubagentHeartbeat>> = { remoteSubagentRuns: [], stopSubagentRunIds: [] };
+    try {
+      remoteSubagents = await remoteSubagentHeartbeat(this.prisma, runner.id);
+    } catch (error) {
+      this.logger.warn(`runner ${runner.id}: remote SubAgent runs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
     // edge counts — 'unknown' means the probe couldn't answer, which is not a claim of a sign-out,
@@ -2573,6 +2583,9 @@ export class RunnerApiController {
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
+      // Present only while this runner has remote SubAgent runs to claim or to stop.
+      ...(!draining && remoteSubagents.remoteSubagentRuns.length > 0 ? { remoteSubagentRuns: remoteSubagents.remoteSubagentRuns } : {}),
+      ...(remoteSubagents.stopSubagentRunIds.length > 0 ? { stopSubagentRunIds: remoteSubagents.stopSubagentRunIds } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
       // Only to a managed instance whose volume the channel has measured: every other runner's response keeps its shape.
@@ -5543,7 +5556,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body(PublicIdPipe.forFields('subagentRunId')) dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const session = await this.assertSessionOrSubagentTarget(sessionId, runner, dto.subagentRunId);
     // Stripped before the lookup, not only before the write, so a retry finds the row the first
     // call created: the idempotency key and the column it was stored in have to agree.
     const toolUseId = stripNul(dto.toolUseId);
@@ -5791,7 +5804,8 @@ export class RunnerApiController {
     /** A link call reads the decision once and answers (wait=0): a hint says when there is one. */
     @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<ApprovalDecisionResponse> {
-    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const card = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId }, select: { subagentRunId: true } });
+    await this.assertSessionOrSubagentTarget(sessionId, runner, card?.subagentRunId ?? undefined);
     const deadline = Date.now() + (link ? 0 : APPROVAL_LONG_POLL_MS);
     for (;;) {
       const a = await this.prisma.approval.findFirst({
@@ -10523,6 +10537,32 @@ export class RunnerApiController {
       select: { sessionKind: true },
     });
     if (landing) assertEngineSessionRow(landing);
+  }
+
+  /**
+   * A card's door: the runner hosting the session, or — for a card a remote SubAgent's child asks under its parent
+   * (docs/subagent-design.md §10.3) — the run's target runner, for a run of this session and this account only.
+   */
+  private async assertSessionOrSubagentTarget(sessionId: string, runner: { id: string }, subagentRunId?: string) {
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    let runId: string | null = null;
+    try {
+      runId = subagentRunId ? toUuid(stripNul(subagentRunId).trim()) : null;
+    } catch {
+      runId = null;
+    }
+    if (runId && ownerId) {
+      const run = await this.prisma.subagentRun.findFirst({
+        where: { id: runId, sessionId, ownerId, targetRunnerId: runner.id },
+        select: { id: true },
+      });
+      const session = run ? await this.prisma.session.findUnique({ where: { id: sessionId } }) : null;
+      if (session && session.ownerId === ownerId) {
+        assertEngineSessionRow(session);
+        return session;
+      }
+    }
+    return this.assertSessionOwnership(sessionId, runner.id, ownerId);
   }
 
   private async assertSessionOwnership(sessionId: string, runnerId: string, ownerId?: string) {
