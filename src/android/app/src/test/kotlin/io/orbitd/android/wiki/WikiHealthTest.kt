@@ -31,17 +31,82 @@ class WikiHealthTest {
             // The whole maintenance part: the look's parts, and — while the server runs the wiki — its reason (P9).
             val parts = WikiHealthLogic.parts(health, now)
             if (!health.serverExecutes) assertEquals("$name: a read without the executor says the look alone", WikiHealthLogic.parts(health.maintenance, now), parts)
-            val expected = case.jsonObject.getValue("parts").jsonArray.map { it.jsonObject }
-            assertEquals(name, expected.map { it.string("text") }, parts.map { it.text })
-            assertEquals("$name: tones", expected.map { it.string("tone") }, parts.map { it.tone.name.lowercase() })
-            assertEquals("$name: marks", expected.map { it.string("mark") }, parts.map { it.mark.name.lowercase() })
-            assertEquals("$name: links", expected.map { it.string("link") }, parts.map { it.link.name.lowercase() })
-            assertEquals("$name: weight", expected.map { it.getValue("strong").jsonPrimitive.boolean }, parts.map { it.strong })
+            assertParts(name, case.jsonObject.getValue("parts").jsonArray, parts)
             assertEquals(name, case.string("text"), WikiHealthLogic.text(parts))
-            // The whole line under the title: every active entry the read counts, the anchors, then maintenance.
+            // A phone's line: the repository's short words, and the whole line under the title ends with it.
+            val narrow = WikiHealthLogic.parts(health, now, narrow = true)
+            assertParts("$name (narrow)", case.jsonObject.getValue("narrowParts").jsonArray, narrow)
+            assertEquals("$name (narrow)", case.string("narrowText"), WikiHealthLogic.text(narrow))
+            assertTrue("$name: the line ends with the phone's text", case.string("line").endsWith(" · ${case.string("narrowText")}"))
+            // The whole line under the title — a phone's: every active entry the read counts, the anchors, then maintenance.
             val home = WikiHomeContent(space, listOf(space), emptyList(), emptyList(), health = health)
             assertEquals("$name: the line under the title", case.string("line"), home.statusLine(now))
         }
+    }
+
+    private fun assertParts(name: String, expected: JsonArray, parts: List<WikiStatusPart>) {
+        val rows = expected.map { it.jsonObject }
+        assertEquals(name, rows.map { it.string("text") }, parts.map { it.text })
+        assertEquals("$name: tones", rows.map { it.string("tone") }, parts.map { it.tone.name.lowercase() })
+        assertEquals("$name: marks", rows.map { it.string("mark") }, parts.map { it.mark.name.lowercase() })
+        assertEquals("$name: links", rows.map { it.string("link") }, parts.map { it.link.name.lowercase() })
+        assertEquals("$name: weight", rows.map { it.getValue("strong").jsonPrimitive.boolean }, parts.map { it.strong })
+        assertEquals("$name: hints", rows.map { it["hint"]?.jsonPrimitive?.contentOrNull }, parts.map { it.hint })
+    }
+
+    private val cases get() = fixture.getValue("cases").jsonArray.map { it.jsonObject }
+    private fun health(case: JsonObject) = WikiSpaceHealth.decode(case.getValue("health"))
+    private fun byTier(tier: String) = cases.map(::health).first { it.repo?.tier == tier && it.maintenance.look == "ok" }
+
+    @Test fun theFixtureCoversEveryRepositoryTier() {
+        assertEquals(setOf("git", "folder", "sessions", "wrong_repository"), cases.mapNotNull { health(it).repo?.tier }.toSet())
+    }
+
+    /** Design §7.2, mock 44 ⑤: nothing on git; the folder grey to Settings, its cost in the hint; amber while the code
+     * checks wait, red for another repository's folder or a refused credential, Fix in Settings last. */
+    @Test fun theRepositoryPartSaysTheTier() {
+        val git = byTier("git")
+        assertEquals(emptyList<WikiStatusPart>(), WikiHealthLogic.repoParts(git, false))
+        assertEquals(WikiHealthLogic.parts(git.maintenance, now), WikiHealthLogic.parts(git, now))
+
+        assertEquals(listOf(WikiStatusPart("Reading the folder, not git", WikiStatusPart.Tone.MUTED, link = WikiStatusPart.Link.SETTINGS,
+            hint = "Commit anchors are not checked: ~/work/app is not a git checkout.")), WikiHealthLogic.repoParts(byTier("folder"), false))
+        assertEquals(listOf("Reading the folder"), WikiHealthLogic.repoParts(byTier("folder"), true).map { it.text })
+
+        val sessions = WikiHealthLogic.parts(byTier("sessions"), now)
+        assertEquals(WikiStatusPart("Code checks paused: ~/work/app was not found on MacBook", WikiStatusPart.Tone.WARN,
+            WikiStatusPart.Mark.DOT, strong = true), sessions[sessions.size - 2])
+        assertEquals(WikiStatusPart(WikiHealthCopy.repoFix, link = WikiStatusPart.Link.SETTINGS), sessions.last())
+        val wrong = WikiHealthLogic.parts(byTier("wrong_repository"), now)
+        assertEquals("~/work/app is a clone of github.com/x/y, not this wiki's repository", wrong[wrong.size - 2].text)
+        assertEquals(WikiStatusPart.Tone.ERROR, wrong[wrong.size - 2].tone)
+        val refused = cases.map(::health).first { it.repo?.reason == "fetch_refused" }
+        assertEquals(WikiStatusPart.Tone.ERROR, WikiHealthLogic.repoParts(refused, false).first().tone)
+        // Fix in Settings goes after the look's own link: View run stays where the look puts it.
+        val failing = cases.map(::health).first { it.repo?.tier == "sessions" && it.maintenance.look == "failing" }
+        assertEquals(listOf("Code checks paused: ~/work/app was not found on MacBook", "View run", WikiHealthCopy.repoFix),
+            WikiHealthLogic.parts(failing, now).map { it.text }.takeLast(3))
+
+        // A phone says the short words alone; nothing while maintenance is off.
+        assertEquals(listOf("Code checks paused"), WikiHealthLogic.repoParts(byTier("sessions"), true).map { it.text })
+        assertEquals(listOf("Wrong folder"), WikiHealthLogic.repoParts(byTier("wrong_repository"), true).map { it.text })
+        val off = byTier("sessions").let { it.copy(maintenance = it.maintenance.copy(enabled = false)) }
+        assertEquals(emptyList<WikiStatusPart>(), WikiHealthLogic.repoParts(off, false))
+    }
+
+    /** The offline runner is said once: as the reason the code checks wait, not again as the server's reason. */
+    @Test fun theOfflineRunnerIsSaidOnce() {
+        val offline = cases.map(::health).first { it.repo?.tier == "sessions" && it.repo?.reason == "runner_offline" }
+        assertNull(WikiHealthLogic.serverReason(offline))
+        assertEquals(1, Regex("Waiting for the runner to come online").findAll(WikiHealthLogic.text(WikiHealthLogic.parts(offline, now))).count())
+    }
+
+    /** A read from a control plane older than the tiers names none, and the line says nothing of the repository. */
+    @Test fun aReadWithoutATierSaysNothingOfTheRepository() {
+        val read = WikiSpaceHealth.decode(Wire.json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"ok","enabled":true},
+            "repo":{"look":"ready","pending":0}}"""))
+        assertNull(read.repo?.tier)
+        assertEquals(emptyList<WikiStatusPart>(), WikiHealthLogic.repoParts(read, false))
     }
 
     @Test fun noHealthReadAndAnUnknownLookDrawNothingOfMaintenance() {

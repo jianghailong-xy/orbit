@@ -19,6 +19,7 @@ import {
   wikiModelTone,
   wikiRunFootText,
   wikiRunRow,
+  wikiRunTier,
   wikiSystemModelLabel,
   type WikiCallRow,
 } from './wikiRuns';
@@ -60,6 +61,7 @@ interface Fixture {
     columns: string[];
     durations: Array<{ seconds: number; says: string }>;
     cases: Array<{ name: string; job: WikiJobView; kind: string; mark: string; tone: string; state: string; text: string; when: string; foot: string }>;
+    tiers: Array<{ name: string; repo: WikiJobView['repo']; tier: string | null; tone: string | null; reason: string | null }>;
     calls: Array<{ name: string; call: WikiJobCallView; row: WikiCallRow }>;
   };
 }
@@ -83,6 +85,14 @@ describe('a run\'s row says the fixture\'s words', () => {
       const row = wikiRunRow(one.job, now);
       expect(row).toEqual({ kind: one.kind, mark: one.mark, tone: one.tone, state: one.state, text: one.text, when: one.when });
       expect(wikiRunFootText(one.job)).toBe(one.foot);
+    });
+  }
+
+  // What a maintenance run read of the repository, as a tag on its row (docs/wiki-repo-tiers-design.md §7.4).
+  for (const one of shared.runs.tiers) {
+    it(`tags the tier: ${one.name}`, () => {
+      const said = wikiRunTier({ repo: one.repo });
+      expect(said).toEqual(one.tier === null ? null : { tier: one.tier, tone: one.tone, reason: one.reason });
     });
   }
 

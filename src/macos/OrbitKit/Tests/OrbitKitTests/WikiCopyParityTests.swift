@@ -111,6 +111,7 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_SECTION_USED", WikiCopy.whereUsed),
             ("WIKI_SECTION_HISTORY", WikiCopy.history),
             ("WIKI_ANCHORS_NOTE", WikiCopy.anchorsNote),
+            ("WIKI_ANCHOR_DEFERRED", WikiCopy.anchorDeferred),
             ("WIKI_NO_USE_YET", WikiCopy.noUseYet),
             ("WIKI_ACTION_EDIT", WikiCopy.edit),
             ("WIKI_ACTION_SUPERSEDE", WikiCopy.supersede),

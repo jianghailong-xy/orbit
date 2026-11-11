@@ -247,11 +247,14 @@ public struct WikiAnchor: Codable, Equatable, Sendable {
     public let expectedExit: Int?
     public let ref: String?
     public let check: Check?
+    /// A code anchor learned when no code could be read, held to no tree yet (contract `anchorRules.deferred`);
+    /// its first check drops it.
+    public let deferred: Bool?
 
     public init(type: WikiAnchorType?, path: String? = nil, symbol: String? = nil,
                 regionSha256: String? = nil, sha: String? = nil, criterionId: String? = nil,
                 semanticHash: String? = nil, contentHash: String? = nil, command: String? = nil,
-                expectedExit: Int? = nil, ref: String? = nil, check: Check? = nil) {
+                expectedExit: Int? = nil, ref: String? = nil, check: Check? = nil, deferred: Bool? = nil) {
         self.type = type
         self.path = path
         self.symbol = symbol
@@ -264,6 +267,7 @@ public struct WikiAnchor: Codable, Equatable, Sendable {
         self.expectedExit = expectedExit
         self.ref = ref
         self.check = check
+        self.deferred = deferred
     }
 }
 

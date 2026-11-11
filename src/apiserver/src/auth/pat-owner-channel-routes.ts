@@ -69,6 +69,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/verifications/reopen',
   'POST /wiki/spaces/:id/workspaces',
   'DELETE /wiki/spaces/:id/workspaces/:workspaceId',
+  // The maintenance settings' probe and Check again and run now (docs/wiki-repo-tiers-design.md §7.3).
+  'POST /wiki/spaces/:id/maintenance/probe',
+  'POST /wiki/spaces/:id/maintenance/run',
   'DELETE /wiki/spaces/:id',
   'POST /wiki/spaces/:id/restore',
   'DELETE /wiki/spaces/:id/purge',

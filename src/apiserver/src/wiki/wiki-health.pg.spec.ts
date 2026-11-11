@@ -9,6 +9,10 @@
  *      racing on the row still tell the owner once;
  *   2. a run that succeeds sets the streak back to zero, and the next streak tells the owner once more,
  *      at its own third failure;
+ *   4. (docs/wiki-repo-tiers-design.md §6, §7.1) a red repository reason three runs in a row tells the owner once, in
+ *      the reason's words — the fourth and fifth tell nobody, a run that could not tell leaves the count, a run that
+ *      reads the repository sets it back to zero, ends racing tell once — and the read says the tier, the reason, its
+ *      sentence and when it was checked;
  *   3. another account reads nothing of the space: its health is the plain 404, its own failing runs
  *      ring its own owner's phone and nobody else's, and its run's end cannot be told in another's space;
  *
@@ -31,7 +35,7 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
-import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_RULES, toUuid, uuidToBase62 } from '@orbit/shared';
+import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_RULES, WIKI_REPO_LOOKS, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -61,6 +65,15 @@ interface Pushed {
   lastError: string | null;
 }
 
+/** What `PushService.notifyWikiRepositoryAttention` was asked to send. */
+interface RepoPushed {
+  ownerId: string;
+  spaceId: string;
+  title: string;
+  runs: number;
+  detail: string;
+}
+
 interface Harness {
   base: string;
   sql: Client;
@@ -68,6 +81,7 @@ interface Harness {
   app: INestApplication;
   bearers: Map<string, string>;
   pushed: Pushed[];
+  repoPushed: RepoPushed[];
   maintenance: WikiMaintenance;
 }
 
@@ -82,6 +96,7 @@ function boot(): Promise<Harness> {
     const prisma = prismaClientFor(URL);
     const bearers = new Map<string, string>();
     const pushed: Pushed[] = [];
+    const repoPushed: RepoPushed[] = [];
     const hub = {
       publishWikiChanged: () => undefined,
       publishForUser: () => undefined,
@@ -90,6 +105,9 @@ function boot(): Promise<Harness> {
     const push = {
       notifyWikiMaintenanceFailing: async (input: Pushed) => {
         pushed.push(input);
+      },
+      notifyWikiRepositoryAttention: async (input: RepoPushed) => {
+        repoPushed.push(input);
       },
     } as unknown as PushService;
     const service = new WikiService(prisma as unknown as PrismaService, hub, push);
@@ -124,7 +142,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, bearers, pushed, maintenance };
+    return { base: await app.getUrl(), sql, prisma, app, bearers, pushed, repoPushed, maintenance };
   })();
   return harness;
 }
@@ -539,4 +557,117 @@ test('another account reads nothing of the space: its health is a 404, and its f
     "another owner's run is answered the plain not-found",
   );
   assert.equal((await readHealth(h, mine)).maintenance.consecutiveFailures, 0);
+});
+
+// ── the repository's half (docs/wiki-repo-tiers-design.md §6, §7.1) ─────────────────────────────────────────────
+
+/** What a run's probe wrote on its row (`WikiMaintainRun.readTier`, migrations 0514 and 0519), as one attempt writes it. */
+async function probed(h: Harness, runId: string, tier: string, reason: string | null, detail: string | null): Promise<void> {
+  await h.prisma.wikiMaintenanceRun.update({
+    where: { id: runId },
+    data: { repoTier: tier, repoReason: reason, repoDetail: detail, repoCheckedAt: new Date() },
+  });
+}
+
+const attentionRuns = async (h: Harness, s: Space): Promise<number> =>
+  (await h.sql.query<{ n: number }>(`SELECT "repo_attention_runs" AS n FROM "wiki_cursor" WHERE "space_id" = $1`, [s.spaceId])).rows[0]!.n;
+
+const repoPushesFor = (h: Harness, s: Space): RepoPushed[] => h.repoPushed.filter((one) => one.spaceId === s.spaceId);
+
+test('a red repository reason three runs in a row tells the owner once, in its words; a run that reads the repository sets the count to zero', { skip }, async () => {
+  const h = await boot();
+  const s = await space(h, 'health-repo', { dailyRunLimit: 48 });
+  const { jobId, runId, expect } = await startRun(h, s);
+  const token = await pageToExpected(h, s, expect);
+  const threshold = WIKI_MAINTENANCE_HEALTH.notifyRepositoryAfterRuns;
+  assert.equal(threshold, 3);
+  const wrong = "~/work/app is a clone of github.com/x/y, not this wiki's repository";
+  // One run's end: its probe found what `tier` and `reason` say, and the run succeeded — a run that reads less than
+  // git is no failure of the run.
+  const run = async (tier: string, reason: string | null, detail: string | null) => {
+    await probed(h, runId, tier, reason, detail);
+    await succeed(h, s, jobId, token);
+  };
+
+  await run('wrong_repository', 'wrong_repository', wrong);
+  await run('wrong_repository', 'wrong_repository', wrong);
+  assert.equal(repoPushesFor(h, s).length, 0, 'two runs tell nobody');
+  assert.equal(await attentionRuns(h, s), 2);
+  const two = await readHealth(h, s);
+  assert.equal(two.maintenance.look, 'ok', 'the runs succeeded: the maintenance part is unchanged');
+  assert.equal(two.maintenance.consecutiveFailures, 0);
+  assert.ok((WIKI_REPO_LOOKS as readonly string[]).includes(two.repo.look), `look is kept as it was: ${two.repo.look}`);
+  assert.equal(two.repo.tier, 'wrong_repository');
+  assert.equal(two.repo.reason, 'wrong_repository');
+  assert.equal(two.repo.detail, wrong);
+  assert.ok(Math.abs(Date.parse(two.repo.checkedAt) - Date.now()) < 60_000, `checkedAt is when the probe read it: ${two.repo.checkedAt}`);
+
+  await run('wrong_repository', 'wrong_repository', wrong);
+  assert.deepEqual(repoPushesFor(h, s), [{
+    ownerId: s.owner.id,
+    spaceId: s.spaceId,
+    title: 'health-repo space',
+    runs: threshold,
+    detail: wrong,
+  }], 'the third run tells the owner, once, in the reason\'s words');
+  assert.equal(h.pushed.filter((one) => one.spaceId === s.spaceId).length, 0, 'and not as a failing streak: no run failed');
+
+  await run('wrong_repository', 'root_mismatch', "~/work/app does not share this wiki's first commit");
+  await run('wrong_repository', 'path_overlap', '~/work/app shares few files with the last snapshot');
+  assert.equal(repoPushesFor(h, s).length, 1, 'the fourth and fifth red runs tell nobody — any red reason counts in the streak');
+  assert.equal(await attentionRuns(h, s), 5);
+
+  // A run that could not tell — the folder missing, an amber reason — leaves the count where it was.
+  await run('sessions', 'not_found', '~/work/app was not found on MacBook');
+  assert.equal(await attentionRuns(h, s), 5, 'an amber reason neither counts nor ends the streak');
+  assert.equal(repoPushesFor(h, s).length, 1);
+  const amber = await readHealth(h, s);
+  assert.deepEqual([amber.repo.tier, amber.repo.reason, amber.repo.detail], ['sessions', 'not_found', '~/work/app was not found on MacBook']);
+
+  // The owner fixes the folder: a run reads the repository, and the count is zero again.
+  await run('git', null, null);
+  assert.equal(await attentionRuns(h, s), 0, 'a run that reads the repository sets the count back to zero');
+  const fixed = await readHealth(h, s);
+  assert.deepEqual([fixed.repo.tier, fixed.repo.reason, fixed.repo.detail], ['git', null, null]);
+
+  // The next streak is a streak of its own — a refused credential is red too — told once more, at its own third run.
+  const refused = 'The git remote refused the credentials on MacBook';
+  await run('sessions', 'fetch_refused', refused);
+  await run('sessions', 'fetch_refused', refused);
+  assert.equal(repoPushesFor(h, s).length, 1);
+  await run('sessions', 'fetch_refused', refused);
+  assert.equal(repoPushesFor(h, s).length, 2, 'the new streak\'s third run tells the owner again');
+  assert.equal(repoPushesFor(h, s)[1]!.detail, refused);
+
+  // The folder tier reads the repository too: zero again. Then ends racing on the row each count, and only the one
+  // that reads the threshold back tells.
+  await run('folder', null, '~/work/app is not a git checkout');
+  assert.equal(await attentionRuns(h, s), 0, 'a run on the folder tier read the repository');
+  await probed(h, runId, 'wrong_repository', 'wrong_repository', wrong);
+  await Promise.all(Array.from({ length: 5 }, () => succeed(h, s, jobId, token)));
+  assert.equal(await attentionRuns(h, s), 5, 'every racing end counted');
+  assert.equal(repoPushesFor(h, s).length, 3, 'and the streak told the owner exactly once');
+  assert.equal(repoPushesFor(h, s)[2]!.runs, threshold);
+});
+
+test('the repository\'s half of the read: null before any probe, and a run from before its sentence said from its reason', { skip }, async () => {
+  const h = await boot();
+  const s = await space(h, 'health-repo-read', { dailyRunLimit: 48 });
+  const before = await readHealth(h, s);
+  assert.deepEqual([before.repo.tier, before.repo.reason, before.repo.detail, before.repo.checkedAt], [null, null, null, null],
+    'a space no run has probed reads null throughout');
+  assert.ok('look' in before.repo && 'workspace' in before.repo && 'pending' in before.repo, 'and its look is kept for older clients');
+
+  const { runId } = await startRun(h, s);
+  // A run whose probe wrote its tier and reason before 0519 wrote their sentence: said from the reason, checked when
+  // its latest attempt started.
+  await h.prisma.wikiMaintenanceRun.update({ where: { id: runId }, data: { repoTier: 'sessions', repoReason: 'not_found', repoDetail: null, repoCheckedAt: null } });
+  const row = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { id: runId }, select: { lastStartedAt: true } });
+  const old = await readHealth(h, s);
+  assert.equal(old.repo.tier, 'sessions', 'a run under way that has probed is the one the read says');
+  assert.equal(old.repo.detail, 'The folder was not found');
+  assert.equal(old.repo.checkedAt, row.lastStartedAt!.toISOString());
+  // Another account reads none of it.
+  const other = await account(h, 'health-repo-other');
+  expectStatus(await health(h, s, other), 404, 'another account\'s read of the space');
 });

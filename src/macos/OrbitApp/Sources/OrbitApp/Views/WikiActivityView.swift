@@ -95,7 +95,7 @@ struct WikiActivityPage: View {
                     if let jobs, !jobs.isEmpty {
                         ForEach(jobs) { job in
                             Button { actions.openJob(job.id) } label: {
-                                WikiRunListRow(row: WikiRunsLogic.row(job, now: now))
+                                WikiRunListRow(row: WikiRunsLogic.row(job, now: now), tier: WikiRunsLogic.tier(job))
                             }
                             .buttonStyle(.plain)
                         }
@@ -165,9 +165,17 @@ struct WikiActivityPage: View {
     private func isNew(_ at: String?) -> Bool? { seen.map { WikiSeenLog.isNew(at, seen: $0) } }
 
     /// The status line under the bar (mock 31 ②): what the space holds, the commit its anchors were
-    /// verified at and where maintenance stands, with Set up and View run as links — the home's line.
+    /// verified at and where maintenance stands, with Set up and View run as links — the home's line. A phone says
+    /// the repository's short words (design §7.2); the folder's cost is the line's help on a wide screen.
     private var statusLine: some View {
-        Text(wikiStatusText(content.statusParts(now: now)))
+        #if os(iOS)
+        let narrow = true
+        #else
+        let narrow = false
+        #endif
+        let parts = content.statusParts(now: now, narrow: narrow)
+        return Text(wikiStatusText(parts))
+            .help(parts.compactMap(\.hint).joined(separator: " "))
             .font(.orbitLabel)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
