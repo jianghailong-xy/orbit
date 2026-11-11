@@ -675,8 +675,8 @@ public enum TranscriptRows {
     /// a `!`-shell command the user ran — that one is the user's own line, not a step.
     ///
     /// A picture folds like any other read (owner, 11-11: an agent reading its own screenshot is a
-    /// step, not something to show the reader). Opening the line draws the card, which unfolds
-    /// itself on the image (`ToolCardView.defaultOpen`) and fetches back bytes the server clipped.
+    /// step, not something to show the reader). Opening the line draws the card folded; opening
+    /// the card draws the picture, fetching back bytes the server clipped.
     /// Web parity: `isGroupableTool`.
     /// A sub-agent's own transcript (`TranscriptState.subagentItems`), as the rows its Agent card
     /// draws: the conversation's folding — runs of steps into one line — and nothing else, since a
