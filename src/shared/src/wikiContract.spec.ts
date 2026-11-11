@@ -108,9 +108,24 @@ import {
 import {
   WIKI_REPO_OPS,
   WIKI_REPO_LOOKS,
+  WIKI_REPO_TIERS,
+  WIKI_REPO_TIER_REASONS,
+  WIKI_REPO_PREMISE_REASONS,
+  WIKI_REPO_TRANSIENT_REASONS,
+  WIKI_REPO_WRONG_REPOSITORY_REASONS,
+  WIKI_REPO_ATTENTION_REASONS,
+  WIKI_REPO_PROBE,
+  WIKI_REPO_PROBE_COPY,
+  WIKI_REPO_OP_PROBE_CAPABILITY,
+  wikiRepoFailureReason,
+  wikiRepoReasonIsPremise,
   WIKI_REPO_OP_CAPABILITY,
   WIKI_REPO_OP_KINDS,
   WIKI_REPO_OP_READ_CAPABILITY,
+  WIKI_REPO_OP_FOLDER_CAPABILITY,
+  WIKI_REPO_FOLDER,
+  WIKI_REPO_SNAPSHOT_SOURCES,
+  wikiRepoPathOverlap,
   WIKI_REPO_OP_STATES,
   WIKI_STORED_TEXT_ENCODINGS,
 } from './wikiRepoOps';
@@ -344,6 +359,116 @@ describe('wiki contract', () => {
     expect(repoOps.abandoned.seconds).toBe(WIKI_REPO_OPS.abandonedSeconds);
   });
 
+  it('reads the repository by tier, and a repository that cannot be read is no gate for a maintenance run (repo tiers P1)', () => {
+    const tiers = CONTRACT.repoOps.tiers;
+    expect(tiers.names).toEqual([...WIKI_REPO_TIERS]);
+    expect(tiers.reasons).toMatch(/^repoOps\.reasons:/u);
+    for (const name of WIKI_REPO_TIERS) expect(typeof tiers[name], name).toBe('string');
+    expect(existsSync(path.join(ROOT, tiers.migration)), `${tiers.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, tiers.migration), 'utf8');
+    expect(sql).toContain('"repo_tier" text');
+    expect(sql).toContain('"repo_reason" text');
+    for (const name of WIKI_REPO_TIERS) expect(sql).toContain(`'${name}'`);
+    expect(tiers.recorded).toMatch(/repo_tier and repo_reason/u);
+    const job = CONTRACT.maintenance.job;
+    const steps: string[] = job.run.steps;
+    const at = (name: string) => steps.findIndex((step) => step.startsWith(`${name}`));
+    // The probe is the first step after the context, and it no longer fails the run when the repository cannot be read.
+    expect(at('probe (stoppedAt repo):')).toBe(at('context:') + 1);
+    expect(at('snapshot:')).toBe(-1);
+    expect(steps[at('probe')]).toMatch(/runs on tier sessions/u);
+    expect(steps[at('probe')]).toMatch(/classified by its reason \(repoOps\.reasons\)/u);
+    expect(steps[at('probe')]).toMatch(/as repoOps\.probe says/u);
+    expect(steps[at('extract:')]).toMatch(/from the space's title/u);
+    expect(steps[at('anchors:')]).toMatch(/On tier sessions only the server's anchors \(criterion, record, merge_evidence\)/u);
+    expect(steps[at('docs:')]).toMatch(/docs\.skipped no_repository/u);
+    expect(job.docs.skipped).toContain('no_repository');
+    expect(job.report).toMatch(/repo \{tier, reason\}/u);
+  });
+
+  it('probes a workspace for the settings and runs maintenance at the owner\'s ask (repo tiers P3)', () => {
+    const repoOps = CONTRACT.repoOps;
+    expect(repoOps.probeCapability).toBe(WIKI_REPO_OP_PROBE_CAPABILITY);
+    expect(WIKI_REPO_OP_KINDS).toContain('probe');
+    const runner = readFileSync(path.join(ROOT, 'src/runner-go/wiki_repo_probe.go'), 'utf8');
+    expect(runner).toContain(`const wikiRepoOpProbeCapabilityV1 = "${WIKI_REPO_OP_PROBE_CAPABILITY}"`);
+    expect(repoOps.kindRuns.probe).toMatch(/no fetch, no snapshot/u);
+    expect(repoOps.probe.waitSeconds).toBe(WIKI_REPO_PROBE.waitSeconds);
+    expect(repoOps.probe.maxAttempts).toBe(WIKI_REPO_PROBE.maxAttempts);
+    expect(existsSync(path.join(ROOT, repoOps.probe.migration)), `${repoOps.probe.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, repoOps.probe.migration), 'utf8');
+    expect(sql).toContain(`'anchors', 'probe'`);
+    expect(sql).toContain(`'backlog', 'age', 'owner'`);
+    const maintenance = CONTRACT.maintenance;
+    expect(maintenance.probe.route).toBe('POST /api/wiki/spaces/:id/maintenance/probe');
+    expect(maintenance.run.route).toBe('POST /api/wiki/spaces/:id/maintenance/run');
+    for (const words of [WIKI_REPO_PROBE_COPY.folderTitle, WIKI_REPO_PROBE_COPY.folderNote, WIKI_REPO_PROBE_COPY.pausedNote]) {
+      expect(maintenance.probe.answer).toContain(words);
+    }
+    expect(maintenance.run.answer).toMatch(/WIKI_MAINTENANCE_RUNNING/u);
+    expect(maintenance.run.answer).toMatch(/WIKI_MAINTENANCE_DAILY_LIMIT/u);
+    expect(maintenance.job.trigger.due).toContain('owner');
+    const users: string[] = CONTRACT.agentSurface.doors.user.routes;
+    expect(users).toContain(maintenance.probe.route);
+    expect(users).toContain(maintenance.run.route);
+  });
+
+  it('reads a working directory that is not git as a folder, for a runner that declares it (repo tiers P4)', () => {
+    const repoOps = CONTRACT.repoOps;
+    expect(repoOps.folderCapability).toBe(WIKI_REPO_OP_FOLDER_CAPABILITY);
+    expect(WIKI_REPO_OP_FOLDER_CAPABILITY).toBe('wiki-repo-op-folder/v1');
+    // The runner's twin of the capability and of the exclusions (src/runner-go/wiki_repo_folder.go).
+    const runner = readFileSync(path.join(ROOT, 'src/runner-go/wiki_repo_folder.go'), 'utf8');
+    expect(runner).toContain(`const wikiRepoOpFolderCapabilityV1 = "${WIKI_REPO_OP_FOLDER_CAPABILITY}"`);
+    expect(runner).toContain(`var wikiRepoFolderMaxFiles = ${repoOps.folder.maxFiles}`);
+    for (const pattern of repoOps.folder.exclude) expect(runner, pattern).toContain(`"${pattern}"`);
+    expect(repoOps.folder.exclude).toEqual([...WIKI_REPO_FOLDER.exclude]);
+    expect(repoOps.folder.maxFiles).toBe(WIKI_REPO_FOLDER.maxFiles);
+    expect(repoOps.folder.minPathOverlap).toBe(WIKI_REPO_FOLDER.minPathOverlap);
+    expect(repoOps.folder.treeHash).toMatch(/sha1 of the lines `path NUL size NUL sha256\(content\) LF`/u);
+    expect(repoOps.kindRuns.snapshot).toMatch(/input\.allowFolder/u);
+    expect(repoOps.tiers.folder).toMatch(/commit anchors are not checked/u);
+    const sql = readFileSync(path.join(ROOT, repoOps.folder.migration), 'utf8');
+    expect(sql).toContain(`"source" text NOT NULL DEFAULT 'git'`);
+    for (const source of WIKI_REPO_SNAPSHOT_SOURCES) expect(sql).toContain(`'${source}'`);
+    expect(CONTRACT.anchorRules.verify.skip).toMatch(/check\.source 'folder'/u);
+    // |new ∩ last| / |last|, and nothing to compare with reads as all of it.
+    expect(wikiRepoPathOverlap(['a', 'b', 'c', 'd'], ['a', 'x'])).toBe(0.25);
+    expect(wikiRepoPathOverlap(['a', 'b'], ['a', 'b', 'c'])).toBe(1);
+    expect(wikiRepoPathOverlap([], ['a'])).toBe(1);
+  });
+
+  it('classifies a repository failure by its reason: a premise is never retried, a transient one up to probe.maxAttempts (repo tiers §6)', () => {
+    const reasons = CONTRACT.repoOps.reasons;
+    expect(reasons.premise).toEqual([...WIKI_REPO_PREMISE_REASONS]);
+    expect(reasons.transient).toEqual([...WIKI_REPO_TRANSIENT_REASONS]);
+    expect(reasons.wrongRepository).toEqual([...WIKI_REPO_WRONG_REPOSITORY_REASONS]);
+    expect([...WIKI_REPO_TIER_REASONS]).toEqual([...reasons.premise, ...reasons.transient]);
+    // Every readiness that is not ready is a premise, and every wrong-repository reason is one too.
+    for (const look of WIKI_REPO_LOOKS.filter((one) => one !== 'ready')) expect(reasons.premise, look).toContain(look);
+    for (const reason of reasons.wrongRepository) expect(reasons.premise, reason).toContain(reason);
+    expect(CONTRACT.repoOps.probe.maxAttempts).toBe(WIKI_REPO_PROBE.maxAttempts);
+    expect(WIKI_REPO_PROBE.maxAttempts).toBe(3);
+    for (const reason of WIKI_REPO_PREMISE_REASONS) expect(wikiRepoReasonIsPremise(reason), reason).toBe(true);
+    for (const reason of WIKI_REPO_TRANSIENT_REASONS) expect(wikiRepoReasonIsPremise(reason), reason).toBe(false);
+
+    // A reason the runner names wins; one the contract does not know is read from the words, and then op_failed.
+    expect(wikiRepoFailureReason('not_found', 'anything')).toBe('not_found');
+    expect(wikiRepoFailureReason('from_the_future', '/w is not a git checkout: exit status 128')).toBe('not_git');
+    // An old runner's words (runner-go wiki_repo_ops.go wikiRepoOpCheckout, network_git.go, failAbandonedWikiRepoOps).
+    const words: Array<[string, string]> = [
+      ['the operation names no working directory to read the repository in', 'no_work_dir'],
+      ['/w is not a git checkout: exit status 128', 'not_git'],
+      ['the checkout /w is a clone of github.com/x/other, not of the space\'s repository github.com/x/app: nothing was read', 'wrong_repository'],
+      ['the checkout /w does not start from the space\'s first commit bbb: it is another repository behind the same URL, so nothing was read', 'root_mismatch'],
+      ['the snapshot operation could not fetch origin\'s default branch into the checkout /w, so nothing was read: git authentication failed: the remote refused', 'fetch_refused'],
+      ['the snapshot operation could not fetch origin\'s default branch into the checkout /w, so nothing was read: Could not resolve host', 'fetch_failed'],
+      ['the runner\'s claim has been silent since 2026-11-11T05:00:00Z and no answer came: the runner gave up on it or is gone, so it is closed', 'runner_lost'],
+      ['the machine went away', 'op_failed'],
+    ];
+    for (const [error, reason] of words) expect(wikiRepoFailureReason(undefined, error), error).toBe(reason);
+  });
+
   it('ships every closed set exactly as the contract lists it', () => {
     const kinds = Object.entries<{ phase: number }>(CONTRACT.kinds);
     expect(kinds.filter(([, k]) => k.phase === 1).map(([name]) => name)).toEqual([...WIKI_KINDS]);
@@ -442,6 +567,20 @@ describe('wiki contract', () => {
       // A check never reports "unchecked": that is only the state before the first one.
       expect(WIKI_ANCHOR_SPECS[type].states).not.toContain('unchecked');
     }
+  });
+
+  it('lets a code anchor say it is deferred, only as true, and no other anchor say it (anchorRules.deferred)', () => {
+    const valid = (CONTRACT.vectors as Array<{ id: string; draft?: Record<string, unknown> }>).find((v) => v.id === 'decision-valid')!.draft!;
+    const withAnchors = (anchors: unknown[]) => validateWikiEntryDraft({ ...valid, anchors }).map((error) => error.path);
+    expect(withAnchors([{ type: 'path', path: 'src/app.go', deferred: true }, { type: 'commit', sha: 'f'.repeat(40), deferred: true },
+      { type: 'symbol', path: 'src/app.go', symbol: 'main', deferred: true }])).toEqual([]);
+    expect(withAnchors([{ type: 'path', path: 'src/app.go', deferred: false }])).toEqual(['anchors[0].deferred']);
+    expect(withAnchors([{ type: 'record', ref: 'orbit-task:abc', deferred: true }])).toEqual(['anchors[0].deferred']);
+    const deferred = CONTRACT.anchorRules.deferred as string;
+    expect(deferred).toMatch(/deferred: true/u);
+    expect(deferred).toContain('None of its code anchors exist in this repository');
+    expect(deferred).toContain('Not checked yet: the code could not be read when this was learned');
+    expect(CONTRACT.push.eligible.anchorDeferredNot).toMatch(/anchorRules\.deferred/u);
   });
 
   it('ships the effect policy the contract states, and it keeps the design\'s promises', () => {
@@ -1223,6 +1362,13 @@ describe('wiki contract', () => {
     expect(health.notifyNoNotes.afterRuns).toBe(WIKI_MAINTENANCE_HEALTH.notifyNoNotesAfterRuns);
     expect(health.notifyNoNotes.minSessions).toBe(WIKI_MAINTENANCE_HEALTH.notifyNoNotesMinSessions);
     expect(health.notifyNoNotes.once).toMatch(/exactly afterRuns long/u);
+    // The repository's half (docs/wiki-repo-tiers-design.md §6, §7.1): its tier and reason, and the red streak told once.
+    expect(keysOf(health.repo)).toEqual(['look', 'workspace', 'runner', 'pending', 'tier', 'reason', 'detail', 'checkedAt']);
+    expect(health.notifyRepository.afterRuns).toBe(WIKI_MAINTENANCE_HEALTH.notifyRepositoryAfterRuns);
+    expect(health.notifyRepository.reasons).toEqual([...WIKI_REPO_ATTENTION_REASONS]);
+    expect(CONTRACT.repoOps.reasons.premise).toEqual(expect.arrayContaining([...WIKI_REPO_ATTENTION_REASONS]));
+    expect(health.notifyRepository.once).toMatch(/exactly afterRuns/u);
+    expect(health.notifyRepository.reset).toMatch(/back to 0/u);
     // The looks win in the order the contract lists them.
     const now = new Date('2026-09-28T12:00:00.000Z');
     const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
@@ -2205,10 +2351,10 @@ describe('wiki contract', () => {
       id: '', kind: 'verify', state: 'queued', waitingFor: null, priority: 0, attempts: 0, createdAt: '', updatedAt: '',
       startedAt: null, endedAt: null, nextAttemptAt: null, failureKind: null, error: null, ahead: null, progress: null,
       calls: { total: 0, queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0, inputTokens: 0, outputTokens: 0 },
-      nextCall: null, requests: [],
+      nextCall: null, requests: [], repo: null,
     };
     expect(read.job).toEqual(Object.keys(job));
-    expect(keysOf(read.jobRules)).toEqual(['ahead', 'progress', 'calls', 'nextCall', 'requests']);
+    expect(keysOf(read.jobRules)).toEqual(['ahead', 'progress', 'calls', 'nextCall', 'requests', 'repo']);
     const call: WikiJobCallView = {
       id: '', step: '', unit: '', attempt: 1, attempts: 0, state: 'queued', enqueuedAt: '', startedAt: null, endedAt: null,
       inputTokens: null, outputTokens: null, httpStatus: null, error: null, errorKind: null, ahead: null,

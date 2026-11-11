@@ -223,7 +223,10 @@ describe('the home of a wiki with nothing to read', () => {
     await open();
     await press(button('Set up…'));
     await press(button('Turn on', dialog()));
-    expect(writes).toEqual([
+    // The chosen workspace's folder is probed first (docs/wiki-repo-tiers-design.md §7.3); then the one write.
+    const probe = `/api/wiki/spaces/${SPACE_ID}/maintenance/probe`;
+    expect(writes.filter((write) => write.path === probe).map((write) => write.body)).toContainEqual({ workspaceId: US });
+    expect(writes.filter((write) => write.path !== probe)).toEqual([
       { method: 'PATCH', path: `/api/wiki/spaces/${SPACE_ID}`, body: { maintenance: { enabled: true, workspaceId: US, dailyRunLimit: 8, lookbackDays: 14 } } },
     ]);
     expect(document.querySelector('.wk-setup-dialog')).toBeNull();

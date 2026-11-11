@@ -9,6 +9,7 @@ import {
   listShowsFolders,
   moveConfirmAction,
   moveConfirmParagraphs,
+  moveConfirmTitle,
   moveFailureText,
   moveTargetFolders,
   moveTargetFooter,
@@ -142,6 +143,7 @@ const target = (over: Partial<SessionMoveTarget> = {}): SessionMoveTarget => ({
   reason: null,
   conversation: 'continues',
   folders: [],
+  startsCoordinator: false,
   ...over,
 });
 
@@ -155,6 +157,7 @@ const answer = (over: Partial<SessionMoveTargets> = {}): SessionMoveTargets => (
   changedFiles: 0,
   unmergedFiles: 0,
   mergeTarget: null,
+  coordinates: null,
   targets: [target()],
   ...over,
 });
@@ -307,5 +310,21 @@ describe('runWorkspaceMove', () => {
       sleep: noSleep,
     });
     expect(refused).toBe('The session woke up; stop it first.');
+  });
+});
+
+describe('a project’s coordinator in the Move panel', () => {
+  const coordinates = { projectId: 'p1', title: 'Session list redesign' };
+
+  it('says the project goes with it, and what an ended coordinator misses', () => {
+    const a = answer({ coordinates, needsEnd: true, branch: 'b', changedFiles: 3, unmergedFiles: 3, mergeTarget: 'main' });
+    expect(moveConfirmTitle(target({ name: 'orbit-prod' }), a)).toBe('Move the coordinator to orbit-prod?');
+    expect(moveConfirmTitle(target({ name: 'orbit-prod' }), answer())).toBe('Move to orbit-prod?');
+    expect(moveConfirmParagraphs(a, target({ name: 'orbit-prod' }), 'orbit')).toEqual([
+      'The conversation moves with it. Your next message continues it in orbit-prod.',
+      'Session list redesign is coordinated from orbit-prod from now on, and its row moves to orbit-prod’s list. Its tasks keep running where they are.',
+      '3 changed files aren’t merged into main yet. They stay on branch b in orbit.',
+      'The session ends first. Until you message it again, Orbit’s updates for the project wait on the project page.',
+    ]);
   });
 });

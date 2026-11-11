@@ -66,6 +66,19 @@ struct MainView: View {
             refold()
         }
         .onChange(of: columnVisibility) { _, now in
+            #if os(iOS)
+            // A full-screen image viewer coming or going re-picks the split's columns by itself;
+            // that is not the reader's choice, so put back what they had instead of saving it. A
+            // fold the shell wants (a turn to portrait under the viewer) still goes through.
+            if FullScreenCoverHold.shared.holding {
+                let open = folded ? !(wikiChatColumn || portrait) : sidebarVisible
+                let kept: NavigationSplitViewVisibility = open ? .all : .doubleColumn
+                if now != kept {
+                    columnVisibility = kept
+                    return
+                }
+            }
+            #endif
             // Brought back by hand while folded: the reader's again, nothing to restore.
             if now == .all { folded = false }
             if !folded { sidebarVisible = (now == .all) }

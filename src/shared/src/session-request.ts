@@ -1,3 +1,5 @@
+import type { RunQuestionCard } from './orbit-turn-cards';
+
 /**
  * One Orbit session asking another for a reply, as the clients read it
  * (docs/session-request-reply-contract.md §3–§6, P1).
@@ -49,6 +51,12 @@ export interface SessionRequestView {
   excerpt?: string;
   /** RECIPIENT_ENDED: how it ended; UNDELIVERED: what took it off the queue; EXPIRED: the recipient's state. */
   closeReason?: string;
+  /**
+   * A task run's question to its coordinator (`RUN_QUESTION`): its card as it stands now. The card
+   * the turn's echo carries is read when the turn is handed out, before anyone has answered, so a
+   * client draws this one over it — answered, by whom, or passed to the owner.
+   */
+  runQuestion?: RunQuestionCard;
 }
 
 /**

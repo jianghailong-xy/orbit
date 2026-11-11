@@ -257,6 +257,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// `SteerDelivery.failureExplanation`.
     public var deliveryCode: String?
     public var deliveryReason: String?
+    /// This message opened a turn (`TurnOpening`), so the turn's head row is drawn under it. nil on
+    /// a steer, an optimistic bubble not yet echoed, and every message read from a sub-agent.
+    public var opensTurn: TurnOpening?
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
@@ -278,7 +281,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 runNotice: RunNoticeCard? = nil,
                 sessionOpening: SessionOpeningCard? = nil,
                 shell: Bool = false, receipt: Bool = false,
-                deliveryCode: String? = nil, deliveryReason: String? = nil) {
+                deliveryCode: String? = nil, deliveryReason: String? = nil,
+                opensTurn: TurnOpening? = nil) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -313,6 +317,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.receipt = receipt
         self.deliveryCode = deliveryCode
         self.deliveryReason = deliveryReason
+        self.opensTurn = opensTurn
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
@@ -323,7 +328,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         case sessionMessage, externalSender, sessionReplies
         case authoredByOrbit, reviewRequest, reviewReturn, reviewAnswers, withdrawable, shell
         case evidenceReview, evidenceSendBack, runQuestion, runNotice, sessionOpening
-        case receipt, deliveryCode, deliveryReason
+        case receipt, deliveryCode, deliveryReason, opensTurn
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -372,6 +377,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
         receipt = (try? c.decodeIfPresent(Bool.self, forKey: .receipt)) ?? false
         deliveryCode = try? c.decodeIfPresent(String.self, forKey: .deliveryCode)
         deliveryReason = try? c.decodeIfPresent(String.self, forKey: .deliveryReason)
+        // A snapshot from before turn heads existed draws none until the window is re-read.
+        opensTurn = try? c.decodeIfPresent(TurnOpening.self, forKey: .opensTurn)
     }
 }
 

@@ -72,6 +72,12 @@ internal object WikiRunsCopy {
         "worker_not_running" -> "wiki worker not running"; else -> ""
     }
 
+    /** What a maintenance run read of the repository, as its row's tag (`WIKI_RUN_TIER_WORDS`): a run that found another
+     * repository's folder read the sessions alone too. */
+    fun tier(tier: String?) = when (tier) {
+        "git" -> "git"; "folder" -> "folder"; "sessions", "wrong_repository" -> "sessions only"; else -> null
+    }
+
     const val systemModel = "System model"
     /** `System model · qwen3.8-27b-fp8`, or the bare words while no model is named (`wikiSystemModelLabel`). */
     fun systemModelLabel(model: String?) = if (model.isNullOrEmpty()) systemModel else "$systemModel · $model"
@@ -98,6 +104,13 @@ internal data class WikiCallRow(
 ) {
     /** ok: green; warn: amber; error: red; run: blue; muted: grey. */
     enum class Tone { OK, WARN, ERROR, RUN, MUTED }
+}
+
+/** What a maintenance run read of the repository, as a tag on its row (the web's `WikiRunTier`): the tier's words, and
+ * when it read the sessions alone, why. */
+internal data class WikiRunTier(val tier: String, val tone: Tone, val reason: String?) {
+    /** plain: git; muted: the folder; warn: amber, the code checks wait; error: red, somebody has to set the folder right. */
+    enum class Tone { PLAIN, MUTED, WARN, ERROR }
 }
 
 internal object WikiRunsLogic {
@@ -176,6 +189,21 @@ internal object WikiRunsLogic {
                 ago(job.endedAt ?: job.updatedAt))
             else -> WikiRunRow(kind, WikiRunRow.Mark.NONE, WikiRunRow.Tone.MUTED, WikiRunsCopy.cancelled, "",
                 ago(job.endedAt ?: job.updatedAt))
+        }
+    }
+
+    /** The run's tier tag (design §7.4, mock 44 ⑤) — the web's `wikiRunTier`: null for a run that names no tier, any
+     * other kind or one before its probe. */
+    fun tier(job: WikiJob): WikiRunTier? {
+        val repo = job.repo ?: return null
+        val tier = WikiRunsCopy.tier(repo.tier) ?: return null
+        return when (repo.tier) {
+            "git" -> WikiRunTier(tier, WikiRunTier.Tone.PLAIN, null)
+            "folder" -> WikiRunTier(tier, WikiRunTier.Tone.MUTED, null)
+            else -> {
+                val red = repo.tier == "wrong_repository" || WikiHealthCopy.repoNeedsAttention(repo.reason)
+                WikiRunTier(tier, if (red) WikiRunTier.Tone.ERROR else WikiRunTier.Tone.WARN, repo.detail)
+            }
         }
     }
 

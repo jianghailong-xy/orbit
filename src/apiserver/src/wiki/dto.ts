@@ -153,6 +153,13 @@ export class BindWikiWorkspaceDto {
   workspaceId!: string;
 }
 
+/** POST /api/wiki/spaces/:id/maintenance/run (contract `maintenance.run`): `acceptFolder` is `Use this folder`. */
+export class WikiMaintenanceRunDto {
+  @IsOptional()
+  @IsBoolean()
+  acceptFolder?: boolean;
+}
+
 /**
  * POST /api/wiki/spaces/:id/changesets (the owner's own write) and POST /api/runner/wiki/changesets
  * (an agent's proposal). One body, because it is one entry point underneath (§4.1).
