@@ -86,10 +86,15 @@ final class WikiChatWiringTests: XCTestCase {
         // The chat as a column makes the Wiki directory, page and chat (design §9's third column): the source list
         // folds while it is open, so the page keeps its width, and comes back as it was — never saved as the reader's.
         let shell = try slice(main, from: "struct MainView: View {", to: "private var sidebar: some View {")
-        assertOrder(shell, [".onChange(of: columnVisibility) { _, now in", "if now == .all { foldedForChat = false }",
-                            "if !foldedForChat { sidebarVisible = (now == .all) }", ".onChange(of: wikiChatColumn) { _, open in",
-                            "if open, columnVisibility == .all {\n                foldedForChat = true\n                columnVisibility = .doubleColumn",
-                            "} else if !open, foldedForChat {\n                columnVisibility = .all",
+        // An iPad window taller than wide folds it the same way (three columns leave the detail too narrow), and it
+        // comes back on the turn back to landscape — macOS keeps its source list.
+        assertOrder(shell, ["#if os(iOS)\n        .onGeometryChange(for: Bool.self) { $0.size.width < $0.size.height } action: { now in",
+                            "portrait = now\n            refold()\n        }\n        #endif",
+                            ".onChange(of: columnVisibility) { _, now in", "if now == .all { folded = false }",
+                            "if !folded { sidebarVisible = (now == .all) }", ".onChange(of: wikiChatColumn) { _, _ in refold() }",
+                            "let wantsFold = wikiChatColumn || portrait",
+                            "if wantsFold, columnVisibility == .all {\n            folded = true\n            columnVisibility = .doubleColumn",
+                            "} else if !wantsFold, folded {\n            columnVisibility = .all",
                             "guard model.selectedSection == .wiki, let chat = model.wikiChat else { return false }",
                             "return chat.presented && !chat.asSheet"], "the source list beside the chat's column")
     }
