@@ -53,6 +53,8 @@ struct UserTurnRow: View {
     /// The words of a message that never reached the engine, back in the composer: nil unless
     /// `SteerDelivery.offersPutBack` says so and there is a console to act through.
     var putBack: (() -> Void)? = nil
+    /// The item a record link or a search hit asked for: this turn's long message opens if it is that one.
+    @Environment(\.revealedItemID) private var revealedItemID
 
     var body: some View {
         let b = bubble
@@ -80,7 +82,8 @@ struct UserTurnRow: View {
         if let card = b.sessionMessage {
             SessionMessageCardView(card: card, text: b.text, ts: b.ts,
                                    undelivered: undelivered,
-                                   attached: b.attached, onCancelQueued: cancel)
+                                   attached: b.attached, onCancelQueued: cancel,
+                                   revealed: revealedItemID == b.id)
         } else if let card = b.itemCard {
             // The note the same turn carried rides inside the card (`b.attached`): nobody typed
             // this turn either, so the control plane's words do not go back into a bubble in the

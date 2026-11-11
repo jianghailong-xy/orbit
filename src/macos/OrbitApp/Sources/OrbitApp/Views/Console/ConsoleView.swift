@@ -856,6 +856,8 @@ struct TranscriptView: View {
         // The ended questions this conversation holds: a turn handing one's answer to the coordinator
         // is that question's card — in the transcript and on the queue alike (`OwnerAnswerLineView`).
         .environment(\.answeredQuestions, console.answeredQuestions)
+        // The item a record link or a search hit asked for: a long message from another session opens to it.
+        .environment(\.revealedItemID, console.revealedItemID)
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the

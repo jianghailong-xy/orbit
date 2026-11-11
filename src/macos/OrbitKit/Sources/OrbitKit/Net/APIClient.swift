@@ -1094,9 +1094,14 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// Replace the project's coordinator conversation with an empty one. On a conversation that is
-    /// still open the server completes it first — the caller asks before pressing this.
-    public func replaceProjectCoordinator(_ projectID: String) async throws -> ProjectCoordinatorOpened {
-        try await postEmpty("projects/\(projectID)/coordinator/replace")
+    /// still open the server completes it first — the caller asks before pressing this. A workspace
+    /// named opens the new one there, and the project is coordinated from it afterwards; none keeps
+    /// the one the project is coordinated in, with no body, as before.
+    public func replaceProjectCoordinator(_ projectID: String,
+                                          workspaceID: String? = nil) async throws -> ProjectCoordinatorOpened {
+        guard let workspaceID else { return try await postEmpty("projects/\(projectID)/coordinator/replace") }
+        return try await post("projects/\(projectID)/coordinator/replace",
+                              body: ReplaceProjectCoordinatorRequest(workspaceId: workspaceID))
     }
 
     /// Lift a task list's pause, so its otherwise-ready tasks can run.

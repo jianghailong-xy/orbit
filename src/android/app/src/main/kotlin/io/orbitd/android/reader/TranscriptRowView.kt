@@ -257,6 +257,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
             val words = if (shown.type == "user") shown.personWords() else shown.body()
             if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
+            // Another session's words are the turn's point: shown under its card, their first lines when long (SessionMessageBody).
+            else if (shown.type == "user" && shown.fields["sessionMessage"] is JsonObject && words.isNotBlank())
+                SessionMessageBody(words, open, revealed = highlighted)
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"

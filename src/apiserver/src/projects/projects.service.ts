@@ -4373,11 +4373,16 @@ export class ProjectsService {
    * AFTER the landing is resolved, so a project that could not have opened a replacement anywhere
    * does not lose the coordinator it has.
    *
-   * What this deliberately will NOT do is move an existing coordinator. A request naming a
+   * What `open` deliberately will NOT do is move an existing coordinator. A request naming a
    * different workspace than the binding was made in is a 409, not a re-point: the conversation is
    * where the work was discussed, and relocating it is a decision someone has to make on purpose.
-   * Moving a coordinator is `rebindCoordinator`, and this is not it — replacing one keeps the
-   * workspace exactly where §7.5 froze it.
+   * Moving the conversation itself is the session's Move (`SessionsService.move`), which takes the
+   * project's coordination workspace along.
+   *
+   * A `replace` that names a workspace is that decision made on purpose: "start a new coordinator
+   * THERE" (docs/mocks/coordinator-move-workspace). The outgoing conversation is completed where it
+   * is, and the new one opens in the named workspace, which the pointer swap below records with it.
+   * A `replace` that names none keeps the workspace where it was, as it always has.
    */
   async coordinator(
     ownerId: string,
@@ -4440,7 +4445,10 @@ export class ProjectsService {
     // gets to make. See `coordinatorLanding`. Resolved BEFORE the completion below: this is the one
     // refusal a replacement can still meet, and meeting it after ending the outgoing conversation
     // would take a project's coordinator away and give it nothing back.
-    const { workspaceId: runIn, fixed } = await this.coordinatorLanding(ownerId, project, workspaceId);
+    const { workspaceId: runIn, fixed } =
+      intent === 'replace' && workspaceId
+        ? { workspaceId: await this.namedReplacementLanding(ownerId, workspaceId), fixed: false }
+        : await this.coordinatorLanding(ownerId, project, workspaceId);
 
     // The conversation being replaced is ENDED, in the same words and by the same method its own
     // Complete button uses. Not a courtesy: `project.coordinator_session_id` is what says who may
@@ -5450,6 +5458,23 @@ export class ProjectsService {
       engineTurnActive: session.engineTurnActive,
       pendingApprovals,
     };
+  }
+
+  /**
+   * The workspace a `replace` named, checked BEFORE the outgoing conversation is completed: a press
+   * that could not open its replacement there must not cost the project the coordinator it has.
+   * The same conditions `sessions.create` (and the swap's landing lock) hold a workspace to, in the
+   * sentences the clients show; another owner's workspace is not found.
+   */
+  private async namedReplacementLanding(ownerId: string, workspaceId: string): Promise<string> {
+    const named = await this.prisma.workspace.findFirst({
+      where: { id: workspaceId, ownerId, deletedAt: null },
+      select: { id: true, enabled: true, runnerId: true },
+    });
+    if (!named) throw new NotFoundException('workspace not found');
+    if (!named.enabled) throw new ConflictException('This workspace is disabled.');
+    if (!named.runnerId) throw new ConflictException('This workspace has no runner.');
+    return named.id;
   }
 
   /**
