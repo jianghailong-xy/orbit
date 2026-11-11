@@ -691,6 +691,8 @@ function LandingWindowRow({
       data-tone={row.tone}
       onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}
     >
+      {/* The sentence first, then the steps under it: the chat says what it is doing before its tool calls (owner 2026-11-11). */}
+      <LandingReply parts={sentence} open={expanded} onToggle={onToggle} />
       {landing ? (
         <LandingSteps
           landing={landing}
@@ -702,7 +704,6 @@ function LandingWindowRow({
           onToggleLast={onToggle}
         />
       ) : null}
-      <LandingReply parts={sentence} open={expanded} onToggle={onToggle} />
       {expanded ? (
         <div className="landings-window-record">
           {merge ? <LandingReceiptBlock receipt={landingMergeReceipt(row.promotion, landing)} /> : null}
@@ -891,7 +892,7 @@ function LandingWindowCard({
       {running && Number.isFinite(started) ? (
         <div className="chat-turn-head">{`${WINDOW_COPY.WORKING_FOR} ${landingClock(Math.max(0, now - started))}`}</div>
       ) : null}
-      {running ? <LandingReply parts={sentence} open={stepsOpen} onToggle={onToggle} /> : null}
+      <LandingReply parts={sentence} open={stepsOpen} onToggle={onToggle} />
       {running && card ? (
         <div className="landings-window-live">
           {card.detail ? <div className="landings-window-card-detail">{card.detail}</div> : null}
@@ -931,9 +932,8 @@ function LandingWindowCard({
           onToggleLast={onToggle}
         />
       ) : null}
-      {running ? null : <LandingReply parts={sentence} open={stepsOpen} onToggle={onToggle} />}
       {/* What a landing in hand still carries — what stopped it, its clock, who decides and the doors — on the chat's own
-          status card, under the sentence. */}
+          status card, under its steps. */}
       {running ? null : (
         <section
           className={`chat-status-card landings-window-card${failedHead ? ' is-failed' : ''}${timedOut ? ' is-timed-out' : ''}${settledAt ? ' is-settled' : ''}`}

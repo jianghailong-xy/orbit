@@ -29,6 +29,7 @@ export const TURN_CARD_FIELDS = {
   projectStarted: true,
   confirmationReviewRequest: true,
   confirmationReturn: true,
+  confirmationAnswers: true,
   sessionMessage: true,
   sessionReplies: true,
 } satisfies Record<keyof TurnCards, true>;

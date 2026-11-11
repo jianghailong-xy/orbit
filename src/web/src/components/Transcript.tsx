@@ -118,9 +118,17 @@ import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseSessionMessage } from '../lib/sessionMessage';
 import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
-import { parseConfirmationReturn, parseConfirmationReviewRequest } from '../lib/confirmationReviewTurns';
-import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
-import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
+import {
+  parseConfirmationAnswers,
+  parseConfirmationReturn,
+  parseConfirmationReviewRequest,
+} from '../lib/confirmationReviewTurns';
+import type {
+  ConfirmationAnswersCard,
+  ConfirmationReturnCard,
+  ConfirmationReviewRequestCard,
+} from '@orbit/shared';
+import { ReviewRequestedCard, SentBackByReviewerCard, YouConfirmedCard } from './ConfirmationReviewTurnCards';
 import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
@@ -587,6 +595,8 @@ type TextNode = {
   // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
   reviewRequest?: ConfirmationReviewRequestCard;
   reviewReturn?: ConfirmationReturnCard;
+  /** The owner's answers handed to the reviewer (§7 Q5): drawn as `You confirmed`. */
+  reviewAnswers?: ConfirmationAnswersCard;
   // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
   // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
   // Only a top-level message opens one: a steer joins the turn already running, and a message
@@ -889,6 +899,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.startedCard
   && !node.reviewRequest
   && !node.reviewReturn
+  && !node.reviewAnswers
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !parseBackgroundWake(node.note);
@@ -1206,6 +1217,7 @@ function buildTranscript(
         const sessionReplies = parseSessionReplies(p) ?? undefined;
         const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
         const reviewReturn = parseConfirmationReturn(p) ?? undefined;
+        const reviewAnswers = parseConfirmationAnswers(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -1244,6 +1256,7 @@ function buildTranscript(
             sessionReplies,
             reviewRequest,
             reviewReturn,
+            reviewAnswers,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1522,19 +1535,38 @@ export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TA
 type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
 const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
 
-function StreamingDrafts() {
+function StreamingDrafts({ live }: { live?: boolean }) {
   const drafts = useContext(StreamingDraftsCtx);
+  // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
+  // each time a block settles, and a reader who opened one wants the next block of the same turn
+  // open too. A turn's end puts it back to folded.
+  const [thinkOpen, setThinkOpen] = useState(false);
+  useEffect(() => {
+    if (!live) setThinkOpen(false);
+  }, [live]);
   if (!drafts) return null;
   return (
     <>
-      {drafts.think && <ThinkingStream text={drafts.think} startedAt={drafts.thinkStartedAt} />}
+      {drafts.think && (
+        <ThinkingStream
+          text={drafts.think}
+          startedAt={drafts.thinkStartedAt}
+          open={thinkOpen}
+          onToggle={() => setThinkOpen((o) => !o)}
+        />
+      )}
       {drafts.text && <StreamingMessage text={drafts.text} />}
     </>
   );
 }
 
 /**
- * Reasoning as it streams: a viewport about ten lines tall that keeps itself at the newest line,
+ * Reasoning as it streams, folded to one row by default: the row that a settled block shows, with
+ * a clock and a character count that keep moving, so the reader sees it working without a box of
+ * italic text scrolling at the tail of every turn (owner, 2026-11-11;
+ * docs/mocks/thinking-fold-live).
+ *
+ * Opened, it is a viewport about ten lines tall that keeps itself at the newest line,
  * rather than an unbounded block. Unbounded, a stretch of it pushed the answer — and the tool
  * calls on the way to it — out of a pane pinned to the tail, and the fold at the end then took
  * back a page of height at once, moving whatever the reader was looking at.
@@ -1542,28 +1574,58 @@ function StreamingDrafts() {
  * The follow is sticky, not forced: a reader who scrolls up inside it to re-read something stays
  * where they put themselves until they return to the bottom.
  */
-function ThinkingStream({ text, startedAt }: { text: string; startedAt?: number }) {
+function ThinkingStream({
+  text,
+  startedAt,
+  open,
+  onToggle,
+}: {
+  text: string;
+  startedAt?: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const port = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   useEffect(() => {
     const el = port.current;
     if (el && follow.current) el.scrollTop = el.scrollHeight;
-  }, [text]);
+    // The top edge fades only over text scrolled past, so a block that fits, or a reader who
+    // scrolled back to its start, reads its first line whole.
+    if (el) el.classList.toggle('is-scrolled', el.scrollTop > 0);
+  }, [text, open]);
   return (
     <div className="chat-think-live">
-      <div className="chat-think-live-head">
-        💭 Thinking… <LiveSeconds startedAt={startedAt} />
-      </div>
-      <div
-        className="chat-think-port"
-        ref={port}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+      <button
+        type="button"
+        className="chat-think-live-head"
+        aria-expanded={open}
+        onClick={() => {
+          // Opening lands on the newest line, whatever the last opening was scrolled to.
+          follow.current = true;
+          onToggle();
         }}
       >
-        <div className="chat-think-stream chat-streaming">{text}</div>
-      </div>
+        {open ? <DownOutlined /> : <RightOutlined />} 💭 <span className="chat-think-live-word">Thinking…</span>
+        <span className="chat-think-meta">
+          <LiveSeconds startedAt={startedAt} />
+          {startedAt !== undefined ? ' · ' : ''}
+          {formatThinkingSize(text.length)}
+        </span>
+      </button>
+      {open && (
+        <div
+          className="chat-think-port"
+          ref={port}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+            el.classList.toggle('is-scrolled', el.scrollTop > 0);
+          }}
+        >
+          <div className="chat-think-stream chat-streaming">{text}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1577,7 +1639,7 @@ function LiveSeconds({ startedAt }: { startedAt?: number }) {
     return () => clearInterval(timer);
   }, [startedAt]);
   if (startedAt === undefined) return null;
-  return <span className="chat-think-meta">{formatThinkingDuration(Date.now() - startedAt)}</span>;
+  return <>{formatThinkingDuration(Date.now() - startedAt)}</>;
 }
 
 // `live` indicates the session is still streaming, so a tool_use without a
@@ -1676,7 +1738,7 @@ export const Transcript = memo(function Transcript({
           <Fragment key={insert.key}>{insert.element}</Fragment>
         ))}
         <NodeList nodes={before} live={live} placed={placed} />
-        <StreamingDrafts />
+        <StreamingDrafts live={live} />
         {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
       </ImagePreviewProvider>
     </TaskLookupCtx.Provider>
@@ -1927,20 +1989,15 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
 // top-level row. Excluded by name rather than by what has arrived, so the row doesn't hop out of
 // the group later, when the result lands (session_create) or the first child event does (Task).
 //
-// A picture is the one exclusion that can't be read off the name: `Read` on a .png and an MCP
-// screenshot tool answer alike with an image block, and only the result says so. It is excluded
-// anyway, because the group is the one fold ToolView can't open through — the card unfolds itself
-// on an image (see defaultOpen) and a closed group hides it whole, so a screenshot inside a run
-// reaches the reader as nothing at all. The hop this costs happens once and never reverses: an
-// image block that has arrived stays arrived, unlike the running/failed states the folded row
-// deliberately reports instead of opening on.
+// A picture folds like any other read (owner, 11-11: an agent reading its own screenshot is a
+// step, not something to show the reader). Opening the line draws the card, which unfolds itself
+// on the image (see defaultOpen) and fetches back bytes the server clipped.
 function isGroupableTool(node: Node, chat = false): node is ToolNode {
   return (
     node.kind === 'tool' &&
     // A wiki chat's drafting call is its card (`WikiDraftCard`), told by its name, as the others here are.
     !(chat && wikiChatDraftingCall(node.name, node.input)) &&
     node.children.length === 0 &&
-    !hasResultImage(node.result?.content) &&
     !node.id.startsWith('shell-') &&
     node.name !== 'AskUserQuestion' &&
     node.name !== 'ExitPlanMode' &&
@@ -2195,6 +2252,21 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             ts={node.ts}
             undelivered={undelivered}
             attached={attached}
+            queued={queued}
+          />
+        );
+      }
+      // The owner's answers handed to the reviewer once they confirmed (§7 Q5): Orbit's words to the
+      // agent, about the reader. Drawn as what the reader did — `You confirmed`, each question and
+      // the answer they gave — with the block the agent read folded at the foot.
+      if (node.reviewAnswers) {
+        return (
+          <YouConfirmedCard
+            card={node.reviewAnswers}
+            text={node.text}
+            seq={seq}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
@@ -3635,9 +3707,23 @@ function nodeText(node: ReactNode): string {
 }
 
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
+  const exp = useContext(ExportCtx);
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
+    // An upload keeps its file name in the link's title. When that name is a picture, the reader
+    // meant to show it — the native clients draw it too (MarkdownFileRef.isImage). The saved HTML
+    // file embeds only `![…]` pictures, so it keeps the chip.
+    if (!exp && name && looksLikeImagePath(name)) {
+      return (
+        <ResolvedAttachmentImage
+          id={id}
+          className="md-image"
+          alt={nodeText(children).trim() || name}
+          loadingClassName="md-image md-image-loading"
+        />
+      );
+    }
     return <AttachmentFile id={id} name={name} />;
   }
   if (typeof href === 'string' && isLegacyArtifactSrc(href)) {

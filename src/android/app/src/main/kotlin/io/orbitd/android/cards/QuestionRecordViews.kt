@@ -168,16 +168,16 @@ internal fun ReplayOption(tag: String, label: String, why: String?, recommended:
 }
 
 /** What the coordinator was told (web `answered-question-told`): folded under its heading, the words verbatim, and what delivery appended
- * folded under them. */
+ * folded under them. [heading] names who was told: the reviewer, on the owner's answers handed to it (`YouConfirmedCard`). */
 @Composable
-private fun ToldFold(tag: String, event: RunEvent) {
+internal fun ToldFold(tag: String, event: RunEvent, heading: String = OwnerAnswerLine.told) {
     var open by rememberSaveable(tag) { mutableStateOf(false) }
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().padding(top = 4.dp).testTag(tag), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.clickable(role = Role.Button) { open = !open }.semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
             .padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("▸", Modifier.rotate(if (open) 90f else 0f).clearAndSetSemantics { }, color = secondary, style = MaterialTheme.typography.labelMedium)
-            Text(OwnerAnswerLine.told, color = secondary, style = MaterialTheme.typography.bodySmall)
+            Text(heading, color = secondary, style = MaterialTheme.typography.bodySmall)
         }
         if (open) {
             SelectionContainer {

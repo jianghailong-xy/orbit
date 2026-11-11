@@ -840,6 +840,10 @@ describe('a settled merge round', () => {
     ].join(''));
     // One attempt: its steps line is `1 step`, open, and its check is a step whose row says how it ended.
     expect(page().querySelector(`[data-landing-entry="${SESSION}"] .landings-window-steps-line`)?.textContent).toBe('1 step');
+    // The sentence comes first and the steps under it, as the chat says what it does before its tool calls.
+    const turn = page().querySelector(`[data-landing-entry="${SESSION}"]`)!;
+    expect(turn.querySelector('.landings-window-reply')!.compareDocumentPosition(turn.querySelector('.landings-window-steps-line')!)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(page().querySelector(`[data-landing-entry="${SESSION}"] .landing-step[data-step="check:MERGE_CHECK"] .chat-tool-summary`)?.textContent)
       .toBe('Merge check passed · 17m 41s');
     // The round's state is said by its row; the board does not repeat it as a timeline fact.
@@ -1086,6 +1090,8 @@ describe('the window', () => {
     expect(value(rule('.landing-step-row'), 'background')).toBe('transparent');
     expect(value(rule('.landings-window-reply'), 'cursor')).toBe('pointer');
     expect(value(rule('.landings-window-entry.is-outlined .landings-window-reply'), 'box-shadow')).toBe('inset 2px 0 0 var(--brand)');
+    // A press leaves no focus box round the sentence.
+    expect(value(rule('.landings-window-reply:focus'), 'outline')).toBe('none');
     // What a reply opens to is inset like the reply, as the chat's text is.
     expect(value(rule('.landings-window-record'), 'margin')).toBe('6px 12px 0');
 
