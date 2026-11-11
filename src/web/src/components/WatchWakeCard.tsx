@@ -32,8 +32,8 @@ export const WatchWakeNamesCtx = createContext<((watchId: string, target: Change
   null,
 );
 
-/** What happened, at a glance. */
-function watchWakeTitle(kind: WatchWake['kind']): string {
+/** What happened, at a glance. Also what a folded exchange says (Transcript `orbitTurnOf`). */
+export function watchWakeTitle(kind: WatchWake['kind']): string {
   return TITLE[kind];
 }
 

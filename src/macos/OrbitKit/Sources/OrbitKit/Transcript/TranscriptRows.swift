@@ -451,6 +451,9 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// A stretch of work between two replies — settled thinking and tool calls — folded into one
     /// steps line (see `TranscriptRows.groupToolRuns`, `StepsSummary`).
     case steps([TranscriptItem])
+    /// Turns Orbit opened, each with everything drawn under it, folded into one row — a run of them
+    /// into one group row (`OrbitExchangeFold`; web parity: `OrbitExchangeSolo` / `OrbitExchangeGroup`).
+    case exchanges([OrbitExchange])
     case statusCard(LocalStatusCard)
     case decisionCard(DeliveredDecisionCard)
     case approval(PendingApproval)
@@ -474,6 +477,9 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
         case .steps(let items):      return items.first?.id ?? "steps-empty"
+        // The bare id of the first turn's opening bubble, for `.steps`' reason: it replaces that
+        // bubble's own row, and a scroll aimed at it must still land somewhere.
+        case .exchanges(let turns):  return turns.first?.id ?? "exchanges-empty"
         case .statusCard(let card):  return "local-status-\(card.id)"
         case .decisionCard(let card): return card.id
         case .approval(let appr):    return "approval-\(appr.id)"
@@ -504,6 +510,8 @@ public enum TranscriptRows {
                              decisionCards: [DeliveredDecisionCard] = [],
                              clocks known: ReceiptAnchor.Clocks? = nil,
                              recap: RecapCard? = nil,
+                             foldExchanges: Bool = true,
+                             watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
                              createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
@@ -620,7 +628,11 @@ public enum TranscriptRows {
         // Ids are unique by construction above; a repeat could only come from a malformed stream
         // (two events sharing a tool_use id). Drop it rather than hand the List a diff that aborts.
         var seen = Set<String>()
-        return groupToolRuns(rows).filter { seen.insert($0.id).inserted }
+        let grouped = groupToolRuns(rows)
+        // The turns Orbit opened, folded with their answers (`OrbitExchangeFold`), unless the caller
+        // draws every row as it is — a static export, a sub-agent's own transcript.
+        let folded = foldExchanges ? OrbitExchangeFold.fold(grouped, watchName: watchName) : grouped
+        return folded.filter { seen.insert($0.id).inserted }
     }
 
     /// Fold everything a turn does between two things it says — its settled thinking and its tool
@@ -673,7 +685,8 @@ public enum TranscriptRows {
     public static func nested(_ items: [TranscriptItem]) -> [TranscriptRow] {
         var state = TranscriptState()
         state.items = items
-        return build(state: state, statusCards: [], canPageOlder: false, showWorkingIndicator: false)
+        return build(state: state, statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+                     foldExchanges: false)
             .filter {
                 switch $0 {
                 case .item, .steps: return true
