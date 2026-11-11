@@ -127,8 +127,27 @@ import type {
   ConfirmationAnswersCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
+  EvidenceReviewCard,
+  EvidenceSendBackCard,
+  RunNoticeCard,
+  RunQuestionCard,
+  SessionOpeningCard,
 } from '@orbit/shared';
 import { ReviewRequestedCard, SentBackByReviewerCard, YouConfirmedCard } from './ConfirmationReviewTurnCards';
+import {
+  EvidenceSentBackCard,
+  EvidenceToReviewCard,
+  RunNoticeTurnCard,
+  RunQuestionTurnCard,
+  SessionOpeningLine,
+} from './OrbitTurnCards';
+import {
+  parseEvidenceReview,
+  parseEvidenceSendBack,
+  parseRunNotice as parseRunNoticeCard,
+  parseRunQuestion,
+  parseSessionOpening,
+} from '../lib/orbitTurnCards';
 import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
@@ -597,6 +616,12 @@ type TextNode = {
   reviewReturn?: ConfirmationReturnCard;
   /** The owner's answers handed to the reviewer (§7 Q5): drawn as `You confirmed`. */
   reviewAnswers?: ConfirmationAnswersCard;
+  /** Five more of Orbit's own turns, each drawn as its card (OrbitTurnCards.tsx). */
+  evidenceReview?: EvidenceReviewCard;
+  evidenceSendBack?: EvidenceSendBackCard;
+  runQuestion?: RunQuestionCard;
+  runNotice?: RunNoticeCard;
+  sessionOpening?: SessionOpeningCard;
   // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
   // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
   // Only a top-level message opens one: a steer joins the turn already running, and a message
@@ -900,6 +925,11 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.reviewRequest
   && !node.reviewReturn
   && !node.reviewAnswers
+  && !node.evidenceReview
+  && !node.evidenceSendBack
+  && !node.runQuestion
+  && !node.runNotice
+  && !node.sessionOpening
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !parseBackgroundWake(node.note);
@@ -1218,6 +1248,11 @@ function buildTranscript(
         const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
         const reviewReturn = parseConfirmationReturn(p) ?? undefined;
         const reviewAnswers = parseConfirmationAnswers(p) ?? undefined;
+        const evidenceReview = parseEvidenceReview(p) ?? undefined;
+        const evidenceSendBack = parseEvidenceSendBack(p) ?? undefined;
+        const runQuestion = parseRunQuestion(p) ?? undefined;
+        const runNotice = parseRunNoticeCard(p) ?? undefined;
+        const sessionOpening = parseSessionOpening(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -1257,6 +1292,11 @@ function buildTranscript(
             reviewRequest,
             reviewReturn,
             reviewAnswers,
+            evidenceReview,
+            evidenceSendBack,
+            runQuestion,
+            runNotice,
+            sessionOpening,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1535,15 +1575,17 @@ export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TA
 type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
 const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
 
-function StreamingDrafts({ live }: { live?: boolean }) {
+function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
   // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
   // each time a block settles, and a reader who opened one wants the next block of the same turn
-  // open too. A turn's end puts it back to folded.
+  // open too. A turn's end puts it back to folded. Read off the transcript's last `turn_end` rather
+  // than off `live`: a reply sent right after a turn ends starts the next one before the session's
+  // status says it ever stopped. Its seq, not a count, so loading older pages changes nothing.
   const [thinkOpen, setThinkOpen] = useState(false);
   useEffect(() => {
-    if (!live) setThinkOpen(false);
-  }, [live]);
+    setThinkOpen(false);
+  }, [lastTurnEnd]);
   if (!drafts) return null;
   return (
     <>
@@ -1731,6 +1773,10 @@ export const Transcript = memo(function Transcript({
     }
     return at < 0 || at >= nodes.length ? [nodes, [] as Node[]] : [nodes.slice(0, at), nodes.slice(at)];
   }, [nodes, streamingAfterSeq]);
+  const lastTurnEnd = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'turn_end') return events[i].seq;
+    return 0;
+  }, [events]);
   const body = (
     <TaskLookupCtx.Provider value={taskLookup}>
       <ImagePreviewProvider>
@@ -1738,7 +1784,7 @@ export const Transcript = memo(function Transcript({
           <Fragment key={insert.key}>{insert.element}</Fragment>
         ))}
         <NodeList nodes={before} live={live} placed={placed} />
-        <StreamingDrafts live={live} />
+        <StreamingDrafts lastTurnEnd={lastTurnEnd} />
         {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
       </ImagePreviewProvider>
     </TaskLookupCtx.Provider>
@@ -2298,6 +2344,38 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
+          />
+        );
+      }
+      // Five more of Orbit's own turns (OrbitTurnCards.tsx): a revision to review, a send-back, a task
+      // run's question and its notify, and the opening of a session Orbit opened. Each is drawn as
+      // what happened; the block the agent read — the turn's words, or its note when the turn has
+      // none — folds at the card's foot, and any other note rides under it as it always did.
+      if (node.evidenceReview || node.evidenceSendBack || node.runQuestion || node.runNotice) {
+        const hasWords = node.text.trim() !== '';
+        const told = hasWords ? node.text : node.note ?? '';
+        const props = {
+          seq,
+          ts: node.ts,
+          undelivered: node.delivery === 'failed' || node.delivery === 'unconfirmed',
+          told,
+          attached: hasWords && node.note
+            ? <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />
+            : undefined,
+          queued,
+        };
+        if (node.evidenceReview) return <EvidenceToReviewCard card={node.evidenceReview} {...props} />;
+        if (node.evidenceSendBack) return <EvidenceSentBackCard card={node.evidenceSendBack} {...props} />;
+        if (node.runQuestion) return <RunQuestionTurnCard card={node.runQuestion} {...props} />;
+        return <RunNoticeTurnCard card={node.runNotice!} {...props} />;
+      }
+      if (node.sessionOpening) {
+        return (
+          <SessionOpeningLine
+            card={node.sessionOpening}
+            brief={node.text}
+            seq={seq}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
           />
         );
       }

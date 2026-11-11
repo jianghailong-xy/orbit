@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Project done card · landing for work Orbit can't see</title>
+<style>
+  @font-face { font-family: MockInter; src: url("file:///mnt/data/tmp/pdmock/Inter.ttf"); font-weight: 100 900; }
+  @font-face { font-family: MockNoto; src: url("file:///mnt/data/tmp/pdmock/NotoSansSC.ttf"); font-weight: 100 900; }
+  @font-face { font-family: MockMono; src: url("file:///mnt/data/tmp/pdmock/JetBrainsMono.ttf"); font-weight: 100 900; }
+  :root {
+    --ink: #1d1d1f; --ink2: #6e6e73; --ink3: #9a9aa0; --line: #e5e5ea; --card: #fff; --page: #f2f2f5;
+    --red: #d70015; --redbg: #fff1f1; --amber: #b25000; --amberbg: #fff6e8; --green: #1f8a3b; --greenbg: #ecf8ef;
+    --blue: #0a66d8; --bluebg: #eaf2ff; --mark: #ff2d55;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #d9d9de; font-family: -apple-system, MockInter, MockNoto, sans-serif; color: var(--ink); }
+  .board { width: 2760px; padding: 40px; background: #ececf0; }
+  h1 { margin: 0 0 6px; font-size: 30px; }
+  .sub { color: var(--ink2); font-size: 16px; margin-bottom: 28px; line-height: 1.6; }
+  .cols { display: grid; grid-template-columns: 520px 640px 520px 400px 488px; gap: 32px; align-items: start; }
+  .frame-title { font-size: 19px; font-weight: 700; margin: 0 0 4px; }
+  .frame-sub { font-size: 14px; color: var(--ink2); margin: 0 0 14px; line-height: 1.55; }
+  .mono { font-family: MockMono, ui-monospace, monospace; font-size: 12.5px; }
+
+  /* ---------- card (imitates .approval-card.project-done-card) ---------- */
+  .c-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: visible; position: relative; }
+  .c-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .c-heading { font-weight: 650; font-size: 15px; }
+  .c-prov { font-size: 10.5px; letter-spacing: .06em; color: var(--ink3); font-weight: 600; }
+  .c-body { padding: 14px 18px 4px; font-size: 13.5px; }
+  .c-meta { color: var(--ink2); font-size: 12.5px; margin-bottom: 12px; }
+  .c-sec { font-size: 11.5px; font-weight: 650; color: var(--ink2); text-transform: uppercase; letter-spacing: .04em; margin: 4px 0 4px; }
+  .c-tally { color: var(--ink2); font-size: 12.5px; margin-bottom: 8px; }
+  .c-rows { list-style: none; margin: 0 0 12px; padding: 0; }
+  .c-rows li { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid #f0f0f3; }
+  .c-no { color: var(--ink3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .c-text { font-size: 13px; }
+  .c-state { font-size: 12px; color: var(--ink2); white-space: nowrap; }
+  .c-state .bad { color: var(--red); font-weight: 600; }
+  .c-state .ok { color: var(--green); font-weight: 600; }
+  .c-checked { color: var(--ink2); font-size: 12.5px; margin: 6px 0 12px; }
+  .c-findings { background: var(--redbg); border: 1px solid #ffc9cc; border-radius: 10px; padding: 10px 12px; font-size: 13px; position: relative; }
+  .c-findings b { display: block; margin-bottom: 4px; }
+  .c-findings ul { margin: 0; padding-left: 18px; }
+  .c-findings li { padding: 6px 0; }
+  .c-expl { color: var(--ink2); font-size: 12.5px; margin: 8px 0 12px; }
+  .c-actions { display: flex; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid var(--line); }
+  .btn { border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: #fff; }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn.small { padding: 4px 10px; font-size: 12px; white-space: nowrap; }
+
+  /* proposal-only pieces */
+  .c-untracked { display: flex; gap: 10px; background: #f6f6f8; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; font-size: 12.5px; color: var(--ink2); line-height: 1.5; position: relative; }
+  .c-untracked .ico { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--ink3); color: var(--ink3); font-size: 11px; font-weight: 700; display: grid; place-items: center; flex: none; margin-top: 1px; }
+  .c-untracked b { color: var(--ink); font-weight: 600; }
+  .c-block { border: 1px solid #ffc9cc; background: var(--redbg); border-radius: 10px; padding: 10px 12px; position: relative; }
+  .c-block-title { font-weight: 650; font-size: 13.5px; margin-bottom: 6px; }
+  .c-block-row { display: grid; grid-template-columns: 22px 1fr; gap: 8px; }
+  .c-task { margin-top: 6px; background: #fff; border: 1px solid #f3d4d6; border-radius: 8px; padding: 7px 10px; font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .c-task .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); margin-right: 6px; }
+  .c-warn { border: 1px solid #f5d9a8; background: var(--amberbg); border-radius: 10px; padding: 10px 12px; font-size: 13px; position: relative; }
+
+  /* ---------- marks ---------- */
+  .mk { position: absolute; width: 26px; height: 26px; border-radius: 50%; background: var(--mark); color: #fff; font-weight: 700; font-size: 14px; display: grid; place-items: center; box-shadow: 0 0 0 3px #fff; z-index: 5; }
+  .ring { position: absolute; border: 2.5px solid var(--mark); border-radius: 8px; pointer-events: none; z-index: 4; }
+  .ring.g { border-color: var(--green); }
+
+  /* ---------- notes ---------- */
+  .notes { margin-top: 16px; background: #fff; border-radius: 12px; padding: 14px 16px; font-size: 14px; line-height: 1.6; }
+  .notes .n { display: grid; grid-template-columns: 28px 1fr; gap: 6px; margin-bottom: 10px; }
+  .notes .n:last-child { margin-bottom: 0; }
+  .notes .k { width: 22px; height: 22px; border-radius: 50%; background: var(--mark); color: #fff; font-size: 12.5px; font-weight: 700; display: grid; place-items: center; margin-top: 2px; }
+  .notes .k.g { background: var(--green); }
+  .notes b { font-weight: 650; }
+  code { font-family: MockMono, ui-monospace, monospace; font-size: 12.5px; background: #f2f2f5; padding: 1px 5px; border-radius: 4px; }
+
+  /* ---------- flow diagram ---------- */
+  .flow { background: #fff; border-radius: 14px; padding: 18px; }
+  .lane { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+  .lane-title { font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }
+  .steps { display: grid; grid-template-columns: 1fr 20px 1fr 20px 1fr; align-items: stretch; }
+  .step { border-radius: 9px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; background: #f6f6f8; }
+  .step .h { font-size: 11px; color: var(--ink3); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+  .arrow { display: grid; place-items: center; color: var(--ink3); font-size: 16px; }
+  .step.green { background: var(--greenbg); }
+  .step.amber { background: var(--amberbg); }
+  .step.red { background: var(--redbg); }
+  .tag { display: inline-block; font-family: MockMono, monospace; font-size: 12px; font-weight: 700; padding: 1px 6px; border-radius: 5px; }
+  .tag.g { background: #c9efd3; color: #0f5a25; }
+  .tag.r { background: #ffd6d9; color: #9a0010; }
+  .outs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .out { border: 1px dashed #d0d0d6; border-radius: 9px; padding: 7px 9px; font-size: 12px; line-height: 1.45; }
+  .out .h { font-size: 10.5px; color: var(--ink3); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+  .out .say { font-weight: 600; }
+  .out.x { border-color: var(--mark); border-style: solid; background: #fff5f7; }
+  .verdict { background: #fff5f7; border: 1.5px solid var(--mark); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.6; }
+
+  /* rules / files / decisions */
+  .side { background: #fff; border-radius: 14px; padding: 16px 18px; font-size: 13.5px; line-height: 1.6; margin-bottom: 18px; }
+  .side h3 { margin: 0 0 8px; font-size: 15.5px; }
+  .side table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  .side td, .side th { border-top: 1px solid var(--line); padding: 6px 4px; vertical-align: top; text-align: left; }
+  .side th { color: var(--ink2); font-weight: 600; font-size: 11.5px; }
+  .todo { background: #fffbe6; border: 1.5px solid #f0c400; }
+  .todo ol { margin: 0; padding-left: 20px; }
+  .todo li { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>“Is this project done?” 卡片：为什么自相矛盾，以及怎么改</h1>
+  <div class="sub">项目：CBAI AI 视觉内容平台 Phase 0 实施 · 4 条判据 · 155 个任务会话全部 <code>shared</code>（无 worktree、无分支）· 项目没绑仓库 · 0 条 merge receipt。<br>
+  截图为按真实数据还原的示意（判据 1–3 的文字为占位），UI 文案保持英文，标注为中文。</div>
+
+  <div class="cols">
+    <!-- ================= ① TODAY ================= -->
+    <div>
+      <div class="frame-title">① 现在：owner 自己点开 “Record as done…”</div>
+      <div class="frame-sub">同一张卡里三处说法打架；真正的阻塞（判据 4 没完成）被埋在里面。</div>
+
+      <div class="c-card" id="today">
+        <div class="c-head"><span class="c-heading">Is this project done?</span><span class="c-prov">FROM ORBIT</span></div>
+        <div class="c-body">
+          <div class="c-meta">CBAI AI 视觉内容平台 Phase 0 实施 · record as done anyway</div>
+          <div class="c-sec">Done when · 4 criteria</div>
+          <div class="c-tally" id="t-tally">3 met · 0 landed on main · 4 nothing to land</div>
+          <ul class="c-rows" id="t-rows">
+            <li><span class="c-no">1</span><span class="c-text">Criterion 1 (placeholder text)</span><span class="c-state">met · No code to land</span></li>
+            <li><span class="c-no">2</span><span class="c-text">Criterion 2 (91 tasks)</span><span class="c-state">met · No code to land</span></li>
+            <li><span class="c-no">3</span><span class="c-text">Criterion 3 (2 tasks)</span><span class="c-state">met · No code to land</span></li>
+            <li><span class="c-no">4</span><span class="c-text">External prerequisites settled</span><span class="c-state"><span class="bad">not met</span> · No code to land</span></li>
+          </ul>
+          <div class="c-checked">Orbit checked: 155 tasks · 0 running · 0 open items</div>
+          <div class="c-findings" id="t-find">
+            <b>Orbit can’t prove 4 things</b>
+            <ul>
+              <li id="t-f1">Criterion 4 is not met</li>
+              <li id="t-f2">Criterion 2 is not on main</li>
+              <li id="t-f3">Criterion 3 is not on main</li>
+              <li id="t-f4">Criterion 4 is not on main</li>
+            </ul>
+          </div>
+          <p class="c-expl">These will be kept as the gaps you accepted.</p>
+        </div>
+        <div class="c-actions"><span class="btn primary">Record as done anyway</span></div>
+      </div>
+
+      <div class="notes">
+        <div class="n"><span class="k">1</span><div><b>行 / 汇总说“没代码要落”，红框说“不在 main 上”。</b>判据 2、3、4 的行写 <i>No code to land</i>，汇总写 <i>4 nothing to land</i>，红框却写 <i>not on main</i>。三处读的是同一个原因 <code>CODELESS</code>，各说各的。</div></div>
+        <div class="n"><span class="k">2</span><div><b>“4 things” 其实只涉及 3 条判据。</b>判据 4 既“没完成”又“没落地”，被数了两次。</div></div>
+        <div class="n"><span class="k">3</span><div><b>唯一真正的阻塞被埋了。</b>判据 4 有个任务还 OPEN（外部前置事项办结），这是“为什么还不算完成”的答案，但它和 3 条结构性噪音排在一起，也没点名是哪个任务。</div></div>
+        <div class="n"><span class="k">4</span><div><b>按下去，这些噪音会被存成“你接受的缺口”。</b>项目根本没走 Orbit 的落地流程，这些缺口是结构性的，不是谁判断过的，存下来只会冲淡缺口记录的意义。</div></div>
+      </div>
+    </div>
+
+    <!-- ================= ② WHY ================= -->
+    <div>
+      <div class="frame-title">② 原因：同一个 <code>CODELESS</code>，两种意思</div>
+      <div class="frame-sub">服务端先判每条判据“落没落地”，再给一个原因；客户端三处都只读这个原因。</div>
+
+      <div class="flow">
+        <div class="lane">
+          <div class="lane-title">判据 1 · 4 个任务，都<b>声明了</b> codeless</div>
+          <div class="steps">
+            <div class="step green"><div class="h">任务事实</div><code>task.codeless = true</code><br>真的没有代码</div>
+            <div class="arrow">→</div>
+            <div class="step green"><div class="h">落地判断 criterionLanding</div>不计入交付<br>→ <b>LANDED</b></div>
+            <div class="arrow">→</div>
+            <div class="step green"><div class="h">原因</div><span class="tag g">CODELESS</span><br>= 没有要落的代码 ✓</div>
+          </div>
+        </div>
+
+        <div class="lane" style="border-color: var(--mark); border-width: 1.5px;">
+          <div class="lane-title">判据 2、3、4 · 102 个任务，<b>没声明</b> codeless，只是跑在 shared 里</div>
+          <div class="steps">
+            <div class="step amber"><div class="h">任务事实</div>会话 <code>isolation = shared</code>、<code>branch = NULL</code><br>可能直接改了 checkout 的代码</div>
+            <div class="arrow">→</div>
+            <div class="step amber"><div class="h">落地判断 criterionLanding</div><b>故意</b>仍算交付（没分支 ≠ 没代码）<br>→ <b>UNKNOWN</b></div>
+            <div class="arrow">→</div>
+            <div class="step red"><div class="h">原因 heldTaskReason</div><span class="tag r">CODELESS</span><br>= “没分支、没证据” ✗<br><span class="mono">criterion-landing-reason.ts:122</span></div>
+          </div>
+          <div class="outs">
+            <div class="out"><div class="h">行 landingReasonLabel</div><span class="say">“No code to land”</span><br>当成没代码</div>
+            <div class="out"><div class="h">汇总 nothingToLandCount</div><span class="say">“4 nothing to land”</span><br>当成没代码</div>
+            <div class="out x"><div class="h">红框 doneFindingLine</div><span class="say">“not on main”</span><br>只看 code、不看 reason，而且说重了：缺的是证据，不是“确定不在”</div>
+          </div>
+        </div>
+
+        <div class="verdict">
+          <b>结论：</b>问题不在某一处的措辞，而在服务端拿一个名字装了两个事实。<br>
+          • 只改红框措辞（按 reason 说 “No code to land”）→ 三处一致了，但对 91 个可能改过代码的任务说“没代码”，是<b>假绿</b>。<br>
+          • 所以要先在服务端把“没分支”分出来，客户端措辞跟着改。<br>
+          • 另外，判据 4 没完成时不必再报一条“没落地”。
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= ③ PROPOSAL ================= -->
+    <div>
+      <div class="frame-title">③ 提议：项目被显式标成 non-code（已定）</div>
+      <div class="frame-sub">标记是协调者或 owner 的明确动作，不靠推断；卡片只讲真正挡路的那一件事。</div>
+
+      <div class="c-card" id="prop">
+        <div class="c-head"><span class="c-heading">Is this project done?</span><span class="c-prov">FROM ORBIT</span></div>
+        <div class="c-body">
+          <div class="c-meta">CBAI AI 视觉内容平台 Phase 0 实施 · record as done anyway</div>
+          <div class="c-untracked" id="p-untracked"><span class="ico">i</span><div><div><b>Non-code project.</b> Orbit checks the criteria only, not where work landed. <span style="color:var(--ink3)">Marked by the coordinator · Nov 11 ·</span> <span style="color:var(--blue);font-weight:600">Change</span></div></div></div>
+          <div class="c-sec">Done when · 4 criteria</div>
+          <div class="c-tally" id="p-tally">3 of 4 met</div>
+          <ul class="c-rows" id="p-rows">
+            <li><span class="c-no">1</span><span class="c-text">Criterion 1 (placeholder text)</span><span class="c-state"><span class="ok">met</span></span></li>
+            <li><span class="c-no">2</span><span class="c-text">Criterion 2 (91 tasks)</span><span class="c-state"><span class="ok">met</span></span></li>
+            <li><span class="c-no">3</span><span class="c-text">Criterion 3 (2 tasks)</span><span class="c-state"><span class="ok">met</span></span></li>
+            <li><span class="c-no">4</span><span class="c-text">External prerequisites settled</span><span class="c-state"><span class="bad">not met</span></span></li>
+          </ul>
+          <div class="c-block" id="p-block">
+            <div class="c-block-title">1 thing stands in the way</div>
+            <div class="c-block-row"><span class="c-no">4</span><div>Criterion 4 is not met — 1 task is still open
+              <div class="c-task"><span><span class="dot"></span>外部前置事项办结（短信、微信开放平台、支付商户、备案、合规审查等）</span><span class="btn small">Open</span></div>
+              <div style="display:flex;gap:8px;margin-top:8px"><span class="btn small" id="p-follow">Move to a follow-up…</span><span style="font-size:12px;color:var(--ink2);align-self:center">takes criterion 4 and its open task out of this project</span></div>
+            </div></div>
+          </div>
+          <p class="c-expl">If you record it done anyway, Orbit keeps criterion 4 as the gap you accepted.</p>
+        </div>
+        <div class="c-actions"><span class="btn primary">Record as done anyway</span><span class="btn">Not yet…</span></div>
+      </div>
+
+      <div class="notes">
+        <div class="n"><span class="k g">A</span><div><b>“非代码项目”是显式标记。</b>协调者用 <code>project_update</code> 标（卡片上写明谁、何时标的），owner 在项目页也能标或撤。标了以后：整条落地线不读，行尾没有落地标签，汇总只数“几条完成”，也不会出现“没落地”缺口。没标的项目一律按有代码处理（见 ④）。</div></div>
+        <div class="n"><span class="k g">B</span><div><b>只剩一件真事，并点名任务。</b>“没完成”按判据分组，列出卡住它的任务，可以直接点开。判据 4 不再重复报“没落地”。</div></div>
+        <div class="n"><span class="k g">C</span><div><b>存下的缺口只有判据 4。</b>结构性的“没落地”不进 <code>acceptedGaps</code>。</div></div>
+        <div class="n"><span class="k g">D</span><div><b>Move to a follow-up…</b>（已定）：选一个后续项目或新建一个，判据 4 连同它没完成的任务一起移过去；本项目的判据变成 3 条、全部完成，按钮从 “Record as done anyway” 变回 “Record as done”，不留缺口。</div></div>
+      </div>
+    </div>
+
+    <!-- ================= ④ VARIANT + RULES ================= -->
+    <div>
+      <div class="frame-title">④ 变体：有仓库，混进了 shared 任务</div>
+      <div class="frame-sub">这时“没分支”是真的缺证据，要说清楚，但不能说成“没代码”或“不在 main”。</div>
+      <div class="c-card" id="var">
+        <div class="c-head"><span class="c-heading">Is this project done?</span><span class="c-prov">FROM ORBIT</span></div>
+        <div class="c-body">
+          <div class="c-sec">Done when · 3 criteria</div>
+          <div class="c-tally">3 met · 2 landed on main · 1 ran without a branch</div>
+          <ul class="c-rows">
+            <li><span class="c-no">1</span><span class="c-text">Criterion 1</span><span class="c-state">met · Landed on main</span></li>
+            <li><span class="c-no">2</span><span class="c-text">Criterion 2</span><span class="c-state">met · Landed on main</span></li>
+            <li><span class="c-no">3</span><span class="c-text">Criterion 3</span><span class="c-state">met · <span style="color:var(--amber);font-weight:600">Ran without a branch</span></span></li>
+          </ul>
+          <div class="c-warn" id="v-warn"><b style="display:block;margin-bottom:4px">Orbit can’t prove 1 thing</b>Criterion 3: 6 tasks ran without a branch, so Orbit can’t see whether their changes reached main. Check main yourself before recording it done.</div>
+          <p class="c-expl">These will be kept as the gaps you accepted.</p>
+        </div>
+        <div class="c-actions"><span class="btn primary">Record as done anyway</span></div>
+      </div>
+
+      <div class="side" style="margin-top:18px">
+        <h3>规则</h3>
+        <table>
+          <tr><th>任务事实</th><th>原因</th><th>行 / 红框</th></tr>
+          <tr><td>声明 codeless、在别的仓库干的活</td><td><code>CODELESS</code></td><td>No code to land / 不报</td></tr>
+          <tr><td>落地线答“分支上没有提交”</td><td><code>NOTHING_TO_LAND</code></td><td>nothing to land / 不报</td></tr>
+          <tr><td>shared、没分支，<b>项目有仓库</b></td><td><b>新：<code>NO_BRANCH</code></b></td><td>Ran without a branch / 黄色，算缺口</td></tr>
+          <tr><td>项目被显式标成 non-code</td><td>项目级“不跟踪”</td><td>顶部一句说明 / 不逐条报</td></tr>
+          <tr><td>判据没完成</td><td>—</td><td>只报 not met，不再报“没落地”</td></tr>
+        </table>
+      </div>
+
+      <div class="side">
+        <h3>会改到的文件</h3>
+        <div class="mono" style="line-height:1.7">
+          shared: CriterionLandingReason（加 NO_BRANCH）<br>
+          apiserver/projects/criterion-landing-reason.ts<br>
+          apiserver/projects/project-done-request.ts（doneReadiness）<br>
+          web/lib/projectDone.ts · components/ProjectSettlementCard.tsx<br>
+          macos/OrbitKit/…/ProjectDone.swift · iOS · Android 同步<br>
+          + 文案一致性测试
+        </div>
+      </div>
+
+      <div class="side" style="border:1.5px solid var(--green)">
+        <h3>已定（11-11）</h3>
+        <ol style="margin:0;padding-left:20px">
+          <li>“不跟踪落地”= 协调者 / owner 显式标记“非代码项目”。</li>
+          <li>有仓库的项目里没分支的任务：按 ④ 报黄色缺口。</li>
+          <li>判据没完成：卡片给 “Open” 跳到任务，再加 “Move to a follow-up…”。</li>
+        </ol>
+      </div>
+    </div>
+  
+    <!-- ================= ⑤ OWNER-CONFIRMED CRITERIA ================= -->
+    <div>
+      <div class="frame-title">⑤ 问题 4：不绑任务的判据，靠“确认”完成（已定）</div>
+      <div class="frame-sub">外部事实（备案、审核、商户开通）不适合做成任务。判据可以选“由确认完成”：没有任务，由你、协调者或一次 Agent 检查确认后算完成。</div>
+
+      <div class="c-card" id="conf">
+        <div class="c-head"><span class="c-heading">Project · Done when</span><span class="c-prov">5 CRITERIA</span></div>
+        <div class="c-body">
+          <div class="c-tally">3 of 5 met · 2 wait for your confirmation</div>
+          <ul class="c-rows">
+            <li><span class="c-no">1</span><span class="c-text">Criterion 1</span><span class="c-state"><span class="ok">met</span> · by 4 tasks</span></li>
+            <li><span class="c-no">2</span><span class="c-text">Criterion 2</span><span class="c-state"><span class="ok">met</span> · by 91 tasks</span></li>
+            <li id="cf-done"><span class="c-no">3</span><span class="c-text">SMS provider is live<div style="font-size:11.5px;color:var(--ink2);margin-top:2px">Confirmed by you · Nov 10 · “Aliyun SMS template approved”</div></span><span class="c-state"><span class="ok">met</span> · by you</span></li>
+            <li id="cf-wait"><span class="c-no">4</span><span class="c-text">ICP filing is approved<div style="font-size:11.5px;color:var(--ink2);margin-top:2px">Checked by: the filing number shows on the MIIT site</div></span><span class="c-state"><span class="btn small primary" style="background:var(--ink);color:#fff">Confirm…</span></span></li>
+            <li><span class="c-no">5</span><span class="c-text">WeChat Open Platform app is approved</span><span class="c-state"><span class="btn small primary" style="background:var(--ink);color:#fff">Confirm…</span></span></li>
+          </ul>
+          <div class="c-block" id="cf-sheet" style="background:#fff;border-color:var(--line)">
+            <div class="c-block-title">Confirm criterion 4</div>
+            <div style="font-size:12.5px;color:var(--ink2);margin-bottom:6px">ICP filing is approved</div>
+            <div style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--ink3);margin-bottom:6px">What did you check? (optional) — e.g. filing no. 京ICP备…</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:8px">＋ Attach a screenshot</div>
+            <div style="display:flex;gap:8px"><span class="btn small primary" style="background:var(--ink);color:#fff">Confirm</span><span class="btn small">Cancel</span></div>
+          </div>
+        </div>
+        <div style="height:14px"></div>
+      </div>
+
+      <div class="notes">
+        <div class="n"><span class="k g">E</span><div><b>每条判据二选一：</b>“由任务完成”（默认，现状）或“由确认完成”。协调者或你都能把判据设成后者；它没有任务，也不参与落地。</div></div>
+        <div class="n"><span class="k g">F</span><div><b>三种确认者：</b>你、协调者、或一次 Agent 检查运行（按判据的验证方法去查，给 PASS / FAIL）。行上写明是谁 / 哪次运行确认的，以及查了什么；协调者确认的，你在卡片上能看到并撤销。</div></div>
+        <div class="n"><span class="k g">G</span><div><b>确认会过期：</b>判据文字改了（revision +1），确认作废，回到“待确认”，与任务声明过期同一规则。撤销确认 = 重新打开。</div></div>
+        <div class="n"><span class="k g">H</span><div><b>本例：</b>原判据 4（一句话塞了 5 件外部事项）拆成几条“由你确认”的判据，进度一眼可见，也不再需要那个一直 OPEN 的代理任务。</div></div>
+      </div>
+
+      <div class="side" style="margin-top:16px;border:1.5px solid var(--green)">
+        <h3>已定（问题 4，11-11）</h3>
+        <ol style="margin:0;padding-left:20px">
+          <li>协调者和你都能设“由确认完成”；确认可以来自你、协调者，或一次 Agent 检查运行。</li>
+          <li>“查了什么”可选，和截图一样。</li>
+          <li>所有项目都能用，不只是非代码项目。</li>
+        </ol>
+      </div>
+    </div>
+</div>
+</div>
+
+<script>
+// Draw numbered marks and rings over the card elements they explain.
+window.drawMarks = function () {
+  const board = document.querySelector('.board').getBoundingClientRect();
+  const put = (sel, label, opts = {}) => {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const pad = opts.pad ?? 3;
+    const ring = document.createElement('div');
+    ring.className = 'ring' + (opts.green ? ' g' : '');
+    Object.assign(ring.style, { left: (r.left - board.left - pad) + 'px', top: (r.top - board.top - pad) + 'px', width: (r.width + 2 * pad) + 'px', height: (r.height + 2 * pad) + 'px' });
+    const mk = document.createElement('div');
+    mk.className = 'mk';
+    if (opts.green) mk.style.background = 'var(--green)';
+    mk.textContent = label;
+    const side = opts.left ? -34 : r.width + 8;
+    Object.assign(mk.style, { left: (r.left - board.left + side) + 'px', top: (r.top - board.top + r.height / 2 - 13) + 'px' });
+    const host = document.querySelector('.board');
+    host.style.position = 'relative';
+    host.appendChild(ring); host.appendChild(mk);
+  };
+  put('#t-tally', '1', { left: true });
+  put('#t-rows', '1', { left: true });
+  put('#t-f2', '1', { pad: 1 });
+  put('#t-f3', '1', { pad: 1 });
+  put('#t-f4', '2', { pad: 1 });
+  put('#t-f1', '3', { pad: 1 });
+  put('#today .c-expl', '4', { pad: 2 });
+  put('#p-untracked', 'A', { green: true, left: true });
+  put('#p-block', 'B', { green: true, left: true });
+  put('#prop .c-expl', 'C', { green: true, left: true });
+  put('#p-follow', 'D', { green: true, left: true });
+  put('#cf-done', 'F', { green: true, left: true });
+  put('#cf-sheet', 'G', { green: true, left: true });
+};
+</script>
+</body>
+</html>

@@ -20,6 +20,7 @@ import {
   wikiChatLayout,
   wikiChatOffline,
   wikiChatPageSection,
+  wikiChatPanelMax,
   wikiChatPanelWidth,
   wikiChatQuoteCounts,
   wikiChatReading,
@@ -121,14 +122,21 @@ describe("the panel's place", () => {
     expect(['wide', 'docked', 'over', 'sheet'].map((layout) => wikiChatFoldsDirectory(layout as never))).toEqual([false, true, true, true]);
   });
 
-  it('is 400 wide by default, dragged between 320 and 560 where it is wide, and as wide as the window as a sheet', () => {
-    expect(wikiChatPanelWidth('wide', null)).toBe(400);
-    expect(wikiChatPanelWidth('wide', 480)).toBe(480);
-    expect(wikiChatPanelWidth('wide', 200)).toBe(320);
-    expect(wikiChatPanelWidth('wide', 900)).toBe(560);
-    expect(wikiChatPanelWidth('docked', 520)).toBe(400);
-    expect(wikiChatPanelWidth('over', 520)).toBe(400);
-    expect(wikiChatPanelWidth('sheet', 520)).toBeNull();
+  it('is a third of the window between 400 and 720 by default, dragged between 320 and half the window where it is wide', () => {
+    // Owner 11-11: 400 whatever the window was too narrow on a wide one.
+    expect(wikiChatPanelWidth('wide', null, 1440)).toBe(480);
+    expect(wikiChatPanelWidth('wide', null, 2055)).toBe(685);
+    expect(wikiChatPanelWidth('wide', null, 3008)).toBe(720);
+    expect(wikiChatPanelWidth('docked', null, 1200)).toBe(400);
+    expect(wikiChatPanelWidth('docked', 900, 1300)).toBe(433);
+    expect(wikiChatPanelWidth('over', null, 900)).toBe(400);
+    expect(wikiChatPanelWidth('wide', 480, 2055)).toBe(480);
+    expect(wikiChatPanelWidth('wide', 200, 2055)).toBe(320);
+    expect(wikiChatPanelWidth('wide', 1400, 2055)).toBe(1027);
+    expect(wikiChatPanelWidth('wide', 1400, 3008)).toBe(1400);
+    expect(wikiChatPanelWidth('wide', 2000, 3008)).toBe(1504);
+    expect(wikiChatPanelWidth('sheet', 520, 600)).toBeNull();
+    expect(wikiChatPanelMax(1440)).toBe(720);
   });
 
   it('is named in the address, every other key kept: ?chat=<session>', () => {

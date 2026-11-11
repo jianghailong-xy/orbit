@@ -36,7 +36,7 @@ import {
   SessionRunSource,
   TaskStatus,
 } from '@prisma/client';
-import { RunEventType, RunStatus as SharedRunStatus, base62ToUuid } from '@orbit/shared';
+import { RunEventType, RunStatus as SharedRunStatus, base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -67,10 +67,12 @@ import { replyToSessionRequest, SESSION_REPLY_TURN_PREFIX } from './session-requ
 import { SessionRequestService } from './session-request.service';
 import { SessionsService } from './sessions.service';
 import type { TurnCards } from './turn-cards';
+import { evidenceReviewTurnId, evidenceSendBackMessage, evidenceSendBackTurnId } from '../tasks/evidence-review';
 import {
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_REVIEW_TURN_KEY_PREFIX,
+  orbitResendTurnKey,
 } from './watch-turn-key';
 import '../test-support/dequeue-under-lease';
 
@@ -90,6 +92,10 @@ const CARD_FIELDS: Record<keyof TurnCards, true> = {
   confirmationReviewRequest: true,
   confirmationReturn: true,
   confirmationAnswers: true,
+  runNotice: true,
+  evidenceReview: true,
+  evidenceSendBack: true,
+  sessionOpening: true,
   sessionMessage: true,
   sessionReplies: true,
   externalSender: true,
@@ -325,6 +331,16 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
           assert.ok(picked.deliveredAt);
           const dueAt = new Date(picked.deliveredAt.getTime() + review.windowSeconds * 1_000).toISOString();
           assert.deepEqual(cards[each], { ...queuedCard, dueAt }, 'only the pickup-based deadline changes at hand-out');
+        } else if (each === 'runNotice' && expected[each] && where === 'the echo') {
+          // Handing a notice out marks it read; nothing else of it moves.
+          assert.deepEqual(cards[each], { ...(expected[each] as object), state: 'READ' }, 'only the read mark changes at hand-out');
+        } else if (each === 'evidenceReview' && expected[each] && where === 'the echo') {
+          const queuedCard = expected[each] as { dueAt: string | null };
+          assert.equal(queuedCard.dueAt, null, 'a queued evidence review has no deadline');
+          const picked = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: turnId } });
+          assert.ok(picked.deliveredAt);
+          const dueAt = new Date(picked.deliveredAt.getTime() + 1_800 * 1_000).toISOString();
+          assert.deepEqual(cards[each], { ...queuedCard, dueAt }, 'only the pickup-based deadline changes at hand-out');
         } else {
           assert.deepEqual(cards[each], expected[each], `${each}: ${where} disagrees with the queue view`);
         }
@@ -496,6 +512,125 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
       answers: [{ key: 'n1', question: 'Ship it behind the flag?', choice: 'Behind the flag', text: null, notShown: false }],
     });
     await assertSameCards('confirmationAnswers', filed.reviewer, told.id, { ahead, listedWhileHanded: true });
+    // A re-send of it after a failed turn is drawn as the same card: its key names the turn it re-sends.
+    const resent = await sessions.createTurn(ownerId, filed.reviewer, {
+      clientTurnId: orbitResendTurnKey(told.id, randomUUID()), content: told.content ?? '',
+    });
+    const resentRow = (await sessions.listQueuedTurns(ownerId, filed.reviewer, 'active')).find((row) => row.turnId === resent.turnId);
+    assert.deepEqual(resentRow?.confirmationAnswers, queued?.confirmationAnswers, 'a re-send keeps its card');
+  });
+
+  // ── evidenceReview and evidenceSendBack ───────────────────────────────────────────────────────
+
+  /** A task the dispatcher filed in no project, its run, and one revision of evidence. */
+  async function evidenceFor(title: string): Promise<{ dispatcher: string; taskId: string; run: string; evidenceId: string }> {
+    const dispatcher = await session(`files: ${title}`);
+    const taskId = await task(title, { creatorSessionId: dispatcher, acceptanceCriteria: `${title}: done.` });
+    const run = await session(`${title} — run`, { taskId, startsTaskWork: true });
+    const created = await prisma.taskCompletionEvidence.create({
+      data: {
+        taskId, ownerId, actorType: CreatorType.USER, actorId: ownerId, sourceSessionId: run,
+        criterionRevision: 'a'.repeat(64), criterion: { key: 'k', text: `${title}: done.` },
+        evidence: { claim: `${title}: the suite passes`, criterion: { key: 'k', text: `${title}: done.` }, checks: [], gaps: [] },
+        evidenceDigest: 'b'.repeat(64), revision: 1n,
+      },
+      select: { id: true },
+    });
+    return { dispatcher, taskId, run, evidenceId: created.id };
+  }
+
+  await t.test('a revision handed to the session that dispatched its task (evidenceReview)', async () => {
+    const work = await evidenceFor('the parity evidence to review');
+    const turn = await sessions.createTurn(ownerId, work.dispatcher, {
+      clientTurnId: evidenceReviewTurnId(work.evidenceId), content: '', intent: 'NEXT_TURN',
+    });
+    const queued = (await sessions.listQueuedTurns(ownerId, work.dispatcher)).find((row) => row.turnId === turn.turnId);
+    assert.deepEqual(queued?.evidenceReview, {
+      evidenceId: work.evidenceId, taskId: work.taskId, title: 'the parity evidence to review', revision: '1',
+      runSessionId: work.run, dueAt: null, claim: 'the parity evidence to review: the suite passes',
+      state: 'OPEN', latestRevision: '1', decision: null,
+    });
+    await assertSameCards('evidenceReview', work.dispatcher, turn.turnId, { listedWhileHanded: false });
+  });
+
+  await t.test('a send-back\'s note handed to the run that submitted the revision (evidenceSendBack)', async () => {
+    const work = await evidenceFor('the parity evidence sent back');
+    const decision = await prisma.taskEvidenceDecision.create({
+      data: {
+        taskId: work.taskId, ownerId, evidenceId: work.evidenceId, criterionRevision: 'a'.repeat(64),
+        evidenceDigest: 'b'.repeat(64), decision: 'SEND_BACK', note: 'show the count before and after',
+        decidedByType: CreatorType.AGENT, decidedById: workspaceId, decidingSessionId: work.dispatcher,
+      },
+      select: { id: true },
+    });
+    const ahead = await ownerSays(work.run, 'the owner goes first');
+    const told = await sessions.createTurn(ownerId, work.run, {
+      clientTurnId: evidenceSendBackTurnId(decision.id),
+      content: evidenceSendBackMessage({
+        taskId: work.taskId, taskTitle: 'the parity evidence sent back', revision: '1',
+        decidedByType: CreatorType.AGENT, note: 'show the count before and after',
+        from: { attributes: [`from-session="${uuidToBase62(work.dispatcher)}"`], lines: [] } as never,
+      }),
+      intent: 'NEXT_TURN',
+    });
+    const queued = (await sessions.listQueuedTurns(ownerId, work.run)).find((row) => row.turnId === told.turnId);
+    assert.deepEqual(queued?.evidenceSendBack, {
+      decisionId: decision.id, taskId: work.taskId, title: 'the parity evidence sent back', revision: '1',
+      note: 'show the count before and after', by: 'SESSION', bySessionId: work.dispatcher,
+      byTitle: 'files: the parity evidence sent back',
+    });
+    await assertSameCards('evidenceSendBack', work.run, told.turnId, { ahead, listedWhileHanded: true });
+  });
+
+  // ── runNotice ─────────────────────────────────────────────────────────────────────────────────
+
+  await t.test('a run\'s notify handed to the coordinator (runNotice)', async () => {
+    const { projectId, coordinator } = await coordinatedProject('run notice parity');
+    const taskId = await task('the run that notifies', { projectId });
+    const run = await session('Notifying run', { taskId, status: RunStatus.RUNNING });
+    const requestId = randomUUID();
+    const clientTurnId = `run-notify:v1:${requestId}`;
+    const turn = await sessions.createTurn(ownerId, coordinator, { clientTurnId, content: '', intent: 'NEXT_TURN' }, {
+      onTurnWritten: async (tx, written) => {
+        await tx.sessionRequest.create({ data: { id: requestId, ownerId, fromSessionId: run, toSessionId: coordinator,
+          turnId: written.id, clientTurnId, kind: 'RUN_NOTIFY',
+          requestPreview: 'The emulator is down; core tests only.', replyBy: new Date(Date.now() + 300_000) } });
+      },
+    });
+    const queued = (await sessions.listQueuedTurns(ownerId, coordinator)).find((row) => row.turnId === turn.turnId);
+    assert.deepEqual(queued?.runNotice, {
+      requestId, taskId, taskTitle: 'the run that notifies', runSessionId: run,
+      message: 'The emulator is down; core tests only.', state: 'OPEN',
+    });
+    await assertSameCards('runNotice', coordinator, turn.turnId, { listedWhileHanded: false });
+  });
+
+  // ── sessionOpening ────────────────────────────────────────────────────────────────────────────
+
+  await t.test('the opening of a session Orbit opened (sessionOpening), on its echo', async () => {
+    // The opening is never on the queue (it is the session's prompt, seeded at claim), so only its
+    // echo carries the card: read it there, for each kind a row can say.
+    async function openingOf(sessionId: string): Promise<unknown> {
+      const turn = await prisma.conversationTurn.create({
+        data: { sessionId, seq: 1, clientTurnId: `initial-${sessionId}`, content: 'You are…', kind: 'message', status: 'IN_FLIGHT' },
+        select: { id: true },
+      });
+      return (await say(sessionId, turn.id, RunEventType.USER, { text: 'You are…' })).sessionOpening;
+    }
+    const { projectId, coordinator } = await coordinatedProject('the project Orbit opened a coordinator for');
+    await prisma.session.update({ where: { id: coordinator }, data: { promptByOrbit: true } });
+    assert.deepEqual(await openingOf(coordinator), {
+      kind: 'COORDINATOR', mention: null,
+      target: { kind: 'PROJECT', id: projectId, title: 'the project Orbit opened a coordinator for' },
+    });
+    const console = await session('Dispatch: parity list', { promptByOrbit: true });
+    const list = await prisma.taskList.create({ data: { ownerId, title: 'parity list', ownerSessionId: console }, select: { id: true } });
+    assert.deepEqual(await openingOf(console), {
+      kind: 'DISPATCH', mention: null, target: { kind: 'LIST', id: list.id, title: 'parity list' },
+    });
+    const typed = await session('the owner opened this one');
+    assert.equal(await openingOf(typed), undefined, 'a person\'s opening is theirs');
+    covered.add('sessionOpening');
   });
 
   await t.test('a run question handed to the coordinator (runQuestion)', async () => {
