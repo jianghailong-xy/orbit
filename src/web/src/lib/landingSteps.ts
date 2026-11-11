@@ -115,11 +115,18 @@ function stepName(key: LandingStepKey, kind: IntegrationJobKind): string {
   }
 }
 
-/** One attempt's lines as its steps, in the order a landing goes through them. */
-export function landingSteps(entries: readonly IntegrationTimelineEntry[], kind: IntegrationJobKind): LandingStep[] {
+/** The lines that only say what queued an attempt: with a `trigger` on its section, the turn's opening message says
+ *  them (docs/mocks/landings-chat-trigger), and no Queue step repeats them. */
+const TRIGGER_KINDS = new Set<string>(['ENQUEUED', 'RETRY', 'CONFIRMATION', 'AUTOMATIC_ATTEMPT']);
+
+/** One attempt's lines as its steps, in the order a landing goes through them. `triggered`: its section carries a
+ *  trigger, so the lines that queued it are the opening message's, not a step's. */
+export function landingSteps(entries: readonly IntegrationTimelineEntry[], kind: IntegrationJobKind,
+  triggered = false): LandingStep[] {
   const groups = new Map<LandingStepKey, LandingStep['entries']>();
   let current: LandingStepKey | null = null;
   entries.forEach((entry, index) => {
+    if (triggered && current === null && TRIGGER_KINDS.has(entry.kind)) return;
     const key = stepOf(entry, current);
     current = key;
     const group = groups.get(key) ?? [];
