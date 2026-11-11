@@ -47,6 +47,8 @@ type supervisedSession struct {
 	// The SubAgent reports (PATCH …/subagents/:runId), in arrival order, and the runs opened so far.
 	subagentReports []map[string]interface{}
 	subagentsOpened int
+	// subagentProvider is the engine the server names for a SubAgent's child; "" is the parent's own, Claude.
+	subagentProvider string
 }
 
 // superviseClaudeSession registers the session active, as a claim does, with one message
@@ -165,10 +167,11 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.subagentsOpened++
 		runID := fmt.Sprintf("run-%d", s.subagentsOpened)
+		provider := firstNonEmpty(s.subagentProvider, providerClaude)
 		s.mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{},
-			"exec": map[string]interface{}{"provider": "claude", "model": "claude-test", "permissionMode": "acceptEdits",
+			"exec": map[string]interface{}{"provider": provider, "model": "claude-test", "permissionMode": "acceptEdits",
 				"env": map[string]string{"ANTHROPIC_API_KEY": "test"}},
 		})
 		return

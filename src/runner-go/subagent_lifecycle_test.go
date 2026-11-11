@@ -314,6 +314,58 @@ func TestSubagentStoppedBeforeFinalizeAndItsFileNotCommitted(t *testing.T) {
 	}
 }
 
+// subagentOpenCodeChildScript is an OpenCode child (`opencode run`): it writes the first half of half.txt, says
+// so, and waits for $SUBAGENT_MARKS/finish. It notes the stop's SIGINT and goes on, so only the kill after the grace
+// ends it.
+const subagentOpenCodeChildScript = `trap 'touch "$SUBAGENT_MARKS/sigint"' INT
+cat > /dev/null
+echo "$$" > "$SUBAGENT_MARKS/pid"
+printf '%s\n' '{"type":"step_start","sessionID":"ses_child","part":{"type":"step-start"}}'
+printf 'first half' > half.txt
+touch "$SUBAGENT_MARKS/started"
+while [ ! -f "$SUBAGENT_MARKS/finish" ]; do sleep 0.05; done
+printf '%s\n' '{"type":"text","sessionID":"ses_child","part":{"type":"text","text":"half.txt is written"}}'`
+
+// Case 3 on another engine: an OpenCode child, stopped by the parent's end, gets the same stop as a Claude one —
+// SIGINT to its process group, the grace, the kill — and is reported STOPPED before finalize, with its file in no
+// commit.
+func TestSubagentNonClaudeChildStoppedBeforeFinalize(t *testing.T) {
+	grace := subagentStopGrace
+	subagentStopGrace = 300 * time.Millisecond
+	t.Cleanup(func() { subagentStopGrace = grace })
+
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	s := superviseClaudeSessionInWorktree(t, pool, oneTurn()...)
+	s.awaitParked("turn-1")
+	r := installSubagentChild(t, s)
+	bin := t.TempDir()
+	writeFakeBin(t, bin, providerOpenCode, subagentOpenCodeChildScript)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	s.mu.Lock()
+	s.subagentProvider = providerOpenCode
+	s.mu.Unlock()
+	r.delegate(true)
+
+	s.live.cancel() // the session ends
+	stopped := r.awaitReport(subagentStatusStopped)
+	if _, err := os.Stat(filepath.Join(r.marks, "sigint")); err != nil {
+		t.Fatal("the OpenCode child was never sent SIGINT: its process did not reach its run, so the stop went straight to the kill")
+	}
+	if stopped["wake"] == true {
+		t.Fatalf("a SubAgent stopped with its session owes a wake: %v", stopped)
+	}
+	waitUntil(t, func() bool { return r.pathIndex("/finalize") >= 0 }, "the session was never finalized")
+	if stop, finalize := r.pathIndex("/subagents/run-1"), r.pathIndex("/finalize"); stop < 0 || stop > finalize {
+		t.Fatalf("the SubAgent was reported at request %d and the session finalized at %d: the stop must come first", stop, finalize)
+	}
+	if childAlive(t, r.marks) {
+		t.Fatal("the OpenCode child outlived the stop")
+	}
+	if committed := mustGit(t, s.execDir, "log", "--all", "--name-only", "--format="); strings.Contains(committed, "half.txt") {
+		t.Fatalf("a commit holds the file the stopped OpenCode SubAgent was writing:\n%s", committed)
+	}
+}
+
 // Case 4: the runner stops — a restart or an update — with a SubAgent running. The child engine ends with it, the
 // run is reported INTERRUPTED with the runner's stop as its reason, and the wake is owed, so the server wakes the
 // parent with it.

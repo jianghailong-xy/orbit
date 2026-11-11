@@ -13,6 +13,10 @@ import { wikiActivityRunPath } from '../lib/wikiRuns';
  *
  * While the server executes the account's wiki the line also says why its runs do not move (mock 35 ⑥), and a
  * run the server's job made has no session: its View run opens the run's row on Activity instead.
+ *
+ * After them, what the latest run read of the repository (docs/wiki-repo-tiers-design.md §7.2, mock 44 ⑤): a phone's
+ * line says its short words, a wide one the whole sentence and `Fix in Settings`. When the two differ both are drawn,
+ * and the stylesheet shows the one the width asks for.
  */
 export function WikiMaintenanceStatus({
   health,
@@ -23,21 +27,35 @@ export function WikiMaintenanceStatus({
   spaceSlug: string;
   now?: number;
 }) {
+  const wide = wikiStatusParts(health, now);
+  const narrow = wikiStatusParts(health, now, true);
+  const line = (parts: WikiStatusPart[]) =>
+    parts.map((part, index) => (
+      <Fragment key={index}>
+        <span className="wk-sep">·</span>
+        <StatusPart part={part} health={health} spaceSlug={spaceSlug} />
+      </Fragment>
+    ));
+  if (JSON.stringify(wide) === JSON.stringify(narrow)) return <>{line(wide)}</>;
   return (
     <>
-      {wikiStatusParts(health, now).map((part, index) => (
-        <Fragment key={index}>
-          <span className="wk-sep">·</span>
-          <StatusPart part={part} health={health} spaceSlug={spaceSlug} />
-        </Fragment>
-      ))}
+      <span className="wk-maint-wide">{line(wide)}</span>
+      <span className="wk-maint-narrow">{line(narrow)}</span>
     </>
   );
 }
 
 function StatusPart({ part, health, spaceSlug }: { part: WikiStatusPart; health: WikiSpaceHealth; spaceSlug: string }) {
   if (part.link === 'settings') {
-    return <Link className="wk-maint-link" to={wikiSettingsPath(spaceSlug)}>{part.text}</Link>;
+    return (
+      <Link
+        className={part.tone === 'muted' ? 'wk-maint-link wk-maint-link--muted' : 'wk-maint-link'}
+        to={wikiSettingsPath(spaceSlug)}
+        title={part.hint}
+      >
+        {part.text}
+      </Link>
+    );
   }
   const lastRun = health.maintenance.lastRun;
   if (part.link === 'run' && lastRun?.jobId) {

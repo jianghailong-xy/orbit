@@ -1,0 +1,1 @@
+draft-dark: the transcript's sticky header never showed

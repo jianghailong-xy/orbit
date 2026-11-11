@@ -977,39 +977,7 @@ func (d *agyDriver) finishTurn(result map[string]interface{}, failure string) {
 	if turn == nil {
 		return
 	}
-	status, subtype, errText := stSucceeded, "success", ""
-	resultError := firstString(result, "error")
-	switch {
-	case turn.interrupted || (result != nil && resultError == "interrupted"):
-		status, subtype = stInterrupted, "interrupted"
-	case failure != "":
-		status, subtype, errText = stFailed, "error", failure
-	case turn.errorStep || (d.proc != nil && !d.proc.initialized):
-		// A process that never initialized failed to start (an invalid --model, say): agy says so
-		// in a `result` and exits.
-		var report *agyErrorReport
-		if d.proc != nil {
-			report, _ = d.proc.errorReport()
-		}
-		status, subtype, errText = stFailed, "error", antigravityErrorText(report, resultError)
-	case agySoftDenied(turn, result):
-		status, subtype = stFailed, "permission_denied"
-		errText = "This turn stopped at a tool that was not allowed to run: " + agyRefusal(turn.lastTool.rawName) +
-			" To let it run, switch the session to Default or Accept Edits (you are asked first) or Bypass permissions, or allow it with a permission rule."
-	}
-	if turn.pending != nil {
-		emitAgyToolResult(d.emit, *turn.pending, subtype == "permission_denied")
-		turn.pending = nil
-	}
-	// Whatever agy says about a step after this goes nowhere: the turn is over.
-	closeUnansweredAgyTools(d.emit, turn, agyUnansweredToolText(status))
-	if errText != "" {
-		d.emit(evError, map[string]interface{}{"message": errText})
-	}
-	resultText := strings.TrimSpace(firstString(result, "response"))
-	if resultText == "" {
-		resultText = strings.TrimSpace(turn.all.String())
-	}
+	status, subtype, errText, resultText := d.settleTurn(turn, result, failure)
 	d.emit(evTurnEnd, withAntigravityContextWindow(map[string]interface{}{
 		"subtype":  subtype,
 		"numTurns": 1, // agy's num_turns counts the whole conversation
@@ -1041,6 +1009,46 @@ func (d *agyDriver) finishTurn(result map[string]interface{}, failure string) {
 	}
 	d.turn = nil
 	d.setTurn("")
+}
+
+// settleTurn is how a turn ended — from its `result`, or with failure set when there is none — and writes what
+// the transcript still owes it: the last tool's result, a result for every call left open, and the error. The
+// session's finishTurn reports it; a SubAgent's child (runAntigravityChild) returns it.
+func (d *agyDriver) settleTurn(turn *agyTurn, result map[string]interface{}, failure string) (status, subtype, errText, resultText string) {
+	status, subtype, errText = stSucceeded, "success", ""
+	resultError := firstString(result, "error")
+	switch {
+	case turn.interrupted || (result != nil && resultError == "interrupted"):
+		status, subtype = stInterrupted, "interrupted"
+	case failure != "":
+		status, subtype, errText = stFailed, "error", failure
+	case turn.errorStep || (d.proc != nil && !d.proc.initialized):
+		// A process that never initialized failed to start (an invalid --model, say): agy says so
+		// in a `result` and exits.
+		var report *agyErrorReport
+		if d.proc != nil {
+			report, _ = d.proc.errorReport()
+		}
+		status, subtype, errText = stFailed, "error", antigravityErrorText(report, resultError)
+	case agySoftDenied(turn, result):
+		status, subtype = stFailed, "permission_denied"
+		errText = "This turn stopped at a tool that was not allowed to run: " + agyRefusal(turn.lastTool.rawName) +
+			" To let it run, switch the session to Default or Accept Edits (you are asked first) or Bypass permissions, or allow it with a permission rule."
+	}
+	if turn.pending != nil {
+		emitAgyToolResult(d.emit, *turn.pending, subtype == "permission_denied")
+		turn.pending = nil
+	}
+	// Whatever agy says about a step after this goes nowhere: the turn is over.
+	closeUnansweredAgyTools(d.emit, turn, agyUnansweredToolText(status))
+	if errText != "" {
+		d.emit(evError, map[string]interface{}{"message": errText})
+	}
+	resultText = strings.TrimSpace(firstString(result, "response"))
+	if resultText == "" {
+		resultText = strings.TrimSpace(turn.all.String())
+	}
+	return status, subtype, errText, resultText
 }
 
 // processExited handles the current process going away: its turn, if one was still running, ends

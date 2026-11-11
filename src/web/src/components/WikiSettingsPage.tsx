@@ -8,7 +8,7 @@ import {
   type WikiReviewMode,
   type WikiSystemModelStatus,
 } from '@orbit/shared';
-import { wikiSpacesQuery, wikiSpaceWorkspacesQuery, wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
+import { wikiHealthQuery, wikiSpacesQuery, wikiSpaceWorkspacesQuery, wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { WIKI_PATH, WIKI_SETTINGS_SAVED, WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
 import { wikiSpaceNames } from '../lib/wikiSpace';
@@ -57,7 +57,18 @@ import {
   WIKI_WORKSPACES_LEAD,
   wikiWorkspaceLabel,
 } from '../lib/wikiReviewMode';
-import { addWikiWorkspace, leaveWikiWorkspaceOut, updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
+import { addWikiWorkspace, leaveWikiWorkspaceOut, runWikiMaintenanceNow, updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
+import {
+  WIKI_CHANGE_WORKSPACE,
+  WIKI_CHECK_AND_RUN,
+  WIKI_RUN_REFUSED,
+  WIKI_RUN_STARTED,
+  WIKI_USE_FOLDER,
+  WIKI_USE_FOLDER_NOTE,
+  WIKI_USE_FOLDER_TITLE,
+  wikiRepoCard,
+} from '../lib/wikiRepoCard';
+import { useConfirm } from './ui/ConfirmDialog';
 import { WikiTrashLink, useMoveWikiToTrash } from './WikiTrashDialog';
 import { WikiModelLine, WikiPrivacyNote } from './WikiSystemModel';
 import { WikiSetUpDialog } from './WikiSetUpDialog';
@@ -167,9 +178,10 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
 
       <WikiWorkspacesCard space={space} />
 
-      <Card className="wk-settings-card" title={WIKI_MAINTENANCE}>
+      <Card className="wk-settings-card" title={<MaintenanceTitle space={space} />}>
         {settings.maintenance.enabled ? (
           <MaintenanceOn
+            space={space}
             maintenance={settings.maintenance}
             server={server}
             busy={write.isPending}
@@ -298,17 +310,80 @@ function WikiWorkspacesCard({ space }: { space: WikiSpaceRow }) {
   );
 }
 
+/** The card's title, and beside it the tag of what the last run read when that is less than git (mock 44 ⑤). */
+function MaintenanceTitle({ space }: { space: WikiSpaceRow }) {
+  const health = useQuery(wikiHealthQuery(space.id));
+  const card = health.data ? wikiRepoCard(health.data, Date.now()) : null;
+  return (
+    <>
+      {WIKI_MAINTENANCE}
+      {card && <span className={`wk-repo-tag ${card.tag.tone}`}>{card.tag.text}</span>}
+    </>
+  );
+}
+
+/**
+ * What the last run read and the ways to set it right (docs/wiki-repo-tiers-design.md §7.3, mock 44 ⑤): the sentence and
+ * when it was checked, then Check again and run now — off with its reason when the day is used up or a run is under way —
+ * Change workspace…, which opens the same form as Edit, and Use this folder when the folder was refused for sharing too
+ * few files with the last snapshot, asked once.
+ */
+function MaintenanceRepo({ space, onChange }: { space: WikiSpaceRow; onChange: () => void }) {
+  const toast = useToast();
+  const health = useQuery(wikiHealthQuery(space.id));
+  const run = useWikiWrite((acceptFolder: boolean) => runWikiMaintenanceNow(space.id, acceptFolder));
+  const [confirm, holder] = useConfirm();
+  const card = health.data ? wikiRepoCard(health.data, Date.now()) : null;
+  if (!card) return null;
+  const start = async (acceptFolder: boolean) => {
+    try {
+      await run.mutateAsync(acceptFolder);
+      toast.success(WIKI_RUN_STARTED);
+    } catch (error) {
+      toast.error(WIKI_RUN_REFUSED, error instanceof Error ? error.message : undefined);
+    }
+  };
+  return (
+    <div className="wk-repo-card">
+      <div className="wk-repo-line">{card.line}</div>
+      <div className="wk-repo-actions">
+        <Button variant="primary" disabled={!card.canRun} loading={run.isPending} onClick={() => void start(false)}>
+          {WIKI_CHECK_AND_RUN}
+        </Button>
+        <Button onClick={onChange}>{WIKI_CHANGE_WORKSPACE}</Button>
+        {card.useFolder && (
+          <Button
+            disabled={!card.canRun || run.isPending}
+            onClick={() => void confirm({
+              title: WIKI_USE_FOLDER_TITLE,
+              description: WIKI_USE_FOLDER_NOTE,
+              confirmText: WIKI_USE_FOLDER,
+              onConfirm: () => start(true),
+            })}
+          >
+            {WIKI_USE_FOLDER}
+          </Button>
+        )}
+      </div>
+      {card.blocked && <div className="wk-repo-blocked">{card.blocked}</div>}
+      {holder}
+    </div>
+  );
+}
+
 /**
  * Maintenance once it is on: where it reads the repository from, the System model, and how often it may — then
  * Edit and Turn off, with the privacy note.
  */
 function MaintenanceOn({
+  space,
   maintenance,
   server,
   busy,
   onEdit,
   onTurnOff,
 }: {
+  space: WikiSpaceRow;
   maintenance: WikiMaintenanceSettings;
   server: WikiSystemModelStatus | null;
   busy: boolean;
@@ -320,6 +395,7 @@ function MaintenanceOn({
   const where = workspace ? wikiWorkspaceLabel(workspace) : (maintenance.workspaceId ?? '—');
   return (
     <>
+      <MaintenanceRepo space={space} onChange={onEdit} />
       <div className="wk-maint-rows">
         <span className="k">{WIKI_STATUS}</span>
         <span className="v">

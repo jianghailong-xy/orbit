@@ -133,6 +133,21 @@ public enum SessionMessageCard {
     public static let openTask = "Its task ↗"
     public static let undelivered = "The session has not confirmed it received this."
 
+    /// A long message folds by its rendered height, not its length (docs/mocks/session-message-clamp,
+    /// approved 2026-11-11): taller than `clampFrom` lines, it shows its first `clampLines` and
+    /// `showMore`; opened, the whole text and `showLess`. Web: `SessionMessageCard.tsx`'s
+    /// `SESSION_MESSAGE_CLAMP_*` and `SESSION_MESSAGE_SHOW_*`.
+    public static let clampLines = 8
+    public static let clampFrom = 12
+    public static let showMore = "Show more"
+    public static let showLess = "Show less"
+
+    /// Whether a body `height` tall, at `lineHeight` per line, is long enough to fold. Nothing
+    /// measured yet (a zero line height) folds nothing.
+    public static func folds(height: Double, lineHeight: Double) -> Bool {
+        lineHeight > 0 && height > lineHeight * Double(clampFrom)
+    }
+
     /// The sending session as the card names it: its title, or what an untitled one is called.
     public static func title(_ card: SessionMessage) -> String {
         let title = card.fromTitle.trimmingCharacters(in: .whitespacesAndNewlines)

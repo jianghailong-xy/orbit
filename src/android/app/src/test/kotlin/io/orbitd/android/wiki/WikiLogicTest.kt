@@ -73,6 +73,15 @@ class WikiLogicTest {
             WikiLogic.anchorStateMark(WikiAnchor("path", "p", check = WikiAnchorCheck("verified", WikiFixtures.sha))))
     }
 
+    @Test fun aDeferredAnchorSaysSoUntilItsFirstCheck() {
+        // contract anchorRules.deferred: the drawer's line beside it, and the wire's key decoded.
+        val decoded = Wire.json.decodeFromString(WikiAnchor.serializer(), """{"type":"path","path":"src/a.go","deferred":true}""")
+        assertEquals(true, WikiLogic.anchorDeferred(decoded))
+        assertEquals(false, WikiLogic.anchorDeferred(WikiAnchor("path", "src/a.go")))
+        assertEquals(false, WikiLogic.anchorDeferred(WikiAnchor("path", "src/a.go", check = WikiAnchorCheck("verified", WikiFixtures.sha), deferred = true)))
+        assertEquals("Not checked yet: the code could not be read when this was learned", WikiCopy.anchorDeferred)
+    }
+
     @Test fun aPitfallsDetailsRows() {
         val detail = WikiEntryDetail.decode(Wire.json.parseToJsonElement(WikiFixtures.entryDetail))
         val rows = WikiLogic.fieldRows(detail.entry.kind, detail.entry.fields)

@@ -977,6 +977,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if eventType == evToolResult {
 			volumeSyncAfterTools.nudge()
 		}
+		// A delegate call, whose id an engine other than Claude Code does not send with it (delegateCallLog).
+		delegateCalls.note(sessionID, eventType, payload)
 		if eventType == evError {
 			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
 				lastErrMu.Lock()
@@ -1211,6 +1213,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				endSessionLeases(sessionID)
 			}
 			stopBgJobService()
+			delegateCalls.forget(sessionID)
 		}()
 	}
 

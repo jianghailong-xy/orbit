@@ -92,24 +92,26 @@ func (l *parentEditLog) note(eventType string, payload map[string]interface{}) {
 	if id, _ := payload["subagentRunId"].(string); id != "" {
 		return
 	}
-	field, ok := subagentEditTools[asString(payload["name"])]
+	tool, ok := subagentEditTools[asString(payload["name"])]
 	if !ok {
 		return
 	}
 	input, _ := payload["input"].(map[string]interface{})
-	path := asString(input[field])
-	if path == "" {
+	paths := tool.paths(input)
+	if len(paths) == 0 {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(l.dir, path)
-	}
 	if l.edits == nil {
 		l.edits = map[string]time.Time{}
 	}
-	l.edits[filepath.Clean(path)] = time.Now()
+	for _, path := range paths {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(l.dir, path)
+		}
+		l.edits[filepath.Clean(path)] = time.Now()
+	}
 }
 
 // since is every path the parent's edit tools named at or after from.

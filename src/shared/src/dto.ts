@@ -77,6 +77,10 @@ export interface SessionMoveTarget {
   conversation: 'continues' | 'rebuilt';
   /** The folders the session can be filed in there. */
   folders: SessionMoveFolder[];
+  /** The session is a project's coordinator and a new coordinator for that project could open here
+   *  (enabled, with a runner) — the Move panel's "Start new here…" when the conversation itself cannot
+   *  come along. Always false for any other session. */
+  startsCoordinator: boolean;
 }
 
 /** `GET /sessions/:id/move-targets`: everything the Move panel and its confirmation need. */
@@ -95,6 +99,9 @@ export interface SessionMoveTargets {
   changedFiles: number;
   unmergedFiles: number;
   mergeTarget: string | null;
+  /** The project this session coordinates (`project.coordinator_session_id`), which moves with it:
+   *  the project is coordinated from wherever the session goes. Null for any other session. */
+  coordinates: { projectId: string; title: string } | null;
   targets: SessionMoveTarget[];
 }
 
@@ -2116,11 +2123,53 @@ export interface SubagentDecision {
   /** Candidates that were dropped, each with why. A null model: the whole provider or engine went. */
   candidates: Array<{ provider: string; engine: string | null; model: string | null; effort: string | null; reason: string }>;
   policyVersion: string;
+  /** The rest of the tier's pool after the pick, ranked: where a run whose account hit its limit moves next
+   *  (§4.3). Absent on older rows; empty when the model was named rather than routed. */
+  fallbacks?: SubagentCandidateTarget[];
   /** Whether the SubAgent runs on what this names. */
   applied: boolean;
   /** What it runs on instead while `applied` is false: the parent's model and effort. Absent on older rows. */
   runModel?: string | null;
   runEffort?: string | null;
+}
+
+/** One engine, provider, model and effort a SubAgent may run on. */
+export interface SubagentCandidateTarget {
+  engine: string;
+  provider: string;
+  model: string;
+  effort: string | null;
+}
+
+/** How one attempt of a SubAgent run ended: still running, a usage-limit or capacity failure it moved on from, or the run's end. */
+export type SubagentAttemptOutcome = 'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | Exclude<SubagentRunStatus, 'RUNNING'>;
+
+/** One entry of `subagent_run.attempts`: a child process the run started, in order (§4.3). */
+export interface SubagentAttempt extends SubagentCandidateTarget {
+  attempt: number;
+  outcome: SubagentAttemptOutcome;
+  /** The engine's own words, for an attempt that hit a limit; truncated. */
+  error?: string;
+  startedAt: string;
+  endedAt?: string;
+}
+
+/** The runner's ask for the next candidate after a child failed on a usage limit or capacity (§4.3). */
+export interface SubagentFallbackRequest {
+  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit or capacity error. */
+  error: string;
+  /** The definition's read-only flag and permission mode, as the start sent them. */
+  readonly?: boolean;
+  permissionMode?: string;
+}
+
+/** Where the run goes next: its new attempt, the reason added to its Why, and how to run the child there. */
+export interface SubagentFallbackResponse {
+  runId: string;
+  attempt: number;
+  reason: string;
+  decision: SubagentDecision;
+  exec: AgentExecConfig;
 }
 
 /**

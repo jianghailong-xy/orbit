@@ -66,6 +66,22 @@ class WikiServerExecutionFixtureTest {
         }
     }
 
+    /** What a maintenance run read of the repository, as a tag on its row (docs/wiki-repo-tiers-design.md §7.4). */
+    @Test fun everyRunTierSaysTheFixturesWords() {
+        val tiers = shared.fobj("runs").farr("tiers").map { it.jsonObject }
+        assertTrue(tiers.isNotEmpty())
+        tiers.forEach { case ->
+            val name = case.string("name")
+            val job = WikiJob.read(buildJsonObject { put("id", "j"); put("kind", "maintain"); put("state", "succeeded"); put("repo", case.getValue("repo")) })!!
+            val said = WikiRunsLogic.tier(job)
+            assertEquals("$name: tier", case.stringOrNull("tier"), said?.tier)
+            assertEquals("$name: tone", case.stringOrNull("tone"), said?.tone?.name?.lowercase())
+            assertEquals("$name: reason", case.stringOrNull("reason"), said?.reason)
+        }
+        assertEquals(setOf("git", "folder", "sessions", "wrong_repository"),
+            tiers.mapNotNull { (it["repo"] as? JsonObject)?.string("tier") }.toSet())
+    }
+
     @Test fun everyCallRowSaysTheFixturesWords() {
         val runs = shared.fobj("runs")
         assertEquals(runs.fstr("callsTitle"), WikiRunsCopy.callsTitle)

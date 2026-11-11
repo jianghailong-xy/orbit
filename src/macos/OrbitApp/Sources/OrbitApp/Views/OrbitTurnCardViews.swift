@@ -273,24 +273,24 @@ struct SessionOpeningRowView: View {
     var onCancelQueued: (() -> Void)?
 
     @State private var open = false
-    @Environment(\.openURL) private var openURL
+
+    private var sentence: Text {
+        guard let target = card.linkedTarget else { return Text(card.lead).foregroundColor(.secondary) }
+        var title = AttributedString(target.title)
+        if let url = target.url { title.link = url }
+        // The copy ends at its last word; the space before the target is the sentence's.
+        return Text(card.lead + " ").foregroundColor(.secondary) + Text(title).foregroundColor(.accentColor)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "smallcircle.filled.circle").font(.orbitMeta).foregroundStyle(.secondary)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(card.lead).foregroundStyle(.secondary)
-                    if let target = card.linkedTarget {
-                        if let url = target.url {
-                            Button { openURL(url) } label: { Text(target.title) }
-                                .buttonStyle(.plain).foregroundStyle(.tint)
-                        } else {
-                            Text(target.title)
-                        }
-                    }
-                }
-                .font(.orbitSubtext)
+                // One Text, so the target wraps inside the sentence rather than beside it; its link
+                // opens through the environment's openURL like every other link in the app.
+                sentence
+                    .font(.orbitSubtext)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 6)
                 if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Button(open ? OrbitTurnCardCopy.hideBrief : OrbitTurnCardCopy.showBrief) { open.toggle() }

@@ -730,9 +730,13 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:66), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
   'PATCH /runner/sessions/:id/subagents/:runId':
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
-    + '(runner-api/runner-subagents.controller.ts:94), and the run is matched by (id, that session) only, on an end '
-    + '(runner-api/runner-subagents.controller.ts:257) and on a RUNNING report owing a wake (recordWakeOwed); '
-    + 'subagent-run.pg.spec.ts sends another account\'s session and run',
+    + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only, on an end '
+    + '(runner-api/runner-subagents.controller.ts:398) and on a RUNNING report owing a wake (recordWakeOwed, '
+    + 'runner-api/runner-subagents.controller.ts:114); subagent-run.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/sessions/:id/subagents/:runId/fallback':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only '
+    + '(runner-api/runner-subagents.controller.ts:303); subagent-fallback.pg.spec.ts sends another account\'s session and run',
   'POST /runner/tasks/:taskId/owner-confirmation':
     'refused 403 to every caller — the owner\'s own machine included — before the task or anything else is read: only '
     + 'the account owner confirms, through the app (task-owner-confirmation.service.ts:205 → '

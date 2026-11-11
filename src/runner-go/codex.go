@@ -383,7 +383,7 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // watch tools in a session whose owner has Watch off (watch_rollout.go). The managed runner's
 // instance identity is here for the same reason: `orbit mcp` sends it with the runner credential,
 // which a managed runner's control plane refuses without it (managed_instance.go).
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID"]`
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID"]`
 
 // codexOrbitMCPServer is the name the config keys below register Orbit's own MCP server under —
 // the `serverName` Codex then reports on an elicitation, which is how an approval tells Orbit's
@@ -836,6 +836,11 @@ func codexToolItemName(item map[string]interface{}) string {
 	}
 	tool := firstString(item, "tool")
 	if server := firstString(item, "server"); server != "" && tool != "" {
+		if server == codexOrbitMCPServer && tool == delegateToolName {
+			// The name the control plane counts a running SubAgent by and the clients draw its block for
+			// (delegateEngineToolName), as every other engine spells it.
+			return delegateEngineToolName
+		}
 		return server + "__" + tool
 	}
 	return tool

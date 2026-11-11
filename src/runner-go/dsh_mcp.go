@@ -112,6 +112,10 @@ func orbitMCPDeclaredEnv(job *ClaimedSession, callTimeout time.Duration) []map[s
 		pairs = append(pairs, "ORBIT_HOME="+home)
 	}
 	pairs = append(pairs, bgJobEnvPairs(job.SessionID)...)
+	// A SubAgent's engine: its `orbit mcp` neither offers nor serves delegate (subagentChildJob).
+	if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
+		pairs = append(pairs, envSubagentRunID+"="+runID)
+	}
 	// A managed runner's instance, which `orbit mcp` sends with the runner credential.
 	pairs = append(pairs, managedInstanceEnv()...)
 	env := make([]map[string]string, 0, len(pairs))
