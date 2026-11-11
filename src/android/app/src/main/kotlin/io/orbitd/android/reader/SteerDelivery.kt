@@ -76,7 +76,7 @@ internal object SteerDelivery {
 
     /** The payload keys a turn carries its Orbit cards under (`TurnCards`), on its echo and its queued row alike. */
     val cardKeys = listOf("openItemDelivery", "ownerAnswer", "coordinatorDelivery", "taskStart", "projectStarted",
-        "confirmationReviewRequest", "confirmationReturn", "sessionMessage", "sessionReplies")
+        "confirmationReviewRequest", "confirmationReturn", "confirmationAnswers", "sessionMessage", "sessionReplies")
 
     /** Whether an echo is the reader's own words and nothing else's (OrbitKit `SteerDelivery.isReadersOwn`, web `readersOwnWords`):
      * no card Orbit draws it as — a delivery, a brief, a review's turn, another session's message or its replies — and no wake. */

@@ -59,6 +59,7 @@ import { RunnerSessionsController } from '../runner-api/runner-sessions.controll
 import { RunnerTaskOwnerConfirmationController } from '../runner-api/runner-task-owner-confirmation.controller';
 import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-review.service';
 import { buildTaskExecutionPrompt } from '../tasks/task-execution-prompt';
+import { TaskOwnerConfirmationController } from '../tasks/task-owner-confirmation.controller';
 import { TaskOwnerConfirmationService } from '../tasks/task-owner-confirmation.service';
 import { taskRunResumeTurnId } from '../tasks/task-run-identity';
 import { TasksService } from '../tasks/tasks.service';
@@ -68,6 +69,7 @@ import { SessionsService } from './sessions.service';
 import type { TurnCards } from './turn-cards';
 import {
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
+  OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_REVIEW_TURN_KEY_PREFIX,
 } from './watch-turn-key';
 import '../test-support/dequeue-under-lease';
@@ -87,6 +89,7 @@ const CARD_FIELDS: Record<keyof TurnCards, true> = {
   projectStarted: true,
   confirmationReviewRequest: true,
   confirmationReturn: true,
+  confirmationAnswers: true,
   sessionMessage: true,
   sessionReplies: true,
   externalSender: true,
@@ -187,6 +190,7 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
   const reviews = new OwnerConfirmationReviewService(db, sessions, realtime as never, push);
   const confirmations = new TaskOwnerConfirmationService(db, sessions, tasks, realtime as never, reviews);
   const confirmationDoor = new RunnerTaskOwnerConfirmationController(confirmations, reviews);
+  const ownerConfirmationDoor = new TaskOwnerConfirmationController(confirmations);
   const openItems = new ProjectOpenItemService(db, sessions);
   const deliveries = new CoordinatorDeliveryService(db, new CoordinatorWakeService(db), sessions);
   const orchestration = new RunnerOrchestrationAuthorizer(db, new JwtService({ secret: 'turn-cards-parity-pg' }));
@@ -462,6 +466,36 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
     const back = await turnKeyed(filed.run, CONFIRMATION_RETURN_TURN_KEY_PREFIX);
     assert.equal(back.clientTurnId, `${CONFIRMATION_RETURN_TURN_KEY_PREFIX}${returned.recordId}`);
     await assertSameCards('confirmationReturn', filed.run, back.id, { listedWhileHanded: false });
+  });
+
+  await t.test('the owner\'s answers handed to the reviewer (confirmationAnswers)', async () => {
+    const filed = await filedRun('the parity task the owner answers for');
+    const requestId = await declare(filed);
+    // The reviewer is handed the review, records one question for the owner, and ends its turn.
+    const handed = await deliver(filed.reviewer);
+    const recorded = await confirmationDoor.review(runner, filed.taskId, filed.reviewer, {
+      requestId, reviewedSha: SHA, judgment: 'Ready, with one call for you.',
+      checked: [{ text: 'the suite passes', evidenceRefs: ['ci run 812'] }],
+      notChecked: [], leftOpen: [],
+      needsYou: [{
+        text: 'Ship it behind the flag?',
+        options: [{ label: 'Behind the flag' }, { label: 'On for everyone' }],
+        recommendedOption: 0,
+      }],
+    } as never);
+    await finish(filed.reviewer, handed.turnId);
+    const ahead = await ownerSays(filed.reviewer, 'the owner goes first');
+    const decided = await ownerConfirmationDoor.decide({ userId: ownerId } as never, filed.taskId, undefined, {
+      decision: 'CONFIRM', requestId, reviewRecordId: recorded.recordId, answers: [{ key: 'n1', option: 0 }],
+    } as never);
+    const told = await turnKeyed(filed.reviewer, OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX);
+    const queued = (await sessions.listQueuedTurns(ownerId, filed.reviewer)).find((row) => row.turnId === told.id);
+    assert.deepEqual(queued?.confirmationAnswers, {
+      decisionId: decided.id, taskId: filed.taskId, title: 'the parity task the owner answers for',
+      decidedAt: queued?.confirmationAnswers?.decidedAt,
+      answers: [{ key: 'n1', question: 'Ship it behind the flag?', choice: 'Behind the flag', text: null, notShown: false }],
+    });
+    await assertSameCards('confirmationAnswers', filed.reviewer, told.id, { ahead, listedWhileHanded: true });
   });
 
   await t.test('a run question handed to the coordinator (runQuestion)', async () => {

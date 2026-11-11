@@ -39,6 +39,7 @@ export function orbitMessageOf(
     || cards.projectStarted !== undefined
     || cards.confirmationReviewRequest !== undefined
     || cards.confirmationReturn !== undefined
+    || cards.confirmationAnswers !== undefined
   );
   if (!platformCard && !isOrbitAuthoredTurnOf(session, turn.clientTurnId)) return null;
   return { coordinatorDelivery: cards?.coordinatorDelivery ?? null };

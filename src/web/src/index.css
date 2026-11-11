@@ -10244,12 +10244,40 @@ button.chat-jump-start:hover {
   border-left: 2px solid var(--border);
   padding-left: 10px;
 }
+/* Folded by default, so it reads as the row a settled block shows (.chat-think-head): what moves
+   is the clock, the count and a faint sweep over the word. */
 .chat-think-live-head {
   display: flex;
   align-items: center;
   gap: 6px;
+  font: inherit;
   font-size: 12.5px;
   color: var(--text-3);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.chat-think-live-word {
+  background: linear-gradient(90deg, var(--text-3) 35%, var(--text-4) 50%, var(--text-3) 65%) 0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: chat-think-sweep 2.4s linear infinite;
+}
+@keyframes chat-think-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-think-live-word {
+    animation: none;
+  }
 }
 .chat-think-port {
   max-height: 11em;
@@ -10266,6 +10294,11 @@ button.chat-jump-start:hover {
 }
 .chat-think-port::-webkit-scrollbar {
   display: none;
+}
+/* Following the newest line leaves the top line cut through its middle; fade that edge instead. */
+.chat-think-port.is-scrolled {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2.5em);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 2.5em);
 }
 .chat-think-meta {
   color: var(--text-4);
@@ -20365,6 +20398,13 @@ div.landing-jobs-open {
 .landings-window-entry.is-outlined .landings-window-reply {
   box-shadow: inset 2px 0 0 var(--brand);
 }
+/* No focus box round the sentence after a press; the keyboard's focus is the outline's own left rule. */
+.landings-window-reply:focus {
+  outline: none;
+}
+.landings-window-reply:focus-visible {
+  box-shadow: inset 2px 0 0 var(--brand);
+}
 /* The landing's ⋯ in its turn foot, where the chat's copy button stands. */
 .landings-window-more {
   flex: none;
@@ -23696,8 +23736,8 @@ div.landing-jobs-open {
   flex-basis: 100%;
   white-space: normal;
 }
-/* A confirmation review's two turns (`ConfirmationReviewTurnCards.tsx`): the request a reviewer is
-   handed, and the reviewer's return handed to the run. Orbit's turns, drawn as the started card is. */
+/* A confirmation review's three turns (`ConfirmationReviewTurnCards.tsx`): the request a reviewer is
+   handed, the reviewer's return handed to the run, and the owner's answers handed to the reviewer. Orbit's turns, drawn as the started card is. */
 .crc-wrap {
   display: flex;
   justify-content: flex-end;
@@ -23715,6 +23755,10 @@ div.landing-jobs-open {
   border-color: var(--warning-border);
   background: var(--warning-bg);
 }
+.crc.is-confirmed {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
 .crc.is-queued {
   border-style: dashed;
 }
@@ -23727,6 +23771,9 @@ div.landing-jobs-open {
 }
 .crc.is-returned .crc-head {
   color: var(--warning);
+}
+.crc.is-confirmed .crc-head {
+  color: var(--success);
 }
 .crc-when {
   margin-left: auto;
@@ -23775,6 +23822,51 @@ div.landing-jobs-open {
   color: var(--warning);
   font-size: 12px;
   line-height: 1.6;
+}
+.crc-lead {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.crc-answers {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.crc-answers li {
+  margin-top: 5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.crc-answer-question {
+  color: var(--text-2);
+}
+.crc-answer {
+  font-weight: 600;
+}
+.crc-answer-note {
+  color: var(--warning);
+  font-size: 12px;
+}
+.crc-raw {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.crc-raw summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.crc-raw pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .crc-undelivered {
   margin-top: 4px;
@@ -26813,15 +26905,43 @@ button.agent-progress-agent:hover {
               border-radius: 6px; background: none; color: var(--text-2); font-size: 15px; cursor: pointer; }
 .wk-chat-ib:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-1); }
 .wk-chat-ib:disabled { color: var(--text-4); cursor: default; }
-.wk-chat-history { flex: none; max-height: 40%; overflow-y: auto; padding: 4px 6px; border-bottom: 1px solid var(--border-subtle); }
-.wk-chat-history-row { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: none;
-                       font: inherit; font-size: 13px; color: var(--text-1); text-align: left; cursor: pointer; }
-.wk-chat-history-row:hover { background: var(--bg-hover); }
-.wk-chat-history-row.on { background: var(--brand-tint); color: var(--brand); }
-.wk-chat-history-row .t { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.wk-chat-history-row .n { flex: none; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
-                          background: var(--warning-solid); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+/* The history the title opens over the whole panel (board 45 ④). */
+.wk-chat-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wk-chat-main[hidden] { display: none; }
+.wk-chat-history { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wk-chat-history-search { flex: none; display: flex; align-items: center; gap: 8px; margin: 10px 12px 4px; padding: 0 10px; height: 32px;
+                          border: 1px solid var(--border); border-radius: 8px; color: var(--text-3); background: var(--bg-raised); }
+.wk-chat-history-search:focus-within { border-color: var(--brand); }
+.wk-chat-history-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 13px; color: var(--text-1); }
+.wk-chat-history-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 12px; }
+.wk-chat-history-group { width: 100%; display: flex; align-items: center; gap: 6px; padding: 10px 8px 4px; border: 0; background: none;
+                         font: inherit; font-size: 12px; font-weight: 600; color: var(--text-3); text-align: left; }
+.wk-chat-history-group.is-fold { cursor: pointer; }
+.wk-chat-history-group .n { font-weight: 500; }
+.wk-chat-history-group .caret { margin-left: auto; font-size: 10px; }
+.wk-chat-history-row { position: relative; display: flex; align-items: center; border-radius: 8px; }
+.wk-chat-history-row:hover, .wk-chat-history-row:focus-within { background: var(--bg-hover); }
+.wk-chat-history-row.on { background: var(--brand-tint); }
+.wk-chat-history-open { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 6px 8px 7px; border: 0; background: none;
+                        font: inherit; text-align: left; cursor: pointer; color: var(--text-1); }
+.wk-chat-history-open .t { font-size: 13.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wk-chat-history-row.on .wk-chat-history-open .t { color: var(--brand); font-weight: 600; }
+.wk-chat-history-open .m { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); }
+.wk-chat-history-open .m.is-needs_you { color: var(--warning); font-weight: 600; }
+.wk-chat-history-open .m.is-working { color: var(--brand); }
+.wk-chat-history-open .m .spin { font-size: 10px; }
+.wk-chat-history-more { flex: none; width: 24px; height: 24px; margin-right: 6px; display: inline-flex; align-items: center; justify-content: center;
+                        border: 0; border-radius: 5px; background: none; color: var(--text-2); cursor: pointer; opacity: 0; }
+.wk-chat-history-row:hover .wk-chat-history-more, .wk-chat-history-more:focus-visible,
+.wk-chat-history-more[aria-expanded='true'] { opacity: 1; }
+.wk-chat-history-more:hover { background: var(--fill-muted); }
+@media (hover: none) { .wk-chat-history-more { opacity: 1; } }
+.wk-chat-history-row.is-renaming { padding: 4px 6px; }
+.wk-chat-history-rename { width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--brand); border-radius: 6px; font: inherit; font-size: 13.5px;
+                          color: var(--text-1); background: var(--bg-raised); outline: 0; }
+.wk-chat-history-more-page { margin: 8px 8px 0; padding: 4px 8px; border: 0; background: none; color: var(--brand); font: inherit; font-size: 12.5px; cursor: pointer; }
 .wk-chat-history-none { padding: 8px; font-size: 12.5px; color: var(--text-3); }
+.wk-chat-history-note { margin: 14px 8px 0; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 .wk-chat-run { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 7px 14px; font-size: 12px; color: var(--text-3);
                border-bottom: 1px solid var(--border-subtle); }
 .wk-chat-pick { position: relative; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; height: 24px; padding: 0 6px;

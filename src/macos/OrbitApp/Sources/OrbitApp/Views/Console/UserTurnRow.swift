@@ -141,6 +141,12 @@ struct UserTurnRow: View {
             SentBackByReviewerCardView(card: card, ts: b.ts,
                                        undelivered: undelivered,
                                        attached: b.attached, onCancelQueued: cancel)
+        } else if let card = b.reviewAnswers {
+            // The owner's answers handed to the reviewer once they confirmed (§7 Q5): Orbit's words
+            // to the agent about the reader, drawn as what the reader did (web parity: NodeView).
+            YouConfirmedCardView(card: card, text: b.text,
+                                 undelivered: undelivered,
+                                 attached: b.attached, onCancelQueued: cancel)
         } else if let replies = b.sessionReplies, !replies.isEmpty {
             // The outcomes of this session's own requests, handed back (`sessionReplies`,
             // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the

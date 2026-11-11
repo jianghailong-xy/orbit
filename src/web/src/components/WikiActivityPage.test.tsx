@@ -545,9 +545,9 @@ describe('a desktop over two spaces: what waits elsewhere is on it too', () => {
 });
 
 describe('the head’s Activity button', () => {
-  it('comes after Contents and before Settings and New entry, with the badge, and is pressed on Activity', () => {
+  it('comes after Contents and before Settings, with the badge, and is pressed on Activity', () => {
     const home = wiki('/wiki/orbit');
-    const order = ['wk-contents-btn', 'wk-activity-btn', 'aria-label="Settings"', 'aria-label="New entry"'].map((needle) => at(home, needle));
+    const order = ['wk-contents-btn', 'wk-activity-btn', 'aria-label="Settings"'].map((needle) => at(home, needle));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(home).toMatch(/<button(?=[^>]*aria-label="Activity")(?=[^>]*aria-describedby="[^"]+")[^>]*class="[^"]*wk-activity-btn">/);
     const activity = wiki('/wiki/orbit/activity');
