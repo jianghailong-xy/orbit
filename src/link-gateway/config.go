@@ -21,6 +21,10 @@ const (
 	defaultPingInterval      = 20 * time.Second
 	defaultPingTimeout       = 60 * time.Second
 	defaultMaxConnsPerRunner = 2
+	// defaultBackendMaxConns is LINK_BACKEND_MAX_CONNS's default: the connections to each backend, which before the
+	// cap were the idle ones kept. An apiserver serves its calls with 10 database connections, so more calls at once
+	// than this only wait inside it instead.
+	defaultBackendMaxConns = 256
 )
 
 // config is everything the gateway is told at start, from the environment (README.md, "Configuration").
@@ -84,6 +88,9 @@ type config struct {
 	InternalAPIURLs []string
 	// RPCTimeout bounds one forwarded call to a backend, retries included.
 	RPCTimeout time.Duration
+	// BackendMaxConns bounds the connections to each backend (LINK_BACKEND_MAX_CONNS); a call past it waits for one
+	// to come free (backend.go).
+	BackendMaxConns int
 
 	// DrillLoseAnswers is LINK_DRILL_LOSE_ANSWERS: how many answers of each call a staging drill has the gateway lose
 	// (drill.go). Nil, the default, loses none.
@@ -259,6 +266,7 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		FrameLog:           str("LINK_FRAME_LOG", "lifecycle"),
 		InternalAPIURLs:    splitList(getenv("LINK_INTERNAL_API_URLS")),
 		RPCTimeout:         dur("LINK_RPC_TIMEOUT", 60*time.Second),
+		BackendMaxConns:    integer("LINK_BACKEND_MAX_CONNS", defaultBackendMaxConns),
 		link:               defaultLinkTuning(),
 	}
 	// Merged ingest (events_merge.go): a window of 0 forwards every batch alone, as before merging.

@@ -60,7 +60,7 @@ func testConfig() config {
 		DrainReconnectMin: 100 * time.Millisecond, DrainReconnectMax: 300 * time.Millisecond,
 		DrainGrace: 300 * time.Millisecond, DrainTimeout: 10 * time.Second,
 		FrameLog:   "all",
-		RPCTimeout: 10 * time.Second, link: defaultLinkTuning(),
+		RPCTimeout: 10 * time.Second, BackendMaxConns: defaultBackendMaxConns, link: defaultLinkTuning(),
 	}
 }
 
