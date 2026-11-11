@@ -89,6 +89,7 @@ func runCursorChild(ctx context.Context, c subagentChild) (ExecResult, string, e
 	if err != nil {
 		return fail(fmt.Errorf("failed to start Cursor CLI: %w", err))
 	}
+	c.started(app.cmd)
 	defer app.dispose()
 	defer func() { bridge.close(); bridge.wait() }()
 

@@ -30,12 +30,18 @@ function harness(
   const statements: string[] = [];
   const published: Array<{ type: string; payload: Record<string, unknown> }> = [];
   let queryCalls = 0;
+  // The predecessor's SubAgent runs, ended INTERRUPTED (subagent-wake.ts interruptOrphanedSubagentRuns): none here.
+  const subagentInterrupts: string[] = [];
   let notified: string | undefined;
   const tx = {
     // Answered by statement: this boundary runs two, and a fake that hands the session row back
     // to both would have the approval collection reading a session as a list of cards.
     $queryRaw: async (...args: unknown[]) => {
       if (sql(args).includes('UPDATE "approval"')) return pendingApprovals.map((id) => ({ id }));
+      if (sql(args).includes('UPDATE "subagent_run"')) {
+        subagentInterrupts.push(sql(args));
+        return [];
+      }
       queryCalls += 1;
       return owned
         ? [
@@ -81,6 +87,7 @@ function harness(
     published,
     notified: () => notified,
     queryCalls: () => queryCalls,
+    subagentInterrupts,
   };
 }
 
@@ -96,6 +103,10 @@ test('takeover CAS retires the observed process generation and installs the new 
   );
 
   assert.equal(h.queryCalls(), 1);
+  // The SubAgents the replaced process hosted end with it: INTERRUPTED, owing the parent a wake.
+  assert.equal(h.subagentInterrupts.length, 1);
+  assert.match(h.subagentInterrupts[0], /"status" = 'INTERRUPTED'/);
+  assert.match(h.subagentInterrupts[0], /"wake_owed" = true/);
   assert.equal(h.executeCalls.length, 3);
   assert.match(sql(h.executeCalls[0]), /INSERT INTO "inbox_lease_generation"/);
   assert.match(sql(h.executeCalls[0]), /"retired_at"/);

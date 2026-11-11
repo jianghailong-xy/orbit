@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   HttpException,
@@ -7,6 +8,7 @@ import {
   ForbiddenException,
   HttpCode,
   NotFoundException,
+  Optional,
   Param,
   Patch,
   Post,
@@ -41,6 +43,7 @@ import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
 import { assertEngineSession } from '../sessions/engine-session';
+import { SessionsService } from '../sessions/sessions.service';
 import { sessionProviderExec } from './session-provider-exec';
 import { stripNul } from './strip-nul';
 import {
@@ -58,6 +61,7 @@ import {
   truncateResultSummary,
 } from './subagent-run';
 import { planSubagentRoute } from './subagent-route';
+import { fileSubagentWake } from './subagent-wake';
 
 const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 
@@ -96,7 +100,31 @@ export class RunnerSubagentsController {
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
     private readonly planUsage: ProviderPlanUsageService,
+    /**
+     * Files the wake a run's end owes its parent (subagent-wake.ts). `@Optional()` for the specs that build this
+     * controller by hand; RunnerApiModule imports SessionsModule, so production always has it, and the wake
+     * sweep files any wake this could not.
+     */
+    @Optional() private readonly sessions?: SessionsService,
   ) {}
+
+  /** Mark a run's end as owing its parent a wake, whatever its status, and read the status back. */
+  private recordWakeOwed(sessionId: string, runId: string): Promise<{ status: string } | null> {
+    return withTransactionRetry(this.prisma, async (tx) => {
+      await tx.subagentRun.updateMany({ where: { id: runId, sessionId, wakeFiledAt: null }, data: { wakeOwed: true } });
+      return tx.subagentRun.findFirst({ where: { id: runId, sessionId }, select: { status: true } });
+    }, loggedRetry(this.logger, 'runnerSubagents.recordWakeOwed'));
+  }
+
+  /** File a run's owed wake now, after the transaction that made it owed. A failure is the sweep's to retry. */
+  private async fileWake(runId: string): Promise<void> {
+    if (!this.sessions) return;
+    try {
+      await fileSubagentWake(this.prisma, this.sessions, runId);
+    } catch (error) {
+      this.logger.warn(`the wake for SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+    }
+  }
 
   private async assertParentOfRunner(sessionId: string, runner: Runner): Promise<void> {
     const session = await this.prisma.session.findUnique({
@@ -169,6 +197,9 @@ export class RunnerSubagentsController {
             type: dto.type,
             definitionSource: dto.definitionSource,
             background: dto.background ?? false,
+            // A background run is answered by the wake its end sends; nobody waits for it inline.
+            wakeOwed: dto.background ?? false,
+            ...(dto.description ? { description: stripNul(dto.description) } : {}),
             status: 'RUNNING',
             decision: shadowDecision(route!, resolvedModel, effort ?? null) as unknown as Prisma.InputJsonValue,
             // The first attempt: the parent's own engine, credential and model while routing is in shadow (§8 P2).
@@ -337,6 +368,11 @@ export class RunnerSubagentsController {
    * changed files, usage and cost. The cost is added to the parent session's `cost_usd` in the same
    * transaction (§6.1), so budgets that read the session's spend count it. Only a RUNNING run ends: a
    * repeated report changes nothing and adds no cost again (`applied: false`).
+   *
+   * `wake: true` says the parent is owed a wake for the end (subagent-wake.ts), which is filed once the end is
+   * committed. `RUNNING` with `wake: true` is the one report that ends nothing: the foreground call that waited
+   * for the run stopped waiting (docs/subagent-design.md §2), so the server now holds the wake its end owes — and
+   * files it at once for a run whose end got here first.
    */
   @Patch('sessions/:id/subagents/:runId')
   async updateSubagentRun(
@@ -346,8 +382,17 @@ export class RunnerSubagentsController {
     @Body() dto: SubagentRunUpdateDto,
   ): Promise<SubagentRunUpdateResponse> {
     await this.assertParentOfRunner(sessionId, runner);
+    if (dto.status === 'RUNNING') {
+      if (dto.wake !== true) {
+        throw new BadRequestException('a RUNNING report only says the waiting call stopped waiting: send wake: true');
+      }
+      const row = await this.recordWakeOwed(sessionId, runId);
+      if (!row) throw new NotFoundException('SubAgent run not found');
+      if (row.status !== 'RUNNING') await this.fileWake(runId);
+      return { runId, status: row.status as SubagentRunStatus, applied: row.status === 'RUNNING' };
+    }
     const costUsd = dto.costUsd ?? 0;
-    return withTransactionRetry(this.prisma, async (tx) => {
+    const answer = await withTransactionRetry(this.prisma, async (tx) => {
       // The parent first, as every writer of a session and its children takes them (rank 30, then 60).
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
       const open = await tx.subagentRun.findFirst({ where: { id: runId, sessionId, status: 'RUNNING' }, select: { attempts: true } });
@@ -363,6 +408,7 @@ export class RunnerSubagentsController {
           ...(dto.changedFiles ? { changedFiles: stripNul(dto.changedFiles) } : {}),
           costUsd,
           ...(dto.usage ? { usage: stripNul(dto.usage) as Prisma.InputJsonValue } : {}),
+          ...(dto.wake ? { wakeOwed: true } : {}),
           endedAt: new Date(),
         },
       });
@@ -378,5 +424,7 @@ export class RunnerSubagentsController {
       await reapApprovalsOfEndedSubagents(tx, sessionId, runId);
       return { runId, status: dto.status, applied: true };
     }, loggedRetry(this.logger, 'runnerSubagents.updateSubagentRun'));
+    if (answer.applied) await this.fileWake(runId);
+    return answer;
   }
 }

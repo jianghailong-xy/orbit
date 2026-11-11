@@ -518,6 +518,9 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		}
 		return failedOpenCodeSpawn("process", err, emit)
 	}
+	if spawned := subagentSpawnedHook(ctx); spawned != nil {
+		spawned(cmd)
+	}
 
 	var stderrWG sync.WaitGroup
 	stderrWG.Add(1)

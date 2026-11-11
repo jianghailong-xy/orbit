@@ -934,6 +934,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	}
 	// A file holding an owner-request secret is left out of the commit, and the session is told (secret_git.go).
 	unstageHeldSecrets(wt.Path, nil, wt.Session)
+	// Nor is what a SubAgent stopped with the session was writing (subagent.go holdSubagentPaths).
+	unstageSubagentPaths(wt.Path, wt.Session)
 	// `diff --cached --quiet` exits non-zero when something is staged → there's work to commit.
 	if _, err := git(wt.Path, "diff", "--cached", "--quiet"); err != nil {
 		var msg string

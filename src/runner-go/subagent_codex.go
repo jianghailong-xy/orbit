@@ -65,6 +65,7 @@ func runCodexChild(ctx context.Context, c subagentChild) (ExecResult, string, er
 		}
 		return ExecResult{Status: stFailed}, "", err
 	}
+	c.started(app.cmd)
 	defer app.close()
 
 	threadID, err := app.startOrResumeThread(ctx, child, c.cwd, upDir)

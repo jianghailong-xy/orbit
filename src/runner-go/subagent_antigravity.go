@@ -48,6 +48,9 @@ func runAntigravityChild(ctx context.Context, c subagentChild) (ExecResult, stri
 	} else if err != nil {
 		return ExecResult{Status: stFailed}, conversation, errors.New("failed to start Antigravity: " + err.Error())
 	}
+	if d.proc != nil {
+		c.started(d.proc.cmd)
+	}
 	turn := newAgyTurn(c.runID)
 	d.turn = turn
 	frame, err := json.Marshal(map[string]interface{}{
