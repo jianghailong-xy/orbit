@@ -44,7 +44,8 @@ export interface ChangeRow {
   workspaceId: string;
   name: string;
   provider: string;
-  /** `<Provider> · <runner>`, `Current`, or why nothing can open there. */
+  /** `<Provider> · <runner>` (empty for the current workspace when its runner is not known), or
+   *  why nothing can open there. The Current pill says which one it is. */
   detail: string;
   /** Null for the current workspace and for one nothing can open in (greyed). */
   way: ChangeWay | null;
@@ -55,8 +56,8 @@ export interface ChangeRow {
   runnerOffline: boolean;
 }
 
-const currentRow = (id: string, name: string, provider: string): ChangeRow => ({
-  workspaceId: id, name, provider, detail: CHANGE_COPY.current, way: null, reason: null, current: true, runnerOffline: false,
+const currentRow = (id: string, name: string, provider: string, detail: string): ChangeRow => ({
+  workspaceId: id, name, provider, detail, way: null, reason: null, current: true, runnerOffline: false,
 });
 
 /** The rows for a coordinator conversation that exists: its own workspace first, then the server's targets. */
@@ -79,7 +80,7 @@ export function changeRowsFromTargets(
       runnerOffline: way != null && t.runnerId != null && !t.runnerOnline,
     };
   });
-  return [currentRow(current.id, current.name, current.provider ?? 'claude'), ...rows];
+  return [currentRow(current.id, current.name, current.provider ?? 'claude', ''), ...rows];
 }
 
 /** The rows when there is no conversation to bring (in Trash, or never opened): every usable workspace
@@ -92,14 +93,15 @@ export function changeRowsFromWorkspaces(
 ): ChangeRow[] {
   const rows = workspaces.map((w): ChangeRow => {
     const provider = w.lastProvider || 'claude';
-    if (w.id === currentWorkspaceId) return currentRow(w.id, w.name, provider);
-    const reason = w.enabled === false ? CHANGE_COPY.disabled : !w.runnerId ? CHANGE_COPY.noRunner : null;
     const runnerName = w.runner?.displayName || w.runner?.name || null;
+    const usual = [providerName(provider), runnerName].filter(Boolean).join(' · ');
+    if (w.id === currentWorkspaceId) return currentRow(w.id, w.name, provider, usual);
+    const reason = w.enabled === false ? CHANGE_COPY.disabled : !w.runnerId ? CHANGE_COPY.noRunner : null;
     return {
       workspaceId: w.id,
       name: w.name,
       provider,
-      detail: reason ?? [providerName(provider), runnerName].filter(Boolean).join(' · '),
+      detail: reason ?? usual,
       way: reason ? null : 'new',
       reason,
       current: false,

@@ -36,7 +36,7 @@ describe('Change: the rows for a coordinator conversation that exists', () => {
       providerName,
     );
     expect(rows.map((r) => [r.name, r.detail, r.way, r.reason, r.current, r.runnerOffline])).toEqual([
-      ['orbit', 'Current', null, null, true, false],
+      ['orbit', '', null, null, true, false],
       ['orbit-prod', 'Claude · workstation-gpu', 'move', null, false, false],
       ['wikova-develop', 'Codex · wikova', 'new', 'Codex keeps this conversation on workstation-gpu', false, true],
       ['HPC', 'This workspace has no runner.', null, 'This workspace has no runner.', false, false],
@@ -64,7 +64,7 @@ describe('Change: the rows when there is no conversation to bring', () => {
       providerName,
     );
     expect(rows.map((r) => [r.name, r.way, r.detail, r.runnerOffline])).toEqual([
-      ['orbit', null, 'Current', false],
+      ['orbit', null, 'Claude', false],
       ['orbit-prod', 'new', 'Claude · workstation-gpu', false],
       ['HPC', null, 'This workspace has no runner.', false],
       ['mac-tools', null, 'This workspace is disabled.', false],

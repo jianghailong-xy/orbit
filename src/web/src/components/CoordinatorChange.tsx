@@ -218,7 +218,18 @@ export function CoordinatorChangeDialog({
         }
       >
         <div className="move-confirm-body">
-          {paragraphs.map((p) => <p key={p}>{p}</p>)}
+          {paragraphs.map((p) => {
+            // The two ways lead their paragraphs; their names are set in bold, as the buttons say them.
+            const lead = [CHANGE_COPY.move, CHANGE_COPY.startThere].find((way) => p.startsWith(`${way}: `));
+            return lead ? (
+              <p key={p}>
+                <b>{lead}:</b>
+                {p.slice(lead.length + 1)}
+              </p>
+            ) : (
+              <p key={p}>{p}</p>
+            );
+          })}
         </div>
         {progress}
         {failure && <div className="move-dialog-error">{failure}</div>}
@@ -248,7 +259,7 @@ export function CoordinatorChangeDialog({
               </span>
               <span className="move-dialog-name">
                 {row.name}
-                <small>{row.detail}</small>
+                {row.detail && <small>{row.detail}</small>}
               </span>
               {row.current && <span className="move-dialog-pill">{CHANGE_COPY.current}</span>}
               {row.runnerOffline && <span className="move-dialog-pill">{CHANGE_COPY.runnerOffline}</span>}
