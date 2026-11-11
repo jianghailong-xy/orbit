@@ -31,6 +31,8 @@ echo "$$" > "$SUBAGENT_MARKS/pid"
 printf '%s\n' '{"type":"system","subtype":"init","session_id":"child"}'
 printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_w","name":"Write","input":{"file_path":"half.txt","content":"first half second half"}}]}}'
 printf 'first half' > half.txt
+# What a Bash call of the child writes: no tool event names it.
+mkdir -p gen && printf 'generated\n' > gen/bash-gen.txt
 touch "$SUBAGENT_MARKS/started"
 while [ ! -f "$SUBAGENT_MARKS/finish" ]; do sleep 0.05; done
 printf ' second half\n' >> half.txt
@@ -67,6 +69,8 @@ func installSubagentChild(t *testing.T, s *supervisedSession) *subagentRig {
 // call is one exchange on the session's job socket, as `orbit mcp` makes it.
 func (r *subagentRig) call(op string, args map[string]interface{}) subagentReport {
 	r.t.Helper()
+	waitUntil(r.t, func() bool { _, err := os.Stat(bgTokenPath(r.job.SessionID)); return err == nil },
+		"the session's job socket never came up")
 	token, err := os.ReadFile(bgTokenPath(r.job.SessionID))
 	if err != nil {
 		r.t.Fatalf("the session's job socket has no token: %v", err)
@@ -269,8 +273,8 @@ func TestSubagentStoppedBeforeFinalizeAndItsFileNotCommitted(t *testing.T) {
 	if !strings.Contains(committed, "parent.txt") {
 		t.Fatalf("the finalize commit does not hold the parent's own work; committed files:\n%s", committed)
 	}
-	if strings.Contains(committed, "half.txt") {
-		t.Fatalf("a commit holds the stopped SubAgent's half-written file:\n%s", committed)
+	if strings.Contains(committed, "half.txt") || strings.Contains(committed, "bash-gen.txt") {
+		t.Fatalf("a commit holds a file the stopped SubAgent was writing:\n%s", committed)
 	}
 	if raw, err := os.ReadFile(filepath.Join(s.execDir, "half.txt")); err != nil || string(raw) != "first half" {
 		t.Fatalf("half.txt in the working tree = %q, %v: it stays there, uncommitted", raw, err)
@@ -329,4 +333,134 @@ func TestSubagentForegroundDetachRecordsTheWakeOnTheServer(t *testing.T) {
 	if interrupted := r.awaitReport(subagentStatusInterrupted); interrupted["wake"] != true {
 		t.Fatalf("the detached run's interruption does not owe the wake: %v", interrupted)
 	}
+}
+
+// Point 1 of the review: a file a stopped SubAgent wrote through Bash — no tool event names it — is held out of the
+// finalize commit like the one its Write tool named, and the run's result lists both; a file the parent's own Write
+// tool wrote while the SubAgent ran is the parent's, and is committed.
+func TestSubagentBashWriteHeldParentEditCommitted(t *testing.T) {
+	grace := subagentStopGrace
+	subagentStopGrace = 300 * time.Millisecond
+	t.Cleanup(func() { subagentStopGrace = grace })
+
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	s := superviseClaudeSessionInWorktree(t, pool, append(oneTurn(),
+		// A second turn in which the parent's own Write tool writes parent-edit.txt while the SubAgent runs.
+		fakeStep{Await: "user"},
+		fakeStep{Emit: "replay_user"},
+		fakeStep{Emit: "tool_use", ToolUseID: "toolu_parent_write", ToolName: "Write",
+			Input: map[string]interface{}{"file_path": "parent-edit.txt", "content": "the parent's edit\n"}},
+		fakeStep{Await: "release", Text: "written"},
+		fakeStep{Emit: "tool_result", ToolUseID: "toolu_parent_write", Text: "written"},
+		fakeStep{Emit: "result", Text: "edited while the SubAgent works"},
+	)...)
+	s.awaitParked("turn-1")
+	r := installSubagentChild(t, s)
+	r.delegate(true)
+
+	claim := *s.job
+	if _, ok := pool.activate(&claim); !ok {
+		t.Fatal("the claim for turn-2 could not activate the session")
+	}
+	s.queue(RunInboxResponse{TurnID: "turn-2", Kind: "message", Content: "edit parent-edit.txt"})
+	s.awaitEvents("the parent's Write", 1, isToolUse("toolu_parent_write"))
+	if err := os.WriteFile(filepath.Join(s.execDir, "parent-edit.txt"), []byte("the parent's edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.fake.Release("written")
+	s.awaitParked("turn-2")
+
+	s.live.cancel() // the session ends with the SubAgent still running
+	stopped := r.awaitReport(subagentStatusStopped)
+	const want = "Left uncommitted because SubAgent run-1 was stopped while they changed: gen/bash-gen.txt, half.txt"
+	if !strings.Contains(asString(stopped["resultSummary"]), want) {
+		t.Fatalf("the stopped run's result = %q, want it to say %q", stopped["resultSummary"], want)
+	}
+	waitUntil(t, func() bool { return r.pathIndex("/finalize") >= 0 }, "the session was never finalized")
+
+	committed := mustGit(t, s.execDir, "log", "--all", "--name-only", "--format=")
+	if !strings.Contains(committed, "parent-edit.txt") {
+		t.Fatalf("the parent's own edit is not committed; committed files:\n%s", committed)
+	}
+	if strings.Contains(committed, "bash-gen.txt") || strings.Contains(committed, "half.txt") {
+		t.Fatalf("a commit holds a file the stopped SubAgent was writing:\n%s", committed)
+	}
+	if raw, err := os.ReadFile(filepath.Join(s.execDir, "gen", "bash-gen.txt")); err != nil || string(raw) != "generated\n" {
+		t.Fatalf("gen/bash-gen.txt in the working tree = %q, %v: it stays there, uncommitted", raw, err)
+	}
+	if status := mustGit(t, s.execDir, "status", "--porcelain", "--untracked-files=all"); !strings.Contains(status, "gen/bash-gen.txt") {
+		t.Fatalf("gen/bash-gen.txt is not left uncommitted: %q", status)
+	}
+}
+
+// Point 2 of the review: the parent's engine is rebuilt in place (a reload here; a crash respawn says the same
+// `resumed`), and the control plane empties the session's running SubAgents on that handshake. The runner
+// announces each SubAgent still running again, after the handshake, so the session goes on reading as working;
+// and a foreground call that was the replaced engine's is gone, so the run's end is now owed as a wake.
+func TestSubagentReannouncedAfterTheParentEngineResumes(t *testing.T) {
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	s := superviseClaudeSession(t, pool, oneTurn()...)
+	s.awaitParked("turn-1")
+	r := installSubagentChild(t, s)
+	run := r.delegate(false)
+
+	claim := *s.job
+	if _, ok := pool.activate(&claim); !ok {
+		t.Fatal("the claim could not activate the parked session")
+	}
+	s.queue(RunInboxResponse{TurnID: "reload-1", Kind: "reload", Content: `{"fastMode":true}`})
+	s.queue(RunInboxResponse{TurnID: "turn-2", Kind: "message", Content: "carry on"})
+	s.awaitParked("turn-2")
+
+	resumedSeq := -1
+	for _, e := range s.eventsOf(func(e RunEvent) bool { return e.Type == evSystem && e.Payload["subtype"] == "resumed" }) {
+		resumedSeq = e.Seq
+		break
+	}
+	if resumedSeq < 0 {
+		t.Fatal("the rebuild was not marked by a resumed handshake, so nothing here is tested")
+	}
+	again := s.eventsOf(func(e RunEvent) bool {
+		return e.Seq > resumedSeq && e.Type == evBackgroundTask && e.Payload["status"] == "running" &&
+			e.Payload["subagentRunId"] == run.RunID && e.Payload["toolUseId"] == "toolu_delegate"
+	})
+	if len(again) != 1 {
+		t.Fatalf("the running SubAgent was announced %d times after the handshake, want once", len(again))
+	}
+	if !childAlive(t, r.marks) {
+		t.Fatal("the SubAgent did not outlive the parent's engine")
+	}
+	held := r.awaitReport(subagentStatusRunning)
+	if held["wake"] != true || held["runId"] != run.RunID {
+		t.Fatalf("the foreground run whose call went with the engine was recorded as %v, want RUNNING owing a wake", held)
+	}
+
+	r.finishChild()
+	if done := r.awaitReport(subagentStatusDone); done["wake"] != true {
+		t.Fatalf("the run's end does not owe the wake: %v", done)
+	}
+}
+
+// Point 3 of the review: the session moves to another runner process (this supervisor loses its ownership).
+// Its SubAgent is stopped, reported STOPPED with the reason and the wake owed, so the parent is woken in its
+// new home.
+func TestSubagentStoppedByAHandoffOwesTheWake(t *testing.T) {
+	grace := subagentStopGrace
+	subagentStopGrace = 300 * time.Millisecond
+	t.Cleanup(func() { subagentStopGrace = grace })
+
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	s := superviseClaudeSession(t, pool, oneTurn()...)
+	s.awaitParked("turn-1")
+	r := installSubagentChild(t, s)
+	r.delegate(true)
+
+	if _, ok := pool.detachForTakeover(s.job.SessionID); !ok {
+		t.Fatal("the supervisor could not be detached for a takeover")
+	}
+	stopped := r.awaitReport(subagentStatusStopped)
+	if stopped["wake"] != true || !strings.Contains(asString(stopped["resultSummary"]), "stopped when this session moved to another runner process") {
+		t.Fatalf("the handoff's stop was reported as %v, want STOPPED with the reason and the wake owed", stopped)
+	}
+	waitUntil(t, func() bool { return !childAlive(t, r.marks) }, "the SubAgent's child engine outlived the handoff")
 }

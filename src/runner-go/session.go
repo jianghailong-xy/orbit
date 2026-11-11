@@ -1009,7 +1009,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if admitted && eventType == evSystem {
 			if subtype, _ := payload["subtype"].(string); subtype == "resumed" {
 				bg.announceRunningJobs()
+				// The SubAgents this runner hosts did not die with the engine either (subagent.go).
+				bg.mu.Lock()
+				announceSubagents := bg.announceSubagents
+				bg.mu.Unlock()
+				if announceSubagents != nil {
+					announceSubagents()
+				}
 			}
+		}
+		// What the parent's own edit tools write, for a stopped SubAgent's hold to leave to it (subagent_tree.go).
+		if admitted && bg != nil {
+			bg.parentEdits.note(eventType, payload)
 		}
 		// Do NOT postEvents inline: emit runs on the stdout-reader goroutine, and a
 		// slow post must never stall draining claude's stdout (backpressure freeze).
@@ -1110,6 +1121,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// only looked at the turn permit would rewrite the checkout under it.
 	bg = newBgTailer(sessionCtx, emitOn(bgEmissionGate), pool.worktreeHoldsFor(job.SessionID))
 	defer bg.stopAll()
+	bg.parentEdits.mu.Lock()
+	bg.parentEdits.dir = execDir
+	bg.parentEdits.mu.Unlock()
+	// A session another runner process took over ends here without being ended: its SubAgents are stopped owing
+	// the parent a wake, which the server delivers in the session's new home (subagent.go).
+	bg.subagentHandoff = func() bool { return ownershipLost.Load() && ctx.Err() == nil }
 	// A Monitor watches from inside this engine, so the pool's warm timer and LRU order are what
 	// end it — between turns, where the agent is not there to see the events stop coming, and
 	// where Claude writes no terminal notification for it. Lend the pool the one fact that defers

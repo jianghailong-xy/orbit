@@ -458,6 +458,7 @@ func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, j
 	}
 	bg.mu.Lock()
 	bg.stopSubagents = svc.stopSubagents
+	bg.announceSubagents = svc.announceSubagents
 	bg.mu.Unlock()
 	key := decodeSessionID(job.SessionID)
 	bgSessionServices.Store(key, svc)

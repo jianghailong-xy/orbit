@@ -178,6 +178,14 @@ type bgTailer struct {
 	// (subagentStop…); installed once by startSessionBgJobService, nil where no job service is at stake.
 	subagentsLive atomic.Int64
 	stopSubagents func(reason string)
+	// announceSubagents reports every SubAgent still running again, behind a `resumed` handshake, as
+	// announceRunningJobs does a job (subagent.go); installed with stopSubagents. subagentHandoff reports
+	// whether the session is ending because another runner process took it over, which stops its SubAgents
+	// owing the parent a wake; nil reads as no. parentEdits is what the parent's own edit tools wrote, and when,
+	// which a stopped SubAgent's hold leaves to the parent (subagent_tree.go).
+	announceSubagents func()
+	subagentHandoff   func() bool
+	parentEdits       parentEditLog
 	// jobs are the background processes this runner spawned and waits on itself
 	// (background_job.go), keyed by the id the runner issued. Retained after they
 	// finish: an agent that comes back to a job asks by that id, and "no such job"
@@ -972,6 +980,8 @@ func (b *bgTailer) stopAll() {
 	reason := subagentStopSessionEnded
 	if b.runnerStoppingLocked() {
 		reason = subagentStopRunnerStopped
+	} else if b.subagentHandoff != nil && b.subagentHandoff() {
+		reason = subagentStopHandedOver
 	}
 	b.mu.Unlock()
 	if stopSubagents != nil {

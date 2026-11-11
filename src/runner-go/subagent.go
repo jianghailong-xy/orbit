@@ -58,6 +58,8 @@ const (
 	// stopping (INTERRUPTED).
 	subagentStopSessionEnded  = "session_ended"
 	subagentStopRunnerStopped = bgRunnerShutdownReason
+	// The session moved to another runner process (ownership lost): STOPPED, and the parent is owed a wake there.
+	subagentStopHandedOver = "session_moved"
 )
 
 // subagentStopGrace is how long a SubAgent asked to stop has to exit before it is killed (§5.2: 10 s), and
@@ -621,6 +623,8 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	_ = os.MkdirAll(dir, 0o700)
 	_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession})
 	files := newSubagentFileCollector(s.execDir)
+	// The tree as the child found it, so a stop can tell what changed while it ran (subagent_tree.go).
+	before, treeKnown := takeSubagentTreeSnapshot(s.execDir)
 	emit := func(eventType string, payload map[string]interface{}) {
 		files.note(eventType, payload)
 		if out, ok := rewriteSubagentEvent(run.id, run.toolUseID, eventType, payload); ok {
@@ -647,6 +651,10 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		status = subagentStatusInterrupted
 		result = strings.TrimSpace("The SubAgent was interrupted: the runner process hosting it stopped (a restart or an" +
 			" update). What it changed so far is in the working tree, uncommitted.\n" + result)
+	case stopReason == subagentStopHandedOver:
+		status = subagentStatusStopped
+		result = strings.TrimSpace("The SubAgent was stopped when this session moved to another runner process. What it" +
+			" changed so far is in the working tree, uncommitted.\n" + result)
 	case stopReason != "" || ctx.Err() != nil:
 		status = subagentStatusStopped
 		if result == "" {
@@ -662,8 +670,33 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		}
 	}
 	if status == subagentStatusStopped || status == subagentStatusInterrupted {
-		// What a stopped SubAgent touched may be half-written: the session's finalize commit leaves it out.
-		holdSubagentPaths(s.sessionID, s.execDir, files.touched())
+		// What a stopped SubAgent touched may be half-written: the session's finalize commit leaves it out. That is
+		// every file its edit tools named, and every file of the tree that changed while it ran — through Bash as
+		// much as through those tools — except what the parent's own edit tools wrote meanwhile.
+		held := map[string]bool{}
+		for _, p := range files.touched() {
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(s.execDir, filepath.FromSlash(p))
+			}
+			held[filepath.Clean(p)] = true
+		}
+		root := s.execDir
+		if treeKnown {
+			if after, ok := takeSubagentTreeSnapshot(s.execDir); ok {
+				for _, p := range after.changedSince(before, s.bg.parentEdits.since(run.startedAt)) {
+					held[p] = true
+				}
+			}
+			root = before.root
+		}
+		paths := make([]string, 0, len(held))
+		for p := range held {
+			paths = append(paths, p)
+		}
+		holdSubagentPaths(s.sessionID, s.execDir, paths)
+		if note := subagentHeldNote(run.id, root, paths); note != "" {
+			result = strings.TrimSpace(result + "\n\n" + note)
+		}
 	}
 
 	s.subagents.mu.Lock()
@@ -684,8 +717,9 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	// A wake is owed to a parent nobody answers inline: a background run, a foreground one whose call stopped
 	// waiting, and any run the runner's stop interrupted, whose call (if any) went with the parent's engine. Not
 	// to a run stopped because its session ended: there is nobody left to wake.
+	// A run stopped because the session moved owes one too: the session goes on in its new home.
 	answeredElsewhere := run.background || run.detached || status == subagentStatusInterrupted
-	wake := answeredElsewhere && status != subagentStatusStopped
+	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver
 	s.subagents.mu.Unlock()
 
 	_ = os.WriteFile(filepath.Join(dir, "result.txt"), []byte(result), 0o600)
@@ -751,6 +785,37 @@ func (s *bgJobService) stopSubagents(reason string) {
 	}
 	if !waitAll(subagentStopReportWait) {
 		logln("SubAgents of session", s.sessionID, "were killed but not all reported in time")
+	}
+}
+
+// announceSubagents reports every SubAgent still running again, behind a `resumed` handshake: the control plane
+// empties the session's running set on that handshake (runner-api.controller bgReset), and these runs did not end
+// with the replaced engine. A foreground run's call did, though — it was the replaced engine's — so its end is now
+// owed as a wake, recorded on the server as a detach would be.
+func (s *bgJobService) announceSubagents() {
+	s.subagents.mu.Lock()
+	var running []subagentReport
+	var toolUseIDs []string
+	var orphaned []string
+	for _, r := range s.subagents.runs {
+		if r.status != subagentStatusRunning {
+			continue
+		}
+		if !r.background && !r.detached {
+			r.detached = true
+			orphaned = append(orphaned, r.id)
+		}
+		running = append(running, r.reportLocked())
+		toolUseIDs = append(toolUseIDs, r.toolUseID)
+	}
+	s.subagents.mu.Unlock()
+	for i, r := range running {
+		s.bg.emit(evBackgroundTask, map[string]interface{}{
+			"toolUseId": toolUseIDs[i], "status": "running", "kind": "subagent", "subagentRunId": r.RunID,
+		})
+	}
+	for _, id := range orphaned {
+		go s.recordSubagentDetach(id)
 	}
 }
 

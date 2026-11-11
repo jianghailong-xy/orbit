@@ -8506,10 +8506,21 @@ export class RunnerApiController {
       // would be a second row. Only a report carrying a `kind` counts — that is what marks a
       // runner-hosted job, as background-jobs-context.ts reads it too — because an engine's own
       // shell carries none, and that shell died with its engine.
+      // A SubAgent still running, reported again behind a `resumed` handshake (runner-go subagent.go
+      // announceSubagents): its delegate call goes back into the running SubAgents, never the job sets.
+      const subRunning = events
+        .filter((e) => {
+          if (e.type !== RunEventType.BACKGROUND_TASK) return false;
+          const { status, subagentRunId } = e.payload as { status?: unknown; subagentRunId?: unknown };
+          return status === 'running' && typeof subagentRunId === 'string' && subagentRunId !== '';
+        })
+        .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
+        .filter(Boolean);
       const bgRunningReports = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
-          const { status, kind } = e.payload as { status?: unknown; kind?: unknown };
+          const { status, kind, subagentRunId } = e.payload as { status?: unknown; kind?: unknown; subagentRunId?: unknown };
+          if (typeof subagentRunId === 'string' && subagentRunId !== '') return false;
           return status === 'running' && typeof kind === 'string' && kind !== '';
         })
         .map((e) => {
@@ -8565,6 +8576,7 @@ export class RunnerApiController {
       // Same fold, narrower set: a shell an engine launched is in `shells` and never here.
       for (const id of bgJobRunning) if (!jobs.includes(id)) jobs = [...jobs, id];
       for (const id of subStarted) subagents = [...subagents.filter((v) => v !== id), id];
+      for (const id of subRunning) if (!subagents.includes(id)) subagents = [...subagents, id];
       // A terminal background_task id belongs to either a background shell or a sub-workspace;
       // removing from the set that doesn't hold it is a no-op, so clear from both.
       for (const id of bgEnded) {

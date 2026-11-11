@@ -10,6 +10,10 @@
  *      reported INTERRUPTED itself wakes the parent with the same reason.
  *   5. The wording: a SubAgent's wake names the SubAgent by its description and run and says nothing of bg_run,
  *      while a bg_run job's wake on the same turn keeps `<background-job-wake>` and its own words.
+ *   1b. A SubAgent still running when the parent's engine is rebuilt (`resumed`) is announced again by the runner,
+ *      and goes back into runningSubagents, never into the bg job sets.
+ *   3b. A SubAgent stopped because the session moved to another runner process is STOPPED owing a wake, and the
+ *      wake names the reason and the files it left uncommitted.
  *   6. A foreground delegate past its tool timeout: the runner's RUNNING report with wake: true makes the server
  *      hold the wake, so a runner restart still wakes the parent — here filed by the wake sweep, the takeover's
  *      own filing having had no SessionsService — and a detach that arrives after the end files it at once.
@@ -284,6 +288,56 @@ test('SubAgent lifecycle: turn end, runner restart, the wake and its wording', {
     assert.equal((await wakeTurns(raced)).length, 0, 'a foreground end nobody detached from is answered inline');
     await subagents.updateSubagentRun(runner, raced, run.runId, update({ status: 'RUNNING', wake: true }));
     assert.ok((await delivered(raced)).includes(`SubAgent fix the lexer (run ${uuidToBase62(run.runId)}) finished: DONE`));
+  });
+
+  await t.test('(1b) after the parent engine resumes, the runner\'s re-announcement puts a running SubAgent back in runningSubagents', async () => {
+    const sessionId = await parkedParent();
+    const leaseOwner = randomUUID();
+    await door.takeoverLeases(runner, sessionId, { leaseOwner, expectedLeaseOwner: null } as never);
+    let seq = 0;
+    const report = (events: Array<{ type: RunEventType; payload: unknown }>) =>
+      door.events(runner, sessionId, {
+        leaseOwner,
+        events: events.map((event) => ({ ...event, seq: ++seq, ts: new Date().toISOString() })) as never,
+      });
+    const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Resume', background: true }));
+    await report([
+      { type: RunEventType.TOOL_USE, payload: { id: 'toolu_01Resume', name: 'mcp__orbit__delegate', input: { background: true } } },
+      { type: RunEventType.TOOL_RESULT, payload: {
+        toolUseId: 'toolu_01Resume', content: [{ type: 'text', text: `{"runId":"${opened.runId}","status":"running"}` }] } },
+    ]);
+    const read = () => prisma.session.findUniqueOrThrow({
+      where: { id: sessionId }, select: { runningSubagents: true, runningBgJobs: true, runningBgShells: true },
+    });
+    assert.deepEqual((await read()).runningSubagents, ['toolu_01Resume']);
+
+    // The engine is rebuilt: the handshake empties the set, and the runner announces the SubAgent again behind it.
+    await report([{ type: RunEventType.SYSTEM, payload: { subtype: 'resumed', reason: 'config_changed' } }]);
+    assert.deepEqual((await read()).runningSubagents, [], 'the handshake empties the running set');
+    await report([{ type: RunEventType.BACKGROUND_TASK, payload: {
+      toolUseId: 'toolu_01Resume', status: 'running', kind: 'subagent', subagentRunId: uuidToBase62(opened.runId) } }]);
+    const after = await read();
+    assert.deepEqual(after.runningSubagents, ['toolu_01Resume'], 'the re-announcement puts the SubAgent back: the session reads as working');
+    assert.deepEqual(after.runningBgJobs, [], 'a SubAgent is not a bg job');
+    assert.deepEqual(after.runningBgShells, [], 'nor a background shell');
+  });
+
+  await t.test('(3b) a SubAgent stopped by a handoff to another runner process wakes the parent with the reason and what it left uncommitted', async () => {
+    const sessionId = await parkedParent();
+    const opened = await subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_01Moved', background: true, description: 'regenerate the clients',
+    }));
+    const runId = uuidToBase62(opened.runId);
+    await subagents.updateSubagentRun(runner, sessionId, opened.runId, update({
+      status: 'STOPPED', wake: true,
+      resultSummary: 'The SubAgent was stopped when this session moved to another runner process. What it changed so far' +
+        ` is in the working tree, uncommitted.\n\nLeft uncommitted because SubAgent ${runId} was stopped while they changed: gen/client.ts`,
+    }));
+    const content = await delivered(sessionId);
+    assert.ok(content.includes(`SubAgent regenerate the clients (run ${runId}) finished: STOPPED`), content);
+    assert.ok(content.includes('stopped when this session moved to another runner process'), content);
+    assert.ok(content.includes(`Left uncommitted because SubAgent ${runId} was stopped while they changed: gen/client.ts`), content);
+    assert.ok(!content.includes('bg_run'), content);
   });
 
   await t.test('a parent that has ended is not woken, and its wake is settled so the sweep leaves it', async () => {
