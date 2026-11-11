@@ -1449,6 +1449,15 @@ public final class APIClient: @unchecked Sendable {
     public func wikiChats(spaceID: String) async throws -> WikiChatList {
         try await get("wiki/spaces/\(spaceID)/chats")
     }
+    /// One page of the history (contract `chat.list.page`, board 45 ④): the chats whose title holds `q`, `offset`
+    /// passed over. The counts come back over every chat.
+    public func wikiChats(spaceID: String, q: String, offset: Int) async throws -> WikiChatList {
+        var query: [URLQueryItem] = []
+        let words = q.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !words.isEmpty { query.append(URLQueryItem(name: "q", value: words)) }
+        if offset > 0 { query.append(URLQueryItem(name: "offset", value: String(offset))) }
+        return try await get("wiki/spaces/\(spaceID)/chats", query: query)
+    }
     /// `POST /wiki/spaces/:id/chats`: a chat made with the owner's first words, word for word, its first turn filed
     /// under the client's UUID; the page and the selection ride beside the words (`wikiContext`).
     public func createWikiChat(spaceID: String, _ req: WikiChatCreateRequest) async throws -> WikiChatCreateAnswer {
