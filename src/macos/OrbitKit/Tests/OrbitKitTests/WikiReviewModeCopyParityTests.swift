@@ -955,10 +955,10 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         XCTAssertTrue(rows.contains("actions.openRun(changesetId)"), "the band's run row presses through to it")
     }
 
-    /// The head's way into the settings: the web's Settings button beside New entry, the native gear.
+    /// The head's way into the settings: the web's Settings button after Activity, the native gear.
     func testTheWikiHeadOpensTheSettings() throws {
         let page = try web(Self.page)
-        assertOrder(page, ["<WikiSettingsButton spaceSlug={space.slug} />", "<WikiNewEntryButton spaceId={space.id} />"],
+        assertOrder(page, ["<WikiActivityButton spaceSlug={space.slug}", "<WikiSettingsButton spaceSlug={space.slug} />"],
                     "the web head's actions")
         assertSays(page, "if (route === 'settings') return <WikiSettingsPage space={resolved} />;", in: Self.page)
         let view = try native("Views/WikiView.swift")

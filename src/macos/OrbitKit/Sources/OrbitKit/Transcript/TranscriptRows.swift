@@ -662,15 +662,10 @@ public enum TranscriptRows {
     /// plan), no transcript or card of its own (Task, Workspace, a spawned child session), and not
     /// a `!`-shell command the user ran — that one is the user's own line, not a step.
     ///
-    /// A picture is the one exclusion that can't be read off the name: `Read` on a .png and an MCP
-    /// screenshot tool answer alike with an image block, and only the result says so. It is excluded
-    /// anyway, because the group is the one fold the card can't open through — the card unfolds
-    /// itself on an image (`ToolCardView.defaultOpen`) and a closed group hides it whole, so a
-    /// screenshot inside a run reaches the reader as nothing at all, and a folded card never
-    /// refetches the bytes the server stripped. The hop out of the run this costs happens once and
-    /// never reverses: an image block that has arrived stays arrived, unlike the running/failed
-    /// states the folded row deliberately reports instead of opening on. Web parity:
-    /// `isGroupableTool`.
+    /// A picture folds like any other read (owner, 11-11: an agent reading its own screenshot is a
+    /// step, not something to show the reader). Opening the line draws the card, which unfolds
+    /// itself on the image (`ToolCardView.defaultOpen`) and fetches back bytes the server clipped.
+    /// Web parity: `isGroupableTool`.
     /// A sub-agent's own transcript (`TranscriptState.subagentItems`), as the rows its Agent card
     /// draws: the conversation's folding — runs of steps into one line — and nothing else, since a
     /// nested list has no approvals, queue or scroll target of its own (web parity: the
@@ -689,7 +684,6 @@ public enum TranscriptRows {
 
     private static func isGroupable(_ card: ToolCard) -> Bool {
         if card.id.hasPrefix("shell-") { return false }
-        if card.resultHasImage { return false }
         switch card.name {
         // Task/Agent/Workflow: Claude Code's names for a sub-agent and a team of them (the 08-14
         // Agent→Workspace rename had rewritten "Agent" here). Their cards carry work of their own —

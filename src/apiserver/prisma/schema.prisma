@@ -3551,6 +3551,7 @@ model ProjectIntegrationJob {
   /// commits of its own that the base already had, every one of them (migration 0410): TRUE says the
   /// work is on the target and nothing was pushed because nothing was missing, FALSE says the branch
   /// carried nothing. NULL is "not measured", read exactly as before the column existed.
+  baselineRed Boolean @default(false) @map("baseline_red")
   sourceFullyApplied Boolean? @map("source_fully_applied")
   /// What an OBSERVE_LANDING job saw (0453, contract §10.4, §10.6): one entry per observed task,
   /// `{ taskId, deliveredSha, baseSha, onUpstream, onIntegrationLine, empty, fullyApplied }`. NULL on

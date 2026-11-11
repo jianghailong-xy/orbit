@@ -54,6 +54,8 @@ function refusalOf(input: IntegrationRetryFacts): { status: number; code: string
 
 test('a failed landing is classified off its structured result, never off its output', () => {
   assert.equal(landingFailureClass({ state: 'CHECK_FAILED', checks: [RED] }), 'CHECK_FAILED');
+  assert.equal(landingFailureClass({ state: 'CHECK_FAILED', checks: [RED], baselineRed: true }), 'BASELINE_RED');
+  assert.equal(landingFailureClass({ state: 'CHECK_FAILED', checks: [{ ...RED, outputTail: 'BASELINE_RED' }] }), 'CHECK_FAILED');
   assert.equal(landingFailureClass({ state: 'CHECK_FAILED', checks: [RED, SLOW] }), 'CHECK_TIMED_OUT');
   // Go's own test timeout panics with exit 1 and the runner's budget never ran out: that is a red
   // check, whatever the output says about timing out.
@@ -72,7 +74,7 @@ test('a failed landing is classified off its structured result, never off its ou
       `${state}: a class exactly where an item is opened`,
     );
   }
-  assert.deepEqual([...RETRYABLE_LANDING_FAILURE_CLASSES], ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR']);
+  assert.deepEqual([...RETRYABLE_LANDING_FAILURE_CLASSES], ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR']);
 });
 
 test('Automatic: a red, a timed-out or an errored landing of a DONE task is rerun, handling the coordinator\'s items', () => {

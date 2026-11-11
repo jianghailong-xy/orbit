@@ -37,13 +37,13 @@ internal object Steps {
     private val FILE_KINDS = setOf("read", "edit", "write")
 
     /** A row one steps line can stand in for (web `isGroupableTool`): reasoning, or a plain call — not a call that is its own card,
-     * that carries a sub-agent's records, that answered with a picture, or a `!`-shell command the reader ran. */
+     * that carries a sub-agent's records, or a `!`-shell command the reader ran. A call that answered with a picture folds too
+     * (owner, 11-11): an agent reading its own screenshot is a step. */
     fun groupable(row: TranscriptRow): Boolean {
         val event = row.event
         if (event.type == "thinking") return true
         if (event.type != "tool_use" || row.children.isNotEmpty()) return false
         if (event.toolId()?.startsWith("shell-") == true) return false
-        if (row.result != null && contentImages(row.result.fields["content"]).isNotEmpty()) return false
         return name(event) !in CARD_TOOLS
     }
 

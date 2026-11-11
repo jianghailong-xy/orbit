@@ -194,17 +194,17 @@ export function openItemKindForJobState(
 }
 
 /**
- * What a landing that did not land failed OF, in the four words its next step turns on (§2.6, J-T1b):
- * the branches conflicted, a check on the combined tree disagreed, a check ran out of its budget
- * before it answered, or the machinery stopped. A conflict is answered only by a branch that changed;
- * the other three may be answered by running the same landing again, when whoever asks can say why
+ * What a landing that did not land failed OF (§2.6, J-T1b): the branches conflicted, a check
+ * disagreed (on the combined tree or also on the baseline), a check ran out of its budget,
+ * or the machinery stopped. A conflict is answered only by a branch that changed;
+ * the other classes may be answered by running the same landing again, when whoever asks can say why
  * it will come out differently.
  */
-export const LANDING_FAILURE_CLASSES = ['CONFLICT', 'CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR'] as const;
+export const LANDING_FAILURE_CLASSES = ['CONFLICT', 'CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type LandingFailureClass = (typeof LANDING_FAILURE_CLASSES)[number];
 
-/** The classes `integration_retry` runs a landing again from — migration 0344's CHECK spells them. */
-export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR'] as const;
+/** Explicit retry treats BASELINE_RED like CHECK_FAILED; migrations 0344/0513 admit both. */
+export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLASSES)[number];
 
 /**
@@ -214,11 +214,12 @@ export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLA
  * killed at its budget — never off the output: a check's own words are the delivery's, and a class
  * decided by grepping them would be decided by whatever the test happened to print.
  */
-export function landingFailureClass(job: { state: string; checks: unknown }): LandingFailureClass | null {
+export function landingFailureClass(job: { state: string; checks: unknown; baselineRed?: boolean }): LandingFailureClass | null {
   switch (job.state) {
     case 'CONFLICT': return 'CONFLICT';
     case 'ERROR': return 'ERROR';
     case 'CHECK_FAILED': {
+      if (job.baselineRed === true) return 'BASELINE_RED';
       const checks = Array.isArray(job.checks) ? job.checks : [];
       const timedOut = checks.some((check) =>
         check !== null && typeof check === 'object' && (check as { timedOut?: unknown }).timedOut === true);
@@ -362,7 +363,9 @@ export function integrationJobLimitSeconds(
   const lease = INTEGRATION_CLAIM_STALE_MS / 1_000;
   if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL) return lease;
   if (job.phase !== 'CHECK') return lease;
-  return checksFor(job).reduce((total, check) => total + check.timeoutSeconds, lease);
+  // Legacy claims can be silent for both the combined check and K3 attribution. V2 renews
+  // throughout preparation and both runs, so its lease remains unchanged.
+  return checksFor(job).reduce((total, check) => total + check.timeoutSeconds * (job.kind === 'LAND_TASK' && check.name === 'LANDING_CHECK' ? 2 : 1), lease);
 }
 
 /** How many jobs one runner is handed per heartbeat (J-T2's dispatch). */
