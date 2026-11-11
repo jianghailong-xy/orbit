@@ -492,7 +492,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
-import { withKeyGatewayToken } from '../providers/key-gateway';
+import { gatewayBooksSpend, withKeyGatewayToken } from '../providers/key-gateway';
 import { cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import { CursorKeyCheckDto, CursorKeyCheckResultDto } from '../providers/dto';
 import { ProvidersService } from '../providers/providers.service';
@@ -6593,6 +6593,11 @@ export class RunnerApiController {
         : null;
       const turnCostUsd = totalsBase ? ownCost(dto.costUsd, totalsBase) : (dto.costUsd ?? 0);
       const noEngineTurnRan = dto.numTurns === 0 && turnCostUsd === 0;
+      // Claude Code on an OpenAI key (design §5.5, D8): the gateway booked each answer's priced usage as it
+      // passed, so the CLI's own figure — its guess from Anthropic's prices — is not booked again. Its totals
+      // are still kept below, for the next completion to be measured from.
+      const gatewayBooked = totalsBase !== null
+        && (await gatewayBooksSpend(tx, { id: sessionId, provider: current.provider, engine: current.engine }));
       const settledByItsRun =
         completedTurn?.senderSessionId != null && dto.status === RunStatus.SUCCEEDED && !noEngineTurnRan;
       const unanswered =
@@ -7124,7 +7129,7 @@ export class RunnerApiController {
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
-          costUsd: { increment: turnCostUsd },
+          costUsd: { increment: gatewayBooked ? 0 : turnCostUsd },
           // The totals this turn was measured to, for the next completion to be measured from.
           ...(totalsBase ? { engineUsageTotals: bookedAfter(dto) } : {}),
           // Folded into the park for the same reason the merge-state clear is: one write, and
@@ -7236,7 +7241,7 @@ export class RunnerApiController {
           },
         });
       }
-      if (totalsBase) {
+      if (totalsBase && !gatewayBooked) {
         // Each model's own share of this turn; a model the turn did not use writes no row.
         const rows = Object.entries(ownModelUsage(dto.modelUsage ?? {}, totalsBase)).map(([model, mu]) => ({
           sessionId,
@@ -7248,7 +7253,7 @@ export class RunnerApiController {
           costUsd: mu.costUSD ?? 0,
         }));
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
-      } else if (dto.usage && current.model) {
+      } else if (!totalsBase && dto.usage && current.model) {
         // Codex reports tokenUsage.last, not the resumed thread's cumulative total.
         await tx.llmUsage.create({
           data: {

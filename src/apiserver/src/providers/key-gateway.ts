@@ -72,6 +72,25 @@ export async function mintKeyGatewayToken(
   return token;
 }
 
+/**
+ * Whether the gateway books this session's spend (design §5.5, decision D8): Claude Code on the key a gateway
+ * token was minted for. Such a session's answers are priced as they pass the gateway (AnthropicGatewayService
+ * `record`), so turn-complete books none of the CLI's own `total_cost_usd` or `modelUsage`, which is its guess from
+ * Anthropic's price table. A token of a key the session has since moved off, or of an engine it no longer runs,
+ * does not count.
+ */
+export async function gatewayBooksSpend(
+  db: Prisma.TransactionClient | PrismaService,
+  session: { id: string; provider: string | null; engine: string | null },
+): Promise<boolean> {
+  if (session.engine !== AgentProvider.CLAUDE || !session.provider) return false;
+  const token = await db.keyGatewayToken.findFirst({
+    where: { sessionId: session.id, provider: { slug: session.provider } },
+    select: { id: true },
+  });
+  return token !== null;
+}
+
 /** Every live token of a key, revoked: the key was disabled or its secret replaced. */
 export async function revokeKeyGatewayTokens(
   db: Prisma.TransactionClient | PrismaService,

@@ -313,10 +313,17 @@ so a failure there is answered with its status too, never as a 200. Either way, 
 
 ### 5.5 Cost and usage
 
-- The gateway records each response's tokens and model per session and key, priced with `openai-prices.ts`, the
-  way `responses-stream-tap.ts` does for pools.
-- Claude Code's own `total_cost_usd` for a GPT id is its guess from its own price table. Whether Orbit's cost line
-  uses the gateway's figure for these sessions is decision D8.
+- The gateway reads each answer's usage off the Responses stream as it passes, with the tap the pool gateway uses
+  (`responses-stream-tap.ts`), and never buffers the stream for it. An unstreamed answer is read the same way, from
+  the body it already reads whole. The usage is priced with `openai-prices.ts` at the model and tier the answer
+  names. One write per answer, after the answer is out, records it three ways: a `key_gateway_usage` row per session
+  and key (migration 0525: input with cached included, cached, output with reasoning included, reasoning, and
+  `cost_micros`), a `usage` row (input counted without the cached part, as a Claude row counts it, with the cached
+  part as `cache_read_input_tokens`), and the cost added to `session.cost_usd`.
+- Claude Code's own `total_cost_usd` for a GPT id is its guess from its own price table. Under D8, turn-complete
+  books neither that figure nor the CLI's `modelUsage` for a session the gateway books (`gatewayBooksSpend`: Claude
+  Code on the key a gateway token was minted for). It still keeps the CLI's running totals, so that the next
+  completion is measured from them. Spec: `key-gateway-usage.pg.spec.ts`.
 
 ### 5.6 Load
 

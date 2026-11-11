@@ -2193,6 +2193,7 @@ model Session {
   messageCharges        SessionMessageCharge[] @relation("SessionMessageChargeRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   keyGatewayTokens      KeyGatewayToken[]
+  keyGatewayUsage       KeyGatewayUsage[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
   toolCalls             ToolCall[]
@@ -6883,6 +6884,8 @@ model ModelProvider {
   aliases       ProviderSlugAlias[]
   // The tokens Claude Code sessions on this key run with instead of it (migration 0519).
   gatewayTokens KeyGatewayToken[]
+  // What those sessions' answers used and cost, as the gateway read them (migration 0525).
+  gatewayUsage  KeyGatewayUsage[]
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -7126,6 +7129,35 @@ model KeyGatewayToken {
   @@index([providerId])
   @@index([userId])
   @@map("key_gateway_token")
+}
+
+/// One answer OpenAI gave a Claude Code session on an OpenAI key through /api/gw/anthropic (migration 0525):
+/// its tokens as the Responses stream's final event counted them, read off the stream as it passed, and their
+/// price from openai-prices.ts (design §5.5, decision D8). Per session and key; the same answer is also a
+/// `usage` row and part of `session.cost_usd`, written with it.
+model KeyGatewayUsage {
+  id                String        @id @default(uuid(7)) @db.Uuid
+  sessionId         String        @map("session_id") @db.Uuid
+  session           Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  providerId        String        @map("provider_id") @db.Uuid
+  provider          ModelProvider @relation(fields: [providerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// The model that answered, as the answer names it.
+  model             String
+  /// The tier it was served on, which prices it; null when the answer named none.
+  serviceTier       String?       @map("service_tier")
+  /// All input, cached included.
+  inputTokens       BigInt        @default(0) @map("input_tokens")
+  cachedInputTokens BigInt        @default(0) @map("cached_input_tokens")
+  /// All output, reasoning included.
+  outputTokens      BigInt        @default(0) @map("output_tokens")
+  reasoningTokens   BigInt        @default(0) @map("reasoning_tokens")
+  // US dollars × 1,000,000.
+  costMicros        BigInt        @default(0) @map("cost_micros")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  @@index([sessionId])
+  @@index([providerId])
+  @@map("key_gateway_usage")
 }
 
 /// What one person spent on one key of a shared pool in one calendar month, UTC (migration 0321):
