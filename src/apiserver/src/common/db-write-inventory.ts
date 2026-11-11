@@ -282,13 +282,23 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary. The runner\'s uploader treats it as a chunk not yet stored; the next flush of the same check carries later chunks, and the missing one is a gap in a best-effort log rather than a fact any decision rests on.',
   },
   {
+    at: 'projects/project-promotion.service.ts#requestPromotion',
+    shape: 'TX_RETRIED',
+    locks: 'project (rank 40) FOR NO KEY UPDATE, then project_promotion_request (0509, rank 60) insert; session is a history reference.',
+    identity: 'One request per successful invocation; failed transaction attempts roll back the insert.',
+    isolation: '', attempts: 4,
+    replay: 'Re-read ownership and the current coordinator pointer under the project row lock, and validate the reason before inserting.',
+    effects: 'None inside; considerCandidate runs after the request commits.',
+    answer: 'The committed request id and the candidate id if one could be created.',
+  },
+  {
     at: 'projects/project-promotion.service.ts#considerCandidate',
     shape: 'TX_RETRIED',
-    locks: 'project_codebase (rank 55) and project_integration_job (rank 60) are read unlocked, then the rows it writes: project_promotion (rank 60) for the new candidate and for whichever older one it supersedes, project_integration_job (rank 60) for that one\'s queued check, project_open_item (rank 60) for that one\'s card and the failures about it it had open (`closePromotionItems`, §4.2). Nothing above rank 60 is locked — the foreign keys take `project` FOR KEY SHARE, which no status write conflicts with; the task and session the candidate and its check name are history references with no key (0423, 0424) and take nothing.',
+    locks: 'project (rank 40) FOR NO KEY UPDATE serializes candidate creation and request consumption. project_promotion_request (rank 60) is read and one request is updated only after candidate insertion, in the same transaction. project_codebase (rank 55) and project_integration_job (rank 60) are read unlocked, then the rows it writes: project_promotion (rank 60) for the new candidate and for whichever older one it supersedes, project_integration_job (rank 60) for that one\'s queued check, project_open_item (rank 60) for that one\'s card and the failures about it it had open (`closePromotionItems`, §4.2). Nothing above rank 60 is locked — the foreign keys take `project` FOR KEY SHARE, which no status write conflicts with; the task and session the candidate and its check name are history references with no key (0423, 0424) and take nothing.',
     identity: 'The candidate\'s source: the partial unique index over `(project_id, source_ref)` on live states. Two landings finishing together therefore produce one live candidate whichever order they commit in — the loser of the index is the transaction that is re-run, and its re-run finds the winner already covering the same tip and makes nothing.',
     isolation: '',
     attempts: 4,
-    replay: 'Everything is re-read inside the closure: whether the queue is empty, which landing is newest, whether a promotion is already in flight, and whether this tip is already covered. A re-run after a conflict therefore re-decides against the committed world; it cannot make a second candidate for a tip that now has one, and it cannot make one for a tip a concurrently committed landing has already moved past.',
+    replay: 'Everything is re-read inside the closure: K7 eligibility from the derived DONE reading or an unconsumed coordinator request, whether the queue is empty, which landing is newest, whether a promotion is already in flight, and whether this tip is already covered. A re-run after a conflict therefore re-decides against the committed world; it cannot make a second candidate for a tip that now has one, and it cannot make one for a tip a concurrently committed landing has already moved past.',
     effects: 'None inside. The check job it queues is a row; the runner picks it up on its next heartbeat, from the committed queue.',
     answer: 'Nothing is answered — no request is waiting on this. The caller logs the failure and the next landing considers the same rows again, which is why the exhausted case is a warning rather than a 503.',
   },
@@ -3504,6 +3514,10 @@ export interface ExcludedSource {
  * skipped, so an exclusion cannot be widened by accident.
  */
 export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
+  {
+    path: 'test-support/promotion-request.ts',
+    why: 'Disposable PostgreSQL fixtures for pre-K7 promotion transitions seed a committed historical request; imported only by specs. The K7 tests separately exercise the real coordinator request door.',
+  },
   {
     path: 'common/transaction-retry.ts',
     why: 'The retry loop itself. Its `$transaction` call IS the mechanism this inventory is about; listing it as a unit of work would make the loop a member of the set it implements.',

@@ -780,32 +780,11 @@ public enum ProjectDone {
         return refs.isEmpty ? checked : "\(checked) · evidence \(refs.joined(separator: ", "))"
     }
 
-    /// The gaps a card nobody asked for carries (`syntheticDoneGaps`): every criterion that is not
-    /// met, or not on main for a reason that is a gap — nothing to land and no code to land are
-    /// outcomes, not gaps to paper over. Main is the subject's main branch, by name.
-    public static func syntheticGaps(_ subject: ProjectDoneSubject) -> [AcceptedGap] {
-        let main = subject.main
-        return (subject.derivedDone?.criteria ?? [])
-            .filter { criterion in
-                let reason = criterion.landingReason
-                let gap = reason != nil && reason != .nothingToLand && reason != .codeless
-                return gap || !criterion.satisfied
-            }
-            .map { criterion in
-                let item = subject.criteria.first { $0.id == criterion.definitionId }
-                let reason = landingReasonLabel(criterion.landingReason, main: main)
-                return AcceptedGap(
-                    criterionKey: item?.key ?? item?.id ?? criterion.definitionId,
-                    title: item?.text ?? criterion.definitionId,
-                    whyNotProven: criterion.satisfied
-                        ? "Orbit cannot prove this criterion is on \(main): \(reason)."
-                        : "Orbit cannot prove this criterion is met by its work yet.")
-            }
-    }
-
-    /// The gaps the card shows: the request's, or the ones Orbit fills in when nobody asked.
+    /// The gaps the card shows: the request's. A card nobody asked for carries none — it shows the
+    /// server's done check instead (`ProjectDoneCheck`), as the web card does since it dropped
+    /// `syntheticDoneGaps`.
     public static func gaps(_ subject: ProjectDoneSubject, request: DoneRequest?) -> [AcceptedGap] {
-        request?.gaps ?? syntheticGaps(subject)
+        request?.gaps ?? []
     }
 
     /// The Orbit checked line (`orbitCheckedText`): whether every criterion is met, what is running,

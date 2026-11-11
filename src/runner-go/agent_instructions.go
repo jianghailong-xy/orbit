@@ -298,7 +298,7 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// the production database. It writes nothing, so it needs no grant and no card.
 		// The two project verbs NOT here — ensure-coordinator and send — are the deliveries to a
 		// coordinator, which OPEN a conversation and so ride the orchestration gate below.
-		for _, action := range []string{"get", "integration", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done", "skip-merge-check"} {
+		for _, action := range []string{"get", "integration", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done", "request-promotion", "skip-merge-check"} {
 			rules = append(rules, "Bash("+command+" project "+action+" *)")
 		}
 		// Every watch verb: they wait on Orbit's own work for the session they run in, which is the

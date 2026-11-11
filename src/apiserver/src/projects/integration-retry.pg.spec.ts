@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -376,7 +377,8 @@ function claim(
 type Failure = Omit<IntegrationJobResultRequest, 'claimGeneration' | 'leaseOwner'>;
 
 /** The result a runner posts, over the route it posts it on. */
-function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Failure) {
+async function report(stack: Stack, w: World, job: IntegrationJobCommand, result: Failure) {
+  if (job.kind === 'LAND_TASK') await seedPromotionRequest(stack.db, w.projectId);
   return stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration,
     leaseOwner: job.leaseOwner,
