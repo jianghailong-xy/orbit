@@ -45,6 +45,12 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
         val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
         YouConfirmedCard(card, event, open, undelivered = delivery == "failed" || delivery == "unconfirmed"); return
     }
+    // Five more of Orbit's own turns (docs/mocks/orbit-turn-cards/): Evidence to review, Evidence sent back, a task run's question and
+    // notice, and the opening of a session Orbit opened — each its own card, never a list of its fields or the reader's bubble.
+    if (isOrbitTurnCard(card)) {
+        val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
+        OrbitTurnCardView(card, event, open, undelivered = delivery == "failed" || delivery == "unconfirmed"); return
+    }
     // A background job's news or a wakeup coming due is a line in the agent's stream (A08-11), not a card of fields.
     if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":wake")) {
         val fields = event?.fields

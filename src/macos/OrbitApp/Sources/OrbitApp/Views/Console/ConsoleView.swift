@@ -85,6 +85,7 @@ struct ConsoleView: View {
             progress: { console.state.taskProgress[$0] },
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
+            subagentRun: { console.subagentRuns[$0] },
             fullPayload: { await console.fullPayload(seq: $0) })
     }
 

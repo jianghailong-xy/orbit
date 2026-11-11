@@ -1,3 +1,4 @@
+import { runningSubagentCards } from '../sessions/abandoned-approvals';
 import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
@@ -228,7 +229,9 @@ export class PushService {
       const session = await this.prisma.session.findFirst({
         where: {
           id: sessionId,
-          status: RunStatus.RUNNING,
+          // A running turn asks, and so does a SubAgent still running after its parent's turn ended
+          // (docs/subagent-design.md §5.3); the "needs you" set below decides whether this card is one.
+          OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
           completedAt: null,
           archivedAt: null,
           deletedAt: null,
@@ -1224,7 +1227,7 @@ export class PushService {
    *  make visible. It does carry the same gate a card does — a project with no coordinator bound,
    *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`). */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const [rows, blockedOnOwner] = await Promise.all([
+    const [rows, blockedOnOwner, withSubagents] = await Promise.all([
       this.prisma.session.findMany({
         where: {
           ownerId,
@@ -1240,9 +1243,35 @@ export class PushService {
         select: { id: true, taskId: true, approvals: { where: { status: 'PENDING' }, select: { id: true, toolName: true } } },
       }),
       readOwnerItemSessionIds(this.prisma, ownerId),
+      // The conversations, at any status, whose running SubAgent asked a card (docs/subagent-design.md §5.3).
+      this.prisma.session.findMany({
+        where: {
+          ownerId,
+          sessionKind: 'CONVERSATION',
+          completedAt: null,
+          archivedAt: null,
+          deletedAt: null,
+          cancelRequestedAt: null,
+          runningSubagents: { isEmpty: false },
+          approvals: { some: { status: 'PENDING', subagentRunId: { not: null } } },
+        },
+        select: {
+          id: true,
+          approvals: { where: { status: 'PENDING', subagentRunId: { not: null } }, select: { id: true, toolName: true, subagentRunId: true } },
+        },
+      }),
     ]);
     const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
-    return [...new Set([...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id), ...blockedOnOwner])];
+    // A running SubAgent's card is a question whatever its parent is doing (docs/subagent-design.md §5.3): a
+    // background SubAgent waiting on a person while its parent sits idle needs them as much as a blocked turn.
+    const subagentCards = await visibleQuestions(this.prisma, await runningSubagentCards(this.prisma, withSubagents.flatMap(
+      (r) => (r.approvals ?? []).map((card: { id: string; toolName: string; subagentRunId?: string | null }) => ({ ...card, sessionId: r.id })),
+    )));
+    return [...new Set([
+      ...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id),
+      ...subagentCards.map(card => card.sessionId),
+      ...blockedOnOwner,
+    ])];
   }
 
   /** Debounced: something that could lower `ownerId`'s "needs you" count happened (an approval

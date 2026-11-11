@@ -12,7 +12,7 @@ import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
  * happened and how the agent answered it — `Evidence revision 2 submitted: B1 — 我确认了 B1…` — and
  * opens back to exactly what was drawn before.
  */
-export type ExchangeCategory = 'evidence' | 'ready' | 'project' | 'watch' | 'job' | 'reply';
+export type ExchangeCategory = 'evidence' | 'ready' | 'project' | 'watch' | 'job' | 'notice' | 'message' | 'reply';
 
 /** What an exchange is about, as far as a tree can place it. */
 export type ExchangeTarget =
@@ -54,6 +54,8 @@ const CATEGORY_WORDS: ReadonlyArray<[ExchangeCategory, string, string]> = [
   ['project', 'project update', 'project updates'],
   ['watch', 'watch', 'watches'],
   ['job', 'background job', 'background jobs'],
+  ['notice', 'run notice', 'run notices'],
+  ['message', 'message', 'messages'],
   ['reply', 'reply', 'replies'],
 ];
 
@@ -84,10 +86,9 @@ export const EMPTY_TREE_LOOKUP: ExchangeTreeLookup = {
 };
 
 export interface ExchangeBranch<E> {
-  /** Unique within the tree: the task's id, `session:<id>`, or `other`. */
+  /** Unique within the tree: the task's id (`idKey`), or `other`. */
   key: string;
-  /** The task's id as the exchanges spelled it; null for a session this page cannot place under
-   *  a task, and for the branch of everything else. */
+  /** The task's id as the exchanges spelled it; null for the branch of everything else. */
   taskId: string | null;
   title: string;
   exchanges: E[];
@@ -112,39 +113,29 @@ export function buildExchangeTree<E extends Pick<OrbitExchangeSummary, 'target'>
   const other: E[] = [];
   for (const ex of exchanges) {
     const task = taskOf(ex.target, lookup);
-    // A session no task is known to run is a branch of its own: what was said about it still
-    // reads together, it just cannot be placed after anything.
-    const placed = task ?? (ex.target?.kind === 'SESSION' ? ex.target : null);
-    if (!placed) {
+    // A session no task is known to run (a landing, another project's conversation) places
+    // nothing: it joins everything else rather than a branch named after an id.
+    if (!task) {
       other.push(ex);
       continue;
     }
-    const key = task ? idKey(task.id) : `session:${idKey(placed.id)}`;
+    const key = idKey(task.id);
     let branch = branches.get(key);
     if (!branch) {
-      branch = {
-        key,
-        taskId: task ? task.id : null,
-        title: task ? (task.title ?? lookup.taskTitle(task.id) ?? '') : (placed.title ?? ''),
-        exchanges: [],
-        children: [],
-      };
+      branch = { key, taskId: task.id, title: task.title ?? lookup.taskTitle(task.id) ?? '', exchanges: [], children: [] };
       branches.set(key, branch);
       order.push(key);
     }
-    if (!branch.title && placed.title) branch.title = placed.title;
+    if (!branch.title && task.title) branch.title = task.title;
     branch.exchanges.push(ex);
   }
   if (order.length + (other.length ? 1 : 0) < 2) return null;
   const roots: ExchangeBranch<E>[] = [];
   for (const key of order) {
     const branch = branches.get(key)!;
-    if (!branch.title) {
-      const id = branch.taskId ?? key.slice('session:'.length);
-      branch.title = `${branch.taskId ? 'Task' : 'Session'} ${(routeId(id) ?? id).slice(-8)}`;
-    }
+    if (!branch.title) branch.title = `Task ${(routeId(branch.taskId!) ?? branch.taskId!).slice(-8)}`;
     // The prerequisite that came first in the group, never the task itself or one placed under it.
-    const prerequisites = branch.taskId ? lookup.upstreamOf(branch.taskId).map(idKey) : [];
+    const prerequisites = lookup.upstreamOf(branch.taskId!).map(idKey);
     const up = order
       .filter((k) => k !== key && prerequisites.includes(k))
       .find((k) => !isBelow(branches.get(k)!, branch));
@@ -163,6 +154,19 @@ function taskOf(target: ExchangeTarget | null, lookup: ExchangeTreeLookup): { id
   if (!target) return null;
   if (target.kind === 'TASK') return { id: target.id, title: target.title };
   return lookup.taskOfSession(target.id);
+}
+
+/**
+ * A task run's `notify` handed to its coordinator because it could not reach the owner
+ * (apiserver sessions/run-notify.ts `<orbit-run-notice>`): the task it is about, by id and title.
+ * Recorded as the turn's control-plane note with no card beside it, so it is read off the words.
+ * Null for anything else.
+ */
+export function parseRunNotice(note: string | undefined): { taskId: string | null; taskTitle: string | null } | null {
+  const head = note && /^<orbit-run-notice task="([^"]*)" run-session="[^"]*"[^>]*>\n/.exec(note.trim());
+  if (!head || !note!.includes('</orbit-run-notice>')) return null;
+  const title = /A run of the task “([\s\S]*?)” used notify\./.exec(note!);
+  return { taskId: head[1] || null, taskTitle: title ? title[1] : null };
 }
 
 /** Every exchange a branch holds, its own and its descendants', in conversation order. */

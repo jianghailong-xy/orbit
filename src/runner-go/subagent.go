@@ -336,6 +336,15 @@ func sameFileNotes(self subagentSpan, others []subagentSpan) []string {
 	return notes
 }
 
+// subagentToolID is a child's tool id as its parent's session knows it: prefixed with the run id. The events and
+// the child's approval cards (approvalBodyOfPrompt) spell it alike, so a card names the call drawn in the block.
+func subagentToolID(runID, id string) string {
+	if id == "" {
+		return ""
+	}
+	return runID + ":" + id
+}
+
 // rewriteSubagentEvent is a child engine event as the parent session's stream carries it, or false for one the
 // parent must not see. Every kept event nests under the delegate call (parentToolUseId), and every tool id the
 // child minted is prefixed with the run id, so a child's toolu_1 never collides with the parent's or another
@@ -350,12 +359,7 @@ func rewriteSubagentEvent(runID, parentToolUseID, eventType string, payload map[
 	default:
 		return nil, false
 	}
-	prefix := func(id string) string {
-		if id == "" {
-			return ""
-		}
-		return runID + ":" + id
-	}
+	prefix := func(id string) string { return subagentToolID(runID, id) }
 	out := make(map[string]interface{}, len(payload)+1)
 	for k, v := range payload {
 		out[k] = v
@@ -882,7 +886,9 @@ func claudeChildSession(parent *ClaimedSession, target AgentExecConfig, def suba
 	}
 	child.Agent.Env[envSubagentRunID] = runID
 	child.Agent.AppendSystemPrompt = subagentSystemPrompt(def)
-	child.Agent.DisallowedTools = appendUnique(target.DisallowedTools, def.DisallowedTools...)
+	// No delegate: a SubAgent cannot hand work on (§5.1 step 3). Its `orbit mcp` offers none either; this keeps
+	// the engine's own tool list without it too.
+	child.Agent.DisallowedTools = appendUnique(target.DisallowedTools, append([]string{delegateEngineToolName}, def.DisallowedTools...)...)
 	if def.Readonly {
 		// The server already narrows a read-only run to plan mode (§5.3); kept here so the child never reads wider.
 		child.Agent.PermissionMode = "plan"

@@ -2912,7 +2912,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0524 adds two workspace columns and the subagent_run table only; no preserved row, trigger or DONE fence change.
       '0524_subagent_run',
       // 0527 adds three subagent_run columns and a partial index only; no preserved row, trigger or DONE fence change.
-      '0527_subagent_run_wake'],
+      '0527_subagent_run_wake',
+      // 0528 adds the nullable approval.subagent_run_id only; no preserved row, trigger or DONE fence change.
+      '0528_approval_subagent_run'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

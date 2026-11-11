@@ -123,6 +123,8 @@ struct WikiChatHost: ViewModifier {
     @Environment(\.horizontalSizeClass) private var hSize
     #endif
     @State private var detent: PresentationDetent = .medium
+    /// The width the Wiki has, the column included: what the column's width is a share of (owner 11-11).
+    @State private var available: CGFloat = 1440
 
     private var compact: Bool {
         #if os(iOS)
@@ -171,6 +173,7 @@ struct WikiChatHost: ViewModifier {
                 }
             }
             .animation(.snappy(duration: 0.25), value: chat.presented)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in available = width }
             .task(id: space.id) {
                 await chat.load(spaceID: space.id)
                 // Board 45: where the panel is the third column, a Wiki page opens with it shown.
@@ -239,13 +242,15 @@ struct WikiChatHost: ViewModifier {
         } else {
             content
                 .inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.closeByOwner() } })) {
-                    panel.inspectorColumnWidth(min: 320, ideal: 400, max: 560)
+                    panel.inspectorColumnWidth(min: CGFloat(WikiChatLogic.Column.min), ideal: CGFloat(WikiChatLogic.Column.ideal(Double(available))),
+                                           max: CGFloat(WikiChatLogic.Column.max(Double(available))))
                 }
         }
         #else
         content
             .inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.closeByOwner() } })) {
-                panel.inspectorColumnWidth(min: 320, ideal: 400, max: 560)
+                panel.inspectorColumnWidth(min: CGFloat(WikiChatLogic.Column.min), ideal: CGFloat(WikiChatLogic.Column.ideal(Double(available))),
+                                           max: CGFloat(WikiChatLogic.Column.max(Double(available))))
             }
         #endif
     }

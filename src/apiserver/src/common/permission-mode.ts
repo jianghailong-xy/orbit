@@ -112,6 +112,24 @@ export function isWiderThanStarter(starter: SessionModeStarter, mode: string, en
   return wider.has(runsAsBypass(mode, engine) ? PermissionMode.BYPASS : mode);
 }
 
+/**
+ * A SubAgent's rule (docs/subagent-design.md §5.3): never wider than its parent, with no exemption. The order
+ * is isWiderThanStarter's, but an Auto parent is held to it too — its SubAgent may not run Bypass, nor a mode
+ * that runs as Bypass on the child's engine. Only a Bypass parent's may run anything. Sessions starting
+ * sessions keep isWiderThanStarter's rule.
+ */
+export function isWiderThanParent(parent: SessionModeStarter, mode: string, engine: string | null): boolean {
+  if (parent.mode === PermissionMode.BYPASS) return false;
+  if (parent.mode !== PermissionMode.AUTO) return isWiderThanStarter(parent, mode, engine);
+  if (mode === parent.mode && engine !== null && engine === parent.engine) return false;
+  return (runsAsBypass(mode, engine) ? PermissionMode.BYPASS : mode) === PermissionMode.BYPASS;
+}
+
+/** What a SubAgent of this parent may run in on this engine (isWiderThanParent), in the pickers' order. */
+export function modesASubagentMayRunIn(parent: SessionModeStarter, engine: string | null): PermissionMode[] {
+  return Object.values(PermissionMode).filter((mode) => !isWiderThanParent(parent, mode, engine));
+}
+
 /** What a session may name for one it starts on this engine, in the order the pickers show them. */
 export function modesItMayStart(starter: SessionModeStarter, engine: string | null): PermissionMode[] {
   return Object.values(PermissionMode).filter((mode) => !isWiderThanStarter(starter, mode, engine));

@@ -2574,11 +2574,11 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 	if s.sessionID == "" {
 		return toolResult(denyJSON("no session context (ORBIT_SESSION_ID unset)"), false)
 	}
-	id, err := s.t.createApproval(context.Background(), s.sessionID, map[string]interface{}{
-		"toolName":  getString(args, "tool_name"),
-		"input":     args["input"],
-		"toolUseId": getString(args, "tool_use_id"),
-	})
+	body, refusal := approvalBodyOfPrompt(args)
+	if refusal != "" {
+		return toolResult(denyJSON(refusal), false)
+	}
+	id, err := s.t.createApproval(context.Background(), s.sessionID, body)
 	if err != nil {
 		return toolResult(denyJSON("could not register approval: "+err.Error()), false)
 	}
@@ -2605,6 +2605,28 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 		msg = "denied by the user"
 	}
 	return toolResult(denyJSON(msg), false)
+}
+
+// approvalBodyOfPrompt is the card a permission prompt files, or the refusal a SubAgent gets instead
+// (docs/subagent-design.md §5.3). A SubAgent asks under its parent's session (ORBIT_SESSION_ID is the parent's):
+// its card names the run, and its call's id carries the run id as a prefix, as the parent's transcript writes it
+// (rewriteSubagentEvent). Its questions and plans are refused: nobody answers them.
+func approvalBodyOfPrompt(args map[string]interface{}) (map[string]interface{}, string) {
+	toolName := getString(args, "tool_name")
+	toolUseID := getString(args, "tool_use_id")
+	body := map[string]interface{}{"toolName": toolName, "input": args["input"], "toolUseId": toolUseID}
+	runID := strings.TrimSpace(os.Getenv(envSubagentRunID))
+	if runID == "" {
+		return body, ""
+	}
+	if toolName == "AskUserQuestion" || toolName == "ExitPlanMode" {
+		return nil, subagentAsksNobodyReason
+	}
+	if toolUseID != "" {
+		body["toolUseId"] = subagentToolID(runID, toolUseID)
+	}
+	body["subagentRunId"] = runID
+	return body, ""
 }
 
 // askQuestionInput rebuilds AskUserQuestion's input for an allow decision: the

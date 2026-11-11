@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -130,5 +131,104 @@ func TestSubagentPreambleSaysTheRules(t *testing.T) {
 		if !strings.Contains(subagentPreamble, rule) {
 			t.Errorf("the preamble does not say %q", rule)
 		}
+	}
+}
+
+// §5.3: a SubAgent's engine is never handed delegate — not by its `orbit mcp`, and not in its own tool list.
+func TestSubagentChildToolListLacksDelegate(t *testing.T) {
+	parent := &ClaimedSession{SessionID: "sess-1", Provider: providerClaude}
+	exec := AgentExecConfig{Model: "claude-sonnet-5-5", PermissionMode: "default"}
+	general := definitionNamed(t, loadSubagentDefinitions(t.TempDir(), ""), "general")
+	child, args := claudeChildSession(parent, exec, general, "run1", "uuid-1", false, t.TempDir())
+	disallowed := argValue(args, "--disallowedTools")
+	if !strings.Contains(","+disallowed+",", ","+delegateEngineToolName+",") {
+		t.Fatalf("the child's --disallowedTools lacks %s: %q", delegateEngineToolName, disallowed)
+	}
+	if child.Agent.Env[envSubagentRunID] != "run1" {
+		t.Fatalf("the child is not marked as a SubAgent: %v", child.Agent.Env)
+	}
+	// What its `orbit mcp` lists, started with that mark.
+	t.Setenv(envSubagentRunID, "run1")
+	resp, _ := (&mcpServer{}).handle(&rpcRequest{JSONRPC: "2.0", ID: []byte("1"), Method: "tools/list"})
+	for _, tool := range resp.Result.(map[string]interface{})["tools"].([]map[string]interface{}) {
+		if tool["name"] == delegateToolName {
+			t.Fatal("a SubAgent's orbit mcp lists delegate")
+		}
+	}
+}
+
+// §5.3: a SubAgent asks nobody. Its AskUserQuestion and its plan approval are refused with an English message
+// telling it to put the question in its result: by the permission prompt, and by the hook in modes that skip it.
+func TestSubagentQuestionsAndPlansAreRefused(t *testing.T) {
+	t.Setenv(envSubagentRunID, "run1")
+	srv := &mcpServer{sessionID: "sess-parent"} // no transport: a refusal files no card
+	for _, tool := range []string{"AskUserQuestion", "ExitPlanMode"} {
+		res := srv.permissionPrompt(map[string]interface{}{
+			"tool_name": tool, "tool_use_id": "toolu_q", "input": map[string]interface{}{"questions": []interface{}{}},
+		})
+		text := res["content"].([]map[string]interface{})[0]["text"].(string)
+		var answer map[string]interface{}
+		if err := json.Unmarshal([]byte(text), &answer); err != nil {
+			t.Fatalf("%s: answer %q: %v", tool, text, err)
+		}
+		if answer["behavior"] != "deny" || answer["message"] != subagentAsksNobodyReason {
+			t.Fatalf("%s was not refused with the SubAgent message: %v", tool, answer)
+		}
+		for _, mode := range []string{"default", "plan", "auto", "bypassPermissions"} {
+			out := bgGuardDecision(hookInput{ToolName: tool, PermissionMode: mode})
+			spec, _ := out["hookSpecificOutput"].(map[string]interface{})
+			if spec["permissionDecision"] != "deny" || spec["permissionDecisionReason"] != subagentAsksNobodyReason {
+				t.Fatalf("hook in %s let a SubAgent's %s through: %v", mode, tool, out)
+			}
+		}
+	}
+	for _, phrase := range []string{"You are a SubAgent", "cannot ask the user", "put your question", "in your result"} {
+		if !strings.Contains(subagentAsksNobodyReason, phrase) {
+			t.Errorf("the refusal does not say %q: %s", phrase, subagentAsksNobodyReason)
+		}
+	}
+
+	// Outside a SubAgent the hook gives no verdict on them, in any mode: an allow would answer a person's question.
+	t.Setenv(envSubagentRunID, "")
+	for _, mode := range []string{"default", "auto", "bypassPermissions"} {
+		if out := bgGuardDecision(hookInput{ToolName: "AskUserQuestion", PermissionMode: mode}); len(out) != 0 {
+			t.Fatalf("hook gave a top-level session's question a verdict in %s: %v", mode, out)
+		}
+	}
+	if _, refusal := approvalBodyOfPrompt(map[string]interface{}{"tool_name": "AskUserQuestion", "tool_use_id": "toolu_q"}); refusal != "" {
+		t.Fatalf("a top-level session's question was refused: %s", refusal)
+	}
+}
+
+// §5.3: a SubAgent's card is filed under the parent's session, naming the run, with the call id the parent's
+// transcript gives that call.
+func TestSubagentApprovalCardNamesItsRun(t *testing.T) {
+	args := map[string]interface{}{"tool_name": "Bash", "tool_use_id": "toolu_7", "input": map[string]interface{}{"command": "go test ./..."}}
+	t.Setenv(envSubagentRunID, "")
+	if body, _ := approvalBodyOfPrompt(args); body["toolUseId"] != "toolu_7" || body["subagentRunId"] != nil {
+		t.Fatalf("a top-level card was changed: %v", body)
+	}
+	t.Setenv(envSubagentRunID, "run1")
+	body, refusal := approvalBodyOfPrompt(args)
+	if refusal != "" || body["subagentRunId"] != "run1" || body["toolUseId"] != "run1:toolu_7" || body["toolName"] != "Bash" {
+		t.Fatalf("SubAgent card = %v (refusal %q)", body, refusal)
+	}
+	use, _ := rewriteSubagentEvent("run1", "toolu_delegate", evToolUse, map[string]interface{}{"id": "toolu_7", "name": "Bash"})
+	if use["id"] != body["toolUseId"] {
+		t.Fatalf("the card names %v, the transcript draws %v", body["toolUseId"], use["id"])
+	}
+}
+
+// A definition's permissionMode reaches the server, which holds it to the parent's; an unknown one is dropped.
+func TestSubagentDefinitionPermissionModeIsSent(t *testing.T) {
+	project := t.TempDir()
+	writeDefinition(t, project, ".claude/agents", "wide.md", "---\npermissionMode: bypassPermissions\n---\nGo.\n")
+	writeDefinition(t, project, ".claude/agents", "odd.md", "---\npermissionMode: yolo\n---\nGo.\n")
+	defs := loadSubagentDefinitions(project, "")
+	if body := subagentStartBody(map[string]interface{}{}, definitionNamed(t, defs, "wide"), "toolu_1", false); body["permissionMode"] != "bypassPermissions" {
+		t.Fatalf("permissionMode not sent: %v", body)
+	}
+	if body := subagentStartBody(map[string]interface{}{}, definitionNamed(t, defs, "odd"), "toolu_1", false); body["permissionMode"] != nil {
+		t.Fatalf("an unknown permissionMode was sent: %v", body)
 	}
 }

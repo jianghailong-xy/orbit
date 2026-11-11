@@ -323,6 +323,7 @@ import { AntigravityRepairCard, antigravityRepair, AttachmentImage, type AuthErr
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
+import { approvalAction, delegateCallOfApproval, delegateDescription } from '../lib/subagentRuns';
 import {
   SessionDecisionStrip,
   decisionRowKey,
@@ -4396,15 +4397,42 @@ export function WorkspaceView({
     : null;
   const readByLiveJob = (a: ApprovalInfo): boolean =>
     !!a.backgroundJobId && (liveBackgroundJobIds === null || liveBackgroundJobIds.has(a.backgroundJobId));
+  // A SubAgent's card is read by its child engine, which outlives the parent's turn (docs/subagent-design.md
+  // §5.3): a question while the session still has a SubAgent running (or the row does not say) and the child's
+  // call has no result.
+  const subagentsStillRunning = (selectedSession?.runningSubagentCount ?? 1) > 0;
   const answerableApprovalIds = new Set(
     approvals
-      .filter(
-        (a) =>
-          readByLiveJob(a) ||
-          (turnStillGenerating && !(a.toolUseId && settledToolUseIds.has(a.toolUseId))),
+      .filter((a) =>
+        a.subagentRunId
+          ? (turnStillGenerating || subagentsStillRunning) && !(a.toolUseId && settledToolUseIds.has(a.toolUseId))
+          : readByLiveJob(a) ||
+            (turnStillGenerating && !(a.toolUseId && settledToolUseIds.has(a.toolUseId))),
       )
       .map((a) => a.id),
   );
+  // Each SubAgent card's delegate call, by card: the description its grey line names, and the block that says
+  // what it is waiting for.
+  const subagentCards = useMemo(() => {
+    const cards = new Map<string, { call: string | null; description: string }>();
+    for (const a of approvals) {
+      if (!a.subagentRunId) continue;
+      const call = delegateCallOfApproval(a, transcriptEvents);
+      cards.set(a.id, { call, description: delegateDescription(call, transcriptEvents) });
+    }
+    return cards;
+  }, [approvals, transcriptEvents]);
+  const answerableKey = [...answerableApprovalIds].join(',');
+  const subagentWaiting = useMemo(() => {
+    const waiting = new Map<string, string>();
+    for (const a of approvals) {
+      const call = subagentCards.get(a.id)?.call;
+      if (call && answerableApprovalIds.has(a.id) && !waiting.has(call)) waiting.set(call, approvalAction(a.toolName, a.input));
+    }
+    return waiting;
+    // answerableApprovalIds is rebuilt every render; its contents are the key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approvals, subagentCards, answerableKey]);
   // Questions submit only through their button, so they must not hold Enter against a later create.
   const activeApprovalId = approvals.find(
     (a) => a.toolName !== 'AskUserQuestion' && answerableApprovalIds.has(a.id),
@@ -9734,6 +9762,7 @@ export function WorkspaceView({
                 linkRefreshKey={sessionDetailQ.dataUpdatedAt}
                 answeredQuestions={answeredQuestions}
                 wikiChat={wikiChatCards}
+                subagentWaiting={subagentWaiting}
               />
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
@@ -9938,6 +9967,7 @@ export function WorkspaceView({
                   onChatAbout={startChatReply}
                   onDecline={startDeclineReply}
                   rememberable={approvalRememberOffered(shownEngine)}
+                  subagent={subagentCards.get(a.id)?.description ?? null}
                 />
               ))}
               <AnsweredQuestionsCtx.Provider value={answeredQuestions}>

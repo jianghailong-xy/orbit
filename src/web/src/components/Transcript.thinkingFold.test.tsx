@@ -13,6 +13,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  events = firstTurn;
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement('div');
   document.body.append(container);
@@ -24,13 +25,14 @@ afterEach(() => {
   container.remove();
 });
 
-const events: RunEvent[] = [{ seq: 1, type: 'user', payload: { text: 'go' } }];
+const firstTurn: RunEvent[] = [{ seq: 1, type: 'user', payload: { text: 'go' } }];
+let events = firstTurn;
 
-function draw(think: string, live = true) {
+function draw(think: string) {
   act(() =>
     root.render(
       <StreamingDraftsCtx.Provider value={think ? { text: '', think } : null}>
-        <Transcript events={events} live={live} streamingAfterSeq={think ? 1 : null} />
+        <Transcript events={events} live streamingAfterSeq={think ? events[events.length - 1].seq : null} />
       </StreamingDraftsCtx.Provider>,
     ),
   );
@@ -62,8 +64,14 @@ describe('a stretch of reasoning still being written', () => {
     draw('second block');
     expect(port()?.textContent).toBe('second block');
 
-    // The turn ends; the next turn's reasoning starts folded.
-    draw('', false);
+    // The turn ends and the next one starts at once: the session never reads as idle in between
+    // (`live` stays true), and the next turn's reasoning still starts folded.
+    events = [
+      ...firstTurn,
+      { seq: 2, type: 'assistant', payload: { text: 'done' } },
+      { seq: 3, type: 'turn_end', payload: {} },
+      { seq: 4, type: 'user', payload: { text: 'again' } },
+    ];
     draw('next turn');
     expect(head()?.getAttribute('aria-expanded')).toBe('false');
     expect(port()).toBeNull();

@@ -48,7 +48,8 @@ final class OrbitExchangeFoldCopyParityTests: XCTestCase {
         for (category, one, many) in [
             (ExchangeCategory.evidence, "evidence", "evidence"), (.ready, "can start", "can start"),
             (.project, "project update", "project updates"), (.watch, "watch", "watches"),
-            (.job, "background job", "background jobs"), (.reply, "reply", "replies"),
+            (.job, "background job", "background jobs"), (.notice, "run notice", "run notices"),
+            (.message, "message", "messages"), (.reply, "reply", "replies"),
         ] {
             let entry = "['\(category.rawValue)', '\(one)', '\(many)']"
             guard let range = lib.range(of: entry, range: cursor..<lib.endIndex) else {
@@ -59,7 +60,7 @@ final class OrbitExchangeFoldCopyParityTests: XCTestCase {
             XCTAssertEqual(OrbitExchangeFold.kinds(exchanges), "1 \(one)")
         }
         XCTAssertEqual(Set(ExchangeCategory.allCases.map(\.rawValue)),
-                       ["evidence", "ready", "project", "watch", "job", "reply"])
+                       ["evidence", "ready", "project", "watch", "job", "notice", "message", "reply"])
     }
 
     func testTheSameDeliveriesStayInView() throws {
@@ -77,6 +78,15 @@ final class OrbitExchangeFoldCopyParityTests: XCTestCase {
     func testAReplyAndAnAskingCallReadTheSame() throws {
         let transcript = try source(Self.webTranscript)
         XCTAssertTrue(transcript.contains("what: `Reply from ${reply.fromTitle}`"))
+        // A task run's message and a run notice, in the web's words.
+        for words in ["what: `Message from ${task ?? card.fromTitle}`", "whatInTask: 'Message'",
+                      "card.fromTitle.replace(/^Task: /, '')", "`Run notice: ${notice.taskTitle}`", "'Run notice'"] {
+            XCTAssertTrue(transcript.contains(words), "\(words) is not in \(Self.webTranscript)")
+        }
+        let lib = try source(Self.webLib)
+        for words in ["<orbit-run-notice task=", "A run of the task “", "” used notify", "</orbit-run-notice>"] {
+            XCTAssertTrue(lib.contains(words), "\(words) is not in \(Self.webLib)")
+        }
         XCTAssertTrue(transcript.contains("(ask_owner|request_owner_action)"))
     }
 }

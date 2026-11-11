@@ -2214,8 +2214,8 @@
       "composer": "The session page's composer, the same component (board 43 ② ④ ⑤, owner 11-07): its attachment row, which holds the page and the selection (notes.wikiContext) first, each with its cross, beside the pictures and files; its text with the slash menu; its toolbar of +, mode, model and effort, the usage gauges, send and Stop; and while a turn runs, a message sent into it or queued for the next one as the session page sends it. A new chat's model, effort, speed and mode go with create; a chat that runs changes its session's config as the session page does. Only a provider or account switch is the full session page's alone.",
       "belongs": "A chat belongs to one space: another space's wiki shows that space's chats. It is in its workspace's session list too, its page headed copy.panel.fromWiki.",
       "widths": {
-        "atLeast1440": "docked on the right, 400 wide by default, dragged between 320 and 560; the contents column as it is",
-        "from1200": "docked on the right; the contents column folds into the existing Contents drawer",
+        "atLeast1440": "docked on the right, a third of the window wide by default but never under 400 nor over 720, dragged between 320 and half the window (owner 11-11); the contents column as it is",
+        "from1200": "docked on the right, as wide as atLeast1440 says by default (400 to 480 here); the contents column folds into the existing Contents drawer",
         "from640": "slides in from the right over the right of the page, with no scrim; Contents drawer",
         "below640": "a bottom sheet, half and full height; Contents drawer"
       },
