@@ -388,7 +388,7 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     // the completed conversation the reader is trying to leave, and reported `created: false`.
     expect(posts).toHaveLength(1);
     expect(posts[0][0]).toBe(`/projects/${PROJECT}/coordinator/replace`);
-    expect(posts[0][1]).toEqual({ method: 'POST' });
+    expect(posts[0][1]).toEqual({ method: 'POST', body: {} });
 
     expect(landedOn).toBe(`/sessions/${SERVED}`);
     // No warning: an empty conversation is what this press asked for, and the card said so first.

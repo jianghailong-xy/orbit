@@ -4445,7 +4445,7 @@ export class ProjectsService {
     // would take a project's coordinator away and give it nothing back.
     const { workspaceId: runIn, fixed } =
       intent === 'replace' && workspaceId
-        ? { workspaceId, fixed: false }
+        ? { workspaceId: await this.namedReplacementLanding(ownerId, workspaceId), fixed: false }
         : await this.coordinatorLanding(ownerId, project, workspaceId);
 
     // The conversation being replaced is ENDED, in the same words and by the same method its own
@@ -5456,6 +5456,23 @@ export class ProjectsService {
       engineTurnActive: session.engineTurnActive,
       pendingApprovals,
     };
+  }
+
+  /**
+   * The workspace a `replace` named, checked BEFORE the outgoing conversation is completed: a press
+   * that could not open its replacement there must not cost the project the coordinator it has.
+   * The same conditions `sessions.create` (and the swap's landing lock) hold a workspace to, in the
+   * sentences the clients show; another owner's workspace is not found.
+   */
+  private async namedReplacementLanding(ownerId: string, workspaceId: string): Promise<string> {
+    const named = await this.prisma.workspace.findFirst({
+      where: { id: workspaceId, ownerId, deletedAt: null },
+      select: { id: true, enabled: true, runnerId: true },
+    });
+    if (!named) throw new NotFoundException('workspace not found');
+    if (!named.enabled) throw new ConflictException('This workspace is disabled.');
+    if (!named.runnerId) throw new ConflictException('This workspace has no runner.');
+    return named.id;
   }
 
   /**

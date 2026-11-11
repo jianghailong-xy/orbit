@@ -78,7 +78,6 @@ import {
   projectsPath,
   projectsQueryKey,
   runnersQuery,
-  sessionFoldersQuery,
   workspacesQuery,
 } from '../lib/queries';
 import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
@@ -89,7 +88,7 @@ import { Alert } from '../components/ui/Alert';
 import { Badge, type BadgeProps } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { useConfirm } from '../components/ui/ConfirmDialog';
-import { SessionMoveModal } from '../components/SessionMoveModal';
+import { SessionMoveModalFor } from '../components/SessionMoveModal';
 import {
   START_COORDINATOR_COPY,
   startCoordinatorAction,
@@ -1504,7 +1503,6 @@ export function ProjectCoordinatorSection({
   // (②–③): the picker, and the Move panel opened on the coordinator conversation.
   const [pickingWorkspace, setPickingWorkspace] = useState(false);
   const [moving, setMoving] = useState(false);
-  const foldersQ = useQuery({ ...sessionFoldersQuery(), enabled: moving });
   const [choosingLanding, setChoosingLanding] = useState(false);
   // The workspace the reader named for a coordinator that has never opened. Kept rather than sent
   // and forgotten, because every later press has to carry the same choice — a Retry that fell back
@@ -1733,11 +1731,9 @@ export function ProjectCoordinatorSection({
       ) : null}
 
       {moving && status.data?.coordination.session && boundWorkspaceId ? (
-        <SessionMoveModal
-          open
+        <SessionMoveModalFor
           session={{ id: status.data.coordination.session.id, title: status.data.coordination.session.title }}
           workspace={{ id: boundWorkspaceId, name: status.data.coordination.workspaceName ?? '' }}
-          folders={(foldersQ.data ?? []).filter((f) => f.workspaceId === boundWorkspaceId)}
           onClose={() => {
             setMoving(false);
             void qc.invalidateQueries({ queryKey: ['project', projectId] });

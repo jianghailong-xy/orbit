@@ -58,7 +58,11 @@ function sessionRow(over: Partial<SessionRow> = {}): SessionRow {
   };
 }
 
-function store(standing: SessionRow | null, workspaceUsable = true) {
+function store(
+  standing: SessionRow | null,
+  workspaceUsable = true,
+  elsewhere: { enabled: boolean; runnerId: string | null } = { enabled: true, runnerId: 'runner-2' },
+) {
   const project = {
     id: PROJECT,
     ownerId: OWNER,
@@ -117,6 +121,8 @@ function store(standing: SessionRow | null, workspaceUsable = true) {
       // `lastCoordinatorWorkspace`, with the conditions it really applies. `workspaceUsable`
       // stands in for the landing having been disabled or trashed since the binding.
       findFirst: async ({ where }: any) => {
+        // The workspace a replacement names (`namedReplacementLanding`): usable unless a case says not.
+        if (where.id === ELSEWHERE) return where.ownerId === OWNER ? { id: ELSEWHERE, ...elsewhere } : null;
         if (where.id !== HOME || where.ownerId !== OWNER || !workspaceUsable) return null;
         return { id: HOME };
       },
@@ -336,4 +342,22 @@ test('opening, as opposed to replacing, still refuses another workspace', async 
   assert.deepEqual(created, []);
   assert.deepEqual(writes, []);
   assert.equal(project.coordinatorWorkspaceId, HOME);
+});
+
+test('a replacement named somewhere that cannot take it refuses before ending anything', async () => {
+  for (const [elsewhere, message] of [
+    [{ enabled: false, runnerId: 'runner-2' }, 'This workspace is disabled.'],
+    [{ enabled: true, runnerId: null }, 'This workspace has no runner.'],
+  ] as const) {
+    const { service, project, completed, created, writes } = store(sessionRow(), true, elsewhere);
+
+    const refused = await thrown(() => service.coordinator(OWNER, PROJECT, ELSEWHERE, 'replace'));
+
+    assert.ok(refused instanceof ConflictException);
+    assert.equal((refused as ConflictException).message, message);
+    assert.deepEqual(completed, [], 'the standing conversation is not ended for a press that cannot open its replacement');
+    assert.deepEqual(created, []);
+    assert.deepEqual(writes, []);
+    assert.equal(project.coordinatorSessionId, STANDING);
+  }
 });

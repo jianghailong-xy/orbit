@@ -47,10 +47,7 @@ export const coordinatorSessionPath = (sessionId: string): string =>
  * is the whole reason the caller asks first: this request ends a conversation that may be mid-turn.
  */
 export function replaceProjectCoordinator(projectId: string, workspaceId?: string): Promise<CoordinatorResult> {
-  return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, {
-    method: 'POST',
-    ...(workspaceId ? { body: { workspaceId } } : {}),
-  });
+  return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST', body: workspaceId ? { workspaceId } : {} });
 }
 
 const providerName = (slug: string): string => (isEngine(slug) ? ENGINE_CLI_NAMES[slug] : slug);

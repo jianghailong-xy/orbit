@@ -36,6 +36,7 @@ import {
   type MovePhase,
 } from '../lib/sessionFolders';
 import { START_COORDINATOR_COPY } from '../lib/coordinatorWorkspace';
+import { sessionFoldersQuery } from '../lib/queries';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { isSessionTerminal } from '../lib/sessionState';
 import { useToast } from '../lib/toast';
@@ -496,5 +497,30 @@ function MoveOption({
       {count !== undefined && <span className="move-dialog-count">{count}</span>}
       {checked && <CheckOutlined className="move-dialog-check" />}
     </button>
+  );
+}
+
+/**
+ * The Move panel opened from outside a session list (the project page's coordinator card): it reads
+ * the workspace's folders itself, only once it is open.
+ */
+export function SessionMoveModalFor({
+  session,
+  workspace,
+  onClose,
+}: {
+  session: MoveDialogSession;
+  workspace: { id: string; name: string };
+  onClose: () => void;
+}) {
+  const foldersQ = useQuery(sessionFoldersQuery());
+  return (
+    <SessionMoveModal
+      open
+      session={session}
+      workspace={workspace}
+      folders={(foldersQ.data ?? []).filter((f) => f.workspaceId === workspace.id)}
+      onClose={onClose}
+    />
   );
 }

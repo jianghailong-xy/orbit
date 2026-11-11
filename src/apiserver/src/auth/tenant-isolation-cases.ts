@@ -1001,6 +1001,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'POST /projects/:id/coordinator body workspaceId': {
     request: (of, mine) => ({ params: { id: mine.projectId }, body: { workspaceId: of.workspaceId } }),
   },
+  'POST /projects/:id/coordinator/replace body workspaceId': {
+    request: (of, mine) => ({ params: { id: mine.projectId }, body: { workspaceId: of.workspaceId } }),
+  },
   'POST /projects/:id/coordinator/rebind body workspaceId': {
     request: (of, mine) => ({ params: { id: mine.projectId }, body: { workspaceId: of.workspaceId } }),
   },

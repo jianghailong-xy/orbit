@@ -10649,6 +10649,26 @@ export class SessionsService {
   }
 
   /**
+   * A project's coordinator takes its project along: the project is coordinated from wherever its
+   * conversation runs. Called by moveToWorkspaceLocked after the session row is written, so
+   * `project_coordinator_pointer_guard` (0126) reads the pair as it now stands — the session already
+   * in the new workspace. The project row is rank 40, above the session's 30 (common/lock-order.ts),
+   * and this UPDATE is what takes it. Conditional on the pointer still naming this session.
+   */
+  private async moveCoordinationWith(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    projectId: string,
+    sessionId: string,
+    workspaceId: string,
+  ): Promise<void> {
+    await tx.project.updateMany({
+      where: { id: projectId, ownerId, coordinatorSessionId: sessionId },
+      data: { coordinatorWorkspaceId: workspaceId },
+    });
+  }
+
+  /**
    * The cross-workspace half of {@link move}, inside its transaction, with the session row locked
    * and — when it is one the session can go to — the named workspace. Every §5.2 condition is asked
    * again on those rows (session-move.ts), so whatever changed since the Move panel was drawn — the
@@ -10743,15 +10763,8 @@ export class SessionsService {
         ...(regionHeld ? { error: null } : {}),
       },
     });
-    // A project's coordinator takes its project along: the project is coordinated from wherever its
-    // conversation runs. Written after the session row, so `project_coordinator_pointer_guard` (0126)
-    // reads the pair as it now stands — the session already in the new workspace. The project row is
-    // rank 40, above the session's 30 (common/lock-order.ts), and this UPDATE is what takes it.
     if (session.coordinatorForProject) {
-      await tx.project.updateMany({
-        where: { id: session.coordinatorForProject.id, ownerId, coordinatorSessionId: id },
-        data: { coordinatorWorkspaceId: to.workspaceId },
-      });
+      await this.moveCoordinationWith(tx, ownerId, session.coordinatorForProject.id, id, to.workspaceId);
     }
     // Queued still: the runner it is now assigned to is the one to wake.
     return regionHeld ? target.runnerId : null;
