@@ -39,6 +39,9 @@ type subagentDefinition struct {
 	Size string
 	// Readonly runs the SubAgent in plan mode without edit tools.
 	Readonly bool
+	// PermissionMode is the frontmatter's permissionMode when it is one of Claude Code's modes; empty runs the
+	// SubAgent in its parent's mode. The server refuses one wider than the parent's (§5.3).
+	PermissionMode string
 	// Tools and DisallowedTools go to engines that support them.
 	Tools           []string
 	DisallowedTools []string
@@ -155,6 +158,10 @@ func parseSubagentDefinition(path string) subagentDefinition {
 		d.Size = size
 	}
 	d.Readonly = frontmatterBool(fields["readonly"])
+	switch mode := strings.TrimSpace(fields["permissionMode"]); mode {
+	case "default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions":
+		d.PermissionMode = mode
+	}
 	if v, set := fields["is_background"]; set && strings.TrimSpace(v) != "" {
 		b := frontmatterBool(v)
 		d.Background = &b
@@ -240,6 +247,9 @@ func subagentStartBody(args map[string]interface{}, def subagentDefinition, tool
 		}
 		if def.Size != "" {
 			body["definitionSize"] = def.Size
+		}
+		if def.PermissionMode != "" {
+			body["permissionMode"] = def.PermissionMode
 		}
 	}
 	return body

@@ -1417,6 +1417,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/approvals body backgroundJobId':
     'the id the machine gave one of its own processes, stored on the approval of the session the path names '
     + '(runner-api.controller.ts:3900)',
+  'POST /runner/sessions/:id/approvals body subagentRunId':
+    'a SubAgent run, looked up only among the runs of the session the path names, whose ownership the door checked '
+    + 'first; any other id, another account\'s run included, is 404 (runner-api.controller.ts:5509); '
+    + 'sessions/subagent-approvals.pg.spec.ts sends another session\'s run and another account\'s',
   'POST /runner/sessions/:id/subagents body toolUseId':
     'the engine\'s id for the delegate call, a key only within the session the path names '
     + '(runner-api/runner-subagents.controller.ts:110)',

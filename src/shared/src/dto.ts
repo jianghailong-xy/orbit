@@ -2166,6 +2166,9 @@ export interface SubagentRunCreateRequest {
   definitionSize?: SubagentSize;
   /** The definition is read-only: the child runs in plan mode. */
   readonly?: boolean;
+  /** The definition's own permission mode. Never wider than the parent's (403
+   *  PERMISSION_MODE_WIDER_THAN_SESSION); left out, the child runs in the parent's mode. */
+  permissionMode?: string;
 }
 
 export interface SubagentRunCreateResponse {
@@ -2332,6 +2335,10 @@ export interface ApprovalInfo {
    *  way the server does: the id is in the session's `runningBgShells` or it is not. Absent on
    *  in-turn asks, which is every ask that names no job. */
   backgroundJobId?: string;
+  /** The SubAgent run that asked this under the session (`ApprovalCreateRequest.subagentRunId`). Its
+   *  `toolUseId` is then the child's own call, prefixed with the run id as the parent's transcript writes it.
+   *  Absent on every card the session asked itself. */
+  subagentRunId?: string;
   status: ApprovalStatus;
   message?: string;
   createdAt: string;
@@ -2349,6 +2356,11 @@ export interface ApprovalCreateRequest {
    *  hands it back here; `sessions/abandoned-approvals.ts` refuses to collect a card whose job is
    *  still up, because that process outlives the turn. Absent on every in-turn ask. */
   backgroundJobId?: string;
+  /** The SubAgent run that asked this (docs/subagent-design.md §5.3). A SubAgent's cards are posted with its
+   *  parent's sessionId and a `toolUseId` prefixed with this id; its child engine reads the answer and outlives
+   *  the parent's turn and calls, so `sessions/abandoned-approvals.ts` collects the card when the run ends and
+   *  not when the parent's calls return. Must name a run of the session the path names. */
+  subagentRunId?: string;
   /** On an `orbit_task_create` card: the asker acts on the owner's "Create and start"
    *  (`ApprovalDecisionRequest.startAfterCreate`). The server records it on the stored card as
    *  `input.acceptsStartAfterCreate`, beside the preview; clients offer the button, and the server

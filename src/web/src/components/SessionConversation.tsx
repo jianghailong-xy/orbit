@@ -15,12 +15,15 @@ import {
   SteerWithdrawCtx,
   StreamingDraftsCtx,
   SubagentRunsCtx,
+  SubagentWaitingCtx,
   TaskActivityCtx,
   Transcript,
   type TranscriptInsert,
   type TurnImage,
   UndeliveredCtx,
 } from './Transcript';
+
+const NO_SUBAGENT_WAITING: ReadonlyMap<string, string> = new Map();
 
 /**
  * A session's live conversation: the transcript of what `useSessionStream` holds, inside the
@@ -47,6 +50,7 @@ export function SessionConversation({
   linkRefreshKey,
   answeredQuestions,
   wikiChat = null,
+  subagentWaiting = NO_SUBAGENT_WAITING,
 }: {
   sessionId: string;
   stream: SessionStream;
@@ -67,6 +71,8 @@ export function SessionConversation({
   answeredQuestions: ContextType<typeof AnsweredQuestionsCtx>;
   /** The card host of a wiki chat (`WikiDraftCard`); null for any other session. */
   wikiChat?: WikiDraftCardHost | null;
+  /** What each SubAgent waits for a person to approve, by its delegate call (`SubagentWaitingCtx`). */
+  subagentWaiting?: ReadonlyMap<string, string>;
 }) {
   const navigate = useNavigate();
   const subagentRuns = useSubagentRuns(sessionId, stream.transcriptEvents);
@@ -80,6 +86,7 @@ export function SessionConversation({
                 <LiveToolOutputsCtx.Provider value={stream.liveToolOutputs}>
                   <TaskActivityCtx.Provider value={stream.taskActivity}>
                     <SubagentRunsCtx.Provider value={subagentRuns}>
+                    <SubagentWaitingCtx.Provider value={subagentWaiting}>
                     <StreamingDraftsCtx.Provider value={stream.streamingDrafts}>
                       {/* The links in this conversation, drawn as cards. The provider is what makes a
                           card possible at all — the shared page and the export mount none — and it
@@ -100,6 +107,7 @@ export function SessionConversation({
                         </AnsweredQuestionsCtx.Provider>
                       </OrbitLinkCardsProvider>
                     </StreamingDraftsCtx.Provider>
+                    </SubagentWaitingCtx.Provider>
                     </SubagentRunsCtx.Provider>
                   </TaskActivityCtx.Provider>
                 </LiveToolOutputsCtx.Provider>

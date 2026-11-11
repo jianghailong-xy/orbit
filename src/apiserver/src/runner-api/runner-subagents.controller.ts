@@ -21,7 +21,13 @@ import {
 } from '@orbit/shared';
 import { Prisma, RunStatus, type Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
-import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
+import {
+  ALWAYS_ALLOWED_TOOLS,
+  isWiderThanStarter,
+  modesItMayStart,
+  resolvePermissionMode,
+  widerModeRefusal,
+} from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -30,6 +36,7 @@ import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { QueueService } from '../queue/queue.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
 import { assertEngineSession } from '../sessions/engine-session';
 import { sessionProviderExec } from './session-provider-exec';
 import { stripNul } from './strip-nul';
@@ -141,8 +148,20 @@ export class RunnerSubagentsController {
         session.assignedRunner?.modelCatalog,
         resolvedExec.reasoningLevels,
       );
-      // A read-only definition runs in plan mode; anything else as the parent does, never wider (§5.3).
+      // A read-only definition runs in plan mode; anything else in the mode its definition names, or as the
+      // parent does when it names none — never wider than the parent (§5.3), by the rule a session starting
+      // another is held to (SessionsService.assertChildModeOrNarrow).
       const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
+      if (!dto.readonly && dto.permissionMode && isWiderThanStarter({ mode: parentMode, engine: provider }, dto.permissionMode, provider)) {
+        throw widerModeRefusal(
+          parentMode,
+          dto.permissionMode,
+          provider,
+          `Remove permissionMode from the SubAgent's definition to run it in this session's mode, or name one it may ` +
+            `run in (${modesItMayStart({ mode: parentMode, engine: provider }, provider).join(', ')}).`,
+        );
+      }
+      const childMode = (dto.readonly ? PermissionMode.PLAN : dto.permissionMode ?? parentMode) as PermissionMode;
       const exec: AgentExecConfig = {
         provider,
         model: runnerModel,
@@ -151,7 +170,7 @@ export class RunnerSubagentsController {
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          dto.readonly ? PermissionMode.PLAN : parentMode,
+          childMode,
           customRow?.enabled === true,
           runner.runsAsRoot,
           session.assignedRunner?.modelCatalog,
@@ -227,6 +246,8 @@ export class RunnerSubagentsController {
       if (costUsd > 0) {
         await tx.session.update({ where: { id: sessionId }, data: { costUsd: { increment: costUsd } } });
       }
+      // Its child engine was the only reader of the cards it asked (§5.3), and it has gone.
+      await reapApprovalsOfEndedSubagents(tx, sessionId, runId);
       return { runId, status: dto.status, applied: true };
     }, loggedRetry(this.logger, 'runnerSubagents.updateSubagentRun'));
   }

@@ -2616,6 +2616,10 @@ model Approval {
   /// whose job is still up (Session.runningBgShells). No FK, like `turnId`: the job id is a token
   /// the runner mints for a process, not a row anything can reference.
   backgroundJobId String? @map("background_job_id")
+  /// The SubAgent run whose child engine asked this, under its parent's session (docs/subagent-design.md §5.3):
+  /// that child polls for the answer, and it outlives the parent's turn and calls, so the card is collected
+  /// when the run ends and not by them (`sessions/abandoned-approvals.ts`). No FK, like `turnId`.
+  subagentRunId   String? @map("subagent_run_id") @db.Uuid
   // PENDING -> ALLOWED | DENIED, or ABANDONED when the turn that raised it ended unanswered
   status       String    @default("PENDING")
   message      String? // optional deny reason / note from the human

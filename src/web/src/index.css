@@ -10515,6 +10515,18 @@ button.chat-jump-start:hover {
   padding: 0 6px;
 }
 /* An opened SubAgent's first line: why it runs where it runs, in grey. */
+/* A SubAgent waiting on a card in its parent's approval area (docs/subagent-design.md §5.3). */
+.chat-subagent-waiting {
+  padding: 2px 10px 6px 58px;
+  font-size: 12px;
+  color: var(--warning-solid);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-subagent .chat-subagent-waiting {
+  padding: 4px 0 2px;
+}
 .chat-subagent-why {
   padding: 8px 10px 4px;
   font-size: 12px;
@@ -12780,6 +12792,19 @@ button.chat-jump-start:hover {
   background: var(--brand-tint);
   margin: 10px 0;
   overflow: hidden;
+}
+/* Which SubAgent asked (docs/subagent-design.md §5.3): one grey line above the card's own head. */
+.approval-subagent {
+  padding: 8px 14px 0;
+  font-size: 12px;
+  color: var(--text-3);
+  background: var(--brand-tint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.approval-subagent + .approval-head {
+  padding-top: 4px;
 }
 .approval-head {
   padding: 10px 14px;

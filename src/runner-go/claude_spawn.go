@@ -172,6 +172,8 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 				{"matcher": "ScheduleWakeup|CronCreate", "hooks": guard},
 				// The other two doors a poll of Orbit's own work comes through (bgGuardOrbitPollReason).
 				{"matcher": "Monitor|mcp__orbit__bg_run", "hooks": guard},
+				// A SubAgent's questions and plans (subagentAsksNobodyReason); no verdict in any other session.
+				{"matcher": "AskUserQuestion|ExitPlanMode", "hooks": guard},
 			},
 		}
 	}

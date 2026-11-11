@@ -124,6 +124,48 @@ export const APPROVAL_ABANDONED_CALL_MESSAGE =
   'the call that asked this already returned, so nothing is left to receive an answer';
 
 /**
+ * The trace for a card a SubAgent asked, whose run has ended (docs/subagent-design.md §5.3).
+ *
+ * The fourth reader. A SubAgent's child engine asks under its parent's session, and it — not the
+ * parent's turn, not the parent's calls — polls for the answer: a background SubAgent runs on after
+ * the parent's turn ends, and the parent's own `delegate` call may return long before its child does.
+ * So such a card is left alone by every rule above and collected only when its run is no longer
+ * RUNNING, which is when that child process has gone.
+ */
+export const APPROVAL_ABANDONED_SUBAGENT_MESSAGE =
+  'the SubAgent that asked this ended before it was answered, so nothing is left to receive an answer';
+
+/**
+ * Collect the pending cards of SubAgent runs that are no longer running. With `runId`, that run's only:
+ * `RunnerSubagentsController.updateSubagentRun` calls it in the transaction that ends the run.
+ */
+export async function reapApprovalsOfEndedSubagents(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  runId?: string,
+): Promise<number> {
+  // The cards first: a session no SubAgent asked anything of — nearly every turn end — reads no run.
+  const asked = (
+    await tx.approval.findMany({
+      where: { sessionId, status: 'PENDING', subagentRunId: runId ?? { not: null } },
+      select: { id: true, subagentRunId: true },
+    })
+  ).filter((card) => !!card.subagentRunId);
+  if (asked.length === 0) return 0;
+  const running = new Set(
+    (await tx.subagentRun.findMany({ where: { sessionId, status: 'RUNNING' }, select: { id: true } })).map((run) => run.id),
+  );
+  const ended = asked.filter((card) => !running.has(card.subagentRunId!)).map((card) => card.id);
+  if (ended.length === 0) return 0;
+  const lost = await tx.approval.updateMany({
+    where: { sessionId, status: 'PENDING', id: { in: ended } },
+    data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_SUBAGENT_MESSAGE },
+  });
+  if (lost.count > 0) await eraseEnvValuesOfCollectedCards(tx, sessionId);
+  return lost.count;
+}
+
+/**
  * Collect this session's approvals whose reader is gone. Returns how many were collected.
  *
  * Called from the boundaries that END turns — the turn-complete acknowledgement and the drains that
@@ -172,6 +214,7 @@ export async function reapApprovalsOfEndedTurns(
       sessionId,
       status: 'PENDING',
       backgroundJobId: { not: null, notIn: liveJobs },
+      subagentRunId: null,
     },
     data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_JOB_MESSAGE },
   });
@@ -185,6 +228,8 @@ export async function reapApprovalsOfEndedTurns(
         // The complement of the pass above, and the reason a card a live job is still reading is
         // in neither: it names its reader, so it is not this rule's to collect.
         { backgroundJobId: null },
+        // A SubAgent's card is its run's to settle (reapApprovalsOfEndedSubagents), not its parent's turn.
+        { subagentRunId: null },
       ],
     },
     data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_MESSAGE },
@@ -201,6 +246,7 @@ export async function reapApprovalsOfEndedTurns(
       status: 'PENDING',
       turnId: null,
       backgroundJobId: null,
+      subagentRunId: null,
       toolUseId: { not: null },
     },
     select: { id: true, toolUseId: true },
@@ -228,7 +274,8 @@ export async function reapApprovalsOfEndedTurns(
           data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_CALL_MESSAGE },
         });
   if (lostItsJob.count + lostItsTurn.count + lostItsCall.count > 0) await eraseEnvValuesOfCollectedCards(tx, sessionId);
-  return lostItsJob.count + lostItsTurn.count + lostItsCall.count;
+  const lostItsSubagent = await reapApprovalsOfEndedSubagents(tx, sessionId);
+  return lostItsJob.count + lostItsTurn.count + lostItsCall.count + lostItsSubagent;
 }
 
 /**
@@ -258,6 +305,9 @@ export async function reapApprovalsOfReturnedCalls(
       sessionId,
       status: 'PENDING',
       backgroundJobId: null,
+      // A SubAgent's card is read by its child engine, which a returned call — the parent's own
+      // `delegate` included — says nothing about (docs/subagent-design.md §5.3).
+      subagentRunId: null,
       toolUseId: { in: [...toolUseIds] },
     },
     data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_CALL_MESSAGE },
@@ -283,6 +333,7 @@ export async function reapApprovalsOfReturnedCallsIn(
     where: {
       status: 'PENDING',
       backgroundJobId: null,
+      subagentRunId: null,
       OR: asked.map((r) => ({ sessionId: r.sessionId, toolUseId: { in: [...r.toolUseIds] } })),
     },
     data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_CALL_MESSAGE },
@@ -311,6 +362,17 @@ export function readByLiveBackgroundJob(
   runningBgShells: readonly string[],
 ): boolean {
   return approval.backgroundJobId !== null && runningBgShells.includes(approval.backgroundJobId);
+}
+
+/**
+ * Whether the SubAgent run a card names is still running, and so its child engine still there to read an
+ * answer: the read side of reapApprovalsOfEndedSubagents.
+ */
+export function readByRunningSubagent(
+  approval: { subagentRunId?: string | null },
+  runningSubagentRuns: ReadonlySet<string>,
+): boolean {
+  return !!approval.subagentRunId && runningSubagentRuns.has(approval.subagentRunId);
 }
 
 /**

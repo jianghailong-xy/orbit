@@ -235,7 +235,7 @@ import {
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
-import { countLiveApprovals, readByLiveBackgroundJob } from './abandoned-approvals';
+import { countLiveApprovals, readByLiveBackgroundJob, readByRunningSubagent } from './abandoned-approvals';
 import { holdsWorkspaceWriteValues, withoutEnvValues } from './workspace-write-card-values';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
@@ -8602,7 +8602,7 @@ export class SessionsService {
    * `abandoned-approvals.ts`), so a card leaves this list exactly where it stops being answerable.
    */
   private async stillBeingAsked<
-    T extends { id: string; toolUseId: string | null; backgroundJobId: string | null },
+    T extends { id: string; toolUseId: string | null; backgroundJobId: string | null; subagentRunId?: string | null },
   >(
     session: {
       id: string;
@@ -8614,8 +8614,21 @@ export class SessionsService {
   ): Promise<T[]> {
     if (approvals.length === 0) return approvals;
     const generating = isSessionGenerating(session);
+    // A SubAgent's card is read by its child engine (docs/subagent-design.md §5.3): a question while its
+    // run is RUNNING and the child's call has no result yet, whatever the parent's turn is doing.
+    const asksForSubagent = approvals.some((a) => !!a.subagentRunId);
+    const runningSubagentRuns = new Set(
+      asksForSubagent
+        ? (
+            await this.prisma.subagentRun.findMany({
+              where: { sessionId: session.id, status: 'RUNNING' },
+              select: { id: true },
+            })
+          ).map((run) => run.id)
+        : [],
+    );
     const raised = approvals
-      .filter((a) => a.backgroundJobId === null)
+      .filter((a) => a.backgroundJobId === null && (generating || !!a.subagentRunId))
       .map((a) => a.toolUseId)
       .filter((id): id is string => id !== null);
     // An old runtime sent no tool_use id, so its rows can never be paired with a result and are
@@ -8623,7 +8636,7 @@ export class SessionsService {
     // read is skipped when there is nothing the turn could tell us about — no id to pair against,
     // or a turn that is not running, which leaves its cards over whatever the calls say.
     const over =
-      raised.length === 0 || !generating
+      raised.length === 0
         ? new Set<string>()
         : new Set(
             (
@@ -8638,9 +8651,11 @@ export class SessionsService {
             ).map((call) => call.toolUseId),
           );
     return approvals.filter((a) =>
-      a.backgroundJobId === null
-        ? generating && (a.toolUseId === null || !over.has(a.toolUseId))
-        : readByLiveBackgroundJob(a, session.runningBgShells),
+      a.subagentRunId
+        ? readByRunningSubagent(a, runningSubagentRuns) && (a.toolUseId === null || !over.has(a.toolUseId))
+        : a.backgroundJobId === null
+          ? generating && (a.toolUseId === null || !over.has(a.toolUseId))
+          : readByLiveBackgroundJob(a, session.runningBgShells),
     );
   }
 
@@ -8808,6 +8823,7 @@ export class SessionsService {
     input: Prisma.JsonValue;
     toolUseId: string | null;
     backgroundJobId: string | null;
+    subagentRunId?: string | null;
     status: string;
     message: string | null;
     createdAt: Date;
@@ -8822,6 +8838,7 @@ export class SessionsService {
       input: a.input,
       toolUseId: a.toolUseId ?? undefined,
       backgroundJobId: a.backgroundJobId ?? undefined,
+      ...(a.subagentRunId ? { subagentRunId: a.subagentRunId } : {}),
       answeredBy: a.decidedCredentialKind === 'COORDINATOR' ? 'COORDINATOR' : null,
       coordinatorFallback: a.coordinatorFallback as ApprovalInfo['coordinatorFallback'] ?? null,
       status: a.status as ApprovalStatus,

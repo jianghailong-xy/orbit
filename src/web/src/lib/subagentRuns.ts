@@ -96,3 +96,63 @@ export function delegateResultText(content: unknown, run: SubagentRunView | unde
   if (delegateLaunchReceipt(content)) return null;
   return text;
 }
+
+type ToolUsePayload = { id?: unknown; name?: unknown; input?: unknown; parentToolUseId?: unknown; subagentRunId?: unknown };
+
+/**
+ * The `delegate` call a SubAgent's approval card was asked from (docs/subagent-design.md §5.3), or null for a card
+ * the session asked itself. The card's `toolUseId` is the child's call as the parent's transcript writes it, the
+ * run id and the child's own id; that call nests under the delegate call. Before the child's call reaches the
+ * transcript, any event of the same run says which delegate call it nests under.
+ */
+export function delegateCallOfApproval(
+  approval: { subagentRunId?: string; toolUseId?: string },
+  events: readonly RunEvent[],
+): string | null {
+  if (!approval.subagentRunId || !approval.toolUseId) return null;
+  const uses = new Map<string, ToolUsePayload>();
+  for (const event of events) {
+    const p = (event.payload ?? {}) as ToolUsePayload;
+    if (event.type === 'tool_use' && typeof p.id === 'string') uses.set(p.id, p);
+  }
+  let id = uses.get(approval.toolUseId)?.parentToolUseId;
+  const colon = approval.toolUseId.indexOf(':');
+  if (typeof id !== 'string' && colon > 0) {
+    const run = approval.toolUseId.slice(0, colon);
+    for (const use of uses.values()) {
+      if (use.subagentRunId === run && typeof use.parentToolUseId === 'string' && uses.get(use.parentToolUseId)?.name === DELEGATE_TOOL) {
+        return use.parentToolUseId;
+      }
+    }
+  }
+  // Up through the child's own nesting, if the call was one of its sub-agent's.
+  for (let hops = 0; typeof id === 'string' && hops < 8; hops++) {
+    const use = uses.get(id);
+    if (!use) return null;
+    if (use.name === DELEGATE_TOOL) return id;
+    id = use.parentToolUseId;
+  }
+  return null;
+}
+
+/** A delegate call's `description`, as the parent wrote it; empty when the transcript does not have it. */
+export function delegateDescription(callId: string | null, events: readonly RunEvent[]): string {
+  if (!callId) return '';
+  for (const event of events) {
+    const p = (event.payload ?? {}) as ToolUsePayload;
+    if (event.type === 'tool_use' && p.id === callId) {
+      const description = (p.input as { description?: unknown } | undefined)?.description;
+      return typeof description === 'string' ? description.trim() : '';
+    }
+  }
+  return '';
+}
+
+/** What a card asks to do, in a few words, for the SubAgent block's `Waiting for approval · <action>`. */
+export function approvalAction(toolName: string, input: unknown): string {
+  const i = (input ?? {}) as Record<string, unknown>;
+  const path = [i.file_path, i.notebook_path, i.path].find((v): v is string => typeof v === 'string' && v !== '');
+  if (typeof i.command === 'string' && i.command.trim()) return `Run ${i.command.trim().split('\n')[0]}`;
+  if (path) return `${toolName} ${path.split('/').pop()}`;
+  return toolName;
+}

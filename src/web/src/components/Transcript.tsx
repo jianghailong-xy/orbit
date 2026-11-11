@@ -1582,6 +1582,10 @@ const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running:
  *  share page, an export. */
 export const SubagentRunsCtx = createContext<ReadonlyMap<string, SubagentRunView>>(new Map());
 
+/** What each SubAgent is waiting for a person to approve, by its `delegate` call: the action of the card it asked
+ *  in the parent's approval area (docs/subagent-design.md §5.3). Empty where no card can be answered. */
+export const SubagentWaitingCtx = createContext<ReadonlyMap<string, string>>(new Map());
+
 function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
   // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
@@ -4223,6 +4227,10 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   const run = useContext(SubagentRunsCtx).get(node.id);
   const meta = isDelegate ? subagentMeta(run) ?? undefined : toolMeta;
   const why = isDelegate ? subagentWhy(run) : null;
+  const waitingFor = useContext(SubagentWaitingCtx).get(node.id);
+  const waitingLine = isDelegate && waitingFor ? (
+    <div className="chat-subagent-waiting">Waiting for approval · {waitingFor}</div>
+  ) : null;
   const isSubWorkspace = node.name === 'Task' || node.name === 'Agent' || isDelegate;
   const isBackgroundTask = isBackgroundTaskCall(node.name);
   const launchReceipt = isLaunchReceipt(node);
@@ -4289,7 +4297,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           </>
         )}
       </div>
-      {isBackgroundTask && !(hasDetail && open) && <SubagentLiveLine node={node} live={live} />}
+      {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
       {questions.length > 0 && !(hasDetail && open) && (
         <QuestionFolded
           questions={questions}
@@ -4330,9 +4338,10 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
               <div className="chat-tool-body">{body}</div>
             </details>
           ) : <div className="chat-tool-body">{body}</div>)}
-          {node.name !== 'Workflow' && node.children.length > 0 && (
+          {node.name !== 'Workflow' && (node.children.length > 0 || waitingLine) && (
             <div className="chat-subagent">
               <NodeList nodes={node.children} live={live} />
+              {waitingLine}
             </div>
           )}
           {/* A sub-agent's totals close its transcript rather than open it. */}

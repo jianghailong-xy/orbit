@@ -1,4 +1,5 @@
 import {
+  PermissionMode,
   SUBAGENT_RUN_STATUSES,
   type RunnerModelCatalog,
   type SubagentDecision,
@@ -76,6 +77,10 @@ export class SubagentRunCreateDto implements SubagentRunCreateRequest {
   @IsOptional()
   @IsBoolean()
   readonly?: boolean;
+
+  @IsOptional()
+  @IsIn(Object.values(PermissionMode))
+  permissionMode?: string;
 }
 
 export class SubagentRunUpdateDto implements SubagentRunUpdateRequest {
