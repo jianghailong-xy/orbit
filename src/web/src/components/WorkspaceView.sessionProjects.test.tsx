@@ -683,11 +683,14 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     await until(() => expect(location.split('?')[0]).toBe(`/sessions/${TASK.id}`));
     expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(encodeId(PROJECT_ID));
     expect(titles()).toEqual(THREE);
+    // ✕ folds the column; the address keeps the project so the title bar's button can bring it back.
     await click(column()!.querySelector('.session-folder-back'), 'the column ✕');
     await until(() => expect(column()).toBeNull());
+    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(encodeId(PROJECT_ID));
     await until(() => expect(titles()).toEqual(THREE));
     await click(sessionRow('Build the package').querySelector('.session-title'), 'the member’s title');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(location.split('?')[0]).toBe(`/sessions/${TASK.id}`));
+    expect(column()).toBeNull();
   });
 
   it('steps onto a member there with ↓ and ↑, and the list stays in this workspace', async () => {
