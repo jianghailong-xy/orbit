@@ -493,6 +493,7 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
 - 按 Claude Code 与 agy 的文档，MCP 服务器和 hook 也继承同样的环境，未逐一实测。
 - 账号池的会话 token 也经 `OPENAI_API_KEY` 交给 Codex，按源码同样可见。
 - 让命令看不到 key 的开关（Claude Code 的 `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`、Codex 的 `ignore_default_excludes=false`）各有副作用，不在本项目范围：前者要求 runner 装 bubblewrap，并把权限模式强制为 Default；后者会去掉所有名字含 KEY、SECRET、TOKEN 的变量。
+- OpenAI key 上的 Claude Code（部署开关 `ORBIT_CLAUDE_OPENAI_GATEWAY`，§2.1）不在本表：它的环境里只有 `orbit-gwk-` 会话 token，key 留在 API 服务器上（§4.2）。web 的 OpenAI 连接表单（`ProviderConnectPage.tsx`）据此写「Who gets this key」：Codex 和 OpenCode 那一行照本表；服务端把 Claude Code 列进这把 key 的 `engines` 时，加一行「Sessions on Claude Code never get it: the key stays on the Orbit server, which sends their requests on. Their runner gets a token that works only for that session.」。iOS、macOS、Android 没有连接表单（加 key、改 key 都在 web 上）。
 - 给 T6：DeepSeek 连接表单的「Who gets this key」可以写：
 
   > Sessions on Claude Code and OpenCode hand this key to the CLI in its environment, where commands the agent runs can read it. DeepSeek Harness keeps it out of the commands it runs, but any program running as the runner's user can still read it from the Harness process.

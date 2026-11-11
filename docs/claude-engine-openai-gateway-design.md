@@ -69,7 +69,10 @@ Orbit already runs a gateway of its own for Codex pools, `/api/gw/codex` (`pool-
    OpenCode". The clients read that list from the API's `engines` field (contract §6.3), so the clients need no new
    logic for it.
 2. **Connection form.** The line saying which processes the key is handed to (wiki entry 34dgAezaocJUDulv5Kc40) says
-   that on Claude Code the key stays on the Orbit server.
+   that on Claude Code the key stays on the Orbit server. P3 found that only the web had such a block, and only for
+   DeepSeek and Cursor keys. It added one for OpenAI keys. The Claude Code line shows when the server lists Claude
+   Code among the key's engines; a key not yet saved has no such list, so it shows on a saved key. iOS, macOS and
+   Android have no connection form: keys are added and edited on the web.
 3. **New session.** The engine picker offers Claude Code for the OpenAI key. The model list is the key's GPT models.
 4. **In the session.** Nothing differs from a DeepSeek-on-Claude-Code session: the same tool cards, effort control,
    compaction and cost line.
