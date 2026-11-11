@@ -226,6 +226,10 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if s.wikiOff {
 			tools = withoutWikiTools(tools)
 		}
+		// A SubAgent cannot hand work on again (subagent.go).
+		if os.Getenv(envSubagentRunID) == "" {
+			tools = append(tools, delegateToolDescriptor(schemaObject))
+		}
 		if s.onlyTools != nil {
 			tools = onlyMCPTools(tools, s.onlyTools)
 		}
@@ -234,12 +238,17 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		var p struct {
 			Name      string                 `json:"name"`
 			Arguments map[string]interface{} `json:"arguments"`
+			Meta      map[string]interface{} `json:"_meta"`
 		}
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
 		}
 		if s.onlyTools != nil && !s.onlyTools[p.Name] {
 			return s.ok(req.ID, toolResult(p.Name+" is not served in this session", true)), true
+		}
+		if p.Name == delegateToolName {
+			// Claude Code names the call this is; its SubAgent's events nest under that id.
+			return s.ok(req.ID, s.callDelegate(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
 		}
 		return s.ok(req.ID, s.callTool(p.Name, p.Arguments)), true
 	default:
