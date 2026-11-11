@@ -87,6 +87,7 @@ function translateSystem(system: unknown): string {
 
 function translateMessages(messages: Json[]): Json[] {
   const input: Json[] = [];
+  let callOrder: string[] = [];
   for (const message of messages) {
     const blocks: Json[] =
       typeof message.content === 'string'
@@ -94,10 +95,29 @@ function translateMessages(messages: Json[]): Json[] {
         : Array.isArray(message.content)
           ? (message.content as Json[])
           : [];
-    if (message.role === 'assistant') translateAssistant(blocks, input);
-    else translateUserOrSystem(message.role === 'system' ? 'developer' : 'user', blocks, input);
+    if (message.role === 'assistant') {
+      translateAssistant(blocks, input);
+      callOrder = blocks.filter((b) => b.type === 'tool_use').map((b) => String(b.id ?? ''));
+    } else {
+      translateUserOrSystem(message.role === 'system' ? 'developer' : 'user', inCallOrder(blocks, callOrder), input);
+    }
   }
   return input;
+}
+
+/**
+ * The CLI lists parallel tool_results in the order they completed, not the order they were called; OpenAI
+ * models read outputs by position as well as by call_id and misattribute them. Results answering a call of
+ * the preceding assistant turn are put in that turn's call order, in the slots such results already held;
+ * every other block (text, results for any other call) keeps its place.
+ */
+function inCallOrder(blocks: Json[], callOrder: string[]): Json[] {
+  const rank = (b: Json) => (b.type === 'tool_result' ? callOrder.indexOf(String(b.tool_use_id ?? '')) : -1);
+  const answered = blocks.filter((b) => rank(b) >= 0);
+  if (answered.length < 2) return blocks;
+  const sorted = [...answered].sort((a, b) => rank(a) - rank(b));
+  let next = 0;
+  return blocks.map((b) => (rank(b) >= 0 ? sorted[next++] : b));
 }
 
 /** User turns, and the `role: "system"` messages the CLI puts between them (basic.json `messages[1]`). */
