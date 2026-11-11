@@ -1357,7 +1357,24 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let managed = draft.managed, managed.blocksNewSession {
+            if managedWelcome, let managed = draft.managed {
+                // A new account's first draft here (docs/mocks/new-user-onboarding, board 02 P1/P2): the
+                // welcome card stands where the runner's state and the engine hero stand for everybody else.
+                ScrollView {
+                    ManagedWelcomeCard(draft: draft, managed: managed, runner: managedRunnerRow,
+                                       engine: welcomeEngine, credential: welcomeCredential,
+                                       keyToUse: MachineSetup.firstKey(in: engines, preferring: welcomeEngine.rawValue),
+                                       machine: managedRunnerRow.map(RunnerPageFormat.displayName) ?? "")
+                        .frame(maxWidth: 620)
+                        .frame(maxWidth: .infinity)
+                        .padding([.horizontal, .top], 14)
+                    Color.clear.frame(height: .composerBandFade)
+                }
+                .fadesIntoComposerBand()
+                #if os(iOS)
+                .scrollDismissesKeyboard(.interactively)
+                #endif
+            } else if let managed = draft.managed, managed.blocksNewSession {
                 // The managed runner's default workspace before its runner was ever ready: there is
                 // no engine for a first session yet (the server would refuse it), so the runner's
                 // state stands where the engine would, and the composer below sends nothing.
@@ -1464,10 +1481,12 @@ struct NewSessionView: View {
             // spaced identically.
             ComposerBand {
                 // The managed runner's state, as the live console shows it, unless it already stands
-                // in the hero's place above.
-                if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
-                    ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                        .padding(.bottom, .composerBandGap)
+                // in the hero's place above, or in the welcome card's first step.
+                if !managedWelcome {
+                    if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
+                        ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                            .padding(.bottom, .composerBandGap)
+                    }
                 }
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
                 if let msg = draft.statusMessage {
@@ -1501,6 +1520,11 @@ struct NewSessionView: View {
             }
             await draft.prepareDraft()
         }
+        // Whether this account has never had a session, read as the managed default draft appears.
+        .task(id: managedDraft) {
+            if managedDraft { await app.readNewAccount() }
+        }
+        .onChange(of: managedWelcome, initial: true) { _, now in draft.welcomes = now }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its
         // best-effort provider/runner requests. Push those later snapshots into the draft so a
         // custom provider adopts its real default even if the draft's own request failed.
@@ -1583,6 +1607,35 @@ struct NewSessionView: View {
     private var currentProviderChoice: ProviderChoice {
         currentEngine.provider
             ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
+    }
+
+    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
+
+    /// This draft is in the managed runner's default workspace (web `managedDraft`).
+    private var managedDraft: Bool {
+        Welcome.isManagedDefaultDraft(status: app.managedRunner?.status, workspaceID: agent.id)
+    }
+
+    /// The welcome card stands here: the managed default draft of an account that never had a session.
+    private var managedWelcome: Bool {
+        managedDraft && draft.managed != nil && app.newAccount == true
+    }
+
+    private var managedRunnerRow: Runner? {
+        (draft.managed?.runnerID ?? agent.runnerId).flatMap { app.agents?.runnerRow($0) }
+    }
+
+    /// Before a first session can start there is no draft engine to sign in, so the runner's own first one.
+    private var welcomeEngine: LoginEngine {
+        Welcome.engine(draftEngine: draft.engine, startsNow: draft.managed?.blocksNewSession != true,
+                       runner: managedRunnerRow)
+    }
+
+    /// The model step's answer: the draft's provider once a first session can start, else none.
+    private var welcomeCredential: SetupCredential {
+        guard let runner = managedRunnerRow else { return .signIn }
+        let provider: ProviderChoice? = draft.managed?.blocksNewSession == true ? nil : currentProviderChoice
+        return MachineSetup.credential(runner: runner, engine: welcomeEngine.rawValue, provider: provider)
     }
 
     /// The full model name (the composer footer only carries a truncated one). No funding label:

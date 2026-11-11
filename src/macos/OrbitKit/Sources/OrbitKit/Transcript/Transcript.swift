@@ -437,8 +437,8 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// the web transcript renders the same blocks inline via `resultImages()`.
     public var resultImages: [Data]
     /// Whether the result carried an image block at all — true even when `resultImages` is empty
-    /// because the server dropped an oversized image's bytes (`MAX_IMAGE_PAYLOAD`). The card opens
-    /// on this, and opening is what refetches the picture. Web parity: `hasResultImage`.
+    /// because the server dropped an oversized image's bytes (`MAX_IMAGE_PAYLOAD`). The card has a
+    /// picture to open on because of this, and opening is what refetches it. Web parity: `hasResultImage`.
     public var resultHasImage: Bool
     public var status: ToolStatus
     /// seq of the `tool_use` event, and whether the server clipped its `input` to a preview.
