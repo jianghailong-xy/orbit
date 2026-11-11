@@ -24,6 +24,7 @@ import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition 
 import { wikiDocsAffected } from '../wiki/wiki-docs-affected';
 import type { WikiDocs } from '../wiki/wiki-docs';
 import { ownerEnvLiterals } from '../wiki/wiki-dossier';
+import { redactSecrets } from '../common/secret-redaction';
 import { encodeCursorToken, type WikiBackfillSession, type WikiMaintenance } from '../wiki/wiki-maintenance';
 import { finishWikiBackfillJob, finishWikiMaintenanceJob } from '../wiki/wiki-maintenance-run';
 import { stripNul } from '../runner-api/strip-nul';
@@ -73,6 +74,7 @@ import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
 import {
   WIKI_REPO_PROBE,
   WIKI_REPO_WRONG_REPOSITORY_REASONS,
+  wikiRepoDetail,
   wikiRepoFailureReason,
   wikiRepoReasonIsPremise,
   type WikiAnchorCheckInput,
@@ -448,6 +450,8 @@ class WikiMaintainRun {
   private position = '';
   /** Whether the space's runner reads whole files; a bounded one is asked with the old limits. */
   private wholeFile = false;
+  /** The workspace's folder and machine, as the probe's readiness named them: what a reason's sentence says (`readTier`). */
+  private repoWhere: { dir: string | null; runner: string | null } = { dir: null, runner: null };
   /** When the run first started: what its seconds run from, and what an anchor check of this run's was made after. */
   private runStarted = new Date();
   /** What the attempts before this one finished (contract `jobs.carry`): read as the attempt starts, folded into the report. */
@@ -496,6 +500,8 @@ class WikiMaintainRun {
         // What the attempt before read of the repository: this attempt's probe writes its own.
         repoTier: null,
         repoReason: null,
+        repoDetail: null,
+        repoCheckedAt: null,
         // Whether the run's endpoint is this machine's or a private one, which the day's counting reads
         // (`maintenance.job.catchUp.dailyLimit`): the System model's address, known only here.
         localEndpoint: this.deps.modelBaseUrl !== null && wikiMaintainEndpointIsLocal(this.deps.modelBaseUrl),
@@ -809,6 +815,7 @@ class WikiMaintainRun {
     const { prisma } = this.deps;
     const { job } = this.jobContext;
     const readiness = await readWikiRepoReadiness(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });
+    this.repoWhere = { dir: readiness.workspace?.workDir ?? null, runner: readiness.runner?.name ?? null };
     // A machine with only `wiki-repo-op/v1` can be handed operations — it answers the old bounded window
     // (`runner_upgrade` says to upgrade it, and `wholeFile` says which read this run gets) — while one with no
     // repository capability at all cannot, and waiting on it would wait out the whole limit to learn that.
@@ -870,7 +877,7 @@ class WikiMaintainRun {
     if (wikiRepoReasonIsPremise(reason)) {
       const wrong = (WIKI_REPO_WRONG_REPOSITORY_REASONS as readonly string[]).includes(reason);
       this.jobContext.log(`the snapshot ${settled.state} (${reason}): ${settled.error ?? ''}`);
-      await this.readTier(wrong ? 'wrong_repository' : 'sessions', reason);
+      await this.readTier(wrong ? 'wrong_repository' : 'sessions', reason, settled.error);
       return;
     }
     // This job's snapshots that did not succeed, this one included: its earlier attempts' probes, each of which failed
@@ -881,13 +888,24 @@ class WikiMaintainRun {
         + `probe ${tried} of ${WIKI_REPO_PROBE.maxAttempts}): ${settled.error ?? ''}`);
     }
     this.jobContext.log(`the snapshot ${settled.state} ${tried} times (${reason}): ${settled.error ?? ''}`);
-    await this.readTier('sessions', reason);
+    await this.readTier('sessions', reason, settled.error);
   }
 
-  /** The tier the probe found, on the report and the run row (migration 0514): what Activity and the health line read. */
-  private async readTier(tier: WikiRepoTier, reason: WikiRepoTierReason | null): Promise<void> {
+  /**
+   * The tier the probe found, on the report and the run row (migrations 0514, 0519): what Activity and the health line
+   * read. The reason is said as one sentence (`wikiRepoDetail`) from the workspace's folder, its machine and the runner's
+   * own words, redacted as a failure's words are, the owner's environment values among them.
+   */
+  private async readTier(tier: WikiRepoTier, reason: WikiRepoTierReason | null, said: string | null = null): Promise<void> {
     this.report.repo = { tier, reason };
-    await this.deps.prisma.wikiMaintenanceRun.updateMany({ where: { id: this.runId }, data: { repoTier: tier, repoReason: reason } });
+    const sentence = reason !== null ? wikiRepoDetail(reason, { ...this.repoWhere, said }) : tier === 'folder' ? wikiRepoDetail('not_git', this.repoWhere) : null;
+    const repoDetail = sentence === null
+      ? null
+      : redactSecrets(sentence, { literals: await ownerEnvLiterals(this.deps.prisma, this.jobContext.job.ownerId) }).text;
+    await this.deps.prisma.wikiMaintenanceRun.updateMany({
+      where: { id: this.runId },
+      data: { repoTier: tier, repoReason: reason, repoDetail, repoCheckedAt: new Date() },
+    });
     if (tier === 'sessions') {
       this.jobContext.log(`the repository cannot be read (${reason}): the run learns from the sessions, and the code checks and documents wait`);
     }

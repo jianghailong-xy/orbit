@@ -63,6 +63,23 @@
         }
       ],
       "text": "Maintenance off · Set up",
+      "narrowParts": [
+        {
+          "text": "Maintenance off",
+          "tone": "muted",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Set up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "narrowText": "Maintenance off · Set up",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintenance off · Set up"
     },
     {
@@ -106,6 +123,23 @@
         }
       ],
       "text": "Maintained 2h ago ✓ · 6 to catch up",
+      "narrowParts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "6 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        }
+      ],
+      "narrowText": "Maintained 2h ago ✓ · 6 to catch up",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 6 to catch up"
     },
     {
@@ -145,6 +179,23 @@
         }
       ],
       "text": "Maintenance on · 0 to catch up",
+      "narrowParts": [
+        {
+          "text": "Maintenance on",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "0 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        }
+      ],
+      "narrowText": "Maintenance on · 0 to catch up",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintenance on · 0 to catch up"
     },
     {
@@ -187,6 +238,23 @@
         }
       ],
       "text": "Maintaining now · started 4m ago · 24 to catch up",
+      "narrowParts": [
+        {
+          "text": "Maintaining now · started 4m ago",
+          "tone": "plain",
+          "mark": "spin",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "24 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        }
+      ],
+      "narrowText": "Maintaining now · started 4m ago · 24 to catch up",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintaining now · started 4m ago · 24 to catch up"
     },
     {
@@ -247,6 +315,37 @@
         }
       ],
       "text": "● Maintenance behind · 43 to catch up, oldest 26h · last run 1d ago · daily limit reached",
+      "narrowParts": [
+        {
+          "text": "Maintenance behind",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "43 to catch up, oldest 26h",
+          "tone": "warn",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "last run 1d ago",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "daily limit reached",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        }
+      ],
+      "narrowText": "● Maintenance behind · 43 to catch up, oldest 26h · last run 1d ago · daily limit reached",
       "line": "11,689 entries · Anchors verified at 1588c3b · ● Maintenance behind · 43 to catch up, oldest 26h · last run 1d ago · daily limit reached"
     },
     {
@@ -296,6 +395,30 @@
         }
       ],
       "text": "● Maintenance behind · 1,234 to catch up, oldest 14d · review queue full",
+      "narrowParts": [
+        {
+          "text": "Maintenance behind",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "1,234 to catch up, oldest 14d",
+          "tone": "warn",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "review queue full",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        }
+      ],
+      "narrowText": "● Maintenance behind · 1,234 to catch up, oldest 14d · review queue full",
       "line": "11,689 entries · Anchors verified at 1588c3b · ● Maintenance behind · 1,234 to catch up, oldest 14d · review queue full"
     },
     {
@@ -353,6 +476,37 @@
         }
       ],
       "text": "● Maintenance failed 3 times · last success 2d ago · 57 to catch up · View run",
+      "narrowParts": [
+        {
+          "text": "Maintenance failed 3 times",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "last success 2d ago",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "57 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "View run",
+          "tone": "plain",
+          "mark": "none",
+          "link": "run",
+          "strong": false
+        }
+      ],
+      "narrowText": "● Maintenance failed 3 times · last success 2d ago · 57 to catch up · View run",
       "line": "11,689 entries · Anchors verified at 1588c3b · ● Maintenance failed 3 times · last success 2d ago · 57 to catch up · View run"
     },
     {
@@ -396,6 +550,23 @@
         }
       ],
       "text": "● Maintenance failed · 57 to catch up",
+      "narrowParts": [
+        {
+          "text": "Maintenance failed",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "57 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        }
+      ],
+      "narrowText": "● Maintenance failed · 57 to catch up",
       "line": "11,689 entries · Anchors verified at 1588c3b · ● Maintenance failed · 57 to catch up"
     },
     {
@@ -472,6 +643,30 @@
         }
       ],
       "text": "Maintained 2h ago ✓ · 6 to catch up · ● Waiting for the runner to come online",
+      "narrowParts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "6 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Waiting for the runner to come online",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "narrowText": "Maintained 2h ago ✓ · 6 to catch up · ● Waiting for the runner to come online",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 6 to catch up · ● Waiting for the runner to come online"
     },
     {
@@ -547,6 +742,30 @@
         }
       ],
       "text": "Maintaining now · started 4m ago · 24 to catch up · ● System model unreachable",
+      "narrowParts": [
+        {
+          "text": "Maintaining now · started 4m ago",
+          "tone": "plain",
+          "mark": "spin",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "24 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "System model unreachable",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "narrowText": "Maintaining now · started 4m ago · 24 to catch up · ● System model unreachable",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintaining now · started 4m ago · 24 to catch up · ● System model unreachable"
     },
     {
@@ -645,6 +864,44 @@
         }
       ],
       "text": "● Maintenance failed 3 times · last success 2d ago · 57 to catch up · ● System model refused the key · View run",
+      "narrowParts": [
+        {
+          "text": "Maintenance failed 3 times",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "last success 2d ago",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "57 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "System model refused the key",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "View run",
+          "tone": "plain",
+          "mark": "none",
+          "link": "run",
+          "strong": false
+        }
+      ],
+      "narrowText": "● Maintenance failed 3 times · last success 2d ago · 57 to catch up · ● System model refused the key · View run",
       "line": "11,689 entries · Anchors verified at 1588c3b · ● Maintenance failed 3 times · last success 2d ago · 57 to catch up · ● System model refused the key · View run"
     },
     {
@@ -717,6 +974,30 @@
         }
       ],
       "text": "Maintenance off · ● System model not configured · Set up",
+      "narrowParts": [
+        {
+          "text": "Maintenance off",
+          "tone": "muted",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "System model not configured",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "Set up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "narrowText": "Maintenance off · ● System model not configured · Set up",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintenance off · ● System model not configured · Set up"
     },
     {
@@ -789,6 +1070,30 @@
         }
       ],
       "text": "Maintenance on · 0 to catch up · ● wiki worker not running",
+      "narrowParts": [
+        {
+          "text": "Maintenance on",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "0 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "wiki worker not running",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "narrowText": "Maintenance on · 0 to catch up · ● wiki worker not running",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintenance on · 0 to catch up · ● wiki worker not running"
     },
     {
@@ -865,6 +1170,30 @@
         }
       ],
       "text": "Maintained 2h ago ✓ · 6 to catch up · ● Upgrade the runner to read the repository",
+      "narrowParts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "6 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Upgrade the runner to read the repository",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "narrowText": "Maintained 2h ago ✓ · 6 to catch up · ● Upgrade the runner to read the repository",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 6 to catch up · ● Upgrade the runner to read the repository"
     },
     {
@@ -930,7 +1259,810 @@
         }
       ],
       "text": "Maintenance off · Set up",
+      "narrowParts": [
+        {
+          "text": "Maintenance off",
+          "tone": "muted",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Set up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "narrowText": "Maintenance off · Set up",
       "line": "11,689 entries · Anchors verified at 1588c3b · Maintenance off · Set up"
+    },
+    {
+      "name": "repository: git — the line says nothing more",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T11:20:00.000Z",
+          "lagSeconds": 2400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": "7YJkyplKP5LOr7QbuCioJ4",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          }
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "git",
+          "reason": null,
+          "detail": null,
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        }
+      ],
+      "text": "Maintained 2h ago ✓ · 3 to catch up",
+      "narrowParts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        }
+      ],
+      "narrowText": "Maintained 2h ago ✓ · 3 to catch up",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 3 to catch up"
+    },
+    {
+      "name": "repository: the folder, not git — grey, its cost in the hint, leading to Settings",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T11:20:00.000Z",
+          "lagSeconds": 2400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": "7YJkyplKP5LOr7QbuCioJ4",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          }
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "folder",
+          "reason": null,
+          "detail": "~/work/app is not a git checkout",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Reading the folder, not git",
+          "tone": "muted",
+          "mark": "none",
+          "link": "settings",
+          "strong": false,
+          "hint": "Commit anchors are not checked: ~/work/app is not a git checkout."
+        }
+      ],
+      "text": "Maintained 2h ago ✓ · 3 to catch up · Reading the folder, not git",
+      "narrowParts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Reading the folder",
+          "tone": "muted",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "narrowText": "Maintained 2h ago ✓ · 3 to catch up · Reading the folder",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 3 to catch up · Reading the folder"
+    },
+    {
+      "name": "repository: sessions only — code checks paused, amber, Fix in Settings",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T11:20:00.000Z",
+          "lagSeconds": 2400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": "7YJkyplKP5LOr7QbuCioJ4",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          }
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "sessions",
+          "reason": "not_found",
+          "detail": "~/work/app was not found on MacBook",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Code checks paused: ~/work/app was not found on MacBook",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "Fix in Settings",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "text": "Maintained 2h ago ✓ · 3 to catch up · ● Code checks paused: ~/work/app was not found on MacBook · Fix in Settings",
+      "narrowParts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Code checks paused",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "narrowText": "Maintained 2h ago ✓ · 3 to catch up · ● Code checks paused",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 3 to catch up · ● Code checks paused"
+    },
+    {
+      "name": "repository: another repository's folder — red, Fix in Settings",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T11:20:00.000Z",
+          "lagSeconds": 2400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": "7YJkyplKP5LOr7QbuCioJ4",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          }
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "wrong_repository",
+          "reason": "wrong_repository",
+          "detail": "~/work/app is a clone of github.com/x/y, not this wiki's repository",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "~/work/app is a clone of github.com/x/y, not this wiki's repository",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "Fix in Settings",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "text": "Maintained 2h ago ✓ · 3 to catch up · ● ~/work/app is a clone of github.com/x/y, not this wiki's repository · Fix in Settings",
+      "narrowParts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Wrong folder",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "narrowText": "Maintained 2h ago ✓ · 3 to catch up · ● Wrong folder",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 3 to catch up · ● Wrong folder"
+    },
+    {
+      "name": "repository: the remote refused the credentials — sessions only, red",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T11:20:00.000Z",
+          "lagSeconds": 2400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": "7YJkyplKP5LOr7QbuCioJ4",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          }
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "sessions",
+          "reason": "fetch_refused",
+          "detail": "The git remote refused the credentials on MacBook",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Code checks paused: The git remote refused the credentials on MacBook",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "Fix in Settings",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "text": "Maintained 2h ago ✓ · 3 to catch up · ● Code checks paused: The git remote refused the credentials on MacBook · Fix in Settings",
+      "narrowParts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Code checks paused",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "narrowText": "Maintained 2h ago ✓ · 3 to catch up · ● Code checks paused",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 3 to catch up · ● Code checks paused"
+    },
+    {
+      "name": "repository: the runner offline is said once, as the reason code checks wait",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "ok",
+          "enabled": true,
+          "lastOkAt": "2026-09-28T10:00:00.000Z",
+          "lastRunAt": "2026-09-28T10:00:00.000Z",
+          "consecutiveFailures": 0,
+          "backlog": 3,
+          "oldestPendingAt": "2026-09-28T11:20:00.000Z",
+          "lagSeconds": 2400,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": "7YJkyplKP5LOr7QbuCioJ4",
+            "outcome": "succeeded",
+            "endedAt": "2026-09-28T10:00:00.000Z"
+          }
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        },
+        "repo": {
+          "look": "runner_offline",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": false
+          },
+          "pending": 0,
+          "tier": "sessions",
+          "reason": "runner_offline",
+          "detail": "Waiting for the runner to come online",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Code checks paused: Waiting for the runner to come online",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "Fix in Settings",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "text": "Maintained 2h ago ✓ · 3 to catch up · ● Code checks paused: Waiting for the runner to come online · Fix in Settings",
+      "narrowParts": [
+        {
+          "text": "Maintained 2h ago",
+          "tone": "plain",
+          "mark": "check",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "3 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Code checks paused",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        }
+      ],
+      "narrowText": "Maintained 2h ago ✓ · 3 to catch up · ● Code checks paused",
+      "line": "11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 3 to catch up · ● Code checks paused"
+    },
+    {
+      "name": "repository: sessions only on a failing run — before View run, Fix in Settings last",
+      "health": {
+        "spaceId": "34VR0RwUSIcaoO7ZZqv52",
+        "entries": 11689,
+        "maintenance": {
+          "look": "failing",
+          "enabled": true,
+          "lastOkAt": "2026-09-26T11:00:00.000Z",
+          "lastRunAt": "2026-09-28T11:30:00.000Z",
+          "consecutiveFailures": 3,
+          "backlog": 57,
+          "oldestPendingAt": "2026-09-26T10:00:00.000Z",
+          "lagSeconds": 180000,
+          "dailyLimitReached": false,
+          "held": null,
+          "running": null,
+          "lastRun": {
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009",
+            "outcome": "failed",
+            "endedAt": "2026-09-28T11:30:00.000Z"
+          },
+          "lastFailure": {
+            "kind": "content",
+            "reason": "The System model refused the key (401)",
+            "at": "2026-09-28T11:30:00.000Z",
+            "sessionId": null,
+            "jobId": "34cE0job0000000000009"
+          }
+        },
+        "repo": {
+          "look": "ready",
+          "workspace": {
+            "id": "34VR0RwUSIcaoO7ZZqv5w",
+            "workDir": "~/work/app"
+          },
+          "runner": {
+            "id": "34VR0RwUSIcaoO7ZZqv5r",
+            "name": "MacBook",
+            "version": "0.1.223",
+            "capability": true,
+            "online": true
+          },
+          "pending": 0,
+          "tier": "sessions",
+          "reason": "not_found",
+          "detail": "~/work/app was not found on MacBook",
+          "checkedAt": "2026-09-28T10:00:00.000Z"
+        },
+        "executor": {
+          "mode": "server",
+          "serverExecutes": true
+        },
+        "systemModel": {
+          "state": "up",
+          "model": "qwen3.8-27b-fp8",
+          "since": "2026-09-28T11:00:00.000Z",
+          "checkedAt": "2026-09-28T11:59:55.000Z",
+          "workerSeenAt": "2026-09-28T11:59:55.000Z"
+        }
+      },
+      "parts": [
+        {
+          "text": "Maintenance failed 3 times",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "last success 2d ago",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "57 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Code checks paused: ~/work/app was not found on MacBook",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "View run",
+          "tone": "plain",
+          "mark": "none",
+          "link": "run",
+          "strong": false
+        },
+        {
+          "text": "Fix in Settings",
+          "tone": "plain",
+          "mark": "none",
+          "link": "settings",
+          "strong": false
+        }
+      ],
+      "text": "● Maintenance failed 3 times · last success 2d ago · 57 to catch up · ● Code checks paused: ~/work/app was not found on MacBook · View run · Fix in Settings",
+      "narrowParts": [
+        {
+          "text": "Maintenance failed 3 times",
+          "tone": "error",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "last success 2d ago",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "57 to catch up",
+          "tone": "plain",
+          "mark": "none",
+          "link": "none",
+          "strong": false
+        },
+        {
+          "text": "Code checks paused",
+          "tone": "warn",
+          "mark": "dot",
+          "link": "none",
+          "strong": true
+        },
+        {
+          "text": "View run",
+          "tone": "plain",
+          "mark": "none",
+          "link": "run",
+          "strong": false
+        }
+      ],
+      "narrowText": "● Maintenance failed 3 times · last success 2d ago · 57 to catch up · ● Code checks paused · View run",
+      "line": "11,689 entries · Anchors verified at 1588c3b · ● Maintenance failed 3 times · last success 2d ago · 57 to catch up · ● Code checks paused · View run"
     }
   ]
 }

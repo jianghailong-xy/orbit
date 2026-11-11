@@ -2904,7 +2904,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0513 adds attribution and admits its explicit retry; no preserved row or fence changes.
       '0513_integration_baseline_red',
       // 0514 adds two nullable wiki_maintenance_run columns and their CHECK only; no preserved rows, triggers or DONE fence change.
-      '0514_wiki_maintenance_run_repo_tier'],
+      '0514_wiki_maintenance_run_repo_tier',
+      // 0519 adds two nullable wiki_maintenance_run columns and one defaulted wiki_cursor counter; no preserved rows,
+      // triggers or DONE fence change.
+      '0519_wiki_repo_attention'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -24714,6 +24714,11 @@ button.project-open-item-action:disabled {
                  border: 1.6px solid var(--brand-border); border-top-color: var(--brand); animation: runner-spin 0.9s linear infinite; }
 .wk-maint-link { color: var(--brand); text-decoration: none; white-space: nowrap; }
 .wk-maint-link:hover { text-decoration: underline; }
+/* The repository's part of the line (docs/wiki-repo-tiers-design.md §7.2): the folder tier's grey words lead to Settings
+   too, and a phone says the short words only. */
+.wk-maint-link--muted { color: var(--text-3); }
+.wk-maint-wide { display: contents; }
+.wk-maint-narrow { display: none; }
 @media (prefers-reduced-motion: reduce) { .wk-maint-spin { animation: none; } }
 .wk-crumb { font-size: 13px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
 .wk-crumb a { color: var(--brand); text-decoration: none; }
@@ -24741,6 +24746,11 @@ button.project-open-item-action:disabled {
 .wk-job-row .s.warn b { color: var(--warning); }
 .wk-job-row .s.error b { color: var(--error); }
 .wk-job-row .s.muted b { color: var(--text-3); }
+.wk-job-tier { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 4px; font-size: 11.5px; line-height: 17px;
+  color: var(--text-2); background: var(--bg-raised); border: 1px solid var(--border-subtle); }
+.wk-job-tier.muted { color: var(--text-3); }
+.wk-job-tier.warn, .wk-job-tier-why.warn { color: var(--warning); }
+.wk-job-tier.error, .wk-job-tier-why.error { color: var(--error); }
 .wk-job-row .when { font-size: 12px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .wk-job-row .chev { align-self: center; font-size: 11px; color: var(--text-3); transition: transform .15s; }
 .wk-job.open .wk-job-row .chev { transform: rotate(90deg); }
@@ -25427,6 +25437,8 @@ button.project-open-item-action:disabled {
   .wk-page > .wk-search .wk-kbd { display: none; }
   .wk-page > .wk-layout, .wk-page > .wk-body { order: 3; }
   .wk-status-review { display: none; }
+  .wk-maint-wide { display: none; }
+  .wk-maint-narrow { display: contents; }
   .wk-maint-spin { display: none; }
   .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search, .wk-page--reading > .wk-status-row { display: none; }
   /* The head's space sits beside its buttons (mock 30 ③). */
@@ -25448,7 +25460,7 @@ button.project-open-item-action:disabled {
   .wk-act > .wk-status-row { margin-top: 6px; background: none; border: 0; border-radius: 0; }
   .wk-act > .wk-status-row .project-integration-row { padding: 0; cursor: default; }
   .wk-act > .wk-status-row .project-integration-facts { display: block; line-height: 1.6; }
-  .wk-act > .wk-status-row .project-integration-facts > :not(.wk-status-review),
+  .wk-act > .wk-status-row .project-integration-facts > :not(.wk-status-review):not(.wk-maint-wide),
   .wk-act > .wk-status-row .wk-maint { display: inline; white-space: normal; }
   .wk-act > .wk-status-row .wk-sep { margin: 0 6px; }
   .wk-layout { display: block; margin-top: 0; }

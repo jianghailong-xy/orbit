@@ -8043,6 +8043,9 @@ model WikiCursor {
   lastOutcome         String?   @map("last_outcome")
   consecutiveFailures Int       @default(0) @map("consecutive_failures")
   lastError           String?   @map("last_error")
+  /// Maintenance runs in a row that read the repository for a red reason (migration 0519, contract
+  /// `maintenance.health.notifyRepository`); a run that reads it sets it back to 0.
+  repoAttentionRuns   Int       @default(0) @map("repo_attention_runs")
   /// Why the last fact that found a run due made no task (0320): `daily_limit_reached` or
   /// `review_queue_full`, and when. Cleared when a task is made.
   heldReason          String?   @map("held_reason")
@@ -8105,6 +8108,10 @@ model WikiMaintenanceRun {
   /// `repoOps.tiers`, migration 0514), and why it read less than git (`repoOps.tiers.reasons`); NULL before its probe.
   repoTier        String?   @map("repo_tier")
   repoReason      String?   @map("repo_reason")
+  /// The reason as one redacted English sentence, and when the probe read it (migration 0519): the health line's
+  /// `repo.detail` and `repo.checkedAt`.
+  repoDetail      String?   @map("repo_detail")
+  repoCheckedAt   DateTime? @map("repo_checked_at") @db.Timestamptz(3)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
