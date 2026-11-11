@@ -59,8 +59,9 @@ struct ConsoleView: View {
     @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
     /// The project sessions sheet a phone's navigation bar button puts up (board 5), and what a
     /// press inside it opens once it has closed.
-    @State private var projectSheet: SessionProjectAddress?
-    @State private var showsProjectSheet = false
+    /// Carried by the presentation itself (`.sheet(item:)`): a `.sheet(isPresented:)` whose content
+    /// read the address from a second state built an empty sheet on its first press.
+    @State private var projectSheet: ProjectSheetTarget?
     @State private var afterProjectSheet: (() -> Void)?
     #endif
 
@@ -487,22 +488,20 @@ struct ConsoleView: View {
             }
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
-        .sheet(isPresented: $showsProjectSheet, onDismiss: {
+        .sheet(item: $projectSheet, onDismiss: {
             let action = afterProjectSheet
             afterProjectSheet = nil
             action?()
-        }) {
-            if let address = projectSheet {
-                NavigationStack {
-                    SessionProjectPage(address: address, leaveSheet: { action in
-                        afterProjectSheet = action
-                        showsProjectSheet = false
-                    })
-                }
-                .environment(appModel)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+        }) { target in
+            NavigationStack {
+                SessionProjectPage(address: target.address, leaveSheet: { action in
+                    afterProjectSheet = action
+                    projectSheet = nil
+                })
             }
+            .environment(appModel)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(item: $taggingSession) { session in
             SessionTagSheet(session: session)
@@ -560,17 +559,22 @@ struct ConsoleView: View {
     }
 
     #if os(iOS)
+    /// The project sessions sheet's subject, as `.sheet(item:)` needs it.
+    private struct ProjectSheetTarget: Identifiable {
+        let address: SessionProjectAddress
+        var id: SessionProjectAddress { address }
+    }
+
     /// The project glyph and the project's session count ("⊞ 11"); a press puts the project's
     /// sessions page up as a sheet, opening at medium height.
     private func projectSessionsButton(_ projectID: String) -> some View {
         let count = appModel.projectSessionCount(projectID)
         return Button {
             let session = appModel.session(id: sessionID)
-            projectSheet = SessionProjectAddress(
+            projectSheet = ProjectSheetTarget(address: SessionProjectAddress(
                 projectID: projectID,
                 agentID: session?.agent?.id ?? session?.agentId ?? appModel.selectedAgentID ?? "",
-                view: .open)
-            showsProjectSheet = true
+                view: .open))
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: SessionProjectSheet.glyph)

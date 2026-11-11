@@ -1010,8 +1010,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
                      "Image(systemName: SessionProjectSheet.glyph)",
                      "if count > 0 { Text(\"\\(count)\").monospacedDigit() }",
                      ".accessibilityLabel(SessionProjectSheet.buttonLabel)",
-                     "projectSheet = SessionProjectAddress(", "projectID: projectID,",
-                     "showsProjectSheet = true"] {
+                     "projectSheet = ProjectSheetTarget(address: SessionProjectAddress(", "projectID: projectID,"] {
             XCTAssertTrue(draw.contains(part), "the button carries `\(part)`")
         }
     }
@@ -1019,12 +1018,16 @@ final class SessionProjectPageWiringTests: XCTestCase {
     /// The sheet: the project's sessions page itself, in a stack of its own, medium and large.
     func testTheButtonPresentsTheSessionsPageAsAMediumAndLargeSheet() throws {
         let console = code(try appSource("Views/Console/ConsoleView.swift"))
-        let sheet = try slice(console, from: ".sheet(isPresented: $showsProjectSheet, onDismiss: {",
+        // `.sheet(item:)`: the address rides with the presentation. Read from a second state by a
+        // `.sheet(isPresented:)`, it was still nil when the sheet first built (an empty sheet on the
+        // simulator, round 4 of this task's probe).
+        let sheet = try slice(console, from: ".sheet(item: $projectSheet, onDismiss: {",
                               to: ".presentationDragIndicator(.visible)")
-        XCTAssertEqual(try branches(of: ".sheet(isPresented: $showsProjectSheet", in: console), ["os(iOS)"])
-        for part in ["if let address = projectSheet {", "NavigationStack {",
-                     "SessionProjectPage(address: address, leaveSheet: { action in",
-                     "afterProjectSheet = action", "showsProjectSheet = false",
+        XCTAssertEqual(try branches(of: ".sheet(item: $projectSheet", in: console), ["os(iOS)"])
+        XCTAssertFalse(console.contains("showsProjectSheet"))
+        for part in ["}) { target in", "NavigationStack {",
+                     "SessionProjectPage(address: target.address, leaveSheet: { action in",
+                     "afterProjectSheet = action", "projectSheet = nil",
                      ".environment(appModel)", ".presentationDetents([.medium, .large])"] {
             XCTAssertTrue(sheet.contains(part), "the sheet carries `\(part)`")
         }
