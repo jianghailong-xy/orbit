@@ -121,7 +121,8 @@ claude ── Messages (SSE) ──▶ /api/gw/anthropic/v1/messages
   It is a new table rather than a nullable `poolId` on `PoolGatewayToken`, so the pool tables' invariants and
   tenant-isolation cases stay as they are.
 - **Compatibility.** `keyEngines` adds `claude` for the `openai` dialect, after `codex`, only when the deployment has
-  the gateway on (D6): `ORBIT_CLAUDE_OPENAI_GATEWAY=true` (docs/configuration.md). `EngineCredential` gains no
+  the gateway on (D6): `ORBIT_CLAUDE_OPENAI_GATEWAY=true` (docs/configuration.md), and only for a key whose endpoint
+  the gateway may call (§5.3). `EngineCredential` gains no
   field: the server passes the switch (`EngineTableOptions.anthropicGateway`) when it builds the `engines` list. The
   Swift and Kotlin mirrors take no switch: the clients read a key's engines off `/providers`.
 - **Environment.** In the `claudeEnv` branch, a key whose dialect is `openai` gets:
@@ -259,6 +260,22 @@ The API server now makes requests to a URL taken from the key row. A key row who
 address would turn the server into a proxy into its own network. Decision D3 picks the rule. The recommendation:
 `api.openai.com` only at first, plus hosts the deployment admin lists in an environment variable. Redirects are not
 followed.
+
+As built (P2, `gateway-upstream.ts`):
+
+- The variable is `ORBIT_GATEWAY_UPSTREAM_HOSTS` (docs/configuration.md): host names, comma- or space-separated.
+- A key's endpoint must be an `https` URL, with no user name or password, on `api.openai.com` or a listed host. An IP
+  literal must be listed and public.
+- Before connecting, the gateway resolves the host. If any address it resolves to is not public, the request is
+  refused. Non-public means loopback, private, link-local, carrier-grade NAT, multicast, reserved, unique-local,
+  IPv4-mapped and NAT64. The connection is then pinned to the address that was checked, so a second lookup cannot
+  answer differently.
+- A refused key's request gets 403 `permission_error`, naming the key and why, and nothing connects. A resolver
+  failure is 529, like an unreachable upstream.
+- A 3xx from upstream is answered as 502 `api_error`, and its `Location` is not passed on. For `count_tokens`, the
+  estimate answers instead.
+- With the flag on, a key whose endpoint fails the URL rule is not offered `claude` at all
+  (`engineTableOptions(baseUrl)`). What a listed name resolves to is checked at each request.
 
 ### 5.4 Errors and quota
 

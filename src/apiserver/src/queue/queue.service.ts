@@ -287,7 +287,7 @@ export class QueueService {
           unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
         }
         if (!unavailable && engine) {
-          const engines = provider ? credentialEngines(keyCredential(provider), engineTableOptions()) : [poolEngine!];
+          const engines = provider ? credentialEngines(keyCredential(provider), engineTableOptions(provider.baseUrl)) : [poolEngine!];
           if (!engines.includes(engine)) incompatible = engineIncompatibleMessage(slug, engine, engines);
         }
         const key = `${session.ownerId}:${slug}`;

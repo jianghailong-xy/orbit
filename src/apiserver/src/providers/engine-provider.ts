@@ -71,7 +71,7 @@ export function resolvedCredentialEngines(credential: ResolvedCredential): Agent
     case 'legacy-dsh':
       return [AgentProvider.DSH];
     case 'key':
-      return credentialEngines(keyCredential(credential.row), engineTableOptions());
+      return credentialEngines(keyCredential(credential.row), engineTableOptions(credential.row.baseUrl));
   }
 }
 
