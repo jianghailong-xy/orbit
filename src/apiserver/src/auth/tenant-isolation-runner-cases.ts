@@ -1695,6 +1695,10 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /auth/google/callback':
     'Google\'s return: the state is found by its hash and must match the browser cookie the start set — '
     + 'google-login.service.ts:390',
+  'GET /integrations/github/callback':
+    'GitHub\'s return: the flow is taken by its state\'s hash with one DELETE … RETURNING and must match the browser '
+    + 'cookie /integrations/github/start set; it writes only the connection of the account that started that flow. '
+    + 'Without a state it only redirects — github-connection.service.ts:151',
   'POST /auth/google/exchange':
     'the ticket is found by its hash and must come with the code verifier of the flow that made it — '
     + 'google-login.service.ts:455',

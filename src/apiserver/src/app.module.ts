@@ -40,6 +40,7 @@ import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
 import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
 import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
+import { GithubModule } from './github/github.module';
 import { EmailModule } from './email/email.module';
 
 @Module({
@@ -87,6 +88,8 @@ import { EmailModule } from './email/email.module';
     // Each account's own Feishu (Lark) app, and the administrators' switch for them (docs/feishu-bot-design.md).
     FeishuModule,
     FeishuActionsModule,
+    // The deployment's GitHub App and each account's connection to it (docs/github-workspace-design.md).
+    GithubModule,
     // Outgoing email: Admin → Email and the welcome-email outbox worker (docs/welcome-email-design.md).
     EmailModule,
   ],

@@ -8,6 +8,7 @@ import { Card } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
 import { useToast } from '../lib/toast';
+import { GithubAppCard } from './GithubAppCard';
 
 /** `GET` and `PUT /admin/integrations/feishu` (docs/feishu-bot-design.md §4.1). */
 export const feishuAdminQuery = () =>
@@ -29,9 +30,9 @@ export function connectedAppsText({ connectedApps, enabledApps }: FeishuAdminSet
 }
 
 /**
- * Admin → Integrations (docs/feishu-bot-design.md §4.1): Feishu bots' one switch, on by default, and how many apps
+ * Admin → Integrations (docs/feishu-bot-design.md §4.1, docs/github-workspace-design.md §8): Feishu bots' one switch, on by default, and how many apps
  * accounts have connected — each a connection from every replica, which is what an operator watches. Saved the
- * moment it is switched.
+ * moment it is switched. Below it, the GitHub App the deployment's accounts connect GitHub through (GithubAppCard).
  */
 export function AdminIntegrationsPage() {
   const message = useToast();
@@ -85,6 +86,7 @@ export function AdminIntegrationsPage() {
           </div>
         </Card>
       )}
+      <GithubAppCard />
     </div>
   );
 }

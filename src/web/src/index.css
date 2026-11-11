@@ -22053,6 +22053,102 @@ div.landing-jobs-open {
 }
 /* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
    console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
+/* Admin → Integrations → GitHub App, and its steps (docs/github-workspace-design.md §8, board 02). */
+.admin-signin + .admin-signin {
+  margin-top: 16px;
+}
+.github-app-file {
+  color: var(--brand);
+  cursor: pointer;
+}
+.github-app-step-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.github-app-step-list b {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.github-app-step-list code {
+  font-size: 12px;
+  background: var(--fill-muted);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+/* Settings → Integrations → GitHub. */
+.settings-github-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.github-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.github-crumb {
+  color: var(--text-3);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.github-alert {
+  margin-bottom: 16px;
+}
+.github-card + .github-card {
+  margin-top: 16px;
+}
+.github-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.github-account-text {
+  flex: 1;
+  min-width: 0;
+}
+.github-avatar {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--fill-muted);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.github-login {
+  font-weight: 500;
+}
+.github-hint {
+  color: var(--text-3);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.github-warn {
+  color: var(--warning);
+}
+.github-installations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.github-installation {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.github-installation:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.github-installation-name {
+  font-weight: 500;
+}
+
 .feishu-page {
   max-width: 720px;
   margin: 0 auto;

@@ -369,6 +369,9 @@ model User {
 
   /// The account's own Feishu (Lark) app, when it connected one (migration 0489).
   feishuApp        FeishuApp?
+  /// The GitHub account connected through the deployment's App, and connections in flight (migration 0538).
+  githubConnection GithubConnection?
+  githubOAuthFlows GithubOAuthFlow[]
   /// Owner-identity codes the account generated for its Feishu app and has not used yet (migration 0494).
   feishuConnectCodes FeishuConnectCode[]
   /// The Feishu groups the account connected, or is connecting, to Orbit (migration 0496).
@@ -664,6 +667,66 @@ model OAuthLoginFlow {
   @@index([expiresAt])
   @@index([linkUserId])
   @@map("oauth_login_flow")
+}
+
+/// The deployment's GitHub App (docs/github-workspace-design.md §4, migration 0538): one row, saved by an
+/// administrator in Admin → Integrations. The client secret and the private key (PEM) are encrypted as a
+/// model provider's API key is (providers/provider-crypto.ts); the empty string is "none saved", and no
+/// response carries either. `slug` is what GitHub's GET /app answered at the save.
+model GithubAppConfig {
+  /// `github`, held by `github_app_config_id_chk`.
+  id              String   @id @default("github")
+  enabled         Boolean  @default(false)
+  appId           BigInt   @map("app_id")
+  slug            String
+  clientId        String   @map("client_id")
+  clientSecretEnc String   @map("client_secret_enc")
+  privateKeyEnc   String   @map("private_key_enc")
+  /// The administrator who saved it last. An id rather than a relation.
+  updatedById     String?  @map("updated_by_id") @db.Uuid
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("github_app_config")
+}
+
+/// The GitHub account an Orbit account connected through the App (migration 0538): at most one per
+/// account, and a GitHub account connects to one Orbit account only. Its user-to-server tokens are
+/// encrypted as GithubAppConfig's secrets are; an App whose user tokens never expire leaves the
+/// refresh token empty.
+model GithubConnection {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  ownerId          String   @unique(map: "github_connection_owner_id_key") @map("owner_id") @db.Uuid
+  owner            User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "github_connection_owner_id_fkey")
+  githubUserId     BigInt   @unique(map: "github_connection_github_user_id_key") @map("github_user_id")
+  login            String
+  accessTokenEnc   String   @map("access_token_enc")
+  refreshTokenEnc  String   @map("refresh_token_enc")
+  accessExpiresAt  DateTime @map("access_expires_at") @db.Timestamptz(3)
+  refreshExpiresAt DateTime @map("refresh_expires_at") @db.Timestamptz(3)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("github_connection")
+}
+
+/// A GitHub connection in flight (migration 0538), from /integrations/github/start to its callback: one
+/// use, ten minutes. Keeps only the sha256 of its state and of the browser-binding cookie; the PKCE
+/// verifier as it is, since it is sent to GitHub with the code.
+model GithubOAuthFlow {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  ownerId      String   @map("owner_id") @db.Uuid
+  owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "github_oauth_flow_owner_id_fkey")
+  stateHash    String   @unique(map: "github_oauth_flow_state_hash_key") @map("state_hash")
+  bindingHash  String   @map("binding_hash")
+  codeVerifier String   @map("code_verifier")
+  /// The Orbit page the callback sends the browser back to: a path on this site.
+  returnPath   String   @map("return_path")
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt], map: "github_oauth_flow_expires_at_idx")
+  @@index([ownerId], map: "github_oauth_flow_owner_id_idx")
+  @@map("github_oauth_flow")
 }
 
 /// Owner-scoped APNs/FCM registration. Token uniqueness is global; Android also replaces the
@@ -1327,6 +1390,18 @@ model Workspace {
   // platform without an answer) and must never be read as "full".
   workDirFreeBytes    BigInt?   @map("work_dir_free_bytes")
   workDirTotalBytes   BigInt?   @map("work_dir_total_bytes")
+  // A workspace cloned from GitHub (docs/github-workspace-design.md §4, migration 0538). All NULL for
+  // one that is not. The repository is named by its id, which survives a rename or a transfer.
+  githubRepoId         BigInt?   @map("github_repo_id")
+  githubInstallationId BigInt?   @map("github_installation_id")
+  // The branch to clone; NULL is the repository's default branch.
+  cloneRef             String?   @map("clone_ref")
+  // PENDING | CLONING | READY | FAILED, held by `workspace_clone_state_chk`.
+  cloneState           String?   @map("clone_state")
+  // Why a clone FAILED: English, redacted.
+  cloneError           String?   @map("clone_error")
+  cloneStartedAt       DateTime? @map("clone_started_at") @db.Timestamptz(3)
+  cloneFinishedAt      DateTime? @map("clone_finished_at") @db.Timestamptz(3)
   ownerId             String    @map("owner_id") @db.Uuid
   owner               User      @relation(fields: [ownerId], references: [id])
   createdAt           DateTime  @default(now()) @map("created_at")

@@ -32,6 +32,7 @@ import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
 import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
+import { GithubIntegrationPage } from './pages/GithubIntegrationPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { SharedWikiDocRoute } from './pages/SharedWikiPage';
@@ -229,6 +230,15 @@ export function App() {
               element={
                 <DocView>
                   <FeishuIntegrationPage />
+                </DocView>
+              }
+            />
+            {/* The account's GitHub connection (docs/github-workspace-design.md §8). */}
+            <Route
+              path="settings/integrations/github"
+              element={
+                <DocView>
+                  <GithubIntegrationPage />
                 </DocView>
               }
             />

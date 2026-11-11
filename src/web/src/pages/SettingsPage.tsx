@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { GithubOutlined } from '@ant-design/icons';
+import { useState, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
@@ -19,9 +20,10 @@ import { useToast } from '../lib/toast';
 import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../lib/workspaceDefaults';
 import { formatFileSize } from '../lib/worktreeFile';
 import { FEISHU_PLATFORM_NAMES, feishuIntegrationQuery } from './FeishuIntegrationPage';
+import { GITHUB_NOT_SET_UP, GITHUB_ROW_HINT, connectGithub, githubConnectedSummary, githubIntegrationQuery } from '../lib/githubIntegration';
 
 // One labelled row: title + hint on the left, the control on the right.
-function Field({ label, hint, children }: { label: string; hint: ReactNode; children: ReactNode }) {
+function Field({ label, hint, children }: { label: ReactNode; hint: ReactNode; children: ReactNode }) {
   return (
     <div
       style={{
@@ -221,7 +223,75 @@ function IntegrationsCard() {
       >
         <Button onClick={() => navigate('/settings/integrations/feishu')}>Manage</Button>
       </Field>
+      <GithubRow />
     </Card>
+  );
+}
+
+/**
+ * Settings → Integrations → GitHub (docs/github-workspace-design.md §8, board 02): Connect while not connected,
+ * Manage once connected, Reconnect when GitHub stopped taking the tokens, and no button where no administrator set
+ * the App up.
+ */
+function GithubRow() {
+  const navigate = useNavigate();
+  const message = useToast();
+  const { data } = useQuery(githubIntegrationQuery());
+  const [connecting, setConnecting] = useState(false);
+  const connect = async () => {
+    setConnecting(true);
+    try {
+      await connectGithub('/settings/integrations/github');
+    } catch (e) {
+      setConnecting(false);
+      message.error("Couldn't start connecting GitHub", (e as Error).message);
+    }
+  };
+  const value = !data
+    ? null
+    : !data.available && !data.connected
+      ? { text: GITHUB_NOT_SET_UP, warn: false }
+      : !data.connected
+        ? { text: 'Not connected', warn: false }
+        : data.needsReconnect
+          ? { text: `@${data.login} needs to sign in again`, warn: true }
+          : { text: githubConnectedSummary(data), warn: false };
+  const action = !data
+    ? null
+    : data.connected && !data.needsReconnect
+      ? <Button onClick={() => navigate('/settings/integrations/github')}>Manage</Button>
+      : !data.available
+        ? data.connected ? <Button onClick={() => navigate('/settings/integrations/github')}>Manage</Button> : null
+        : (
+          <Button variant="primary" icon={<GithubOutlined />} loading={connecting} onClick={() => void connect()}>
+            {data.connected ? 'Reconnect' : 'Connect'}
+          </Button>
+        );
+  return (
+    <div className="settings-github-row">
+      <Field
+        label={
+          <>
+            <GithubOutlined /> GitHub
+          </>
+        }
+        hint={
+          <>
+            {GITHUB_ROW_HINT}
+            {value && (
+              <div
+                className="settings-github-value"
+                style={{ marginTop: 4, fontSize: 13, color: value.warn ? 'var(--warning)' : 'var(--text-2)' }}
+              >
+                {value.text}
+              </div>
+            )}
+          </>
+        }
+      >
+        {action}
+      </Field>
+    </div>
   );
 }
 
