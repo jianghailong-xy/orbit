@@ -15,6 +15,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
+import { AdminEmailPage } from './pages/AdminEmailPage';
 import { AdminIntegrationsPage } from './pages/AdminIntegrationsPage';
 import { InfrastructurePage } from './pages/InfrastructurePage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
@@ -254,6 +255,15 @@ export function App() {
               element={
                 <DocView>
                   <AdminSignInPage />
+                </DocView>
+              }
+            />
+            {/* The admin area's outgoing email: Resend and the welcome email (docs/welcome-email-design.md §3.1). */}
+            <Route
+              path="admin/email"
+              element={
+                <DocView>
+                  <AdminEmailPage />
                 </DocView>
               }
             />

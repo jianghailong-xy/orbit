@@ -412,7 +412,8 @@ private struct CompactSections: View {
         // selection in this shell. Settings › Infrastructure is the same page on Settings' own stack.
         case .runners:
             NavigationStack(path: $model.nav.path) {
-                RunnersListView(rowNavigation: .push)
+                // A new account with no machine lands here: the welcome card (docs/mocks/new-user-onboarding).
+                NoMachineWelcomeGate { RunnersListView(rowNavigation: .push) }
                     .drawerToggle(open: openDrawer)
                     .refreshable { await model.runners?.load() }
                     .navigationDestination(for: NavNode.self) { node in
