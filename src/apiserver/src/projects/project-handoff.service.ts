@@ -53,6 +53,7 @@ import type { AuthCredential } from '../common/current-user.decorator';
 import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertEngineSession } from '../sessions/engine-session';
 import { returnSessionsToOpen } from '../sessions/return-to-open';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
 import { criterionKeyOf } from './project-acceptance';
@@ -1302,6 +1303,13 @@ export class ProjectHandoffService {
     now: Date,
     credential?: AuthCredential,
   ): Promise<HandoffListRow[]> {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: { sessionKind: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    // A move card is drawn in a conversation, never in the platform's landing container (§2.9 LS6).
+    assertEngineSession(session);
     const ids = answers.map((answer) => answer.handoffId);
     if (ids.length === 0) throw new BadRequestException('a batch answer names at least one move');
     if (new Set(ids).size !== ids.length) {
