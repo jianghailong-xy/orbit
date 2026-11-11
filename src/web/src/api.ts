@@ -860,6 +860,7 @@ export const resumeSession = (
   });
 
 export interface ApprovalInfo {
+  coordinatorFallback?: string | null;
   id: string;
   sessionId: string;
   toolName: string;

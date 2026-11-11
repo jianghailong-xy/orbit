@@ -20,6 +20,16 @@ class OwnerReviewTest {
         runCatching { Instant.parse(iso).atOffset(ZoneOffset.UTC).let { "%02d:%02d".format(it.hour, it.minute) } }.getOrNull()
     }
 
+    @Test fun coordinatorRaisedConclusionLeadsAndFallbackIsLabelled() {
+        val raised = corpus.objects("bars").first { it.text("case")!!.startsWith("coordinator raised") }.obj("review")!!
+        val bar = OwnerReview.bar(raised, OwnerReview.Place.CARD, utc)
+        assertEquals("QUOTE", bar.lines.first().kind)
+        assertEquals(raised.obj("review")!!.text("judgment"), bar.lines.first().text)
+        val fallback = corpus.objects("bars").first { it.obj("review")?.text("state") == "NOT_REVIEWED" &&
+            it.obj("review")?.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR" }.obj("review")!!
+        assertEquals("Not reviewed by the coordinator", OwnerReview.bar(fallback, OwnerReview.Place.CARD, utc).lines.first().text)
+    }
+
     @Test fun theBarDrawsWhatTheFixtureDraws() {
         val bars = corpus.objects("bars")
         assertTrue(bars.size >= 16)

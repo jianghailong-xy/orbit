@@ -1322,6 +1322,7 @@ function QuestionForm({
     <div className="approval-card">
       <div className="approval-head">❓ Claude has a question for you</div>
       <div className="approval-body is-questions">
+        {approval.coordinatorFallback ? <div className="owner-confirmation-review-status">Not reviewed by the coordinator</div> : null}
         <div className="chat-questions">
           {questions.map((qq, k) => {
             const q = qq.question ?? '';

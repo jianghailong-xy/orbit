@@ -1350,6 +1350,7 @@ public struct MergeRepairRequest: Codable, Sendable {
 /// The durable approval record (GET /sessions/:id/approvals). Distinct from the live
 /// `approval_request` SSE nudge; this is the source of truth on (re)connect.
 public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
+    public let coordinatorFallback: String?
     public let id: String
     public let toolName: String?
     public let status: String?

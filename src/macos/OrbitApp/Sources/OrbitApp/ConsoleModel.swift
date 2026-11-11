@@ -5895,7 +5895,7 @@ final class ConsoleModel {
         guard let infos = try? await api.approvals(sessionID: sessionID) else { return }
         reducer.reconcileApprovals(infos.map {
             PendingApproval(id: $0.id, kind: Approvals.kind(toolName: $0.toolName),
-                            toolName: $0.toolName, input: $0.input)
+                            toolName: $0.toolName, input: $0.input, coordinatorFallback: $0.coordinatorFallback)
         }, knownBefore: knownBefore)
         publishStateNow()
     }

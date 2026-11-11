@@ -40,8 +40,15 @@ internal fun ReviewBarView(review: JsonObject, place: OwnerReview.Place, answers
     var oldOpen by rememberSaveable(review.text("reviewId")) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag("review-bar").background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
         .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ReviewBarHead(bar)
-        bar.lines.forEach { ReviewBarLine(it, items, answers) }
+        ReviewBarHead(bar, review.text("state") == "REVIEWED" && review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR" && place == OwnerReview.Place.CARD)
+        val raised = review.text("state") == "REVIEWED" && review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR" && place == OwnerReview.Place.CARD
+        if (raised) {
+            bar.lines.filter { it.kind != "ROW" }.forEach { ReviewBarLine(it, items, answers) }
+            val record = review.obj("review")
+            var checksOpen by rememberSaveable(review.text("reviewId")) { mutableStateOf(false) }
+            Disclosure("${record?.objects("checked")?.size ?: 0} checked · ${record?.objects("notChecked")?.size ?: 0} not checked · ${record?.objects("leftOpen")?.size ?: 0} left open", checksOpen, "review-bar:checks") { checksOpen = !checksOpen }
+            if (checksOpen) bar.lines.filter { it.kind == "ROW" }.forEach { ReviewBarLine(it, items, answers) }
+        } else bar.lines.forEach { ReviewBarLine(it, items, answers) }
         if (bar.folded.isNotEmpty()) {
             Disclosure(OwnerReview.showOldReview, oldOpen, "review-bar:old") { oldOpen = !oldOpen }
             if (oldOpen) bar.folded.forEach { ReviewBarLine(it, items, null) }
@@ -55,13 +62,13 @@ internal fun ReviewBarView(review: JsonObject, place: OwnerReview.Place, answers
 /** `REVIEW · <reviewer> · <time>`, the reviewer's name giving way before the label or the time, and the commit at the right —
  * struck through once the record no longer describes what is waiting. */
 @Composable
-private fun ReviewBarHead(bar: OwnerReview.Bar) {
+private fun ReviewBarHead(bar: OwnerReview.Bar, raised: Boolean) {
     val style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
     val tone = MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f)) {
-            Text("${OwnerReview.reviewHeading} · ", style = style, color = tone, maxLines = 1)
-            Text(bar.reviewer, Modifier.weight(1f, fill = false), style = style, color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (raised) "Coordinator" else "${OwnerReview.reviewHeading} · ", style = style, color = tone, maxLines = 1)
+            if (!raised) Text(bar.reviewer, Modifier.weight(1f, fill = false), style = style, color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
             bar.time?.let { Text(" · $it", style = style, color = tone, maxLines = 1) }
         }
         bar.sha?.let {
@@ -140,14 +147,14 @@ internal fun Disclosure(label: String, open: Boolean, tag: String, toggle: () ->
  */
 @Composable
 internal fun ReviewAnswerBlocks(questions: List<JsonObject>, choices: List<OwnerAnswer>, enabled: Boolean, choose: (OwnerAnswer) -> Unit,
-    recorded: Boolean = false) {
+    recorded: Boolean = false, showFirst: Boolean = false) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         questions.forEachIndexed { index, question ->
             val id = question.text("key") ?: return@forEachIndexed
             val chosen = OwnerReview.choice(question, choices)
             key(id) {
                 Column(Modifier.testTag("owner-question:$id"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (index > 0) Text(question.text("text").orEmpty(), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+                    if (showFirst || index > 0) Text(question.text("text").orEmpty(), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
                     val refs = question.strings("evidenceRefs")
                     if (refs.isNotEmpty()) {
                         var open by rememberSaveable(id) { mutableStateOf(false) }
@@ -251,15 +258,25 @@ internal fun OwnerCardBody(card: InteractionCard, open: (String) -> Unit, owner:
         }
         else -> {
             Text(view.text("title").orEmpty(), style = MaterialTheme.typography.titleSmall)
-            Field("Done when", view["acceptanceCriteria"], open)
             val waiting = view.obj("waiting")
-            Field("The run's report", waiting?.obj("report")?.get("text"), open)
             // The reviewer's box, between what the agent said and what confirming sets off (contract §6 H1).
             OwnerReview.readable(waiting?.get("review"))?.let { review ->
                 val questions = OwnerReview.questions(review)
                 ReviewBarView(review, OwnerReview.Place.CARD, answers = if (owner == null || questions.isEmpty()) null else {
-                    { ReviewAnswerBlocks(questions, owner.choices, owner.enabled, owner.choose, recorded) }
+                    { ReviewAnswerBlocks(questions, owner.choices, owner.enabled, owner.choose, recorded, showFirst = review.text("state") == "REVIEWED" && review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR") }
                 })
+            }
+            val raised = waiting?.obj("review")?.let { it.text("state") == "REVIEWED" && it.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR" } == true
+            if (raised) {
+                var evidenceOpen by rememberSaveable(waiting?.text("requestId")) { mutableStateOf(false) }
+                Disclosure("Run evidence", evidenceOpen, "owner:run-evidence") { evidenceOpen = !evidenceOpen }
+                if (evidenceOpen) {
+                    Field("Done when", view["acceptanceCriteria"], open)
+                    Field("The run's report", waiting?.obj("report")?.get("text"), open)
+                }
+            } else {
+                Field("Done when", view["acceptanceCriteria"], open)
+                Field("The run's report", waiting?.obj("report")?.get("text"), open)
             }
             if (!recorded) Field("If confirmed", view["ifConfirmed"], open)
         }

@@ -12,6 +12,28 @@ import XCTest
 /// reports green on exactly the day the thing it watches went away.
 final class OwnerConfirmationReviewTests: XCTestCase {
 
+    func testCoordinatorRaisedConclusionPrecedesDecisionPoints() throws {
+        let raised = try XCTUnwrap(try fixture().bars.first { $0.case.hasPrefix("coordinator raised") })
+        XCTAssertTrue(raised.review.isCoordinatorRaised)
+        let bar = OwnerConfirmations.reviewBar(raised.review, place: .card, clock: Self.utcClock)
+        XCTAssertEqual(bar.lines.first?.kind, .quote)
+        XCTAssertEqual(bar.lines.first?.text, raised.review.review?.judgment)
+        let fallback = try XCTUnwrap(try fixture().bars.first { $0.review.state == .notReviewed && $0.review.reviewer.kind == "PROJECT_COORDINATOR" })
+        XCTAssertEqual(OwnerConfirmations.reviewBar(fallback.review, place: .card, clock: Self.utcClock).lines.first?.text,
+                       "Not reviewed by the coordinator")
+    }
+
+    func testQuestionFallbackSurvivesTheApprovalRead() throws {
+        let info = try JSONDecoder().decode(ApprovalInfo.self, from: Data(
+            #"{"id":"question","toolName":"AskUserQuestion","status":"PENDING","input":{},"coordinatorFallback":"TIMED_OUT"}"#.utf8))
+        let pending = PendingApproval(id: info.id, kind: .question, toolName: info.toolName,
+                                      input: info.input, coordinatorFallback: info.coordinatorFallback)
+        XCTAssertEqual(pending.coordinatorFallback, "TIMED_OUT")
+        let older = try JSONDecoder().decode(ApprovalInfo.self, from: Data(
+            #"{"id":"permission","toolName":"Bash","status":"PENDING","input":{}}"#.utf8))
+        XCTAssertNil(older.coordinatorFallback)
+    }
+
     private static let fixturePath = "src/shared/src/owner-confirmation-review.fixture.json"
 
     private struct Missing: Error, CustomStringConvertible {

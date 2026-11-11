@@ -533,12 +533,14 @@ public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
 
 /// A live tool-permission / question / plan prompt awaiting a human decision.
 public struct PendingApproval: Equatable, Sendable, Identifiable, Codable {
+    public var coordinatorFallback: String?
     public enum Kind: String, Sendable, Codable { case tool, question, plan }
     public let id: String
     public var kind: Kind
     public var toolName: String?
     public var input: JSONValue?
-    public init(id: String, kind: Kind, toolName: String?, input: JSONValue?) {
+    public init(id: String, kind: Kind, toolName: String?, input: JSONValue?, coordinatorFallback: String? = nil) {
+        self.coordinatorFallback = coordinatorFallback
         self.id = id
         self.kind = kind
         self.toolName = toolName

@@ -257,6 +257,11 @@ function recordLines(review: OwnerConfirmationReviewView, answers: boolean): Rev
   const record = review.review;
   if (!record) return [];
   const headline = recordHeadline(review);
+  if (review.lead && review.state === 'REVIEWED' && answers) return [
+    { kind: 'QUOTE', text: review.lead.conclusion },
+    ...(review.lead.points.length ? [{ kind: 'ANSWERS' as const, text: '' as const }] : [{ kind: 'NOTE' as const, text: 'Nothing else needs your decision.' }]),
+    ...listRows(record),
+  ];
   return [
     ...(headline ? [{ kind: 'HEADLINE' as const, ...reviewHeadlineLine(headline) }] : []),
     ...(answers && record.needsYou.length > 0 ? [{ kind: 'ANSWERS' as const, text: '' as const }] : []),
@@ -303,7 +308,7 @@ export function reviewBar(
     }
     case 'NOT_REVIEWED':
       return bar(null, null, [
-        { kind: 'STATUS', icon: 'DASH', text: NOT_REVIEWED, warn: false },
+        { kind: 'STATUS', icon: 'DASH', text: review.reviewer.kind === 'PROJECT_COORDINATOR' ? 'Not reviewed by the coordinator' : NOT_REVIEWED, warn: false },
         { kind: 'NOTE', text: notReviewedNote(review.notReviewedReason, review.windowSeconds) },
       ]);
     case 'RETURNED': {
@@ -463,6 +468,7 @@ export function OwnerConfirmationReviewBar({
       line={line}
       items={items}
       questions={reviewQuestions(review)}
+      showFirst={Boolean(review.lead)}
       recordId={review.review?.recordId ?? review.reviewId}
       choices={choices}
       onChoose={onChoose}
@@ -472,15 +478,20 @@ export function OwnerConfirmationReviewBar({
     <div className="owner-confirmation-review" data-review-state={review.state}>
       <div className="owner-confirmation-review-head">
         <span className="owner-confirmation-review-who">
-          <span className="owner-confirmation-key">{`${REVIEW_HEADING} · `}</span>
-          <span className="owner-confirmation-review-name" title={bar.reviewer}>{bar.reviewer}</span>
+          <span className="owner-confirmation-key">{review.lead && place === 'CARD' ? 'Coordinator' : `${REVIEW_HEADING} · `}</span>
+          {!review.lead || place !== 'CARD' ? <span className="owner-confirmation-review-name" title={bar.reviewer}>{bar.reviewer}</span> : null}
           {bar.time ? <span className="owner-confirmation-key">{` · ${bar.time}`}</span> : null}
         </span>
         {bar.sha ? (
           <span className={`owner-confirmation-review-sha${bar.shaStruck ? ' is-struck' : ''}`}>{bar.sha}</span>
         ) : null}
       </div>
-      {bar.lines.map(draw)}
+      {review.lead && place === 'CARD' ? <>
+        {bar.lines.filter(line => line.kind !== 'ROW').map(draw)}
+        <details><summary>{`${review.lead.checks.checked} checked · ${review.lead.checks.notChecked} not checked · ${review.lead.checks.leftOpen} left open`}</summary>
+          {bar.lines.filter(line => line.kind === 'ROW').map(draw)}
+        </details>
+      </> : bar.lines.map(draw)}
       {bar.folded.length > 0 ? (
         <>
           <button
@@ -507,7 +518,9 @@ function ReviewLine({
   recordId,
   choices,
   onChoose,
+  showFirst,
 }: {
+  showFirst: boolean;
   line: ReviewBarLine;
   items: Map<string, ConfirmationReviewItem>;
   questions: ConfirmationNeedsYouItem[];
@@ -533,7 +546,7 @@ function ReviewLine({
       );
     case 'ANSWERS':
       return onChoose ? (
-        <ReviewAnswerBlocks questions={questions} recordId={recordId} choices={choices} onChoose={onChoose} />
+        <ReviewAnswerBlocks showFirst={showFirst} questions={questions} recordId={recordId} choices={choices} onChoose={onChoose} />
       ) : null;
     case 'ROW':
       return <ReviewRow line={line} items={line.keys.flatMap((key) => items.get(key) ?? [])} />;
@@ -598,10 +611,12 @@ function ReviewRow({
  */
 function ReviewAnswerBlocks({
   questions,
+  showFirst,
   recordId,
   choices,
   onChoose,
 }: {
+  showFirst: boolean;
   questions: ConfirmationNeedsYouItem[];
   recordId: string;
   choices: ReviewChoices;
@@ -614,7 +629,7 @@ function ReviewAnswerBlocks({
         const name = `review-${recordId}-${item.key}`;
         return (
           <div key={item.key} className="owner-confirmation-review-question">
-            {index > 0 ? <div className="owner-confirmation-review-question-text">{item.text}</div> : null}
+            {showFirst || index > 0 ? <div className="owner-confirmation-review-question-text">{item.text}</div> : null}
             <ReviewEvidence refs={item.evidenceRefs ?? []} />
             {item.options.map((option, optionIndex) => (
               <label

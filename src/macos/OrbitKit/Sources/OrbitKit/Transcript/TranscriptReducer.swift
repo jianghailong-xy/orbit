@@ -1741,8 +1741,12 @@ public struct TranscriptReducer: Sendable, Codable {
     public mutating func reconcileApprovals(_ approvals: [PendingApproval], knownBefore: Set<String>) {
         let listed = Set(approvals.map(\.id))
         state.pendingApprovals.removeAll { knownBefore.contains($0.id) && !listed.contains($0.id) }
-        for appr in approvals where !state.pendingApprovals.contains(where: { $0.id == appr.id }) {
-            state.pendingApprovals.append(appr)
+        for appr in approvals {
+            if let index = state.pendingApprovals.firstIndex(where: { $0.id == appr.id }) {
+                state.pendingApprovals[index] = appr
+            } else {
+                state.pendingApprovals.append(appr)
+            }
         }
     }
 

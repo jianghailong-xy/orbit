@@ -674,10 +674,15 @@ export function OwnerConfirmationCard({
             {OWNER_CONFIRMATION_YOURS}
             <span className="owner-confirmation-id">{view.taskId}</span>
           </div>
-          <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={waiting.report} foldCriteria />
-          {/* The reviewer's box, between what the agent said and what confirming sets off (contract
-              §6 H1): where the review stands, and its questions for the owner when it asks any. */}
-          {waiting.review ? (
+          {waiting.review && (waiting.review.lead || (waiting.review.state === 'NOT_REVIEWED' && waiting.review.reviewer.kind === 'PROJECT_COORDINATOR')) ? (
+            <OwnerConfirmationReviewBar review={waiting.review} place="CARD" choices={choices} onChoose={onChoose} />
+          ) : null}
+          {waiting.review?.lead ? (
+            <details><summary>Run evidence</summary>
+              <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={waiting.report} foldCriteria />
+            </details>
+          ) : <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={waiting.report} foldCriteria />}
+          {waiting.review && !waiting.review.lead && !(waiting.review.state === 'NOT_REVIEWED' && waiting.review.reviewer.kind === 'PROJECT_COORDINATOR') ? (
             <OwnerConfirmationReviewBar review={waiting.review} place="CARD" choices={choices} onChoose={onChoose} />
           ) : null}
           {/* Right above the buttons: the card is taller than a phone's screen, and this is what is

@@ -169,6 +169,8 @@ public struct ConfirmationReturnRecordView: Codable, Equatable, Sendable {
 
 /// The review of one confirmation request, as the card and its receipts draw it (§3.4).
 public struct OwnerConfirmationReviewView: Codable, Equatable, Sendable {
+    public var isCoordinatorRaised: Bool { state == .reviewed && reviewer.kind == "PROJECT_COORDINATOR" && review != nil }
+
     public struct Outdated: Codable, Equatable, Sendable {
         public enum Cause: String, Codable, Equatable, Sendable {
             case newerReport = "NEWER_REPORT"
@@ -587,7 +589,7 @@ public extension OwnerConfirmations {
             ])
         case .notReviewed:
             return bar(nil, nil, [
-                ReviewBar.Line(kind: .status, text: notReviewed, icon: .dash, warn: false),
+                ReviewBar.Line(kind: .status, text: review.reviewer.kind == "PROJECT_COORDINATOR" ? "Not reviewed by the coordinator" : notReviewed, icon: .dash, warn: false),
                 ReviewBar.Line(kind: .note, text: notReviewedNote(review.notReviewedReason,
                                                                   windowSeconds: review.windowSeconds)),
             ])
@@ -639,7 +641,14 @@ public extension OwnerConfirmations {
                                     answers: Bool) -> [ReviewBar.Line] {
         guard let record = review.review else { return [] }
         var lines: [ReviewBar.Line] = []
-        if let headline = recordHeadline(review) {
+        if review.isCoordinatorRaised && answers {
+            lines.append(ReviewBar.Line(kind: .quote, text: record.judgment))
+            if record.needsYou.isEmpty {
+                lines.append(ReviewBar.Line(kind: .note, text: "Nothing else needs your decision."))
+            }
+        }
+
+        if !(review.isCoordinatorRaised && answers), let headline = recordHeadline(review) {
             let line = reviewHeadlineLine(headline)
             lines.append(ReviewBar.Line(kind: .headline, text: line.text, warn: line.warn))
         }
@@ -655,7 +664,7 @@ public extension OwnerConfirmations {
             lines.append(ReviewBar.Line(kind: .row, text: items.map(\.text).joined(separator: " · "),
                                         row: row, label: label, keys: items.map(\.key)))
         }
-        if !record.judgment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if !(review.isCoordinatorRaised && answers) && !record.judgment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             lines.append(ReviewBar.Line(kind: .quote, text: record.judgment))
         }
         return lines

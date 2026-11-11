@@ -1190,3 +1190,12 @@ describe('one waiting completion decision on the session page', () => {
 
 // The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
 vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
+
+
+describe('run question coordinator fallback', () => {
+  it('labels a fallback question while ordinary questions keep their existing copy', () => {
+    const question = { id: 'fallback-question', toolName: 'AskUserQuestion', input: { questions: [{ question: 'Ship this release?', options: [{ label: 'Ship' }, { label: 'Wait' }] }] } } as ApprovalInfo;
+    expect(render({ ...question, coordinatorFallback: 'TIMED_OUT' })).toContain('Not reviewed by the coordinator');
+    expect(render(question)).not.toContain('Not reviewed by the coordinator');
+  });
+});

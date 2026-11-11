@@ -144,7 +144,7 @@ object OwnerReview {
                 Line("STATUS", review.text("since")?.let(clock)?.let { "$reviewingSincePrefix $it" } ?: underReview, icon = "CLOCK", warn = false),
                 Line("NOTE", if (place == Place.CARD) reviewWillAsk else reviewWillShowHere)))
             "NOT_REVIEWED" -> bar(null, null, listOf(
-                Line("STATUS", notReviewed, icon = "DASH", warn = false),
+                Line("STATUS", if (review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR") "Not reviewed by the coordinator" else notReviewed, icon = "DASH", warn = false),
                 Line("NOTE", notReviewedNote(review.text("notReviewedReason"), review.number("windowSeconds") ?: 0))))
             "RETURNED" -> {
                 val returned = review.obj("returned")
@@ -177,7 +177,11 @@ object OwnerReview {
     private fun recordLines(review: JsonObject, answers: Boolean): List<Line> {
         val record = review.obj("review") ?: return emptyList()
         return buildList {
-            headline(review, record)?.let { add(it) }
+            val raised = answers && review.text("state") == "REVIEWED" && review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR"
+            if (raised) {
+                add(Line("QUOTE", record.text("judgment").orEmpty()))
+                if (record.objects("needsYou").isEmpty()) add(Line("NOTE", "Nothing else needs your decision."))
+            } else headline(review, record)?.let { add(it) }
             if (answers && record.objects("needsYou").isNotEmpty()) add(Line("ANSWERS", ""))
             listOf(Triple("CHECKED", reviewChecked, "checked"), Triple("NOT_CHECKED", reviewNotChecked, "notChecked"),
                 Triple("LEFT_OPEN", reviewLeftOpen, "leftOpen")).forEach { (row, label, key) ->
@@ -185,7 +189,7 @@ object OwnerReview {
                 if (items.isNotEmpty()) add(Line("ROW", items.joinToString(" · ") { it.text("text").orEmpty() }, row = row, label = label,
                     keys = items.map { it.text("key").orEmpty() }))
             }
-            record.text("judgment")?.takeIf { it.isNotBlank() }?.let { add(Line("QUOTE", it)) }
+            if (!raised) record.text("judgment")?.takeIf { it.isNotBlank() }?.let { add(Line("QUOTE", it)) }
         }
     }
 
