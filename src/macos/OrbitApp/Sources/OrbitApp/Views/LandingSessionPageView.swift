@@ -540,7 +540,7 @@ private struct LandingCheckLogView: View {
                                 Text(LandingPageCopy.bytesOmitted(entry.truncatedBytes))
                                     .font(.orbitMeta).foregroundStyle(.secondary)
                             }
-                            Text(LandingCheckCopy.timelineText(entry))
+                            Text(entry.text)
                                 .font(.orbitMono)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)

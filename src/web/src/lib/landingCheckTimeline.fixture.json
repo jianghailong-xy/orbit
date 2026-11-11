@@ -1,0 +1,188 @@
+{
+  "sessionId": "landing-check-fixture",
+  "projectId": "34WvwUS8YMXfOfWbMqVuu",
+  "subject": "TASK",
+  "taskId": "34OEE9DwfWYjo3aRFuBgo",
+  "promotionId": null,
+  "episode": 1,
+  "openedAt": "2026-11-11T10:00:00.000Z",
+  "settledAt": "2026-11-11T10:41:00.000Z",
+  "settledAs": "LANDED",
+  "phase": null,
+  "round": 1,
+  "checks": [
+    {
+      "name": "LANDING_CHECK",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "timedOut": false,
+      "durationMs": 840000
+    }
+  ],
+  "liveness": null,
+  "blockingReason": null,
+  "currentAttempt": {
+    "jobId": "check-attempt-3",
+    "kind": "LAND_TASK",
+    "state": "LANDED",
+    "generation": 3,
+    "phase": null,
+    "round": 1,
+    "step": null,
+    "claim": 1,
+    "runnerName": "fixture-runner",
+    "sourceSessionId": null,
+    "targetRef": "refs/heads/project/payments",
+    "startedAt": "2026-11-11T10:26:00.000Z",
+    "heartbeatAt": "2026-11-11T10:40:00.000Z",
+    "outputMovedAt": null,
+    "progressProtocol": "v2",
+    "check": null,
+    "liveness": null,
+    "blockingReason": null,
+    "timedOut": false,
+    "limitSeconds": 600,
+    "retryable": false,
+    "pushBoundaryPassed": true
+  },
+  "todos": [],
+  "generations": [],
+  "timeline": {
+    "sections": [
+      {
+        "title": "Generation 1",
+        "jobId": "check-attempt-1",
+        "kind": "LAND_TASK",
+        "generation": 1,
+        "state": "CHECK_FAILED",
+        "entries": [
+          {
+            "id": "failed",
+            "seq": 1,
+            "kind": "CHECK_FINISHED",
+            "at": "2026-11-11T10:00:00.000Z",
+            "claim": 1,
+            "round": 1,
+            "check": {
+              "name": "LANDING_CHECK",
+              "index": 1
+            },
+            "phase": "CHECK",
+            "step": null,
+            "actor": {
+              "type": "RUNNER"
+            },
+            "reason": null,
+            "data": {
+              "exitCode": 1,
+              "expectedExitCode": 0,
+              "timedOut": false,
+              "durationMs": 840000
+            },
+            "text": "Landing check failed \u00b7 exit 1 \u00b7 14m"
+          },
+          {
+            "id": "baseline",
+            "seq": 2,
+            "kind": "CHECK_FINISHED",
+            "at": "2026-11-11T10:01:00.000Z",
+            "claim": 1,
+            "round": 1,
+            "check": {
+              "name": "LANDING_CHECK",
+              "index": 2
+            },
+            "phase": "CHECK",
+            "step": null,
+            "actor": {
+              "type": "RUNNER"
+            },
+            "reason": null,
+            "data": {
+              "exitCode": 1,
+              "expectedExitCode": 0,
+              "timedOut": false,
+              "durationMs": 840000,
+              "scope": "BASELINE"
+            },
+            "text": "Checked the project branch with main, without this task \u00b7 also fails"
+          }
+        ]
+      },
+      {
+        "title": "Generation 2",
+        "jobId": "check-attempt-2",
+        "kind": "LAND_TASK",
+        "generation": 2,
+        "state": "CANCELLED",
+        "entries": [
+          {
+            "id": "skipped",
+            "seq": 1,
+            "kind": "CHECK_FINISHED",
+            "at": "2026-11-11T10:20:00.000Z",
+            "claim": 1,
+            "round": 1,
+            "check": {
+              "name": "LANDING_CHECK",
+              "index": 1
+            },
+            "phase": "CHECK",
+            "step": null,
+            "actor": {
+              "type": "RUNNER"
+            },
+            "reason": null,
+            "data": {
+              "exitCode": null,
+              "expectedExitCode": 0,
+              "timedOut": false,
+              "durationMs": 840000,
+              "skipped": "PATHS_EXEMPT",
+              "files": [
+                "docs/notes.md"
+              ]
+            },
+            "text": "Landing check skipped \u00b7 only exempt paths changed"
+          }
+        ]
+      },
+      {
+        "title": "Generation 3",
+        "jobId": "check-attempt-3",
+        "kind": "LAND_TASK",
+        "generation": 3,
+        "state": "LANDED",
+        "entries": [
+          {
+            "id": "passed",
+            "seq": 1,
+            "kind": "CHECK_FINISHED",
+            "at": "2026-11-11T10:40:00.000Z",
+            "claim": 1,
+            "round": 1,
+            "check": {
+              "name": "LANDING_CHECK",
+              "index": 1
+            },
+            "phase": "CHECK",
+            "step": null,
+            "actor": {
+              "type": "RUNNER"
+            },
+            "reason": null,
+            "data": {
+              "exitCode": 0,
+              "expectedExitCode": 0,
+              "timedOut": false,
+              "durationMs": 840000
+            },
+            "text": "Landing check passed \u00b7 14m"
+          }
+        ]
+      }
+    ],
+    "facts": [],
+    "truncated": false
+  }
+}

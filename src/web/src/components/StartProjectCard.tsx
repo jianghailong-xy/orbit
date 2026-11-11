@@ -621,9 +621,9 @@ export function StartProjectCard({
                 onChange={(event) => set({ landingCheckCommand: event.target.value })} />
               <div className="start-card-hint">{LANDING_CHECK_COPY.HINT}</div>
               {!draft.landingCheckCommand && <div className="start-card-hint">{inheritedLandingCommand(draft.mergeCheckCommand || null)}</div>}
-              <NumberInput value={draft.landingCheckTimeoutSeconds ?? null} min={1} precision={0} disabled={!editable}
+              <NumberInput className="project-check-timeout" value={draft.landingCheckTimeoutSeconds ?? null} min={1} precision={0} disabled={!editable}
                 aria-label={`${LANDING_CHECK_COPY.LABEL} ${LANDING_CHECK_COPY.TIMEOUT}`}
-                placeholder={LANDING_CHECK_COPY.TIMEOUT_PLACEHOLDER}
+                placeholder={LANDING_CHECK_COPY.INHERITS_TIMEOUT}
                 onValueChange={(value) => set({ landingCheckTimeoutSeconds: value })} />
               <div className="start-card-hint">{LANDING_CHECK_COPY.TIMEOUT_HINT}</div>
               {draft.landingCheckTimeoutSeconds == null && <div className="start-card-hint">{inheritedLandingTimeout(draft.mergeCheckTimeoutSeconds)}</div>}
@@ -662,7 +662,7 @@ export function StartProjectCard({
                   <span>{RUN_MERGE_CHECK_TIMEOUT}</span>
                   <span className="start-card-inline">
                     <NumberInput
-                      className="start-card-count"
+                      className="project-check-timeout"
                       min={1}
                       precision={0}
                       value={draft.mergeCheckTimeoutSeconds}

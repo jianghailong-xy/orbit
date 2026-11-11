@@ -49,6 +49,11 @@ class LandingStepsTest {
         val scoped = LandingSessionModel.scopedEntries(listOf(entry), view, "new")
         assertEquals("Checked the project branch with main, without this task · also fails", LandingSessionModel.timelineText(scoped.single()))
         assertEquals(listOf(entry), LandingSessionModel.scopedEntries(listOf(entry), view, "old"))
+        val explicit = entry.copy(data = buildJsonObject { put("scope", "TASK") })
+        assertEquals(listOf(explicit), LandingSessionModel.scopedEntries(listOf(explicit), view, "new"))
+        val server = entry.copy(claim = 0, text = "Checked the project branch with main, without this task · passes",
+            data = buildJsonObject { put("scope", "BASELINE"); put("exitCode", 0); put("expectedExitCode", 0) })
+        assertEquals(server.text, LandingSessionModel.timelineText(LandingSessionModel.scopedEntries(listOf(server), view, "old").single()))
         assertEquals(listOf(entry.copy(claim = 2)), LandingSessionModel.scopedEntries(listOf(entry.copy(claim = 2)), view, "new"))
         assertEquals(listOf(entry.copy(round = 2)), LandingSessionModel.scopedEntries(listOf(entry.copy(round = 2)), view, "new"))
     }

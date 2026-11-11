@@ -28,6 +28,11 @@ describe('Landing check readouts', () => {
     expect(landingTimelineText(scopedLandingEntries([entry], landing, 'new')[0]!))
       .toBe('Checked the project branch with main, without this task · also fails');
     expect(scopedLandingEntries([entry], landing, 'old')[0]).toBe(entry);
+    const explicit = { ...entry, data: { ...entry.data, scope: 'TASK' } };
+    expect(scopedLandingEntries([explicit], landing, 'new')[0]).toBe(explicit);
+    const server = { ...entry, claim: 1, data: { scope: 'BASELINE', exitCode: 0, expectedExitCode: 0 },
+      text: 'Checked the project branch with main, without this task · passes' };
+    expect(landingTimelineText(scopedLandingEntries([server], landing, 'old')[0]!)).toBe(server.text);
     const earlier = { ...entry, claim: 1 };
     expect(scopedLandingEntries([earlier], landing, 'new')[0]).toBe(earlier);
     const round = { ...entry, round: 2 };

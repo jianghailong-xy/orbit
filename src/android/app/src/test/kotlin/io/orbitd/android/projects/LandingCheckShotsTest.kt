@@ -18,6 +18,9 @@ import io.orbitd.android.cards.CardBody
 import io.orbitd.android.cards.ExceptionCard
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.ui.OrbitTheme
+import io.orbitd.android.reader.LandingRecord
+import io.orbitd.android.reader.LandingSessionModel
+import java.time.ZoneOffset
 import java.io.File
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +65,27 @@ class LandingCheckShotsTest {
         bitmap.recycle()
         println("Captured production Compose frame: $name")
     }
+    @Test @Config(qualifiers = "w411dp-h1600dp") fun timeline() {
+        val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { File(it, "src/web/src/lib/landingCheckTimeline.fixture.json").isFile }
+        val view = LandingSessionModel.read(json(File(root, "src/web/src/lib/landingCheckTimeline.fixture.json").readText()))
+        show {
+            Text("Landing session · Payments", style = MaterialTheme.typography.titleMedium)
+            LandingRecord(view, Instant.parse("2026-11-11T10:45:00Z"), ZoneOffset.UTC) { _, _ -> null }
+        }
+        repeat(2) {
+            compose.onAllNodes(hasTestTag("landing:step-row:check:LANDING_CHECK") and
+                hasAnyAncestor(hasTestTag("landing:step:check:LANDING_CHECK")), useUnmergedTree = true)[0]
+                .performScrollTo().performClick()
+        }
+        for (text in listOf("Landing check passed · 14m", "Landing check failed · exit 1 · 14m",
+            "Landing check skipped · only exempt paths changed",
+            "Checked the project branch with main, without this task · also fails")) {
+            compose.onAllNodesWithText(text, useUnmergedTree = true).filter(hasTestTag("landing:step-summary").not())[0].assertIsDisplayed()
+        }
+        shot("timeline")
+    }
+
     @Test fun settings() {
         val state = ProjectPageState().apply { integration = json("""{"line":"PROJECT_BRANCH","locked":true,
           "mergeCheckCommand":"make test-all","mergeCheckTimeoutSeconds":3600,"landingCheckCommand":null,

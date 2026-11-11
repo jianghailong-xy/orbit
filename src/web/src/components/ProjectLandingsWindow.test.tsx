@@ -15,6 +15,7 @@ import type {
 import { api, getSession, type SessionDetail } from '../api';
 import { landingClockTime } from './ProjectPanoramaHeader';
 import { ProjectLandingsWindow } from './ProjectLandingsWindow';
+import landingCheckFixture from '../lib/landingCheckTimeline.fixture.json';
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
@@ -1103,4 +1104,18 @@ describe('the window', () => {
     expect(foot).not.toMatch(/border-radius|box-shadow/u);
     expect(value(rule('.landing-page-foot-line'), 'white-space')).toBe('nowrap');
   });
+});
+
+
+it('renders all landing-check verdicts and historical event-scoped attribution in the real timeline', async () => {
+  view = { ...landingCheckFixture, sessionId: SESSION, projectId: PROJECT } as SessionLandingView;
+  await mount();
+  await openSteps();
+  const lines = [...page().querySelectorAll('.landing-timeline-text')].map((node) => node.textContent);
+  for (const expected of [
+    'Landing check passed · 14m',
+    'Landing check failed · exit 1 · 14m',
+    'Landing check skipped · only exempt paths changed',
+    'Checked the project branch with main, without this task · also fails',
+  ]) expect(lines).toContain(expected);
 });

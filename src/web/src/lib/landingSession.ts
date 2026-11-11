@@ -1010,6 +1010,7 @@ export function scopedLandingEntries(entries: readonly IntegrationTimelineEntry[
   const attempt = landing.currentAttempt;
   if (attempt?.jobId !== jobId) return [...entries];
   return entries.map((entry) => {
+    if (typeof entry.data?.scope === 'string') return entry;
     if (entry.claim !== attempt.claim || entry.round !== attempt.round || entry.check?.name !== 'LANDING_CHECK') return entry;
     const check = landing.checks[entry.check.index - 1];
     return check?.scope === 'BASELINE' ? { ...entry, data: { ...entry.data, scope: 'BASELINE' } } : entry;
