@@ -67,6 +67,9 @@ import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { CompletionInputRouter } from './completion-input-router.service';
+import { DependentReadyProducer } from './dependent-ready.producer';
+import { TaskRunStoppedProducer } from './task-run-stopped.producer';
+import { CoordinatorFactQueueService } from './coordinator-fact-queue.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorDeliveryService, coordinatorDeliveryTurnId } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
@@ -156,7 +159,16 @@ async function connect(): Promise<Stack> {
     new CriterionUnlandedProducer(prisma, convergence),
   );
   const openItems = new ProjectOpenItemService(prisma, sessions);
+  const recoveryDelivery = new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions);
+  const recovery = new CoordinatorFactQueueService(
+    prisma, recoveryDelivery,
+    new TaskRunStoppedProducer(prisma, convergence, recoveryDelivery),
+    new DependentReadyProducer(prisma, convergence, recoveryDelivery),
+    new ProjectTasksSettledProducer(prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions), convergence, recoveryDelivery),
+  );
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router, undefined, openItems);
+  Object.assign(tasks, { coordinatorFacts: recovery });
   const acceptance = new ProjectAcceptanceService(prisma);
   const projects = new ProjectsService(prisma, acceptance, sessions);
   const receipts = new MergeReceiptService(prisma, router);
@@ -180,6 +192,7 @@ async function connect(): Promise<Stack> {
     undefined,
     new ProjectPromotionService(prisma),
   );
+  Object.assign(api, { coordinatorFacts: recovery });
   return { db, sessions, tasks, projects, acceptance, receipts, api, jobs };
 }
 
@@ -1079,3 +1092,42 @@ test('(5) a judgment opened because the tasks settled files no task while a land
 test('the looks-finished PostgreSQL target is explicitly disposable', { skip }, () => {
   assertCoordinatorPgUrlIsIsolated(URL);
 });
+
+test('a settled-project fact refused during FAILED recovers on the reconcile tick without another event',
+  { skip, timeout: 120_000 }, async (t) => {
+    const stack = await connect();
+    t.after(() => stack.db.$disconnect());
+    const w = await world(stack, 'settled-recovery', ['the walkthrough is complete']);
+    const task = await servingTask(stack, w, w.keys[0]!, 'completed walkthrough');
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await settleExecutable(stack, task.id);
+    const prisma = stack.db as unknown as PrismaService;
+    const convergence = new CoordinatorConvergenceService(prisma);
+    const delivery = new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), stack.sessions);
+    const producer = new ProjectTasksSettledProducer(prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), stack.sessions), convergence, delivery);
+    assert.equal((await producer.afterCommit([w.projectId]))[0]?.outcome, 'REFUSED');
+    const wakes = () => stack.db.projectCoordinatorWake.findMany({
+      where: { projectId: w.projectId, event: 'PROJECT_TASKS_SETTLED' },
+    });
+    assert.equal((await wakes()).length, 1);
+    await stack.tasks.reconcileTick();
+    assert.equal((await wakes()).length, 1, 'a paused coordinator causes no repeated refusal');
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    assert.equal((await wakes()).filter((wake) => wake.status === 'DELIVERED').length, 1);
+    const turns = () => stack.db.conversationTurn.findMany({
+      where: { sessionId: w.coordinatorSessionId, content: { contains: 'looks finished, but Orbit' } },
+    });
+    assert.equal((await turns()).length, 1);
+    await stack.db.conversationTurn.updateMany({
+      where: { id: (await turns())[0]!.id }, data: { status: 'ANSWERED', deliveredAt: null },
+    });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    const resent = await turns();
+    assert.equal(resent.length, 2);
+    assert.notEqual(resent[0]!.clientTurnId, resent[1]!.clientTurnId);
+    await stack.tasks.reconcileTick();
+    assert.equal((await turns()).length, 2);
+  });

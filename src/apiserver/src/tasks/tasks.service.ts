@@ -96,6 +96,7 @@ import {
   projectStandsStill,
 } from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
+import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from './evidence-review.service';
 import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
@@ -2138,6 +2139,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
     @Optional() private readonly confirmationReviews?: OwnerConfirmationReviewService,
     @Optional() private readonly push?: PushService,
+    @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.files = files ?? new FilesService(prisma);
@@ -2588,6 +2590,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // hands it over too; that is the latency, and this is the guarantee that one which is back and
       // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
       .then(() => this.deliverLooksFinishedOwedTo())
+      .then(() => this.coordinatorFacts?.deliverOwedTo())
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
       .then(() => this.evidenceReviews?.deliverOwedTo())
       .then(() => this.evidenceReviews?.deliverSendBacksOwedTo())

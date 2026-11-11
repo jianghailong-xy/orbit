@@ -347,6 +347,27 @@ export class ProjectTasksSettledProducer {
   }
 
   /**
+   * Read-only recovery check for `CoordinatorFactQueueService`: the same settlement must still be
+   * routed to the conversation. Recovery needs no subsequent task write or landing receipt.
+   */
+  async queuedFactFor(projectId: string) {
+    if (await this.prisma.task.findFirst({
+      where: { projectId, status: { notIn: [...SETTLED_TASK_STATUSES] } },
+      select: { id: true },
+    })) return null;
+    const tasks = await this.prisma.task.findMany({
+      where: { projectId }, select: { id: true, status: true },
+    });
+    const criteria = await this.statedCriteria(projectId);
+    const settlements = tasks.map((task) => ({ taskId: task.id, status: task.status }));
+    if (projectAcceptanceLandedFact(projectId, settlements, criteria)) return null;
+    if ((await readProjectFinish(this.prisma, projectId, { tasksSettled: true })).state !== 'LOOKS_FINISHED') {
+      return null;
+    }
+    return projectTasksSettledFact(projectId, settlements, criteria);
+  }
+
+  /**
    * Every criterion this project states, with the two dimensions the card reports.
    *
    * One query, and the fold over its rows is `criterionLanding`'s — the same nested read the
