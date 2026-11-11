@@ -252,3 +252,41 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
   计费的 key，key 之间按 models.dev 价格排。不把订阅折算成 API 价格。
 - **B. 默认开**，Optimize For = Cost。Agent 设置里可关。
 - **C. 一轮结束时还有后台 SubAgent**：会话保持 Running，SubAgent 结束时唤醒父会话，与 `bg_run` 一致；停放推迟到它们结束。
+
+## 10. 跨 workspace 的 SubAgent（owner，2026-11-11 追加）
+
+例：`orbit-develop`（HPC）上的会话把「在 Mac 上跑 iOS 构建和测试」交给 `orbit-macos`（Mac mini）。两台机器没有共同的
+工作目录，所以跨 workspace 的 SubAgent 与同机的有三点不同。owner 已定：**只回文字，不带改动**；**点名或按能力自动选**；
+**加进本项目**。
+
+### 10.1 选哪个 workspace
+
+| # | 条件 | 结果 |
+|---|---|---|
+| 1 | `delegate(workspace="orbit-macos")` | 点名的那个 |
+| 2 | `delegate(needs=["os:darwin"])` 或定义文件 `needs:` | 在候选 workspace 里选：同一 owner、启用、`repoUrl` 与父会话的 workspace 相同、runner 在线且报告了全部所需能力；多个时按额度余量，再按 Agents 列表顺序 |
+| 3 | 都没写 | 父会话本机（§5，同一 cwd） |
+
+- `repoUrl` 不同（或任一为空）一律拒绝：`SUBAGENT_WORKSPACE_REPO_MISMATCH`。跨仓库的活用 `session_create`。
+- runner 目前不报告操作系统；runner 任务要加上 `os:<GOOS>`（`os:darwin`、`os:linux`）。其他能力沿用 `Runner.capabilities`。
+- 目标 workspace 的 Agent 必须开着 SubAgents（`subagentsEnabled`），并发上限按**目标**会话树算在父会话的上限里。
+
+### 10.2 在哪里跑、改动去哪
+
+- 服务端把 SubAgent 派给目标 runner；目标 runner 在该 workspace 的 workDir 上建一个**临时的、detached 的 worktree**
+  （目标 workspace 自己的 HEAD），子引擎在里面跑；结束后整个删掉。workDir 不是 git 仓库时直接拒绝
+  （`SUBAGENT_WORKSPACE_NOT_GIT`），不在别人的工作目录里乱写。
+- **只交回文字结果**：不把任何文件带回父会话，也不留在目标 workspace。结果末尾由 runner 附一行
+  `Discarded changes: <n> files (<paths…>)`，让父 Agent 知道它改过什么但没有带回。
+- 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，
+  父 Agent 需要它看到新代码时，自己先提交并推送（或者在 prompt 里写清楚）。
+
+### 10.3 路由、显示、生命周期
+
+- 路由（§4）的候选池按**目标 runner** 的引擎、登录、额度算；`decision` 记 `workspaceId` 和选中它的理由。
+- 事件由目标 runner 发给服务端，服务端以父会话的 `sessionId`、`parentToolUseId` = `delegate` 调用写进父会话的事件流；
+  只有被派到的那台 runner 能为这次运行写事件（按 `subagent_run` 的 `target_runner_id` 鉴权）。
+- 块头多一项：`general · M · Claude Sonnet 5.5 · on orbit-macos`；Why 里写 workspace 是怎么选出来的。
+- 审批卡照 §5.3 发到父会话。父会话停止 / 结束时，服务端通知目标 runner 停掉它（宽限 10 s）；目标 runner 掉线时记
+  `INTERRUPTED` 并唤醒父会话。花费照样计入父会话。
+- `subagent_run` 加列：`workspace_id`、`target_runner_id`。
