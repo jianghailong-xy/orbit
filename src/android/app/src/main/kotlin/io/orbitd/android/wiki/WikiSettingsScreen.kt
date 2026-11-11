@@ -607,7 +607,7 @@ internal fun WikiCreateSheet(store: WikiStore, data: DirectoryData, close: () ->
         { id -> workspace(id)?.repository?.let(WikiStartCopy::createRepositoryNote) ?: WikiModeCopy.repoFromNote },
         WikiMaintenanceChoice(null, maintenance.dailyRunLimit, WikiModeLogic.lookbackChoice(maintenance.lookbackDays),
             WikiModeLogic.lookbackDaysOffered(maintenance.lookbackDays)),
-        state.systemModel?.takeIf { state.serverExecutes }, state.busy, refusal, close) { choice ->
+        state.systemModel?.takeIf { state.serverExecutes }, state.busy, refusal, close = close) { choice ->
         val picked = workspace(choice.workspaceId)
         val repository = picked?.repository
         val repoUrl = picked?.repoUrl
