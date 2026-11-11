@@ -20355,6 +20355,26 @@ div.landing-jobs-open {
   font-size: 13px;
   text-align: left;
 }
+/* What queued an attempt: the chat's user bubble (docs/mocks/landings-chat-trigger), its time always shown — it is
+   when the landing started, as the turn foot's is when it ended. */
+.landings-window-trigger {
+  margin: 10px 12px 4px auto;
+}
+.landings-window-trigger .md p {
+  margin: 0;
+}
+.landings-window-trigger .chat-user.is-link {
+  cursor: pointer;
+}
+.landings-window-trigger .chat-user.is-link:focus {
+  outline: none;
+}
+.landings-window-trigger .chat-user.is-link:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--brand);
+}
+.landings-window-trigger-meta > .chat-time {
+  opacity: 1;
+}
 .landings-window-reply {
   margin: 2px 0 0;
   cursor: pointer;
@@ -20401,9 +20421,19 @@ div.landing-jobs-open {
   border: 0;
   background: transparent;
   color: inherit;
-  font: inherit;
+  /* The family only: the size is the chat tool row's own 12.5px, as every tool call's. */
+  font-family: inherit;
   text-align: left;
   cursor: pointer;
+}
+/* No focus box on a press; the keyboard's focus reads as the row's hover. */
+.landing-step-row:focus,
+.landings-window-steps-line:focus {
+  outline: none;
+}
+.landing-step-row:focus-visible,
+.landings-window-steps-line:focus-visible {
+  background: var(--bg-sunken);
 }
 .landing-step-detail {
   padding: 6px 12px 8px;

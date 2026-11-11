@@ -47,6 +47,31 @@ describe('landingSteps', () => {
     expect(steps[4].at).toBe(entries[14].at);
   });
 
+  it('leaves what queued an attempt to its trigger: the steps start at Claim, and a stop while queued stays a step', () => {
+    const queued = [
+      line('RETRY', 'Rerun by the coordinator · the baseline was repaired', { claim: 0 }),
+      line('ENQUEUED', 'Queued again to land on project/p1', { claim: 0 }),
+      line('CLAIMED', 'Claimed by runner workstation-gpu · claim 1'),
+      line('RESULT', 'Landed on project/p1 · 9afb7d1', { data: { state: 'LANDED' } }),
+    ];
+    expect(landingSteps(queued, 'LAND_TASK', true).map((step) => step.name)).toEqual(['Claim', 'Push']);
+    // Without a trigger (an older server) the Queue step still says it.
+    expect(landingSteps(queued, 'LAND_TASK').map((step) => step.name)).toEqual(['Queue', 'Claim', 'Push']);
+    const merged = [
+      line('CONFIRMATION', 'Confirmed by Automatic', { claim: 0 }),
+      line('AUTOMATIC_ATTEMPT', 'Automatic merge 1 of 3 · if main moves again, it asks the owner', { claim: 0 }),
+      line('ENQUEUED', 'Merging into main on its own — Automatic is on', { claim: 0 }),
+      line('CLAIMED', 'Claimed by runner workstation-gpu · claim 1'),
+    ];
+    expect(landingSteps(merged, 'LAND_PROMOTION', true).map((step) => step.name)).toEqual(['Claim']);
+    const stopped = [
+      line('ENQUEUED', 'Task marked done · queued to land on project/p1', { claim: 0 }),
+      line('STOP_REQUESTED', 'Stopped by the owner before it ran', { claim: 0 }),
+    ];
+    expect(landingSteps(stopped, 'LAND_TASK', true).map((step) => [step.name, step.summary.text]))
+      .toEqual([['Queue', 'Stopped by the owner before it ran']]);
+  });
+
   it('keeps a failed check’s result in its check, so no Push row says a push failed', () => {
     const steps = landingSteps([
       line('ENQUEUED', 'Task marked done'),

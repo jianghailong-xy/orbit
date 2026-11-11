@@ -487,6 +487,38 @@ export interface IntegrationTimelineSection<Instant = string> {
   state: string;
   /** Oldest first: by claim, then by round, then by the instant the fact happened. */
   entries: IntegrationTimelineEntry<Instant>[];
+  /** What put this attempt on the queue: the opening message of its turn in a client
+   *  (docs/mocks/landings-chat-trigger). Absent from a server older than it. */
+  trigger?: IntegrationTimelineTrigger<Instant>;
+}
+
+/**
+ * What put one attempt on the queue, read off the attempt's own row at read time (nothing is
+ * copied): why, who, what was handed over, and the conversation to open for it. A client words it;
+ * the server writes no sentence for it.
+ *
+ * - `DONE`: the task was marked done and its branch handed over — `by` TASK, `sessionId` the work
+ *   session.
+ * - `RETRY`: a rerun — `by` COORDINATOR (its `sessionId`), OWNER, or ORBIT; `reason` is the one given.
+ * - `BACKFILL` / `BEHIND_WORK`: Orbit queued it — the project started integrating, or the task's
+ *   work ended on another branch.
+ * - `CHECK`: a merge round's check of the project line, queued by Orbit.
+ * - `CONFIRMED`: a merge into main, confirmed by AUTOMATIC or the OWNER.
+ * - `OBSERVE`: Orbit looking for finished work on the line.
+ */
+export interface IntegrationTimelineTrigger<Instant = string> {
+  cause: 'DONE' | 'RETRY' | 'BACKFILL' | 'BEHIND_WORK' | 'CHECK' | 'CONFIRMED' | 'OBSERVE';
+  by: 'TASK' | 'COORDINATOR' | 'OWNER' | 'AUTOMATIC' | 'ORBIT';
+  /** When it was queued. */
+  at: Instant;
+  /** The branch handed over (`refs/heads/…`). */
+  sourceRef: string;
+  /** The commit handed over, where it is known: the attempt's own pushed source, a merge
+   *  candidate's tip, or — for a task's newest attempt — the task's delivered commit. */
+  sourceSha: string | null;
+  /** The conversation it came from: the task's work session, or the coordinator that asked. */
+  sessionId: string | null;
+  reason: string | null;
 }
 
 /** A subject-level derived fact that belongs to no one attempt (a fix task, the promotion state). */
