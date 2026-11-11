@@ -71,7 +71,8 @@ internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: 
                     style = MaterialTheme.typography.titleMedium)
                 Text("✦", Modifier.clearAndSetSemantics { }, color = AgentTone, style = MaterialTheme.typography.labelLarge)
                 Text("SubAgent", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
-                description?.let { Text(it, Modifier.weight(1f, fill = false), color = grey, style = MaterialTheme.typography.labelLarge,
+                description?.let { Text(it, Modifier.weight(1f, fill = false), color = grey, fontWeight = FontWeight.Normal,
+                    style = MaterialTheme.typography.labelLarge,
                     maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 when {
                     failed -> Text("Failed", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
