@@ -456,6 +456,68 @@ of the request:
   sign-in. The claim it names says how: `aud` names another client, and `exp` an expired token, which points
   at the apiserver's clock.
 
+## Configure outgoing email
+
+Orbit can send one email: a welcome email to each new account, through [Resend](https://resend.com). It is
+off until an administrator sets it up. Like Google sign-in, the settings live in the database, not in `.env`,
+and apply from the next request without a restart. The deployment itself must provide:
+
+- `PUBLIC_ORIGIN`, the address people open Orbit at: the email's **Open Orbit** button and its links point there.
+- `PROVIDER_SECRET_KEY`, which encrypts the saved Resend API key.
+- Outbound HTTPS from the apiserver to `api.resend.com`.
+
+### Set up Resend
+
+1. Create an account at [resend.com](https://resend.com).
+2. In Resend, open **Domains → Add Domain** and add the domain you will send from, for example `example.com`.
+   Add the DNS records Resend lists (SPF, DKIM and, if offered, the return-path record) at your DNS provider,
+   then press **Verify DNS Records**. Wait until the domain reads **Verified**; until then Resend refuses every
+   send from it with `403 The example.com domain is not verified`.
+3. In Resend, open **API Keys → Create API Key**. **Sending access** is enough; you can limit it to the domain
+   from step 2. Copy the key (it starts with `re_`). Resend shows it only once.
+4. In Orbit, sign in as an administrator and open **Admin → Email** (Admin is in the account menu). Paste the key
+   under **Resend API key**, fill in **From** with an address on the verified domain, such as
+   `Orbit <orbit@example.com>`, and switch on **Send email from this deployment**. **Reply-To** is optional:
+   left empty, replies go to the first administrator's address. **Send a welcome email to new accounts** is on
+   by default. Press **Save**. The badge beside **Outgoing email** turns to **On**.
+5. Press **Send test email**. Orbit sends a short email to your own address and shows what Resend answered:
+   the email's id, or the HTTP status and Resend's message.
+
+### What gets sent
+
+- Every account created after the setting is on gets one welcome email: a Google sign-up, and an account an
+  administrator creates in **Admin → Users**. It says which address and deployment the account is on, how to
+  sign in (with Google, or with the password the administrator gave them), and how to get started. It never
+  contains a password, a token or a sign-in link. The first administrator created at `/setup` gets none.
+- Accounts that existed before email was set up get none, and neither do accounts created while it was off or
+  while the welcome toggle was off. An administrator can send one by hand: **Send welcome email** in the
+  account's ⋯ menu in **Admin → Users**.
+- A failed send is tried again after 1 minute, 10 minutes and 1 hour. After the fourth failure it is marked
+  failed, and **Admin → Users** shows **Welcome email failed** under the account's status (hover for Resend's
+  error), with **Send welcome email** in its menu. A `422` from Resend (an address it will not send to) is
+  marked failed at once. **Admin → Email** shows how many were sent and failed in the last 7 days.
+- Each send carries an `Idempotency-Key`, so Resend does not deliver an email twice when the apiserver
+  restarts in the middle of a send. Several apiservers never send the same email twice.
+
+The API key is encrypted with `PROVIDER_SECRET_KEY` and never shown again. Leave the field empty to keep the
+saved key, or paste a new one to replace it. After `PROVIDER_SECRET_KEY` changes, the saved key can no longer be
+read: **Admin → Email** asks for it again, and sending pauses (nothing is lost or counted as failed) until it is
+pasted again.
+
+### Email troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| Send test email: `Resend answered 403 — The example.com domain is not verified` | The From domain is not verified in Resend yet (step 2), or From uses another domain. |
+| Send test email: `Resend answered 401 — API key is invalid` | The key was deleted or mistyped. Create a new one and paste it. |
+| Send test email: `Resend answered 403 — You can only send testing emails to your own email address` | No domain is verified, and the account still sends from Resend's test domain. Verify a domain and use it in From. |
+| The badge reads **Off** | The switch is off, or the API key or From is missing. The card says which. |
+| Users show **Welcome email failed** | Hover the line for Resend's error. Fix the cause, then use **Send welcome email** in the account's menu. |
+
+The apiserver logs a `401` or `403` from Resend under `EmailOutbox`
+(`docker compose logs apiserver | grep EmailOutbox`). The line names the account's id and Resend's message,
+never the key.
+
 ## Wiki System model
 
 The `wiki-worker` service calls the wiki's System model: a model endpoint that speaks the Anthropic Messages API, such
@@ -954,7 +1016,10 @@ apiservers (below):
   release.
 
 It sends everything else a person does to the first apiserver. A Codex "Sign in with ChatGPT" runs its sign-in in the
-process that started it, so all of one person's other requests must reach that same process.
+process that started it, so all of one person's other requests must reach that same process. While the first apiserver
+is stopping or stopped, as an upgrade recreates it, those requests go to the others
+(`gateway/several-apiservers/first/`), and back to the first once it answers again. A sign-in that was under way when it
+stopped has to be started again.
 
 **Runners on the link.** Several apiservers need every runner to work over the [runner link](#runner-link), as every
 runner of this release does.
@@ -1028,6 +1093,31 @@ a 502, and the link gateway sends the call again or tells the runner to.
 - If you set `keepalive_timeout` in the web gateway's upstreams, or put another proxy or load balancer in front of the
   apiservers, keep its idle timeout under 120 seconds.
 
+One hop out the rule holds the same way. The web gateway keeps a client's idle connection for 120 seconds
+(`keepalive_timeout` in `gateway/nginx.conf`), and runners close theirs after 90 seconds, Go's default. A test in the
+runner (`src/runner-go/idle_connections_test.go`) fails if a runner's client would keep one as long as the gateway does.
+
+**How an apiserver stops.** On `docker stop`, so also when an upgrade or `docker compose up` recreates it, an apiserver
+stops by itself and loses nothing that is in flight (`src/apiserver/src/common/graceful-stop.ts`):
+
+1. It stops accepting connections, on port 3000 and on `RUNNER_LINK_INTERNAL_PORT`. The web gateway and the link
+   gateway find the connection refused at once, and send the request to another apiserver. They do this for a POST too,
+   since none of it was sent.
+2. Its session streams and control-plane streams end. The clients open them again on another apiserver: each session
+   stream picks up after the last stored event it had.
+3. It finishes the requests in flight, for up to 6 seconds. Each answer tells the caller to close the connection, and
+   the apiserver closes it once the answer is sent. It closes idle connections at once.
+4. It then stops its background work and closes NATS, its coordination connection and the database. The leader's lock
+   goes with that connection, so another apiserver takes over the reaper and the sweeps at its next poll.
+5. It exits, but no sooner than 4 seconds after the stop began. Until then its address refuses connections, so a
+   session stream that opens again a moment later is sent to another apiserver at once. An address that no longer
+   answers at all would make the web gateway wait out its 2-second connect timeout first.
+
+It exits 0 within 9 seconds, inside Docker's default grace period of 10 seconds. A request still unanswered after the
+6 seconds is cut, and its caller asks again. Only the slow ones wait that long, such as a merge called with
+`waitSeconds`. If the migration that runs before it starts is still running when the stop comes, Docker waits out the
+grace period and kills the container.
+
 **How the session streams are spread:**
 
 - **By session.** The web gateway hashes the session's id in the stream's address, so all of one session's streams,
@@ -1036,9 +1126,9 @@ a 502, and the link gateway sends the call again or tells the runner to.
   a stream addressed by its UUID can reach another apiserver, which costs that apiserver a subscription of its own.
 - **When the set changes.** When an apiserver is added or stops, some sessions move to another apiserver, each when its
   stream next connects. A stream already open stays where it is.
-- **When an apiserver stops.** Its streams end, and the clients open them again on the others: the web gateway gives up
-  on the stopped one after 2 seconds, then leaves it out. Each stream picks up from the last stored event it had, and
-  the deltas go on.
+- **When an apiserver stops.** Its streams end, and the clients open them again on the others. A stopping apiserver
+  refuses connections, so the web gateway moves on at once. It gives up on one that went away without stopping after
+  2 seconds, then leaves it out. Each stream picks up from the last stored event it had, and the deltas go on.
 - **When the web gateway starts.** It looks the name up as it starts, which Compose does once the first apiserver is
   healthy. Had no apiserver been running then, the two routes would answer 502 until its next look-up, 10 seconds
   later.

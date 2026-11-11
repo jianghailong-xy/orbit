@@ -83,6 +83,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
 import io.orbitd.android.management.LocalSessionRecaps
+import io.orbitd.android.tasks.resolvedRunState
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastTone
 import io.orbitd.android.navigation.*
@@ -120,6 +121,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val listedTurns = state.session?.snapshot?.queuedTurns.orEmpty()
     val atTail = state.window.newerAfter == null
     val rows = remember(state.window.events, listedTurns, atTail) { Steps.group(transcriptRows(state.window.events, listedTurns, holdsSteers = atTail)) }
+    // What the list draws: the same rows with the turns Orbit opened folded into a line each, runs of them together (ExchangeFold).
+    // Every other reading of the conversation keeps [rows], which hold each event. A watch's line names its target as the wake's own
+    // line does, once the names below are known.
+    var wakeNames by remember(handle, route.id) { mutableStateOf<(String, JsonObject) -> String?>({ _, _ -> null }) }
+    val shownRows = remember(rows, wakeNames) { ExchangeFold.fold(rows, wakeNames) }
+    // Each turn's head row, under the message that opened it (web `TurnHead`); only the newest may count up.
+    val turnHeads = remember(state.window.events) { TurnHeads.of(state.window.events) }
+    val newestHead = turnHeads.keys.maxOrNull()
     // What the tray holds, off the same events the rows leave them out of — or the live transcript's, while the reader is in history.
     val steerEvents = if (atTail) state.window.events else state.session?.transcript?.events.orEmpty()
     val unreadSteers = remember(steerEvents, listedTurns) { SteerDelivery.place(steerEvents, listedTurns).unread }
@@ -162,7 +171,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
-    val currentRows by rememberUpdatedState(rows)
+    val currentRows by rememberUpdatedState(shownRows)
     val nested = remember { object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             if (source == NestedScrollSource.UserInput) { follow = false; dragging = true }
@@ -385,8 +394,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val targetNames = remember(cards.watches, cards.created, sessionTitles) {
         { watchId: String, target: JsonObject -> watchTargetName(watchId, target, cards.watches.map { it.source }, { sessionTitles(it) }, cards.created) }
     }
+    LaunchedEffect(targetNames) { wakeNames = targetNames }
+    val exchangeTree = rememberExchangeTree(app, handle, state.session?.snapshot?.detail)
     CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
-        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions) {
+        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
+        LocalExchangeTree provides exchangeTree) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
@@ -396,7 +408,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // measure says whether it is on screen), and a composer that takes typing, with room, in a window no dialog covers.
         if (lastPage != null) {
             val focused = LocalWindowInfo.current.isWindowFocused
-            val tail = rows.lastOrNull()?.takeIf { !state.denied && state.window.seeded && state.window.newerAfter == null }?.let { it.key to it.newestSeq }
+            val tail = shownRows.lastOrNull()?.takeIf { !state.denied && state.window.seeded && state.window.newerAfter == null }?.let { it.key to it.newestSeq }
             val composerUsable = composerState.loaded && composerHeight > 0.dp && focused && !state.denied
             SideEffect { lastPage.composed(view, tail, state.firstSeed, composerUsable) }
         }
@@ -409,7 +421,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // which is when the jump row shows too; at the tail the reader is following the answer to what they just asked, and the
         // bar's middle stays empty. Only the capsule reads the named question, so a scroll past one redraws it alone; and the bar
         // keeps the content it is first handed, so both are states the content reads as it draws.
-        val question = rememberStuckQuestion(rows, list)
+        val question = rememberStuckQuestion(shownRows, list)
         val offTail by rememberUpdatedState(!state.denied && (!follow || state.window.newerAfter != null))
         // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8), bound while this page shows.
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
@@ -449,11 +461,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         }
                     })
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
-                val displayedRows = rows
+                val displayedRows = shownRows
                 val displayedWindow = state.window
                 // Inside the row it follows, so no list index moves: the reader's jumps count rows.
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
+                // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
+                // merely live: a turn stopped without a `turn_end` would count up for as long as the session waits (iOS reads `.running` too).
+                val sessionLive = live != null && (worktreeState.detail ?: snapshotDetail)?.let(::resolvedRunState) == "RUNNING"
                 val displayedLoading = state.loading
                 val targetSeq = state.targetSeq
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().fadesIntoComposerBand().onSizeChanged {
@@ -504,9 +519,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> if (it.steps.isNotEmpty()) "steps" else it.event.type }) { index, row ->
                         val asked = ownerPlaced[index]
-                        if (asked == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))
+                        // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
+                        val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
+                        val drawRow: @Composable () -> Unit = {
+                            if (head == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
+                            else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
+                                TurnHeadLine(head, ticking = sessionLive && row.event.seq == newestHead)
+                            }
+                        }
+                        if (asked == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))
+                            drawRow()
                             asked.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
                         }
                     }
@@ -549,9 +573,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // Android's jump stays a row under the list (iOS floats a disc 6 pt above the fade): below the list, so never in its fade.
                 if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth().testTag("transcript-jump"), horizontalArrangement = Arrangement.SpaceEvenly) {
                     TextButton(onClick = {
-                        val last = rows.lastOrNull { it.event.type == "user" }
+                        val last = shownRows.lastOrNull { it.event.type == "user" }
                         if (last != null) model.show(last.event.seq)
-                    }, enabled = rows.any { it.event.type == "user" }) { Text("Last question") }
+                    }, enabled = shownRows.any { it.event.type == "user" }) { Text("Last question") }
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
                 // Android's own, as iOS's console shows no connection: only while the stream is being made again (A06-18), under

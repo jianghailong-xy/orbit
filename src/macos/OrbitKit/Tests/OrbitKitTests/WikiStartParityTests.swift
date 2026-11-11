@@ -654,7 +654,7 @@ final class WikiStartParityTests: XCTestCase {
                            "if chosen == nil { Text(WikiModeCopy.noWorkspace).tag(String?.none) }", "if let repository = group.repository {",
                            "Section(repository) { options(group.choices) }"], "the form's picker")
         assertOrder(form, ["if let refusal {", "Text(refusal).foregroundStyle(.red)", "Button(submitLabel) {"], "the form's end")
-        let answer = try slice(form, from: "Button(submitLabel) {", to: ".disabled(saving || chosen == nil)")
+        let answer = try slice(form, from: "Button(submitLabel) {", to: ".disabled(saving || chosen == nil || probed?.canTurnOn == false)")
         assertOrder(answer, ["answer.workspaceID = chosen", "refusal = await submit(answer)", "saving = false", "if refusal == nil { dismiss() }"],
                     "the form stays open on a refusal")
         let setUp = try slice(settings, from: "struct WikiSetUpSheet: View {", to: "struct WikiCreateSheet: View {")

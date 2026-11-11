@@ -35,6 +35,8 @@ type wikiPlanRepo struct {
 	headings map[string][]wikiPlanHeading
 	symbols  map[string][]string
 	blobs    map[string]string
+	// A folder's tree (wiki_repo_folder.go): every text there is was read with the rest, and there is no git to ask.
+	folder bool
 }
 
 type wikiPlanHeading struct {
@@ -321,7 +323,7 @@ func wikiPlanSymbols(file, text string) []string {
 
 // blobOf is a file's text at the sha, read now if it was not read with the rest.
 func (r *wikiPlanRepo) blobOf(file string) string {
-	if text, ok := r.blobs[file]; ok {
+	if text, ok := r.blobs[file]; ok || r.folder {
 		return text
 	}
 	out, err := wikiPlanGitOutput(r.root, "show", r.sha+":"+file)

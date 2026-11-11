@@ -5,7 +5,7 @@
 import { WIKI_MAINTENANCE_RULES, type WikiCursorOutcome } from './wiki';
 import type { WikiMaintenanceFailureKind, WikiMaintenanceHeldReason } from './wikiMaintain';
 import type { WikiExecutorView } from './wikiJobs';
-import type { WikiRepoLook } from './wikiRepoOps';
+import type { WikiRepoLook, WikiRepoTier, WikiRepoTierReason } from './wikiRepoOps';
 import type { WikiSystemModelStatus } from './wikiSystemModel';
 
 /**
@@ -25,6 +25,12 @@ export const WIKI_MAINTENANCE_HEALTH = {
    */
   notifyNoNotesAfterRuns: 3,
   notifyNoNotesMinSessions: 20,
+  /**
+   * The maintenance runs in a row whose repository was read for a red reason (`WIKI_REPO_ATTENTION_REASONS`) at which the
+   * owner is told, once for the streak; a run that reads the repository sets the count back to 0
+   * (docs/wiki-repo-tiers-design.md §6, `wiki_cursor.repo_attention_runs`).
+   */
+  notifyRepositoryAfterRuns: 3,
 } as const;
 
 /** A space's maintenance run, as the status line reads it. */
@@ -80,6 +86,20 @@ export interface WikiSpaceRepoHealth {
   runner: { id: string; name: string; version: string | null; capability: boolean; online: boolean } | null;
   /** The space's repository operations that have not settled — what a reader is waiting on. */
   pending: number;
+  /**
+   * What the latest maintenance run read of the repository (docs/wiki-repo-tiers-design.md §7.1): `git`, `folder`,
+   * `sessions` or `wrong_repository`, null while no run has read it. Absent from a control plane older than that.
+   */
+  tier?: WikiRepoTier | null;
+  /** Why it read less than git (contract `repoOps.reasons`); null on `git` and `folder`. */
+  reason?: WikiRepoTierReason | null;
+  /**
+   * That reason as one English sentence, redacted (`~/work/app was not found on MacBook`), and on `folder` what the
+   * folder is (`~/work/app is not a git checkout`, the hint after `Commit anchors are not checked:`); null on `git`.
+   */
+  detail?: string | null;
+  /** When the run read it. */
+  checkedAt?: string | null;
 }
 
 /** `GET /api/wiki/spaces/:id/health`. */

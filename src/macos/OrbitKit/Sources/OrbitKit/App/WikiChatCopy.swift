@@ -197,6 +197,20 @@ public enum WikiChatCopy {
 
     public static let history = "Chats in this space"
     public static let noHistory = "No chats in this space yet"
+    // The history the title opens (board 45 ④, owner 11-11).
+    public static let historyTitle = "Chats"
+    public static let search = "Search chats"
+    public static let noMatch = "No chats match"
+    public static let groupOpen = "Open"
+    public static let groupCompleted = "Completed"
+    public static let showMore = "Show more"
+    public static let trashNote = "Chats you move to Trash stay there for 30 days. Restore them from Trash in the session list."
+    public static let rowActions = "Chat actions"
+    public static let rename = "Rename…"
+    public static let renameField = "Chat name"
+    public static let complete = "Complete"
+    public static let moveToTrash = "Move to Trash"
+    public static let actionFailed = "That didn’t work. Try again in a moment."
     public static let openSession = "Open as a full session"
     public static let close = "Hide chat"
     public static let resize = "Resize chat"
@@ -324,6 +338,19 @@ public enum WikiChatCopy {
         "WIKI_CHAT_CHOOSE_WORKSPACE": chooseWorkspace,
         "WIKI_CHAT_HISTORY": history,
         "WIKI_CHAT_NO_HISTORY": noHistory,
+        "WIKI_CHAT_HISTORY_TITLE": historyTitle,
+        "WIKI_CHAT_SEARCH": search,
+        "WIKI_CHAT_NO_MATCH": noMatch,
+        "WIKI_CHAT_GROUP_OPEN": groupOpen,
+        "WIKI_CHAT_GROUP_COMPLETED": groupCompleted,
+        "WIKI_CHAT_SHOW_MORE": showMore,
+        "WIKI_CHAT_TRASH_NOTE": trashNote,
+        "WIKI_CHAT_ROW_ACTIONS": rowActions,
+        "WIKI_CHAT_RENAME": rename,
+        "WIKI_CHAT_RENAME_FIELD": renameField,
+        "WIKI_CHAT_COMPLETE": complete,
+        "WIKI_CHAT_MOVE_TO_TRASH": moveToTrash,
+        "WIKI_CHAT_ACTION_FAILED": actionFailed,
         "WIKI_CHAT_OPEN_SESSION": openSession,
         "WIKI_CHAT_CLOSE": close,
         "WIKI_CHAT_RESIZE": resize,

@@ -81,6 +81,10 @@ export const ANSWER_NOT_SHOWN = 'Not shown to you — the recommended answer was
 export const BEFORE_REVIEW = 'Before the review came in';
 /** The card the reviewer's own conversation draws for the turn that asks it to review (§2 D7). */
 export const REVIEW_REQUESTED = 'Review requested';
+/** The card the reviewer's conversation draws for the owner's answers handed to it (§7 Q5). */
+export const YOU_CONFIRMED = 'You confirmed';
+export const ANSWERS_SENT_TO_REVIEWER = 'Your answers, sent to this reviewer';
+export const REVIEWER_WAS_TOLD = 'What the reviewer was told';
 
 export function reviewingSince(time: string): string {
   return `${REVIEWING_SINCE} ${time}`;

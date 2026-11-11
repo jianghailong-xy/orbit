@@ -208,7 +208,7 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
 
     func testTheCardsTitlesMatchTheWebCard() throws {
         let web = try flat(Self.webCard)
-        let titles = try section(web, from: "function title(", to: "\n}", Self.webCard)
+        let titles = try section(web, from: "function backgroundWakeTitle(", to: "\n}", Self.webCard)
 
         assertWritten(titles, BackgroundWakeCard.title(wake(jobs: [])),
                       "the title of a turn a wakeup opened", Self.webCard)
@@ -245,7 +245,7 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
 
     func testTheLineNamesAndClosesInTheSameWords() throws {
         let web = try flat(Self.webCard)
-        let name = try section(web, from: "function lineName(", to: "\n}", Self.webCard)
+        let name = try section(web, from: "function backgroundWakeName(", to: "\n}", Self.webCard)
         let closing = try section(web, from: "function lineStatus(", to: "\n}", Self.webCard)
 
         XCTAssertEqual(BackgroundWakeCard.lineName(wake(jobs: [job(description: "upgrade")])), "upgrade")

@@ -708,6 +708,10 @@ public enum OwnerConfirmations {
     public static let beforeReview = "Before the review came in"
     /// The card the reviewer's own conversation draws for the turn that asks it to review (§2 D7).
     public static let reviewRequested = "Review requested"
+    /// The card the reviewer's conversation draws for the owner's answers handed to it (§7 Q5).
+    public static let youConfirmed = "You confirmed"
+    public static let answersSentToReviewer = "Your answers, sent to this reviewer"
+    public static let reviewerWasTold = "What the reviewer was told"
     /// The press onto the run's session — the exception card's words for the same door.
     public static let openTaskSession = "Open task session"
 
@@ -1065,18 +1069,22 @@ public enum OwnerConfirmations {
         "\(count) \(count == 1 ? one : many)"
     }
 
-    /// The moment, in the words both receipts use: "16:00", or "9/10 16:00" when it was another
-    /// day. Fixed 24-hour clock rather than the browser's locale-formatted one — the two ends say
-    /// the same thing, each in its own reader's convention.
+    /// The moment, in the words both receipts use: the reader's own short clock ("4:00 PM", or "16:00"
+    /// where that is the convention), with "9/10" before it when it was another day — the same clock
+    /// the transcript's own times use (`EvidenceDecisions.receiptTime`, web `decisionReceiptTime`).
     public static func receiptTime(_ iso: String, now: Date = Date(),
                                    calendar: Calendar = .current,
-                                   timeZone: TimeZone = .current) -> String? {
+                                   timeZone: TimeZone = .current,
+                                   locale: Locale = .current) -> String? {
         guard let at = RelativeTime.parse(iso) else { return nil }
         var cal = calendar
         cal.timeZone = timeZone
-        let parts = cal.dateComponents([.hour, .minute], from: at)
-        guard let hour = parts.hour, let minute = parts.minute else { return nil }
-        let clock = String(format: "%02d:%02d", hour, minute)
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        let clock = formatter.string(from: at)
         guard !cal.isDate(at, inSameDayAs: now) else { return clock }
         let day = cal.dateComponents([.month, .day], from: at)
         guard let month = day.month, let dayOfMonth = day.day else { return clock }

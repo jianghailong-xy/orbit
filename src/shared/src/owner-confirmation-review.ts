@@ -178,3 +178,25 @@ export interface ConfirmationReturnCard {
   reason: string;
   problems: ConfirmationReviewItem[];
 }
+
+/**
+ * The reading the reviewer's `owner-confirmation-answers:v1:` turn carries on its `user` event (§7 Q5):
+ * drawn as "You confirmed" with the owner's answers, never as the owner's own message. Each answer is
+ * the option's label (`choice`), or the owner's own words (`text`) when they wrote them instead.
+ */
+export interface ConfirmationAnswersCard {
+  decisionId: string;
+  taskId: string;
+  title: string;
+  decidedAt: string;
+  answers: ConfirmationAnswersCardLine[];
+}
+
+export interface ConfirmationAnswersCardLine {
+  key: string;
+  question: string;
+  choice: string | null;
+  text: string | null;
+  /** The owner's app did not show this question; the recommended option was recorded (Q3). */
+  notShown: boolean;
+}

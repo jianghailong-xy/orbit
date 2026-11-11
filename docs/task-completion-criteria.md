@@ -116,6 +116,14 @@ evidence.
   decision, note included, is also on the revision in `task_evidence_list` for any session to read.
   A session narrower than the run that decision would end or hand the note to is held to
   `docs/session-request-reply-contract.md` §2.5.
+- **How the two turns are drawn** (owner, 2026-11-11, `docs/mocks/orbit-turn-cards/`). The review
+  turn's echo and queued row carry `evidenceReview` (`EvidenceReviewCard`: task, revision, the run's
+  claim, `dueAt` once handed out, and its state — OPEN, SUPERSEDED, DECIDED or CLOSED, read from the
+  rows as they stand), drawn as an `Evidence to review` card with the line saying who decides and by
+  when. The send-back turn carries `evidenceSendBack` (`EvidenceSendBackCard`: revision, the note, and
+  who sent it back — the session the block names, or the account owner), drawn as an
+  `Evidence sent back` card. Neither is drawn as the reader's own message; the block the agent read
+  folds at the card's foot.
 - **Back to the owner.** While the dispatching session holds the revision, nobody else is asked: no
   card, no count. It holds it while the delivery turn exists, that session has not ended, and 30
   minutes have not passed since the delivery — read at read time, nothing scheduled. After that, or

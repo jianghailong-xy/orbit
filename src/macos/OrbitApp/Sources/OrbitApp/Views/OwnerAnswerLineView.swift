@@ -109,6 +109,10 @@ private struct OpenOwnerAnswerKey: EnvironmentKey {
     static let defaultValue: (OwnerAnswerTold) -> Void = { _ in }
 }
 
+private struct RevealedItemIDKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
 private struct AnsweredQuestionsKey: EnvironmentKey {
     static let defaultValue: [String: ProjectClosedQuestion] = [:]
 }
@@ -126,6 +130,14 @@ extension EnvironmentValues {
     var answeredQuestions: [String: ProjectClosedQuestion] {
         get { self[AnsweredQuestionsKey.self] }
         set { self[AnsweredQuestionsKey.self] = newValue }
+    }
+
+    /// The transcript item a record link or a search hit last asked for (`ConsoleModel.revealedItemID`):
+    /// a long message from another session that is that item opens to show it. Nil where no console
+    /// sets it.
+    var revealedItemID: String? {
+        get { self[RevealedItemIDKey.self] }
+        set { self[RevealedItemIDKey.self] = newValue }
     }
 }
 
