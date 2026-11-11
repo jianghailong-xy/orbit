@@ -73,6 +73,7 @@ import { QueuedUserTurn } from './Transcript';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Radio, RadioGroup } from './ui/Radio';
+import { WelcomeExamples, WelcomeHead } from './WelcomeCard';
 import './MachineSetupCard.css';
 
 const TYPED_PATH_SETTLE_MS = 400;
@@ -299,6 +300,7 @@ export function MachineSetupCard({
   onFolder,
   onEngine,
   onUseApiKey,
+  welcome,
 }: {
   runner: Runner;
   /** Every runner of the account, which decides whether Cursor CLI is drawn at all (webShowsEngine). */
@@ -313,6 +315,9 @@ export function MachineSetupCard({
   /** Run on this engine's own sign-in instead, which is also how a key is left again. */
   onEngine: (engine: LoginEngine) => void;
   onUseApiKey: () => void;
+  /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it, and offers
+   *  first messages to try, which fill the page's composer. */
+  welcome?: { composerText: string; onExample: (text: string) => void };
 }) {
   const machine = machineName(runner);
   const offline = runner.online !== true;
@@ -336,15 +341,19 @@ export function MachineSetupCard({
 
   return (
     <div className="msc">
-      <div className="msc-head">
-        <span className="msc-head-icon">
-          <DesktopOutlined aria-hidden="true" />
-        </span>
-        <div>
-          <div className="msc-title">{setupTitle(machine)}</div>
-          <div className="msc-sub">{SETUP_LEAD}</div>
+      {welcome ? (
+        <WelcomeHead />
+      ) : (
+        <div className="msc-head">
+          <span className="msc-head-icon">
+            <DesktopOutlined aria-hidden="true" />
+          </span>
+          <div>
+            <div className="msc-title">{setupTitle(machine)}</div>
+            <div className="msc-sub">{SETUP_LEAD}</div>
+          </div>
         </div>
-      </div>
+      )}
 
       {offline ? (
         // Never heard from is a machine still coming up, not one gone away; and with nothing declared yet, not
@@ -423,6 +432,8 @@ export function MachineSetupCard({
           )}
         </div>
       </div>
+
+      {welcome && <WelcomeExamples step={3} picked={welcome.composerText} onPick={welcome.onExample} />}
 
       <div className={`msc-foot${ready ? ' ready' : ''}`}>
         {ready && folder
