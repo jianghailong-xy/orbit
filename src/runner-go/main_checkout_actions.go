@@ -50,7 +50,7 @@ func handleMainCheckoutRequest(t *Transport, req MainCheckoutRunnerRequest, deps
 	if req.Op == "action" && req.Command != nil {
 		expires = req.Command.ExpiresAt
 	}
-	if at, err := time.Parse(time.RFC3339Nano, expires); err == nil && time.Now().After(at) {
+	if pastDeadline(expires) {
 		logln(fmt.Sprintf("main checkout %s %s: past its deadline %s, not started", req.Op, req.ID, expires))
 		return
 	}
@@ -74,6 +74,16 @@ func handleMainCheckoutRequest(t *Transport, req MainCheckoutRunnerRequest, deps
 		logln("main checkout request", req.ID, "has an unknown op", req.Op)
 	}
 }
+
+// pastDeadline reports whether an RFC 3339 deadline has passed ("" never does).
+func pastDeadline(at string) bool {
+	t, err := time.Parse(time.RFC3339Nano, at)
+	return err == nil && time.Now().After(t)
+}
+
+// errMainCheckoutExpired is an action whose deadline passed while it waited for the checkout's lock
+// (a merge holding it): it is not started, and no result is sent.
+var errMainCheckoutExpired = errors.New("its deadline passed while it waited for the checkout")
 
 // postWithRetry posts an answer, a few times: the request is handed out once, so an answer lost
 // here leaves the person waiting for the timeout.
@@ -118,7 +128,7 @@ func runMainCheckoutAction(cmd MainCheckoutActionCommand, deps mainCheckoutDeps)
 	case mainCheckoutMove:
 		return moveMainCheckoutFiles(cmd, deps)
 	case mainCheckoutRescue:
-		return saveAndCleanMainCheckout(cmd, deps), nil
+		return saveAndCleanMainCheckout(cmd, deps)
 	default:
 		return MainCheckoutActionResult{}, fmt.Errorf("this runner does not do %q yet", cmd.Kind)
 	}
@@ -163,36 +173,39 @@ func mainCheckoutBlocked(state string) bool {
 // saveAndCleanMainCheckout is the rescue action: Clean up checkout, widened to a checkout that is
 // merely dirty (untracked files included), once its fingerprint matches the review. Nothing is
 // cleaned unless the rescue branch exists.
-func saveAndCleanMainCheckout(cmd MainCheckoutActionCommand, deps mainCheckoutDeps) MainCheckoutActionResult {
+func saveAndCleanMainCheckout(cmd MainCheckoutActionCommand, deps mainCheckoutDeps) (MainCheckoutActionResult, error) {
 	r := newMainCheckoutResult(cmd)
 	ctx := context.Background()
 	root, err := mainCheckoutRoot(ctx, cmd.Root)
 	if err != nil || (deps.owns != nil && !deps.owns(root)) {
 		r.GitMessage = "that checkout isn't one this runner works in"
-		return refuseMainCheckout(r, mainCheckoutFingerprintStale)
+		return refuseMainCheckout(r, mainCheckoutFingerprintStale), nil
 	}
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
 	defer lockMainCheckout(root)()
+	if pastDeadline(cmd.ExpiresAt) {
+		return r, errMainCheckoutExpired
+	}
 
 	scan, err := scanMainCheckout(ctx, root)
 	if err != nil {
 		r.GitMessage = firstLine(err.Error())
-		return refuseMainCheckout(r, mainCheckoutRescueFailed)
+		return refuseMainCheckout(r, mainCheckoutRescueFailed), nil
 	}
 	r.Branch = scan.Snapshot.Branch
 	if code := checkMainCheckoutFingerprint(&r, cmd.Fingerprint, scan); code != "" {
-		return refuseMainCheckout(r, code)
+		return refuseMainCheckout(r, code), nil
 	}
 	n := len(scan.All)
 	r.FileCount = &n
 	r.Head = scan.Snapshot.Head
 	if scan.Snapshot.Head == "" {
-		return refuseMainCheckout(r, mainCheckoutNoHead)
+		return refuseMainCheckout(r, mainCheckoutNoHead), nil
 	}
 	before := inspectRepoRoot(root)
 	if n == 0 && before.State == repoStateClean {
-		return finishMainCheckoutResult(r, mainCheckoutDone, "")
+		return finishMainCheckoutResult(r, mainCheckoutDone, ""), nil
 	}
 	if before.State == repoStateClean {
 		// inspectRepoRoot does not count untracked files; this action does.
@@ -211,10 +224,10 @@ func saveAndCleanMainCheckout(cmd MainCheckoutActionCommand, deps mainCheckoutDe
 	if out.Status != "done" {
 		r.GitMessage = clip(firstLine(out.Message), 300)
 		r.State = out.State
-		return refuseMainCheckout(r, mainCheckoutRescueFailed)
+		return refuseMainCheckout(r, mainCheckoutRescueFailed), nil
 	}
 	r.Head = headSha(root)
-	return finishMainCheckoutResult(r, mainCheckoutDone, "")
+	return finishMainCheckoutResult(r, mainCheckoutDone, ""), nil
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -330,6 +343,9 @@ func moveMainCheckoutFiles(cmd MainCheckoutActionCommand, deps mainCheckoutDeps)
 		return refuseMainCheckout(r, mainCheckoutFingerprintStale), nil
 	}
 	defer lockMainCheckout(root)()
+	if pastDeadline(cmd.ExpiresAt) {
+		return r, errMainCheckoutExpired
+	}
 
 	busy := func() bool { return deps.turnRunning != nil && deps.turnRunning(cmd.TargetSessionID) }
 	if busy() {

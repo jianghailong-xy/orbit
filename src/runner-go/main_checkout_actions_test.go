@@ -589,3 +589,28 @@ func findPosted(t *testing.T, posted map[string]json.RawMessage, suffix string) 
 	t.Fatalf("nothing posted to …%s (have %v)", suffix, posted)
 	return nil
 }
+
+// An action whose deadline passes while it waits for the checkout's lock (a merge holding it) is
+// not started: no result, nothing changed.
+func TestMainCheckoutActionPastItsDeadlineAfterTheLockIsNotStarted(t *testing.T) {
+	f := newMoveFixture(t)
+	mcWrite(t, f.repo, "a.txt", "one\nTWO\nthree\n")
+	cmd := f.cmd(t, "a.txt")
+	cmd.ExpiresAt = time.Now().Add(200 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+	unlock := lockMainCheckout(f.repo)
+	done := make(chan error)
+	go func() {
+		_, err := runMainCheckoutAction(cmd, f.deps())
+		done <- err
+	}()
+	time.Sleep(500 * time.Millisecond)
+	unlock()
+	if err := <-done; err != errMainCheckoutExpired {
+		t.Fatalf("err %v", err)
+	}
+	requireFiles(t, "source", f.repo, map[string]string{"a.txt": "one\nTWO\nthree\n"})
+	requireFiles(t, "target", f.target, map[string]string{"a.txt": "one\ntwo\nthree\n"})
+	if b := rescueBranches(t, f.repo); len(b) != 0 {
+		t.Fatalf("rescue branches %v", b)
+	}
+}
