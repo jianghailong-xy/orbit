@@ -209,7 +209,7 @@ test('doneReadiness: a confirmed CONFIRMATION criterion has no finding, an uncon
   // The landing fold's answer for a CONFIRMATION criterion, whatever work is filed under it.
   const [{ landing }] = criterionLanding(
     [{ id: 'crit', satisfiedBy: 'CONFIRMATION', servingTasks: [] }], BRANCHES);
-  const state = (satisfied: boolean): DoneState => ({
+  const state = (satisfied: boolean, nonCode = false): DoneState => ({
     criteria: [{
       stated: {
         ordinal: 1, key: 'k', text: 'ICP filing approved', definitionId: 'crit',
@@ -227,9 +227,33 @@ test('doneReadiness: a confirmed CONFIRMATION criterion has no finding, an uncon
     jobs: [],
     criteriaDigest: 'd',
     stateDigest: 's',
+    nonCode,
   });
   assert.deepEqual(doneReadiness(state(true), []).map((f) => f.code), []);
   assert.deepEqual(doneReadiness(state(false), []).map((f) => f.code), ['DONE_CRITERION_UNSATISFIED']);
+  // In a project marked non-code the two rules compose: still no landing finding either way.
+  assert.deepEqual(doneReadiness(state(true, true), []).map((f) => f.code), []);
+  assert.deepEqual(doneReadiness(state(false, true), []).map((f) => f.code), ['DONE_CRITERION_UNSATISFIED']);
+});
+
+test('a CONFIRMATION criterion in a non-code project reads no landing reason at all', () => {
+  const [{ landing }] = criterionLanding(
+    [{ id: 'crit', satisfiedBy: 'CONFIRMATION', servingTasks: [] }], BRANCHES);
+  for (const confirmations of [[row()], []]) {
+    const derived = derivedDoneFromLanes(
+      criterionSatisfaction([criterion({ satisfiedBy: 'CONFIRMATION', confirmations })]),
+      [{ definitionId: 'crit', landing, landingReason: 'NOTHING_TO_LAND' }],
+      [],
+      'CONFIRMED',
+      true,
+    );
+    assert.equal(derived.nonCode, true);
+    assert.equal(derived.criteria[0].landingReason, null);
+    assert.ok(!derived.criteria[0].withheld.includes('CRITERION_UNLANDED'));
+    assert.ok(!derived.withheld.includes('CRITERION_UNLANDED'));
+    assert.equal(derived.done, confirmations.length > 0);
+    assert.equal(derived.criteria[0].confirmation?.state, confirmations.length > 0 ? 'CONFIRMED' : 'UNCONFIRMED');
+  }
 });
 
 // ── Mode is a semantic change ──────────────────────────────────────────────────────────────────
