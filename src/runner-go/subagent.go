@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -25,6 +26,18 @@ import (
 // the end (PATCH …/subagents/:runId). A foreground call then waits for the end in slices short enough for one
 // socket exchange; a background one, or a foreground one whose wait ran out, is woken through the same
 // background-wake door a bg_run job wakes its session through.
+//
+// The wake for a run's end is the server's (docs/subagent-design.md §2, §5.2): the PATCH that ends the run says
+// whether one is owed, and the server files it in the run's own words, `<orbit-subagent-finished>`. A foreground
+// call that stops waiting records that on the server first (subagent_detach), so a runner that restarts in the
+// meantime cannot lose the wake: the server ends a run its runner left RUNNING when the next runner process takes
+// the session over, and wakes the parent with why.
+//
+// Lifecycle (§5.2): the parent's engine may end its turn and be recycled while a SubAgent runs, but the idle
+// park is deferred until none runs (the pool's subagentProbe). The parent's end stops every SubAgent first —
+// SIGINT to its process group, subagentStopGrace, then the kill — and they are reported STOPPED before
+// finalizeWorktree runs, which leaves what a stopped SubAgent touched out of the commit (holdSubagentPaths). A
+// runner that stops ends them the same way, as INTERRUPTED, and the server wakes the parent with the reason.
 
 const (
 	// envSubagentRunID marks an engine started as a SubAgent. Its `orbit mcp` offers no delegate tool:
@@ -41,10 +54,18 @@ const (
 	subagentStatusInterrupted = "INTERRUPTED"
 	subagentStatusStopped     = "STOPPED"
 
-	// The wake a SubAgent's end sends names this kind, so the parent reads it apart from a bg_run job.
-	subagentWakeKind = "subagent"
-	// How much of a result a wake quotes. The control plane takes up to 8000 characters of excerpt.
-	subagentWakeExcerptCap = 6000
+	// Why the runner stops a SubAgent: the parent session ended (STOPPED), or the runner process hosting it is
+	// stopping (INTERRUPTED).
+	subagentStopSessionEnded  = "session_ended"
+	subagentStopRunnerStopped = bgRunnerShutdownReason
+)
+
+// subagentStopGrace is how long a SubAgent asked to stop has to exit before it is killed (§5.2: 10 s), and
+// subagentStopReportWait how long its stop then waits for the run to be reported before the session goes on
+// ending. Variables only so a test need not sit them out.
+var (
+	subagentStopGrace      = 10 * time.Second
+	subagentStopReportWait = 30 * time.Second
 )
 
 // subagentPreamble is the fixed English text every SubAgent's prompt starts with (§3).
@@ -244,6 +265,11 @@ type subagentRun struct {
 	costUsd   float64
 	// detached marks a foreground run whose call stopped waiting: its end wakes the session.
 	detached bool
+	// cmd is the child engine once spawned, and stopReason why the runner stopped it (subagentStop…), empty
+	// while nothing has. cancel kills it.
+	cmd        *exec.Cmd
+	stopReason string
+	cancel     context.CancelFunc
 }
 
 func (r *subagentRun) reportLocked() subagentReport {
@@ -389,6 +415,24 @@ func (c *subagentFileCollector) note(eventType string, payload map[string]interf
 	}
 }
 
+// touched is every path the child changed or was changing when it stopped: an edit whose result never came back
+// may have left its file half-written.
+func (c *subagentFileCollector) touched() []string {
+	paths := append([]string(nil), c.changed...)
+	seen := map[string]bool{}
+	for _, p := range paths {
+		seen[p] = true
+	}
+	for _, p := range c.pending {
+		if !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	sort.Strings(paths)
+	return paths
+}
+
 func (c *subagentFileCollector) relative(path string) string {
 	if c.cwd == "" || !filepath.IsAbs(path) {
 		return filepath.ToSlash(filepath.Clean(path))
@@ -449,11 +493,16 @@ func (s *bgJobService) handleSubagent(op string, args map[string]interface{}) bg
 			return bgSocketResponse{Error: "no SubAgent run " + getString(args, "runId") + " in this session"}
 		}
 		s.subagents.mu.Lock()
-		defer s.subagents.mu.Unlock()
 		if run.status == subagentStatusRunning {
 			run.detached = true
 		}
-		return bgSocketResponse{OK: true, Result: run.reportLocked()}
+		report := run.reportLocked()
+		s.subagents.mu.Unlock()
+		if report.Status == subagentStatusRunning {
+			// The server holds the wake from here, whatever happens to this runner before the run ends.
+			s.recordSubagentDetach(run.id)
+		}
+		return bgSocketResponse{OK: true, Result: report}
 	}
 	return bgSocketResponse{Error: "unknown SubAgent operation: " + op}
 }
@@ -499,6 +548,9 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		"background":       background,
 		"readonly":         kind == "explore",
 	}
+	if description := strings.TrimSpace(getString(args, "description")); description != "" {
+		body["description"] = description
+	}
 	for _, key := range []string{"size", "sizeReason", "model"} {
 		if v := strings.TrimSpace(getString(args, key)); v != "" {
 			body[key] = v
@@ -523,13 +575,17 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	} else if engineSession, err = randomUUID(); err != nil {
 		return subagentReport{}, err
 	}
+	// Not the session's context: cancelling that would kill the child at once, and its end is stopSubagents'
+	// to make, with its grace, before the session's finalize (stopAll calls it first).
+	ctx, cancel := context.WithCancel(context.Background())
 	run := &subagentRun{
 		id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"),
 		background: background, model: created.Exec.Model, engine: providerClaude, engineSession: engineSession,
-		done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning,
+		done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning, cancel: cancel,
 	}
 	s.subagents.add(run)
-	go s.runSubagent(run, created.Exec, subagentPreamble+"\n\n"+prompt, resumeFrom != nil)
+	s.bg.subagentsLive.Add(1)
+	go s.runSubagent(ctx, run, created.Exec, subagentPreamble+"\n\n"+prompt, resumeFrom != nil)
 	s.subagents.mu.Lock()
 	defer s.subagents.mu.Unlock()
 	return run.reportLocked(), nil
@@ -556,9 +612,11 @@ func (s *bgJobService) subagentRecord(runID string) (*subagentRecord, error) {
 	return &rec, nil
 }
 
-// runSubagent runs the child to its end, then reports it: the PATCH, the parent's answer, and a wake when one is owed.
-func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, prompt string, resume bool) {
-	ctx := s.bg.ctx
+// runSubagent runs the child to its end, then reports it: the PATCH (which says whether the server owes the parent
+// a wake), and for a run nobody is waiting on inline, the terminal background_task that clears it from the
+// session's running SubAgents.
+func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target AgentExecConfig, prompt string, resume bool) {
+	defer run.cancel()
 	dir := subagentDir(s.sessionID, run.id)
 	_ = os.MkdirAll(dir, 0o700)
 	_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession})
@@ -569,10 +627,27 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, promp
 			s.bg.emit(eventType, out)
 		}
 	}
-	res, err := runClaudeChild(ctx, s.job, exec, run.id, run.engineSession, resume, s.execDir, dir, prompt, emit)
+	spawned := func(cmd *exec.Cmd) {
+		s.subagents.mu.Lock()
+		run.cmd = cmd
+		stopping := run.stopReason != ""
+		s.subagents.mu.Unlock()
+		if stopping {
+			// Asked to stop while it was starting.
+			_ = interruptSessionProcessGroup(cmd)
+		}
+	}
+	res, err := runClaudeChild(ctx, s.job, target, run.id, run.engineSession, resume, s.execDir, dir, prompt, emit, spawned)
+	s.subagents.mu.Lock()
+	stopReason := run.stopReason
+	s.subagents.mu.Unlock()
 	status, result := subagentStatusDone, strings.TrimSpace(res.Result)
 	switch {
-	case ctx.Err() != nil:
+	case stopReason == subagentStopRunnerStopped:
+		status = subagentStatusInterrupted
+		result = strings.TrimSpace("The SubAgent was interrupted: the runner process hosting it stopped (a restart or an" +
+			" update). What it changed so far is in the working tree, uncommitted.\n" + result)
+	case stopReason != "" || ctx.Err() != nil:
 		status = subagentStatusStopped
 		if result == "" {
 			result = "The SubAgent was stopped because the session ended."
@@ -585,6 +660,10 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, promp
 		if result == "" {
 			result = "The SubAgent failed: " + firstNonEmpty(res.ErrorMsg, res.Subtype, "no result")
 		}
+	}
+	if status == subagentStatusStopped || status == subagentStatusInterrupted {
+		// What a stopped SubAgent touched may be half-written: the session's finalize commit leaves it out.
+		holdSubagentPaths(s.sessionID, s.execDir, files.touched())
 	}
 
 	s.subagents.mu.Lock()
@@ -602,63 +681,105 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, promp
 	}
 	run.status, run.result, run.costUsd = status, result, res.CostUsd
 	report := run.reportLocked()
+	// A wake is owed to a parent nobody answers inline: a background run, a foreground one whose call stopped
+	// waiting, and any run the runner's stop interrupted, whose call (if any) went with the parent's engine. Not
+	// to a run stopped because its session ended: there is nobody left to wake.
+	answeredElsewhere := run.background || run.detached || status == subagentStatusInterrupted
+	wake := answeredElsewhere && status != subagentStatusStopped
 	s.subagents.mu.Unlock()
 
-	s.patchSubagent(run.id, report, res.Usage)
+	_ = os.WriteFile(filepath.Join(dir, "result.txt"), []byte(result), 0o600)
+	s.patchSubagent(run.id, report, res.Usage, wake)
+	if answeredElsewhere || status == subagentStatusStopped {
+		// The terminal background_task clears the delegate call from the session's running SubAgents, as a
+		// background Agent's does.
+		bgStatus := map[string]string{subagentStatusDone: bgStatusCompleted, subagentStatusFailed: bgStatusFailed}[status]
+		if bgStatus == "" {
+			bgStatus = bgStatusKilled
+		}
+		s.bg.emit(evBackgroundTask, map[string]interface{}{
+			"toolUseId": run.toolUseID, "status": bgStatus, "summary": "SubAgent " + run.id + " " + strings.ToLower(status),
+			"output": result, "subagentRunId": run.id,
+		})
+	}
+	s.bg.subagentsLive.Add(-1)
 	s.subagents.mu.Lock()
-	wakeOwed := run.background || run.detached
 	close(run.done)
 	s.subagents.mu.Unlock()
-	if !wakeOwed {
+}
+
+// stopSubagents ends every SubAgent of the session still running, for reason (subagentStop…): SIGINT to its
+// process group, subagentStopGrace to exit, then the kill. Returns once each has been reported, or
+// subagentStopReportWait after the kill. Run before the session's finalize commit (§5.2), so nothing a
+// SubAgent is still writing is captured by it.
+func (s *bgJobService) stopSubagents(reason string) {
+	s.subagents.mu.Lock()
+	var running []*subagentRun
+	for _, r := range s.subagents.runs {
+		if r.status != subagentStatusRunning {
+			continue
+		}
+		if r.stopReason == "" {
+			r.stopReason = reason
+		}
+		running = append(running, r)
+		if r.cmd != nil {
+			_ = interruptSessionProcessGroup(r.cmd)
+		}
+	}
+	s.subagents.mu.Unlock()
+	if len(running) == 0 {
 		return
 	}
-	// The terminal background_task clears the delegate call from the session's running SubAgents, as a
-	// background Agent's does; the wake brings the result to the parent.
-	bgStatus := map[string]string{subagentStatusDone: bgStatusCompleted, subagentStatusFailed: bgStatusFailed}[status]
-	if bgStatus == "" {
-		bgStatus = bgStatusKilled
-	}
-	s.bg.emit(evBackgroundTask, map[string]interface{}{
-		"toolUseId": run.toolUseID, "status": bgStatus, "summary": "SubAgent " + run.id + " " + strings.ToLower(status),
-		"output": result, "subagentRunId": run.id,
-	})
-	if ctx.Err() != nil || s.bg.wake == nil {
-		return
-	}
-	outputPath := filepath.Join(dir, "result.txt")
-	_ = os.WriteFile(outputPath, []byte(result), 0o600)
-	excerpt := strings.ToValidUTF8(strings.ReplaceAll(result, "\x00", ""), "")
-	if len(excerpt) > subagentWakeExcerptCap {
-		excerpt = excerpt[:subagentWakeExcerptCap] + "…"
-	}
-	wake := bgWake{
-		WakeID: run.id + ":" + bgWakeOnExit, JobID: run.id, Trigger: bgWakeOnExit, Kind: subagentWakeKind,
-		Command: "delegate: " + firstNonEmpty(run.description, run.id), Description: "SubAgent " + strings.ToLower(status),
-		Status: bgStatus, OutputPath: outputPath, OutputSize: int64(len(result)), OutputExcerpt: excerpt,
-	}
-	if bgStatus == bgStatusKilled {
-		wake.Reason = "session_cancelled"
-	}
-	for attempt := 1; attempt <= bgWakeAttempts+3; attempt++ {
-		err := s.bg.wake(wake)
-		if err == nil || !isRetryableTransportError(err) {
-			if err != nil {
-				logln("could not wake the session for SubAgent", run.id+":", err)
+	logln(fmt.Sprintf("stopping %d SubAgent(s) of session %s (%s)", len(running), s.sessionID, reason))
+	waitAll := func(limit time.Duration) bool {
+		deadline := time.After(limit)
+		for _, r := range running {
+			select {
+			case <-r.done:
+			case <-deadline:
+				return false
 			}
+		}
+		return true
+	}
+	if waitAll(subagentStopGrace) {
+		return
+	}
+	for _, r := range running {
+		r.cancel()
+	}
+	if !waitAll(subagentStopReportWait) {
+		logln("SubAgents of session", s.sessionID, "were killed but not all reported in time")
+	}
+}
+
+// recordSubagentDetach tells the server that the call waiting for a run has stopped waiting, so the run's end
+// wakes the parent (§2). A failure is logged and survived: the run's own report says the same.
+func (s *bgJobService) recordSubagentDetach(runID string) {
+	body := map[string]interface{}{"status": subagentStatusRunning, "wake": true}
+	for attempt := 1; attempt <= 3; attempt++ {
+		err := s.t.do(nil, "PATCH", "/runner/sessions/"+s.sessionID+"/subagents/"+runID, body, nil, 15*time.Second)
+		if err == nil {
 			return
 		}
-		time.Sleep(time.Duration(attempt) * bgWakeRetryDelay)
+		if !isRetryableTransportError(err) || attempt == 3 {
+			logln("could not record that the call for SubAgent", runID, "stopped waiting:", err)
+			return
+		}
+		time.Sleep(time.Duration(attempt) * time.Second)
 	}
 }
 
 // patchSubagent reports a run's end. Asked again while the control plane does not answer: the run's cost reaches
 // the parent session only through it, and a repeated report is applied once.
-func (s *bgJobService) patchSubagent(runID string, report subagentReport, usage *TokenUsage) {
+func (s *bgJobService) patchSubagent(runID string, report subagentReport, usage *TokenUsage, wake bool) {
 	body := map[string]interface{}{
 		"status":        report.Status,
 		"resultSummary": report.Result,
 		"changedFiles":  nonNilStrings(report.ChangedFiles),
 		"costUsd":       report.CostUsd,
+		"wake":          wake,
 	}
 	if usage != nil {
 		body["usage"] = usage
@@ -679,17 +800,17 @@ func (s *bgJobService) patchSubagent(runID string, report subagentReport, usage 
 // runClaudeChild runs Claude Code as a SubAgent: launched by the session's own argv and spawn code in the parent's
 // cwd, in child mode — its own scratch dir, its own conversation, one prompt, no checkout of its own, nothing
 // finalized and nothing committed. Every stream message is parsed by the session's own handleMessage.
-func runClaudeChild(ctx context.Context, parent *ClaimedSession, exec AgentExecConfig, runID, engineSession string,
-	resume bool, cwd, scratch, prompt string, emit emitFn) (ExecResult, error) {
+func runClaudeChild(ctx context.Context, parent *ClaimedSession, target AgentExecConfig, runID, engineSession string,
+	resume bool, cwd, scratch, prompt string, emit emitFn, spawned func(*exec.Cmd)) (ExecResult, error) {
 	child := *parent
 	child.Provider = providerClaude
-	child.Agent = exec
+	child.Agent = target
 	child.Agent.Provider = providerClaude
 	child.Agent.McpConfig = parent.Agent.McpConfig
 	child.Agent.PromptSuggestions = false
 	child.Agent.FastMode = false
 	child.Agent.Env = map[string]string{}
-	for k, v := range exec.Env {
+	for k, v := range target.Env {
 		child.Agent.Env[k] = v
 	}
 	child.Agent.Env[envSubagentRunID] = runID
@@ -698,6 +819,9 @@ func runClaudeChild(ctx context.Context, parent *ClaimedSession, exec AgentExecC
 	sp, err := spawnClaude(ctx, &child, cwd, args)
 	if err != nil {
 		return ExecResult{}, err
+	}
+	if spawned != nil {
+		spawned(sp.cmd)
 	}
 	var stderrTail strings.Builder
 	stderrDone := make(chan struct{})
@@ -760,4 +884,80 @@ func writeJSONFile(path string, v interface{}) error {
 		return err
 	}
 	return os.WriteFile(path, b, 0o600)
+}
+
+// subagentHeld is, by session, the absolute paths a stopped SubAgent touched that its session's next finalize
+// commit leaves out (holdSubagentPaths, unstageSubagentPaths).
+var subagentHeld = struct {
+	sync.Mutex
+	paths map[string]map[string]bool
+}{paths: map[string]map[string]bool{}}
+
+// holdSubagentPaths records what a stopped SubAgent touched, relative to cwd, for the session's finalize commit to
+// leave out: the file may be half-written, and a commit — a park checkpoint included — would make it look like
+// work. It stays in the working tree, uncommitted, where the parent finds it on resume.
+func holdSubagentPaths(sessionID, cwd string, paths []string) {
+	if len(paths) == 0 {
+		return
+	}
+	key := decodeSessionID(sessionID)
+	subagentHeld.Lock()
+	defer subagentHeld.Unlock()
+	held := subagentHeld.paths[key]
+	if held == nil {
+		held = map[string]bool{}
+		subagentHeld.paths[key] = held
+	}
+	for _, p := range paths {
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(cwd, filepath.FromSlash(p))
+		}
+		held[filepath.Clean(p)] = true
+	}
+}
+
+// takeSubagentHeldPaths hands over, once, the paths held for a session, relative to the checkout root dir. A
+// path outside it is dropped: git has nothing to say about it.
+func takeSubagentHeldPaths(sessionID, dir string) []string {
+	key := decodeSessionID(sessionID)
+	subagentHeld.Lock()
+	held := subagentHeld.paths[key]
+	delete(subagentHeld.paths, key)
+	subagentHeld.Unlock()
+	root := dir
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		root = resolved
+	}
+	var rel []string
+	for p := range held {
+		r, err := filepath.Rel(dir, p)
+		if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+			r, err = filepath.Rel(root, p)
+			if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+				continue
+			}
+		}
+		rel = append(rel, filepath.ToSlash(r))
+	}
+	sort.Strings(rel)
+	return rel
+}
+
+// unstageSubagentPaths takes the paths a stopped SubAgent of the session touched out of what finalize staged, so
+// the commit does not hold them. Called after staging and before the commit.
+func unstageSubagentPaths(dir, sessionID string) {
+	paths := takeSubagentHeldPaths(sessionID, dir)
+	if len(paths) == 0 {
+		return
+	}
+	args := append([]string{"rm", "--cached", "--quiet", "--ignore-unmatch", "--"}, paths...)
+	if _, err := git(dir, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
+		args = append([]string{"reset", "--quiet", "--"}, paths...)
+	}
+	if _, err := git(dir, args...); err != nil {
+		logln("could not leave the files of a stopped SubAgent out of the commit of session", sessionID+":", err)
+		return
+	}
+	logln(fmt.Sprintf("session %s — left %d file(s) a stopped SubAgent touched out of the commit: %s",
+		sessionID, len(paths), strings.Join(paths, ", ")))
 }

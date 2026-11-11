@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -43,6 +44,9 @@ type supervisedSession struct {
 	paths []string
 	// The worktree snapshots the runner reported with no turn to complete, in arrival order.
 	diffs []DiffResultRequest
+	// The SubAgent reports (PATCH …/subagents/:runId), in arrival order, and the runs opened so far.
+	subagentReports []map[string]interface{}
+	subagentsOpened int
 }
 
 // superviseClaudeSession registers the session active, as a claim does, with one message
@@ -154,6 +158,26 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 		if json.NewDecoder(r.Body).Decode(&req) == nil {
 			s.mu.Lock()
 			s.settled = append(s.settled, req)
+			s.mu.Unlock()
+		}
+	case strings.HasSuffix(r.URL.Path, "/subagents") && r.Method == http.MethodPost:
+		// A delegate call opens a run on the parent's own engine (runner-subagents.controller.ts).
+		s.mu.Lock()
+		s.subagentsOpened++
+		runID := fmt.Sprintf("run-%d", s.subagentsOpened)
+		s.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{},
+			"exec": map[string]interface{}{"provider": "claude", "model": "claude-test", "permissionMode": "acceptEdits",
+				"env": map[string]string{"ANTHROPIC_API_KEY": "test"}},
+		})
+		return
+	case strings.Contains(r.URL.Path, "/subagents/") && r.Method == http.MethodPatch:
+		var report map[string]interface{}
+		if json.NewDecoder(r.Body).Decode(&report) == nil {
+			report["runId"] = r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+			s.mu.Lock()
+			s.subagentReports = append(s.subagentReports, report)
 			s.mu.Unlock()
 		}
 	case strings.HasSuffix(r.URL.Path, "/diff"):

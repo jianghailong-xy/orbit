@@ -1117,6 +1117,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// holds p.mu when it asks, and this tailer reaches into the pool from under b.mu.
 	clearMonitorProbe := pool.setMonitorProbe(live, bg.hasLiveMonitors)
 	defer clearMonitorProbe()
+	// A SubAgent of the session still running defers the idle park the same way, until it ends (subagent.go).
+	clearSubagentProbe := pool.setSubagentProbe(live, bg.hasRunningSubagents)
+	defer clearSubagentProbe()
 	// A runner that stops — re-executing into an update, or its service stopped — ends these
 	// jobs too, and that is not this session ending. Its drain starts the moment the runner
 	// starts to stop rather than after this supervisor's turn drain, so what it kills is

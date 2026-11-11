@@ -2910,7 +2910,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers or DONE fence change, and no row is written.
       '0517_email_outbox',
       // 0524 adds two workspace columns and the subagent_run table only; no preserved row, trigger or DONE fence change.
-      '0524_subagent_run'],
+      '0524_subagent_run',
+      // 0527 adds three subagent_run columns and a partial index only; no preserved row, trigger or DONE fence change.
+      '0527_subagent_run_wake'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
