@@ -1168,10 +1168,12 @@ describe('the window', () => {
 });
 
 
-it('renders all landing-check verdicts and historical event-scoped attribution in the real timeline', async () => {
+it('renders landing-check verdicts and historical attribution beside each turn opener', async () => {
   view = { ...landingCheckFixture, sessionId: SESSION, projectId: PROJECT } as SessionLandingView;
   await mount();
   await openSteps();
+  expect(page().querySelectorAll('.landings-window-trigger')).toHaveLength(3);
+  expect(page().textContent).toContain('The baseline was repaired');
   const lines = [...page().querySelectorAll('.landing-timeline-text')].map((node) => node.textContent);
   for (const expected of [
     'Landing check passed · 14m',

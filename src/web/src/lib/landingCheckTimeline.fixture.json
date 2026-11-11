@@ -107,7 +107,16 @@
             },
             "text": "Checked the project branch with main, without this task \u00b7 also fails"
           }
-        ]
+        ],
+        "trigger": {
+          "cause": "DONE",
+          "by": "TASK",
+          "at": "2026-11-11T10:00:00.000Z",
+          "sourceRef": "refs/heads/orbit/task-payments",
+          "sourceSha": null,
+          "sessionId": null,
+          "reason": null
+        }
       },
       {
         "title": "Generation 2",
@@ -145,7 +154,16 @@
             },
             "text": "Landing check skipped \u00b7 only exempt paths changed"
           }
-        ]
+        ],
+        "trigger": {
+          "cause": "RETRY",
+          "by": "COORDINATOR",
+          "at": "2026-11-11T10:20:00.000Z",
+          "sourceRef": "refs/heads/orbit/task-payments",
+          "sourceSha": null,
+          "sessionId": null,
+          "reason": "The baseline was repaired"
+        }
       },
       {
         "title": "Generation 3",
@@ -179,7 +197,16 @@
             },
             "text": "Landing check passed \u00b7 14m"
           }
-        ]
+        ],
+        "trigger": {
+          "cause": "RETRY",
+          "by": "COORDINATOR",
+          "at": "2026-11-11T10:40:00.000Z",
+          "sourceRef": "refs/heads/orbit/task-payments",
+          "sourceSha": null,
+          "sessionId": null,
+          "reason": "The baseline was repaired"
+        }
       }
     ],
     "facts": [],
