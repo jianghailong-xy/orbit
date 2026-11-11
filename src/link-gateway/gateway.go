@@ -172,7 +172,10 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ws.SetReadLimit(maxFrameBytes)
 	c := newConn(g, ws, claims, ip)
 	c.token = bearer(r)
-	c.run(started)
+	// Served on a goroutine of its own, so this one ends, and with it what it held for the upgrade: net/http's
+	// request and response, and a stack the TLS handshake grew, which would otherwise stay with every connection for
+	// its life, to be scanned at each GC.
+	go c.run(started)
 }
 
 // refuseHTTP answers an upgrade request the gateway will not upgrade. The body's code names the CloseCode the same
@@ -330,6 +333,12 @@ func serveMain(args []string) int {
 	if err != nil {
 		logger.Error("configuration refused", "problems", err.Error())
 		return 2
+	}
+	gc := applyGCSettings(os.Getenv, os.ReadFile)
+	if gc.MemoryLimit > 0 {
+		logger.Info("the GC keeps within a memory limit", "bytes", gc.MemoryLimit, "from", gc.LimitFrom, "gogc", gc.GOGC)
+	} else {
+		logger.Warn("no memory limit: the container has no memory allowance and GOMEMLIMIT is not set", "gogc", gc.GOGC)
 	}
 	g := newGateway(cfg, logger)
 	tlsSetup, err := buildTLS(cfg, g.metrics, logger)
