@@ -701,7 +701,7 @@ iPhone 抽屉、web 手机抽屉、web 桌面侧栏、iPad 与 macOS 侧栏都�
 #### 12.3.1 首页：内容
 
 - **从上到下**：页头 → 内容状态行 → 搜索 → 原则组 → 文档按大类 → `Browse by category · A–Z index`。web 手机、iOS、iPad 详情栏是同一个顺序（图 30 ③、31 ①③）。顺序由 web 的 `WikiHome.tsx`、`index.css` 的手机规则和 iOS 的 `WikiLogic.HomeBand` 一起钉住。
-- **页头**：`Wiki` · space（§12.3.4）· Contents · Activity（带「等你」数，§12.3.3）· Settings · New entry。
+- **页头**：`Wiki` · space（§12.3.4）· Contents · Activity（带「等你」数，§12.3.3）· Settings。New entry 在 11-11 去掉（效果图 45 ③）：手写条目改在 wiki 聊天里说。
   - iOS 工具栏：Contents（`list.bullet`）· Activity（`clock.arrow.circlepath`）· Settings。
   - web 桌面不画 Contents：目录栏就在左边。今天 ≥961px 就是这样，≤960px 才有这个按钮。
 - **内容状态行**：`35 documents · 5 written`，即 `docs.total` 与 `docs.written`。维护状态（条目数、待审、维护、追赶）不在首页，在 Activity。
