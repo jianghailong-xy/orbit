@@ -24,7 +24,7 @@ func runOpenCodeChild(ctx context.Context, c subagentChild) (ExecResult, string,
 	if err := os.MkdirAll(c.scratch, 0o700); err != nil {
 		return ExecResult{Status: stFailed}, conversation, err
 	}
-	res := runOpenCodeTurn(ctx, child, c.cwd, c.scratch, c.prompt, nil, c.emit)
+	res := runOpenCodeTurn(withSubagentSpawned(ctx, c.spawned), child, c.cwd, c.scratch, c.prompt, nil, c.emit)
 	if res.RuntimeSessionID != "" {
 		conversation = res.RuntimeSessionID
 	}

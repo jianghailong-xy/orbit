@@ -50,6 +50,7 @@ func runKimiChild(ctx context.Context, c subagentChild) (ExecResult, string, err
 	if err != nil {
 		return ExecResult{Status: stFailed}, "", errors.New("failed to spawn kimi acp: " + err.Error())
 	}
+	c.started(app.cmd)
 	defer app.close()
 
 	var activeMu sync.Mutex

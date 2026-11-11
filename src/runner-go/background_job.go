@@ -1331,9 +1331,21 @@ func (b *bgTailer) drainOnRunnerShutdown(shutdown context.Context) {
 			return
 		}
 		b.wg.Add(1)
+		stopSubagents := b.stopSubagents
 		b.mu.Unlock()
 		defer b.wg.Done()
+		// The session's SubAgents end with the runner too, beside its jobs: INTERRUPTED, and the server wakes
+		// the parent with why (subagent.go).
+		var subagents sync.WaitGroup
+		if stopSubagents != nil {
+			subagents.Add(1)
+			go func() {
+				defer subagents.Done()
+				stopSubagents(subagentStopRunnerStopped)
+			}()
+		}
 		b.drainJobs(bgDrainWaitCap)
+		subagents.Wait()
 	})
 }
 

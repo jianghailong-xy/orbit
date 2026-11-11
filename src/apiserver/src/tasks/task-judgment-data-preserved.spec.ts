@@ -2918,6 +2918,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0521_wiki_repo_snapshot_source',
       // 0524 adds two workspace columns and the subagent_run table only; no preserved row, trigger or DONE fence change.
       '0524_subagent_run',
+      // 0527 adds three subagent_run columns and a partial index only; no preserved row, trigger or DONE fence change.
+      '0527_subagent_run_wake',
       // 0528 adds the nullable approval.subagent_run_id only; no preserved row, trigger or DONE fence change.
       '0528_approval_subagent_run',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.

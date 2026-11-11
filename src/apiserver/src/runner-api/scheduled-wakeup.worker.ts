@@ -16,6 +16,7 @@ import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { BACKGROUND_WAKE_TURN_PREFIX, sessionHasEnded, undeliveredWakeTurn } from './background-job-wake';
+import { fileSubagentWake, type SubagentWakeOutcome, unfiledSubagentWakes } from './subagent-wake';
 import {
   claimLoopAlert,
   clearLoopAlert,
@@ -171,7 +172,10 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
 
   private tick(): void {
     if (!this.running || this.pass) return;
+    // The SubAgent wakes a first filing missed ride on the same pass (subagent-wake.ts): the same clock, the
+    // same createTurn, and nothing a runner has to do.
     this.pass = this.drain()
+      .then(() => this.fileOwedSubagentWakes())
       .then(
         () => undefined,
         (error) => this.log.error(`scheduled wakeup pass failed: ${messageOf(error)}`),
@@ -185,6 +189,23 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
         }, this.pollIntervalMs);
         this.timer.unref(); // never what keeps a process alive
       });
+  }
+
+  /**
+   * File the wakes ended SubAgent runs owe their parents and whose first filing — on the runner's report, or at
+   * the takeover that interrupted them — did not land: up to one batch, the longest-ended first. Each is filed at
+   * most once (fileSubagentWake's compare-and-set), so this racing that first filing costs nothing.
+   */
+  async fileOwedSubagentWakes(): Promise<SubagentWakeOutcome[]> {
+    const outcomes: SubagentWakeOutcome[] = [];
+    for (const runId of await unfiledSubagentWakes(this.prisma, this.batch)) {
+      try {
+        outcomes.push(await fileSubagentWake(this.prisma, this.sessions, runId));
+      } catch (error) {
+        this.log.error(`the wake for SubAgent run ${runId} was not filed: ${messageOf(error)}`);
+      }
+    }
+    return outcomes;
   }
 
   /** Deliver up to one batch of due wakeups and ticks, the longest-due first. */

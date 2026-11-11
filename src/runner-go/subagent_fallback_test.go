@@ -78,12 +78,14 @@ func (r *subagentFallbackRig) run(t *testing.T) subagentReport {
 		bg: newBgTailer(ctx, func(string, map[string]interface{}) {}, nil), t: NewTransport(srv.URL, "runner-token"),
 		sessionID: "sess1", execDir: t.TempDir(), job: &ClaimedSession{Provider: providerClaude},
 	}
+	runCtx, runCancel := context.WithCancel(context.Background())
 	run := &subagentRun{
 		id: "run1", toolUseID: "toolu_delegate", model: "claude-opus-5-5", engine: providerClaude, engineSession: "e1",
-		kind: "general", done: make(chan struct{}), status: subagentStatusRunning,
+		kind: "general", done: make(chan struct{}), status: subagentStatusRunning, cancel: runCancel,
 	}
 	s.subagents.add(run)
-	s.runSubagent(run, AgentExecConfig{Provider: providerClaude, Model: "claude-opus-5-5"},
+	s.bg.subagentsLive.Add(1)
+	s.runSubagent(runCtx, run, AgentExecConfig{Provider: providerClaude, Model: "claude-opus-5-5"},
 		subagentDefinition{Name: "general", Source: "builtin"}, "Fix the flaky test", false)
 	s.subagents.mu.Lock()
 	defer s.subagents.mu.Unlock()

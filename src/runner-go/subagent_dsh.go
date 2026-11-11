@@ -105,6 +105,7 @@ func runDshChild(ctx context.Context, c subagentChild) (ExecResult, string, erro
 	if err != nil {
 		return ExecResult{Status: stFailed}, engineSession, fmt.Errorf("failed to start DeepSeek Harness: %w", err)
 	}
+	c.started(app.cmd)
 	defer app.dispose()
 	defer permissions.close()
 	initCtx, initCancel := context.WithTimeout(ctx, 60*time.Second)

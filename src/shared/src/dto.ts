@@ -2218,6 +2218,8 @@ export interface SubagentRunCreateRequest {
   /** The definition's own permission mode. Never wider than the parent's (403
    *  PERMISSION_MODE_WIDER_THAN_SESSION); left out, the child runs in the parent's mode. */
   permissionMode?: string;
+  /** The delegate call's description, which the wake for the run's end names. */
+  description?: string;
 }
 
 export interface SubagentRunCreateResponse {
@@ -2228,9 +2230,14 @@ export interface SubagentRunCreateResponse {
   exec: AgentExecConfig;
 }
 
-/** The runner's report when a SubAgent run ends (§5.1 step 5). */
+/**
+ * The runner's report when a SubAgent run ends (§5.1 step 5). `RUNNING` with `wake: true` is the one report
+ * that does not end it: the foreground call waiting for it stopped waiting, so its end is to wake the parent (§2).
+ */
 export interface SubagentRunUpdateRequest {
-  status: Exclude<SubagentRunStatus, 'RUNNING'>;
+  status: SubagentRunStatus;
+  /** The parent is owed a wake when the run ends; the server files it (`<orbit-subagent-finished>`). */
+  wake?: boolean;
   /** What was handed back to the parent, truncated by the server. */
   resultSummary?: string;
   /** Paths the child's edit tools wrote, as the runner collected them. */
