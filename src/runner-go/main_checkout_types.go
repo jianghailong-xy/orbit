@@ -187,3 +187,24 @@ type MainCheckoutChangedNotice struct {
 	Truncated   bool                      `json:"truncated"`
 	Fingerprint string                    `json:"fingerprint"`
 }
+
+// MainCheckoutRunnerRequest is one entry of the heartbeat's mainCheckoutRequests (contract §10.1):
+// a snapshot read (Op "snapshot": Root, DiffPaths, RequestedAt, ExpiresAt) or an action (Op
+// "action": Command). Each is handed out once; ID is what the answer is posted under.
+type MainCheckoutRunnerRequest struct {
+	ID          string                     `json:"id"`
+	Op          string                     `json:"op"`
+	Root        string                     `json:"root,omitempty"`
+	DiffPaths   []string                   `json:"diffPaths,omitempty"`
+	RequestedAt string                     `json:"requestedAt,omitempty"`
+	ExpiresAt   string                     `json:"expiresAt,omitempty"`
+	Command     *MainCheckoutActionCommand `json:"command,omitempty"`
+}
+
+// MainCheckoutSnapshotAnswer is POST /runner/main-checkout/:id/snapshot: the snapshot and the
+// patches asked for, or Error (one line) when the read failed.
+type MainCheckoutSnapshotAnswer struct {
+	Snapshot *MainCheckoutSnapshot  `json:"snapshot,omitempty"`
+	Diffs    []MainCheckoutFileDiff `json:"diffs,omitempty"`
+	Error    string                 `json:"error,omitempty"`
+}

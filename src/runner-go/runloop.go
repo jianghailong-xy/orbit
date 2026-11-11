@@ -1954,6 +1954,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				repoHealth.refresh() // report the repaired state on the next heartbeat, not in a minute
 			}
+			// Main checkout reads and actions (main_checkout_actions.go). Each is handed out once
+			// and runs on its own goroutine, so a Move of many files never holds the heartbeat up;
+			// the checkout's lock serializes the ones on one checkout, and with merges into it.
+			for _, mr := range resp.MainCheckoutRequests {
+				go func(mr MainCheckoutRunnerRequest) {
+					handleMainCheckoutRequest(t, mr, mainCheckoutDeps{
+						owns:        func(root string) bool { return runnerOwnsCheckout(repoHealth.dirs(), root) },
+						turnRunning: pool.turnRunning,
+					})
+					if mr.Op == "action" {
+						repoHealth.refresh() // the bar shows the new state on the next heartbeat
+					}
+				}(mr)
+			}
 			// Remove an account slot the user asked to be rid of. Carried out here, on the
 			// heartbeat's own goroutine, for the reason the repair above is: it is a directory
 			// removal, and the request is redelivered until we report, so a second one racing the

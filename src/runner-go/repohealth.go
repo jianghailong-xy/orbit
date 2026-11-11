@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"sort"
@@ -155,9 +157,11 @@ type repoCleanupOutcome struct {
 // must never rewrite a directory that isn't one of its own agents' workDirs.
 func cleanupRepoRoot(dir string, allowed func(string) bool) repoCleanupOutcome {
 	// Serialized against merges: both mutate this checkout, and a repair landing mid-merge would
-	// yank the tree out from under a fast-forward.
+	// yank the tree out from under a fast-forward. The checkout's own lock serializes it against the
+	// main checkout actions too.
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
+	defer lockMainCheckout(dir)()
 
 	root, err := git(expandTilde(dir), "rev-parse", "--show-toplevel")
 	if err != nil || root == "" {
@@ -170,7 +174,13 @@ func cleanupRepoRoot(dir string, allowed func(string) bool) repoCleanupOutcome {
 	if before.State == repoStateClean {
 		return repoCleanupOutcome{Status: "done", State: repoStateClean, Message: "checkout was already clean"}
 	}
+	return cleanupRepoRootLocked(root, before)
+}
 
+// cleanupRepoRootLocked is the rescue and reset behind cleanupRepoRoot, for a caller already holding
+// mergeLock and the checkout's lock. Save & clean (the main checkout's rescue action) comes here
+// too, for a checkout that is merely dirty, untracked files included, once its fingerprint matched.
+func cleanupRepoRootLocked(root string, before repoRootState) repoCleanupOutcome {
 	rescue, err := rescueWorkingTree(root, before)
 	if err != nil {
 		// Nothing has been touched yet, so failing here is safe: the checkout stays exactly as
@@ -217,13 +227,17 @@ func cleanupRepoRoot(dir string, allowed func(string) bool) repoCleanupOutcome {
 	return repoCleanupOutcome{Status: "done", State: after.State, RescueBranch: rescue, Message: msg}
 }
 
-// rescueWorkingTree commits the checkout's current on-disk content to a fresh orbit/rescue-* branch
+// rescueWorkingTree commits the checkout's current on-disk content to an orbit/rescue-* branch
 // without touching HEAD, the index, or the working tree, and returns the branch name ("" when the
 // tree matches HEAD and there is nothing worth keeping).
 //
 // Everything runs against a temp index seeded from HEAD: the real one holds the conflict stages
 // that make this a rescue in the first place. Ignored files are left out — `add -A` honors
 // .gitignore — so node_modules never lands in a rescue commit.
+//
+// The branch is named from the content (HEAD and the saved tree), so saving the same checkout twice
+// — a Move redone after a crash — finds the branch it made the first time instead of making a
+// second one. A branch of that name holding anything else is an error, and nothing is changed.
 func rescueWorkingTree(root string, state repoRootState) (string, error) {
 	head, err := git(root, "rev-parse", "HEAD")
 	if err != nil || head == "" {
@@ -253,16 +267,26 @@ func rescueWorkingTree(root string, state repoRootState) (string, error) {
 	if headTree, _ := git(root, "rev-parse", head+"^{tree}"); headTree == tree {
 		return "", nil // on-disk content already matches HEAD: only the index was broken
 	}
+	sum := sha256.Sum256([]byte(head + " " + tree))
+	branch := "orbit/rescue-" + hex.EncodeToString(sum[:])[:8]
+	if existing, err := git(root, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch); err == nil && existing != "" {
+		gotTree, _ := git(root, "rev-parse", existing+"^{tree}")
+		gotParent, _ := git(root, "rev-parse", existing+"^")
+		if gotTree == tree && gotParent == head {
+			return branch, nil // saved already: the same content on the same HEAD
+		}
+		return "", fmt.Errorf("%s already exists and holds something else", branch)
+	}
 	body := fmt.Sprintf(
-		"Orbit found this checkout in a %q state and cleaned it up.\n\nSaved here first: this is the working tree exactly as it was,\nconflict markers and all. Files: %s\n",
+		"Orbit saved this checkout (%q state) before changing it.\n\nThis is the working tree exactly as it was,\nconflict markers and all. Files: %s\n",
 		state.State, strings.Join(state.Paths, ", "))
 	commit, err := gitEnv(root, env,
-		"commit-tree", tree, "-p", head, "-m", "rescue: working tree before Orbit cleaned up this checkout", "-m", body)
+		"commit-tree", tree, "-p", head, "-m", "rescue: working tree before Orbit changed this checkout", "-m", body)
 	if err != nil || commit == "" {
 		return "", fmt.Errorf("commit-tree: %s", gitStderr(err))
 	}
-	branch := "orbit/rescue-" + shortSha(commit)
-	if _, err := git(root, "branch", branch, commit); err != nil {
+	// Create only: a branch someone made between the check above and here is left alone.
+	if _, err := git(root, "update-ref", "refs/heads/"+branch, commit, ""); err != nil {
 		return "", fmt.Errorf("branch: %s", gitStderr(err))
 	}
 	return branch, nil

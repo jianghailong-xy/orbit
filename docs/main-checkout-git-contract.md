@@ -111,7 +111,14 @@ Merge (`mergeToMain`). What each action does:
 - **move**: check fingerprint → save the checkout to `orbit/rescue-*` (`rescueWorkingTree`) →
   3-way apply to the target worktree, `--check` first → restore only those paths in the main
   checkout to HEAD and delete those untracked files. A target running a turn is refused with
-  `TARGET_BUSY`.
+  `TARGET_BUSY`, and so is a target whose worktree is not on the runner's disk.
+  The 3-way is done per file (`git merge-file`, base = the checkout's HEAD), and every file's
+  result is computed before anything is written. `git apply --3way --check` is not used: in
+  git 2.47 it exits 0 on conflicting hunks, and `--3way` implies `--index`, which refuses any path
+  the target has uncommitted changes in. Content the target already holds is skipped. Moved paths
+  that changed in the checkout after the save are kept there, and the result is the partial
+  `MOVE_SOURCE_CHANGED`. Until it ends, a Move keeps a journal under the git dir, so the same
+  request redone after a crash finishes the work instead of being refused as stale.
 - **commit**: check fingerprint → build a temporary index holding only the chosen files →
   `commit-tree` → `update-ref` with the expected old HEAD (CAS) → align the real index's chosen
   paths to the new HEAD; unchosen staged, unstaged and untracked content is untouched. A commit is
