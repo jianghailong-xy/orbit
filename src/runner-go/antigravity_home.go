@@ -295,10 +295,16 @@ func antigravityMCPServers(agent AgentExecConfig, orbitExe string) map[string]in
 		}
 	}
 	if orbitExe != "" {
+		env := map[string]string{}
+		if runID := strings.TrimSpace(agent.Env[envSubagentRunID]); runID != "" {
+			// A SubAgent's `orbit mcp` offers no delegate. agy hands its own environment on too; named here so
+			// the server gets it whatever agy passes.
+			env[envSubagentRunID] = runID
+		}
 		servers["orbit"] = map[string]interface{}{
 			"command": orbitExe,
 			"args":    []string{"mcp"},
-			"env":     map[string]string{},
+			"env":     env,
 		}
 	}
 	return servers
