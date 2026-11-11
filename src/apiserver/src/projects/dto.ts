@@ -336,6 +336,13 @@ export class UpdateProjectDto {
    * automatic-only, so a project is settled by whoever writes this column and by nothing else. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
 
+  /** The explicit non-code mark (migration 0535; owner decision 2026-11-11 — never inferred). True
+   *  marks the project non-code, false clears it. Written by the account owner, or by the
+   *  conversation the project is coordinated from (`project_update`); any other session is refused.
+   *  Each write records who and when (`nonCodeSetBy`, `nonCodeSetBySessionId`, `nonCodeSetAt`).
+   *  A marked project reads no landing; whether its criteria are met is unchanged. */
+  @IsSent() @IsBoolean() nonCode?: boolean;
+
   /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The line is
    *  the account owner's alone, refused whole to a request carrying an acting session. The merge
    *  check may be changed from a session, but only on a confirmation card the owner has answered

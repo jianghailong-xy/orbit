@@ -247,6 +247,9 @@ export interface DoneState {
   jobs: Array<{ integrationJobId: string; kind: string; state: string; taskId: string | null }>;
   criteriaDigest: string;
   stateDigest: string;
+  /** The project carries the explicit non-code mark (migration 0535): it reads no landing, so no
+   *  criterion carries a `reason` or `heldOffLanded`, and no `DONE_CRITERION_UNLANDED` is found. */
+  nonCode: boolean;
 }
 
 /** GET /projects/:id/done-check: owner read, with no asking session excluded.

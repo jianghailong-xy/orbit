@@ -111,6 +111,7 @@ test('the CBAI shape: one finding for the unmet criterion, NO_BRANCH warnings fo
     jobs: [],
     criteriaDigest: 'd',
     stateDigest: 's',
+    nonCode: false,
   };
 
   const findings = doneReadiness(state, []);

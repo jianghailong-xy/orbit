@@ -3149,6 +3149,16 @@ model Project {
   /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
   acceptedGaps       Json      @default("[]") @map("accepted_gaps")
 
+  /// Non-code by an explicit mark, never inferred (migration 0535, owner decision 2026-11-11): the
+  /// coordinator sets it through project_update, the owner on the project page. A marked project
+  /// reads no landing (`project-done-derived.ts`, `project-done-request.ts`). The three columns
+  /// after it say who wrote it last, set or cleared — OWNER, or COORDINATOR with the conversation
+  /// it was written from — and when; null while nobody has.
+  nonCode                Boolean   @default(false) @map("non_code")
+  nonCodeSetBy           String?   @map("non_code_set_by")
+  nonCodeSetBySessionId  String?   @map("non_code_set_by_session_id") @db.Uuid
+  nonCodeSetAt           DateTime? @map("non_code_set_at") @db.Timestamptz(3)
+
   /// The account owner's Reopen project (migration 0469): when they pressed it, and what it was
   /// pressed over, the seal of the criteria and each task serving one by a digest of its facts
   /// (`project-done-derived.ts`). While those have not moved, the projection does not store DONE over

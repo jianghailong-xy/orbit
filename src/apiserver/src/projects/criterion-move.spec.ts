@@ -339,6 +339,7 @@ async function doneCheckOfA(store: Store) {
     jobs: [],
     criteriaDigest: standardSetVersion(stated).digest,
     stateDigest: '',
+    nonCode: false,
   };
   return doneReadiness(state, []);
 }

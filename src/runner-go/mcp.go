@@ -636,6 +636,15 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			}
 			body["integration"] = settings
 		}
+		// The explicit non-code mark: true sets it, false clears it. Only a boolean: the server
+		// records who wrote it, so an accidental string must not reach it as some other value.
+		if nonCode, present := args["nonCode"]; present {
+			value, ok := nonCode.(bool)
+			if !ok {
+				return toolResult("nonCode must be true or false", true)
+			}
+			body["nonCode"] = value
+		}
 		if structuredCriteria {
 			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], true)
 			if err != nil {
@@ -3767,6 +3776,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"the check. Once a project has started integrating the line is locked, and " +
 						"a request to move it is refused even from the owner: to change it, its " +
 						"project branch reaches main first.",
+				},
+				"nonCode": map[string]interface{}{
+					"type": "boolean",
+					"description": "Mark this project non-code (true) or clear the mark (false). A project is " +
+						"non-code only by this explicit mark, never inferred: set it when the project's goal is " +
+						"met by work that changes no code in this repository (a filing, an approval, research). " +
+						"A marked project reads no landing — its criteria carry no landingReason, the done check " +
+						"reports nothing unlanded, and recording it done stores no landing gaps — while whether " +
+						"each criterion is met is unchanged. Only the conversation this project is coordinated " +
+						"from may write it; project_get returns it with nonCodeSetBy (OWNER or COORDINATOR), " +
+						"nonCodeSetBySessionId and nonCodeSetAt.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",

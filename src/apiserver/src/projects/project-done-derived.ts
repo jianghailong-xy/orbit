@@ -188,6 +188,14 @@ export interface DerivedProjectDone {
   criteria: DerivedDoneCriterionAnswer[];
   confirmation: StandardSetConfirmationState;
   counts: DerivedDoneCounts;
+  /**
+   * The project carries the explicit non-code mark (`project.non_code`, migration 0535). Such a
+   * project reads no landing: no criterion carries a `landingReason`, none is withheld as
+   * `CRITERION_UNLANDED`, and `counts.landed`, `onMain` and `byReason` are all zero — a client
+   * reading this flag shows no landing label or tally at all. `landing` on each criterion is still
+   * the fold's own answer, and `satisfied` is untouched.
+   */
+  nonCode: boolean;
 }
 
 /**
@@ -205,10 +213,12 @@ export interface DerivedDoneCriterionAnswer extends DerivedDoneCriterion {
 /** The three clauses ONE criterion can trip, in the order the projection reports them. */
 export function criterionWithheldClauses(
   criterion: DerivedDoneCriterion,
+  /** The project is marked non-code: its criteria are never withheld for their landing. */
+  nonCode = false,
 ): DerivedDoneWithheld[] {
   const clauses: DerivedDoneWithheld[] = [];
   if (!criterion.satisfied) clauses.push('CRITERION_UNSATISFIED');
-  if (criterion.landing !== 'LANDED') clauses.push('CRITERION_UNLANDED');
+  if (!nonCode && criterion.landing !== 'LANDED') clauses.push('CRITERION_UNLANDED');
   if (criterion.independence !== 'INDEPENDENT') {
     clauses.push('CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE');
   }
@@ -232,6 +242,8 @@ const CRITERION_CLAUSES = [
 export function deriveProjectDone(
   criteria: readonly DerivedDoneCriterion[],
   confirmation: StandardSetConfirmationState,
+  /** The project's explicit non-code mark: a marked project reads no landing (see `nonCode`). */
+  nonCode = false,
 ): DerivedProjectDone {
   // Each criterion is asked once which clauses it trips, and the project's own list is the union
   // of those: the conjunction and the reasons it fails are the same three predicates, read once.
@@ -240,7 +252,8 @@ export function deriveProjectDone(
   // against a shorter standard set than the one on record — and would say so nowhere.
   const answers: DerivedDoneCriterionAnswer[] = criteria.map((criterion) => ({
     ...criterion,
-    withheld: criterionWithheldClauses(criterion),
+    ...(nonCode ? { landingReason: null } : {}),
+    withheld: criterionWithheldClauses(criterion, nonCode),
   }));
 
   const withheld: DerivedDoneWithheld[] = [];
@@ -256,7 +269,21 @@ export function deriveProjectDone(
     withheld,
     criteria: answers,
     confirmation,
-    counts: derivedDoneCounts(answers),
+    counts: nonCode ? nonCodeCounts(answers) : derivedDoneCounts(answers),
+    nonCode,
+  };
+}
+
+/** A marked project's counts: the criteria and how many are met, and no landing tally at all. */
+function nonCodeCounts(criteria: readonly DerivedDoneCriterion[]): DerivedDoneCounts {
+  return {
+    criteria: criteria.length,
+    met: criteria.filter((criterion) => criterion.satisfied).length,
+    landed: 0,
+    onMain: 0,
+    byReason: Object.fromEntries(
+      CRITERION_LANDING_REASONS.map((reason) => [reason, 0]),
+    ) as Record<CriterionLandingReason, number>,
   };
 }
 
@@ -355,6 +382,7 @@ export async function readDerivedProjectDoneReading(
     inFlight,
     independence,
     confirmation,
+    marked,
   ] = await Promise.all([
     prisma.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId, project: { ownerId } },
@@ -377,6 +405,7 @@ export async function readDerivedProjectDoneReading(
     readInFlightLandingJobs(prisma, projectId),
     readCriterionIndependence(prisma, ownerId, projectId),
     latestConfirmation(prisma, projectId),
+    prisma.project.findFirst({ where: { id: projectId, ownerId }, select: { nonCode: true } }),
   ]);
 
   const standing = standardSetConfirmationStanding(
@@ -385,7 +414,9 @@ export async function readDerivedProjectDoneReading(
   );
   const landing = criterionLandingWithReasons(landingFacts, branches, inFlight);
   return {
-    derived: derivedDoneFromLanes(satisfaction, landing, independence, standing.state),
+    derived: derivedDoneFromLanes(
+      satisfaction, landing, independence, standing.state, marked?.nonCode ?? false,
+    ),
     standing,
     satisfaction,
     inFlight,
@@ -437,6 +468,8 @@ export function derivedDoneFromLanes(
   landing: readonly CriterionLandingWithReason[],
   independence: readonly CriterionIndependenceAnswer[],
   confirmation: StandardSetConfirmationState,
+  /** The project's explicit non-code mark (`deriveProjectDone`). */
+  nonCode = false,
 ): DerivedProjectDone {
   const landed = new Map(landing.map((row) => [row.definitionId, row]));
   const independent = new Map(independence.map((row) => [row.definitionId, row]));
@@ -459,7 +492,7 @@ export function derivedDoneFromLanes(
       : ('NO_RECEIPT' satisfies CriterionLandingReason),
   }));
 
-  return deriveProjectDone(criteria, confirmation);
+  return deriveProjectDone(criteria, confirmation, nonCode);
 }
 
 /**

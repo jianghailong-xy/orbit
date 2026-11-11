@@ -267,6 +267,8 @@ export const COORDINATOR_MESSAGE_UNDELIVERED_CODE = 'COORDINATOR_MESSAGE_UNDELIV
  * start is refused before it begins, and starting with Automatic off is one of the two ways out.
  */
 export const START_COORDINATOR_UNAVAILABLE = 'START_COORDINATOR_UNAVAILABLE';
+/** The non-code mark written from a session that does not coordinate the project (`nonCodeWriter`). */
+export const NON_CODE_COORDINATOR_ONLY = 'NON_CODE_COORDINATOR_ONLY';
 
 /**
  * Which press `coordinator` is answering.
@@ -2798,6 +2800,7 @@ export class ProjectsService {
         landingAnswers,
         independence,
         standardSetConfirmation,
+        project.nonCode,
       ),
     };
   }
@@ -3612,6 +3615,30 @@ export class ProjectsService {
    * owner has answered covers exactly this change (`assertIntegrationIsWrittenByItsOwner`). A token
    * stays refused the whole object, card or no card — it is not a session, so there is nothing for
    * a card to be bound to — which is the one asymmetry here. */
+  /**
+   * Who writes the non-code mark on this request, or null when it carries none. The account owner
+   * (no acting session) or the conversation this project is coordinated from (COORDINATOR, with its
+   * session id); any other session is refused whole before anything is written — the mark decides
+   * whether a project reads landing at all, so it is not a side effect of some task's edit.
+   */
+  static nonCodeWriter(
+    dto: Pick<UpdateProjectDto, 'nonCode'>,
+    actingSessionId: string | undefined,
+    coordinatorSessionId: string | null,
+  ): { by: 'OWNER' | 'COORDINATOR'; sessionId: string | null } | null {
+    if (dto.nonCode === undefined) return null;
+    const session = actingSessionId?.trim();
+    if (!session) return { by: 'OWNER', sessionId: null };
+    if (session !== coordinatorSessionId) {
+      throw new ForbiddenException({
+        code: NON_CODE_COORDINATOR_ONLY,
+        message: 'Only the conversation this project is coordinated from, or the account owner, '
+          + 'may mark it non-code or clear the mark: nothing was written.',
+      });
+    }
+    return { by: 'COORDINATOR', sessionId: session };
+  }
+
   async update(
     ownerId: string,
     id: string,
@@ -3633,6 +3660,7 @@ export class ProjectsService {
       );
     }
     ProjectsService.assertStatusIsNotWrittenFromASession(dto, actingSessionId);
+    const nonCodeWriter = ProjectsService.nonCodeWriter(dto, actingSessionId, current.coordinatorSessionId);
     // The card this write rests on, when it carries a merge check. Read BEFORE the transaction
     // with the rest of the guards, so a request no card covers is refused having written nothing.
     const mergeCheckApproval = await this.assertIntegrationIsWrittenByItsOwner(
@@ -3676,6 +3704,14 @@ export class ProjectsService {
         : {}),
       ...(dto.sessionBudgetPerDay !== undefined
         ? { sessionBudgetPerDay: dto.sessionBudgetPerDay }
+        : {}),
+      ...(nonCodeWriter
+        ? {
+          nonCode: dto.nonCode,
+          nonCodeSetBy: nonCodeWriter.by,
+          nonCodeSetBySessionId: nonCodeWriter.sessionId,
+          nonCodeSetAt: new Date(),
+        }
         : {}),
       // One bump per write of the authorization set, however many of its fields the write carried:
       // a revision is a version of that set, not a count of columns. `increment` rather than a
@@ -3890,7 +3926,8 @@ export class ProjectsService {
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
       // moved none of them, so there is nothing to re-project and no reason to re-decide a column
       // the owner may have just written by hand.
-      if (dto.acceptanceCriteriaItems !== undefined && !held) {
+      // So is the non-code mark: a marked project's criteria are no longer withheld for landing.
+      if ((dto.acceptanceCriteriaItems !== undefined && !held) || nonCodeWriter) {
         await this.reprojectProjectStatus(ownerId, id);
       }
       // Spread rather than nested, and only when there IS one: a caller whose edit was applied
