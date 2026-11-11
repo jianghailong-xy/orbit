@@ -43,6 +43,12 @@ object ManagementFixture {
     /** Each DeepSeek key's balance answer by provider id, and a gate that holds a key's read until it completes. */
     val balances = java.util.concurrent.ConcurrentHashMap<String, String>()
     val balanceGates = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+    /** GET providers/subagent-tiers' body; users/me's preferences.subagentBlockedProviders (null leaves it out); the SubAgents fields
+     * GET workspaces/:id carries (`,"subagentsEnabled":false,…`); and every write's body, as "PATCH path {…}". */
+    @Volatile var subagentTiers = """{"providers":[]}"""
+    @Volatile var subagentBlocked: List<String>? = null
+    @Volatile var workspaceExtra = ""
+    val bodies = CopyOnWriteArrayList<String>()
     /** GET tasks/:id for [TASK]. */
     @Volatile var task = "{}"
     @Volatile var workspaceName = "Alpha"
@@ -124,6 +130,7 @@ object ManagementFixture {
         balances.clear(); balanceGates.clear(); task = "{}"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
+        subagentTiers = """{"providers":[]}"""; subagentBlocked = null; workspaceExtra = ""; bodies.clear()
     }
 
     fun writes(path: String) = calls.filter { it.endsWith(" $path") && !it.startsWith("GET ") }
@@ -148,9 +155,9 @@ object ManagementFixture {
 
     private val now get() = Instant.now()
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
-        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}}}"""
+        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}${subagentBlocked?.let { ",\"subagentBlockedProviders\":" + JsonArray(it.map(::JsonPrimitive)) }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
-        "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"}"""
+        "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
     private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":$runnerTwoOnline,
         "status":"${if (runnerTwoOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerTwoOnline) now else now.minusSeconds(86_400)}","maxConcurrent":1,
@@ -202,6 +209,7 @@ object ManagementFixture {
         calls += "${api.method} $path"
         if (api.query.isNotEmpty()) queries += "${api.method} $path?" + api.query.joinToString("&") { (k, v) -> "$k=$v" }
         fun body() = Json.parseToJsonElement(api.body!!.decodeToString()).jsonObject
+        if (api.method != HttpMethod.GET) api.body?.let { bodies += "${api.method} $path ${it.decodeToString()}" }
         when (path) {
             "auth/login" -> ok("""{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":${user()}}""")
             "auth/logout" -> ok("{}")
@@ -210,11 +218,13 @@ object ManagementFixture {
                 body()["theme"]?.let { theme = it.jsonPrimitive.content }
                 body()["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
                 body()["recaps"]?.let { recaps = it.jsonPrimitive.boolean }
+                body()["subagentBlockedProviders"]?.let { list -> subagentBlocked = list.jsonArray.map { it.jsonPrimitive.content } }
                 ok(user())
             }
             "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")
             "providers" -> ok(providerCatalog)
             "providers/mine" -> ok(providersMine)
+            "providers/subagent-tiers" -> ok(subagentTiers)
             "tasks/$TASK" -> ok(task)
             "users/me/avatar" -> fail(404, "no avatar")
             "workspaces" -> ok("[${workspace()}]")

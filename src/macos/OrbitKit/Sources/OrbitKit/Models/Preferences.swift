@@ -38,6 +38,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// a session's list row in place of its raw last reply. Absent means on; only opting out is ever
     /// written. Tolerant like the two above: a stray value reads as absent rather than failing `me`.
     public let recaps: Bool?
+    /// The providers SubAgents may not use, by slug (docs/subagent-design.md §7). Absent: none blocked.
+    public let subagentBlockedProviders: [String]?
 
     /// Whether smart model selection is on for this account — only an explicit `true` turns it on.
     public var smartModelSelection: Bool { modelRouting == true }
@@ -49,7 +51,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case theme, defaultModel, defaultModels, defaultPermissionMode, defaultEffort
         case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting, promptSuggestions
-        case recaps
+        case recaps, subagentBlockedProviders
     }
 
     public init(from decoder: Decoder) throws {
@@ -65,6 +67,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         modelRouting = (try? c.decodeIfPresent(Bool.self, forKey: .modelRouting)) ?? nil
         promptSuggestions = (try? c.decodeIfPresent(Bool.self, forKey: .promptSuggestions)) ?? nil
         recaps = (try? c.decodeIfPresent(Bool.self, forKey: .recaps)) ?? nil
+        subagentBlockedProviders = (try? c.decodeIfPresent([String].self, forKey: .subagentBlockedProviders)) ?? nil
     }
 }
 
@@ -82,11 +85,14 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var modelRouting: Bool?
     public var promptSuggestions: Bool?
     public var recaps: Bool?
+    /// Replaces the whole blocked list.
+    public var subagentBlockedProviders: [String]?
     public init(theme: String? = nil, defaultModel: String? = nil, defaultModels: [String: String]? = nil,
                 defaultPermissionMode: String? = nil,
                 defaultEffort: String? = nil, enableOrchestration: Bool? = nil,
                 notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil,
-                modelRouting: Bool? = nil, promptSuggestions: Bool? = nil, recaps: Bool? = nil) {
+                modelRouting: Bool? = nil, promptSuggestions: Bool? = nil, recaps: Bool? = nil,
+                subagentBlockedProviders: [String]? = nil) {
         self.theme = theme
         self.defaultModel = defaultModel
         self.defaultModels = defaultModels
@@ -98,5 +104,6 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
         self.modelRouting = modelRouting
         self.promptSuggestions = promptSuggestions
         self.recaps = recaps
+        self.subagentBlockedProviders = subagentBlockedProviders
     }
 }

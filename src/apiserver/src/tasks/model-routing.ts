@@ -523,15 +523,17 @@ const OPTIMIZE_LABEL = { cost: 'Cost', balance: 'Balance', intelligence: 'Intell
  * table's efforts, the family's first model by catalogue priority (as routeTaskRun picks it), and Codex's
  * runner default at each effort. Every other engine's catalogue has no tier, model by model.
  */
+type SubagentCatalogInput = Pick<SubagentRoutingInput, 'modelCatalog' | 'runtimeDefaultModels'>;
+
 function builtinTierRows(
   engine: string,
-  input: SubagentRoutingInput,
+  input: SubagentCatalogInput,
   prices?: Readonly<Record<string, number>>,
 ): SubagentModelRow[] {
   return builtinRows(engine, input).map((row) => (prices ? { ...row, outputPricePerMTok: prices[row.model] ?? null } : row));
 }
 
-function builtinRows(engine: string, input: SubagentRoutingInput): SubagentModelRow[] {
+function builtinRows(engine: string, input: SubagentCatalogInput): SubagentModelRow[] {
   const catalog = input.modelCatalog?.[engine as AgentProvider] ?? [];
   if (engine === AgentProvider.CLAUDE) {
     const family = (prefix: string) => catalog
@@ -552,6 +554,15 @@ function builtinRows(engine: string, input: SubagentRoutingInput): SubagentModel
       : [];
   }
   return catalog.map((row) => ({ model: row.value, effort: null, level: null }));
+}
+
+/**
+ * The tier rows routeSubagent reads for one engine of a provider: the provider's own model space, else the
+ * engine's runner-reported catalogue through the built-in tier table. What the Providers page's Tier column
+ * shows (GET /providers/subagent-tiers), so it cannot say a model is routed when the router would skip it.
+ */
+export function subagentEngineRows(engine: SubagentProviderEngine, input: SubagentCatalogInput): SubagentModelRow[] {
+  return engine.models ? [...engine.models] : builtinTierRows(engine.engine, input, engine.prices);
 }
 
 interface SubagentCandidate extends SubagentModelRow {
@@ -713,7 +724,7 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
     const slug = provider.slug;
     if (input.blockedProviders.includes(slug)) return drop(slug, null, null, null, 'Blocked in the SubAgents settings');
     if (!provider.inScope) return drop(slug, null, null, null, 'A shared provider, which only admins may use');
-    provider.engines.forEach(({ engine, models }, engineIndex) => {
+    provider.engines.forEach(({ engine }, engineIndex) => {
       const report = input.engines?.[engine];
       // A runner that reported nothing is not judged on it; one that reported others lacks this one.
       if (input.engines && !report?.installed) return drop(slug, engine, null, null, `${engine} is not installed on the parent's runner`);
@@ -735,7 +746,7 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
         if (provider.account?.refused) return drop(slug, engine, null, null, "The endpoint refused the account's key");
         if (provider.account?.unreadable) return drop(slug, engine, null, null, "The account's quota cannot be read");
       }
-      const rows = models ?? builtinTierRows(engine, input, provider.engines[engineIndex].prices);
+      const rows = subagentEngineRows(provider.engines[engineIndex], input);
       if (rows.length === 0) return drop(slug, engine, null, null, `No models with a tier on ${engine}`);
       const ceilings = new Map<string, ModelRoutingLevel>();
       for (const row of rows) {

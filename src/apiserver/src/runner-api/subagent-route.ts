@@ -2,6 +2,10 @@ import { basename } from 'node:path';
 import {
   AgentProvider,
   credentialEngines,
+  ENGINE_CLI_NAMES,
+  type ProviderModelTier,
+  type ProviderTierRow,
+  type SubagentTiersResponse,
   providerPreset,
   type PlanUsageSnapshot,
   type ProviderPreset,
@@ -9,7 +13,7 @@ import {
   type RunnerModelCatalog,
   type SubagentRunCreateRequest,
 } from '@orbit/shared';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -20,7 +24,10 @@ import { isPoolCandidate } from '../providers/pool-admission';
 import { followsRuntimeCatalog, withPreset } from '../providers/preset-overlay';
 import { COMPATIBILITY_GUARD_SLUGS } from '../providers/providers.service';
 import {
+  MODEL_ROUTING_ENGINES,
+  MODEL_ROUTING_LEVELS,
   routeSubagent,
+  subagentEngineRows,
   type ModelRoutingEngineState,
   type ModelRoutingOptimizeFor,
   type SubagentEngineReport,
@@ -37,16 +44,30 @@ export function subagentBlockedProviders(preferences: unknown): string[] {
   return Array.isArray(list) ? list.filter((slug): slug is string => typeof slug === 'string') : [];
 }
 
-/** One model of a key's own list as a tier row: its tier and price, else those its preset ships for it. */
-function keyModelRow(model: ProviderPresetModel, shipped: readonly ProviderPresetModel[]): SubagentModelRow {
+/** A tier row of a key's own list, with where its tier came from (the Tier column reads it; the router ignores it). */
+interface KeyModelRow extends SubagentModelRow {
+  source: 'catalogue' | 'owner' | null;
+  editable: boolean;
+}
+
+/** One model of a key's own list as a tier row: the tier its preset ships for it, else the one the owner set
+ *  (model_provider.model_tiers), and its price. */
+function keyModelRow(model: ProviderPresetModel, shipped: readonly ProviderPresetModel[], ownerTiers: unknown): KeyModelRow {
   const preset = shipped.find((entry) => entry.value === model.value);
+  const set = ownerTiers && typeof ownerTiers === 'object' ? (ownerTiers as Record<string, unknown>)[model.value] : undefined;
+  const owner = MODEL_TIERS.find((tier) => tier === set) ?? null;
   return {
     model: model.value,
     effort: null,
-    level: model.tier ?? preset?.tier ?? null,
+    level: preset?.tier ?? owner,
     outputPricePerMTok: model.outputPricePerMTok ?? preset?.outputPricePerMTok ?? null,
+    source: preset?.tier ? 'catalogue' : owner ? 'owner' : null,
+    // The catalogue's word stands; a model it does not tier is the owner's to tier (docs/subagent-design.md §7).
+    editable: !preset?.tier,
   };
 }
+
+const MODEL_TIERS = ['S', 'M', 'L', 'XL'] as const;
 
 /** What the reads take of ProviderPlanUsageService: a pool member's cached quota and how its last read ended. */
 export interface SubagentPlanUsageReader {
@@ -117,6 +138,46 @@ export async function planSubagentRoute(
     ...(states[slug] ? { account: { quota: states[slug].quota ?? null, paused: states[slug].paused === true } } : {}),
   }));
 
+  const catalog = (runner?.modelCatalog ?? null) as RunnerModelCatalog | null;
+  const configured = await readConfiguredProviders(db, ownerId, { catalog, planUsage: args.planUsage ?? null, now: reads.now });
+
+  const mode = agent?.modelRoutingOptimizeFor;
+  const optimizeFor: ModelRoutingOptimizeFor = mode === 'balance' || mode === 'intelligence' ? mode : 'cost';
+  const level = (value: unknown) => (['S', 'M', 'L', 'XL'] as const).find((entry) => entry === value) ?? null;
+  return routeSubagent({
+    type: dto.type,
+    definitionName: dto.definitionSource === 'builtin' ? dto.type : basename(dto.definitionSource),
+    caller: { model: dto.model ?? null, size: level(dto.size), sizeReason: dto.sizeReason ?? null },
+    definition: { model: dto.definitionModel ?? null, size: level(dto.definitionSize) },
+    optimizeFor,
+    parent: args.parent,
+    providers: [...builtins, ...configured.map((entry) => entry.provider)],
+    blockedProviders: subagentBlockedProviders(owner?.preferences),
+    engines,
+    modelCatalog: catalog,
+    runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
+  });
+}
+
+/** A configured provider (a key or an account pool) as routing reads it, with what the Tier column shows of it. */
+interface ConfiguredProvider {
+  provider: SubagentProvider;
+  label: string;
+  kind: 'key' | 'pool';
+  /** A key of the owner's own, which the tier write takes; null for a shared key or a pool. */
+  providerId: string | null;
+}
+
+/**
+ * The owner's keys and account pools in provider_list's order, as routeSubagent reads them: with which
+ * engines each runs and the tier rows of each. Shared providers are read too, so one outside
+ * usableProviderScope is recorded as removed rather than missing. Reads only.
+ */
+async function readConfiguredProviders(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  { catalog, planUsage, now }: { catalog: RunnerModelCatalog | null; planUsage: SubagentPlanUsageReader | null; now: Date },
+): Promise<ConfiguredProvider[]> {
   const rows = await db.modelProvider.findMany({
     where: { enabled: true, slug: { notIn: COMPATIBILITY_GUARD_SLUGS }, OR: [{ ownerId }, { ownerId: null }] },
     orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
@@ -125,8 +186,7 @@ export async function planSubagentRoute(
     where: { id: { in: rows.map((row) => row.id) }, ...(await usableProviderScope(db, ownerId)) },
     select: { id: true },
   })).map((row) => row.id));
-  const catalog = (runner?.modelCatalog ?? null) as RunnerModelCatalog | null;
-  const keys: SubagentProvider[] = rows.map((row) => {
+  const keys = rows.map((row): ConfiguredProvider => {
     const credential = keyCredential(row);
     const runsOn = credentialEngines(credential);
     const shipped = providerPreset(row.presetSlug);
@@ -134,14 +194,14 @@ export async function planSubagentRoute(
     const presetModels = shipped ? catalogModels(shipped) : [];
     const subscription = credential.kind === 'key' && credential.subscriptionToken;
     // A subscription token's quota is the credential's own, read through the same cache as a pool member's.
-    const usage = subscription ? args.planUsage?.snapshot(row) ?? null : null;
-    const standing = subscription ? args.planUsage?.usageStanding(row) ?? null : null;
-    return {
+    const usage = subscription ? planUsage?.snapshot(row) ?? null : null;
+    const standing = subscription ? planUsage?.usageStanding(row) ?? null : null;
+    const provider: SubagentProvider = {
       slug: row.slug,
       billing: subscription ? 'subscription' : 'key',
       ...(subscription ? {
         account: {
-          quota: fullestWindow(usage, reads.now),
+          quota: fullestWindow(usage, now),
           refused: standing === 'KEY_REFUSED',
           unreadable: usage === null || standing === 'USAGE_UNKNOWN',
         },
@@ -152,20 +212,20 @@ export async function planSubagentRoute(
         // Priced from models.dev like every other preset (an Anthropic key on Claude Code, an OpenAI key on Codex).
         index === 0 && row.runtime !== AgentProvider.DSH && followsRuntimeCatalog(row)
           ? { engine, prices: catalogPrices(shipped, catalog, engine) }
-          : { engine, models: (Array.isArray(own) ? own : []).map((model) => keyModelRow(model, presetModels)) }
+          : { engine, models: (Array.isArray(own) ? own : []).map((model) => keyModelRow(model, presetModels, row.modelTiers)) }
       )),
     };
+    return { provider, label: row.label, kind: 'key', providerId: row.ownerId === ownerId ? row.id : null };
   });
 
   // Account pools (provider_list lists them after the keys). A Claude pool spends its members' subscription
   // keys, read through the same cache dispatch chooses a member by; a Codex pool of one's own its ChatGPT
   // logins, whose readings the pool gateway stores; a shared Codex pool runs on OpenAI API keys, billed per token.
-  const now = reads.now;
   const pools = await db.providerPool.findMany({
     where: { OR: [{ ownerId, shared: false }, { engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } }] },
     orderBy: { createdAt: 'asc' },
     select: {
-      id: true, slug: true, shared: true, engine: true,
+      id: true, slug: true, label: true, shared: true, engine: true,
       members: { where: { ownerId }, orderBy: { provider: { slug: 'asc' } }, select: { provider: true, pausedUntil: true } },
     },
   });
@@ -175,10 +235,10 @@ export async function planSubagentRoute(
   });
   const later = (at: Date | null) => at !== null && at > now;
   const openai = providerPreset('openai');
-  const poolProviders: SubagentProvider[] = pools.map((pool): SubagentProvider => {
+  const poolProviders = pools.map((pool): ConfiguredProvider => {
     if (pool.shared) {
-      return { slug: pool.slug, billing: 'key', inScope: true,
-        engines: [{ engine: AgentProvider.CODEX, prices: catalogPrices(openai, catalog, AgentProvider.CODEX) }] };
+      return { label: pool.label, kind: 'pool', providerId: null, provider: { slug: pool.slug, billing: 'key', inScope: true,
+        engines: [{ engine: AgentProvider.CODEX, prices: catalogPrices(openai, catalog, AgentProvider.CODEX) }] } };
     }
     const members: SubagentPoolMember[] = pool.engine === AgentProvider.CODEX
       ? logins.filter((login) => login.poolId === pool.id).map((login) => {
@@ -195,8 +255,8 @@ export async function planSubagentRoute(
         .map((member) => ({ ...member.provider, pausedUntil: member.pausedUntil }))
         .filter(isPoolCandidate)
         .map((row) => {
-          const standing = args.planUsage?.usageStanding(row) ?? null;
-          const usage = args.planUsage?.snapshot(row) ?? null;
+          const standing = planUsage?.usageStanding(row) ?? null;
+          const usage = planUsage?.snapshot(row) ?? null;
           return {
             label: row.label,
             quota: fullestWindow(usage, now),
@@ -205,23 +265,72 @@ export async function planSubagentRoute(
             unreadable: standing === 'USAGE_UNKNOWN' || usage === null,
           };
         });
-    return { slug: pool.slug, billing: 'subscription', inScope: true, engines: [{ engine: pool.engine }], pool: { members } };
+    return { label: pool.label, kind: 'pool', providerId: null,
+      provider: { slug: pool.slug, billing: 'subscription', inScope: true, engines: [{ engine: pool.engine }], pool: { members } } };
   });
+  return [...keys, ...poolProviders];
+}
 
-  const mode = agent?.modelRoutingOptimizeFor;
-  const optimizeFor: ModelRoutingOptimizeFor = mode === 'balance' || mode === 'intelligence' ? mode : 'cost';
-  const level = (value: unknown) => (['S', 'M', 'L', 'XL'] as const).find((entry) => entry === value) ?? null;
-  return routeSubagent({
-    type: dto.type,
-    definitionName: dto.definitionSource === 'builtin' ? dto.type : basename(dto.definitionSource),
-    caller: { model: dto.model ?? null, size: level(dto.size), sizeReason: dto.sizeReason ?? null },
-    definition: { model: dto.definitionModel ?? null, size: level(dto.definitionSize) },
-    optimizeFor,
-    parent: args.parent,
-    providers: [...builtins, ...keys, ...poolProviders],
-    blockedProviders: subagentBlockedProviders(owner?.preferences),
-    engines,
-    modelCatalog: catalog,
-    runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
+/**
+ * The Providers page's Tier column and the SubAgents settings' provider list (docs/subagent-design.md §7): every
+ * provider routeSubagent considers, in its order, each with the tiers the router reads for its models. The
+ * runner catalogue is the owner's most recently heard-from runner's that reported one, so the built-in table's
+ * rows name the models a SubAgent would get there. Built-in engines without a tier table list no models:
+ * nothing of theirs is routed onto. Reads only.
+ */
+export async function subagentTierView(db: Prisma.TransactionClient, ownerId: string, now = new Date()): Promise<SubagentTiersResponse> {
+  const runner = await db.runner.findFirst({
+    where: { ownerId, modelCatalog: { not: Prisma.DbNull } },
+    orderBy: [{ lastHeartbeatAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
+    select: { modelCatalog: true, runtimeDefaultModels: true },
   });
+  const catalogInput = {
+    modelCatalog: (runner?.modelCatalog ?? null) as RunnerModelCatalog | null,
+    runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
+  };
+  const configured = await readConfiguredProviders(db, ownerId, { catalog: catalogInput.modelCatalog, planUsage: null, now });
+  const builtins: ConfiguredProvider[] = Object.values(AgentProvider).map((slug) => ({
+    label: ENGINE_CLI_NAMES[slug],
+    kind: 'key',
+    providerId: null,
+    provider: { slug, billing: isLoginEngine(slug) ? 'subscription' : 'key', inScope: true, engines: [{ engine: slug }] },
+  }));
+  return {
+    providers: [...builtins, ...configured]
+      .filter(({ provider }) => provider.inScope)
+      .map((entry, index): ProviderTierRow => {
+        const builtin = index < builtins.length;
+        const models = new Map<string, ProviderModelTier>();
+        for (const engine of entry.provider.engines) {
+          // A built-in engine outside the tier table has no tiered rows: listing its whole catalogue as Not set would
+          // offer tiers the owner cannot give it.
+          if (!engine.models && !MODEL_ROUTING_ENGINES.includes(engine.engine)) continue;
+          for (const row of subagentEngineRows(engine, catalogInput) as Array<SubagentModelRow & Partial<KeyModelRow>>) {
+            const seen = models.get(row.model) ?? {
+              model: row.model,
+              levels: [],
+              source: null,
+              editable: false,
+              outputPricePerMTok: null,
+            };
+            if (row.level && !seen.levels.includes(row.level)) seen.levels.push(row.level);
+            seen.source = seen.source ?? row.source ?? (row.level ? 'catalogue' : null);
+            seen.editable = seen.editable || (row.editable === true && entry.providerId !== null);
+            seen.outputPricePerMTok = seen.outputPricePerMTok ?? row.outputPricePerMTok ?? null;
+            models.set(row.model, seen);
+          }
+        }
+        for (const model of models.values()) {
+          model.levels.sort((a, b) => MODEL_ROUTING_LEVELS.indexOf(a) - MODEL_ROUTING_LEVELS.indexOf(b));
+        }
+        return {
+          slug: entry.provider.slug,
+          label: entry.label,
+          kind: builtin ? 'builtin' : entry.kind,
+          providerId: entry.providerId,
+          billing: entry.provider.billing,
+          models: [...models.values()],
+        };
+      }),
+  };
 }
