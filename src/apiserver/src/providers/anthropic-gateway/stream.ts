@@ -40,6 +40,11 @@ export class MessagesStreamConverter {
   private started = false;
   private finished = false;
   private sawFunctionCall = false;
+  /**
+   * The upstream's own failure, when the response ended in one (`response.failed`, a stream `error`): its
+   * code and message as OpenAI gave them, for the gateway's key side effects (design §5.4).
+   */
+  failure: { code: string; message: string } | undefined;
 
   constructor(private readonly ctx: StreamContext) {}
 
@@ -226,6 +231,7 @@ export class MessagesStreamConverter {
 
   private fail(code: string, message: string, out: MessagesEvent[]): void {
     this.finished = true;
+    this.failure = { code, message };
     const mapped = anthropicError(code, message, this.ctx);
     out.push(errorEvent(mapped.type, mapped.message));
   }
@@ -261,8 +267,8 @@ function errorEvent(type: string, message: string): MessagesEvent {
 /**
  * An upstream error code in Anthropic's terms. The one wording the CLI acts on is the overflow: it compacts
  * and retries only on "prompt is too long" (toolong-r2.json); OpenAI's own wording makes it re-send the same
- * request once and give up (toolong-openai.json). Which status and wording each other code answers with,
- * and the key side effects, are P2's (design §5.4).
+ * request once and give up (toolong-openai.json). This is the type of an `error` event in a stream that
+ * had already begun; every other failure is answered by the gateway's gatewayFailure (design §5.4).
  */
 export function anthropicError(code: string, message: string, ctx: Pick<StreamContext, 'contextWindow' | 'inputTokensEstimate'>): { type: string; message: string } {
   if (code === 'context_length_exceeded') {
