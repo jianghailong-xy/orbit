@@ -37,6 +37,7 @@ import {
   keyCredential,
   usableProviderScope,
 } from './custom-provider';
+import { engineTableOptions } from './key-gateway';
 import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { SESSION_ENGINE_UNKNOWN_MESSAGE, sessionEngine, type SessionEngineFacts } from './session-engine';
 
@@ -70,7 +71,7 @@ export function resolvedCredentialEngines(credential: ResolvedCredential): Agent
     case 'legacy-dsh':
       return [AgentProvider.DSH];
     case 'key':
-      return credentialEngines(keyCredential(credential.row));
+      return credentialEngines(keyCredential(credential.row), engineTableOptions());
   }
 }
 

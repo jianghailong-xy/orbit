@@ -22,6 +22,13 @@ import { Prisma } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 import { accountDir, isAccountEngine } from '@orbit/shared';
 import { ACCOUNT_CHOICE, accountEnvVar, accountOnRunner, type AccountRunner } from './account';
+import {
+  anthropicGatewayUrl,
+  engineTableOptions,
+  gatewaySmallModel,
+  KEY_GATEWAY_TOKEN_PREFIX,
+  runsThroughAnthropicGateway,
+} from './key-gateway';
 import { catalogModels } from './model-catalog';
 import { ANTHROPIC_HOST } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
@@ -375,9 +382,14 @@ function injectedEnv(
       KIMI_MODEL_BASE_URL: row.baseUrl,
     };
   }
+  // An OpenAI key on Claude Code runs through Orbit's own gateway, which holds the key and translates
+  // Anthropic Messages to OpenAI Responses (docs/claude-engine-openai-gateway-design.md §4.2). The engine gets
+  // the gateway and the session token minted for this build (key-gateway.ts withKeyGatewayToken) — never the
+  // key: a build that minted none (a read that dispatches nothing) gets no credential at all.
+  const throughGateway = runsThroughAnthropicGateway(AgentProvider.CLAUDE, row);
   const claudeEnv: Record<string, string> = {
-    ANTHROPIC_BASE_URL: row.baseUrl,
-    ANTHROPIC_AUTH_TOKEN: apiKey,
+    ANTHROPIC_BASE_URL: throughGateway ? anthropicGatewayUrl() : row.baseUrl,
+    ANTHROPIC_AUTH_TOKEN: throughGateway ? gatewayToken(row) : apiKey,
     // The model the session runs, beside the endpoint that serves it. The engine itself is told by
     // --model, which outranks this; what reads it is a command the session runs that must call the
     // same model through a clean Claude Code of its own — `orbit wiki verify` (wiki contract
@@ -407,9 +419,13 @@ function injectedEnv(
   // takes the by-name path from the start (measured on 2.1.292 against DeepSeek: the conversation
   // that 422s without it completes a turn with it). Injected only where the host is not
   // Anthropic's: there the inline form is served, and the session keeps it.
-  if (!isAnthropicEndpoint(row.baseUrl)) {
+  if (throughGateway || !isAnthropicEndpoint(row.baseUrl)) {
     claudeEnv.CLAUDE_CODE_INLINE_TOOLS = 'false';
   }
+  // Claude Code's background requests (WebFetch summaries, side questions) go out on its haiku slot, which on
+  // the gateway is the key's small model (design §4.5).
+  const small = throughGateway ? gatewaySmallModel(row) : undefined;
+  if (small) claudeEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = small;
   // A model id the CLI's own catalog doesn't describe gets 200k assumed for it, and auto-compact
   // keeps the session inside that. The endpoint can't correct the CLI — an Anthropic-compatible
   // shim like DeepSeek's serves no /v1/models for it to ask — so the declared window travels as
@@ -447,6 +463,11 @@ function injectedEnv(
     claudeEnv.CLAUDE_CODE_EFFORT_LEVEL = 'unset';
   }
   return claudeEnv;
+}
+
+/** The gateway token minted for this build, or nothing: never the key, nor a pool's token. */
+function gatewayToken(row: ModelProviderRow): string {
+  return row.sessionToken?.startsWith(KEY_GATEWAY_TOKEN_PREFIX) ? row.sessionToken : '';
 }
 
 /** A Claude subscription token: Anthropic serves it to its own clients only, so OpenCode never gets
@@ -681,8 +702,9 @@ export function resolveProviderExec(args: {
     const engine = args.engine ?? native;
     const apiKey = customRow.sessionToken ?? decryptSecret(customRow.apiKeyEnc);
     const credential = keyCredential(customRow, apiKey);
-    if (!isEngineCompatible(engine, credential)) {
-      throw engineIncompatible(customRow.slug ?? args.declaredProvider ?? '', engine, credentialEngines(credential));
+    const table = engineTableOptions();
+    if (!isEngineCompatible(engine, credential, table)) {
+      throw engineIncompatible(customRow.slug ?? args.declaredProvider ?? '', engine, credentialEngines(credential, table));
     }
     // The model space is the engine's on this key (§2.2): DeepSeek Harness's own catalogue on a
     // DeepSeek key, the key vendor's table for Claude Code — and for OpenCode, the table the key's

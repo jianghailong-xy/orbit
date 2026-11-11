@@ -16,6 +16,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { anthropicGatewayEnabled, engineTableOptions, withKeyGatewayToken } from '../providers/key-gateway';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
@@ -286,7 +287,7 @@ export class QueueService {
           unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
         }
         if (!unavailable && engine) {
-          const engines = provider ? credentialEngines(keyCredential(provider)) : [poolEngine!];
+          const engines = provider ? credentialEngines(keyCredential(provider), engineTableOptions()) : [poolEngine!];
           if (!engines.includes(engine)) incompatible = engineIncompatibleMessage(slug, engine, engines);
         }
         const key = `${session.ownerId}:${slug}`;
@@ -512,7 +513,9 @@ export class QueueService {
                             SELECT a.provider_id FROM "provider_slug_alias" a WHERE a.slug = s.provider))
                       AND mp.enabled
                       AND mp.runtime = ANY(CASE s."engine"
-                        WHEN 'claude' THEN ARRAY['claude', 'dsh']
+                        -- Claude Code also runs an OpenAI key, through /api/gw/anthropic, with the deployment flag on.
+                        WHEN 'claude' THEN CASE WHEN ${anthropicGatewayEnabled()}
+                          THEN ARRAY['claude', 'dsh', 'codex'] ELSE ARRAY['claude', 'dsh'] END
                         WHEN 'dsh' THEN ARRAY['claude', 'dsh']
                         WHEN 'opencode' THEN ARRAY['claude', 'codex', 'kimi', 'antigravity', 'dsh']
                         ELSE ARRAY[s."engine"]
@@ -962,9 +965,11 @@ export class QueueService {
       { ownerId: session.ownerId, provider: declared, providerBuiltin: session.providerBuiltin },
       workspace?.env,
     );
+    // Claude Code on an OpenAI key runs on a token minted for this claim, never the key (key-gateway.ts).
+    const keyRow = await withKeyGatewayToken(this.prisma, session, engine, configuredRow);
     const customRow = declaredIsBuiltin
-      ? configuredRow
-      : (configuredRow ??
+      ? keyRow
+      : (keyRow ??
         (await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
         (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
         (await this.resolveSharedPool(this.prisma, session, declared!, true)));

@@ -492,6 +492,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { withKeyGatewayToken } from '../providers/key-gateway';
 import { cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import { CursorKeyCheckDto, CursorKeyCheckResultDto } from '../providers/dto';
 import { ProvidersService } from '../providers/providers.service';
@@ -3836,9 +3837,10 @@ export class RunnerApiController {
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
       // As on the claim (QueueService.buildSession): the key the slug names or a retired name of one,
       // and a legacy built-in dsh session's default DeepSeek key when its workspace holds no key itself.
-      const keyRow = await dispatchKeyRow(
+      // Claude Code on an OpenAI key is rebuilt on a token minted for this reclaim, as the claim mints one.
+      const keyRow = await withKeyGatewayToken(this.prisma, s, engines.get(s.id), await dispatchKeyRow(
         this.prisma, { ownerId: s.ownerId, provider: declared, providerBuiltin: s.providerBuiltin }, workspace?.env,
-      );
+      ));
       const customRow = declaredIsBuiltin
         ? keyRow
         : (keyRow ??
@@ -5534,7 +5536,8 @@ export class RunnerApiController {
     if (!engine) return { refusal: await unavailable(null) };
     // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
     // session's default DeepSeek key when its workspace holds no key itself.
-    const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
+    // Claude Code on an OpenAI key re-spawns on a token minted for this reload, as the claim mints one.
+    const keyRow = await withKeyGatewayToken(tx, session, engine, await dispatchKeyRow(tx, session, session.workspace?.env));
     const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
       ? keyRow
       : (keyRow ??

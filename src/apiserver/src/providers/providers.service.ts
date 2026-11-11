@@ -24,6 +24,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { codexLoginView, codexPoolUnavailableReason, maskedAccount, POOL_LOGIN_SELECT } from './codex-login';
+import { engineTableOptions, revokeKeyGatewayTokens } from './key-gateway';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -126,7 +127,7 @@ function cursorKeyCheckAnswer(outcome: CursorKeyCheckOutcome, why: CursorKeyChec
 /** The engines a key's row runs on (shared providerEngines.ts): its protocol, its preset and endpoint,
  *  and whether its key is a Claude subscription token — which only this side can say, holding the key. */
 function keyEngines(row: { runtime: string; presetSlug: string | null; baseUrl: string; apiKeyEnc: string }): AgentProvider[] {
-  return credentialEngines(keyCredential(row));
+  return credentialEngines(keyCredential(row), engineTableOptions());
 }
 
 /** What uses a key, per engine (docs/provider-engine-contract.md §3.6): the open sessions spending it and
@@ -696,7 +697,7 @@ export class ProvidersService {
       const runs = credentialEngines(keyCredential(
         { runtime, presetSlug: current.presetSlug, baseUrl: dto.baseUrl ?? current.baseUrl, apiKeyEnc: apiKeyEnc ?? current.apiKeyEnc },
         dto.apiKey,
-      ));
+      ), engineTableOptions());
       const stranded = (await readKeyUsage(this.prisma, current)).engines.filter((e) => !runs.includes(e.engine));
       if (stranded.length > 0) {
         throw dialectInUse(current.label, stranded, protocolMoves ? 'protocol' : endpointMoves ? 'endpoint' : 'key');
@@ -704,6 +705,13 @@ export class ProvidersService {
       await this.recordSessionEngines(current);
     }
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
+    // A key switched off, given a new secret or moved to another endpoint or protocol: the tokens Claude Code
+    // sessions on it run with through the gateway stop at once (docs/claude-engine-openai-gateway-design.md
+    // §4.2). The session's next claim mints a token on the key as it now is.
+    // Only an OpenAI key ever has such tokens.
+    if (keyDialect(current.runtime) === 'openai' && (dto.enabled === false || apiKeyEnc || protocolMoves || endpointMoves)) {
+      await revokeKeyGatewayTokens(this.prisma, row.id);
+    }
     this.publishChanged(ownerId, row.id);
     return this.desensitize(row);
   }

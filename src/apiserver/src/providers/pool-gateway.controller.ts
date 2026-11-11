@@ -11,6 +11,7 @@ import {
 } from './pool-gateway.service';
 import { loginGatewayAllows } from './codex-login-gateway';
 import { PoolLoginGatewayService } from './pool-login-gateway.service';
+import { ANTHROPIC_GATEWAY_PATH } from './key-gateway';
 import { POOL_LOGIN_TOKEN_PREFIX } from './shared-pool';
 
 /**
@@ -67,12 +68,14 @@ export class PoolGatewayController {
 }
 
 /**
- * `middleware`, for every request but the gateway's. main.ts parses JSON and form bodies for the whole
- * API; the gateway forwards the body codex sent byte for byte, so it must reach the handler unread.
+ * `middleware`, for every request but the gateways'. main.ts parses JSON and form bodies for the whole
+ * API; the pool gateway forwards the body codex sent byte for byte, and the Anthropic gateway reads the body
+ * Claude Code sent itself, past main.ts's limit, so both must reach their handler unread.
  */
 export function outsideThePoolGateway(middleware: RequestHandler): RequestHandler {
-  return (req: Request, res: Response, next: NextFunction) =>
-    (req.originalUrl ?? req.url).startsWith(`${POOL_GATEWAY_PATH}/`) || (req.originalUrl ?? req.url) === POOL_GATEWAY_PATH
-      ? next()
-      : middleware(req, res, next);
+  const under = (url: string, prefix: string) => url.startsWith(`${prefix}/`) || url.startsWith(`${prefix}?`) || url === prefix;
+  return (req: Request, res: Response, next: NextFunction) => {
+    const url = req.originalUrl ?? req.url;
+    return under(url, POOL_GATEWAY_PATH) || under(url, ANTHROPIC_GATEWAY_PATH) ? next() : middleware(req, res, next);
+  };
 }

@@ -102,8 +102,10 @@ claude ── Messages (SSE) ──▶ /api/gw/anthropic/v1/messages
   and a stream converter fed Responses SSE bytes that emits Messages SSE bytes. It does no I/O, so it can be tested
   against recorded fixtures alone.
 - **Upstream.** The key row's `baseUrl` + `/responses`, sent with the existing `sendUpstream` / `relayStream`
-  helpers. `forwardedHeaders` drops the caller's `OpenAI-Organization` and `OpenAI-Project` headers (wiki pitfall
-  34mMW9abYYvUTlWPS4nti). Which hosts are allowed is decision D3.
+  helpers (`relayStream` takes a conversion, so the translator sits between the upstream's bytes and the CLI's).
+  Nothing the CLI sent is forwarded as a header: the gateway builds the request's headers itself (type, accept,
+  the key), so the caller's `OpenAI-Organization` and `OpenAI-Project` never reach OpenAI (wiki pitfall
+  34mMW9abYYvUTlWPS4nti), nor its Anthropic headers. Which hosts are allowed is decision D3.
 
 ### 4.2 Tokens and dispatch
 
@@ -112,18 +114,22 @@ claude ── Messages (SSE) ──▶ /api/gw/anthropic/v1/messages
   each claim, reclaim and provider-switch reload; older tokens of the same session and key stay good, because a warm
   engine keeps the environment it was spawned with. A token is revoked when:
   - the session ends,
-  - the key is deleted, disabled or rotated,
+  - the key is deleted (the rows go with it), disabled or rotated — a new secret, endpoint or protocol
+    (`revoked_at`, set by the key's update),
   - the owner's account is disabled (refused as `ACCOUNT_DISABLED`, as `gw/codex` does).
 
   It is a new table rather than a nullable `poolId` on `PoolGatewayToken`, so the pool tables' invariants and
   tenant-isolation cases stay as they are.
 - **Compatibility.** `keyEngines` adds `claude` for the `openai` dialect, after `codex`, only when the deployment has
-  the gateway on (D6). `EngineCredential` gains no field: the server passes the switch when it builds the `engines`
-  list.
+  the gateway on (D6): `ORBIT_CLAUDE_OPENAI_GATEWAY=true` (docs/configuration.md). `EngineCredential` gains no
+  field: the server passes the switch (`EngineTableOptions.anthropicGateway`) when it builds the `engines` list. The
+  Swift and Kotlin mirrors take no switch: the clients read a key's engines off `/providers`.
 - **Environment.** In the `claudeEnv` branch, a key whose dialect is `openai` gets:
   - `ANTHROPIC_BASE_URL = PUBLIC_ORIGIN + /api/gw/anthropic` and `ANTHROPIC_AUTH_TOKEN = orbit-gwk-…`
     instead of the row's endpoint and key.
   - `ANTHROPIC_DEFAULT_HAIKU_MODEL` = the key's small model (§4.5).
+  - A build that minted no token (a read that dispatches nothing) gets an empty `ANTHROPIC_AUTH_TOKEN`, never the
+    key.
   - The rest of the block as today: `ANTHROPIC_MODEL`, inline tools off (the host is not Anthropic's), the Explore
     switch, `CLAUDE_CODE_MAX_CONTEXT_TOKENS`, effort.
 
@@ -211,7 +217,7 @@ requests claude 2.1.322 really sent (`providers/fixtures/claude-cli-2.1.322/`, r
   unset it carried the session model (`gpt-5.5`), not a Claude id; with it set, that model
   (`toolsearch-r2.json`, `toolsearch-haikur2.json`). A headless runner session sent no title request. Subagents ran on
   the session model (`subagent-r2.json`). Dispatch sets `ANTHROPIC_DEFAULT_HAIKU_MODEL` to the key's small model: the
-  preset's mini model, or the row's own choice. As a backstop, the gateway also rewrites any `claude-*haiku*` id to
+  first `mini` model of the key's list, the preset's or the row's own (`gatewaySmallModel`); none, and it is unset. As a backstop, the gateway also rewrites any `claude-*haiku*` id to
   that model, and any other `claude-*` id to the session model, so no request reaches OpenAI with a Claude id.
 - **Context windows.** The `openai` preset's models (`providerPresets.ts`) need a `contextWindow`, so
   `CLAUDE_CODE_MAX_CONTEXT_TOKENS` is set. Without it the CLI assumes 200k.

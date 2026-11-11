@@ -80,6 +80,21 @@ describe('credentialEngines', () => {
     expect(defaultEngineOf(legacyToken)).toBe('claude');
   });
 
+  it('adds Claude Code for an OpenAI key only with the Anthropic gateway on, after Codex', () => {
+    const openai = key('codex', 'openai', 'https://api.openai.com/v1');
+    const on = { anthropicGateway: true };
+    expect(credentialEngines(openai, on)).toEqual(['codex', 'claude', 'opencode']);
+    expect(defaultEngineOf(openai, on)).toBe('codex');
+    expect(isEngineCompatible('claude', openai, on)).toBe(true);
+    // Off, or not passed: the table as it was.
+    expect(credentialEngines(openai, { anthropicGateway: false })).toEqual(['codex', 'opencode']);
+    expect(isEngineCompatible('claude', openai)).toBe(false);
+    // No other dialect gains anything, and a subscription token still runs nowhere on an OpenAI row.
+    expect(credentialEngines(GLM, on)).toEqual(['claude', 'opencode']);
+    expect(credentialEngines(key('kimi', 'moonshot', 'https://api.moonshot.ai/v1'), on)).toEqual(['kimi', 'opencode']);
+    expect(credentialEngines(key('codex', 'openai', 'https://api.openai.com/v1', true), on)).toEqual([]);
+  });
+
   it('runs a key on a protocol no engine speaks nowhere', () => {
     expect(credentialEngines(key('opencode', null, 'https://x.example'))).toEqual([]);
     expect(defaultEngineOf(key('opencode', null, 'https://x.example'))).toBeNull();

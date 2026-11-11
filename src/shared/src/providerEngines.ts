@@ -90,9 +90,20 @@ export function isDeepSeekKey(row: { presetSlug: string | null; baseUrl: string 
   }
 }
 
+/**
+ * What the deployment has switched on, which the table reads beside the credential. Not a field of the
+ * credential: the server that holds the switch passes it when it builds a key's `engines` list, and a
+ * caller that passes nothing gets the table as it is with every switch off.
+ */
+export interface EngineTableOptions {
+  /** Orbit's /api/gw/anthropic gateway is on (docs/claude-engine-openai-gateway-design.md §4.2, D6):
+   *  an OpenAI key also runs on Claude Code, after its default engine Codex (D7). */
+  anthropicGateway?: boolean;
+}
+
 /** The engines `credential` can run on, its default engine first and the rest in ALL_ENGINES order;
  *  empty when nothing can run it (a key on a protocol no engine speaks). */
-export function credentialEngines(credential: EngineCredential): AgentProvider[] {
+export function credentialEngines(credential: EngineCredential, options: EngineTableOptions = {}): AgentProvider[] {
   switch (credential.kind) {
     case 'login':
     case 'pool':
@@ -100,11 +111,11 @@ export function credentialEngines(credential: EngineCredential): AgentProvider[]
     case 'opencode':
       return [AgentProvider.OPENCODE];
     case 'key':
-      return keyEngines(credential);
+      return keyEngines(credential, options);
   }
 }
 
-function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>): AgentProvider[] {
+function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>, options: EngineTableOptions): AgentProvider[] {
   const dialect = keyDialect(key.runtime);
   if (!dialect) return [];
   if (key.subscriptionToken) return dialect === 'anthropic' ? [AgentProvider.CLAUDE] : [];
@@ -115,14 +126,16 @@ function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>): AgentProvi
   const native = legacyDsh ? AgentProvider.DSH : NATIVE_ENGINE[dialect];
   const runs = new Set<AgentProvider>([NATIVE_ENGINE[dialect], AgentProvider.OPENCODE]);
   if (dialect === 'anthropic' && (legacyDsh || isDeepSeekKey(key))) runs.add(AgentProvider.DSH);
+  // Claude Code on an OpenAI key through Orbit's own gateway, which holds the key (design §4.2).
+  if (dialect === 'openai' && options.anthropicGateway) runs.add(AgentProvider.CLAUDE);
   return [native, ...ALL_ENGINES.filter((engine) => engine !== native && runs.has(engine))];
 }
 
 /** The engine a caller that names only the credential gets, or null when nothing can run it. */
-export function defaultEngineOf(credential: EngineCredential): AgentProvider | null {
-  return credentialEngines(credential)[0] ?? null;
+export function defaultEngineOf(credential: EngineCredential, options: EngineTableOptions = {}): AgentProvider | null {
+  return credentialEngines(credential, options)[0] ?? null;
 }
 
-export function isEngineCompatible(engine: string, credential: EngineCredential): boolean {
-  return (credentialEngines(credential) as string[]).includes(engine);
+export function isEngineCompatible(engine: string, credential: EngineCredential, options: EngineTableOptions = {}): boolean {
+  return (credentialEngines(credential, options) as string[]).includes(engine);
 }

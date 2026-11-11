@@ -1,0 +1,48 @@
+import { All, Controller, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
+import { ACCOUNT_DISABLED, ACCOUNT_DISABLED_MESSAGE } from '../auth/disabled-accounts';
+import {
+  anthropicGatewayAllows,
+  anthropicGatewayPath,
+  AnthropicGatewayService,
+  refuseAnthropic,
+} from './anthropic-gateway.service';
+import { bearerToken } from './pool-gateway.service';
+
+/**
+ * `/api/gw/anthropic/*` — Claude Code on an OpenAI key (docs/claude-engine-openai-gateway-design.md §4.1), beside
+ * `/api/gw/codex`. No guard: the caller's only credential is the `orbit-gwk-` session token the gateway checks,
+ * and every path under the prefix reaches the handler, so one outside the gateway's list is refused by the
+ * gateway, in Anthropic's error shape, rather than answered by the router. That includes the
+ * `HEAD <base>/api/hello` the CLI sends before its first request (P0, basic.json request 1).
+ */
+@Controller('gw/anthropic')
+export class AnthropicGatewayController {
+  constructor(private readonly gateway: AnthropicGatewayService) {}
+
+  @All(['', '{*path}'])
+  async forward(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const caller = await this.gateway.caller(bearerToken(req.headers.authorization) ?? headerToken(req.headers['x-api-key']));
+    if (!caller) {
+      refuseAnthropic(res, 401, 'authentication_error',
+        'This Orbit session token is not valid any more: the session ended or moved, or its key was removed, switched off or replaced.');
+      return;
+    }
+    if (caller === ACCOUNT_DISABLED) {
+      refuseAnthropic(res, 403, 'permission_error', ACCOUNT_DISABLED_MESSAGE);
+      return;
+    }
+    const path = anthropicGatewayPath(req.originalUrl ?? req.url);
+    if (!anthropicGatewayAllows(req.method, path)) {
+      refuseAnthropic(res, 404, 'not_found_error', `${req.method} ${path} is not something the Orbit gateway forwards.`);
+      return;
+    }
+    return this.gateway.forward(req, res, caller);
+  }
+}
+
+/** A token sent as `x-api-key`, which Claude Code uses for ANTHROPIC_API_KEY (it sends a bearer for ours). */
+function headerToken(value: string | string[] | undefined): string | undefined {
+  const token = (Array.isArray(value) ? value[0] : value)?.trim();
+  return token ? token : undefined;
+}
