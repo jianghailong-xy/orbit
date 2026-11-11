@@ -197,9 +197,7 @@ struct ManagedWelcomeCard: View {
                     RunnerSignInView(runnerID: runner.id, engine: engine,
                                      onSignedIn: { Task { await app.agents?.refreshRunnerSnapshot() } },
                                      signInTitle: RunnerPageCopy.RUNNER_SIGN_IN,
-                                     onUseApiKey: keyToUse.map { key in
-                                         { draft.pickDraft(engine: key.engine, provider: key.provider) }
-                                     })
+                                     onUseApiKey: useKey)
                         .id(engine)
                         .buttonBorderShape(.capsule)
                         .controlSize(.small)
@@ -211,11 +209,17 @@ struct ManagedWelcomeCard: View {
         }
     }
 
+    /// Use an API Key: the first key or pool that runs here becomes the draft's credential; none, none offered.
+    private var useKey: (() -> Void)? {
+        guard let key = keyToUse else { return nil }
+        return { draft.pickDraft(engine: key.engine, provider: key.provider) }
+    }
+
     private var foot: some View {
         let foot = Welcome.foot(startsNow: startsNow, up: up, signedIn: credential.done)
         return Text(foot.text)
             .font(.orbitLabel)
-            .foregroundStyle(foot == .ready ? SetupInk.found : .secondary)
+            .foregroundStyle(foot == .ready ? SetupInk.found : Color.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 8)
     }

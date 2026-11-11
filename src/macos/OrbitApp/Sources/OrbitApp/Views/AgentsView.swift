@@ -1634,7 +1634,7 @@ struct NewSessionView: View {
     /// The model step's answer: the draft's provider once a first session can start, else none.
     private var welcomeCredential: SetupCredential {
         guard let runner = managedRunnerRow else { return .signIn }
-        let provider = draft.managed?.blocksNewSession == true ? nil : currentProviderChoice
+        let provider: ProviderChoice? = draft.managed?.blocksNewSession == true ? nil : currentProviderChoice
         return MachineSetup.credential(runner: runner, engine: welcomeEngine.rawValue, provider: provider)
     }
 

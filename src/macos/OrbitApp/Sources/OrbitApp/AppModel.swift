@@ -2042,9 +2042,11 @@ final class AppModel {
     func readNewAccount() async {
         guard let api else { return }
         let generation = apiGeneration
-        async let open = try? api.sessionRowCount(view: .open)
-        async let completed = try? api.sessionRowCount(view: .completed)
-        let answer = Welcome.isNewAccount(openRows: await open, completedRows: await completed)
+        let open = try? await api.sessionRowCount(view: .open)
+        // A row in Open already says it: Completed is asked only when Open is empty.
+        var completed: Int?
+        if open == 0 { completed = try? await api.sessionRowCount(view: .completed) }
+        let answer = Welcome.isNewAccount(openRows: open, completedRows: completed)
         guard generation == apiGeneration, self.api === api else { return }
         newAccount = answer
     }
