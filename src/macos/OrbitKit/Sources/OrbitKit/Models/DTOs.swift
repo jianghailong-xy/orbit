@@ -1220,6 +1220,9 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     }
     public let confirmationReturn: JSONValue?
     public var reviewReturnCard: ConfirmationReturnCard? { ConfirmationReturnCard.parseCard(confirmationReturn) }
+    /// The owner's answers handed to the reviewer (`confirmationAnswers`, §7 Q5), held raw the same way.
+    public let confirmationAnswers: JSONValue?
+    public var reviewAnswersCard: ConfirmationAnswersCard? { ConfirmationAnswersCard.parseCard(confirmationAnswers) }
     /// An Automatic task run's question routed to its coordinator (`runQuestion`, turn-cards.ts) —
     /// held raw. No client draws a card for it yet, web included, so the turn reads as its words. Nil
     /// on every other turn, and from an older server.
@@ -1231,7 +1234,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswerCard, coordinatorDelivery: coordinatorDeliveryCard,
                   taskStart: taskStartCard, startedCard: startedCard,
                   sessionMessage: senderCard, externalSender: externalSenderFrom, sessionReplies: replyCards,
-                  reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
+                  reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard,
+                  reviewAnswers: reviewAnswersCard)
     }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
@@ -1244,7 +1248,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 externalSender: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
-                confirmationReturn: JSONValue? = nil, runQuestion: JSONValue? = nil,
+                confirmationReturn: JSONValue? = nil, confirmationAnswers: JSONValue? = nil,
+                runQuestion: JSONValue? = nil,
                 placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
                 deliveryReason: String? = nil) {
@@ -1269,6 +1274,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.authoredByOrbit = authoredByOrbit
         self.confirmationReviewRequest = confirmationReviewRequest
         self.confirmationReturn = confirmationReturn
+        self.confirmationAnswers = confirmationAnswers
         self.runQuestion = runQuestion
     }
 }

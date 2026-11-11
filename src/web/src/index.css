@@ -23696,8 +23696,8 @@ div.landing-jobs-open {
   flex-basis: 100%;
   white-space: normal;
 }
-/* A confirmation review's two turns (`ConfirmationReviewTurnCards.tsx`): the request a reviewer is
-   handed, and the reviewer's return handed to the run. Orbit's turns, drawn as the started card is. */
+/* A confirmation review's three turns (`ConfirmationReviewTurnCards.tsx`): the request a reviewer is
+   handed, the reviewer's return handed to the run, and the owner's answers handed to the reviewer. Orbit's turns, drawn as the started card is. */
 .crc-wrap {
   display: flex;
   justify-content: flex-end;
@@ -23715,6 +23715,10 @@ div.landing-jobs-open {
   border-color: var(--warning-border);
   background: var(--warning-bg);
 }
+.crc.is-confirmed {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
 .crc.is-queued {
   border-style: dashed;
 }
@@ -23727,6 +23731,9 @@ div.landing-jobs-open {
 }
 .crc.is-returned .crc-head {
   color: var(--warning);
+}
+.crc.is-confirmed .crc-head {
+  color: var(--success);
 }
 .crc-when {
   margin-left: auto;
@@ -23775,6 +23782,51 @@ div.landing-jobs-open {
   color: var(--warning);
   font-size: 12px;
   line-height: 1.6;
+}
+.crc-lead {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.crc-answers {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.crc-answers li {
+  margin-top: 5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.crc-answer-question {
+  color: var(--text-2);
+}
+.crc-answer {
+  font-weight: 600;
+}
+.crc-answer-note {
+  color: var(--warning);
+  font-size: 12px;
+}
+.crc-raw {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.crc-raw summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.crc-raw pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .crc-undelivered {
   margin-top: 4px;

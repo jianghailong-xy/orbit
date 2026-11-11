@@ -68,6 +68,7 @@ const CARD_FIELDS: Record<keyof TurnCards, true> = {
   projectStarted: true,
   confirmationReviewRequest: true,
   confirmationReturn: true,
+  confirmationAnswers: true,
   sessionMessage: true,
   sessionReplies: true,
   externalSender: true,

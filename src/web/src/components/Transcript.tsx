@@ -115,9 +115,17 @@ import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseSessionMessage } from '../lib/sessionMessage';
 import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
-import { parseConfirmationReturn, parseConfirmationReviewRequest } from '../lib/confirmationReviewTurns';
-import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
-import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
+import {
+  parseConfirmationAnswers,
+  parseConfirmationReturn,
+  parseConfirmationReviewRequest,
+} from '../lib/confirmationReviewTurns';
+import type {
+  ConfirmationAnswersCard,
+  ConfirmationReturnCard,
+  ConfirmationReviewRequestCard,
+} from '@orbit/shared';
+import { ReviewRequestedCard, SentBackByReviewerCard, YouConfirmedCard } from './ConfirmationReviewTurnCards';
 import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
@@ -584,6 +592,8 @@ type TextNode = {
   // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
   reviewRequest?: ConfirmationReviewRequestCard;
   reviewReturn?: ConfirmationReturnCard;
+  /** The owner's answers handed to the reviewer (§7 Q5): drawn as `You confirmed`. */
+  reviewAnswers?: ConfirmationAnswersCard;
   // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
   // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
   // Only a top-level message opens one: a steer joins the turn already running, and a message
@@ -886,6 +896,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.startedCard
   && !node.reviewRequest
   && !node.reviewReturn
+  && !node.reviewAnswers
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !parseBackgroundWake(node.note);
@@ -1203,6 +1214,7 @@ function buildTranscript(
         const sessionReplies = parseSessionReplies(p) ?? undefined;
         const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
         const reviewReturn = parseConfirmationReturn(p) ?? undefined;
+        const reviewAnswers = parseConfirmationAnswers(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -1241,6 +1253,7 @@ function buildTranscript(
             sessionReplies,
             reviewRequest,
             reviewReturn,
+            reviewAnswers,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -2039,6 +2052,21 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             ts={node.ts}
             undelivered={undelivered}
             attached={attached}
+            queued={queued}
+          />
+        );
+      }
+      // The owner's answers handed to the reviewer once they confirmed (§7 Q5): Orbit's words to the
+      // agent, about the reader. Drawn as what the reader did — `You confirmed`, each question and
+      // the answer they gave — with the block the agent read folded at the foot.
+      if (node.reviewAnswers) {
+        return (
+          <YouConfirmedCard
+            card={node.reviewAnswers}
+            text={node.text}
+            seq={seq}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );

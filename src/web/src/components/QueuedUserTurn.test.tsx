@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ConfirmationAnswersCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
@@ -138,6 +139,14 @@ const RETURNED: ConfirmationReturnCard = {
   problems: [{ key: 'p1', text: 'P1-3 still sends the reply twice' }],
 };
 const RETURN_BLOCK = '<orbit-confirmation-return request-id="r1">\nSent back: two findings remain.\n</orbit-confirmation-return>';
+const ANSWERS: ConfirmationAnswersCard = {
+  decisionId: '01a0cca7-0000-7000-8000-0000000000c1',
+  taskId: '01a0cca7-0000-7000-8000-0000000000c2',
+  title: 'Welcome email for new accounts',
+  decidedAt: '2026-11-11T05:13:08.000Z',
+  answers: [{ key: 'n1', question: 'How should it reach main?', choice: 'Merge to main now', text: null, notShown: false }],
+};
+const ANSWERS_TOLD = '<orbit-confirmation-answers task="t">\nThe owner confirmed it.\n</orbit-confirmation-answers>';
 
 const FROM: SessionMessageCard = {
   fromSessionId: '01a0cca7-8609-70ed-a0e2-d4b55b832b61',
@@ -275,7 +284,7 @@ const CASES: Case[] = [
     row: { turnId: 'turn-review', content: REVIEW_BLOCK, createdAt: TS, confirmationReviewRequest: REVIEW_REQUEST, authoredByOrbit: true },
     echo: { text: REVIEW_BLOCK, controlPlaneNote: REVIEW_BLOCK, confirmationReviewRequest: REVIEW_REQUEST },
     root: '.crc-wrap',
-    queuedMark: '.crc.is-queued:not(.is-returned)',
+    queuedMark: '.crc.is-queued:not(.is-returned):not(.is-confirmed)',
     slot: '.crc-queued',
     actions: ['Cancel'],
     acceptable: false,
@@ -290,6 +299,17 @@ const CASES: Case[] = [
     slot: '.crc-queued',
     actions: ['Cancel'],
     acceptable: false,
+  },
+  {
+    name: 'the owner’s answers handed to the reviewer',
+    field: 'confirmationAnswers',
+    row: { turnId: 'turn-answers', content: ANSWERS_TOLD, createdAt: TS, confirmationAnswers: ANSWERS, authoredByOrbit: true },
+    echo: { text: ANSWERS_TOLD, confirmationAnswers: ANSWERS },
+    root: '.crc-wrap',
+    queuedMark: '.crc.is-confirmed.is-queued',
+    slot: '.crc-queued',
+    actions: ['Cancel'],
+    acceptable: true,
   },
   {
     name: 'another session’s message',
@@ -553,6 +573,7 @@ describe('a turn on the queue is drawn as the card its echo is', () => {
       projectStarted: STARTED,
       confirmationReviewRequest: REVIEW_REQUEST,
       confirmationReturn: RETURNED,
+      confirmationAnswers: ANSWERS,
       sessionMessage: FROM,
       sessionReplies: [REPLY],
     };
