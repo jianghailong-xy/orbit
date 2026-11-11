@@ -849,6 +849,8 @@ test('a session row says when the message it previews is Orbit’s own', {
     const fact = dependentReadyFact({ projectId, taskId: ready, title: 'Re-send it as Orbit’s', dispatchEpoch: 1 });
     assert.equal((await deliveries.queue(fact, allow)).outcome, 'DELIVERED');
     const told = await turnKeyed(coordinator, coordinatorDeliveryTurnId(wakeIdempotencyKey(fact)));
+    const card = await queuedCard(coordinator, told.id);
+    assert.ok(card, 'the queue view drew the fact as no card');
     await failAfterEcho(coordinator);
 
     const resent = await autoRetry.resendRetryMessage(ownerId, coordinator);
@@ -856,14 +858,14 @@ test('a session row says when the message it previews is Orbit’s own', {
     assert.equal(turn.id, resent.turnId);
     assert.ok(turn.clientTurnId.startsWith(`${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}retry-message:`), turn.clientTurnId);
     assert.equal(turn.content, told.content);
-    // No notification card is read under the re-send's key, so the row says the message's first line.
-    await assertEverywhere(coordinator, { text: told.content, from: null, orbit: ORBIT }, 'the notification, re-sent', projectId);
+    // The re-send's key names the turn it re-sends, so the row carries that turn's card again.
+    await assertEverywhere(coordinator, { text: told.content, from: null, orbit: { coordinatorDelivery: card } }, 'the notification, re-sent', projectId);
     await queuedAsOrbit(coordinator, turn.id, true, 'the notification, re-sent');
 
     const delivered = await claimToMessage(coordinator);
     assert.equal(delivered.json.turnId, turn.id);
     await echo(coordinator, delivered);
-    await assertEverywhere(coordinator, { text: told.content, from: null, orbit: ORBIT }, 'the notification, re-sent, echoed', projectId);
+    await assertEverywhere(coordinator, { text: told.content, from: null, orbit: { coordinatorDelivery: card } }, 'the notification, re-sent, echoed', projectId);
     await reply(coordinator, delivered);
     await assertEverywhere(coordinator, { text: null, from: null, orbit: null }, 'the notification, re-sent, answered', projectId);
   });

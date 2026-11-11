@@ -453,8 +453,8 @@ describe('wiki chat contract', () => {
     expect(CONTRACT.chat.create.body).toContain('attachmentIds?');
     expect(DESIGN).toContain('就是 session 页的 composer，是同一个组件');
     expect(keysOf(panel.widths)).toEqual(['atLeast1440', 'from1200', 'from640', 'below640']);
-    expect(panel.widths.atLeast1440).toMatch(/400 wide by default, dragged between 320 and 560/u);
-    for (const row of ['| ≥ 1440 | 右侧停靠，默认 400，可拖 320–560 | 照旧 |', '| 1200–1439 | 右侧停靠 |', '| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 |', '| < 640 | 底部 sheet，半屏与全屏两档 |']) {
+    expect(panel.widths.atLeast1440).toMatch(/a third of the window wide by default but never under 400 nor over 720, dragged between 320 and half the window/u);
+    for (const row of ['| ≥ 1440 | 右侧停靠，默认窗口宽的 1/3（400–720），可拖 320 到窗口宽的一半（owner 11-11 定） | 照旧 |', '| 1200–1439 | 右侧停靠，默认同上（这一档是 400–480） |', '| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 |', '| < 640 | 底部 sheet，半屏与全屏两档 |']) {
       expect(DESIGN).toContain(row);
     }
     expect(panel.drawer).toMatch(/The entry drawer opens to the left of the panel/u);

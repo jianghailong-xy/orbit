@@ -6,6 +6,7 @@ import {
   buildExchangeTree,
   downstreamCount,
   exchangeKinds,
+  parseRunNotice,
   replyGist,
   upstreamFromGraph,
   type ExchangeTarget,
@@ -83,17 +84,16 @@ describe('buildExchangeTree', () => {
     expect(tree.map((b) => b.title)).toEqual(['B4b', 'B5']);
   });
 
-  it('gives a session it cannot place under a task a branch of its own', () => {
-    const run = '0195c0de-0000-7000-8000-0000000000ff';
+  it('puts a session it cannot place under a task with everything else, not in a branch named after an id', () => {
+    const landing = '0195c0de-0000-7000-8000-0000000000ff';
     const tree = buildExchangeTree(
-      [ex(1, { kind: 'SESSION', id: run, title: 'Probe the gateway' }), ex(2, task(B1)), ex(3, { kind: 'SESSION', id: run })],
+      [ex(1, { kind: 'SESSION', id: landing, title: 'Land · B1' }), ex(2, task(B1)), ex(3, { kind: 'SESSION', id: landing })],
       lookup,
     )!;
     expect(tree.map((b) => [b.title, b.exchanges.map((e) => e.seq)])).toEqual([
-      ['Probe the gateway', [1, 3]],
       ['B1', [2]],
+      [OTHER_BRANCH_TITLE, [1, 3]],
     ]);
-    expect(tree[0].taskId).toBeNull();
   });
 
   it('draws no tree for a group about one thing', () => {
@@ -104,6 +104,23 @@ describe('buildExchangeTree', () => {
   it('names a task this page knows nothing about by the end of its id', () => {
     const tree = buildExchangeTree([ex(1, task(B1)), ex(2, null)], EMPTY_TREE_LOOKUP)!;
     expect(tree[0].title).toMatch(/^Task \w{8}$/);
+  });
+});
+
+describe('parseRunNotice', () => {
+  it('reads the task a run notice is about, and nothing else', () => {
+    const note = [
+      '<orbit-run-notice task="34vZUH31xayU3ZWjyRWfh" run-session="3y90ooHJ7OgQrKUV8KyqwZ" from-session="3y90ooHJ7OgQrKUV8KyqwZ" from-mode="auto">',
+      'A run of the task “A task’s delivered_sha can freeze” used notify. It did not reach the account owner.',
+      'Message: Background job bgj_c06ee80b2571 ended (exit code 0)',
+      'Nothing is waiting for your reply. If the owner should know or decide, use ask_owner with your recommendation.',
+      '</orbit-run-notice>',
+    ].join('\n');
+    expect(parseRunNotice(note)).toEqual({ taskId: '34vZUH31xayU3ZWjyRWfh', taskTitle: 'A task’s delivered_sha can freeze' });
+    expect(parseRunNotice(note.replace('task="34vZUH31xayU3ZWjyRWfh"', 'task=""'))?.taskId).toBeNull();
+    expect(parseRunNotice('<orbit-run-question task="x" run-session="y">\nA run asked…\n</orbit-run-question>')).toBeNull();
+    expect(parseRunNotice(note.replace('</orbit-run-notice>', ''))).toBeNull();
+    expect(parseRunNotice(undefined)).toBeNull();
   });
 });
 
