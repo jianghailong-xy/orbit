@@ -81,14 +81,14 @@ const ENDED = {
   capabilities: { canSend: false, canResume: false, resumeBlockedReason: 'RUNNER_OFFLINE', canComplete: true, canRestore: false },
 };
 
-const runner = (id: string, name: string, online = false) => ({
+const runner = (id: string, name: string, online = false, auth = 'yes') => ({
   id,
   name,
   online,
   status: online ? 'ONLINE' : 'OFFLINE',
   maxConcurrent: 2,
   activeSessions: 0,
-  engines: [{ engine: 'claude', installed: true, auth: 'yes' }],
+  engines: [{ engine: 'claude', installed: true, auth }],
 });
 
 interface Server {
@@ -101,6 +101,10 @@ interface Server {
   providers?: unknown[];
   /** The managed runner's row still reads online (it has just gone to sleep; its last beat is fresh). */
   managedOnline?: boolean;
+  /** Claude Code's sign-in on the managed runner. */
+  managedAuth?: 'yes' | 'no';
+  /** The account's Completed list: one session unless a test says the account is new. */
+  history?: unknown[];
 }
 let server: Server;
 let statusReads = 0;
@@ -160,7 +164,10 @@ beforeEach(() => {
       return Promise.resolve({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
     }
     if (path === '/runners') {
-      return Promise.resolve([runner(MANAGED_RUNNER, 'Managed runner', server.managedOnline), runner(OWN_RUNNER, 'mac-01')]);
+      return Promise.resolve([
+        runner(MANAGED_RUNNER, 'Managed runner', server.managedOnline, server.managedAuth),
+        runner(OWN_RUNNER, 'mac-01'),
+      ]);
     }
     if (path === '/workspaces') {
       workspaceReads += 1;
@@ -171,6 +178,7 @@ beforeEach(() => {
     }
     if (path === '/providers') return Promise.resolve(server.providers ?? []);
     if (['/providers/pools', '/providers/shared-pools', '/session-tags', '/session-folders'].includes(path)) return Promise.resolve([]);
+    if (path === '/sessions?view=completed&limit=1') return Promise.resolve(server.history ?? [{ id: 'earlier' }]);
     if (path.startsWith('/sessions?')) return Promise.resolve([]);
     if (path.startsWith(`/sessions/${ENDED_SESSION}`)) {
       if (path.includes('/diff')) return Promise.resolve({ files: [] });
@@ -467,5 +475,76 @@ describe('what stays as it was', () => {
     expect(statusReads).toBe(0);
     await type('Hello');
     expect(sendButton().disabled).toBe(true);
+  });
+});
+
+/**
+ * A new account's first draft in its managed default workspace wears the welcome card
+ * (docs/mocks/new-user-onboarding, P1 and P2) in place of the runner's notice and the engine hero.
+ */
+describe('a new account’s managed workspace', () => {
+  const card = () => mounted().querySelector<HTMLElement>('.welcome-card');
+  const step = (name: string) => card()?.querySelector<HTMLElement>(`[data-step="${name}"]`) ?? null;
+  const text = (element: Element | null | undefined) => element?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+
+  it('preparing: greets, shows the runner coming up in step 1, and keeps step 2 for once it is up', async () => {
+    server = {
+      capabilities: capability('switched on'),
+      statuses: [state('preparing: starting')],
+      lastProvider: 'claude',
+      managedAuth: 'no',
+      history: [],
+    };
+    await open(MANAGED_WORKSPACE);
+    await waitForUi(() => expect(text(card()?.querySelector('.msc-title'))).toBe('Welcome to Orbit, Reader'));
+    expect(text(step('computer')?.querySelector('.managed-runner-notice-title'))).toBe('Preparing your managed runner');
+    expect(step('computer')?.querySelector('a')?.getAttribute('href')).toBe('/runners/register');
+    expect(text(step('model'))).toContain('Opens once the computer is up');
+    expect(card()!.querySelectorAll('.welcome-example')).toHaveLength(3);
+    expect(text(card()!.querySelector('.msc-foot'))).toBe('Your first message can go once steps 1 and 2 are done.');
+    // The card stands for the notice and the hero: neither is drawn twice.
+    expect(notice()).toBeNull();
+    expect(mounted().querySelector('.np-hero')).toBeNull();
+    expect(composer().placeholder).toBe('Describe a task for the agent…');
+  });
+
+  it('up without a model: step 1 is done and step 2 signs Claude Code in on it; an example fills the composer', async () => {
+    server = {
+      capabilities: capability('switched on'),
+      statuses: [state('model unavailable: started without a signed-in runtime')],
+      lastProvider: 'claude',
+      managedOnline: true,
+      managedAuth: 'no',
+      history: [],
+    };
+    await open(MANAGED_WORKSPACE);
+    await waitForUi(() => expect(step('computer')?.querySelector('.msc-num.done')).toBeTruthy());
+    expect(text(step('computer'))).toContain('Managed runner is ready');
+    expect(step('model')?.querySelector('.rsi')).toBeTruthy();
+    const example = card()!.querySelectorAll<HTMLButtonElement>('.welcome-example')[0];
+    await act(async () => example.click());
+    await waitForUi(() => expect(composer().value).toBe('Build a one-page site that shows today’s weather for a city'));
+  });
+
+  it('ready and signed in: both steps are done lines, and the foot says a message starts at once', async () => {
+    server = {
+      capabilities: capability('switched on'),
+      statuses: [state('available')],
+      lastProvider: 'claude',
+      managedOnline: true,
+      history: [],
+    };
+    await open(MANAGED_WORKSPACE);
+    await waitForUi(() => expect(card()).toBeTruthy());
+    expect(step('computer')?.querySelector('.msc-num.done')).toBeTruthy();
+    expect(step('model')?.querySelector('.msc-num.done')).toBeTruthy();
+    expect(text(card()!.querySelector('.msc-foot'))).toBe('All set. Send it and the agent starts right away.');
+  });
+
+  it('an account that has had a session keeps the notice and the hero', async () => {
+    server = { capabilities: capability('switched on'), statuses: [state('preparing: starting')], lastProvider: 'claude' };
+    await open(MANAGED_WORKSPACE);
+    await waitForUi(() => expect(noticeTitle()).toBe('Preparing your managed runner'));
+    expect(card()).toBeNull();
   });
 });

@@ -3104,6 +3104,8 @@ export interface IntegrationCheckSpec {
 
 /** What one check came to. `exitCode` is null when the command never produced one. */
 export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
+  skipped?: 'PATHS_EXEMPT';
+  files?: string[];
   exitCode: number | null;
   timedOut: boolean;
   durationMs: number;

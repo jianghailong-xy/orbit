@@ -1948,6 +1948,17 @@ func (t *Transport) observeIntegration(sessionID, id, reason string) (json.RawMe
 	return out, err
 }
 
+// requestPromotion records a K7 request as the project's current coordinator conversation.
+func (t *Transport) requestPromotion(sessionID, id, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/promotions/request",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // skipIntegrationMergeCheck queues one of a DONE task's landings again with the project's merge
 // check NOT RUN (contract §2.4 J-S5), as the acting session — which the server checks against the
 // project's coordinator pointer exactly as it does for a rerun.
