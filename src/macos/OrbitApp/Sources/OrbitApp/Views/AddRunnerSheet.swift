@@ -13,7 +13,6 @@ struct AddRunnerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var platform = RunnerPageFormat.Platform.macOS
-    @State private var copied = false
     /// The runners online when the wait began; nil until the list has been read once.
     @State private var baseline: Set<String>?
     /// The first runner to come online since — latched, like the web guide's.
@@ -92,29 +91,7 @@ struct AddRunnerSheet: View {
 
     /// The command on a dark card, with Copy and Share (to the machine it has to be typed on).
     private var commandBox: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(promptedCommand)
-                .font(.orbitMono)
-                .foregroundStyle(Color.white)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Button(action: copyCommand) {
-                    Label(copied ? "Copied" : RunnerPageCopy.RUNNER_COPY,
-                          systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .modifier(RunnerCommandButton())
-                }
-                .buttonStyle(.plain)
-                SwiftUI.ShareLink(item: command) {
-                    Label(RunnerPageCopy.RUNNER_SHARE, systemImage: "square.and.arrow.up")
-                        .modifier(RunnerCommandButton())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Color(white: 0.11), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        RunnerInstallCommandBox(platform: platform)
     }
 
     /// Waiting for the new runner — or the one that came.
@@ -234,19 +211,6 @@ struct AddRunnerSheet: View {
 
     // MARK: the wait
 
-    private var command: String {
-        RunnerPageFormat.installCommand(platform, origin: model.baseURL.map(RunnerPageFormat.origin) ?? "")
-    }
-
-    /// `$ curl -fsSL …`, the prompt drawn dim.
-    private var promptedCommand: AttributedString {
-        typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
-        var line = AttributedString("$ ")
-        line[Colour.self] = Color.gray
-        line += AttributedString(command)
-        return line
-    }
-
     /// Read the runner list every 5s — the web guide's pace — until a runner that wasn't online when
     /// the sheet opened comes online. The list the sheet opened over is the baseline when it has been
     /// read; otherwise the first read that succeeds is.
@@ -267,16 +231,6 @@ struct AddRunnerSheet: View {
     }
 
     // MARK: presses
-
-    private func copyCommand() {
-        PlatformPasteboard.copyString(command)
-        PlatformHaptics.success()
-        copied = true
-        Task {
-            try? await Task.sleep(for: .seconds(1.6))
-            copied = false
-        }
-    }
 
     /// Return on a code that isn't all there yet reads it as typed; the server says if it's wrong.
     private func submitCode() {
@@ -338,6 +292,63 @@ struct AddRunnerSheet: View {
         dismiss()
         model.settingsPresented = false
         model.startSession(onMachine: runner.id)
+    }
+}
+
+/// The one command that installs a runner and registers it, built from this instance's own origin, on a
+/// dark card with Copy and Share: Add Runner's, and a new account's welcome card's first step.
+struct RunnerInstallCommandBox: View {
+    @Environment(AppModel.self) private var model
+    let platform: RunnerPageFormat.Platform
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(promptedCommand)
+                .font(.orbitMono)
+                .foregroundStyle(Color.white)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button(action: copyCommand) {
+                    Label(copied ? "Copied" : RunnerPageCopy.RUNNER_COPY,
+                          systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .modifier(RunnerCommandButton())
+                }
+                .buttonStyle(.plain)
+                SwiftUI.ShareLink(item: command) {
+                    Label(RunnerPageCopy.RUNNER_SHARE, systemImage: "square.and.arrow.up")
+                        .modifier(RunnerCommandButton())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(white: 0.11), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var command: String {
+        RunnerPageFormat.installCommand(platform, origin: model.baseURL.map(RunnerPageFormat.origin) ?? "")
+    }
+
+    /// `$ curl -fsSL …`, the prompt drawn dim.
+    private var promptedCommand: AttributedString {
+        typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
+        var line = AttributedString("$ ")
+        line[Colour.self] = Color.gray
+        line += AttributedString(command)
+        return line
+    }
+
+    private func copyCommand() {
+        PlatformPasteboard.copyString(command)
+        PlatformHaptics.success()
+        copied = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            copied = false
+        }
     }
 }
 
