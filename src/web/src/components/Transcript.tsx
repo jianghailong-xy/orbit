@@ -1990,8 +1990,8 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
 // the group later, when the result lands (session_create) or the first child event does (Task).
 //
 // A picture folds like any other read (owner, 11-11: an agent reading its own screenshot is a
-// step, not something to show the reader). Opening the line draws the card, which unfolds itself
-// on the image (see defaultOpen) and fetches back bytes the server clipped.
+// step, not something to show the reader). Opening the line draws the card folded; opening the card
+// draws the picture, fetching back bytes the server clipped.
 function isGroupableTool(node: Node, chat = false): node is ToolNode {
   return (
     node.kind === 'tool' &&
@@ -4034,8 +4034,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A wiki chat's drafting call (contract `chat.drafts.toolResult`) is drawn as the card its answer names, wherever the
   // chat is shown — the panel and the full session page provide the card's host; a share link and an export do not.
   const draftCall = useContext(WikiDraftCardCtx) !== null && wikiChatDraftingCall(node.name, node.input);
-  // A plan is the point of the turn — open it by default; a result carrying an image (a
-  // screenshot the workspace produced for the user) opens so the picture shows without a click.
+  // A plan is the point of the turn — open it by default. A result carrying an image no longer
+  // opens (owner, 11-11): an agent reading a screenshot is a step, and its picture waits for a click
+  // like any other output; the click is what fetches back bytes the server clipped.
   // A static export opens every card (nothing can be un-folded after the fact).
   // A created batch joins them: it is a write to state outside this session, the titles it names
   // appear nowhere else in the transcript, and under auto-approval the panel that would have shown
@@ -4045,17 +4046,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // proportionate to unfold: the input is what has the lines (a heredoc clamps at
   // sixteen), the reason is four — and the agent, not the reader, is the first responder
   // to a failed step. The red mark on the folded row says it happened; the click says why.
-  // Keyed on the *preview* result, which is why a clipped image keeps its (dataless) block: this
-  // decides whether the card opens, and opening the card is what fetches the picture back. Asking
-  // `resultImages` here instead would deadlock the two — the refetch below is gated on being open.
   // A question to the user no longer opens: folded, its card is already the record of what was
   // asked and how it was answered (see `questionUnread` below for the one time it still does).
   const usuallyOpen =
     !!exp ||
     node.name === 'ExitPlanMode' ||
     isShell ||
-    isAutoOpenBatch(node) ||
-    hasResultImage(node.result?.content);
+    isAutoOpenBatch(node);
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const isQuestion = node.name === 'AskUserQuestion';
   // Opening a clipped card pulls its untrimmed call/result back (see useFullPayload); until

@@ -22227,6 +22227,26 @@ div.landing-jobs-open {
 .admin-users-status-off::before {
   background: var(--error);
 }
+/* A failed welcome email (docs/welcome-email-design.md §3.5): one grey line under the status, its error on hover. */
+.admin-users-status-stack {
+  display: grid;
+  gap: 2px;
+}
+.admin-users-welcome-failed {
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: default;
+}
+/* Send welcome email while outgoing email is off: the entry, disabled, says why under its label. */
+.admin-users-menu-two-line {
+  display: grid;
+  gap: 2px;
+}
+.admin-users-menu-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
 .admin-users-table .admin-users-col-actions {
   width: 1%;
   text-align: right;
@@ -27312,3 +27332,71 @@ button.agent-progress-agent:hover {
   line-height: 1.5;
 }
 .project-done-findings ul { list-style: none; padding: 0; margin: 0; }
+/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the Sign-in card's rows, with From and
+   Reply-To side by side, the test email's answer beside its buttons, and the last week under a rule. */
+.admin-email-off {
+  margin-top: -8px;
+}
+.admin-email-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 600px) {
+  .admin-email-pair {
+    grid-template-columns: 1fr;
+  }
+}
+.admin-email-divided {
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+.admin-email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.admin-email-buttons {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.admin-email-result {
+  padding: 8px 12px;
+  border: 1px solid;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.admin-email-result-ok {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.admin-email-result-error {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.admin-email-week {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle, var(--border));
+  color: var(--text-2);
+}
+.admin-email-failed {
+  color: var(--error);
+}
+.admin-email-failures {
+  display: grid;
+  gap: 6px;
+  margin: -8px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 12.5px;
+}

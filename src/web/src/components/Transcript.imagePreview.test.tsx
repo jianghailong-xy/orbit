@@ -85,8 +85,12 @@ async function key(name: string): Promise<void> {
 }
 
 // The reply's screenshot comes from a tool call, which folds into the turn's steps line like any
-// other read (512db0583); the viewer pages what is drawn, so open the line to draw it.
-const openSteps = () => click(container.querySelector('.chat-steps-line')!);
+// other read (512db0583) and stays folded inside it until clicked; the viewer pages what is drawn,
+// so open the line, then the card, to draw it.
+const openSteps = async () => {
+  await click(container.querySelector('.chat-steps-line')!);
+  await click(container.querySelector('.chat-steps-detail .chat-tool-row')!);
+};
 const bubble = (seq: number) => container.querySelector<HTMLElement>(`.chat-user[data-seq="${seq}"]`)!;
 const thumbnails = (scope: Element) => [...scope.querySelectorAll<HTMLButtonElement>('button.chat-image-btn')];
 const viewer = () => document.querySelector<HTMLElement>('[role="dialog"]');

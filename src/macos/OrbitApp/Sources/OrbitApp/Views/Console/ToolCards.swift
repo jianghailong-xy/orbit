@@ -296,14 +296,14 @@ struct ToolCardView: View {
         questionOutcome == nil && card.status == .ok && hasResult && (!card.resultTruncated || resultResolved)
     }
 
-    /// A result carrying an image (a screenshot the workspace produced for the user) opens so the
-    /// picture shows without a click — web parity, where `hasResultImage` joins `defaultOpen`.
-    /// Keyed on the block, not the decoded bytes: a clipped image has none until the open card
-    /// fetches them back. An answered question opens only when its answer cannot be read.
+    /// A result carrying an image no longer opens by itself (owner, 11-11): an agent reading a
+    /// screenshot is a step, and the picture waits for a click like any other output; opening is
+    /// what fetches back bytes the server clipped (web parity). An answered question opens only
+    /// when its answer cannot be read.
     private var defaultOpen: Bool {
         if !showsHeader { return true }
         if !questions.isEmpty { return questionUnread }
-        return (d.autoOpen || card.resultHasImage) && hasDetail
+        return d.autoOpen && hasDetail
     }
     private var expanded: Bool { manualOpen ?? defaultOpen }
     private var isOpen: Bool { expanded && hasDetail }
@@ -541,8 +541,8 @@ struct ToolCardView: View {
                 }
             } else if card.resultHasImage {
                 // The other half of that: an oversized image reaches the preview as a block with no
-                // bytes at all (`MAX_IMAGE_PAYLOAD`), and that block is what opened this card
-                // (`defaultOpen`) — so until `resolveFull` fetches the payload whole there is a
+                // bytes at all (`MAX_IMAGE_PAYLOAD`), so once the reader opens this card and until
+                // `resolveFull` fetches the payload whole there is a
                 // picture-shaped hole here, and a hole reads as a broken card rather than a
                 // deferred picture.
                 ToolResultImagePlaceholder()

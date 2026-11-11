@@ -929,6 +929,7 @@ final class AppModel {
         linkCards?.removeAll()
         linkCards = nil
         managedRunner?.reset()
+        newAccount = nil
         #if os(iOS)
         disablePush()   // reads the access token, so before the store is cleared below
         #endif
@@ -2027,6 +2028,27 @@ final class AppModel {
         case .machines?:        selectedSection = .runners
         case .workspace?, nil:  break
         }
+    }
+
+    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
+
+    /// Whether this account has never had a session: its Open and Completed lists, one row each, both
+    /// answered empty (board 03, rule 1; the web's `useNewAccount`). Nil until read, and false after a
+    /// read that failed. Kept for this run of the app only: nothing is stored to remember it.
+    private(set) var newAccount: Bool?
+
+    /// Read it again: the pages that can wear the welcome card ask as they appear, as the web's query
+    /// does on mount, so the card goes once a first session exists anywhere.
+    func readNewAccount() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        let open = try? await api.sessionRowCount(view: .open)
+        // A row in Open already says it: Completed is asked only when Open is empty.
+        var completed: Int?
+        if open == 0 { completed = try? await api.sessionRowCount(view: .completed) }
+        let answer = Welcome.isNewAccount(openRows: open, completedRows: completed)
+        guard generation == apiGeneration, self.api === api else { return }
+        newAccount = answer
     }
 
     // MARK: a machine with no workspace (board rules 1–12)
