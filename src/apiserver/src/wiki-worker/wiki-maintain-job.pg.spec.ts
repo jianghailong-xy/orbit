@@ -1499,6 +1499,62 @@ test('the first check of a deferred entry finds none of its code anchors in this
   assert.equal((await pushedOf(h, fx)).has(entryId), false);
 });
 
+test('a folder-tier run takes no commit anchor an extraction names: its paths are held to the folder, nothing is deferred, an entry naming only commits is kept without code anchors, and both are pushed once accepted', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { title: 'Folder Garden', reviewMode: 'manual', capabilities: FOLDER_RUNNER, snapshotRow: false });
+  await h.prisma.wikiSpaceWorkspace.create({ data: { spaceId: fx.spaceId, ownerId: h.ownerId, workspaceId: fx.workspaceId } });
+  await holdFolderSnapshot(h, fx.spaceId, TREE_ONE);
+  const sha = 'e'.repeat(40);
+  const both = 'PORT 在导入时读取 folder';
+  const commitOnly = 'PORT 的提交 folder';
+  h.model.answer = (hit) => {
+    if (hit.prompt.includes('==== CASE FILE ====')) {
+      if (hit.prompt.includes('狼人杀')) return '{"offTopic": true}';
+      return JSON.stringify([
+        pitfall(fx, both, { anchors: { paths: ['src/app.go'], commits: [sha] } }),
+        pitfall(fx, commitOnly, { anchors: { paths: [], commits: [sha] } }),
+      ]);
+    }
+    return '{"verdict":"supported","reason":"the cited turn says exactly this"}';
+  };
+  const page = pageOf(fx);
+  h.maintenance.dossierPage = (async () => page) as unknown as WikiMaintenance['dossierPage'];
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), { snapshotSha: TREE_ONE });
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.repo, { tier: 'folder', reason: null });
+  assert.equal((report.entries as Record<string, number>).foreign, 0, `an entry naming a commit is not another repository's: ${JSON.stringify(report)}`);
+
+  // In Review: the first with its path alone, held to the folder; the second with no code anchor; nothing deferred.
+  const review = await h.service.listReview(h.ownerId, fx.spaceId);
+  const ops = review.flatMap((changeset) => changeset.ops as Array<Record<string, unknown>>).filter((op) => op.op === 'add');
+  const titleOf = (payload: unknown): string => {
+    const body = (payload ?? {}) as Record<string, unknown>;
+    return String(((body.entry ?? body.draft ?? body) as Record<string, unknown>).title);
+  };
+  const byTitle = new Map(ops.map((op) => [titleOf(op.payload), op]));
+  assert.deepEqual([...byTitle.keys()].sort(), [both, commitOnly].sort(), JSON.stringify(review));
+  assert.deepEqual(opAnchors(byTitle.get(both)!.payload), [{ type: 'path', path: 'src/app.go' }]);
+  assert.deepEqual(opAnchors(byTitle.get(commitOnly)!.payload), []);
+
+  // Accepted, both are live with no deferred anchor, and both are pushed.
+  for (const op of ops) {
+    await h.service.decide(h.ownerId, h.ownerId, String(op.changesetId), [{ opId: String(op.id), action: 'accept' }] as never, null);
+  }
+  const pushed = await pushedOf(h, fx);
+  for (const title of [both, commitOnly]) {
+    const entry = await h.prisma.wikiEntry.findFirstOrThrow({ where: { ownerId: h.ownerId, spaceId: fx.spaceId, title } });
+    assert.equal(entry.status, 'active');
+    for (const anchor of (entry.anchors ?? []) as Array<Record<string, unknown>>) {
+      assert.notEqual(anchor.type, 'commit', JSON.stringify(anchor));
+      assert.equal(anchor.deferred, undefined, JSON.stringify(anchor));
+    }
+    assert.equal(pushed.has(entry.id), true, `${title} is pushed`);
+  }
+});
+
 test('an op whose first answer is no verdict is asked again under a unit of its own, `<opId>#retry`, told why as the runner tells it, and gets its verdict there', { skip }, async () => {
   const h = await boot();
   await clearWork(h);

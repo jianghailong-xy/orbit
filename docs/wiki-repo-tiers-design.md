@@ -11,6 +11,11 @@
 > - Q1：space 有仓库地址、但工作目录不是 git checkout 时，也走文件夹档，用路径重合度防止选错目录；
 > - Q2：第 0 档抽出的条目照常进 Review，代码锚点标为未核，核过之前不进推送块；
 > - Q3：一个 wiki 仍然只读一个 workspace。
+>
+> 修订：
+>
+> - 2026-11-11（来自 P4 的真实 runner 演练）：文件夹档抽取时不收条目写的 commit 锚点，不标 `deferred`，也不算作别的仓库的；
+>   否则这些锚点在文件夹上永远核不了，条目永远不进推送块（§5.1、§5.2）。
 
 ---
 
@@ -105,7 +110,7 @@ probe ─► dossiers ─► extract / claims ─► self-check ─► breaker �
 | probe（原 `repo`） | git 快照；失败 = 整次运行失败 | 读出档位；第 1/2 档拿到快照；第 0 档记下原因继续走。只有瞬时故障按 infra 重试（§6） |
 | dossiers … advance | 依赖上一步 | **不依赖仓库** |
 | extract 的 prompt | README 首段 | 有快照用 README 首段，否则用 space 的 title |
-| extract 的锚点过滤 | `repo = null` 时，写了代码锚点的条目全丢 | 有快照：照旧，全部锚点都不在仓库里的条目当作别的仓库的；没快照：锚点照收，标 `deferred`（§5.2） |
+| extract 的锚点过滤 | `repo = null` 时，写了代码锚点的条目全丢 | 有快照：照旧，全部锚点都不在仓库里的条目当作别的仓库的（文件夹快照不收 commit 锚点，§5.1）；没快照：锚点照收，标 `deferred`（§5.2） |
 | verify | 照旧 | 照旧 |
 | anchors | runner 的 `anchors` 操作 | 服务端锚点（`criterion`、`record`、`merge_evidence`）每一档都核；`path` / `symbol` 第 1/2 档核；`commit` 只有第 2 档核。核不了的保留上一次结果，`anchors_due` 保持置位 |
 | docs | 按 plan 重写受影响的节 | 第 1/2 档照旧；第 0 档跳过，受影响的节留到下次读得到时再写，复用追赶模式「落后时跳过、回来后统一重写」的记账（`maintenance.job.catchUp`） |
@@ -172,6 +177,8 @@ probe ─► dossiers ─► extract / claims ─► self-check ─► breaker �
 | `criterion`、`record`、`merge_evidence` | 服务端核（不变） | 同左 | 同左 |
 | `command` | 不变 | 不变 | 不变 |
 
+- 文件夹档抽取时，条目写的 `commit` 锚点直接不收：不标 `deferred`，也不算「全部锚点都不在仓库里」；`path` / `symbol` 锚点照旧按快照核。
+  只写了 `commit` 锚点的条目照收，只是没有代码锚点。原因：文件夹档不核 `commit`，收下的话它会一直是 `deferred`，条目永远不推送（§5.2）。
 - 文件夹档核出的检查记录：`ref` 是树哈希，另带 `source: "folder"`。`wiki_get` 和条目抽屉据此显示「核于文件夹」而不是某个提交。
 - `anchorHoldsAt` 对 `source: "folder"` 的检查只认同一个树哈希：树哈希变了就整条重核。核查只是 runner 上的 stat 和查找，不调模型，
   每次运行的上限沿用 `anchorRules.verify` 的数字。
@@ -182,6 +189,7 @@ probe ─► dossiers ─► extract / claims ─► self-check ─► breaker �
 
 - 没有快照时，抽取不再丢掉写了代码锚点的条目，而是收下锚点，并在每个代码锚点上标 `deferred: true`
   （「抽取时没有对着任何代码树检查过」）。
+- 只有没有快照（第 0 档）才这样标；文件夹档有快照，`path` / `symbol` 当场核，`commit` 锚点不收（§5.1），所以不会留下 `deferred`。
 - 条目照常进 Review；owner 照常 Accept / Edit / Reject。
 - **推送**：今天的推送只排除 `changed` 和 `missing`（`wiki-push.ts` `OUT_OF_PUSH_ANCHORS`），`unchecked` 的条目会推。新增一条：
   有任何一个 `deferred` 且还没有检查记录的代码锚点的条目，不进 `<orbit_wiki_context>`。第一次核过（任何一档），`deferred` 就去掉，条目按今天的规则推。

@@ -69,7 +69,7 @@ import {
   type WikiNewDesignDoc,
   type WikiUnplacedEntry,
 } from './wiki-maintain-plan';
-import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportDeferredAnchors, wikiImportIsObject } from './wiki-import-extract';
+import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
 import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
 import {
   WIKI_REPO_PROBE,
@@ -891,10 +891,9 @@ class WikiMaintainRun {
       sizes,
       about: typeof raw.readme === 'string' ? cutRunes(raw.readme, WIKI_MAINTAIN_JOB.aboutMaxChars) : '',
       // A folder has the paths and no commits (design §5.1): a path is held to its files as on git, and a commit the
-      // extraction names is kept, deferred to the first run that reads git, rather than read as another repository's.
-      anchors: source === 'folder'
-        ? { anchors: (raw: unknown) => [...tree.anchors(raw), ...wikiImportDeferredAnchors({ commits: wikiImportIsObject(raw) ? raw.commits : [] })] }
-        : tree,
+      // extraction names is not taken — a folder never checks it, so kept it would stay deferred and keep its entry out
+      // of the push for good (§5.2) — nor read as another repository's.
+      anchors: source === 'folder' ? { anchors: (raw: unknown) => tree.anchors(wikiImportIsObject(raw) ? { ...raw, commits: [] } : raw), readsCommits: false } : tree,
     };
   }
 
