@@ -80,9 +80,9 @@ class LandingSessionShellTest {
         signIn(); open("orbit-session:$landing")
         await { exists(hasTestTag("landings-window")) }
         // The window's shell: its title, the project it runs for, and the read-only footer — no composer.
-        await { text("page-bar-subtitle") == "Run by Orbit · Launch" }
+        await { text("page-bar-subtitle") == "Launch" }
         assertTrue(exists(hasText("Landings") and hasAnyAncestor(hasTestTag("app-bar")), unmerged = true))
-        assertEquals("Orbit runs these landings — nothing to type here.", text("landings:footer-line"))
+        assertEquals("Orbit runs these landings", text("landings:footer-line"))
         // The landing it was opened on: a card under Now, named by its task, opened in place and outlined for a moment.
         await { text("landing:task-name") == "Wire the page" }
         assertTrue(exists(hasTestTag("landings:day:Now")))
@@ -258,15 +258,15 @@ class LandingSessionShellTest {
             """{"kind":"RESULT","at":"${ago(60)}","claim":1,"data":{"state":"LANDED"},"text":"Landed on project/launch · 8ed0ea7"}"""))
         ProjectShell.landingTitle = "Land · Wire the page"
         signIn(); open("orbit-session:$landing")
-        await { exists(hasTestTag("landing-row:title") and hasText("Wire the page"), unmerged = true) }
-        assertEquals("Landed", text("landing-row:detail"))
-        assertEquals("✓", text("landing-row:mark"))
+        // The chat's job line: how it ended over the task's name (docs/mocks/landings-chat-tools-native).
+        await { exists(hasTestTag("landing-row:name") and hasText("Wire the page"), unmerged = true) }
+        assertEquals("Landed", text("landing-line:title"))
         assertTrue(exists(hasTestTag("landings:day:Today")))
         assertFalse("nothing in hand: no Now", exists(hasTestTag("landings:day:Now")))
         assertFalse("a settled landing is no card", exists(hasTestTag("landing-status-card"), unmerged = true))
         // Opened where it was focused: its record, read off the detail the link already read.
         await { exists(hasText("Landed on project/launch · 8ed0ea7"), unmerged = true) }
-        assertEquals("Orbit runs these landings — nothing to type here.", text("landings:footer-line"))
+        assertEquals("Orbit runs these landings", text("landings:footer-line"))
         val reads = ProjectShell.calls.count { it == "GET sessions/$landing" }
         compose.mainClock.advanceTimeBy(20_000)
         settle()
@@ -280,7 +280,9 @@ class LandingSessionShellTest {
         ProjectShell.landingLog = """{"jobId":"j-1","entries":[{"claim":1,"round":1,"seq":0,"text":"FAILED something\n","truncatedBytes":0}],"nextCursor":null}"""
         signIn(); open("orbit-session:$landing")
         await { exists(hasTestTag("landing:section:j-1")) }
-        assertEquals("Generation 1", text("landing:section-title:j-1"))
+        // One attempt: no heading over it; its check is a step, open because it failed.
+        assertFalse(exists(hasTestTag("landing:section-title:j-1"), unmerged = true))
+        assertEquals("Task acceptance", text("landing:step-name"))
         compose.onNodeWithTag("landing:log:0").performClick()
         await { exists(hasTestTag("landing:log-text")) }
         assertEquals("FAILED something\n", text("landing:log-text"))
@@ -299,7 +301,9 @@ class LandingSessionShellTest {
             {"kind":"RESULT","at":"${ago(200)}","claim":1,"data":{"state":"READY"},"text":"Ready to merge into fix/passed-x"}"""))
         ProjectShell.landingLog = """{"jobId":"j-1","entries":[{"claim":1,"round":1,"seq":0,"text":"FAILED something\n","truncatedBytes":0}],"nextCursor":null}"""
         signIn(); open("orbit-session:$landing")
-        await { exists(hasTestTag("landing:mark:3")) }
+        await { exists(hasTestTag("landing:mark:1"), unmerged = true) }
+        openSteps()
+        await { exists(hasTestTag("landing:mark:3"), unmerged = true) }
         assertEquals(listOf("✓", "✗", "✓", "✗"), (0..3).map { text("landing:mark:$it") })
         // Only the check that did not pass reads its tail inline (05 g): its last lines in the dark block, not the whole log.
         await { exists(hasTestTag("landing:inline-output")) }
@@ -321,6 +325,7 @@ class LandingSessionShellTest {
             "entries":[{"kind":"RESULT","at":"${ago(600)}","claim":1,"data":{"state":"READY"},"text":"Ready to merge into main"}]}],"facts":[]}""")
         signIn(); open("orbit-session:$landing")
         await { exists(hasTestTag("landing:section:j-2")) }
+        openSteps()
         val marks = compose.onAllNodesWithTag("landing:mark:0", useUnmergedTree = true).fetchSemanticsNodes()
             .map { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
         assertEquals(listOf("✓", "✗"), marks)
@@ -331,8 +336,9 @@ class LandingSessionShellTest {
         ProjectShell.landing = view(kind = "CHECK_PROMOTION", subject = "PROMOTION", taskId = null, promotionId = "p-1", state = "READY")
         signIn(); open("orbit-session:$landing")
         await { text("landing-head:detail") == "Passed the check · waiting for the owner" }
-        assertEquals("Merge check", text("landing-head:title"))
+        // The line says how it stands; the round's word leads its name (docs/mocks/landings-chat-tools-native).
         assertEquals("Ready", text("landing-head:right"))
+        assertTrue(text("landing:task-name")!!.startsWith("Merge check"))
         assertFalse(exists(hasTestTag("landing:failure"), unmerged = true))
         assertFalse(exists(hasText("Stopped · not landed"), unmerged = true))
     }
@@ -431,7 +437,7 @@ class LandingSessionShellTest {
     @Test fun theCardsOwnReadKeepsTheJobForALaterVisit() {
         ProjectShell.landing = view(); ProjectShell.inFlightJobs = listedJob()
         signIn(); open("orbit-session:$landing")
-        await { exists(hasTestTag("landing-head")) && ProjectShell.calls.contains("GET projects/$launch/integration") }
+        await { exists(hasTestTag("landing:card-line")) && ProjectShell.calls.contains("GET projects/$launch/integration") }
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         await { !exists(hasTestTag("landings-window")) }
         ProjectShell.landingStatus = 503
@@ -472,6 +478,17 @@ class LandingSessionShellTest {
     }
 
     /** Lets what a read answered reach the screen, for an assertion that something is NOT drawn. */
+    /** Opens every folded step of every record drawn open, so each of the server's lines is on screen
+     *  (docs/mocks/landings-chat-tools-native: a landing's lines sit in its steps, and only a failed or running one starts open). */
+    private fun openSteps() {
+        fun prefix(p: String) = SemanticsMatcher("tag $p…") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(p) == true }
+        repeat(40) {
+            val rows = compose.onAllNodes(prefix("landing:step-row:") and hasParent(prefix("landing:step:")), useUnmergedTree = true)
+            if (rows.fetchSemanticsNodes().isEmpty()) return
+            rows[0].performClick()
+            compose.waitForIdle()
+        }
+    }
     private fun settle() { repeat(3) { compose.waitForIdle(); Thread.sleep(400) }; compose.waitForIdle() }
 
     // MARK: the journey's hands and eyes
@@ -494,8 +511,8 @@ class LandingSessionShellTest {
     }
     /** The landing's menu: a long-press on its card (the old page's ⋯), once the card has read its view. */
     private fun menu() {
-        await { exists(hasTestTag("landing-head")) }
-        compose.onNode(hasTestTag("landing-status-card")).performSemanticsAction(SemanticsActions.OnLongClick)
+        await { exists(hasTestTag("landing:card-line")) }
+        compose.onNode(hasTestTag("landing:card-line")).performSemanticsAction(SemanticsActions.OnLongClick)
         await { items().isNotEmpty() }
         compose.waitForIdle()
     }

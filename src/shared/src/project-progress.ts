@@ -64,6 +64,9 @@ export interface ProjectIntegrationSettings<Instant = string> {
   /** Integration started, so the line can no longer change (§1.2 L4). */
   locked: boolean;
   startedAt: Instant | null;
+  landingCheckCommand: string | null;
+  landingCheckTimeoutSeconds: number | null;
+  landingCheckCommandAbsentReason: 'FALLS_BACK_TO_MERGE_CHECK' | null;
   mergeCheckCommand: string | null;
   mergeCheckCommandAbsentReason: 'NOT_CONFIGURED' | null;
   mergeCheckTimeoutSeconds: number | null;
@@ -236,7 +239,7 @@ export type IntegrationJobLiveness = 'LIVE' | 'QUIET' | 'SILENT' | 'LEASE_EXPIRE
 /** The check a v2 claim is running, as its progress reports name it (§2.2 J-T4). The job row's
  *  `checks` holds finished results in a different shape. */
 export interface ProjectIntegrationCheck<Instant = string> {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   /** Position of this check in the run, from 1, and how many the run has in all. */
   index: number;
   count: number;
@@ -459,7 +462,7 @@ export interface IntegrationTimelineEntry<Instant = string> {
   /** The claim the fact happened under; 0 before the first claim. */
   claim: number;
   round: number | null;
-  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'; index: number } | null;
+  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK'; index: number } | null;
   phase: IntegrationJobPhase | null;
   step: string | null;
   actor: IntegrationTimelineActor | null;
@@ -484,6 +487,39 @@ export interface IntegrationTimelineSection<Instant = string> {
   state: string;
   /** Oldest first: by claim, then by round, then by the instant the fact happened. */
   entries: IntegrationTimelineEntry<Instant>[];
+  /** What put this attempt on the queue: the opening message of its turn in a client
+   *  (docs/mocks/landings-chat-trigger). Absent from a server older than it. */
+  trigger?: IntegrationTimelineTrigger<Instant>;
+}
+
+/**
+ * What put one attempt on the queue, read off the attempt's own row at read time (nothing is
+ * copied): why, who, what was handed over, and the conversation to open for it. A client words it;
+ * the server writes no sentence for it.
+ *
+ * - `DONE`: the task was marked done and its branch handed over — `by` TASK, `sessionId` the work
+ *   session.
+ * - `RETRY`: a rerun — `by` COORDINATOR (its `sessionId`), OWNER, or ORBIT; `reason` is the one given.
+ * - `BACKFILL` / `BEHIND_WORK`: Orbit queued it — the project started integrating, or the task's
+ *   work ended on another branch.
+ * - `CHECK`: a merge round's check of the project line, queued by Orbit.
+ * - `CONFIRMED`: a merge into main, confirmed by AUTOMATIC or the OWNER.
+ * - `OBSERVE`: Orbit looking for finished work on the line.
+ */
+export interface IntegrationTimelineTrigger<Instant = string> {
+  cause: 'DONE' | 'RETRY' | 'BACKFILL' | 'BEHIND_WORK' | 'CHECK' | 'CONFIRMED' | 'OBSERVE';
+  by: 'TASK' | 'COORDINATOR' | 'OWNER' | 'AUTOMATIC' | 'ORBIT';
+  /** When it was queued. */
+  at: Instant;
+  /** The branch handed over (`refs/heads/…`). */
+  sourceRef: string;
+  /** The commit handed over, where it is known: the source commit the attempt's runner reported,
+   *  a merge candidate's tip, or — for a task's newest attempt not reported yet — the task's
+   *  delivered commit. */
+  sourceSha: string | null;
+  /** The conversation it came from: the task's work session, or the coordinator that asked. */
+  sessionId: string | null;
+  reason: string | null;
 }
 
 /** A subject-level derived fact that belongs to no one attempt (a fix task, the promotion state). */
@@ -1303,6 +1339,10 @@ export interface ProjectOpenItemsView<Instant = string> {
    * the reason `startRequest` is. Absent from a server that predates done requests.
    */
   doneRequest?: ProjectOpenItemRow<Instant> | null;
+  /** The owner's latest Not yet answer, until a newer done request is filed. */
+  latestDoneRequestDecline?: { note: string; declinedAt: Instant } | null;
+  /** Latest platform-superseded request, for 24 hours or until a newer request is filed. */
+  latestDoneRequestSuperseded?: { reason: string; supersededAt: Instant } | null;
   /**
    * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — which
    * a row's merge into main is a merge into. Null when the project has no repository bound.

@@ -207,7 +207,6 @@ export const wikiActivityPath = (spaceSlug: string): string => `${WIKI_PATH}/${s
 export const WIKI_TITLE = 'Wiki';
 export const WIKI_SEARCH_PLACEHOLDER = 'Search the wiki';
 export const WIKI_SEARCH_SHORTCUT = '⌘K';
-export const WIKI_NEW_ENTRY = 'New entry';
 export const WIKI_REVIEW_TITLE = 'Review';
 
 /** The proposals waiting in Review: Activity's first banner, and the home's phone banner. */

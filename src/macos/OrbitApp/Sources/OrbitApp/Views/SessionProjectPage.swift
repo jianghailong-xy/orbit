@@ -374,6 +374,14 @@ struct SessionProjectPage: View {
                 .listRowSeparator(.hidden)
             mergeCard
                 .listRowSeparator(.hidden)
+            if let detail = ProjectDone.staleRequest(app.projectSessionsOpenItems) {
+                ProjectStaleDoneRow(detail: detail)
+                    .listRowSeparator(.hidden)
+            } else if app.projectSessionsOpenItems?.doneRequest == nil,
+               let decline = app.projectSessionsOpenItems?.latestDoneRequestDecline {
+                ProjectDoneDeclineRow(decline: decline)
+                    .listRowSeparator(.hidden)
+            }
             if let coordinator {
                 Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
             }
@@ -554,7 +562,12 @@ struct SessionProjectPage: View {
     /// (docs/mocks/project-landing-card, owner decision 2026-10-11).
     @ViewBuilder private var firstCard: some View {
         if let subject = doneSubject, ProjectPage.drawsEnding(subject) {
-            ProjectNotDoneCard(subject: subject, withCoordinator: 0, askedAt: nil)
+            ProjectNotDoneCard(subject: subject, confirmedAt: app.projectSessionsConfirmedAt, onReopen: {
+                guard let store = app.projects?.detail(address.projectID) else { return ProjectDone.notReopened }
+                if let error = await store.setStatus(.open) { return error }
+                await app.loadProjectDone(address)
+                return nil
+            }, withCoordinator: 0, askedAt: nil)
         } else {
             progressCard
             landingCard
@@ -703,6 +716,12 @@ struct SessionProjectPage: View {
                                                           updatedAt: app.projectSessionsIntegrationReadAt,
                                                           refreshFailed: app.projectSessionsIntegrationReadFailed)
                     },
+                    // Why it asks although Automatic is on, and the way to stop it asking: How it
+                    // runs, on the project's page (owner decision 2026-11-10).
+                    askReason: PromotionCards.askReason(
+                        merge.current, line: app.projectSessionsIntegration?.line,
+                        deliveryMode: app.projectSessionsIntegration?.deliveryMode, automatic: merge.automatic),
+                    onLetAgentPush: { openProject() },
                     blockedBy: merge.current.flatMap { view in
                         app.projectSessionsIntegration.flatMap {
                             PromotionCards.blockedByLine(view, landings: $0.landTasks)
@@ -837,6 +856,11 @@ private struct ProjectMergeCardView: View {
     let shape: ProjectMergeCard.Shape
     /// The merge job's live line, drawn inside the card while one is in flight.
     let landing: ProjectPage.LandingLine?
+    /// Why the asking card asks although Automatic is on (`PromotionCards.askReason`); nil draws no
+    /// line.
+    let askReason: String?
+    /// Opens the project's How it runs, from under that line.
+    let onLetAgentPush: () -> Void
     /// Who is in front of a blocked candidate (`PromotionCards.blockedByLine`), off the project's
     /// own landings; nil when the line is doing nothing on this candidate's branches.
     let blockedBy: String?
@@ -1060,6 +1084,20 @@ private struct ProjectMergeCardView: View {
                              ? Color.green : Color.primary)
         if let met = merge.criteriaMet, let line = PromotionCards.criteriaLine(met: met.met, of: met.total) {
             Text(line).font(.orbitMeta).foregroundStyle(.secondary)
+        }
+        if let askReason {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(askReason)
+                    .font(.orbitMeta).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(PromotionCards.letAgentPushInstead, action: onLetAgentPush)
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .buttonStyle(.plain)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
         }
         HStack(spacing: 8) {
             Button { act { await merge.confirmMergeToMain(view) } } label: {

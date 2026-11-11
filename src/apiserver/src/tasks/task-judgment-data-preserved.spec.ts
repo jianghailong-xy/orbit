@@ -2886,7 +2886,29 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0506_owner_request_secret',
       // 0507 only replaces the confirmation-review end trigger: open FAILED runs keep waiting.
       // No completion ledger, DONE fence or preserved trigger/function is changed.
-      '0507_confirmation_review_waits_for_pickup'],
+      '0507_confirmation_review_waits_for_pickup',
+      // 0508 adds mutable landing settings and extends the event/log check-name sets.
+      '0508_project_landing_check',
+      // 0509 adds coordinator promotion request facts only; no existing ledger or fence changes.
+      '0509_project_promotion_request',
+      // 0510 adds nullable owner_request client metadata only; no preserved rows, triggers or DONE fence change.
+      '0510_owner_request_resolved_client',
+      // 0511 only replaces 0487's `open_list_bump_owner`, so that an UPDATE of `project_integration_job` that changes
+      // nothing but a lease renewal's columns bumps no Open-list counter. No table, column, constraint or trigger is
+      // created, altered or dropped; the function writes `open_list_epoch` alone, and none of the six preserved
+      // triggers/functions is named or replaced, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE runs at apply time.
+      '0511_open_list_renewal_not_a_change',
+      // 0512 adds nullable project JSON only; no preserved rows, triggers or DONE fence change.
+      '0512_project_done_task_epochs',
+      // 0513 adds attribution and admits its explicit retry; no preserved row or fence changes.
+      '0513_integration_baseline_red',
+      // 0516 adds the one-row email_settings table only (docs/welcome-email-design.md §3.1); no preserved rows,
+      // triggers or DONE fence change, and no row is written.
+      '0516_email_settings',
+      // 0517 adds the email_outbox table, its indexes and its foreign key to "user" only; no preserved rows,
+      // triggers or DONE fence change, and no row is written.
+      '0517_email_outbox'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

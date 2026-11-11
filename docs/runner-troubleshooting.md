@@ -455,6 +455,24 @@ command to run. Its runner keeps its process until it next starts, which then fa
 
 which puts its own copy in place and moves the runner to `orbit-runner@<user name>.service`.
 
+**Root's runner is still `orbit-runner-root.service`.** On a set-up host, root is an ordinary account:
+root's registration command uses hostd and starts `orbit-runner@root.service`, running root's own
+`/root/.orbit/bin/orbit` as uid 0. To move the legacy unit without registering again, run as root:
+
+```bash
+/usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+Setup puts root's own binary in place if missing, drains the old unit before starting the instance, and preserves
+the registration. Drop-ins are left in place and named, **not carried over**: review
+`/etc/systemd/system/<unit>.d/` and `/etc/systemd/system.control/<unit>.d/` (from `systemctl set-property`).
+Recreate needed settings under `orbit-runner@root.service.d/` or with
+`systemctl set-property orbit-runner@root.service CPUWeight=200`; the exact PATH and CPUWeight recreation,
+reload, restart and manual removal commands are in
+[Root's runner and its legacy unit](self-hosting.md#roots-runner-and-its-legacy-unit).
+Afterwards root's runner updates its own binary and asks hostd to update the machine binary like any account's.
+For root's request, hostd checks its download as unprivileged `nobody`. Hosts that are not set up keep the legacy unit.
+
 **The runners are on a newer release than `/usr/local/bin/orbit`.** Each runner updates its own copy and then asks
 the broker once to update its binary. A runner whose copy came from a release before this layout does not ask, and a
 broker whose directory its group can write declines, and the runner logs why. The broker's binary follows with the

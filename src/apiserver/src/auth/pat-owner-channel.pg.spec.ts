@@ -291,6 +291,8 @@ test('the owner channel refuses a personal access token door by door and field b
       body: { note: 'not yet' },
       login: 409,
     },
+    // The owner's DONE readiness read (a324f2397): what Record as done would be weighed against.
+    { route: 'GET /projects/:id/done-check', path: `/projects/${anyProject}/done-check`, login: 200 },
     {
       route: 'GET /projects/:id/acceptance/criteria-decisions/pending',
       path: `/projects/${anyProject}/acceptance/criteria-decisions/pending`,

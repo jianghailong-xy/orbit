@@ -247,6 +247,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   // The subject has no Feishu app connected: the administrator is answered that there was none to remove.
   'DELETE /admin/users/:id/feishu': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // Outgoing email is not configured in the fixture: the administrator is answered 409 EMAIL_NOT_CONFIGURED, nothing written.
+  'POST /admin/users/:id/welcome-email': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   // A Feishu group the account connected (§8.1): changed, and the spare one removed.
   'PATCH /integrations/feishu/chats/:id': { request: (of) => ({ params: { id: of.feishuChatRouteId }, body: { maxConcurrentSessions: 3 } }) },
   'DELETE /integrations/feishu/chats/:id': { request: (of) => ({ params: { id: of.spare.feishuChatRouteId } }) },
@@ -327,6 +329,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
       body: { criteriaDigest: 'e'.repeat(64), line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null },
     }),
   },
+  'GET /projects/:id/done-check': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/done': {
     request: (of) => ({ params: { id: of.projectId }, body: { criteriaDigest: 'e'.repeat(64), acceptedGaps: [] } }),
   },

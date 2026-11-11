@@ -10244,12 +10244,40 @@ button.chat-jump-start:hover {
   border-left: 2px solid var(--border);
   padding-left: 10px;
 }
+/* Folded by default, so it reads as the row a settled block shows (.chat-think-head): what moves
+   is the clock, the count and a faint sweep over the word. */
 .chat-think-live-head {
   display: flex;
   align-items: center;
   gap: 6px;
+  font: inherit;
   font-size: 12.5px;
   color: var(--text-3);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.chat-think-live-word {
+  background: linear-gradient(90deg, var(--text-3) 35%, var(--text-4) 50%, var(--text-3) 65%) 0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: chat-think-sweep 2.4s linear infinite;
+}
+@keyframes chat-think-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-think-live-word {
+    animation: none;
+  }
 }
 .chat-think-port {
   max-height: 11em;
@@ -10266,6 +10294,11 @@ button.chat-jump-start:hover {
 }
 .chat-think-port::-webkit-scrollbar {
   display: none;
+}
+/* Following the newest line leaves the top line cut through its middle; fade that edge instead. */
+.chat-think-port.is-scrolled {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2.5em);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 2.5em);
 }
 .chat-think-meta {
   color: var(--text-4);
@@ -10497,41 +10530,228 @@ button.chat-jump-start:hover {
 .chat-tool-task .chat-tool-row:hover {
   background: #f4eefe;
 }
-.chat-tool-group .chat-tool-row {
-  min-height: 32px;
+.chat-steps {
+  margin: 4px 0 10px;
+  padding: 0 12px;
 }
-.chat-tool-group:not(.is-open) .chat-tool-row {
-  background: transparent;
-}
-.chat-tool-group:not(.is-open) .chat-tool-row:hover {
-  background: var(--bg-sunken);
-}
-.chat-tool-group-lead {
+/* One muted line between two replies: no card, no icon. The caret shows only on hover (or while
+   open), so a turn of eight steps reads as eight quiet sentences. */
+.chat-steps-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 13px;
   color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
 }
-.chat-tool-group-lead.is-failed {
+.chat-steps-line:hover {
+  color: var(--text-2);
+}
+.chat-steps-caret {
+  font-size: 10px;
+  opacity: 0;
+}
+.chat-steps-line:hover .chat-steps-caret,
+.chat-steps.is-open .chat-steps-caret {
+  opacity: 1;
+}
+.chat-steps-failed {
   color: var(--error);
 }
-.chat-tool-group-lead .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+.chat-steps-detail {
+  margin: 6px 0 4px 2px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
 }
-/* The breakdown is what a settled group's folded row is really for, so give it room for the
-   usual two-or-three kinds — but never much past half the row, or a narrow window would let it
-   squeeze the counts (which have no fixed width of their own) out of the line entirely. */
-.chat-tool-group-breakdown {
-  max-width: min(420px, 55%);
+/* A turn Orbit opened, folded with the agent's answer into one muted line (OrbitExchangeFold):
+   what happened, then the first line of the reply, then the time. Two or more in a row fold into one
+   group line, which opens to them by task. Same tone as the steps line: nothing here is the
+   reader's, and nothing asks for them. */
+.orbit-exchange-root,
+.orbit-exchanges {
+  margin: 2px 0 8px;
+  padding: 0 12px;
+}
+.orbit-exchange-line,
+.orbit-exchanges-line,
+.orbit-branch-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
+}
+.orbit-exchange-line:hover,
+.orbit-exchanges-line:hover,
+.orbit-branch-line:hover {
+  color: var(--text-2);
+}
+.orbit-exchange-line:focus-visible,
+.orbit-exchanges-line:focus-visible,
+.orbit-branch-line:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.orbit-exchange-mark {
+  flex: none;
+  width: 12px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.orbit-exchange-what {
+  flex: none;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.orbit-exchanges-count {
+  flex: none;
+  color: var(--text-2);
+}
+.orbit-exchange-reply {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chat-tool-group-detail {
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-raised);
-  padding: 4px 8px 8px;
+.orbit-exchange-line .orbit-exchange-reply::before {
+  content: '— ';
 }
-.chat-tool-group-detail .chat-tool-card {
-  margin: 4px 0;
+.orbit-exchanges-kinds::before,
+.orbit-branch-meta::before {
+  content: '· ';
+}
+.orbit-exchange-time {
+  flex: none;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.orbit-exchange-caret,
+.orbit-branch-caret {
+  flex: none;
+  font-size: 10px;
+}
+.orbit-exchange-caret {
+  width: 10px;
+  opacity: 0;
+}
+.orbit-exchange-line:hover .orbit-exchange-caret,
+.orbit-exchanges-line:hover .orbit-exchange-caret,
+.orbit-exchange.is-open > .orbit-exchange-line .orbit-exchange-caret,
+.orbit-exchanges.is-open > .orbit-exchanges-line .orbit-exchange-caret {
+  opacity: 1;
+}
+.orbit-exchanges-body {
+  margin: 2px 0 4px 2px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+.orbit-branch-caret {
+  width: 12px;
+}
+.orbit-branch-title {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-weight: 500;
+}
+.orbit-branch-body {
+  margin-left: 5px;
+  padding-left: 14px;
+  border-left: 1px dashed var(--border);
+}
+.orbit-exchange-detail {
+  margin: 6px 0 10px 2px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+/* A phone has no room for both halves on one row: what happened and when, then the reply under it. */
+@media (max-width: 600px) {
+  .orbit-exchange-line,
+  .orbit-branch-line {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .orbit-exchange-line .orbit-exchange-what,
+  .orbit-branch-title {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+  }
+  .orbit-exchange-line .orbit-exchange-reply,
+  .orbit-branch-meta {
+    order: 5;
+    flex-basis: 100%;
+    padding-left: 20px;
+  }
+  .orbit-exchange-line .orbit-exchange-reply::before,
+  .orbit-branch-meta::before {
+    content: '';
+  }
+  .orbit-exchange-line .orbit-exchange-caret,
+  .orbit-branch-line .orbit-exchange-caret,
+  .orbit-exchanges-kinds,
+  .orbit-branch.is-open > .orbit-branch-line .orbit-branch-meta {
+    display: none;
+  }
+}
+.chat-steps-live {
+  margin-top: 6px;
+  font-size: 13.5px;
+}
+.chat-steps-live-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.chat-steps-live-head > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-steps-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: chat-steps-pulse 1.2s ease-in-out infinite;
+}
+@keyframes chat-steps-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-steps-dot {
+    animation: none;
+  }
+}
+.chat-steps-live-cmd {
+  padding-left: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-steps-elbow {
+  margin-right: 4px;
 }
 .chat-tool-detail {
   border-top: 1px solid var(--border-subtle);
@@ -12295,6 +12515,19 @@ button.chat-jump-start:hover {
   line-height: 1.5;
 }
 .project-done-not-yet-actions { display: flex; gap: 8px; margin-top: 9px; }
+/* Option A: the derived receipt names the confirmation and offers the owner's correction. */
+.project-why-not-done.is-derived,
+.project-why-not-done.is-derived .approval-head {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+.project-why-not-done.is-derived .criteria-provenance {
+  color: var(--success);
+  border-color: var(--success-border);
+}
+.project-done-derived-line { margin: 7px 0; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.project-done-derived-reopen { padding: 4px 0; color: var(--brand); background: transparent; }
+.project-done-derived-reopen:hover:not(:disabled) { text-decoration: underline; }
 .project-done-receipt-line { margin: 9px 0 0; font-size: 14px; font-weight: 600; color: var(--text-1); }
 .project-done-accepted { margin-top: 8px; font-size: 12.5px; }
 .project-done-accepted summary { color: var(--brand); cursor: pointer; }
@@ -20130,43 +20363,30 @@ div.landing-jobs-open {
   color: var(--error);
   font-size: 12px;
 }
-/* The Landings window's read-only footer (LS6), shaped like the conversation's composer card
-   (`.composer-box`: its 24px corners, raised surface, rim and shadow) with nothing to type into: the
-   sentence where the text would be, and the way to the coordinator in Send's place (board
-   docs/mocks/landings-chat-bubbles 01 b). */
+/* The Landings window's read-only footer (LS6): one plain line on the window's bottom edge — a lock
+   and "Orbit runs these landings", the coordinator's door at the end — so no landing runs on beneath
+   it (docs/mocks/landings-ui-polish ③). */
 .landing-page-foot {
-  flex: none;
-  margin-top: auto;
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  background: var(--bg-raised);
-  box-shadow:
-    0 2px 10px rgba(31, 35, 41, 0.05),
-    0 10px 30px rgba(31, 35, 41, 0.04);
-  color: var(--text-2);
-  font-size: 13px;
-}
-.landing-page-foot b {
-  color: var(--text-1);
-  font-weight: 600;
-}
-/* Where the composer's text stands: 1px of rim + 23 = 24px in, in its 15px type and line. */
-.landing-page-foot-line {
-  padding: 12px 23px 2px;
-  color: var(--text-2);
-  font-size: 15px;
-  line-height: 1.6;
-}
-/* The composer's toolbar row: who decides on the left, from the text's edge, and the door to them
-   on the right where Send stands. As tall with the door as without it. */
-.landing-page-foot-bar {
   display: flex;
+  flex: none;
   align-items: center;
-  gap: 8px;
-  min-height: 43px;
-  padding: 4px 13.43px 7px 23px;
-  color: var(--text-2);
+  gap: 10px;
+  min-height: 48px;
+  margin-top: auto;
+  padding: 6px 4px 6px 6px;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
   font-size: 13px;
+}
+.landing-page-foot-line {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .landing-page-foot-open.orbit-button {
   flex: none;
@@ -20215,10 +20435,8 @@ div.landing-jobs-open {
   background: var(--bg-hover);
   color: var(--text-1);
 }
-/* The window ends in a fade into its footer, as the conversation ends into its composer card
-   (`.workspace-scroll-wrap > .workspace-sessions`): a landing cut off at the bottom dissolves into
-   the card instead of being sliced through above it. The padding is the fade's room, and the
-   scrollbar's gutter keeps out of it. */
+/* The window ends in a fade above its footer: a landing cut off at the bottom dissolves instead of
+   being sliced through. The padding is the fade's room, and the scrollbar's gutter keeps out of it. */
 .landings-window-body {
   padding-top: 4px;
   padding-bottom: 20px;
@@ -20258,27 +20476,20 @@ div.landing-jobs-open {
   background: var(--brand-tint);
   color: var(--brand);
 }
-/* The landings Orbit reported close together (landingsWindowGroups): its avatar once, beside the
-   first message, and the messages in a column. */
+/* The landings Orbit reported close together (landingsWindowGroups): the messages in a column. No
+   avatar — every message here is Orbit's (docs/mocks/landings-ui-polish ①). */
 .landings-window-group {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
 }
 .landings-window-group + .landings-window-group {
-  margin-top: 12px;
-}
-.landings-window-avatar {
-  display: block;
-  flex: none;
-  width: 32px;
-  height: 32px;
+  margin-top: 2px;
 }
 .landings-window-column {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 /* Now's cards keep the room they had between them. */
@@ -20296,161 +20507,161 @@ div.landing-jobs-open {
   transition: outline-color 200ms ease;
 }
 /* The landing the window was opened on, outlined for a moment (board 03 f): a card's whole entry, a
-   settled landing's bubble. */
+   settled landing's line. */
 .landings-window-entry.is-card.is-outlined {
   outline-color: var(--brand);
 }
-.landings-window-entry.is-outlined .landings-window-row {
-  box-shadow: 0 0 0 2px var(--brand);
+/* A landing as a chat turn (docs/mocks/landings-chat-turns): its attempts on the chat's steps lines,
+   its reply — one plain sentence — and the chat's turn foot. Turns stand closer than a conversation's:
+   a landing's foot sits under its sentence with only the room the next steps line needs. */
+.landings-window-turn {
+  margin: 0 0 4px;
 }
-/* The bubble and its ⋯, which stands in the gutter the bubble leaves on its right. */
-.landings-window-row-line {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.landings-window-turn .chat-steps {
+  margin: 2px 0;
 }
-.landings-window-row-line .landings-window-row {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: calc(100% - 44px);
+.landings-window-turn .chat-turn-foot {
+  margin: 2px 0 14px;
 }
-/* A settled landing is one message from Orbit (board 01 b): it hugs its words, which are never cut
-   short, on the neutral fill of a chat's incoming bubble; the mark, the line and the time under them. */
-.landings-window-row {
-  display: flex;
-  flex-direction: column;
-  padding: 9px 13px 8px;
+/* A steps line is the chat's `.chat-steps-line`, pressed as a button. */
+.landings-window-steps-line {
   border: 0;
-  border-radius: 16px;
-  background: var(--fill-muted);
-  color: var(--text-1);
+  background: transparent;
   font: inherit;
+  font-size: 13px;
   text-align: left;
+}
+/* What queued an attempt: the chat's user bubble (docs/mocks/landings-chat-trigger), its time always shown — it is
+   when the landing started, as the turn foot's is when it ended. */
+.landings-window-trigger {
+  margin: 10px 12px 4px auto;
+}
+.landings-window-trigger .md p {
+  margin: 0;
+}
+.landings-window-trigger .chat-user.is-link {
   cursor: pointer;
-  transition: background-color 120ms ease, box-shadow 200ms ease;
 }
-.landings-window-row:hover {
-  background: color-mix(in srgb, var(--fill-muted), var(--text-1) 5%);
+.landings-window-trigger .chat-user.is-link:focus {
+  outline: none;
 }
-.landings-window-row-text {
-  font-size: 14px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
+.landings-window-trigger .chat-user.is-link:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--brand);
 }
-.landings-window-row-foot {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 3px;
-  color: var(--text-2);
-  font-size: 12px;
-  line-height: 16px;
+.landings-window-trigger-meta > .chat-time {
+  opacity: 1;
 }
-.landings-window-row-mark {
-  flex: none;
+.landings-window-reply {
+  margin: 2px 0 0;
+  cursor: pointer;
 }
-.landings-window-row-mark.is-ok {
-  color: var(--success);
+.landings-window-reply .md p {
+  margin: 0;
 }
-.landings-window-row-mark.is-merge {
-  color: var(--brand);
+.landings-window-entry.is-outlined .landings-window-reply {
+  box-shadow: inset 2px 0 0 var(--brand);
 }
-.landings-window-row-mark.is-quiet {
-  color: var(--text-3);
+/* No focus box round the sentence after a press; the keyboard's focus is the outline's own left rule. */
+.landings-window-reply:focus {
+  outline: none;
 }
-.landings-window-row-detail {
-  min-width: 0;
-  overflow-wrap: anywhere;
+.landings-window-reply:focus-visible {
+  box-shadow: inset 2px 0 0 var(--brand);
 }
-.landings-window-row-time {
-  flex: none;
-  margin-left: auto;
-  padding-left: 12px;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-}
+/* The landing's ⋯ in its turn foot, where the chat's copy button stands. */
 .landings-window-more {
   flex: none;
-  width: 28px;
-  height: 28px;
-  margin: 6px 4px 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 20px;
+  height: 18px;
+  margin-left: -4px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-3);
-  font-size: 15px;
+  font-size: 13px;
   cursor: pointer;
 }
 .landings-window-more:hover {
   background: var(--bg-hover);
   color: var(--text-1);
 }
-/* A bubble's ⋯ shows where the pointer or the keyboard is on it, or while its menu is open; a card's
-   always shows, and so does every one on a screen without hover. */
-.landings-window-row-line .landings-window-more {
-  margin: 0;
-  opacity: 0;
-}
-.landings-window-entry:hover .landings-window-row-line .landings-window-more,
-.landings-window-row-line:focus-within .landings-window-more,
-.landings-window-row-line .landings-window-more[data-popup-open],
-.landings-window-row-line .landings-window-more[aria-expanded="true"] {
-  opacity: 1;
-}
-@media (hover: none) {
-  .landings-window-row-line .landings-window-more {
-    opacity: 1;
-  }
-}
-.landings-window-card {
-  margin-bottom: 0;
-}
-.landings-window-card-top {
+.landings-window-steps {
   display: flex;
-  align-items: flex-start;
-  gap: 4px;
-}
-.landings-window-card-top .landings-window-more {
-  margin: -2px -6px 0 0;
-}
-.landings-window-card-press {
-  display: flex;
-  flex: 1;
   flex-direction: column;
-  min-width: 0;
-  padding: 0;
+}
+.landing-step-row {
+  width: 100%;
   border: 0;
   background: transparent;
   color: inherit;
-  font: inherit;
+  /* The family only: the size is the chat tool row's own 12.5px, as every tool call's. */
+  font-family: inherit;
   text-align: left;
   cursor: pointer;
 }
-/* The task the card is about: the one line the window adds under the status card's head. */
-.landings-window-card-task {
-  display: block;
-  margin-top: 8px;
-  color: var(--text-1);
-  font-size: 13px;
-  overflow-wrap: anywhere;
+/* No focus box on a press; the keyboard's focus reads as the row's hover. */
+.landing-step-row:focus,
+.landings-window-steps-line:focus {
+  outline: none;
 }
-/* A bubble's record opens under it across the column, on the quiet panel a person's bubble opens its
-   ⊕ note on (`.chat-user-wrap > .chat-injected-panel`, board 03 e). A card's opens under the card as
-   before. */
-.landings-window-record {
-  margin-top: 4px;
-  padding: 10px 12px 12px;
-  border-radius: 12px;
+.landing-step-row:focus-visible,
+.landings-window-steps-line:focus-visible {
   background: var(--bg-sunken);
 }
-.landings-window-entry.is-card .landings-window-record {
+.landing-step-detail {
+  padding: 6px 12px 8px;
+}
+/* What a landing in hand still carries, on the chat's own status card under its sentence. */
+.landings-window-card.chat-status-card {
+  margin: 8px 12px 0;
+  width: min(640px, calc(100% - 24px));
+}
+.landings-window-card.is-failed {
+  border-left-color: var(--error);
+}
+.landings-window-status-icon.is-failed {
+  background: var(--error);
+  font-size: 10px;
+}
+.landings-window-status-clock {
+  margin-left: auto;
+  color: var(--text-3);
+  font-weight: 500;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.landings-window-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 12px 12px;
+}
+.landings-window-card-body .landing-card-block,
+.landings-window-card-body .landing-card-actions {
   margin-top: 0;
-  padding: 12px 4px 4px;
-  border-radius: 0;
-  background: none;
+}
+.landings-window-card-detail {
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.landings-window-wait-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+/* A landing that runs: its clock, budget and liveness under its sentence. */
+.landings-window-live {
+  margin: 6px 12px 2px;
+}
+/* What a turn opens to under its sentence: a merge's receipt, a task's two ways out — inset like the reply. */
+.landings-window-record {
+  margin: 6px 12px 0;
 }
 .landings-window-receipt {
   margin-bottom: 12px;
@@ -20465,8 +20676,7 @@ div.landing-jobs-open {
   margin-left: 0;
 }
 @media (prefers-reduced-motion: reduce) {
-  .landings-window-entry.is-card,
-  .landings-window-row {
+  .landings-window-entry.is-card {
     transition: none;
   }
 }
@@ -22046,6 +22256,26 @@ div.landing-jobs-open {
 }
 .admin-users-status-off::before {
   background: var(--error);
+}
+/* A failed welcome email (docs/welcome-email-design.md §3.5): one grey line under the status, its error on hover. */
+.admin-users-status-stack {
+  display: grid;
+  gap: 2px;
+}
+.admin-users-welcome-failed {
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: default;
+}
+/* Send welcome email while outgoing email is off: the entry, disabled, says why under its label. */
+.admin-users-menu-two-line {
+  display: grid;
+  gap: 2px;
+}
+.admin-users-menu-hint {
+  color: var(--text-3);
+  font-size: 12px;
 }
 .admin-users-table .admin-users-col-actions {
   width: 1%;
@@ -23699,8 +23929,8 @@ div.landing-jobs-open {
   flex-basis: 100%;
   white-space: normal;
 }
-/* A confirmation review's two turns (`ConfirmationReviewTurnCards.tsx`): the request a reviewer is
-   handed, and the reviewer's return handed to the run. Orbit's turns, drawn as the started card is. */
+/* A confirmation review's three turns (`ConfirmationReviewTurnCards.tsx`): the request a reviewer is
+   handed, the reviewer's return handed to the run, and the owner's answers handed to the reviewer. Orbit's turns, drawn as the started card is. */
 .crc-wrap {
   display: flex;
   justify-content: flex-end;
@@ -23718,6 +23948,17 @@ div.landing-jobs-open {
   border-color: var(--warning-border);
   background: var(--warning-bg);
 }
+.crc.is-confirmed {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.crc.is-neutral {
+  border-color: var(--border);
+  background: var(--bg-hover);
+}
+.crc.is-neutral .crc-head {
+  color: var(--text-2);
+}
 .crc.is-queued {
   border-style: dashed;
 }
@@ -23730,6 +23971,9 @@ div.landing-jobs-open {
 }
 .crc.is-returned .crc-head {
   color: var(--warning);
+}
+.crc.is-confirmed .crc-head {
+  color: var(--success);
 }
 .crc-when {
   margin-left: auto;
@@ -23778,6 +24022,161 @@ div.landing-jobs-open {
   color: var(--warning);
   font-size: 12px;
   line-height: 1.6;
+}
+.crc-lead {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.crc-answers {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.crc-answers li {
+  margin-top: 5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.crc-answer-question {
+  color: var(--text-2);
+}
+.crc-answer {
+  font-weight: 600;
+}
+.crc-answer-note {
+  color: var(--warning);
+  font-size: 12px;
+}
+.crc-raw {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.crc-raw summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.crc-raw pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.crc-state {
+  margin-top: 8px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.crc-state.is-warn {
+  color: var(--warning);
+}
+.crc-state.is-ok {
+  color: var(--success);
+}
+.crc-claim {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.crc-claim-text {
+  white-space: pre-wrap;
+}
+.crc-claim.is-clamped .crc-claim-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.crc-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.crc-question {
+  margin-top: 6px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.crc-question-text {
+  font-weight: 600;
+}
+.crc-question ul {
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.crc-question li {
+  margin-top: 2px;
+  color: var(--text-2);
+}
+.crc-question li.is-picked {
+  color: var(--text-1);
+  font-weight: 600;
+}
+/* The opening of a session Orbit opened (OrbitTurnCards.tsx `SessionOpeningLine`): one line, the brief folded. */
+.session-opening {
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-hover);
+}
+.session-opening-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.session-opening-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.session-opening-text a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.session-opening-toggle {
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.session-opening-quote {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.session-opening-brief {
+  max-height: 320px;
+  margin: 8px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .crc-undelivered {
   margin-top: 4px;
@@ -24368,6 +24767,21 @@ button.project-open-item-action:disabled {
   border-top-color: var(--success-border);
 }
 .project-promotion-link {
+  font-size: 12.5px;
+}
+/* Why a READY card asks with Automatic on, and the way not to be asked: one line above the presses. */
+.project-promotion-reason {
+  margin: 0 14px 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-raised);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.project-promotion-reason .project-promotion-reason-link {
+  height: auto;
+  padding: 0;
+  margin-top: 2px;
   font-size: 12.5px;
 }
 /* Pushed to the far end of the action row: how long this has been asked is context, not a press. */
@@ -26714,7 +27128,7 @@ button.agent-progress-agent:hover {
   color: var(--text-3);
 }
 .ac-error {
-  color: var(--danger-solid, var(--danger));
+  color: var(--danger-solid, var(--error));
 }
 .ac-diff {
   max-height: 420px;
@@ -26801,15 +27215,43 @@ button.agent-progress-agent:hover {
               border-radius: 6px; background: none; color: var(--text-2); font-size: 15px; cursor: pointer; }
 .wk-chat-ib:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-1); }
 .wk-chat-ib:disabled { color: var(--text-4); cursor: default; }
-.wk-chat-history { flex: none; max-height: 40%; overflow-y: auto; padding: 4px 6px; border-bottom: 1px solid var(--border-subtle); }
-.wk-chat-history-row { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: none;
-                       font: inherit; font-size: 13px; color: var(--text-1); text-align: left; cursor: pointer; }
-.wk-chat-history-row:hover { background: var(--bg-hover); }
-.wk-chat-history-row.on { background: var(--brand-tint); color: var(--brand); }
-.wk-chat-history-row .t { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.wk-chat-history-row .n { flex: none; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
-                          background: var(--warning-solid); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+/* The history the title opens over the whole panel (board 45 ④). */
+.wk-chat-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wk-chat-main[hidden] { display: none; }
+.wk-chat-history { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wk-chat-history-search { flex: none; display: flex; align-items: center; gap: 8px; margin: 10px 12px 4px; padding: 0 10px; height: 32px;
+                          border: 1px solid var(--border); border-radius: 8px; color: var(--text-3); background: var(--bg-raised); }
+.wk-chat-history-search:focus-within { border-color: var(--brand); }
+.wk-chat-history-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 13px; color: var(--text-1); }
+.wk-chat-history-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 12px; }
+.wk-chat-history-group { width: 100%; display: flex; align-items: center; gap: 6px; padding: 10px 8px 4px; border: 0; background: none;
+                         font: inherit; font-size: 12px; font-weight: 600; color: var(--text-3); text-align: left; }
+.wk-chat-history-group.is-fold { cursor: pointer; }
+.wk-chat-history-group .n { font-weight: 500; }
+.wk-chat-history-group .caret { margin-left: auto; font-size: 10px; }
+.wk-chat-history-row { position: relative; display: flex; align-items: center; border-radius: 8px; }
+.wk-chat-history-row:hover, .wk-chat-history-row:focus-within { background: var(--bg-hover); }
+.wk-chat-history-row.on { background: var(--brand-tint); }
+.wk-chat-history-open { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 6px 8px 7px; border: 0; background: none;
+                        font: inherit; text-align: left; cursor: pointer; color: var(--text-1); }
+.wk-chat-history-open .t { font-size: 13.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wk-chat-history-row.on .wk-chat-history-open .t { color: var(--brand); font-weight: 600; }
+.wk-chat-history-open .m { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); }
+.wk-chat-history-open .m.is-needs_you { color: var(--warning); font-weight: 600; }
+.wk-chat-history-open .m.is-working { color: var(--brand); }
+.wk-chat-history-open .m .spin { font-size: 10px; }
+.wk-chat-history-more { flex: none; width: 24px; height: 24px; margin-right: 6px; display: inline-flex; align-items: center; justify-content: center;
+                        border: 0; border-radius: 5px; background: none; color: var(--text-2); cursor: pointer; opacity: 0; }
+.wk-chat-history-row:hover .wk-chat-history-more, .wk-chat-history-more:focus-visible,
+.wk-chat-history-more[aria-expanded='true'] { opacity: 1; }
+.wk-chat-history-more:hover { background: var(--fill-muted); }
+@media (hover: none) { .wk-chat-history-more { opacity: 1; } }
+.wk-chat-history-row.is-renaming { padding: 4px 6px; }
+.wk-chat-history-rename { width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--brand); border-radius: 6px; font: inherit; font-size: 13.5px;
+                          color: var(--text-1); background: var(--bg-raised); outline: 0; }
+.wk-chat-history-more-page { margin: 8px 8px 0; padding: 4px 8px; border: 0; background: none; color: var(--brand); font: inherit; font-size: 12.5px; cursor: pointer; }
 .wk-chat-history-none { padding: 8px; font-size: 12.5px; color: var(--text-3); }
+.wk-chat-history-note { margin: 14px 8px 0; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 .wk-chat-run { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 7px 14px; font-size: 12px; color: var(--text-3);
                border-bottom: 1px solid var(--border-subtle); }
 .wk-chat-pick { position: relative; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; height: 24px; padding: 0 6px;
@@ -26827,8 +27269,8 @@ button.agent-progress-agent:hover {
 .wk-chat-choice:hover { border-color: var(--brand); background: var(--brand-tint); }
 .wk-chat-choice .m { font-size: 12px; color: var(--text-3); }
 .wk-chat-body { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
-/* A person's meta row runs out to the left of the bubble's column on one line (.chat-user-meta), but the panel is 320–560
-   wide and its body is a scroll box, which cuts off whatever runs past its left edge (C15). Here the attachment line
+/* A person's meta row runs out to the left of the bubble's column on one line (.chat-user-meta), but the panel is 320 wide
+   and up and its body is a scroll box, which cuts off whatever runs past its left edge (C15). Here the attachment line
    takes a line of its own under the bubble and wraps there, whole, as board 42 ① shows it; the copy and the time keep
    their line under it, where the dot that led into the attachment line has nothing left to lead into. */
 .wk-chat-body .chat-user-meta { flex-wrap: wrap; height: auto; min-height: 18px; }
@@ -27010,4 +27452,83 @@ button.agent-progress-agent:hover {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 8px 16px;
   margin-top: 4px;
+}
+
+.project-done-findings {
+  padding: 10px 12px;
+  border: 1px solid var(--error);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  color: var(--error);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.project-done-findings ul { list-style: none; padding: 0; margin: 0; }
+/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the Sign-in card's rows, with From and
+   Reply-To side by side, the test email's answer beside its buttons, and the last week under a rule. */
+.admin-email-off {
+  margin-top: -8px;
+}
+.admin-email-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 600px) {
+  .admin-email-pair {
+    grid-template-columns: 1fr;
+  }
+}
+.admin-email-divided {
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+.admin-email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.admin-email-buttons {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.admin-email-result {
+  padding: 8px 12px;
+  border: 1px solid;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.admin-email-result-ok {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.admin-email-result-error {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.admin-email-week {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle, var(--border));
+  color: var(--text-2);
+}
+.admin-email-failed {
+  color: var(--error);
+}
+.admin-email-failures {
+  display: grid;
+  gap: 6px;
+  margin: -8px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 12.5px;
 }

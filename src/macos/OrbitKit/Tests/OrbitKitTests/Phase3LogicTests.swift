@@ -183,6 +183,9 @@ final class Phase3LogicTests: XCTestCase {
 
         // A merge into main waiting on the owner opens the project's page, where its card is
         // (owner decision 2026-10-06); every other owner item still opens the conversation.
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "project-done", "projectID": "p1"]),
+                       .openProject(projectID: "p1"))
         let merge = ["sessionID": "s1", "kind": "approve-merge-to-main", "projectID": "p1", "openItemID": "i1"]
         XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier", userInfo: merge),
                        .openProjectMerge(projectID: "p1", sessionID: "s1"))

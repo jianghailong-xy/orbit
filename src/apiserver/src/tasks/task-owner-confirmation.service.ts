@@ -247,12 +247,20 @@ export class TaskOwnerConfirmationService {
   private confirm(
     ownerId: string,
     taskId: string,
-    answering: string | null,
+    requested: string | null,
     note: string | null,
     input: Pick<DecideOwnerConfirmation, 'reviewRecordId' | 'answers'>,
   ): Promise<{ receipt: OwnerDecisionReceipt; answered: boolean }> {
     return withTransactionRetry(this.prisma, async (tx) => {
+      let answering = requested;
       const standing = await lockedStanding(tx, ownerId, taskId);
+      // §13 A4: the panel can answer the request hidden by a coordinator hold.
+      const latest = standing.latestRequest;
+      if (answering === null && latest && !latest.decided && !latest.returned) {
+        const review = (await confirmationReviewStates(tx,
+          [{ id: latest.id, taskId, sessionId: latest.sessionId, requestedAt: latest.requestedAt }], new Date())).get(latest.id);
+        if (review?.reviewer.kind === 'PROJECT_COORDINATOR' && review.state === 'UNDER_REVIEW') answering = latest.id;
+      }
       const refusal = ownerDecisionRefusal(standing, 'CONFIRM', answering);
       if (refusal) throwOwnerConfirmationRefusal(refusal);
       const reviewed = await reviewOfDecision(tx, taskId, standing, answering, {

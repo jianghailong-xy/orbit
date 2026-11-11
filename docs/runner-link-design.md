@@ -809,3 +809,7 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 - **兼容和发布。**
   - proto、服务端、网关都不改。`Heartbeat.draining` 早已存在，生产的旧网关 f8b9964f3 照样转发（它的 README：`draining` 是带类型的字段，原样转给服务端），当前服务端已经按它停发心跳派的工作。
   - 改动只在 runner，需要发一次 runner 版本才生效；它只在下一次升级（之后的版本）时起作用。0.1.248/0.1.249 等旧 runner 行为不变，与新 runner 混跑没有交互。
+- **2026-11-10 HPC 的 4 个 turn 不是升级打断的，是 OOM 停了整个 runner。**（任务 34vFtgH0L69RYHdWr9ECW）
+  - 经过：16:16:15Z 内核在 HPC 的 runner unit 里 OOM 杀了某个会话的 `tsc`。systemd 默认 `OOMPolicy=stop`，于是停了整个 runner；100 秒的关停排空到 16:17:55Z 结束了 4 个在跑的 turn，`Restart=always` 在 16:18:05Z 把 runner 拉起，启动时的自更新在没有会话的情况下装上了 0.1.252。升级闸门最后一次检查（16:12:21Z）是正确地推迟了的。新进程把 4 个 turn 全部重新领回，都 ANSWERED。
+  - 修复（fe5db828a）：runner 写出的两种 unit（`service.go`、`host_setup.go`）都写入 `OOMPolicy=continue`，OOM 只结束出问题的那个进程，不再连带停掉 runner。已经装好的 unit 只在重新注册时更新；HPC 另加了一次性的 drop-in `/etc/systemd/system/orbit-runner-root.service.d/oom-policy.conf`（任务 34vNE2Z174xCdCn3UfLcc）。
+  - 含义："升级不打断在跑的 turn"还依赖 runner 不被它所在 unit 里的别的事停掉。升级这条路本身只在没有 turn 在跑、或排空结束后才开始；unit 被 systemd 停掉（OOM、手动 stop）走的是关停排空，不受本节约束。

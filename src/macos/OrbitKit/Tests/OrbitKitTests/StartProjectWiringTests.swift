@@ -213,7 +213,13 @@ final class StartProjectWiringTests: XCTestCase {
         XCTAssertTrue(start.contains(".disabled(!editable || draft.line != .main)"))
         XCTAssertTrue(start.contains("Text(draft.deliveryHint)"), "with what it means, or why it is not offered")
         XCTAssertTrue(start.contains("update { $0.chooseLine(line) }"))
-        XCTAssertTrue(start.contains("Text(RunSettings.mergeCheckHint(draft.main))"))
+        XCTAssertTrue(start.contains("Text(draft.mergeCheckHint)"),
+                      "the merge check's hint follows the delivery chosen (`StartSettingsDraft.mergeCheckHint`)")
+        let rows = ["lineRow(editable: editable)", "deliveryRow(editable: editable)", "mainBranchRow(upstream, editable: editable)"]
+            .map { start.range(of: $0)?.lowerBound }
+        XCTAssertFalse(rows.contains(nil))
+        XCTAssertEqual(rows.compactMap { $0 }, rows.compactMap { $0 }.sorted(),
+                       "Delivery sits directly under the line, before Main branch (owner decision 2026-11-10)")
         XCTAssertTrue(start.contains("let items = StartProject.comesToYou(automatic: draft.automatic, line: draft.line,"),
                       "what still comes to the owner is listed under the switch, off the same draft")
         XCTAssertTrue(start.contains("private var opensCoordinator: Bool { draft.automatic && !hasCoordinator }"),

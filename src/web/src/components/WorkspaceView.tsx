@@ -134,6 +134,7 @@ import {
   projectPromotionQuery,
   sessionCreatedTasksQuery,
   watchesQuery,
+  projectDependencyGraphQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
 import { SessionMoveModal, type MoveDialogSession } from './SessionMoveModal';
@@ -234,6 +235,9 @@ import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
 import { HeldFirstMessage, MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
+import { ManagedWelcomeCard, useNewAccount } from './WelcomeCard';
+import { WELCOME_PLACEHOLDER } from '../lib/welcomeCopy';
+import type { LoginEngine } from '@orbit/shared';
 import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
 import {
   currentEngineChoice,
@@ -249,6 +253,8 @@ import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeNamesCtx } from './WatchWakeCard';
+import { ExchangeTreeCtx, type ExchangeTree } from './OrbitExchangeFold';
+import { idKey as exchangeIdKey, upstreamFromGraph } from '../lib/orbitExchangeFold';
 import {
   ago,
   sameResourceId,
@@ -408,7 +414,9 @@ import {
   type StartPageRow,
 } from '../lib/projectStart';
 import { PROJECT_DONE_COPY, type ProjectDoneDocument } from '../lib/projectDone';
-import { ProjectWhyNotDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
+import { ProjectDoneDeclineRow } from './ProjectDoneDeclineRow';
+import { ProjectStaleDoneRow } from './ProjectStaleDoneRow';
+import { ProjectSessionsDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -3044,12 +3052,12 @@ export function WorkspaceView({
   const pageSessionsError = (projectSessionsQ.error ?? completedProjectSessionsQ.error) as Error | null;
   // A project nobody has started (docs/mocks/project-start-sessions-page): its progress line says so,
   // and the start's row sits under it — by the project page's own rule (`startPageRow`), read off the
-  // sidebar's `startedAt` and the open items, which are read only while that holds.
+  // sidebar's `startedAt` and the open items, also read for the latest Not yet answer.
   const pageStarted = pageProject ? projectStarted(pageProject) : null;
   const pageNotStarted = pageProject?.status === 'OPEN' && pageStarted === false;
   const pageOpenItemsQ = useQuery({
     ...projectOpenItemsQuery(openProjectId ?? ''),
-    enabled: !!openProjectId && pageNotStarted,
+    enabled: !!openProjectId,
     refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const pageStart = pageNotStarted
@@ -3637,6 +3645,26 @@ export function WorkspaceView({
     !!setup.folder &&
     !!runner.online &&
     (setupCredential.step === 'signedIn' || setupCredential.step === 'onKey');
+  // A new account's first draft wears the welcome card (docs/mocks/new-user-onboarding): on its managed
+  // runner's default workspace in place of the runner's notice and the engine hero, and on a bare
+  // machine as the setup card's greeting. Only while the account has never had a session.
+  const managedDraft =
+    !selected &&
+    !!managed &&
+    !!workspaceId &&
+    !!managed.status.workspaceId &&
+    routeId(managed.status.workspaceId) === routeId(workspaceId);
+  const newAccount = useNewAccount(composing && (bareMachine || managedDraft));
+  const managedWelcome = newAccount && managedDraft && !bareMachine;
+  const machineWelcome = newAccount && bareMachine;
+  // Before a first session can start there is no draft engine to sign in, so the runner's own first one.
+  const welcomeEngine: LoginEngine =
+    !managedDraftBlocked && isLoginProvider(pickedEngine) ? (pickedEngine as LoginEngine) : firstEngineOn(runner.engines);
+  const welcomeCredential = setupCredentialOf(
+    runner,
+    welcomeEngine,
+    managedDraftBlocked && !draftHere ? null : currentDraftEngine.provider,
+  );
   // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
   // provider of it reads, listed or not (a key since removed, the legacy built-in `dsh`).
   const shownEngineProviders = useMemo(
@@ -3691,6 +3719,11 @@ export function WorkspaceView({
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
+  };
+  // A first message from the welcome card: into the composer, to be read, changed and sent there.
+  const pickWelcomeExample = (example: string): void => {
+    setText(example);
+    setTimeout(() => taRef.current?.focus(), 0);
   };
   // The setup card's Use an API key (rule 5): with a key or pool that can run here, that is the draft's
   // credential, this engine's first; with none yet, the keys are where one is connected.
@@ -5006,6 +5039,34 @@ export function WorkspaceView({
     },
     [watchesForHeaderQ.data, createdTasks.data],
   );
+
+  // What places a folded Orbit turn under its task in the transcript (OrbitExchangeFold): which
+  // task a session runs, from the rows this page already holds, and which tasks a task waits on,
+  // from the project's dependency graph — read only once a group of folded turns is opened in a
+  // conversation that belongs to a project, and shared with the project page's read.
+  const [exchangeTreeWanted, setExchangeTreeWanted] = useState(false);
+  const exchangeGraph = useQuery({
+    ...projectDependencyGraphQuery(coordinatedProjectId ?? ''),
+    enabled: exchangeTreeWanted && Boolean(coordinatedProjectId) && !selectedTrashed,
+  });
+  const wantExchangeTree = useCallback(() => setExchangeTreeWanted(true), []);
+  const exchangeTree = useMemo<ExchangeTree>(() => {
+    const graph = upstreamFromGraph(exchangeGraph.data);
+    const taskBySession = new Map<string, { id: string; title?: string }>();
+    for (const row of sessionsQ.data ?? []) {
+      if (typeof row.taskId === 'string' && row.taskId) {
+        taskBySession.set(exchangeIdKey(row.id), { id: row.taskId, title: graph.taskTitle(row.taskId) });
+      }
+    }
+    return {
+      lookup: {
+        taskOfSession: (sessionId) => taskBySession.get(exchangeIdKey(sessionId)) ?? null,
+        upstreamOf: graph.upstreamOf,
+        taskTitle: graph.taskTitle,
+      },
+      want: wantExchangeTree,
+    };
+  }, [exchangeGraph.data, sessionsQ.data, wantExchangeTree]);
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
@@ -8513,6 +8574,8 @@ export function WorkspaceView({
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
+        : managedWelcome || (machineWelcome && composerTakesWork)
+          ? WELCOME_PLACEHOLDER
         : managedDraftBlocked || !composerTakesWork
           ? (managed?.display.title ?? 'Runner offline')
           : replyTo
@@ -8697,7 +8760,7 @@ export function WorkspaceView({
               card's place (docs/mocks/project-done-sessions-page) — the progress card itself would
               say nothing but the word Done. */}
           {openProjectId && pageSettledDoc && (
-            <ProjectWhyNotDoneCard project={pageSettledDoc} />
+            <ProjectSessionsDoneCard projectId={openProjectId} project={pageSettledDoc} />
           )}
           {openProjectId && !pageSettledDoc && (
             <>
@@ -8727,6 +8790,10 @@ export function WorkspaceView({
               onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
                 navigate(sessionPath(pageCoordinator.id), { state: stampFromList() })) : null} />
           )}
+          {openProjectId && <>
+            <ProjectStaleDoneRow view={pageOpenItemsQ.data} />
+            <ProjectDoneDeclineRow items={pageOpenItemsQ.data} />
+          </>}
           {openProjectId
             ? projectMembers.length === 0 && !loadingSessions && (
               <div className="session-project-empty">
@@ -9586,6 +9653,7 @@ export function WorkspaceView({
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
               <WatchWakeNamesCtx.Provider value={wakeTargetName}>
+              <ExchangeTreeCtx.Provider value={exchangeTree}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
                   says so, and otherwise it is the way to the first message, which scrolling alone
                   never reaches (see jumpToStart). Pinned to the top of the viewport rather than
@@ -9949,6 +10017,7 @@ export function WorkspaceView({
                   )}
                 </div>
               )}
+              </ExchangeTreeCtx.Provider>
               </WatchWakeNamesCtx.Provider>
             </div>
           ) : bareMachine ? (
@@ -9966,6 +10035,7 @@ export function WorkspaceView({
                   onFolder={setup.pickFolder}
                   onEngine={(engine) => pickDraft(engine as AgentProvider, engine)}
                   onUseApiKey={pickApiKey}
+                  welcome={machineWelcome ? { composerText: text, onExample: pickWelcomeExample } : undefined}
                 />
                 {setup.held && (
                   <HeldFirstMessage
@@ -9981,6 +10051,22 @@ export function WorkspaceView({
                     <SessionStatusCard card={card} />
                   </RevealedOnArrival>
                 ))}
+              </div>
+            </div>
+          ) : managedWelcome && managed ? (
+            <div key="welcome" className="workspace-sessions workspace-draft">
+              <div className="msc-draft">
+                <ManagedWelcomeCard
+                  managed={managed}
+                  runner={runner}
+                  engine={welcomeEngine}
+                  credential={welcomeCredential}
+                  composerText={text}
+                  startsNow={!managedDraftBlocked}
+                  onExample={pickWelcomeExample}
+                  onUseApiKey={pickApiKey}
+                  onChangeCredential={() => pickDraft(welcomeEngine as AgentProvider, welcomeEngine)}
+                />
               </div>
             </div>
           ) : composing ? (
@@ -10046,7 +10132,7 @@ export function WorkspaceView({
         />
         {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
             waking, failed (with Retry), removed. */}
-        {managed && managed.display.kind !== 'available' && <ManagedRunnerNotice managed={managed} />}
+        {managed && managed.display.kind !== 'available' && !managedWelcome && <ManagedRunnerNotice managed={managed} />}
         {/* What this session is waiting on: live watches it observes. A watch waits on the server,
             not in a process, so it gets its own strip rather than a row in the tray below
             (docs/watch-contract.md §9.2). Hidden when there are none. */}

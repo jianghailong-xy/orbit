@@ -410,27 +410,29 @@ private struct StreamingProse: View {
 
 struct ThinkingView: View {
     let block: ThinkingBlock
-    /// Nil until the reader says otherwise: a stretch still being written opens (watching it think
-    /// is the point of showing it at all) and a settled one folds (a turn stacks ten of them). A
-    /// tap pins it either way, and that pin survives the block settling underneath it.
+    /// Nil until the reader says otherwise: folded, whether the stretch is still being written or
+    /// settled (owner, 2026-11-11, docs/mocks/thinking-fold-live — a box of reasoning scrolling at
+    /// the tail of every turn was the biggest moving thing on screen and the least read). The row's
+    /// running clock says it is working. A tap pins it open, and that pin survives the block
+    /// settling underneath it.
     @State private var pinnedOpen: Bool?
     private static let tailAnchor = "thinking-tail"
 
-    private var expanded: Bool { pinnedOpen ?? !block.isFinalized }
+    private var expanded: Bool { pinnedOpen ?? false }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             row
             if expanded { content }
         }
-        // ToolGroupCardView's List rule, same row: animating the fold has SwiftUI interpolating
+        // StepsRowView's List rule, same row: animating the fold has SwiftUI interpolating
         // the contents while the UICollectionView behind the List re-measures and animates the
         // same cell — both driving one height, which is the flicker. The fold is instant instead.
         .animation(nil, value: expanded)
     }
 
     /// The tap row. The fold is driven by hand — chevron, contentShape, onTapGesture — the way
-    /// every other foldable row in this List does it (ToolCardView, ToolGroupCardView): the
+    /// every other foldable row in this List does it (ToolCardView, StepsRowView): the
     /// `DisclosureGroup` this row was before would not collapse on tap on iOS (reported on a
     /// streaming Kimi turn, 2026-10-09).
     private var row: some View {
@@ -439,9 +441,13 @@ struct ThinkingView: View {
             Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
                 .rotationEffect(.degrees(expanded ? 90 : 0))
-            Label(rowLabel, systemImage: "brain")
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .lineLimit(1)
+            // Ticks once a second only while the stretch is still being written; a settled row's
+            // words do not move, and a turn stacks many of them.
+            if block.isFinalized {
+                rowLabel(Date())
+            } else {
+                TimelineView(.periodic(from: .now, by: 1)) { context in rowLabel(context.date) }
+            }
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
@@ -481,12 +487,19 @@ struct ThinkingView: View {
 
     /// What the row says while it is shut. A bare "Thinking" told a reader nothing about whether
     /// opening it was worth it; this states how long the stretch took and how much it came to.
-    private var rowLabel: String {
+    private func rowLabel(_ now: Date) -> some View {
+        Label(rowText(now: now), systemImage: "brain")
+            .font(.orbitLabel).foregroundStyle(.secondary)
+            .lineLimit(1)
+            .monospacedDigit()
+    }
+
+    private func rowText(now: Date) -> String {
         block.isFinalized
             ? ThinkingSummary.settledLabel(chars: block.text.count, blocks: block.blocks,
                                            startedTs: block.startedTs, finishedTs: block.finishedTs,
                                            thinkingMs: block.thinkingMs)
-            : "Thinking…"
+            : ThinkingSummary.liveLabel(chars: block.displayText.count, startedTs: block.startedTs, now: now)
     }
 }
 

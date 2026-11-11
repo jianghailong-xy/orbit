@@ -1,0 +1,80 @@
+<!doctype html><html><head><meta charset="utf-8"><title>New user onboarding</title><style>
+body{margin:0;background:#f3f4f6}
+.b-part{font:15px/1.6 Inter,"Noto Sans SC",sans-serif;color:#1f2328;background:#fff;width:1400px;padding:36px 44px 40px;box-sizing:border-box;margin:0 0 24px}
+.b-part h1{font-size:26px;margin:0 0 6px}.b-part h2{font-size:20px;margin:22px 0 8px}
+.b-lead{color:#4b5563;margin:0 0 18px}
+.b-row{display:flex;gap:24px;flex-wrap:wrap}
+.b-frame{margin:0;width:640px}
+.b-shot{position:relative;overflow:visible !important;border:1px solid #d1d5db;border-radius:10px;overflow:hidden;line-height:0}
+.b-frame figcaption{font-size:14px;color:#374151;margin-top:8px}
+.b-frame figcaption b{color:#111}
+.b-pin{position:absolute;width:24px;height:24px;border-radius:50%;background:#e11d48;color:#fff;font:700 13px/24px Inter,sans-serif;text-align:center;box-shadow:0 0 0 3px #fff}
+.b-notes{counter-reset:n;padding:0;list-style:none;margin:10px 0 0}
+.b-notes li{position:relative;padding-left:34px;margin:8px 0}
+.b-notes li::before{counter-increment:n;content:counter(n);position:absolute;left:0;top:2px;width:22px;height:22px;border-radius:50%;background:#e11d48;color:#fff;font:700 12px/22px Inter,sans-serif;text-align:center}
+.b-bad{color:#b91c1c;font-weight:600}
+table.b-t{border-collapse:collapse;width:100%;font-size:14px;margin-top:6px}
+.b-t th,.b-t td{border:1px solid #e5e7eb;padding:8px 10px;text-align:left;vertical-align:top}
+.b-t th{background:#f9fafb}
+.b-rec{background:#ecfdf5}
+.b-tag{display:inline-block;font-size:12px;border-radius:4px;padding:0 6px;background:#fef3c7;color:#92400e;margin-left:6px}
+code{font:13px "JetBrains Mono",monospace;background:#f3f4f6;padding:1px 4px;border-radius:4px}
+</style></head><body><section class="b-part" id="part-1"><h1>新用户第一次登录 · 今天（真实页面，HEAD 7cce83664）</h1>
+<p class="b-lead">两条路取决于服务器有没有开托管 runner。示例账号 Mia：管理员刚建的号，第一次登录。</p>
+<h2>A. 服务器开了托管 runner（install-server.sh 默认）</h2><div class="b-row">
+<figure class="b-frame"><div class="b-shot"><img src="frames/t-m-preparing.png" width="640"></div><figcaption><b>A1 落地</b>：空的 New session 页，底部一条蓝色 “Preparing your managed runner”。没说 Orbit 是什么、能干什么。</figcaption></figure>
+<figure class="b-frame"><div class="b-shot"><img src="frames/t-m-model.png" width="640"></div><figcaption><b>A2 一分钟后</b>：变成黄色 “needs a model”，五行英文解释 runner / runtime / model key，入口在右上角链接。<span class="b-bad">新人卡在这。</span></figcaption></figure>
+<figure class="b-frame"><div class="b-shot"><img src="frames/t-m-machines.png" width="640"></div><figcaption><b>A3 Machines &amp; models</b>：5 个运行时、Install、Update runner、API keys……新人得自己判断点哪个 Sign in，做完还要自己找回会话页。</figcaption></figure>
+</div>
+<h2>B. 没开托管 runner</h2><div class="b-row">
+<figure class="b-frame"><div class="b-shot"><img src="frames/t-s-register.png" width="640"></div><figcaption><b>B1 落地</b>：直接是 “Add a runner” + 一条 curl 命令。第一屏就要求在终端里装东西，没有任何说明这是为了什么。</figcaption></figure>
+<figure class="b-frame"><div class="b-shot"><img src="frames/t-s-draft.png" width="640"></div><figcaption><b>B2 机器连上后</b>：已上线的 “Set up mia-macbook” 设置卡（文件夹 + 登录 CLI，消息先等着）。<b>这是今天最好的一屏</b>——方案就从它长出来。</figcaption></figure>
+</div>
+<h2>问题归纳</h2><ol class="b-notes">
+<li>没有“欢迎”：新人不知道 Orbit 是“给编码 agent 一台电脑 + 一个任务，结果留在这里，手机也能看”。</li>
+<li>A 路的关键一步（登录模型）被藏在一条状态提示的链接后面，去的页面是给老用户管机器用的。</li>
+<li>A、B 两条路长得完全不一样；B2 的设置卡只在 B 路出现。</li>
+<li>没有“第一条消息该写什么”的提示，空输入框对新人最难。</li>
+</ol></section><section class="b-part" id="part-2"><h1>方案：一张欢迎卡，三步，就在新会话页里</h1>
+<p class="b-lead">把 B2 的设置卡扩成“欢迎卡”，两条路都落在同一张卡上：① 电脑 ② 模型 ③ 第一条消息。不做弹窗、不做分页向导；卡下面的输入框一直能用，先发的消息等前两步做完自动开始（沿用 B2 已有的“消息先等着”）。外观全部复用已上线的 <code>.msc</code> / <code>.rsi</code> 组件，不新造样式。帧是真实页面 + DOM 注入。</p>
+<div class="b-row">
+<figure class="b-frame"><div class="b-shot"><img src="frames/p-managed.png" width="640"><span class="b-pin" style="left:285.0px;top:140.0px">1</span><span class="b-pin" style="left:285.0px;top:200.5px">2</span><span class="b-pin" style="left:285.0px;top:278.0px">3</span><span class="b-pin" style="left:285.0px;top:374.5px">4</span></div><figcaption><b>P1 托管 runner · 刚登录</b></figcaption></figure>
+<figure class="b-frame"><div class="b-shot"><img src="frames/p-ready.png" width="640"><span class="b-pin" style="left:285.0px;top:227.0px">5</span><span class="b-pin" style="left:285.0px;top:278.0px">6</span></div><figcaption><b>P2 前两步做完</b>：折成两行 ✓，点了第一个示例，输入框已填好，发送即开始。</figcaption></figure>
+</div>
+<ol class="b-notes">
+<li><b>电脑</b>：托管 runner 在后台自动起；这里只显示进度（“usually under a minute”），不用用户做任何事。下方小链接 “Use my own computer instead” 切到 P3 的写法。</li>
+<li><b>模型</b>：就地登录 Claude Code（已有的 <code>rsi</code> 登录组件，OAuth 粘码流程同 B2），或 API key，或换 Codex。不再跳到 Machines &amp; models。<b>不用等第 1 步</b>：托管 runner 起来前也能先点，起来后自动接上。</li>
+<li><b>第一条消息</b>：三个示例，选中只是把文字填进下面的输入框，可以改。示例都能在空文件夹里做完、几分钟见效。</li>
+<li>底部一句：现在就能发，前两步好了自动开始。</li>
+<li>做完的步骤折成一行灰字 + Change，卡变矮，视线落到第 3 步和输入框。</li>
+<li>第一条消息发出后整张卡消失，此后这个账号再也不显示（以“有过一个会话”为准，不另存标记）。</li>
+</ol>
+<div class="b-row" style="margin-top:18px">
+<figure class="b-frame"><div class="b-shot"><img src="frames/p-own.png" width="640"><span class="b-pin" style="left:285.0px;top:147.0px">7</span><span class="b-pin" style="left:285.0px;top:229.5px">8</span></div><figcaption><b>P3 没有托管 runner（或点了 Use my own computer）</b>：第 1 步就是今天的 “Add a runner” 命令 + 等待；连上后第 2 步展开。同一张卡、同一个顺序。</figcaption></figure>
+<div style="width:640px;font-size:14px">
+<ol class="b-notes" start="7" style="counter-reset:n 6">
+<li><b>连接电脑</b>：命令、系统切换、Having trouble 都搬自今天的 RunnerRegisterGuide；“this page moves on by itself” 沿用它的轮询。</li>
+<li><b>模型这步先灰着</b>（“Opens after step 1”），因为登录 CLI 要在那台电脑上做。连上后若它已经登录过 CLI，这步直接 ✓。</li>
+</ol>
+<p style="color:#4b5563;margin-top:14px">连上之后，今天 B2 的“文件夹”那一步照旧出现在第 1、2 步之间（自己的电脑要选在哪个文件夹工作；托管 runner 不需要，用它自带的 default）。</p>
+<p style="color:#4b5563">iPhone / Mac / Android：同一张卡的竖排版本，在 web 定稿后再出图。</p>
+</div></div></section><section class="b-part" id="part-3"><h1>待定 · 要你拍板</h1>
+<table class="b-t"><tr><th style="width:24%">问题</th><th>方案 A</th><th>方案 B</th></tr>
+<tr><td>1. 引导的形式</td><td class="b-rec"><b>新会话页里的一张卡</b>（本板）。和 B2 一致，用户随时能直接打字，不打断。<span class="b-tag">推荐</span></td><td>全屏分页向导（欢迎 → 选电脑 → 登录模型 → 写第一条），走完才进主界面。更“仪式感”，但多一套页面，卡住就进不去。</td></tr>
+<tr><td>2. 开了托管 runner 时，要不要先问“用托管还是自己的电脑”</td><td class="b-rec"><b>默认托管</b>，只给一个小链接切换。新人零安装就能跑起来。<span class="b-tag">推荐</span></td><td>第 1 步做成二选一单选。更透明，但多一个决定，而且多数新人答不上来。</td></tr>
+<tr><td>3. 第一条消息的示例</td><td class="b-rec"><b>三个固定示例</b>，写在客户端，英文，选了只填输入框。<span class="b-tag">推荐</span></td><td>不给示例，只留输入框和一句提示。更干净，但空白输入框正是新人最难的一步。</td></tr>
+<tr><td>4. Projects / Tasks / Wiki 要不要一并介绍</td><td class="b-rec"><b>不介绍</b>。先让第一个会话跑起来；这些概念等用户自己点进去时再在各自的空状态里讲。<span class="b-tag">推荐</span></td><td>第一个会话结束后弹 3 张卡片的功能导览。</td></tr>
+</table>
+<h2>规则</h2><ol class="b-notes">
+<li>卡只在“这个账号还没有任何会话”时出现在新会话页；有过一个会话就永远不再出现，不存额外标记。</li>
+<li>每一步的完成状态都从服务器已有的数据读：托管 runner 状态（<code>GET /managed-runner</code>）、runner 在线与引擎 <code>auth</code>、账号的 API key。没有新接口。</li>
+<li>先发的消息照 B2 规则排队，前两步就绪后自动开始；卡底部说清这一点。</li>
+<li>出错（托管 runner failed / waitingCapacity 等）就在第 1 步里显示今天同一句话和 Retry，不再另起一条提示条。</li>
+<li>界面文案全部英文（本板说明是中文）。</li>
+</ol>
+<h2>落地（按代价排）</h2>
+<table class="b-t"><tr><th>阶段</th><th>内容</th><th>大小</th></tr>
+<tr><td>P0 web</td><td>新 <code>WelcomeCard</code>：由 <code>MachineSetupCard</code> 扩出（加“电脑”步、示例步、折叠完成行）；<code>DefaultLanding</code> 的无 runner 分支不再跳 <code>/runners/register</code>，而是落到这张卡；托管 runner 的 notice 在卡出现时不再单独显示。</td><td>仅 web，约 1 个任务，无服务端改动</td></tr>
+<tr><td>P1 iOS / macOS</td><td>同一张卡的 SwiftUI 版本（现在原生端新账号只看到 “on the web”）。</td><td>1 个任务</td></tr>
+<tr><td>P1 Android</td><td>同上，Compose 版本，跟 iOS 对齐。</td><td>1 个任务</td></tr>
+</table></section></body></html>

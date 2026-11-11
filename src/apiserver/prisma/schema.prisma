@@ -335,6 +335,7 @@ model User {
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
   avatar           UserAvatar? // the profile photo, when one is set (0335)
+  emailOutbox      EmailOutbox[] // the welcome email of this account, when it was created after 0517
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
@@ -512,6 +513,52 @@ model SignInProvider {
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("sign_in_provider")
+}
+
+/// Outgoing email (docs/welcome-email-design.md §3.1; migration 0516): at most one row, id 1, written by an
+/// administrator on Admin → Email. No row is the same as a row that is off. `email_settings_one_row_chk`
+/// (`id` = 1) lives only in the migration.
+model EmailSettings {
+  id              Int      @id @default(1) @db.SmallInt
+  enabled         Boolean  @default(false)
+  /// AES-256-GCM ciphertext of the Resend API key ("iv:tag:ct", each base64); empty = none saved.
+  resendApiKeyEnc String   @default("") @map("resend_api_key_enc")
+  fromAddress     String   @default("") @map("from_address")
+  /// Empty: the earliest administrator's address.
+  replyTo         String   @default("") @map("reply_to")
+  welcomeEnabled  Boolean  @default(true) @map("welcome_enabled")
+  /// The administrator who saved it last. An id rather than a relation, so deleting them writes nothing here.
+  updatedById     String?  @map("updated_by_id") @db.Uuid
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("email_settings")
+}
+
+/// One email to send (docs/welcome-email-design.md §3.3; migration 0517), written in the transaction that
+/// creates the account. `kind` is only WELCOME; status PENDING | SENT | FAILED | SKIPPED (CHECKs live in
+/// the migration). No body and no secret: the email is rendered when it is sent.
+model EmailOutbox {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  kind              String
+  userId            String    @map("user_id") @db.Uuid
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toAddress         String    @map("to_address")
+  /// The administrator who created the account; null for a Google sign-up. No relation, as updatedById.
+  createdById       String?   @map("created_by_id") @db.Uuid
+  status            String
+  attempts          Int       @default(0)
+  generation        Int       @default(0)
+  keyAttempt        Int       @default(0) @map("key_attempt")
+  nextAttemptAt     DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lastError         String?   @map("last_error")
+  lastAttemptAt     DateTime? @map("last_attempt_at") @db.Timestamptz(3)
+  providerMessageId String?   @map("provider_message_id")
+  sentAt            DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([kind, userId], map: "email_outbox_kind_user_id_key")
+  @@map("email_outbox")
 }
 
 /// The runner dispatch pause (docs/runner-link-design.md §11.1, §11.3, D8; migration 0442): at most one
@@ -3064,6 +3111,7 @@ model Activity {
 /// intent, the criteria are what a check is run against. Merging them would make "is this done"
 /// a matter of interpreting a paragraph, which is the failure verification exists to avoid.
 model Project {
+  promotionRequests ProjectPromotionRequest[]
   id      String @id @default(uuid(7)) @db.Uuid
   title   String
   // Tenant scope: list/authorization always filter by this column (like tasks and task lists).
@@ -3095,6 +3143,9 @@ model Project {
   doneAt             DateTime? @map("done_at") @db.Timestamptz(3)
   /// The seal of the criteria the DONE was recorded against.
   doneCriteriaDigest String?   @map("done_criteria_digest") @db.Char(64)
+  /// Serving task lifecycle epochs captured by the owner DONE press (migration 0512).
+  /// Null on legacy records, which retain timestamp-based reopen detection.
+  doneTaskEpochs Json? @map("done_task_epochs")
   /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
   acceptedGaps       Json      @default("[]") @map("accepted_gaps")
 
@@ -3356,7 +3407,11 @@ model ProjectCodebase {
   /// When the platform started landing work on the line. Non-null locks it: from then on a trigger
   /// refuses moving either ref or the repository's identity (0270).
   integrationStartedAt     DateTime? @map("integration_started_at") @db.Timestamptz(3)
-  /// The project-level check run on the combined tree before a landing. Null: none.
+  /// The project landing check; null falls back to mergeCheckCommand (0508). Not locked by 0270.
+  landingCheckCommand        String? @map("landing_check_command")
+  /// Landing check budget; null falls back to mergeCheckTimeoutSeconds.
+  landingCheckTimeoutSeconds Int?    @map("landing_check_timeout_seconds")
+  /// The project-level check run before promotion into upstream. Null: none.
   mergeCheckCommand        String?   @map("merge_check_command")
   /// That check's budget in seconds. Null: the one-hour default an acceptance command gets.
   mergeCheckTimeoutSeconds Int?      @map("merge_check_timeout_seconds")
@@ -3543,6 +3598,7 @@ model ProjectIntegrationJob {
   /// commits of its own that the base already had, every one of them (migration 0410): TRUE says the
   /// work is on the target and nothing was pushed because nothing was missing, FALSE says the branch
   /// carried nothing. NULL is "not measured", read exactly as before the column existed.
+  baselineRed Boolean @default(false) @map("baseline_red")
   sourceFullyApplied Boolean? @map("source_fully_applied")
   /// What an OBSERVE_LANDING job saw (0453, contract §10.4, §10.6): one entry per observed task,
   /// `{ taskId, deliveredSha, baseSha, onUpstream, onIntegrationLine, empty, fullyApplied }`. NULL on
@@ -3637,7 +3693,7 @@ model ProjectIntegrationJobLog {
   claimGeneration BigInt @map("claim_generation")
   /// The round inside that claim, from 1, as the job row had it when the chunk arrived.
   round           Int
-  /// TASK_ACCEPTANCE | MERGE_CHECK (`project_integration_job_log_check_name_chk`).
+  /// TASK_ACCEPTANCE | MERGE_CHECK | LANDING_CHECK (`project_integration_job_log_check_name_chk`).
   checkName       String @map("check_name")
   /// The check's position in the run, from 1.
   checkIndex      Int    @map("check_index")
@@ -7278,6 +7334,8 @@ model OwnerRequest {
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
   resolvedByUserId    String?   @map("resolved_by_user_id") @db.Uuid
   resolvedBySessionId String?   @map("resolved_by_session_id") @db.Uuid
+  /// The client the owner ended it from (`web`, `ios`, `macos`, `android`); null when withdrawn, expired or unknown.
+  resolvedClient      String?   @map("resolved_client")
   /// Why it was declined (required) or withdrawn.
   resolutionNote      String?   @map("resolution_note")
   /// What the owner chose or said when marking it done: `{ option?, text? }`.
@@ -9099,4 +9157,19 @@ model FeishuDeploymentSetting {
   updatedById String?  @map("updated_by_id") @db.Uuid
 
   @@map("feishu_deployment_setting")
+}
+
+/// K7: a coordinator request remains pending until a candidate consumes it in its own transaction.
+model ProjectPromotionRequest {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// History references: deleting a conversation or promotion must not erase the request's provenance.
+  sessionId             String   @map("session_id") @db.Uuid
+  reason                String
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  consumedByPromotionId String?  @map("consumed_by_promotion_id") @db.Uuid
+
+  @@index([projectId, createdAt])
+  @@map("project_promotion_request")
 }

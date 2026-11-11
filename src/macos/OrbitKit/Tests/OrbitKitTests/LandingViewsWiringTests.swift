@@ -41,7 +41,8 @@ final class LandingViewsWiringTests: XCTestCase {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
         for part in ["struct LandingStatusCardView: View {",
                      "struct LandingTimelineView: View {",
-                     "ProjectLandingHead(",
+                     "struct LandingLineView: View {",
+                     "LandingSteps.steps(section.entries, kind: section.kind)",
                      "LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,",
                      "LandingPageCopy.outcomeCard(landing, promotion: promotion)",
                      "LandingPageCopy.gates(landing, now: now, updatedAt: readAt, failed: readFailed)",
@@ -73,49 +74,71 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertFalse(window.contains("Copy Link"), "design §3: no Copy Link on a landing's menu")
     }
 
-    /// The window reads as a chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles, option C): each
-    /// settled landing is a bubble that hugs its words, Orbit's avatar beside the first message of each
-    /// group, the days as chips, the cards in hand as Orbit's last messages, and the footer in the
-    /// composer's place and shape with nothing to type in it.
+    /// The window reads as the session chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles;
+    /// polished 2026-11-10, docs/mocks/landings-ui-polish; 2026-11-11,
+    /// docs/mocks/landings-chat-tools-native): each settled landing, and each merge into main, is the
+    /// chat's background-job line on two lines; it opens to its steps as the chat's tool rows; the days
+    /// are chips; a landing that runs has the chat's Working for head; on the phone the head is the
+    /// navigation bar's one row; and the footer is one opaque read-only line on the bottom edge.
     func testTheWindowReadsAsAChat() throws {
         let window = code(try appSource("Views/ProjectLandingsWindowView.swift"))
         for part in ["ForEach(day.groups) { group in",
-                     "rowView(row, leads: index == 0, ends: index == group.rows.count - 1, model: model)",
-                     "cardView(card, leads: index == 0, ends: index == window.now.count - 1, model: model)",
-                     "if leads { OrbitAppIcon(size: 32) }",
+                     "rowView(row, ends: index == group.rows.count - 1, model: model)",
+                     "cardView(card, ends: index == window.now.count - 1, model: model)",
                      "dayChip(day.title)",
                      ".background((now ? Color.accentColor : Color.secondary).opacity(0.12), in: Capsule())",
-                     "LandingsWindowBubble(row: row)",
-                     "LandingsBubbleLayout(spacing: 4) {",
-                     ".padding(.trailing, 44)",
-                     ".overlay { outline(id, radius: 16) }",
+                     "LandingLineView(",
+                     "title: merge ? row.title : row.detail,",
+                     "name: merge ? row.detail : row.title,",
+                     "status: checkMs.map { \"\\(LandingStepCopy.check) \\(LandingPageCopy.duration(ms: $0))\" },",
+                     ".overlay { outline(id, radius: 8) }",
                      "recordPanel {",
-                     "scroller.safeAreaBar(edge: .bottom, spacing: 0) { footer }",
-                     "return ComposerBand {",
-                     ".composerBandCard(cornerRadius: 24)",
+                     ".padding(.leading, LandingLineView.indent)",
+                     "LandingStepCopy.workingFor",
+                     "let open = expanded.contains(id) || running || waiting || timedOut",
+                     "open: open)",
+                     "ToolbarItem(placement: .principal) { titleBlock }",
+                     "ToolbarItem(placement: .topBarTrailing) { windowMenu }",
+                     "Label(words, systemImage: \"lock\")",
+                     "Rectangle().fill(.bar).ignoresSafeArea(edges: .bottom)",
                      "Label(LandingPageCopy.openCoordinatorLink, systemImage: \"person\")"] {
             XCTAssertTrue(window.contains(part), "the chat keeps `\(part)`")
         }
         // Every message is its own child of the lazy stack, so the placement still finds each id.
-        XCTAssertTrue(window.contains("messageLine(leads: leads, ends: ends) {"))
+        XCTAssertTrue(window.contains("messageLine(ends: ends) {"))
+        XCTAssertFalse(window.contains("OrbitAppIcon("), "no avatars: every message is Orbit's")
+        XCTAssertFalse(window.contains("ComposerBand {"), "the footer is no longer drawn as a composer")
+        XCTAssertFalse(window.contains("safeAreaBar("), "nothing runs on beneath the footer")
+        XCTAssertFalse(window.contains("\\(LandingPageCopy.runByOrbit) · "), "the subtitle is the project's name alone")
         XCTAssertFalse(window.contains("LandingsWindowRowHead"), "the list row's head is gone")
+        for gone in ["LandingsWindowBubble", "LandingsBubbleLayout", "LandingsWindowEventLine"] {
+            XCTAssertFalse(window.contains(gone), "no bubble or centred event line: `\(gone)`")
+        }
         XCTAssertFalse(window.contains("TextField("), "nothing to type here (LS6)")
         // The bar stands below the scroller on the Mac, so it counts toward the window's minimum, which
         // AppKit measures at zero width: a vertically fixed sentence there stands one glyph to a line and
         // pushes the whole window past the screen's edge.
         let footer = try XCTUnwrap(window.range(of: "private var footer: some View {"))
         let bar = String(window[footer.lowerBound...].prefix(1_400))
-        XCTAssertTrue(bar.contains(".lineLimit(2)"), "the bar's sentence is capped")
+        XCTAssertTrue(bar.contains(".lineLimit(1)"), "the bar's sentence is capped")
         XCTAssertFalse(bar.contains(".fixedSize("), "nothing in the bar is vertically fixed")
-        // A card's task name is whole, as a bubble's is: the column beside the avatar is narrower, and
-        // the board draws a long name wrapping (02 d).
+        // The line: the mark and its facts on one line, the task's name under them on up to two — a
+        // Chinese name wraps rather than being cut to one character.
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
-        let name = try XCTUnwrap(page.range(of: "@ViewBuilder private var titleLine: some View {"))
-        XCTAssertFalse(String(page[name.lowerBound...].prefix(240)).contains(".lineLimit("), "a card's task name is not cut")
-        // The avatar is the app icon the sign-in page draws, not a second drawing of it.
-        let login = code(try appSource("Views/LoginView.swift"))
-        XCTAssertTrue(login.contains("struct OrbitAppIcon: View {"))
-        XCTAssertFalse(login.contains("private struct OrbitAppIcon"))
+        let line = try XCTUnwrap(page.range(of: "struct LandingLineView: View {"))
+        let lineBody = String(page[line.lowerBound...].prefix(2_600))
+        XCTAssertTrue(lineBody.contains(".lineLimit(2)"), "a task's name takes up to two lines")
+        XCTAssertTrue(lineBody.contains("Text(LandingStepCopy.details)"))
+        // A step is the chat's tool row: the tone bar, the icon tile, the mono name, its mark; and a
+        // failed or running step starts open.
+        let step = try XCTUnwrap(page.range(of: "@ViewBuilder private func stepRow("))
+        let stepBody = String(page[step.lowerBound...].prefix(3_200))
+        for part in [".font(.orbitMono.weight(.semibold))",
+                     ".background(tone.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))",
+                     ".overlay(alignment: .leading) { Rectangle().fill(tone).frame(width: 3) }",
+                     "pressed[key] ?? (status == .failed || status == .running)"] {
+            XCTAssertTrue(stepBody.contains(part), "a step keeps `\(part)`")
+        }
     }
 
     /// Opened on a landing, the window scrolls to it, opens it and outlines it for a moment; opened
@@ -172,8 +195,10 @@ final class LandingViewsWiringTests: XCTestCase {
     /// word in red. Every other head keeps its ring.
     func testTheStatusCardsHeadWearsTheRedCrossForAnAttemptThatStoppedOnAFailure() throws {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
-        XCTAssertTrue(page.contains("running: card.running, timedOut: card.timedOut, failed: card.stoppedOnFailure)"),
-                      "the status card hands its head the attempt's failure")
+        XCTAssertTrue(page.contains("line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,"),
+                      "the status card's line takes the attempt's failure")
+        XCTAssertTrue(page.contains(".foregroundStyle(kind == .failed ? Color.red : Color.secondary)"),
+                      "a failed line's word is red")
         let head = code(try appSource("Views/ProjectLandingRow.swift"))
         guard let start = head.range(of: "struct ProjectLandingHead: View {"),
               let end = head.range(of: "struct ProjectSpinnerRing: View {", range: start.upperBound..<head.endIndex) else {

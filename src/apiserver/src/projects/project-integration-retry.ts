@@ -52,7 +52,7 @@ export interface IntegrationRetryFacts {
   /** The task's newest LAND_TASK, by generation; null when it never had one. `phase` is where it
    *  stopped: a CONFLICT at MAIN_SYNC is the line's, and its refusal says what resolves that one. */
   newestLanding: {
-    id: string; generation: number; state: string; checks: unknown; phase?: string | null;
+    id: string; generation: number; state: string; checks: unknown; baselineRed?: boolean; phase?: string | null;
     /** RUNNING, and its runner has said nothing past the job's limit (§1.6 `inFlightJobs`). */
     timedOut?: boolean;
   } | null;
@@ -385,7 +385,7 @@ function notRetryable(state: string, failureClass: LandingFailureClass | null, p
         + 'moved to another branch, send the task back (task_reopen) so its next DONE queues that one.';
     default:
       return `this task's newest landing is ${state}, which is not a failure a rerun answers: only `
-        + 'CHECK_FAILED, CHECK_TIMED_OUT and ERROR are run again.';
+        + 'CHECK_FAILED, CHECK_TIMED_OUT, BASELINE_RED and ERROR are run again.';
   }
 }
 

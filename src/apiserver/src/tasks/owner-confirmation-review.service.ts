@@ -91,6 +91,9 @@ function refuse(status: 400 | 403 | 409, code: string, requiredAction: string, m
 /** Thrown out of a return's turn hook when the owner confirmed while it was on its way: it is PROBLEMS now. */
 class ReturnBecameProblems extends Error {}
 
+/** A coordinator pause leaves delivery PENDING rather than recording a refusal (§16 F3). */
+class ReviewDeliveryPaused extends Error {}
+
 interface ReviewerStanding {
   session: string;
   turnId: string;
@@ -146,6 +149,7 @@ export class OwnerConfirmationReviewService {
         ownerId: true,
         taskId: true,
         reviewerSessionId: true,
+        reviewerKind: true,
         delivery: true,
         deliveryTurnClientId: true,
         records: { select: { id: true } },
@@ -165,6 +169,7 @@ export class OwnerConfirmationReviewService {
       await this.refuseDelivery(review.id, 'REVIEWER_ENDED', moved);
       return;
     }
+    if (review.reviewerKind === 'PROJECT_COORDINATOR' && conversationIsPaused(reviewer)) return;
     const previous = review.deliveryTurnClientId
       ? await this.prisma.conversationTurn.findUnique({
         where: { sessionId_clientTurnId: { sessionId: review.reviewerSessionId, clientTurnId: review.deliveryTurnClientId } },
@@ -189,6 +194,7 @@ export class OwnerConfirmationReviewService {
         { participateSendTransaction: (tx) => bindReviewDelivery(tx, review.id, clientTurnId, review.deliveryTurnClientId) },
       );
     } catch (error) {
+      if (error instanceof ReviewDeliveryPaused) return;
       // Checked first: it is a Conflict too, and its code is the one the hook found.
       const code = error instanceof ReviewDeliveryRefused
         ? error.refusalCode
@@ -220,7 +226,7 @@ export class OwnerConfirmationReviewService {
   /**
    * D5: every review still PENDING for this reviewer, delivered — called after each completion of
    * the reviewer's own turns, which is where a delivery a crash cut off between its commit and D2 is
-   * picked up again. A failure is logged and left waiting; unread deliveries have no running window.
+   * picked up again. A failure is logged and left waiting; TASK_CREATOR windows start at pickup.
    */
   async deliverPendingFor(reviewerSessionId?: string): Promise<void> {
     const pending = await this.prisma.taskOwnerConfirmationReview.findMany({
@@ -272,15 +278,19 @@ export class OwnerConfirmationReviewService {
           'the owner has already decided this request, so there is nobody left to answer needsYou; record '
           + 'the review without it, or use task_confirmation_return if something must change');
       }
+      const before = await this.stateOf(taskId, standing.request, tx);
+      const raised = standing.review.reviewerKind === 'PROJECT_COORDINATOR' && before === 'UNDER_REVIEW'
+        && standing.request.decisions.length === 0 && OWNER_CONFIRMATION_UNSETTLED_STATUSES.some((status) => status === standing.task.status);
       const recordId = await writeReviewRecord(tx, ownerId, taskId, standing, {
         kind: 'REVIEW',
         reviewedSha: input.reviewedSha,
         judgment: input.judgment,
         body: input.lists,
       });
-      return { recordId, request: standing.request, alreadyRecorded: false };
+      return { recordId, request: standing.request, alreadyRecorded: false, raised };
     }, loggedRetry(this.logger, 'ownerConfirmationReview.review'));
     if (!written.alreadyRecorded) {
+      if (written.raised) await this.push?.notifyConfirmationRaised(written.recordId);
       this.publishMoved([{ ownerId, taskId, runSessionId: written.request.sessionId }]);
     }
     return {
@@ -483,9 +493,10 @@ export class OwnerConfirmationReviewService {
   private async stateOf(
     taskId: string,
     request: { id: string; sessionId: string; requestedAt: Date },
+    tx: Prisma.TransactionClient = this.prisma,
   ): Promise<OwnerConfirmationReviewState | null> {
     const views = await confirmationReviewStates(
-      this.prisma,
+      tx,
       [{ id: request.id, taskId, sessionId: request.sessionId, requestedAt: request.requestedAt }],
       new Date(),
     );
@@ -531,6 +542,9 @@ async function bindReviewDelivery(
   });
   if (!reviewer || conversationIsOver(reviewer)) {
     throw new ReviewDeliveryRefused('REVIEWER_ENDED', 'the reviewer\'s session has ended');
+  }
+  if (review.reviewerKind === 'PROJECT_COORDINATOR' && conversationIsPaused(reviewer)) {
+    throw new ReviewDeliveryPaused();
   }
   // S3, as `decidingSessionDisqualification`'s first rule: the session that did the work does not
   // review it.

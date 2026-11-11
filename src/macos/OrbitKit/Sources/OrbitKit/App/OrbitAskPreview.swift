@@ -151,6 +151,72 @@ public struct BlockerResolvePreview: Equatable, Sendable {
     }
 }
 
+/// What a merge-check change would write, read off the `orbit_project_update_integration` ask. The
+/// runner reads the CURRENT check from the project and puts the proposal beside it
+/// (`runner-go/mcp.go`, `projectMergeCheckCard`), and the server writes only what this card carried —
+/// so the two commands are the whole decision. Web draws the same pair (`MergeCheckChangeBody`).
+public struct MergeCheckChangePreview: Equatable, Sendable {
+    public let projectTitle: String
+    /// The check as the project stands, or nil when it has none.
+    public let current: String?
+    /// What it would become; nil clears it.
+    public let next: String?
+    /// False when the proposal names only a timeout: the command stays as it is.
+    public let changesCommand: Bool
+    /// The budget the proposal names, in seconds; nil leaves it as it is.
+    public let timeoutSeconds: Int?
+
+    /// The header holds one line beside its badge, so the project's name takes the row under it.
+    public static let heading = "Change the merge check?"
+    public var projectLine: String { projectTitle.isEmpty ? "This project" : projectTitle }
+    public static let note = "Run on the combined tree before this project's work lands. "
+        + "Nothing else about the project's integration line changes."
+    public static let action = "Change the check"
+    /// An empty line reads as a loading state, so a missing check is said in words.
+    public var currentLine: String { current ?? "no check configured" }
+    public var nextLine: String {
+        guard changesCommand else { return "\(currentLine) (unchanged)" }
+        return next ?? "no check — nothing runs on the combined tree"
+    }
+    public var timeoutLine: String? { timeoutSeconds.map { "killed after \($0)s" } }
+    /// What a refusal names, ahead of the reason to be typed. Web computes the same name.
+    public var declineName: String { "\(projectTitle.isEmpty ? "this project" : projectTitle)'s merge check" }
+}
+
+/// What a skip would let through, read off the `orbit_integration_skip_merge_check` ask. The runner
+/// reads it from the project and the landing before it files the card (`runner-go/mcp.go`,
+/// `skipMergeCheckFacts`): the command that would NOT run, verbatim, what it said last time, and the
+/// agent's reason. Web draws the same fields (`SkipMergeCheckBody`).
+public struct SkipMergeCheckPreview: Equatable, Sendable {
+    public let projectTitle: String
+    /// The DONE task whose landing this is.
+    public let taskTitle: String
+    /// The check command that will not run, as the project has it configured.
+    public let checkCommand: String
+    /// What that check said the last time, in the landing read's own words; empty when none.
+    public let failure: String
+    /// Why the agent says this red is the check's rather than the delivery's.
+    public let reason: String
+    /// The project's main branch by name; `main` where the card names none.
+    public let mainBranch: String
+
+    /// The header holds one line beside its "merge check" badge, so the task's name takes the row
+    /// under it, and the heading leaves "merge" to the badge: at .body bold on a phone the longer
+    /// "Land without the merge check?" was cut short.
+    public static let heading = "Land without the check?"
+    public var taskLine: String { taskTitle.isEmpty ? "This task" : taskTitle }
+    public var projectLine: String? { projectTitle.isEmpty ? nil : "In \(projectTitle)" }
+    public static let commandCaption = "This landing runs without the merge check"
+    public static let reasonCaption = "The agent says this red is the check’s, not the work’s"
+    public var note: String {
+        "Once, and only this landing: the project’s check command is unchanged, and the next "
+            + "landing and every merge into \(mainBranch) are checked as before."
+    }
+    public static let action = "Land it without the check"
+    /// What a refusal names, ahead of the reason to be typed. Web computes the same name.
+    public var declineName: String { taskTitle.isEmpty ? "this landing" : taskTitle }
+}
+
 /// What a delete would take away, read off the card the server filed for it. The asker sends only
 /// an id: the name, where it stands and what goes with it are the server's own reading
 /// (`runner-api/runner-delete-approval.ts`), so a card cannot name one machine and delete another.
@@ -422,6 +488,39 @@ public extension Approvals {
             reason: input["reason"]?.stringValue ?? "",
             kind: blocker?["kind"]?.stringValue ?? "",
             subjectTitle: blocker?["subjectTitle"]?.stringValue ?? "")
+    }
+
+    /// The merge-check change carried on an `orbit_project_update_integration` ask, or nil for any
+    /// other approval. A blank command counts as none, the way web reads it.
+    static func mergeCheckChangePreview(toolName: String,
+                                        from input: JSONValue) -> MergeCheckChangePreview? {
+        guard isMergeCheckChange(toolName: toolName) else { return nil }
+        func command(_ key: String) -> String? {
+            guard let s = input[key]?.stringValue,
+                  !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return s
+        }
+        return MergeCheckChangePreview(
+            projectTitle: input["projectTitle"]?.stringValue ?? "",
+            current: command("currentMergeCheckCommand"),
+            next: command("mergeCheckCommand"),
+            changesCommand: input["mergeCheckCommand"] != nil,
+            timeoutSeconds: input["mergeCheckTimeoutSeconds"]?.intValue)
+    }
+
+    /// The skip carried on an `orbit_integration_skip_merge_check` ask, or nil for any other
+    /// approval. A missing field reads as empty, the way web reads it.
+    static func skipMergeCheckPreview(toolName: String,
+                                      from input: JSONValue) -> SkipMergeCheckPreview? {
+        guard isSkipMergeCheck(toolName: toolName) else { return nil }
+        func text(_ key: String) -> String { input[key]?.stringValue ?? "" }
+        return SkipMergeCheckPreview(
+            projectTitle: text("projectTitle"),
+            taskTitle: text("taskTitle"),
+            checkCommand: text("checkCommand"),
+            failure: text("failure"),
+            reason: text("reason"),
+            mainBranch: RunSettings.mainBranchName(input["mainBranch"]?.stringValue))
     }
 
     /// The restructure preview carried on an `orbit_dag_change` approval, or nil when absent.

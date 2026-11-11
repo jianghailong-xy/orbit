@@ -523,6 +523,9 @@ class TranscriptDeviceTest {
         control("{\"reset\":true,\"mode\":\"DS4\"}")
         openSession(); awaitText("Message 99999", true)
         scrollHistory()
+        // The call is behind its turn's steps line: open the line, then the call.
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("steps:99982"))
+        compose.onNode(hasTestTag("steps-line") and hasAnyAncestor(hasTestTag("steps:99982"))).performClick()
         compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("event:99982"))
         compose.onNode(hasText("Show input and output") and hasAnyAncestor(hasTestTag("event:99982"))).performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("View full output").fetchSemanticsNodes().isNotEmpty() }

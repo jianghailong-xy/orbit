@@ -27,6 +27,7 @@ import {
   ObserveIntegrationDto,
   RecordMergeEvidenceDto,
   RequestProjectDoneDto,
+  RequestPromotionDto,
   RequestProjectStartDto,
   ResolveOpenItemDto,
   ResolveProjectBlockerDto,
@@ -35,6 +36,7 @@ import {
   SkipMergeCheckDto,
   UpdateProjectDto,
 } from '../projects/dto';
+import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { HANDOFF_STORED_STATES, type HandoffStoredState } from '../projects/project-handoff';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
@@ -108,6 +110,7 @@ export class RunnerProjectsController {
      * provide only the collaborators those routes reach. Absent, that one route answers 503.
      */
     @Optional() private readonly integrationJobs?: IntegrationJobRelay,
+    @Optional() private readonly promotions?: ProjectPromotionService,
   ) {}
 
   /**
@@ -585,6 +588,21 @@ export class RunnerProjectsController {
       kind: 'SESSION',
       sessionId: sessionId?.trim() ?? '',
     });
+  }
+
+  /** K7: the current coordinator requests a candidate; normal merge authorization still applies. */
+  @Post('projects/:id/promotions/request')
+  @HttpCode(200)
+  requestPromotion(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RequestPromotionDto,
+  ) {
+    if (!this.promotions) throw new HttpException(
+      { code: 'INTEGRATION_QUEUE_UNAVAILABLE', message: 'this control plane runs no integration queue' }, 503,
+    );
+    return this.promotions.requestPromotion(runner.ownerId, id, sessionId, dto?.reason);
   }
 
   /**

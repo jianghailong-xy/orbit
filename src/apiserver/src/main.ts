@@ -42,6 +42,14 @@ async function bootstrap() {
   // so no guard can see the un-normalized spelling.
   app.use(publicIdHeaders);
 
+  // No answer is ever read as something other than what it says it is. The page policy lets any of this
+  // origin's files run as a script (src/web/nginx.conf), and this is what holds an answer under /api/ to
+  // its own type: a browser refuses a script whose type is not JavaScript only when nosniff is on it.
+  app.use((_req: unknown, res: { setHeader(name: string, value: string): void }, next: () => void) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  });
+
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }),

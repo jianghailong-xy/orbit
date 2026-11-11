@@ -194,17 +194,17 @@ export function openItemKindForJobState(
 }
 
 /**
- * What a landing that did not land failed OF, in the four words its next step turns on (§2.6, J-T1b):
- * the branches conflicted, a check on the combined tree disagreed, a check ran out of its budget
- * before it answered, or the machinery stopped. A conflict is answered only by a branch that changed;
- * the other three may be answered by running the same landing again, when whoever asks can say why
+ * What a landing that did not land failed OF (§2.6, J-T1b): the branches conflicted, a check
+ * disagreed (on the combined tree or also on the baseline), a check ran out of its budget,
+ * or the machinery stopped. A conflict is answered only by a branch that changed;
+ * the other classes may be answered by running the same landing again, when whoever asks can say why
  * it will come out differently.
  */
-export const LANDING_FAILURE_CLASSES = ['CONFLICT', 'CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR'] as const;
+export const LANDING_FAILURE_CLASSES = ['CONFLICT', 'CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type LandingFailureClass = (typeof LANDING_FAILURE_CLASSES)[number];
 
-/** The classes `integration_retry` runs a landing again from — migration 0344's CHECK spells them. */
-export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR'] as const;
+/** Explicit retry treats BASELINE_RED like CHECK_FAILED; migrations 0344/0513 admit both. */
+export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLASSES)[number];
 
 /**
@@ -214,11 +214,12 @@ export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLA
  * killed at its budget — never off the output: a check's own words are the delivery's, and a class
  * decided by grepping them would be decided by whatever the test happened to print.
  */
-export function landingFailureClass(job: { state: string; checks: unknown }): LandingFailureClass | null {
+export function landingFailureClass(job: { state: string; checks: unknown; baselineRed?: boolean }): LandingFailureClass | null {
   switch (job.state) {
     case 'CONFLICT': return 'CONFLICT';
     case 'ERROR': return 'ERROR';
     case 'CHECK_FAILED': {
+      if (job.baselineRed === true) return 'BASELINE_RED';
       const checks = Array.isArray(job.checks) ? job.checks : [];
       const timedOut = checks.some((check) =>
         check !== null && typeof check === 'object' && (check as { timedOut?: unknown }).timedOut === true);
@@ -236,7 +237,9 @@ export function isRetryableLandingFailure(
 
 /** The checks the runner ran, as it reports them back. `outputTail` is clipped by the runner. */
 export interface IntegrationCheckResult {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  skipped?: 'PATHS_EXEMPT';
+  files?: string[];
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
   exitCode: number | null;
@@ -247,7 +250,7 @@ export interface IntegrationCheckResult {
 
 /** The check the runner is told to run (§2.3 `IntegrationJobCommand`). */
 export interface IntegrationCheckSpec {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
   timeoutSeconds: number;
@@ -275,6 +278,8 @@ export interface IntegrationCheckSource {
   acceptanceCommand: string | null;
   acceptanceExpectedExitCode: number | null;
   acceptanceTimeoutSeconds: number | null;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   skipMergeCheck: boolean;
@@ -290,7 +295,7 @@ export interface IntegrationCheckSource {
  *
  * ONE GENERATION MAY SKIP ITS CHECK. `integration_skip_merge_check` queues a landing with the merge
  * check NOT RUN, because the account owner agreed the check is what is red rather than the delivery
- * (§2.4 J-S5, 0393) — so no MERGE_CHECK spec is built and the runner's CHECK phase does not happen
+ * (§2.4 J-S5, 0393) — so no LANDING_CHECK spec is built and the runner's CHECK phase does not happen
  * at all. The task's own acceptance is deliberately NOT skipped with it: the check the owner was
  * asked about is the project's, and a task whose own criterion cannot pass on the combined tree is a
  * statement about that task that no approval here chose to waive. This is the only place a check
@@ -320,12 +325,17 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
   // impossible: what skips a check is one task's landing onto the project's own branch, and a row
   // that arrived saying otherwise — a hand-written fixture, a build ahead of the migration — keeps
   // the check it was queued for rather than landing unchecked.
-  if (row.mergeCheckCommand && !(row.kind === 'LAND_TASK' && row.skipMergeCheck)) {
+  const landing = row.kind === 'LAND_TASK';
+  const command = landing ? row.landingCheckCommand ?? row.mergeCheckCommand : row.mergeCheckCommand;
+  const timeout = landing
+    ? row.landingCheckTimeoutSeconds ?? row.mergeCheckTimeoutSeconds
+    : row.mergeCheckTimeoutSeconds;
+  if (command && !(landing && row.skipMergeCheck)) {
     checks.push({
-      name: 'MERGE_CHECK',
-      command: row.mergeCheckCommand,
+      name: landing ? 'LANDING_CHECK' : 'MERGE_CHECK',
+      command,
       expectedExitCode: 0,
-      timeoutSeconds: row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+      timeoutSeconds: timeout ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
     });
   }
   return checks;
@@ -353,7 +363,9 @@ export function integrationJobLimitSeconds(
   const lease = INTEGRATION_CLAIM_STALE_MS / 1_000;
   if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL) return lease;
   if (job.phase !== 'CHECK') return lease;
-  return checksFor(job).reduce((total, check) => total + check.timeoutSeconds, lease);
+  // Legacy claims can be silent for both the combined check and K3 attribution. V2 renews
+  // throughout preparation and both runs, so its lease remains unchanged.
+  return checksFor(job).reduce((total, check) => total + check.timeoutSeconds * (job.kind === 'LAND_TASK' && check.name === 'LANDING_CHECK' ? 2 : 1), lease);
 }
 
 /** How many jobs one runner is handed per heartbeat (J-T2's dispatch). */
@@ -847,7 +859,7 @@ export async function queueLandingBehindTheWork(
  *
  * It rides on the generation it was asked for and nowhere else: the project's
  * `merge_check_command` is not touched, so the next landing and every promotion check run as they
- * did. The check is skipped, never passed — `checksFor` hands the runner no MERGE_CHECK at all, and
+ * did. The check is skipped, never passed — `checksFor` hands the runner no LANDING_CHECK at all, and
  * the row keeps this so that a landing whose checks array is empty cannot be read as a green one.
  */
 export interface LandingSkipMergeCheck {

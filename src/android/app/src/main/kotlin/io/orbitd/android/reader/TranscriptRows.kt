@@ -31,12 +31,16 @@ internal fun contentImages(value: JsonElement?): List<String> = when (value) {
 }
 
 /** [folded] is the later `thinking` blocks folded into this one's row (A06-11): the row keeps the first block's identity. [steer]: how
- * the row's message came out, when it is one of the reader's steers ([SteerDelivery.outcomes]) — said under it. */
+ * the row's message came out, when it is one of the reader's steers ([SteerDelivery.outcomes]) — said under it. [steps]: the rows a
+ * steps line stands for ([Steps.group]), the first one's event its identity. [exchanges]: the turns Orbit opened that this row folds
+ * ([ExchangeFold.fold]), the first one's opening event its identity. */
 @Immutable
 internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = null, val children: List<TranscriptRow> = emptyList(),
-    val folded: List<RunEvent> = emptyList(), val steer: SteerOutcome? = null) {
+    val folded: List<RunEvent> = emptyList(), val steer: SteerOutcome? = null, val steps: List<TranscriptRow> = emptyList(),
+    val exchanges: List<FoldedExchange> = emptyList()) {
     val key: String get() = "event:${event.seq}"
-    fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || folded.any { it.seq == seq } || children.any { it.contains(seq) }
+    fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || folded.any { it.seq == seq } || children.any { it.contains(seq) } ||
+        steps.any { it.contains(seq) } || exchanges.any { ex -> ex.rows.any { it.contains(seq) } }
 }
 
 /** Project only durable changes. Live text and tool snapshots are passed to their own row. [holdsSteers]: a window that reaches the

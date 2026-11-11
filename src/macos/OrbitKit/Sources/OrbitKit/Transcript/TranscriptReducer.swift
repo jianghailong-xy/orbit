@@ -1404,6 +1404,14 @@ public struct TranscriptReducer: Sendable, Codable {
         // `ConfirmationReviewTurns.swift`), by the same rule.
         let reviewRequest = ConfirmationReviewRequestCard.parse(ev.payload)
         let reviewReturn = ConfirmationReturnCard.parse(ev.payload)
+        // And the owner's answers handed to the reviewer (`confirmationAnswers`, §7 Q5).
+        let reviewAnswers = ConfirmationAnswersCard.parse(ev.payload)
+        // And five more of Orbit's own turns (`OrbitTurnCards.swift`), by the same rule.
+        let evidenceReview = EvidenceReviewCard.parse(ev.payload)
+        let evidenceSendBack = EvidenceSendBackCard.parse(ev.payload)
+        let runQuestion = RunQuestionCard.parse(ev.payload)
+        let runNotice = RunNoticeCard.parse(ev.payload)
+        let sessionOpening = SessionOpeningCard.parse(ev.payload)
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -1473,6 +1481,12 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.sessionReplies = sessionReplies
                 b.reviewRequest = reviewRequest
                 b.reviewReturn = reviewReturn
+                b.reviewAnswers = reviewAnswers
+                b.evidenceReview = evidenceReview
+                b.evidenceSendBack = evidenceSendBack
+                b.runQuestion = runQuestion
+                b.runNotice = runNotice
+                b.sessionOpening = sessionOpening
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
@@ -1514,7 +1528,9 @@ public struct TranscriptReducer: Sendable, Codable {
                                 externalSender: externalSender,
                                 sessionReplies: sessionReplies,
                                 reviewRequest: reviewRequest,
-                                reviewReturn: reviewReturn)
+                                reviewReturn: reviewReturn,
+                                reviewAnswers: reviewAnswers,
+                                evidenceReview: evidenceReview, evidenceSendBack: evidenceSendBack, runQuestion: runQuestion, runNotice: runNotice, sessionOpening: sessionOpening)
         // A steer of the reader's that nothing has read yet is not part of the conversation: it
         // waits in the tray — the row it was drawn as while queued, under the same id — until its
         // delivery settles (`applyUserDelivery`).

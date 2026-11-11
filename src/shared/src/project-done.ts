@@ -1,3 +1,4 @@
+import type { TaskStatus } from './enums';
 import type { OpenItemKind } from './project-progress';
 
 /**
@@ -15,12 +16,18 @@ export type ProjectDoneBy = 'OWNER' | 'DERIVED';
  * One gap the owner accepted when recording a project done: a criterion Orbit could not prove, and
  * what was checked instead.
  *
- * The server keeps the object as it was sent. `criterionKey` is the anchor every version of the card
- * carries (the criterion's `key`, as `project_get` returns it); the rest is the explanation the card
+ * For a coordinator request the server keeps the object as it was sent. Without a request it
+ * appends every current check finding, including project-wide findings anchored as documented below.
+ * `criterionKey` is the anchor every version of the card carries; the rest is the explanation the card
  * showed, which may grow without making an older server unable to read a gap accepted earlier.
  */
 export interface AcceptedGap {
+  /** A criterion key, or `project:<projectId>` when scope is PROJECT. The latter is a
+   * reserved project anchor, never the key of a stated criterion. */
   criterionKey: string;
+  scope?: 'CRITERION' | 'PROJECT';
+  /** The original check finding, retained for project-wide context and criterion details. */
+  finding?: ProjectDoneFinding;
   /** A few words naming the gap — the card's headline for it. */
   title?: string;
   /** Why Orbit cannot prove the criterion. */
@@ -192,4 +199,55 @@ export interface ProjectDoneRecord {
   criteriaDigest: string;
   acceptedGaps: AcceptedGap[];
   requestId: string | null;
+}
+
+/** One criterion, as the check reads it. */
+export interface DoneStateCriterion {
+  stated: {
+    ordinal: number;
+    key: string;
+    text: string;
+    definitionId: string;
+    definitionRevision: number;
+    verificationMethod: string | null;
+    completionCriterionOverrideReason: string | null;
+    contentHash: string;
+  };
+  satisfied: boolean;
+  /** The work holding it unmet, as the satisfaction lane names it; empty when nothing is filed. */
+  heldUpBy: Array<{ taskId: string; title: string }>;
+  landing: 'LANDED' | 'ON_INTEGRATION_LINE' | 'UNKNOWN';
+  /** Why it is not LANDED (`criterion-landing-reason.ts`); null when it is. */
+  reason: CriterionLandingReason | null;
+  /** The serving work that has something to land and is not on the upstream. */
+  heldOffLanded: Array<{ taskId: string; title: string }>;
+}
+
+/** One task of the project, as the check reads it. */
+export interface DoneStateTask {
+  id: string;
+  title: string;
+  status: `${TaskStatus}`;
+  criterionDefinitionId: string | null;
+  /** A run of it is going, or waiting for a runner — never the asking conversation's own. */
+  run: 'RUNNING' | 'QUEUED' | null;
+}
+
+/** Everything the check and the digest read: the project as it stands. */
+export interface DoneState {
+  criteria: DoneStateCriterion[];
+  /** Every task of the project, cancelled ones included, oldest first. */
+  tasks: DoneStateTask[];
+  /** The open items waiting on the owner, oldest first — this kind's own excepted. */
+  ownerItems: Array<{ itemId: string; kind: OpenItemKind; title: string }>;
+  /** The landings and merges into main queued or running, oldest first. */
+  jobs: Array<{ integrationJobId: string; kind: string; state: string; taskId: string | null }>;
+  criteriaDigest: string;
+  stateDigest: string;
+}
+
+/** GET /projects/:id/done-check: owner read, with no asking session excluded.
+ * REFUSE findings inform the owner; they do not prevent an owner record. */
+export interface ProjectDoneCheck extends DoneState {
+  findings: ProjectDoneFinding[];
 }

@@ -135,7 +135,7 @@ object CardCatalog {
                 CardFamily.WORKSPACE_WRITE -> listOf(if (approval.toolName == WorkspaceWriteCards.createTool) CardVerb.CREATE_WORKSPACE else CardVerb.SAVE_CHANGES, CardVerb.CHAT)
                 // One of Orbit's own asks (iOS `Approvals.isOrbitAsk`): saying no is a conversation, and there is no standing yes.
                 // DeepSeek Harness answers each ask once and keeps no rule (iOS cef6c8e0d): there, a card is Allow and Deny alone.
-                else -> if (approval.toolName == ApprovalRules.mergeCheckChange) listOf(CardVerb.ALLOW, CardVerb.CHAT) else listOf(CardVerb.ALLOW, CardVerb.DENY) +
+                else -> if (approval.toolName == ApprovalRules.mergeCheckChange || approval.toolName == SkipMergeCheckCards.tool) listOf(CardVerb.ALLOW, CardVerb.CHAT) else listOf(CardVerb.ALLOW, CardVerb.DENY) +
                     if (!DshRuntime.rememberOffered(engine) || ApprovalRules.remember(approval.toolName, approval.input).isEmpty()) emptyList()
                     else listOf(CardVerb.REMEMBER)
             }
@@ -148,7 +148,7 @@ object CardCatalog {
                 CardFamily.BLOCKER -> "Resolve this blocker?"
                 CardFamily.DELETE -> DeleteCards.title(approval.toolName)
                 CardFamily.WORKSPACE_WRITE -> WorkspaceWriteCards.title(approval.toolName)
-                else -> approval.toolName
+                else -> if (approval.toolName == SkipMergeCheckCards.tool) SkipMergeCheckCards.heading else approval.toolName
             }
             add(InteractionCard("approval:${approval.id}", family, title, raw, id, projectId, approval.id,
                 approval.input.toString(), actions, if (unexpired) approval.status else "Expired"))

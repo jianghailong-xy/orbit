@@ -1,14 +1,17 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { resolve } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   AutoRetryCtx,
   type AutoRetryHelp,
   AuthErrorCtx,
+  EventFullCtx,
   ExportCtx,
   LiveToolOutputsCtx,
   MD,
@@ -1186,7 +1189,7 @@ describe('engine stderr', () => {
     expect(html).not.toContain('chat-error-card-log');
   });
 
-  it('keeps an apply_patch stderr failure inside the surrounding tool group', () => {
+  it('keeps an apply_patch stderr failure inside the surrounding steps line', () => {
     const html = renderToStaticMarkup(
       <Transcript
         events={[
@@ -1206,9 +1209,8 @@ describe('engine stderr', () => {
       />,
     );
 
-    expect(html).toContain('Tools × 3');
-    expect(html).toContain('1 failed');
-    expect(html).toContain('Failed: ');
+    expect(html).toContain('Ran 2 shell commands, edited 1 file');
+    expect(html).toContain(' · 1 failed');
     expect(html).not.toContain('chat-error-card');
     // The expected source line belongs to the failed call's expandable result, not a second red row.
     expect(html).not.toContain("The transcript's tool-call rendering");
@@ -1526,6 +1528,7 @@ describe('Orbit write tool cards', () => {
   it('names a restructure by its reason rather than its JSON', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
+        <ExportCtx.Provider value={'html' as never}>
         <Transcript
           events={[
             toolEvent('mcp__orbit__tasklist_propose_dag', {
@@ -1535,6 +1538,7 @@ describe('Orbit write tool cards', () => {
             }),
           ]}
         />
+        </ExportCtx.Provider>
       </MemoryRouter>,
     );
 
@@ -1545,7 +1549,9 @@ describe('Orbit write tool cards', () => {
   it('still falls back to the generic card for any other MCP tool', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
-        <Transcript events={[toolEvent('mcp__orbit__task_get', { taskId: 'x' })]} />
+        <ExportCtx.Provider value={'html' as never}>
+          <Transcript events={[toolEvent('mcp__orbit__task_get', { taskId: 'x' })]} />
+        </ExportCtx.Provider>
       </MemoryRouter>,
     );
 
@@ -1765,7 +1771,9 @@ describe('a tag block typed into a user bubble', () => {
 describe('Bash folded row', () => {
   const bashRow = (input: Record<string, unknown>) =>
     renderToStaticMarkup(
-      <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Bash', input } }]} />,
+      <ExportCtx.Provider value={'html' as never}>
+        <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Bash', input } }]} />
+      </ExportCtx.Provider>,
     );
 
   it('falls back to the command when the runtime sends no description', () => {
@@ -1784,7 +1792,9 @@ describe('Bash folded row', () => {
 describe('Edit card', () => {
   const editRow = (input: Record<string, unknown>) =>
     renderToStaticMarkup(
-      <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Edit', input } }]} />,
+      <ExportCtx.Provider value={'html' as never}>
+        <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Edit', input } }]} />
+      </ExportCtx.Provider>,
     );
 
   it('opens onto the diff it was given', () => {
@@ -1881,87 +1891,107 @@ describe('foreground Shell card', () => {
   });
 });
 
-// The folded row of a tool group has one job: decide whether the group is worth opening. A
-// settled group answers that with its counts and per-kind breakdown — the last call of 31 is an
-// arbitrary anchor — so only a call still in flight gets a string, and it speaks in the same
-// prose the expanded rows use rather than in raw shell.
-describe('tool group folded row', () => {
+// Everything a turn does between two replies folds into one line of steps: the thinking first, then
+// each kind of call in the order it came. The line is there to say what happened; the cards behind it
+// are one click away, so nothing is lost — only deferred.
+describe('steps line', () => {
   const call = (seq: number, id: string, description: string, command: string) => ({
     seq,
     type: 'tool_use',
     payload: { id, name: 'Bash', input: { command, description } },
   });
   const done = (seq: number, toolUseId: string) => ({ seq, type: 'tool_result', payload: { toolUseId, content: 'ok' } });
-  // Assert against the folded row alone — an expanded group legitimately shows every raw command.
-  const foldedRow = (html: string) => html.split('chat-tool-group-detail')[0];
 
-  it('names the in-flight call by purpose while the group is still running', () => {
-    const html = foldedRow(renderToStaticMarkup(
+  it('says what a stretch of work did in one sentence, thinking first', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'thinking', payload: { text: 'look first', thinkingMs: 15_000 } },
+          call(2, 't1', 'List deploy files', 'ls /root/orbit/deploy'),
+          done(3, 't1'),
+          call(4, 't2', 'Show container status', 'docker compose ps'),
+          done(5, 't2'),
+          { seq: 6, type: 'assistant', payload: { text: 'Containers are up.' } },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Thought for 15s, listed 1 directory, ran 1 shell command');
+    // The cards wait behind the line, the reasoning with them.
+    expect(html).not.toContain('chat-steps-detail');
+    expect(html).not.toContain('docker compose ps');
+    expect(html).not.toContain('look first');
+    expect(html).toContain('Containers are up.');
+  });
+
+  it('folds a single call too, so every stretch reads alike', () => {
+    const html = renderToStaticMarkup(<Transcript events={[call(1, 't1', 'Show status', 'git status'), done(2, 't1')]} />);
+
+    expect(html).toContain('Ran 1 shell command');
+    expect(html).not.toContain('chat-tool-card');
+  });
+
+  it('counts files rather than calls for reads and edits', () => {
+    const edit = (seq: number, id: string, file_path: string) => ({
+      seq,
+      type: 'tool_use',
+      payload: { id, name: 'Edit', input: { file_path, old_string: 'a', new_string: 'b' } },
+    });
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'tool_use', payload: { id: 'r1', name: 'Read', input: { file_path: '/w/a.ts' } } },
+          done(2, 'r1'),
+          edit(3, 'e1', '/w/a.ts'),
+          done(4, 'e1'),
+          edit(5, 'e2', '/w/a.ts'),
+          done(6, 'e2'),
+          edit(7, 'e3', '/w/b.ts'),
+          done(8, 'e3'),
+          { seq: 9, type: 'tool_use', payload: { id: 'g1', name: 'Grep', input: { pattern: 'x' } } },
+          done(10, 'g1'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Read 1 file, edited 2 files, searched 1 time');
+  });
+
+  it('draws the call in flight under the line by purpose and command, and only that one', () => {
+    const html = renderToStaticMarkup(
       <Transcript
         live
         events={[
           call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
           done(2, 't1'),
           call(3, 't2', 'Locate codex rollout file', 'find /root/.codex -name "*01a000ae*" 2>/dev/null | head'),
-          call(4, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-        ]}
-      />,
-    ));
-
-    expect(html).toContain('· Running: ');
-    expect(html).toContain('Locate codex rollout file');
-    // Neither the raw command of the running call nor of the finished one.
-    expect(html).not.toContain('01a000ae');
-    expect(html).not.toContain('orbit capabilities');
-  });
-
-  it('leaves the row to the counts once every call has settled', () => {
-    const html = renderToStaticMarkup(
-      <Transcript
-        events={[
-          call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
-          done(2, 't1'),
-          call(3, 't2', 'Locate codex rollout file', 'find /root/.codex -name "*01a000ae*" 2>/dev/null | head'),
-          done(4, 't2'),
-          call(5, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-          done(6, 't3'),
         ]}
       />,
     );
 
-    expect(html).toContain('3 succeeded');
-    expect(html).not.toContain('Running: ');
-    // No call speaks for the group: neither the last command nor its description.
-    expect(html).not.toContain('journalctl');
-    expect(html).not.toContain('Read runner logs');
-    // The per-call detail is one click away, so nothing is lost — only deferred.
-    expect(html).not.toContain('chat-tool-group-detail');
+    expect(html).toContain('Ran 1 shell command');
+    expect(html).toContain('chat-steps-live');
+    expect(html).toContain('Locate codex rollout file');
+    expect(html).toContain('01a000ae');
+    // The settled call stays behind the line.
+    expect(html).not.toContain('orbit capabilities');
   });
 
-  // Opening a group because something is running means closing it again the moment that call
-  // lands, which drops the transcript by the height of the group right where the reader is
-  // looking. Only a failure — a state that cannot revert — is worth opening on.
-  it('stays folded while running so settling cannot yank the layout', () => {
-    const events = [
-      call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
-      done(2, 't1'),
-      call(3, 't2', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-      done(4, 't2'),
-      call(5, 't3', 'Build runner', 'go build ./...'),
-    ];
+  it('joins the line once the call lands, without unfolding anything', () => {
+    const events = [call(1, 't1', 'Build runner', 'go build ./...')];
     const runningHtml = renderToStaticMarkup(<Transcript live events={events} />);
-    const settledHtml = renderToStaticMarkup(<Transcript live events={[...events, done(6, 't3')]} />);
+    const settledHtml = renderToStaticMarkup(<Transcript live events={[...events, done(2, 't1')]} />);
 
-    expect(runningHtml).not.toContain('chat-tool-group-detail');
-    // Same shape before and after the last call lands: only the row's own text changes.
-    expect(settledHtml).not.toContain('chat-tool-group-detail');
-    expect(runningHtml).toContain('1 running · 2 succeeded');
-    expect(settledHtml).toContain('3 succeeded');
+    expect(runningHtml).toContain('chat-steps-live');
+    expect(runningHtml).not.toContain('chat-steps-line');
+    expect(settledHtml).toContain('Ran 1 shell command');
+    expect(settledHtml).not.toContain('chat-steps-live');
+    expect(settledHtml).not.toContain('chat-steps-detail');
   });
 
-  // Forcing a failed group open unfolds the failed call with it (ToolView opens on error), so one
-  // bad command became a screenful of clamped heredoc. Name the failure on the row instead.
-  it('names the failed call on the row rather than unfolding the group', () => {
+  // Forcing a failed stretch open unfolds the failed call with it (ToolView opens on error), so one
+  // bad command became a screenful of clamped heredoc. The line counts the failure instead.
+  it('counts a failure on the line rather than unfolding it', () => {
     const html = renderToStaticMarkup(
       <Transcript
         events={[
@@ -1969,44 +1999,25 @@ describe('tool group folded row', () => {
           done(2, 't1'),
           call(3, 't2', 'Build runner', 'go build ./...'),
           { seq: 4, type: 'tool_result', payload: { toolUseId: 't2', content: 'boom', isError: true } },
-          call(5, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-          done(6, 't3'),
         ]}
       />,
     );
 
-    expect(html).not.toContain('chat-tool-group-detail');
-    expect(html).toContain('1 failed');
-    expect(html).toContain('· Failed: ');
-    expect(html).toContain('Build runner');
-    // The command that failed stays behind the fold, error included.
-    expect(html).not.toContain('go build');
+    expect(html).toContain('Ran 2 shell commands<span class="chat-steps-failed"> · 1 failed</span>');
+    expect(html).not.toContain('chat-steps-detail');
     expect(html).not.toContain('boom');
   });
 
-  // The first failure is usually what caused the ones after it.
-  it('names the first failure when several calls failed', () => {
-    const bad = (seq: number, toolUseId: string) => ({
-      seq,
-      type: 'tool_result',
-      payload: { toolUseId, content: 'boom', isError: true },
-    });
+  it('is open in an export, where nothing can be clicked', () => {
     const html = renderToStaticMarkup(
-      <Transcript
-        events={[
-          call(1, 't1', 'Generate the client', 'prisma generate'),
-          bad(2, 't1'),
-          call(3, 't2', 'Build runner', 'go build ./...'),
-          bad(4, 't2'),
-          call(5, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
-          done(6, 't3'),
-        ]}
-      />,
+      <ExportCtx.Provider value={'html' as never}>
+        <Transcript events={[call(1, 't1', 'Build runner', 'go build ./...'), done(2, 't1')]} />
+      </ExportCtx.Provider>,
     );
 
-    expect(html).toContain('· Failed: ');
-    expect(html).toContain('Generate the client');
-    expect(html).not.toContain('Build runner');
+    expect(html).toContain('chat-steps is-open');
+    expect(html).toContain('chat-steps-detail');
+    expect(html).toContain('Build runner');
   });
 
   it('reserves the caret column for a running call with no detail yet', () => {
@@ -2018,18 +2029,12 @@ describe('tool group folded row', () => {
             { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'wait', input: {} } },
             done(2, 't1'),
             { seq: 3, type: 'tool_use', payload: { id: 't2', name: 'wait', input: {} } },
-            done(4, 't2'),
-            { seq: 5, type: 'tool_use', payload: { id: 't3', name: 'wait', input: {} } },
-            done(6, 't3'),
-            { seq: 7, type: 'tool_use', payload: { id: 't4', name: 'wait', input: {} } },
-            done(8, 't4'),
-            { seq: 9, type: 'tool_use', payload: { id: 't5', name: 'wait', input: {} } },
           ]}
         />
       </ExportCtx.Provider>,
     );
 
-    expect(html).toContain('1 running · 4 succeeded');
+    expect(html).toContain('Used 1 tool');
     expect(html).toContain(
       'class="chat-tool-row no-detail"><span class="chat-tool-caret"></span><span class="chat-tool-icon"',
     );
@@ -2052,14 +2057,13 @@ describe('failed tool call body', () => {
     },
   ];
 
-  // The red mark on the row says it failed; unfolding sixteen clamped lines of heredoc to say
-  // the same thing is the disproportionate part.
+  // The red count on the steps line says it failed; unfolding sixteen clamped lines of heredoc to
+  // say the same thing is the disproportionate part.
   it('stays folded, like every other settled call', () => {
     const html = renderToStaticMarkup(<Transcript events={failed} />);
 
-    expect(html).toContain('Append the tests');
-    expect(html).toContain('chat-tool-status err');
-    expect(html).not.toContain('chat-tool-detail');
+    expect(html).toContain(' · 1 failed');
+    expect(html).not.toContain('chat-steps-detail');
     expect(html).not.toContain('No such file or directory');
   });
 
@@ -2121,8 +2125,8 @@ describe('failed tool call body', () => {
       />,
     );
 
-    expect(html).toContain('chat-tool-status err');
-    expect(html).not.toContain('chat-tool-status running');
+    expect(html).toContain(' · 1 failed');
+    expect(html).not.toContain('chat-steps-live');
     // agy's interrupt carries no payload at all, and it is still the reader's Stop.
     expect(html).toContain('<div class="chat-note" data-seq="2">⊘ interrupted</div>');
   });
@@ -2283,8 +2287,8 @@ describe('tool run folding', () => {
     // — with an unknown tone name the whole border shorthand is dropped and the stripe vanishes.
     // Only the names the stylesheet defines will do (see .chat-tone-* in index.css).
     expect(html).toContain('chat-tone-agent');
-    // Splitting the run on the card leaves two singles — neither reaches the fold threshold.
-    expect(html).not.toContain('chat-tool-group');
+    // The card splits the run: a steps line either side of it.
+    expect(html.split('class="chat-steps"').length - 1).toBe(2);
   });
 
   // A sub-workspace card was kept out only by its children, which arrive after the call — so it
@@ -2297,7 +2301,7 @@ describe('tool run folding', () => {
     ]);
 
     expect(html).toContain('chat-tool-task');
-    expect(html).not.toContain('chat-tool-group');
+    expect(html.split('class="chat-steps"').length - 1).toBe(2);
   });
 
   // Same reason as the child-session card: a batch renders its own picture and its own list of
@@ -2310,62 +2314,39 @@ describe('tool run folding', () => {
     ]);
 
     expect(html).toContain('Create tasks');
-    expect(html).not.toContain('chat-tool-group');
+    expect(html.split('class="chat-steps"').length - 1).toBe(2);
   });
 
-  // A screenshot is the one card the reader is meant to *look* at, and ToolView unfolds it for
-  // exactly that reason — but it can't unfold the group around it, so a picture folded into
-  // "Read × 3" reaches the reader as a counter.
-  it('keeps a screenshot out of the fold, picture and all', () => {
-    const data = 'iVBORw0KGgo=';
-    const shot = [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data } }];
-    const html = render([
-      callWith('Read', { file_path: '/tmp/s0.png' }, shot),
-      callWith('Read', { file_path: '/tmp/s1.png' }, shot),
-      callWith('Read', { file_path: '/tmp/s2.png' }, shot),
-    ]);
-
-    expect(html).not.toContain('chat-tool-group');
-    expect(html.split(`data:image/png;base64,${data}`).length - 1).toBe(3);
-  });
-
-  // Lifting the picture out is not licence to stop folding around it: the plain calls either side
-  // are still a run, and still the noise the summary row exists to swallow.
-  it('still folds the plain calls a screenshot sits among', () => {
+  // An agent reading a screenshot is a step like any other read (owner, 11-11): it folds into the
+  // line rather than standing out as a card of its own, and the closed line draws no picture.
+  it('folds a screenshot into the steps line with the calls around it', () => {
     const data = 'iVBORw0KGgo=';
     const html = render([
       callWith('Bash', { command: 'ls' }, 'a.txt'),
       callWith('Bash', { command: 'pwd' }, '/tmp'),
-      callWith('Bash', { command: 'whoami' }, 'root'),
       callWith('Read', { file_path: '/tmp/s0.png' }, [
         { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
       ]),
+      callWith('Bash', { command: 'whoami' }, 'root'),
     ]);
 
-    expect(html).toContain('Bash × 3');
-    expect(html).toContain(`data:image/png;base64,${data}`);
+    expect(html.split('class="chat-steps"').length - 1).toBe(1);
+    expect(html).toContain('read 1 file');
+    expect(html).not.toContain(`data:image/png;base64,${data}`);
   });
 
-  // Codex's app-server can pass an MCP CallToolResult wrapper through unchanged. The image is
-  // then under `content`, rather than being the tool_result's top-level array, so it must still
-  // split the run and must not fall back to printing the base64 payload as JSON text.
-  it('keeps a wrapped screenshot out of the fold', () => {
+  // Codex's app-server can pass an MCP CallToolResult wrapper through unchanged. The image is then
+  // under `content`, rather than being the tool_result's top-level array; it folds all the same.
+  it('folds a wrapped screenshot too', () => {
     const data = 'iVBORw0KGgo=';
     const shot = {
       content: [{ type: 'text', text: 'screenshot ready' }, { type: 'image', data, mimeType: 'image/png' }],
     };
-    const html = render([
-      callWith('Bash', { command: 'ls' }, 'a.txt'),
-      callWith('Bash', { command: 'pwd' }, '/tmp'),
-      callWith('Bash', { command: 'whoami' }, 'root'),
-      callWith('exec', { command: 'capture' }, shot),
-    ]);
+    const html = render([callWith('Bash', { command: 'ls' }, 'a.txt'), callWith('exec', { command: 'capture' }, shot)]);
 
-    expect(html).toContain('Bash × 3');
-    expect(html).not.toContain('chat-tool-group-detail');
-    expect(html).toContain(`data:image/png;base64,${data}`);
+    expect(html.split('class="chat-steps"').length - 1).toBe(1);
+    expect(html).not.toContain(`data:image/png;base64,${data}`);
     expect(resultText(shot)).toBe('screenshot ready');
-    expect(html).not.toContain(`"data": "${data}"`);
   });
 
   it('still folds a run of plain calls', () => {
@@ -2375,15 +2356,16 @@ describe('tool run folding', () => {
       callWith('Bash', { command: 'whoami' }, 'root'),
     ]);
 
-    expect(html).toContain('chat-tool-group');
-    expect(html).toContain('Bash × 3');
+    expect(html).toContain('chat-steps');
+    expect(html).toContain('Listed 1 directory, ran 2 shell commands');
   });
 });
 
 // A screenshot too big to ship inline reaches the transcript as an image block with no `data`
-// (see the apiserver's MAX_IMAGE_PAYLOAD). What must survive that clip is the *card opening*:
-// the untrimmed payload is fetched only for an open card, so a card that folds because it can't
-// see an image is a card that never asks for the image — the picture would be gone, not deferred.
+// (see the apiserver's MAX_IMAGE_PAYLOAD). It folds into the steps line like any read, and its card
+// stays folded until clicked (owner, 11-11); what must survive the clip is the card opening on the
+// image block once clicked: the untrimmed payload is fetched only for an open card, so a card with
+// nothing to open on is a card that never asks for the image — the picture would be gone.
 describe('clipped screenshot results', () => {
   const imageResult = (source: Record<string, unknown>): RunEvent[] => [
     { seq: 1, type: 'tool_use', payload: { id: 'ti', name: 'Read', input: { file_path: '/tmp/shot.png' } } },
@@ -2394,30 +2376,78 @@ describe('clipped screenshot results', () => {
       payload: { toolUseId: 'ti', content: [{ type: 'image', source }] },
     },
   ];
-  const render = (events: RunEvent[]) => renderToStaticMarkup(<Transcript events={events} />);
 
-  it('opens the card for an image whose bytes the server dropped', () => {
-    const html = render(imageResult({ type: 'base64', media_type: 'image/png' }));
+  // Mounts the transcript, opens its steps line and then the card, and hands back the page;
+  // `fetchFull` answers the card's refetch of the untrimmed result.
+  const openLine = async (events: RunEvent[], fetchFull: ReturnType<typeof vi.fn>) => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const root = createRoot(dom.window.document.getElementById('root')!);
+    await act(async () => {
+      root.render(
+        <EventFullCtx.Provider value={fetchFull}>
+          <Transcript events={events} />
+        </EventFullCtx.Provider>,
+      );
+    });
+    const line = dom.window.document.querySelector<HTMLElement>('.chat-steps-line');
+    expect(line, 'the screenshot did not fold into a steps line').not.toBeNull();
+    await act(async () => line!.click());
+    const card = dom.window.document.querySelector<HTMLElement>('.chat-steps-detail .chat-tool-card');
+    // Opening the line draws the card folded: the picture waits for the reader, not the agent.
+    expect(card?.classList.contains('is-open')).toBe(false);
+    expect(fetchFull).not.toHaveBeenCalled();
+    await act(async () => card!.querySelector<HTMLElement>('.chat-tool-row')!.click());
+    return {
+      document: dom.window.document,
+      close: async () => {
+        await act(async () => root.unmount());
+        dom.window.close();
+        vi.unstubAllGlobals();
+      },
+    };
+  };
 
-    expect(html).toContain('is-open');
-  });
-
-  // Opening on the block is only half of it: the card is now a picture-shaped hole until the
-  // untrimmed payload lands, and a reader who cannot tell "coming" from "gone" reads it as broken.
-  it('shows the picture-shaped placeholder while the bytes are being fetched back', () => {
-    const html = render(imageResult({ type: 'base64', media_type: 'image/png' }));
-
-    expect(html).toContain('chat-result-image-loading');
-  });
-
-  it('still opens — and renders — a small image that arrived whole', () => {
+  it('opens the card on a dropped image when clicked, holds its place, and fetches the picture back', async () => {
     const data = 'iVBORw0KGgo=';
-    const html = render(imageResult({ type: 'base64', media_type: 'image/png', data }));
+    let answer: (v: unknown) => void = () => {};
+    const fetchFull = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { document, close } = await openLine(imageResult({ type: 'base64', media_type: 'image/png' }), fetchFull);
+    try {
+      expect(document.querySelector('.chat-steps-detail .is-open')).not.toBeNull();
+      // A reader who cannot tell "coming" from "gone" reads the hole as broken.
+      expect(document.querySelector('.chat-result-image-loading')).not.toBeNull();
+      expect(fetchFull).toHaveBeenCalledWith(2);
 
-    expect(html).toContain('is-open');
-    expect(html).toContain(`data:image/png;base64,${data}`);
-    // The bytes are here, so there is nothing to wait for.
-    expect(html).not.toContain('chat-result-image-loading');
+      await act(async () =>
+        answer({
+          payload: {
+            toolUseId: 'ti',
+            content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data } }],
+          },
+        }),
+      );
+      expect(document.body.innerHTML).toContain(`data:image/png;base64,${data}`);
+      expect(document.querySelector('.chat-result-image-loading')).toBeNull();
+    } finally {
+      await close();
+    }
+  });
+
+  it('shows a small image that arrived whole as soon as its card opens', async () => {
+    const data = 'iVBORw0KGgo=';
+    const { document, close } = await openLine(
+      imageResult({ type: 'base64', media_type: 'image/png', data }),
+      vi.fn(() => new Promise(() => {})),
+    );
+    try {
+      expect(document.body.innerHTML).toContain(`data:image/png;base64,${data}`);
+      expect(document.querySelector('.chat-result-image-loading')).toBeNull();
+    } finally {
+      await close();
+    }
   });
 
   it('leaves a text-only result folded', () => {

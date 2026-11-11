@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -948,6 +949,7 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     await tick(stack, supersedeClock, recordingPush().push);
     const [supersedeItem] = await leaseItems(stack, w.projectId);
     assert.ok(supersedeItem, 'the silent check opened its item');
+    await seedPromotionRequest(stack.prisma, w.projectId);
     const considered = await stack.promotions.considerCandidate(w.projectId);
     assert.ok(considered, 'the new landing is owed a candidate');
     const [closedBySupersede] = await leaseItems(stack, w.projectId);

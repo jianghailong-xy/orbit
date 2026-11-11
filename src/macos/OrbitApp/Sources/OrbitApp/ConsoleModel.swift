@@ -1873,11 +1873,32 @@ final class ConsoleModel {
         return true
     }
 
+    /// The item a record link or a search hit last asked for. A fold over the turns Orbit opened
+    /// (`OrbitExchangeFoldView`) that holds it opens the way down to it, as a steps line's row is
+    /// scrolled to in its stead.
+    private(set) var revealedItemID: String?
+
+    /// The project's dependency graph, for the task tree a group of folded Orbit turns opens to. Read
+    /// once, and only once a group is opened (`wantExchangeTree`): a conversation nobody opens a group
+    /// in costs no request.
+    private(set) var exchangeGraph: ProjectDependencyGraph?
+    private var exchangeGraphAsked = false
+
+    func wantExchangeTree(projectID: String?) {
+        guard !exchangeGraphAsked, let projectID, !projectID.isEmpty else { return }
+        exchangeGraphAsked = true
+        Task { @MainActor [weak self, api] in
+            let graph = try? await api.projectDependencyGraph(projectID)
+            self?.exchangeGraph = graph
+        }
+    }
+
     /// Ask the transcript to scroll to the record's row. The row is found as the transcript draws it
     /// (`TranscriptRows.build`), so a tool call folded into a run is reached through the run's row.
     private func markRecord(_ anchor: TranscriptAnchor, page: [RunEvent]) {
         let state = reducer.state
         guard let itemID = TranscriptRecordAnchor.itemID(for: anchor, page: page, in: state.items) else { return }
+        revealedItemID = itemID
         let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
                                         showWorkingIndicator: false, decisionCards: decisionCards)
         scrollTick += 1
@@ -1941,6 +1962,19 @@ final class ConsoleModel {
     /// The status that drives send decisions: the stream status, upgraded to the server's
     /// terminal status when the stream missed the (un-replayable) terminal transition.
     var sessionStatus: RunStatus { ComposerLogic.reconcileStatus(stream: state.status, server: serverStatus) }
+
+    /// A new account's welcome card stands over this draft (docs/mocks/new-user-onboarding): the empty
+    /// composer says what to write. Set by the page drawing the card.
+    var welcomes = false
+    /// Bumped to ask the composer to take focus (`fillFromWelcome`).
+    var focusRequests = 0
+
+    /// A first message picked on the welcome card: into the composer, to be read, changed and sent
+    /// there. Nothing is sent.
+    func fillFromWelcome(_ example: String) {
+        composerText = example
+        focusRequests &+= 1
+    }
 
     /// What an empty composer says on a machine's new session page, which has no workspace to send to.
     var machinePlaceholder: String? {
@@ -4739,6 +4773,11 @@ final class ConsoleModel {
             return .at(at)
         }
         return .onArrival(afterItemID: DeliveryAnchor.onArrival(of: .projectDone, items: state.items))
+    }
+
+    func readProjectDoneCheck() async throws -> ProjectDoneCheck? {
+        guard let projectID else { return nil }
+        return try await api.projectDoneCheck(projectID: projectID)
     }
 
     /// Record the project done from its card (`POST /projects/:id/done`, `ProjectDone.body`): the

@@ -145,10 +145,8 @@ class MainBranchCopyTest {
         assertTemplate(done, ProjectDone.on(b), b to main)
         assertTemplate(done, ProjectDone.landedOn(b), b to main)
         assertTemplate(done, ProjectDone.landingReasonLabel(null, b), b to main)
-        val gap = ProjectDone.syntheticGaps(j("""{"integration":{"upstreamRef":"$b"},"acceptanceCriteriaItems":[{"id":"c1","key":"k1","ordinal":1,"text":"One."}],
-            "derivedDone":{"criteria":[{"definitionId":"c1","satisfied":true,"landingReason":"ON_PROJECT_BRANCH"}]}}""")).single()
-        assertTemplate(web("components/ProjectSettlementCard.tsx"), gap.text("whyNotProven")!!, b to main,
-            ProjectDone.landingReasonLabel("ON_PROJECT_BRANCH") to "\${reason}")
+        // The web no longer draws a gap of its own for a card nobody asked for (1a05fa4bc: the done-check's findings
+        // stand in for it), so the synthetic gap's sentence has no web twin to compare with; MainBranchTest pins it.
 
         val promotion = web("components/ProjectPromotionCard.tsx")
         assertTemplate(promotion, PromotionCards.mergeTo(b), b to main)

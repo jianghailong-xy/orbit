@@ -929,6 +929,7 @@ final class AppModel {
         linkCards?.removeAll()
         linkCards = nil
         managedRunner?.reset()
+        newAccount = nil
         #if os(iOS)
         disablePush()   // reads the access token, so before the store is cleared below
         #endif
@@ -2029,6 +2030,27 @@ final class AppModel {
         }
     }
 
+    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
+
+    /// Whether this account has never had a session: its Open and Completed lists, one row each, both
+    /// answered empty (board 03, rule 1; the web's `useNewAccount`). Nil until read, and false after a
+    /// read that failed. Kept for this run of the app only: nothing is stored to remember it.
+    private(set) var newAccount: Bool?
+
+    /// Read it again: the pages that can wear the welcome card ask as they appear, as the web's query
+    /// does on mount, so the card goes once a first session exists anywhere.
+    func readNewAccount() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        let open = try? await api.sessionRowCount(view: .open)
+        // A row in Open already says it: Completed is asked only when Open is empty.
+        var completed: Int?
+        if open == 0 { completed = try? await api.sessionRowCount(view: .completed) }
+        let answer = Welcome.isNewAccount(openRows: open, completedRows: completed)
+        guard generation == apiGeneration, self.api === api else { return }
+        newAccount = answer
+    }
+
     // MARK: a machine with no workspace (board rules 1–12)
 
     /// Each machine's new session page as it has been left, for this run of the app. Mutated by
@@ -2890,6 +2912,7 @@ final class AppModel {
     /// (`ProjectPage.drawsEnding`): the criteria document's own subject, the same read the
     /// conversation's settled card keeps.
     private(set) var projectSessionsDone: ProjectDoneSubject?
+    private(set) var projectSessionsConfirmedAt: String?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -3130,18 +3153,10 @@ final class AppModel {
     }
 
     /// One poll of what the page's start row needs (docs/mocks/project-start-sessions-page): the
-    /// project's open items — the coordinator's request to start among them — while the sidebar row
-    /// says nobody has started it. A started project, or one the row does not say about, reads
-    /// nothing more than before; a read that fails keeps the last answer rather than drawing none.
+    /// project's open items, including the start request and the owner's latest Not yet answer.
+    /// A failed read keeps the last answer rather than drawing none.
     func loadProjectStart(_ address: SessionProjectAddress) async {
         guard let api else { return }
-        let key = PublicID.storageKey(address.projectID)
-        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
-        // The start row needs the items only on a project nobody has started.
-        guard row?.status == .open, row?.started == false else {
-            projectSessionsOpenItems = nil
-            return
-        }
         let items = try? await api.projectOpenItems(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
         projectSessionsOpenItems = items
@@ -3163,7 +3178,16 @@ final class AppModel {
         }
         let document = try? await api.projectCriteria(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let document else { return }
+        let confirmedAt: String?
+        if document.doneBy == .derived {
+            let standing = try? await api.acceptanceConfirmation(projectID: address.projectID)
+            confirmedAt = standing?.confirmation?.confirmedAt
+        } else {
+            confirmedAt = nil
+        }
+        guard projectSessionsAddress == address, !Task.isCancelled else { return }
         projectSessionsDone = document.doneSubject
+        projectSessionsConfirmedAt = confirmedAt
     }
 
     /// A member may belong to another Workspace. Carry its record into the console's cache, which
@@ -3786,6 +3810,13 @@ final class AppModel {
         case .open(let route): self.route(to: route)
         case let .approve(sid, behavior): Task { await approveAll(sessionID: sid, behavior: behavior) }
         case let .reply(sid, text): Task { await reply(sessionID: sid, text: text) }
+        case let .openProject(projectID):
+            #if os(iOS)
+            settingsPresented = false
+            openProjectSessions(PublicID.toPublic(projectID), inColumn: false)
+            #else
+            openProject(PublicID.toPublic(projectID))
+            #endif
         case let .openProjectMerge(projectID, sid):
             #if os(iOS)
             // A push names its project by the stored UUID; every list row spells it base62.
