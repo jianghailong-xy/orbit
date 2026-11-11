@@ -1,14 +1,17 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { resolve } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   AutoRetryCtx,
   type AutoRetryHelp,
   AuthErrorCtx,
+  EventFullCtx,
   ExportCtx,
   LiveToolOutputsCtx,
   MD,
@@ -2314,59 +2317,36 @@ describe('tool run folding', () => {
     expect(html.split('class="chat-steps"').length - 1).toBe(2);
   });
 
-  // A screenshot is the one card the reader is meant to *look* at, and ToolView unfolds it for
-  // exactly that reason — but it can't unfold the group around it, so a picture folded into
-  // "Read × 3" reaches the reader as a counter.
-  it('keeps a screenshot out of the fold, picture and all', () => {
-    const data = 'iVBORw0KGgo=';
-    const shot = [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data } }];
-    const html = render([
-      callWith('Read', { file_path: '/tmp/s0.png' }, shot),
-      callWith('Read', { file_path: '/tmp/s1.png' }, shot),
-      callWith('Read', { file_path: '/tmp/s2.png' }, shot),
-    ]);
-
-    expect(html).not.toContain('chat-steps');
-    expect(html.split(`data:image/png;base64,${data}`).length - 1).toBe(3);
-  });
-
-  // Lifting the picture out is not licence to stop folding around it: the plain calls either side
-  // are still a run, and still the noise the summary row exists to swallow.
-  it('still folds the plain calls a screenshot sits among', () => {
+  // An agent reading a screenshot is a step like any other read (owner, 11-11): it folds into the
+  // line rather than standing out as a card of its own, and the closed line draws no picture.
+  it('folds a screenshot into the steps line with the calls around it', () => {
     const data = 'iVBORw0KGgo=';
     const html = render([
       callWith('Bash', { command: 'ls' }, 'a.txt'),
       callWith('Bash', { command: 'pwd' }, '/tmp'),
-      callWith('Bash', { command: 'whoami' }, 'root'),
       callWith('Read', { file_path: '/tmp/s0.png' }, [
         { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
       ]),
+      callWith('Bash', { command: 'whoami' }, 'root'),
     ]);
 
-    expect(html).toContain('Listed 1 directory, ran 2 shell commands');
-    expect(html).toContain(`data:image/png;base64,${data}`);
+    expect(html.split('class="chat-steps"').length - 1).toBe(1);
+    expect(html).toContain('read 1 file');
+    expect(html).not.toContain(`data:image/png;base64,${data}`);
   });
 
-  // Codex's app-server can pass an MCP CallToolResult wrapper through unchanged. The image is
-  // then under `content`, rather than being the tool_result's top-level array, so it must still
-  // split the run and must not fall back to printing the base64 payload as JSON text.
-  it('keeps a wrapped screenshot out of the fold', () => {
+  // Codex's app-server can pass an MCP CallToolResult wrapper through unchanged. The image is then
+  // under `content`, rather than being the tool_result's top-level array; it folds all the same.
+  it('folds a wrapped screenshot too', () => {
     const data = 'iVBORw0KGgo=';
     const shot = {
       content: [{ type: 'text', text: 'screenshot ready' }, { type: 'image', data, mimeType: 'image/png' }],
     };
-    const html = render([
-      callWith('Bash', { command: 'ls' }, 'a.txt'),
-      callWith('Bash', { command: 'pwd' }, '/tmp'),
-      callWith('Bash', { command: 'whoami' }, 'root'),
-      callWith('exec', { command: 'capture' }, shot),
-    ]);
+    const html = render([callWith('Bash', { command: 'ls' }, 'a.txt'), callWith('exec', { command: 'capture' }, shot)]);
 
-    expect(html).toContain('Listed 1 directory, ran 2 shell commands');
-    expect(html).not.toContain('chat-steps-detail');
-    expect(html).toContain(`data:image/png;base64,${data}`);
+    expect(html.split('class="chat-steps"').length - 1).toBe(1);
+    expect(html).not.toContain(`data:image/png;base64,${data}`);
     expect(resultText(shot)).toBe('screenshot ready');
-    expect(html).not.toContain(`"data": "${data}"`);
   });
 
   it('still folds a run of plain calls', () => {
@@ -2382,9 +2362,10 @@ describe('tool run folding', () => {
 });
 
 // A screenshot too big to ship inline reaches the transcript as an image block with no `data`
-// (see the apiserver's MAX_IMAGE_PAYLOAD). What must survive that clip is the *card opening*:
-// the untrimmed payload is fetched only for an open card, so a card that folds because it can't
-// see an image is a card that never asks for the image — the picture would be gone, not deferred.
+// (see the apiserver's MAX_IMAGE_PAYLOAD). It folds into the steps line like any read; what must
+// survive the clip is the *card opening* once the reader opens the line: the untrimmed payload is
+// fetched only for an open card, so a card that stays folded because it can't see an image is a
+// card that never asks for the image — the picture would be gone, not deferred.
 describe('clipped screenshot results', () => {
   const imageResult = (source: Record<string, unknown>): RunEvent[] => [
     { seq: 1, type: 'tool_use', payload: { id: 'ti', name: 'Read', input: { file_path: '/tmp/shot.png' } } },
@@ -2395,30 +2376,73 @@ describe('clipped screenshot results', () => {
       payload: { toolUseId: 'ti', content: [{ type: 'image', source }] },
     },
   ];
-  const render = (events: RunEvent[]) => renderToStaticMarkup(<Transcript events={events} />);
 
-  it('opens the card for an image whose bytes the server dropped', () => {
-    const html = render(imageResult({ type: 'base64', media_type: 'image/png' }));
+  // Mounts the transcript, opens its steps line, and hands back the page; `fetchFull` answers the
+  // card's refetch of the untrimmed result.
+  const openLine = async (events: RunEvent[], fetchFull: (seq: number) => Promise<unknown>) => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const root = createRoot(dom.window.document.getElementById('root')!);
+    await act(async () => {
+      root.render(
+        <EventFullCtx.Provider value={fetchFull}>
+          <Transcript events={events} />
+        </EventFullCtx.Provider>,
+      );
+    });
+    const line = dom.window.document.querySelector<HTMLElement>('.chat-steps-line');
+    expect(line, 'the screenshot did not fold into a steps line').not.toBeNull();
+    await act(async () => line!.click());
+    return {
+      document: dom.window.document,
+      close: async () => {
+        await act(async () => root.unmount());
+        dom.window.close();
+        vi.unstubAllGlobals();
+      },
+    };
+  };
 
-    expect(html).toContain('is-open');
-  });
-
-  // Opening on the block is only half of it: the card is now a picture-shaped hole until the
-  // untrimmed payload lands, and a reader who cannot tell "coming" from "gone" reads it as broken.
-  it('shows the picture-shaped placeholder while the bytes are being fetched back', () => {
-    const html = render(imageResult({ type: 'base64', media_type: 'image/png' }));
-
-    expect(html).toContain('chat-result-image-loading');
-  });
-
-  it('still opens — and renders — a small image that arrived whole', () => {
+  it('opens the card on a dropped image, holds its place, and fetches the picture back', async () => {
     const data = 'iVBORw0KGgo=';
-    const html = render(imageResult({ type: 'base64', media_type: 'image/png', data }));
+    let answer: (v: unknown) => void = () => {};
+    const fetchFull = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { document, close } = await openLine(imageResult({ type: 'base64', media_type: 'image/png' }), fetchFull);
+    try {
+      expect(document.querySelector('.chat-steps-detail .is-open')).not.toBeNull();
+      // A reader who cannot tell "coming" from "gone" reads the hole as broken.
+      expect(document.querySelector('.chat-result-image-loading')).not.toBeNull();
+      expect(fetchFull).toHaveBeenCalledWith(2);
 
-    expect(html).toContain('is-open');
-    expect(html).toContain(`data:image/png;base64,${data}`);
-    // The bytes are here, so there is nothing to wait for.
-    expect(html).not.toContain('chat-result-image-loading');
+      await act(async () =>
+        answer({
+          payload: {
+            toolUseId: 'ti',
+            content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data } }],
+          },
+        }),
+      );
+      expect(document.body.innerHTML).toContain(`data:image/png;base64,${data}`);
+      expect(document.querySelector('.chat-result-image-loading')).toBeNull();
+    } finally {
+      await close();
+    }
+  });
+
+  it('shows a small image that arrived whole as soon as the line opens', async () => {
+    const data = 'iVBORw0KGgo=';
+    const { document, close } = await openLine(
+      imageResult({ type: 'base64', media_type: 'image/png', data }),
+      () => new Promise(() => {}),
+    );
+    try {
+      expect(document.body.innerHTML).toContain(`data:image/png;base64,${data}`);
+      expect(document.querySelector('.chat-result-image-loading')).toBeNull();
+    } finally {
+      await close();
+    }
   });
 
   it('leaves a text-only result folded', () => {
