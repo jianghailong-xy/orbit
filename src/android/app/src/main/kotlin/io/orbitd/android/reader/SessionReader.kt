@@ -96,7 +96,7 @@ import kotlinx.serialization.json.*
 
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
-    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
+    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}, swap: (OrbitRoute) -> Unit = open) {
     // This page shows a conversation, and the store streams the one it shows: selecting it is the reader's own act, so a
     // landing session — which SessionDestination never sends here — is never subscribed to (§2.9 LS6). A reader leaving
     // clears the selection; a reader replacing another (a link to a second session) sets its own after the old one's.
@@ -170,6 +170,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         state.session?.snapshot?.detail?.let { runCatching { Wire.json.decodeFromJsonElement(DirectorySession.serializer(), it) }.getOrNull() }
     }
     val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
+    // The project this conversation is the coordinator or a member of (owner 2026-11-11, docs/mocks/project-sessions-column board 5):
+    // its bar carries the button that opens the project's sessions in a sheet. Read off the detail, or the list's row before that.
+    val projectId = listed?.projectMembership?.projectId ?: remember(data.sessions, route.id) {
+        data.sessions.values.firstNotNullOfOrNull { rows -> rows.firstOrNull { ObjectId.same(it.id, route.id) }?.projectMembership?.projectId }
+    }
+    val listCount = remember(projectId, data.sessions) { projectId?.let { SessionProjectMembers.members(it, data.sessions.values.flatten()).size } ?: 0 }
+    // What the sheet last counted — Open and Completed, read across workspaces — once it has been open; the lists' count before that.
+    var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
+    var projectSheet by remember(handle, route.id) { mutableStateOf(false) }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(shownRows)
     val nested = remember { object : NestedScrollConnection {
@@ -427,9 +436,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
             if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
         }, actions = {
+            if (projectId != null) ProjectSessionsButton(sheetCount ?: listCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
                 actions, open, { action = it }, { details = true }, leave)
         })
+        if (projectSheet && projectId != null) ProjectSessionsSheet(app, handle, projectId, route.workspaceId, data, api, open,
+            close = { projectSheet = false }, onCount = { sheetCount = it }) { next ->
+            projectSheet = false
+            if (!ObjectId.same(next.id, route.id)) swap(next)
+        }
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail

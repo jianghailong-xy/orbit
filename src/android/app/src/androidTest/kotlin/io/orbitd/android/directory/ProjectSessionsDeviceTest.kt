@@ -2,6 +2,7 @@ package io.orbitd.android.directory
 
 import io.orbitd.android.hasRowMenu
 import io.orbitd.android.openRowMenu
+import io.orbitd.android.openProjectSessionsPage
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.ui.semantics.Role
@@ -30,7 +31,8 @@ import org.junit.runner.RunWith
 
 /**
  * A05d on a device, over a controlled HTTP fixture (not a deployment): a workspace's list draws project Launch's sessions as one row
- * in its coordinator's place (A05-6), the row opens the project's sessions page over the list and Back returns to it, and the
+ * in its coordinator's place (A05-6), the row opens the coordinator's conversation, whose bar's button opens the project's sessions in a
+ * bottom sheet where a member picked takes the conversation's place, Back returning to the list (owner 2026-11-11), and the
  * drawer's project row opens that page as its destination's root (A05-7). The theme is the device's (the script runs it light and
  * dark); every step leaves a screenshot in files/a05d/<theme>.
  */
@@ -82,29 +84,38 @@ class ProjectSessionsDeviceTest {
                 capture("02-project-row-menu")
                 compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick(); settle()
 
-                // A05-7 · the row opens the project's sessions over the list.
-                compose.onNodeWithTag("project-row:$launch").performClick()
-                await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("landing-card")) }
-                compose.awaitListed(hasText("Shipped docs"))
+                // Owner 2026-11-11 (docs/mocks/project-sessions-column board 5): the row opens the coordinator's conversation, whose bar
+                // carries the project's sessions button; the button opens the project's sessions in a bottom sheet.
+                compose.onNodeWithTag("project-row:$launch").performClick(); settle()
+                await { calls.any { it == "GET /api/sessions/$coord" } && exists(hasContentDescription("Project sessions")) }
+                assertFalse(exists(hasTestTag("project-sessions")))
+                capture("03-coordinator-with-button")
+                compose.onNodeWithContentDescription("Project sessions").performClick(); settle()
+                await { exists(hasTestTag("project-sessions-sheet")) && exists(hasTestTag("landing-card")) }
                 await { exists(hasText("Launch") and hasText("Project · 4 sessions")) }
-                compose.onNodeWithContentDescription("Back").assertExists()
                 compose.onNodeWithContentDescription("Open Project").assertExists()
+                capture("04-project-sessions-sheet")
+                compose.awaitListed(hasText("Shipped docs"))
                 assertEquals(listOf("Coordinator", "Coordinate launch", "Today", "Wire tests", "Quota retry", "2–7 days ago", "Shipped docs"), pageLines())
                 assertTrue(compose.listed(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")))
-                capture("03-project-sessions")
+                // A member picked in the sheet closes it and takes the conversation's place; its bar carries the same button.
+                compose.listed(hasText("Wire tests") and hasClickAction())
+                compose.onNode(hasText("Wire tests") and hasClickAction()).performClick(); settle()
+                await { calls.any { it == "GET /api/sessions/$worker" } && !exists(hasTestTag("project-sessions-sheet")) }
+                await { exists(hasContentDescription("Project sessions")) }
+                capture("05-member-with-button")
                 compose.onNodeWithContentDescription("Back").performClick(); settle()
                 await { exists(hasTestTag("project-row:$launch")) }
                 assertFalse(exists(hasTestTag("project-sessions")))
-                capture("04-back-to-list")
 
                 // A05-7 · the drawer's project row: the same page as its destination's root, led by the drawer's button.
                 openDrawer(); await { exists(drawerRow("Launch")) }
-                capture("05-drawer")
+                capture("06-drawer")
                 compose.onNode(drawerRow("Launch")).performClick(); settle()
                 await { exists(hasTestTag("project-sessions")) }
                 compose.awaitListed(hasText("Shipped docs"))
                 compose.onNodeWithContentDescription("Back").assertDoesNotExist()
-                capture("06-drawer-root")
+                capture("07-drawer-root")
                 compose.onNodeWithContentDescription("Open Project").performClick(); settle()
                 await { exists(hasTestTag("project-detail")) }
                 compose.onNodeWithContentDescription("Back").performClick(); settle()
@@ -114,12 +125,12 @@ class ProjectSessionsDeviceTest {
                 started = false
                 openDrawer(); compose.onNode(drawerRow("Alpha")).performClick(); settle()
                 await { exists(hasTestTag("project-row:$launch")) }
-                compose.onNodeWithTag("project-row:$launch").performClick()
+                compose.openProjectSessionsPage(launch)
                 await { exists(hasTestTag("project-sessions-review-start")) && exists(hasText("Not started · 8 tasks")) }
-                capture("07-not-started-asked")
+                capture("08-not-started-asked")
                 compose.onNodeWithTag("project-sessions-review-start").performClick()
                 awaitStartCard()
-                capture("08-start-card")
+                capture("09-start-card")
                 compose.onNodeWithTag("project-start-request-cancel").performClick(); settle()
                 File(evidence, "result.txt").writeText("PASS\n")
             } catch (failure: Throwable) {

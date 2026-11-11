@@ -24,8 +24,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /** A05-6 and A05-7 in the production shell (iOS 164d91245, 86b2ceaa4, 609d4f226, 859fc2e0c, ff3711fdf, aa163019d): a workspace's list
- * draws a project's sessions as one row in its coordinator's place, saying what they say; the row opens the project's sessions page
- * over the list, and Back returns to it; the drawer's project row opens that page as its destination's root. */
+ * draws a project's sessions as one row in its coordinator's place, saying what they say; the row opens the coordinator's conversation,
+ * whose bar opens the project's sessions in a bottom sheet (owner 2026-11-11), and its menu's Sessions opens them as a page over the
+ * list; the drawer's project row opens that page as its destination's root. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ProjectShellApplication::class, qualifiers = "w411dp-h891dp")
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -59,29 +60,59 @@ class ProjectSessionsShellTest {
         assertEquals("Session running", row.fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
     }
 
-    @Test fun theRowOpensTheProjectsSessionsOverTheListAndBackReturnsToIt() {
+    /** Owner 2026-11-11 (docs/mocks/project-sessions-column board 5): the row opens the coordinator's conversation, not the project's
+     * sessions page; the conversation's bar carries the project glyph and the project's session count ("Project sessions"), which opens
+     * those sessions in a bottom sheet — the page as it is, under a head with ✕ — and Back from the conversation returns to the list. */
+    @Test fun theRowOpensTheCoordinatorWhoseBarOpensTheProjectsSessionsInASheet() {
         signIn(); openAlpha()
         compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
-        await { exists(hasTestTag("project-sessions")) && exists(hasText("Shipped docs")) }
-        compose.onNodeWithContentDescription("Back").assertExists()
-        // The bar: the project's name over "Project · N sessions", and the button that opens its page.
+        await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.COORD}" } && exists(hasContentDescription("Project sessions")) }
+        compose.onAllNodesWithTag("project-sessions").assertCountEquals(0)
+        compose.onAllNodesWithTag("project-row:${ProjectShell.LAUNCH}").assertCountEquals(0)
+        // Before the sheet has read anything, the count is the Open list's: the coordinator and its two Open members.
+        compose.onNode(hasTestTag("project-sessions-button-count") and hasText("3"), useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Project sessions").performClick()
+        await { exists(hasTestTag("project-sessions-sheet")) && exists(hasText("Shipped docs")) }
         await { exists(hasText("Launch") and hasText("Project · 4 sessions")) }
         compose.onNodeWithContentDescription("Open Project").assertExists()
-        // Read across workspaces, by project: Open and Completed together, the coordinator first, the rest by recency.
-        assertTrue(ProjectShell.calls.any { it == "GET sessions?view=open&projectId=${ProjectShell.LAUNCH}&includeLanding=1" })
         assertTrue(ProjectShell.calls.any { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}&includeLanding=1" })
         assertEquals(listOf("Coordinator", "Coordinate launch", "Today", "Wire tests", "Quota retry", "2–7 days ago", "Shipped docs"), pageLines())
         compose.onNode(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")).assertExists()
-        // A task landing on the project branch is a card of its own under the progress card (A11-11), no longer a row of it.
-        await { exists(hasTestTag("landing-card")) }
-        compose.onNode(hasTestTag("landing-card:what") and hasText("Wire the page"), useUnmergedTree = true).assertExists()
-        compose.onAllNodes(hasTestTag("landing-card") and hasAnyAncestor(hasTestTag("project-sessions-progress"))).assertCountEquals(0)
-        // No page search and no New session on the page.
-        compose.onAllNodes(hasText("Search sessions") and hasAnyAncestor(hasTestTag("project-sessions"))).assertCountEquals(0)
-        compose.onAllNodes(hasText("New session") and hasAnyAncestor(hasTestTag("project-sessions"))).assertCountEquals(0)
+        // ✕ closes it; the conversation stays, and the button now counts what the sheet read, Completed too.
+        compose.onNodeWithTag("project-sessions-sheet-close").performClick()
+        await { !exists(hasTestTag("project-sessions-sheet")) }
+        await { exists(hasTestTag("project-sessions-button-count") and hasText("4"), unmerged = true) }
         compose.onNodeWithContentDescription("Back").performClick()
         await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
-        compose.onAllNodesWithTag("project-sessions").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Project sessions").assertCountEquals(0)
+    }
+
+    /** Board 5 ③: a member picked in the sheet closes it and opens in the conversation's place — Back returns to the list, not to the
+     * coordinator — and a member's bar carries the same button, whose sheet opens the coordinator the same way. */
+    @Test fun aMemberPickedInTheSheetClosesItAndTakesTheConversationsPlace() {
+        signIn(); openAlpha()
+        openSheetFromTheRow()
+        pickInSheet("Wire tests")
+        await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.WORKER}" } && !exists(hasTestTag("project-sessions-sheet")) }
+        await { exists(hasContentDescription("Project sessions")) }
+        val coordinatorReads = ProjectShell.calls.count { it == "GET sessions/${ProjectShell.COORD}" }
+        compose.onNodeWithContentDescription("Project sessions").performClick()
+        await { exists(hasTestTag("project-sessions-sheet")) && exists(hasText("Coordinate launch") and hasClickAction()) }
+        pickInSheet("Coordinate launch")
+        await { ProjectShell.calls.count { it == "GET sessions/${ProjectShell.COORD}" } > coordinatorReads && !exists(hasTestTag("project-sessions-sheet")) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+    }
+
+    /** A session in no project carries no project sessions button; a project's member opened from the list does. */
+    @Test fun onlyAProjectsConversationsCarryTheButton() {
+        signIn(); openAlpha()
+        await { exists(hasRowMenu("Options for Plain notes")) }
+        compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
+        await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.PLAIN}" } && exists(hasContentDescription("Back")) }
+        compose.waitForIdle()
+        compose.onAllNodesWithContentDescription("Project sessions").assertCountEquals(0)
     }
 
     /** A11-11 (iOS 749d995c5, owner decision 2026-10-11): the landing in flight is a card of its own under the progress card, in the
@@ -89,7 +120,7 @@ class ProjectSessionsShellTest {
      * the sentence that takes the reader off the hook. From a server that lists no jobs its press opens the project's page. */
     @Test fun theLandingInFlightIsACardOfItsOwnUnderTheProgressCard() {
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("landing-card")) }
         val progress = compose.onNodeWithTag("project-sessions-progress").fetchSemanticsNode().boundsInRoot
         val card = compose.onNodeWithTag("landing-card").fetchSemanticsNode().boundsInRoot
@@ -108,7 +139,7 @@ class ProjectSessionsShellTest {
         ProjectShell.started = false; ProjectShell.startRequest = true
         ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server", "c" to "C · Web", "d" to "D · Android"), listOf("a" to "b", "a" to "c", "a" to "d"))
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions-review-start")) }
         compose.onNodeWithTag("project-sessions-review-start").performClick()
         await { exists(hasTestTag("project-start-request-task-graph")) }
@@ -122,7 +153,7 @@ class ProjectSessionsShellTest {
         ProjectShell.started = false
         ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server"), listOf("a" to "b"))
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions-start-own")) }
         compose.onNodeWithTag("project-sessions-start-own").performClick()
         await { exists(hasTestTag("project-start-plan-graph")) }
@@ -137,7 +168,7 @@ class ProjectSessionsShellTest {
         ProjectShell.started = false; ProjectShell.startRequest = true
         ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server"), listOf("a" to "b"))
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions-review-start")) }
         ProjectShell.documentStatus = 500
         compose.onNodeWithTag("project-sessions-review-start").performClick()
@@ -156,7 +187,7 @@ class ProjectSessionsShellTest {
         ProjectShell.started = false; ProjectShell.startRequest = true
         ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server"), listOf("a" to "b"))
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions-review-start")) }
         ProjectShell.holdDocument = CompletableDeferred()
         compose.onNodeWithTag("project-sessions-review-start").performClick()
@@ -175,7 +206,7 @@ class ProjectSessionsShellTest {
         ProjectShell.started = false
         ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server"), listOf("a" to "b"))
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions-start-own")) }
         ProjectShell.documentStatus = 500
         compose.onNodeWithTag("project-sessions-start-own").performClick()
@@ -245,7 +276,7 @@ class ProjectSessionsShellTest {
     /** A project's member is listed where its coordinator is: of its sessions, only the coordinator's row offers Move…. */
     @Test fun aMembersMenuHasNoMoveAndTheCoordinatorsHasIt() {
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasRowMenu("Options for Wire tests")) }
         compose.onNode(hasRowMenu("Options for Wire tests")).openRowMenu()
         await { exists(hasText("Rename") and hasAnyAncestor(isDialog())) }
@@ -258,7 +289,7 @@ class ProjectSessionsShellTest {
 
     @Test fun aMemberOpensOverThePageAndTheProjectButtonOpensItsPage() {
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasText("Shipped docs") and hasClickAction()) }
         compose.onNode(hasText("Shipped docs") and hasClickAction()).performClick()
         await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.DONE}" } }
@@ -283,7 +314,7 @@ class ProjectSessionsShellTest {
     @Test fun aProjectNobodyStartedSaysSoAndItsCoordinatorsRequestOpensTheStartCard() {
         ProjectShell.started = false; ProjectShell.startRequest = true
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions-review-start")) }
         compose.onNode(hasTestTag("project-sessions-progress-line") and hasText("Not started · 8 tasks")).assertExists()
         compose.onNode(hasText("Ready to start") and hasAnyAncestor(hasTestTag("project-sessions-start"))).assertExists()
@@ -299,7 +330,7 @@ class ProjectSessionsShellTest {
     @Test fun nobodyAskingLeavesTheOwnersOwnStart() {
         ProjectShell.started = false
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions-start-own")) }
         compose.onNode(hasText("The coordinator hasn’t asked yet")).assertExists()
         compose.onNodeWithTag("project-sessions-start-own").assert(hasText("Start…")).performClick()
@@ -329,7 +360,7 @@ class ProjectSessionsShellTest {
     @Test fun aProjectThatIsDoneDrawsItsEndingInTheProgressCardsPlace() {
         ProjectShell.done = true
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions-ending-settled")) }
         val ending = hasAnyAncestor(hasTestTag("project-sessions-ending-settled"))
         compose.onNode(hasText("This project is done") and ending, useUnmergedTree = true).assertExists()
@@ -348,7 +379,7 @@ class ProjectSessionsShellTest {
     @Test fun theEndingNamesItsRecorderAndAnOlderReadKeepsTheProgressCard() {
         ProjectShell.done = true; ProjectShell.doneBy = "OWNER"; ProjectShell.doneCounts = false
         signIn(); openAlpha()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions-progress-line") and hasText("Done")) }
         compose.onAllNodesWithTag("project-sessions-ending-settled").assertCountEquals(0)
         // The current read, recorded by the owner: the same ending, spelled by its badge.
@@ -364,7 +395,7 @@ class ProjectSessionsShellTest {
     @Test fun aMemberMovedToTrashLeavesThePageAndItsProjectRowOnThePress() {
         signIn(); openAlpha()
         compose.onNodeWithTag("project-row-running", useUnmergedTree = true).assertExists()
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasText("Project · 4 sessions")) && exists(hasRowMenu("Options for Wire tests")) }
         val answer = CompletableDeferred<Unit>()
         ProjectShell.holdDelete = answer
@@ -388,7 +419,7 @@ class ProjectSessionsShellTest {
         signIn(); openAlpha()
         val early = CompletableDeferred<Unit>()
         ProjectShell.holdMembers = early
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         settled { completedReads() == 1 }
         ProjectShell.holdMembers = null
         // Drawn from the app's own Open list while the page's read is out.
@@ -444,6 +475,18 @@ class ProjectSessionsShellTest {
         compose.onNodeWithTag("drawer-project-needs-you:${ProjectShell.QUIET}", useUnmergedTree = true).assertExists()
     }
 
+    private fun openSheetFromTheRow() {
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasContentDescription("Project sessions")) }
+        compose.onNodeWithContentDescription("Project sessions").performClick()
+        await { exists(hasTestTag("project-sessions-sheet")) && exists(hasText("Coordinate launch") and hasClickAction()) }
+    }
+    /** A member's row in the sheet, scrolled into the half-height sheet first. */
+    private fun pickInSheet(title: String) {
+        val row = hasText(title) and hasClickAction() and hasAnyAncestor(hasTestTag("project-sessions-list"))
+        compose.onNodeWithTag("project-sessions-list").performScrollToNode(row)
+        compose.onNode(row).performClick()
+    }
     /** A wait on the fixture or the store, not the screen: it idles the UI on every look, or the store's coroutines (on the main
      * looper) would never run. */
     private fun settled(condition: () -> Boolean) = await { compose.waitForIdle(); condition() }
@@ -472,7 +515,7 @@ class ProjectSessionsShellTest {
     private fun openAlpha() {
         await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
     }
-    private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+    private fun exists(matcher: SemanticsMatcher, unmerged: Boolean = false) = compose.onAllNodes(matcher, useUnmergedTree = unmerged).fetchSemanticsNodes().isNotEmpty()
     private fun app() = compose.activity.application as OrbitApplication
     private fun signIn() {
         compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedOut }
