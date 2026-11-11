@@ -316,7 +316,7 @@ private struct MachineSetupCard: View {
             .foregroundStyle(Color.accentColor)
     }
 
-    private func step<Content: View>(number: Int, done: Bool, @ViewBuilder content: () -> Content) -> some View {
+    private func step<Content: View>(number: Int, done: Bool, @ViewBuilder content: @escaping () -> Content) -> some View {
         SetupStepRow(number: number, done: done, content: content)
     }
 
