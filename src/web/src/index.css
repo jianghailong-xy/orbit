@@ -23226,13 +23226,15 @@ div.landing-jobs-open {
    card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields
    drawn instead of the paragraph they were rendered into. Amber rather than brand: an exception
    item is something nobody's work is waiting behind, and every one of them is somebody's to decide. */
+/* Orbit's cards sit on the agent's side, in the reply column at its full width: the right side is the
+   owner's own words only (docs/mocks/orbit-cards-left, approved 2026-11-11). Same for .tsc/.psc/.crc/.smc. */
 .oic-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .oic {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -23403,11 +23405,11 @@ div.landing-jobs-open {
    never read as the same thing. */
 .tsc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .tsc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23594,11 +23596,11 @@ div.landing-jobs-open {
    words are another agent's, and the head says whose. */
 .smc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .smc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23799,11 +23801,11 @@ div.landing-jobs-open {
    as a raised list of links. */
 .psc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .psc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23933,11 +23935,11 @@ div.landing-jobs-open {
    handed, the reviewer's return handed to the run, and the owner's answers handed to the reviewer. Orbit's turns, drawn as the started card is. */
 .crc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .crc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
