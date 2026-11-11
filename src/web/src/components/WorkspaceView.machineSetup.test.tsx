@@ -94,6 +94,8 @@ const austin = (over: Partial<Machine> = {}): Machine => ({
   ...over,
 });
 
+/** What the account's Completed list holds: one session by default, none for a new account. */
+let history: unknown[] = [];
 let runners: Machine[];
 let workspaces: unknown[];
 let providers: unknown[];
@@ -158,6 +160,7 @@ beforeEach(() => {
   vi.mocked(uploadAttachment).mockReset();
   vi.mocked(uploadAttachment).mockImplementation(async () => ({ id: 'att-1' }) as never);
   apiMock.mockReset();
+  history = [{ id: 'earlier' }];
   apiMock.mockImplementation(((path: string, options?: { method?: string; body?: unknown }) => {
     if (options?.method === 'PATCH') {
       patched.push({ path, body: options.body });
@@ -172,6 +175,8 @@ beforeEach(() => {
     if (path === '/workspaces') return Promise.resolve(workspaces);
     if (path === '/providers') return Promise.resolve(providers);
     if (['/providers/pools', '/providers/shared-pools', '/session-tags', '/session-folders'].includes(path)) return Promise.resolve([]);
+    // An account that has had a session already: the setup card, not a new account's welcome card.
+    if (path === '/sessions?view=completed&limit=1') return Promise.resolve(history);
     if (path.startsWith('/sessions?')) return Promise.resolve([]);
     if (path.endsWith('/login')) return Promise.resolve({ status: null, engine: null, url: null, userCode: null, message: null });
     if (path.startsWith(`/sessions/${SESSION}`)) {
@@ -920,5 +925,36 @@ describe('rule 8: the line that opens the conversation', () => {
     await waitForUi(() => expect(line()).toBeTruthy());
     expect(said(line())).toBe('Created workspace app on orbit@austin · /home/orbit/code/app');
     expect(button('Rename')).toBeUndefined();
+  });
+});
+
+/**
+ * A new account's first machine (docs/mocks/new-user-onboarding): the setup card greets it, and offers
+ * first messages that fill the composer. Only while the account has never had a session.
+ */
+describe('a new account', () => {
+  it('is greeted by the setup card, which offers first messages that fill the composer', async () => {
+    history = [];
+    await open(`/runners/${AUSTIN}/new`);
+    await waitForUi(() => expect(said(card()?.querySelector('.msc-title'))).toBe('Welcome to Orbit, Reader'));
+    expect(card()!.querySelector('[data-step="folder"]')).toBeTruthy();
+    expect(card()!.querySelector('[data-step="engine"]')).toBeTruthy();
+    const examples = [...card()!.querySelectorAll<HTMLButtonElement>('.welcome-example')];
+    expect(examples.map((b) => said(b))).toEqual([
+      'Build a one-page site that shows today’s weather for a city',
+      'Read github.com/owner/repo and explain how it is put together',
+      'Write a script that renames my photos by the date they were taken',
+    ]);
+    expect(composer().placeholder).toBe('Describe a task for the agent…');
+    await act(async () => examples[1].click());
+    await settle();
+    expect(composer().value).toBe('Read github.com/owner/repo and explain how it is put together');
+    expect(examples[1].getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('an account that has had a session gets the setup card as before', async () => {
+    await openMachine();
+    expect(said(card()!.querySelector('.msc-title'))).toBe('Set up orbit@austin');
+    expect(card()!.querySelector('.welcome-example')).toBeNull();
   });
 });

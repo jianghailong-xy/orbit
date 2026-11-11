@@ -796,9 +796,9 @@ class WikiMaintainRun {
     // Whether this machine reads whole files (repoOps.cache, 0406): a bounded one is asked with the old limits.
     this.wholeFile = readiness.runner?.wholeFile === true;
     const held = await prisma.wikiRepoSnapshot.findFirst({ where: { spaceId: job.spaceId, ownerId: job.ownerId }, select: { sha: true } });
-    const settled = await this.operation('snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of origin/main');
+    const settled = await this.operation('snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of the default branch');
     if (settled.state !== 'succeeded') {
-      throw new WikiJobInfraError(`REPO_OP_FAILED: the snapshot of origin/main ${settled.state}: ${settled.error ?? ''}`);
+      throw new WikiJobInfraError(`REPO_OP_FAILED: the snapshot of the default branch ${settled.state}: ${settled.error ?? ''}`);
     }
     const sha = String(settled.result?.sha ?? '');
     const snapshot = await readWikiRepoSnapshot(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });

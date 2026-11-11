@@ -249,7 +249,7 @@ function parseWrite(body: unknown, planKeys: ReadonlySet<string>, slug: string, 
   write.planVersion = problems.integer(body.planVersion, 'planVersion', 1) ?? 0;
   const repoSha = typeof body.repoSha === 'string' ? body.repoSha.trim() : '';
   if (!COMMIT.test(repoSha)) {
-    problems.fail('repoSha', 'is required: the origin/main commit the repository was read at, 40 lowercase hex characters (each section is kept with it)');
+    problems.fail('repoSha', 'is required: the default branch\'s commit the repository was read at, 40 lowercase hex characters (each section is kept with it)');
   }
   write.repoSha = repoSha;
   write.model = problems.optionalText(body.model, 'model', 200);
@@ -1376,7 +1376,7 @@ export class WikiDocs {
       if (!['repoSha', 'paths'].includes(key)) problems.fail(key, `${key} is not a field of a withdrawal: repoSha, paths`);
     }
     if (typeof raw.repoSha !== 'string' || !COMMIT.test(raw.repoSha)) {
-      problems.fail('repoSha', 'is the origin/main commit the paths are gone at: 40 lowercase hex characters');
+      problems.fail('repoSha', 'is the default branch\'s commit the paths are gone at: 40 lowercase hex characters');
     }
     const listed = Array.isArray(raw.paths) ? raw.paths : [];
     if (!Array.isArray(raw.paths) || raw.paths.length === 0) problems.fail('paths', 'names at least one repository path that is gone');

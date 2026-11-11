@@ -219,7 +219,7 @@ func TestWikiFetchIsNotHeldByWhatGitLeavesRunning(t *testing.T) {
 	t.Setenv("GIT_TRACE", trace)
 
 	done := make(chan error, 1)
-	go func() { done <- fetchWikiOriginMain(f.checkout) }()
+	go func() { _, err := fetchWikiOriginRef(f.checkout); done <- err }()
 	select {
 	case err := <-done:
 		if err != nil {

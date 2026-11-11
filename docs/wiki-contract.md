@@ -321,7 +321,7 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
 
 | type | 字段 | 复验结果 | 复验方式 |
 | --- | --- | --- | --- |
-| `path` | path | verified / missing | runner：`git cat-file -e origin/main:<path>` |
+| `path` | path | verified / missing | runner：`git cat-file -e <ref>:<path>` |
 | `symbol` | path, symbol, regionSha256? | verified / changed / missing | runner：`git grep -n` 找符号，对其后若干行做哈希比对 |
 | `commit` | sha（40 位小写十六进制） | verified / missing | runner：`git merge-base --is-ancestor`，必须验 |
 | `criterion` | criterionId, semanticHash? | verified / changed | 服务端比对 semanticHash |
@@ -439,8 +439,8 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
     `wiki-import-golden.spec.ts` 让服务端的实现逐字节对上它；P10 放行了服务端读 note 与 runner 不同的地方（`wikiImportNote`），那里以服务端的
     为准，Go 那边的不回移。回答的 JSON 按 encoding/json 的读法：`{entries}`
     包裹键不区分大小写，字符串和键里的孤立代理字符读作 U+FFFD，超出 float64 范围的数字使整个回答判为解析失败（不读成 Infinity）。
-    锚点查 space 的快照：路径在 origin/main 的树里、
-    提交被 origin/main 可达；space 的 runner 能取时先要一份新快照（最多等 180 秒，持租约等），取不到就用 space 已有的快照，
+    锚点查 space 的快照：路径在默认分支的树里、
+    提交被默认分支可达；space 的 runner 能取时先要一份新快照（最多等 180 秒，持租约等），取不到就用 space 已有的快照，
     都没有就不带锚点。之后先 dry run，再以 import 来源、调用会话的身份、`wiki-import:<空间和 op 的哈希>` 幂等键提议；
     分批规则同上：遇到 `WIKI_QUOTA` 或 `WIKI_REVIEW_QUEUE_FULL`，剩下的留给下一次。
   - 命令停止等待（作业留在服务端，id 记在本机，下一次运行先收它的结果）：System model 拒了 key 或没配置时立即停；模型
@@ -1225,7 +1225,8 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
 
 ### 17.2 runner 怎么验
 
-- 先 `git fetch origin +refs/heads/main:refs/remotes/origin/main`，再对 `refs/remotes/origin/main` 此刻指向的提交逐个检查；fetch 失败就什么都不验、
+- 先读 origin 的默认分支（`git ls-remote --symref origin HEAD`，读不到时用 checkout 的 `refs/remotes/origin/HEAD`），再
+  `git fetch origin +refs/heads/<name>:refs/remotes/origin/<name>`，对该 ref 此刻指向的提交逐个检查；fetch 失败就什么都不验、
   什么都不报。报告里带这个 40 位 sha（`ref`）。
 - path：`git cat-file -e <ref>:<path>`（去掉开头的 `./`、`/` 和结尾的 `/`），在就是 verified，不在就是 missing。
 - symbol：`git grep -n -w -F -I` 在该文件（路径是目录时取路径序的第一个文件）里找符号作为整词出现的第一行；从这一行起共 20 行
@@ -1822,7 +1823,7 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 P11（2026-10-19）删除了这三条命令（契约原来的 `plan.jobs.cli`）和 runner 上的起草流水线（`src/runner-go/wiki_plan*.go`）。下面的步骤
 （`plan.jobs.run`）是服务端的 plan 作业照做的，细节见 21.10。
 
-- **准备材料**：space 的快照——runner 在维护 workspace 的 checkout 上 fetch 后按 origin/main 做的，checkout 不是 space 的仓库就判失败：模块结构
+- **准备材料**：space 的快照——runner 在维护 workspace 的 checkout 上 fetch 后按仓库默认分支做的，checkout 不是 space 的仓库就判失败：模块结构
   与入口、`docs/` 标题树（不含 `docs/mocks`、`docs/evidence`）、contracts 清单、代码符号索引；再读 plan 材料（`plan.jobs.materials`）：项目、
   会话标题的统计与聚类、条目与主题分布。
 - **分四步起草**，每个单元一次 System model 请求（经请求队列，不开 thinking），紧凑行格式：目录骨架 → 按大类补每篇的读者与范围 → 逐篇大纲
