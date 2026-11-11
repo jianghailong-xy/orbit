@@ -488,6 +488,15 @@ export class QueueService {
             AND NOT (s.id = ANY(${paused}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
+            -- Settings › Translation (sessions/turn-translation.ts): a new or revived session whose only
+            -- work is the owner's message, HELD while it is translated or after its translation failed,
+            -- waits for that message. Releasing it wakes the queue again.
+            AND NOT (
+              EXISTS (SELECT 1 FROM "conversation_turn" held
+                       WHERE held."session_id" = s.id AND held."status" = 'HELD')
+              AND NOT EXISTS (SELECT 1 FROM "conversation_turn" work
+                               WHERE work."session_id" = s.id AND work."status" IN ('PENDING', 'IN_FLIGHT'))
+            )
             -- An unresolved/disabled configured identity must never become a Claude job. A shared
             -- provider resolves for an admin's session only (usableProviderScope): a member's is never claimed.
             --

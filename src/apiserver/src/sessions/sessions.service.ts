@@ -125,6 +125,10 @@ import {
   CREATE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
   type WikiChatContext,
+  type TranslationActionResponse,
+  type TranslationLanguage,
+  type TurnTranslation,
+  AGENT_LANGUAGE,
 } from '@orbit/shared';
 import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -219,6 +223,14 @@ import {
   titleFromPrompt,
 } from './naming';
 import { enqueueRecap, type RecapOutcome } from './recap';
+import { translate, TranslationFailed } from './translation';
+import {
+  HELD_TURN_STATUS,
+  heldTurnColumns,
+  ownerTranslationLanguage,
+  turnTranslationOf,
+  turnTranslationQueue,
+} from './turn-translation';
 import {
   broaden,
   normalizeSearchQuery,
@@ -427,6 +439,10 @@ interface ListedQueuedTurn extends TurnCards {
    *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
    *  turn somebody sent. */
   authoredByOrbit?: true;
+  /** Session translation (@orbit/shared TurnTranslation): this is the owner's message translated, or
+   *  being translated, for the engine. `content` is then the English delivered — or, while the turn is
+   *  TRANSLATING or FAILED and so not delivered, the owner's words as well. Absent otherwise. */
+  translation?: TurnTranslation;
 }
 
 interface ListedActiveTurn extends ListedQueuedTurn {
@@ -1057,6 +1073,13 @@ export class SessionsService {
        * opening turn is then laid down now, carrying the sender, rather than by the claim, which knows of none.
        */
       externalSender?: ExternalTurnSender;
+      /**
+       * The owner's own door (POST /sessions): with Settings › Translation on, the opening message is
+       * laid down HELD in the session's own INSERT transaction and translated before the claim may hand
+       * the session out (turn-translation.ts). Words typed by a person only: a task run, a shell-first
+       * or attachments-only opening, a wiki chat and a Feishu mention are not translated.
+       */
+      translate?: boolean;
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -1563,15 +1586,27 @@ export class SessionsService {
         ...(wikiChat ? { wikiChatSpaceId: wikiChat.spaceId } : {}),
       },
     });
+    // Settings › Translation: the language the opening message is translated from, or null.
+    const heldFrom = opts?.translate && !dto.taskId && !wikiChat && !dto.shell && !attachmentsAlone
+      && !opts.externalSender && !opts.fence && dto.prompt.trim()
+      ? await ownerTranslationLanguage(this.prisma, ownerId)
+      : null;
     const session = await (newWorkspace
       ? this.createInNewWorkspace(ownerId, newWorkspace, insertSession, {
           attachmentIds,
           shell: dto.shell === true,
           attachmentsAlone,
+          heldFrom,
         })
       : wikiChat
         ? this.writeChat(dto.workspaceId!, dto.prompt, wikiChat, attachmentIds, insertSession)
-        : this.writeFenced(opts?.fence, (client) => insertSession(client))
+        : heldFrom
+          ? withTransactionRetry(this.prisma, async (tx) => {
+              const created = await insertSession(tx);
+              await this.insertHeldOpeningLocked(tx, created, heldFrom);
+              return created;
+            }, loggedRetry(this.logger, 'sessions.createHeldOpening'))
+          : this.writeFenced(opts?.fence, (client) => insertSession(client))
     ).catch(async (e: unknown) => {
       // The folder checked above was deleted before this INSERT reached it: the same 400 as naming
       // a deleted one. Re-read rather than parsed out of the error, so a P2003 about any other key
@@ -1599,6 +1634,8 @@ export class SessionsService {
         where: { id: { in: attachmentIds }, sessionId: null, turnId: null, taskId: null },
         data: { sessionId: session.id },
       });
+      // A held opening is already laid down, so no claim will seed it and link them: link them now.
+      if (heldFrom) await this.linkHeldOpeningAttachments(this.prisma, session.id);
     }
     // A shell-first session (composed from a `!cmd` draft): seed its first turn as a 'shell'
     // turn now, using the SAME fixed clientTurnId the claim uses, so buildSession sees a turn
@@ -1617,6 +1654,14 @@ export class SessionsService {
     if (attachmentsAlone && !newWorkspace) await this.seedOpeningTurn(session);
     // Opened by somebody outside Orbit: the opening turn says who, so it is laid down now with them on it.
     else if (opts?.externalSender && !newWorkspace && !dto.shell) await this.seedOpeningTurn(session, opts.externalSender);
+    // A held opening starts being translated now that its session exists for everyone to see.
+    if (heldFrom) {
+      const opening = await this.prisma.conversationTurn.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: session.id, clientTurnId: SessionsService.initialTurnClientId(session.id) } },
+        select: { id: true },
+      });
+      if (opening) this.startTurnTranslation(session.id, opening.id);
+    }
     this.queue.notifySessionQueued(session.assignedRunnerId);
     // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
@@ -1767,7 +1812,7 @@ export class SessionsService {
     ownerId: string,
     target: NewWorkspaceTarget,
     insertSession: (tx: Prisma.TransactionClient, workspaceId: string) => PromiseLike<S>,
-    opening: { attachmentIds: readonly string[]; shell: boolean; attachmentsAlone: boolean },
+    opening: { attachmentIds: readonly string[]; shell: boolean; attachmentsAlone: boolean; heldFrom?: TranslationLanguage | null },
   ): Promise<S> {
     const lockKey = parseInt(createHash('sha256').update(ownerId).digest('hex').slice(0, 8), 16) & 0x7fffffff;
     const made = await withTransactionRetry(this.prisma, async (tx) => {
@@ -1803,6 +1848,10 @@ export class SessionsService {
         });
       }
       if (opening.attachmentsAlone) await this.ensurePromptSeeded(tx, created);
+      if (opening.heldFrom) {
+        await this.insertHeldOpeningLocked(tx, created, opening.heldFrom);
+        await this.linkHeldOpeningAttachments(tx, created.id);
+      }
       return { created, workspace };
     }, loggedRetry(this.logger, 'sessions.createInNewWorkspace')).catch((error: unknown) => {
       // The error's code or class, not its message, which can quote the values it was writing.
@@ -5766,6 +5815,35 @@ export class SessionsService {
   }
 
   /**
+   * A new or revived session's opening message under Settings › Translation: laid down as the seed
+   * turn (the same fixed key the claim seeds under, so buildSession sees it and seeds nothing), HELD,
+   * in the transaction that wrote the session. The claim does not hand out a PENDING session whose only
+   * work is held (queue.service trySessionClaim); releaseHeldTurn wakes it.
+   */
+  private async insertHeldOpeningLocked(
+    tx: Prisma.TransactionClient,
+    session: { id: string; prompt: string },
+    from: TranslationLanguage,
+  ): Promise<ConversationTurn> {
+    return this.insertTurnLocked(tx, session.id, {
+      kind: 'message',
+      content: session.prompt,
+      clientTurnId: SessionsService.initialTurnClientId(session.id),
+      ...heldTurnColumns(session.prompt, from),
+    });
+  }
+
+  /** The session's compose-page uploads, joined to its held opening as the claim's seed would join them. */
+  private async linkHeldOpeningAttachments(client: PrismaService | Prisma.TransactionClient, sessionId: string): Promise<void> {
+    const opening = await client.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId, clientTurnId: SessionsService.initialTurnClientId(sessionId) } },
+      select: { id: true },
+    });
+    if (!opening) return;
+    await client.attachment.updateMany({ where: { sessionId, turnId: null }, data: { turnId: opening.id } });
+  }
+
+  /**
    * Seed the session's first turn from its prompt, idempotently. A fresh PENDING session
    * isn't seeded until the runner claims it (queue.service.buildSession), so to queue a
    * follow-up onto one we must lay down the prompt as turn 1 first — otherwise the
@@ -6010,6 +6088,11 @@ export class SessionsService {
       externalSenderName?: string | null;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
+      /** A held message under Settings › Translation (heldTurnColumns, migration 0531). */
+      status?: string;
+      displayPrompt?: string;
+      translationState?: string;
+      translationLang?: string;
     },
   ) {
     const existing = await tx.conversationTurn.findUnique({
@@ -6270,6 +6353,13 @@ export class SessionsService {
        * replay of a committed key never reaches it, and a refusal it throws takes the turn with it.
        */
       onTurnWritten?: (tx: Prisma.TransactionClient, turn: ConversationTurn) => Promise<void>;
+      /**
+       * The owner's own door (POST /sessions/:id/turns and its siblings): when the owner has Settings ›
+       * Translation on and the server holds the DeepSeek key, the message is written HELD and translated
+       * before anything delivers it (turn-translation.ts). An option of this call and never a field of
+       * `dto`; every platform delivery and every session-to-session door leaves it unset.
+       */
+      translate?: boolean;
     },
   ) {
     assertPromptSize(dto.content, 'message');
@@ -6283,6 +6373,11 @@ export class SessionsService {
     // A wiki chat's page and selection (contract `chat.turns`): shape-checked before anything is read,
     // and taken only by a chat, which is decided under the lock below.
     const wikiContext = readWikiChatContext(dto.wikiContext);
+    // Settings › Translation: the language this message is translated from, or null when it goes as
+    // written. Words only — a `!cmd` is a command, and attachments alone carry no words.
+    const translateFrom = opts?.translate && dto.kind !== 'shell' && dto.content?.trim()
+      ? await ownerTranslationLanguage(this.prisma, ownerId)
+      : null;
     // Retried whole. This is where a user turn serializes against the runner's claim and against
     // turnComplete, and every one of those decisions is taken from the Session row read under the
     // lock inside the closure. A victim wrote no turn, so a re-run enqueues once — and the delivery
@@ -6331,13 +6426,17 @@ export class SessionsService {
           && intent === 'NEXT_TURN'
           && dto.kind !== 'shell'
           && existing.sendIntent === 'CURRENT_WORK';
+        // A translated message was held, so its route was taken when it was released (releaseHeldTurn):
+        // it may be either kind now, and its `content` is the English — the owner sent its original.
+        const translated = existing.translationState != null;
         if (
-          (intent === 'CURRENT_WORK' && existing.sendIntent !== 'CURRENT_WORK')
-          || (intent === 'NEXT_TURN'
-            && existing.sendIntent != null
-            && existing.sendIntent !== 'NEXT_TURN'
-            && !routedSteer)
-          || (intent === undefined && existing.sendIntent === 'CURRENT_WORK')
+          !translated && (
+            (intent === 'CURRENT_WORK' && existing.sendIntent !== 'CURRENT_WORK')
+            || (intent === 'NEXT_TURN'
+              && existing.sendIntent != null
+              && existing.sendIntent !== 'NEXT_TURN'
+              && !routedSteer)
+            || (intent === undefined && existing.sendIntent === 'CURRENT_WORK'))
         ) {
           throw new ConflictException(`clientTurnId was already used with ${existing.sendIntent ?? 'legacy intent'}`);
         }
@@ -6358,8 +6457,8 @@ export class SessionsService {
           storedAttachments,
         );
         if (
-          !expectedKinds.includes(existing.kind)
-          || existing.content !== dto.content
+          !(translated ? ['message', 'steer'] : expectedKinds).includes(existing.kind)
+          || (existing.displayPrompt ?? existing.content) !== dto.content
           || expectedAttachments.length !== storedAttachments.length
           || expectedAttachments.some((attachmentId, index) => attachmentId !== storedAttachments[index])
           || (existing.requestFingerprint != null
@@ -6372,7 +6471,7 @@ export class SessionsService {
         }
         return {
           turn: existing,
-          placement: await this.turnPlacement(tx, id, existing),
+          placement: existing.status === HELD_TURN_STATUS ? 'queued' as const : await this.turnPlacement(tx, id, existing),
           wakeQueue: false,
           wakeInbox: false,
           idempotent: true,
@@ -6386,6 +6485,16 @@ export class SessionsService {
       }
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
         throw new SessionNotSendable('the session has ended');
+      }
+      // Settings › Translation: written HELD, routed and woken only once translated (releaseHeldTurn).
+      if (translateFrom && dto.content) {
+        return {
+          turn: await this.insertHeldTurnLocked(tx, ownerId, session, dto, translateFrom, intent, wikiContext),
+          placement: 'queued' as const,
+          wakeQueue: false,
+          wakeInbox: false,
+          idempotent: false,
+        };
       }
       // A server-routed send is placed before anything may join it: whether it goes into the running
       // turn or waits behind it decides which queued turn it can join, and a placement changed after
@@ -6658,6 +6767,8 @@ export class SessionsService {
     }));
     if (queued.wakeQueue) this.queue.notifySessionQueued(turnRunnerId);
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
+    // A held message starts being translated now that the turn exists for everyone to see.
+    if (!queued.idempotent && queued.turn.status === HELD_TURN_STATUS) this.startTurnTranslation(id, queued.turn.id);
     // A message, a scheduled wakeup, a watch or a task's prompt that left the session waiting for its
     // runner wakes a sleeping managed runner. A turn joining a running one needs no wake.
     if (queued.wakeQueue) await this.wakeManagedRunner(turnRunnerId, 'turn');
@@ -6677,7 +6788,210 @@ export class SessionsService {
       ...('targetTurnId' in queued.turn && queued.turn.targetTurnId
         ? { targetTurnId: queued.turn.targetTurnId }
         : {}),
+      // Settings › Translation (@orbit/shared TurnTranslation): TRANSLATING on the send that held it.
+      ...(turnTranslationOf(queued.turn) ? { translation: turnTranslationOf(queued.turn) } : {}),
     };
+  }
+
+  /**
+   * Settings › Translation: write the owner's message HELD (turn-translation.ts). The attachments are
+   * checked and linked and the row previews the message as createTurn does, but nothing is routed or
+   * woken — the session stays as it is until releaseHeldTurn. Its route is taken at release: an explicit
+   * NEXT_TURN stays one (`send_intent`), and anything else — CURRENT_WORK or an N-1 client's
+   * unqualified send — is written into the engine turn running then, when there is one that can take it,
+   * and waits as the next message otherwise. A message translated for seconds may find the turn it was
+   * aimed at over; it is never refused for that.
+   */
+  private async insertHeldTurnLocked(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    session: Session,
+    dto: SessionTurnDto,
+    from: TranslationLanguage,
+    intent: SessionTurnIntent | undefined,
+    wikiContext: WikiChatContext | null,
+  ): Promise<ConversationTurn> {
+    const content = dto.content!;
+    const attachmentIds = await this.assertLinkableAttachments(ownerId, session.id, dto.clientTurnId, dto.attachmentIds, tx);
+    if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session, attachmentIds);
+    const turn = await this.insertTurnLocked(tx, session.id, {
+      kind: 'message',
+      content,
+      clientTurnId: dto.clientTurnId,
+      ...(intent === 'NEXT_TURN' ? { sendIntent: 'NEXT_TURN' as const } : {}),
+      ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
+      ...heldTurnColumns(content, from),
+    });
+    await this.linkAttachments(turn.id, attachmentIds, tx);
+    await tx.session.update({
+      where: { id: session.id },
+      data: {
+        lastTurnAt: new Date(),
+        // The owner's own words, as they wrote them.
+        ...pendingMessageColumns(content, null, null),
+        // The owner took over, as in createTurn.
+        retryAt: null,
+        retryClaimedAt: null,
+      },
+    });
+    return turn;
+  }
+
+  /** Translations this process has started and not finished: what a spec waits for. */
+  private readonly translationsInFlight = new Set<Promise<void>>();
+
+  /** Resolves once every translation this process has started so far has settled. For specs. */
+  async translationsSettled(): Promise<void> {
+    while (this.translationsInFlight.size > 0) await Promise.all([...this.translationsInFlight]);
+  }
+
+  /** Translate a held message in the background, after the request that held it has answered. */
+  private startTurnTranslation(sessionId: string, turnId: string): void {
+    const run: Promise<void> = turnTranslationQueue
+      .run(() => this.translateHeldTurn(sessionId, turnId))
+      .catch((error: unknown) => {
+        this.logger.warn(`translating turn ${turnId} of session ${sessionId} failed: ${(error as Error)?.message ?? error}`);
+      })
+      .finally(() => this.translationsInFlight.delete(run));
+    this.translationsInFlight.add(run);
+  }
+
+  /**
+   * One translation of a held message: released in English on success; FAILED on anything else — the
+   * translator's refusal, a mangled reply, the 20 s timeout — and so not delivered (decision 1A). Every
+   * change is announced on the session's stream (QUEUED_TURNS_CHANGED), which is what turns the chip.
+   */
+  private async translateHeldTurn(sessionId: string, turnId: string): Promise<void> {
+    const turn = await this.prisma.conversationTurn.findFirst({
+      where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: 'TRANSLATING' },
+      select: { displayPrompt: true, translationLang: true },
+    });
+    if (!turn) return;
+    const original = turnTranslationOf({ ...turn, translationState: 'TRANSLATING' });
+    let english: string | null = null;
+    let why = 'the message could not be read';
+    if (original) {
+      try {
+        english = await translate(original.original, original.from, AGENT_LANGUAGE);
+      } catch (error) {
+        why = error instanceof TranslationFailed ? `${error.reason}: ${error.message}` : String(error);
+      }
+    }
+    if (english !== null) {
+      // Success wins over a FAILED written meanwhile (a Retry raced, or another replica gave up on it).
+      await this.releaseHeldTurn(sessionId, turnId, english, 'DONE', ['TRANSLATING', 'FAILED']);
+      return;
+    }
+    const failed = await this.prisma.conversationTurn.updateMany({
+      where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: 'TRANSLATING' },
+      data: { translationState: 'FAILED' },
+    });
+    this.logger.warn(`turn ${turnId} of session ${sessionId} was not translated, so it was not sent (${why})`);
+    if (failed.count > 0) this.realtime.publishQueuedTurnsChanged(sessionId);
+  }
+
+  /**
+   * Deliver a held message: `content` becomes what the engine receives, status PENDING, routed as
+   * insertHeldTurnLocked says, and the session moved and woken exactly as createTurn moves and wakes it
+   * for a new message. Under the Session lock, like every enqueue. Null when the turn is no longer held
+   * in one of `from` (released, withdrawn, retried elsewhere); `ended` when the session can take no
+   * message any more, in which case the turn stays held.
+   */
+  private async releaseHeldTurn(
+    sessionId: string,
+    turnId: string,
+    content: string,
+    state: 'DONE' | 'SENT_AS_WRITTEN',
+    from: ReadonlyArray<'TRANSLATING' | 'FAILED'>,
+  ): Promise<{ turn: ConversationTurn } | { ended: true } | null> {
+    let runnerId: string | null = null;
+    let nextStatus: RunStatus | null = null;
+    const released = await withTransactionRetry(this.prisma, async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
+      if (locked.length === 0) return null;
+      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+      const turn = await tx.conversationTurn.findFirst({
+        where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: { in: [...from] } },
+      });
+      if (!turn) return null;
+      if (session.deletedAt || SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+        return { ended: true as const };
+      }
+      const steerTarget = turn.sendIntent == null && turn.clientTurnId !== SessionsService.initialTurnClientId(sessionId)
+        ? await this.steerTargetIfLive(tx, sessionId, session)
+        : null;
+      const updated = await tx.conversationTurn.update({
+        where: { id: turn.id },
+        data: {
+          content,
+          status: 'PENDING',
+          translationState: state,
+          ...(steerTarget ? { kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: steerTarget.id } : {}),
+        },
+      });
+      runnerId = session.assignedRunnerId;
+      nextStatus = statusAfterTurnEnqueued(session.status);
+      if (nextStatus !== session.status) {
+        await tx.session.update({ where: { id: sessionId }, data: { status: nextStatus, lastTurnAt: new Date() } });
+      }
+      return { turn: updated };
+    }, loggedRetry(this.logger, 'sessions.releaseHeldTurn', { transaction: { maxWait: 10_000, timeout: 30_000 } }));
+    if (!released || 'ended' in released) return released;
+    if (nextStatus === RunStatus.PENDING) {
+      this.queue.notifySessionQueued(runnerId);
+      await this.wakeManagedRunner(runnerId, 'turn');
+    }
+    if (nextStatus === RunStatus.RUNNING) this.realtime.notifyInbox(sessionId);
+    this.realtime.publishQueuedTurnsChanged(sessionId);
+    return released;
+  }
+
+  /** The owner's held message, or 404. */
+  private async ownHeldTurn(ownerId: string, sessionId: string, turnId: string) {
+    const session = await this.prisma.session.findFirst({ where: { id: sessionId, ownerId }, select: { id: true } });
+    if (!session) throw new NotFoundException('session not found');
+    const turn = await this.prisma.conversationTurn.findFirst({
+      where: { id: turnId, sessionId },
+      select: { id: true, status: true, displayPrompt: true, translationState: true, translationLang: true },
+    });
+    if (!turn) throw new NotFoundException('message not found');
+    return turn;
+  }
+
+  private static notHeld(): ConflictException {
+    return new ConflictException({ code: 'TRANSLATION_NOT_HELD', message: 'This message is not waiting on a translation.' });
+  }
+
+  /**
+   * Retry (POST /sessions/:id/turns/:turnId/translation/retry): translate a held message again. FAILED
+   * goes back to TRANSLATING; one still TRANSLATING — whose translation this process may have lost to a
+   * restart — is asked again, and whichever answer comes first releases it.
+   */
+  async retryTurnTranslation(ownerId: string, sessionId: string, turnId: string): Promise<TranslationActionResponse> {
+    await this.ownHeldTurn(ownerId, sessionId, turnId);
+    const retried = await this.prisma.conversationTurn.updateMany({
+      where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: { in: ['FAILED', 'TRANSLATING'] } },
+      data: { translationState: 'TRANSLATING' },
+    });
+    if (retried.count === 0) throw SessionsService.notHeld();
+    this.realtime.publishQueuedTurnsChanged(sessionId);
+    this.startTurnTranslation(sessionId, turnId);
+    const turn = await this.ownHeldTurn(ownerId, sessionId, turnId);
+    return { turnId, translation: turnTranslationOf(turn)! };
+  }
+
+  /**
+   * Send as written (POST /sessions/:id/turns/:turnId/translation/send-as-written): deliver a held
+   * message as the owner wrote it, untranslated (SENT_AS_WRITTEN).
+   */
+  async sendTurnAsWritten(ownerId: string, sessionId: string, turnId: string): Promise<TranslationActionResponse> {
+    const held = await this.ownHeldTurn(ownerId, sessionId, turnId);
+    if (held.status !== HELD_TURN_STATUS || held.displayPrompt == null) throw SessionsService.notHeld();
+    const released = await this.releaseHeldTurn(sessionId, turnId, held.displayPrompt, 'SENT_AS_WRITTEN', ['FAILED', 'TRANSLATING']);
+    if (!released) throw SessionsService.notHeld();
+    if ('ended' in released) throw new SessionNotSendable('the session has ended');
+    return { turnId, translation: turnTranslationOf(released.turn)! };
   }
 
   /**
@@ -6715,12 +7029,16 @@ export class SessionsService {
        * nothing else; written on the follow-up turn and never on the interrupt, which says nothing.
        */
       senderSessionId?: string;
+      /** The owner's own door: the follow-up is held and translated, as `createTurn`'s `translate`. */
+      translate?: boolean;
     },
   ) {
     // Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).
     await this.assertEngineSession(ownerId, id);
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
+    // Settings › Translation: the follow-up's words are held until translated; the interrupt is not.
+    const heldFrom = opts?.translate && content.trim() ? await ownerTranslationLanguage(this.prisma, ownerId) : null;
     // The runner's copy of the request, and the only thing it reads off an interrupt turn: the
     // follow-up the server filed separately, and the flag that says this interrupt also ends the
     // session's background work. Shaped like `setconfig`'s payload — a JSON object in `content`,
@@ -6887,6 +7205,7 @@ export class SessionsService {
         content,
         clientTurnId: dto!.clientTurnId!,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...(heldFrom ? heldTurnColumns(content, heldFrom) : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       // Its sender, read as createTurn reads one.
@@ -6896,7 +7215,8 @@ export class SessionsService {
       const sentByOrbit = content
         ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
         : null;
-      const nextStatus = statusAfterTurnEnqueued(session.status);
+      // A held follow-up moves nothing until it is released (releaseHeldTurn).
+      const nextStatus = heldFrom ? session.status : statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
         data: {
@@ -6924,6 +7244,7 @@ export class SessionsService {
     if (queued.wakeQueue) this.queue.notifySessionQueued(interruptRunnerId);
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
     if (!queued.idempotent) this.realtime.publishQueuedTurnsChanged(id);
+    if (!queued.idempotent && heldFrom && queued.turn) this.startTurnTranslation(id, queued.turn.id);
     return queued.turn
       ? { ok: true as const, turnId: queued.turn.id, seq: queued.turn.seq }
       : { ok: true as const };
@@ -6986,7 +7307,8 @@ export class SessionsService {
         sessionId: id,
         kind: { in: ['message', 'shell', 'steer'] },
         OR: [
-          { status: { in: ['PENDING', 'IN_FLIGHT'] } },
+          // HELD: the owner's message being translated, or whose translation failed (turn-translation.ts).
+          { status: { in: ['PENDING', 'IN_FLIGHT', HELD_TURN_STATUS] } },
           ...(view === 'active'
             ? [{ sendIntent: 'CURRENT_WORK', deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] } }]
             : []),
@@ -7010,10 +7332,14 @@ export class SessionsService {
         senderSessionId: true,
         externalSenderSource: true,
         externalSenderName: true,
+        displayPrompt: true,
+        translationState: true,
+        translationLang: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
-    const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
+    // A held message is not executable until it is released, so it is never the head.
+    const headExecutableId = turns.find((t) => (t.kind === 'message' || t.kind === 'shell') && t.status !== HELD_TURN_STATUS)?.id;
     const initialClientTurnId = SessionsService.initialTurnClientId(id);
     const wakeContent = await this.queuedWakeContent(id, turns);
     const classified = turns
@@ -7025,9 +7351,10 @@ export class SessionsService {
       //
       // A turn handing back the outcomes of this session's requests is the same kind of row
       // (sessions/session-request.ts): listed with the blocks it will be delivered with.
-      .filter((turn) => turn.clientTurnId !== initialClientTurnId
+      // A held opening is listed, though: until it is translated the queue is the only place its chip is.
+      .filter((turn) => turn.status === HELD_TURN_STATUS || (turn.clientTurnId !== initialClientTurnId
         && !SessionsService.isChatOpeningTurn(session, turn)
-        && (!isPlatformContentTurn(turn.clientTurnId) || wakeContent.has(turn.id)))
+        && (!isPlatformContentTurn(turn.clientTurnId) || wakeContent.has(turn.id))))
       .map((turn) => ({
         turn,
         content: wakeContent.get(turn.id) ?? turn.content ?? '',
@@ -7038,7 +7365,7 @@ export class SessionsService {
         // successor is not promoted into the place it vacates.
         placement: (turn.kind === 'steer'
           ? 'steer'
-          : isPlatformContentTurn(turn.clientTurnId)
+          : isPlatformContentTurn(turn.clientTurnId) || turn.status === HELD_TURN_STATUS
             ? 'queued'
             : turn.id === headExecutableId
               ? 'accepted'
@@ -7046,7 +7373,7 @@ export class SessionsService {
       }));
     if (view !== 'active') {
       const queued = classified
-        .filter(({ turn, placement }) => turn.status === 'PENDING' && placement !== 'accepted');
+        .filter(({ turn, placement }) => (turn.status === 'PENDING' || turn.status === HELD_TURN_STATUS) && placement !== 'accepted');
       // The cards, for the same reason the active view carries them and by the same read: the
       // narrow projection is what the installed native client draws its queue from, and a delivery
       // it cannot see the card on is 30 lines of prose in the reader's own bubble until the runner
@@ -7065,6 +7392,7 @@ export class SessionsService {
           })),
           ...cards.get(turn.id),
           ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(turnTranslationOf(turn) ? { translation: turnTranslationOf(turn) } : {}),
         };
       });
     }
@@ -7134,6 +7462,7 @@ export class SessionsService {
             : {}),
           ...cards.get(turn.id),
           ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(turnTranslationOf(turn) ? { translation: turnTranslationOf(turn) } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({
@@ -7236,6 +7565,17 @@ export class SessionsService {
       // And a request another session asked of this one, withdrawn unread: UNDELIVERED. A reply turn
       // withdrawn here leaves its outcomes held for this session's next turn (session-request.ts).
       await settleUnrunSessionRequests(tx, id, { code: 'TURN_WITHDRAWN', turnId });
+      // A held message (Settings › Translation) is nobody's yet: withdrawn like a pending steer, with no
+      // queue-slot bookkeeping, since it holds none. Never a held opening, which is the session's prompt.
+      const held = await tx.conversationTurn.deleteMany({
+        where: {
+          id: turnId,
+          sessionId: id,
+          status: HELD_TURN_STATUS,
+          clientTurnId: { not: SessionsService.initialTurnClientId(id) },
+        },
+      });
+      if (held.count > 0) return null;
       const res = await tx.conversationTurn.deleteMany({
         // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
         where: {
@@ -8947,7 +9287,7 @@ export class SessionsService {
     dto: SessionResumeDto,
     taskId: string | null,
     workspaceId: string | null,
-    opts?: { routeToCurrentRun?: boolean },
+    opts?: { routeToCurrentRun?: boolean; translate?: boolean },
   ): Promise<SessionResumeAnswer> {
     if (taskId !== null) {
       // `NOT: { id }` is belt-and-braces — every path here arrives with THIS row terminal, so it
@@ -9003,7 +9343,7 @@ export class SessionsService {
           // attachment with a sentence about ids. Both are worse than the structured refusal this
           // door has always given, which at least names the run to open and re-send in.
           if (dto.attachmentIds?.length) throw inTheWay();
-          const delivered = await this.createTurn(ownerId, holder.id, dto);
+          const delivered = await this.createTurn(ownerId, holder.id, dto, { translate: opts?.translate });
           return {
             ...delivered,
             revived: false as const,
@@ -9105,6 +9445,10 @@ export class SessionsService {
        * docs/personal-access-token-design.md): reviving a session is another way of setting its mode.
        */
       credential?: AuthCredential;
+      /** The owner's own door: Settings › Translation applies, as `createTurn`'s `translate`. On both
+       *  branches — a revived session's message is held like any other (insertHeldOpeningLocked's rule:
+       *  the claim does not hand out a session whose only work is held). */
+      translate?: boolean;
     },
   ): Promise<SessionResumeAnswer> {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -9218,6 +9562,7 @@ export class SessionsService {
         senderSessionId: opts?.senderSessionId,
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
+        translate: opts?.translate,
       });
       // Nothing was revived: this turn joined a process that was already running. Said out loud
       // because the orchestration door offers resume as a fallback for `send`, and the caller
@@ -9244,6 +9589,10 @@ export class SessionsService {
     // Retried whole. A resume reads the session, its project capacity and its worktree state under
     // locks taken inside the closure and writes from that read; nothing outside it moves between
     // attempts, and the runner is notified after this returns.
+    // Settings › Translation on the revive: its message is laid down HELD (insertHeldOpeningLocked's rule).
+    const reviveHeldFrom = opts?.translate && dto.kind !== 'shell' && dto.content?.trim()
+      ? await ownerTranslationLanguage(this.prisma, ownerId)
+      : null;
     const revived = await withTransactionRetry(this.prisma, async (tx) => {
       // THE RIGHT TO DO THIS, FIRST, and held to commit. A delivery whose lease was taken over
       // while it was getting here must not write the turn anyway — the receipt would refuse its
@@ -9403,7 +9752,7 @@ export class SessionsService {
         );
         if (
           existing.kind !== expectedKind
-          || existing.content !== dto.content
+          || (existing.displayPrompt ?? existing.content) !== dto.content
           || (existing.requestFingerprint != null
             && existing.requestFingerprint !== requestFingerprint)
           || expectedAttachments.length !== storedAttachments.length
@@ -9509,6 +9858,7 @@ export class SessionsService {
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
+        ...(reviveHeldFrom && dto.content ? heldTurnColumns(dto.content, reviveHeldFrom) : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       await opts?.onTurnWritten?.(tx, turn);
@@ -9644,7 +9994,12 @@ export class SessionsService {
     // A revived run waits for its runner like any queued turn: a managed one not asked above — its
     // heartbeat still looked fresh — is asked now.
     if (revived.wasRevived && !askedManagedRunner) await this.wakeManagedRunner(session.assignedRunnerId, 'resume');
+    if (revived.wasRevived && revived.turn.status === HELD_TURN_STATUS) {
+      this.realtime.publishQueuedTurnsChanged(id);
+      this.startTurnTranslation(id, revived.turn.id);
+    }
     return {
+      ...(turnTranslationOf(revived.turn) ? { translation: turnTranslationOf(revived.turn) } : {}),
       turnId: revived.turn.id,
       seq: revived.turn.seq,
       kind: revived.turn.kind,
