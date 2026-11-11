@@ -1142,6 +1142,7 @@ struct TranscriptView: View {
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
                              showWorkingIndicator: console.showWorkingIndicator,
+                             running: console.state.status == .running,
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
                              recap: recapCard,
@@ -1210,6 +1211,7 @@ struct TranscriptView: View {
         switch row {
         case .loadOlder: return EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         case .bottom:    return EdgeInsets()
+        case .turnHead:  return EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16)
         default:         return EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)
         }
     }
@@ -1239,6 +1241,9 @@ struct TranscriptView: View {
         case .item(let item):
             TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
                 .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
+        case .turnHead(let line):
+            // No `AnchorRow`: the head belongs to the message above it, which is the anchor.
+            TurnHeadRowView(line: line)
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
