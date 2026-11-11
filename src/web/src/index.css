@@ -23226,13 +23226,15 @@ div.landing-jobs-open {
    card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields
    drawn instead of the paragraph they were rendered into. Amber rather than brand: an exception
    item is something nobody's work is waiting behind, and every one of them is somebody's to decide. */
+/* Orbit's cards sit on the agent's side, in the reply column at its full width: the right side is the
+   owner's own words only (docs/mocks/orbit-cards-left, approved 2026-11-11). Same for .tsc/.psc/.crc/.smc. */
 .oic-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .oic {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -23403,11 +23405,11 @@ div.landing-jobs-open {
    never read as the same thing. */
 .tsc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .tsc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23594,11 +23596,11 @@ div.landing-jobs-open {
    words are another agent's, and the head says whose. */
 .smc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .smc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23799,11 +23801,11 @@ div.landing-jobs-open {
    as a raised list of links. */
 .psc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .psc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23933,11 +23935,11 @@ div.landing-jobs-open {
    handed, the reviewer's return handed to the run, and the owner's answers handed to the reviewer. Orbit's turns, drawn as the started card is. */
 .crc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .crc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23951,6 +23953,13 @@ div.landing-jobs-open {
 .crc.is-confirmed {
   border-color: var(--success-border);
   background: var(--success-bg);
+}
+.crc.is-neutral {
+  border-color: var(--border);
+  background: var(--bg-hover);
+}
+.crc.is-neutral .crc-head {
+  color: var(--text-2);
 }
 .crc.is-queued {
   border-style: dashed;
@@ -24053,6 +24062,116 @@ div.landing-jobs-open {
 .crc-raw pre {
   max-height: 320px;
   margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.crc-state {
+  margin-top: 8px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.crc-state.is-warn {
+  color: var(--warning);
+}
+.crc-state.is-ok {
+  color: var(--success);
+}
+.crc-claim {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.crc-claim-text {
+  white-space: pre-wrap;
+}
+.crc-claim.is-clamped .crc-claim-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.crc-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.crc-question {
+  margin-top: 6px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.crc-question-text {
+  font-weight: 600;
+}
+.crc-question ul {
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.crc-question li {
+  margin-top: 2px;
+  color: var(--text-2);
+}
+.crc-question li.is-picked {
+  color: var(--text-1);
+  font-weight: 600;
+}
+/* The opening of a session Orbit opened (OrbitTurnCards.tsx `SessionOpeningLine`): one line, the brief folded. */
+.session-opening {
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-hover);
+}
+.session-opening-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.session-opening-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.session-opening-text a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.session-opening-toggle {
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.session-opening-quote {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.session-opening-brief {
+  max-height: 320px;
+  margin: 8px 0 0;
   padding: 8px;
   overflow: auto;
   border-radius: 6px;

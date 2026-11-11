@@ -1,4 +1,4 @@
-<!-- 2026-11-11 · draft for the owner's review. Board: docs/mocks/task-fork-from-session/01-architecture.html (+ PNGs). No project or task exists for it yet. -->
+<!-- 2026-11-11 · the owner took every recommendation in §4 (D1 A, D2 A, D3 A, D4 A, D5 B2, D6 A). Board: docs/mocks/task-fork-from-session/01-architecture.html (+ PNGs). -->
 
 # A task that starts from my session's work, and a task that leaves no empty branch
 
@@ -127,7 +127,7 @@ then commits is not flagged. That is unchanged by this design and noted as a fol
 B2 keeps isolation and leaves nothing behind in the common case. Its cost is that the server must accept a branch
 first reported at finalize rather than named at creation, for this one kind of session.
 
-## 4. Decisions for the owner
+## 4. Decisions (owner, 2026-11-11: every recommendation taken)
 
 | # | Question | Options | Recommendation |
 |---|---|---|---|

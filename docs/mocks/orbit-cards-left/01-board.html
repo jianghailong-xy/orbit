@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Orbit 发来的卡片改到左侧</title>
+<style>
+  body { margin: 0; background: #eceef2; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', sans-serif; color: #1d2330; }
+  .board { width: 2240px; padding: 48px; box-sizing: border-box; background: #eceef2; }
+  h1 { font-size: 34px; margin: 0 0 8px; }
+  .sub { font-size: 17px; color: #5b6475; margin-bottom: 28px; line-height: 1.6; }
+  .row { display: flex; gap: 28px; align-items: flex-start; margin-bottom: 32px; }
+  .frame { background: #fff; border-radius: 14px; padding: 18px 18px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .frame h2 { font-size: 19px; margin: 0 0 4px; }
+  .frame .cap { font-size: 14px; color: #5b6475; margin: 0 0 12px; line-height: 1.55; max-width: 660px; }
+  .frame img { display: block; border: 1px solid #e3e6eb; border-radius: 8px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; vertical-align: 2px; }
+  .t-now { background: #fde8e8; color: #b42318; } .t-new { background: #e3f0ff; color: #1757c2; }
+  .panel { background: #fff; border-radius: 14px; padding: 22px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 15px; line-height: 1.65; }
+  .panel h2 { font-size: 20px; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid #e8eaee; }
+  th { color: #5b6475; font-weight: 600; background: #f6f7f9; }
+  code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; background: #f1f3f6; padding: 1px 5px; border-radius: 4px; }
+  .q { background: #fff8e6; border: 1px solid #f3d27a; border-radius: 10px; padding: 14px 18px; }
+  .q b { color: #8a5a00; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Orbit 发来的卡片改到左侧 · 右边只放你自己说的话</h1>
+  <div class="sub">
+    现在：例外项、任务开工、项目已启动、确认审查、其他会话发来的消息这几种卡片靠右（<code>justify-content: flex-end</code>，宽 88%），和你自己的消息同侧；但 Orbit 的其他消息（协调者通知、watch、后台作业）已经是居中或靠左的一行。方案 2：这几种卡片也改到左侧，和 agent 的回复同一栏、占满宽度。<br>
+    截图都来自真实 Web 控制台，回放的是 Runner 链路 v1 协调会话的真实记录。只改布局，卡片内容和颜色不变。
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2><span class="tag t-now">① 现在</span>例外项卡片靠右，左边空一块</h2>
+      <p class="cap">卡片和上面的回复、下面的回复不在一栏，看起来像你发出去的消息。</p>
+      <img src="shots/oic-today.png" width="660">
+    </div>
+    <div class="frame">
+      <h2><span class="tag t-new">② 方案</span>靠左，占满回复那一栏</h2>
+      <p class="cap">左边缘和回复对齐，从上往下读是一条线：Orbit 说了什么 → 协调者怎么处理。卡片本身不变，仍是橙色的例外项。</p>
+      <img src="shots/oic-new.png" width="660">
+    </div>
+    <div class="frame">
+      <h2>手机：例外项</h2>
+      <p class="cap">左：现在　右：方案</p>
+      <div style="display:flex; gap:12px"><img src="shots/oic-today-phone.png" width="300"><img src="shots/oic-new-phone.png" width="300"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2><span class="tag t-now">③ 现在</span>其他会话发来的消息卡片</h2>
+      <p class="cap">同样靠右、88% 宽。</p>
+      <img src="shots/smc-today.png" width="660">
+    </div>
+    <div class="frame">
+      <h2><span class="tag t-new">④ 方案</span>同样靠左、占满一栏</h2>
+      <p class="cap">卡片顶上已经写着 “From &lt;发信会话&gt;” 和 “Sent by another Orbit session, not by you”，放到左边不会被误认成 agent 自己说的。</p>
+      <img src="shots/smc-new.png" width="660">
+    </div>
+    <div class="frame">
+      <h2>手机：其他会话的消息</h2>
+      <p class="cap">左：现在　右：方案。手机上多出来的 12% 宽度让长消息少折几行。</p>
+      <div style="display:flex; gap:12px"><img src="shots/smc-today-phone.png" width="300"><img src="shots/smc-new-phone.png" width="300"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel" style="flex:1.3">
+      <h2>哪些卡片动，哪些不动</h2>
+      <table>
+        <tr><th style="width:34%">卡片</th><th>方案</th></tr>
+        <tr><td>例外项（<code>.oic</code>）</td><td>靠左，占满一栏</td></tr>
+        <tr><td>任务开工（<code>.tsc</code>，任务会话的第一轮）</td><td>靠左，占满一栏</td></tr>
+        <tr><td>项目已启动（<code>.psc</code>）</td><td>靠左，占满一栏</td></tr>
+        <tr><td>确认审查请求 / 审查退回（<code>.crc</code>）</td><td>靠左，占满一栏</td></tr>
+        <tr><td>其他会话发来的消息（<code>.smc</code>）</td><td>靠左，占满一栏（见待你定 1）</td></tr>
+        <tr><td>你自己发的消息</td><td>不动，仍靠右</td></tr>
+        <tr><td>会话回信（<code>.src</code>）、协调者通知、watch / 后台作业、折叠行</td><td>不动，本来就在左侧或居中</td></tr>
+      </table>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:24px;">
+      <div class="panel">
+        <h2>改动范围</h2>
+        <ul style="margin:0; padding-left:20px">
+          <li>Web：<code>index.css</code> 五处 <code>*-wrap</code> 的 <code>justify-content</code> 和卡片宽度。</li>
+          <li>iOS / macOS：这几张卡片视图的对齐（OrbitApp）。</li>
+          <li>Android：对应卡片的对齐。</li>
+          <li>不改卡片内容、文案、颜色，不改服务端。</li>
+        </ul>
+      </div>
+      <div class="q">
+        <b>待你定</b>
+        <ol style="margin:6px 0 0; padding-left:20px;">
+          <li><b>其他会话发来的消息要不要一起移？</b>推荐一起移：它是另一个 agent 写的话，不是你说的；卡片顶上写明了来源。</li>
+          <li><b>宽度：</b>推荐占满一栏（如图），和回复对齐；也可以保持 88% 宽、只是靠左。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

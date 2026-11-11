@@ -35,6 +35,7 @@ import io.orbitd.android.core.cards.QuestionRecords
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
+import io.orbitd.android.cards.isOrbitTurnCard
 import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.directory.ExternalSender
 import io.orbitd.android.text.*
@@ -76,7 +77,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     // turn: the line first, then their reply cards (web `Transcript.tsx`'s session-replies branch).
     val answerLine = cards.firstOrNull()?.takeIf { line ->
         event.type == "user" && (line.key.endsWith(":ownerAnswer") && cards.size == 1 ||
-            line.key.endsWith(":coordinatorDelivery") && cards.drop(1).all { it.key.contains(":reply:") })
+            line.key.endsWith(":coordinatorDelivery") && cards.drop(1).all { it.key.contains(":reply:") } ||
+            // An Orbit turn drawn as its own card (`OrbitTurnCardView`) carries its block in its own fold: the row is the card alone.
+            isOrbitTurnCard(line) && cards.drop(1).all { it.key.contains(":reply:") })
     }
     /** [reveal]: a failed read opens the card to say so — except for a question card reading itself whole while folded. */
     fun loadFull(copy: Boolean = false, reveal: Boolean = true) { scope.launch {
