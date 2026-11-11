@@ -27,6 +27,7 @@ fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
             add(InteractionCard("record:${event.seq}:wake", CardFamily.BACKGROUND, "Background update", wake, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
         }
         addProjection("confirmationReviewRequest", "Review requested", CardFamily.REVIEW, listOf("requestId", "taskId", "title", "runSessionId"))
+        addProjection("runQuestion", "Run question", CardFamily.REVIEW, listOf("requestId", "runSessionId", "state"))
         addProjection("confirmationReturn", "Sent back by the reviewer", CardFamily.REVIEW, listOf("requestId", "reason"))
         addProjection("taskStart", "Task started", CardFamily.SESSION_REQUEST, listOf("taskId", "title"))
         addProjection("projectStarted", "Project started", CardFamily.SESSION_REQUEST, listOf("projectId", "projectTitle", "by"))

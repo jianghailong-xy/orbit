@@ -1,3 +1,5 @@
+import { parseRunQuestion, type RunQuestion } from '../lib/runQuestion';
+import { RunQuestionCard } from './RunQuestionCard';
 import {
   ApartmentOutlined,
   ApiOutlined,
@@ -584,6 +586,7 @@ type TextNode = {
   // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
   reviewRequest?: ConfirmationReviewRequestCard;
   reviewReturn?: ConfirmationReturnCard;
+  runQuestion?: RunQuestion;
   // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
   // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
   // Only a top-level message opens one: a steer joins the turn already running, and a message
@@ -886,6 +889,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.startedCard
   && !node.reviewRequest
   && !node.reviewReturn
+  && !node.runQuestion
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !parseBackgroundWake(node.note);
@@ -1203,6 +1207,7 @@ function buildTranscript(
         const sessionReplies = parseSessionReplies(p) ?? undefined;
         const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
         const reviewReturn = parseConfirmationReturn(p) ?? undefined;
+        const runQuestion = parseRunQuestion(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -1225,7 +1230,7 @@ function buildTranscript(
           }
           break;
         }
-        if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
+        if (p.text || runQuestion || (imgs && imgs.length) || (refs && refs.length)) {
           const node: TextNode = {
             kind: 'user',
             seq: ev.seq,
@@ -1241,6 +1246,7 @@ function buildTranscript(
             sessionReplies,
             reviewRequest,
             reviewReturn,
+            runQuestion,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -2020,6 +2026,10 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // A confirmation review's two turns (lib/confirmationReviewTurns): the request a reviewer is
       // handed, and the reviewer's return handed to the run. Both are Orbit's — the block the agent
       // read rides at the foot as the note it is — and neither is the reader's bubble.
+      if (node.runQuestion) {
+        return <RunQuestionCard card={node.runQuestion} queued={queued}
+          attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />} />;
+      }
       if (node.reviewRequest || node.reviewReturn) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
         const attached = node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;

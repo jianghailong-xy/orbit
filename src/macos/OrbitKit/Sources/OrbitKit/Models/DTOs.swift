@@ -1218,6 +1218,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     public var reviewRequestCard: ConfirmationReviewRequestCard? {
         ConfirmationReviewRequestCard.parseCard(confirmationReviewRequest)
     }
+    public let runQuestion: JSONValue?
+    public var runQuestionCard: RunQuestionCard? { RunQuestionCard.parseCard(runQuestion) }
     public let confirmationReturn: JSONValue?
     public var reviewReturnCard: ConfirmationReturnCard? { ConfirmationReturnCard.parseCard(confirmationReturn) }
     /// Every card this turn is drawn as while it waits, each read as above — the one place the queue's
@@ -1227,7 +1229,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswerCard, coordinatorDelivery: coordinatorDeliveryCard,
                   taskStart: taskStartCard, startedCard: startedCard,
                   sessionMessage: senderCard, externalSender: externalSenderFrom, sessionReplies: replyCards,
-                  reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
+                  reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard, runQuestion: runQuestionCard)
     }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
@@ -1240,7 +1242,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 externalSender: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
-                confirmationReturn: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
+                confirmationReturn: JSONValue? = nil, runQuestion: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
                 deliveryReason: String? = nil) {
         self.turnId = turnId
@@ -1264,6 +1266,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.authoredByOrbit = authoredByOrbit
         self.confirmationReviewRequest = confirmationReviewRequest
         self.confirmationReturn = confirmationReturn
+        self.runQuestion = runQuestion
     }
 }
 

@@ -110,3 +110,22 @@ public enum ConfirmationReviewTurnLinks {
         return URL(string: "\(scheme):\(id)")
     }
 }
+
+/// A blocked run's question delivered to the coordinator (§14 R5). This card has no owner controls.
+public struct RunQuestionCard: Codable, Equatable, Sendable {
+    public let requestId: String
+    public let taskTitle: String
+    public let runSessionId: String
+    public let replyBy: String
+    public let state: String
+    public let approvalStatus: String
+    public let questions: JSONValue
+
+    public var pending: Bool { state == "PENDING" && approvalStatus == "PENDING" }
+    public var parsedQuestions: [AskQuestion] { Approvals.parseQuestions(from: .object(["questions": questions])) }
+
+    public static func parseCard(_ value: JSONValue?) -> RunQuestionCard? {
+        guard let value, let data = try? JSONEncoder().encode(value) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
+}

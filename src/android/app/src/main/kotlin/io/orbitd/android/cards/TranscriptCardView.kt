@@ -36,6 +36,24 @@ import kotlinx.serialization.json.JsonPrimitive
 @Composable
 internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, event: RunEvent? = null) {
     val ts = event?.ts
+    if (card.key.endsWith(":runQuestion")) {
+        val source = card.source
+        val pending = source.text("state") == "PENDING" && source.text("approvalStatus") == "PENDING"
+        Column(Modifier.fillMaxWidth().testTag("run-question-card").padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Run question", style = MaterialTheme.typography.labelMedium)
+            Text(source.text("taskTitle").orEmpty(), style = MaterialTheme.typography.titleSmall)
+            Text(if (pending) "Waiting for the coordinator" else "No longer waiting for the coordinator")
+            if (pending) Text("Reply by ${source.text("replyBy").orEmpty()}")
+            source.objects("questions").forEach { question ->
+                Text(question.text("question").orEmpty(), style = MaterialTheme.typography.titleSmall)
+                Text(if (question.flag("multiSelect")) "Choose any that apply" else "Choose one")
+                question.objects("options").forEach { option ->
+                    Text("• ${option.text("label").orEmpty()}${option.text("description")?.let { " — $it" }.orEmpty()}")
+                }
+            }
+        }
+        return
+    }
     // A review's two turns are drawn as their own cards (A08-1), not as a list of their fields.
     if (card.family == CardFamily.REVIEW && (card.key.endsWith(":confirmationReviewRequest") || card.key.endsWith(":confirmationReturn"))) {
         ReviewTurnCard(card, ts, open); return

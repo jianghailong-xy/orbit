@@ -24,6 +24,7 @@ public struct TurnCards: Equatable, Sendable {
     public var sessionReplies: [SessionReply]?
     public var reviewRequest: ConfirmationReviewRequestCard?
     public var reviewReturn: ConfirmationReturnCard?
+    public var runQuestion: RunQuestionCard?
 
     public init(itemCard: OpenItemDelivery? = nil, ownerAnswer: OwnerAnswer? = nil,
                 coordinatorDelivery: CoordinatorDelivery? = nil, taskStart: TaskStart? = nil,
@@ -31,7 +32,7 @@ public struct TurnCards: Equatable, Sendable {
                 externalSender: ExternalMessageFrom? = nil,
                 sessionReplies: [SessionReply]? = nil,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
-                reviewReturn: ConfirmationReturnCard? = nil) {
+                reviewReturn: ConfirmationReturnCard? = nil, runQuestion: RunQuestionCard? = nil) {
         self.itemCard = itemCard
         self.ownerAnswer = ownerAnswer
         self.coordinatorDelivery = coordinatorDelivery
@@ -42,6 +43,7 @@ public struct TurnCards: Equatable, Sendable {
         self.sessionReplies = sessionReplies
         self.reviewRequest = reviewRequest
         self.reviewReturn = reviewReturn
+        self.runQuestion = runQuestion
     }
 }
 
@@ -54,7 +56,7 @@ extension UserBubble {
                       taskStart: taskStart, startedCard: startedCard,
                       sessionMessage: sessionMessage, externalSender: externalSender,
                       sessionReplies: sessionReplies,
-                      reviewRequest: reviewRequest, reviewReturn: reviewReturn)
+                      reviewRequest: reviewRequest, reviewReturn: reviewReturn, runQuestion: runQuestion)
         }
         set {
             itemCard = newValue.itemCard
@@ -67,6 +69,7 @@ extension UserBubble {
             sessionReplies = newValue.sessionReplies
             reviewRequest = newValue.reviewRequest
             reviewReturn = newValue.reviewReturn
+            runQuestion = newValue.runQuestion
         }
     }
 }

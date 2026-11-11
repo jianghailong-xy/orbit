@@ -130,6 +130,8 @@ struct UserTurnRow: View {
             ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
                                    undelivered: undelivered,
                                    attached: b.attached, onCancelQueued: cancel)
+        } else if let card = b.runQuestion {
+            RunQuestionCardView(card: card)
         } else if let card = b.reviewRequest {
             // A confirmation request handed to this conversation to review, and a reviewer's
             // return handed to the run (`ConfirmationReviewTurns.swift`): Orbit's turns, drawn as

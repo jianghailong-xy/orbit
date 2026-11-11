@@ -270,6 +270,17 @@ const CASES: Case[] = [
     acceptable: true,
   },
   {
+    name: 'a run question handed to the coordinator',
+    field: 'runQuestion',
+    row: { turnId: 'turn-run-question', content: '', createdAt: TS, runQuestion: {"requestId": "run-question-1", "taskTitle": "Ship client cards", "runSessionId": "run-session", "replyBy": "2026-11-12T12:00:00Z", "state": "PENDING", "approvalStatus": "PENDING", "questions": [{"question": "Ship now?", "options": [{"label": "Ship", "description": "Release today"}, {"label": "Wait"}], "multiSelect": false}]}, authoredByOrbit: true },
+    echo: { text: '', runQuestion: {"requestId": "run-question-1", "taskTitle": "Ship client cards", "runSessionId": "run-session", "replyBy": "2026-11-12T12:00:00Z", "state": "PENDING", "approvalStatus": "PENDING", "questions": [{"question": "Ship now?", "options": [{"label": "Ship", "description": "Release today"}, {"label": "Wait"}], "multiSelect": false}]} },
+    root: '.run-question-card',
+    queuedMark: '.run-question-card.is-queued',
+    slot: '.run-question-queued',
+    actions: ['Cancel'],
+    acceptable: false,
+  },
+  {
     name: 'a confirmation request handed to its reviewer',
     field: 'confirmationReviewRequest',
     row: { turnId: 'turn-review', content: REVIEW_BLOCK, createdAt: TS, confirmationReviewRequest: REVIEW_REQUEST, authoredByOrbit: true },

@@ -16,6 +16,7 @@ final class QueuedTurnCardsTests: XCTestCase {
     /// One card of each kind, under the key the queue list and the echo carry it by, named for the
     /// `UserBubble` field it is drawn from.
     private static let fixtures: [(field: String, key: String, card: String)] = [
+        ("runQuestion", "runQuestion", #"{"requestId": "run-question-1", "taskTitle": "Ship client cards", "runSessionId": "run-session", "replyBy": "2026-11-12T12:00:00Z", "state": "PENDING", "approvalStatus": "PENDING", "questions": [{"question": "Ship now?", "options": [{"label": "Ship", "description": "Release today"}, {"label": "Wait"}], "multiSelect": false}]}"#),
         ("itemCard", "openItemDelivery", """
             {"itemId": "item-1", "kind": "INTEGRATION_CONFLICT", "title": "Merge conflict on project/34Y7",
              "files": ["src/web/src/components/WorkspaceView.tsx"]}

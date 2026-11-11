@@ -168,3 +168,29 @@ private struct ReviewTurnQueuedFoot: View {
         }
     }
 }
+
+struct RunQuestionCardView: View {
+    let card: RunQuestionCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Run question").font(.orbitLabel.weight(.semibold))
+            Text(card.taskTitle).font(.orbitProse.weight(.semibold))
+            Text(card.pending ? "Waiting for the coordinator" : "No longer waiting for the coordinator")
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            if card.pending {
+                Text("Reply by \(card.replyBy)").font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            ForEach(Array(card.parsedQuestions.enumerated()), id: \.offset) { _, question in
+                Text(question.question).font(.orbitProse.weight(.semibold))
+                Text(question.multiSelect ? "Choose any that apply" : "Choose one").font(.orbitLabel)
+                ForEach(Array(question.options.enumerated()), id: \.offset) { _, option in
+                    Text("• \(option.label)\(option.description.map { " — \($0)" } ?? "")").font(.orbitProse)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+}

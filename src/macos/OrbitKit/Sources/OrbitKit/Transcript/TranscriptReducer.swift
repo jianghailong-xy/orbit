@@ -1404,6 +1404,7 @@ public struct TranscriptReducer: Sendable, Codable {
         // `ConfirmationReviewTurns.swift`), by the same rule.
         let reviewRequest = ConfirmationReviewRequestCard.parse(ev.payload)
         let reviewReturn = ConfirmationReturnCard.parse(ev.payload)
+        let runQuestion = RunQuestionCard.parseCard(ev.payload["runQuestion"])
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -1473,6 +1474,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.sessionReplies = sessionReplies
                 b.reviewRequest = reviewRequest
                 b.reviewReturn = reviewReturn
+                b.runQuestion = runQuestion
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
@@ -1514,7 +1516,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                 externalSender: externalSender,
                                 sessionReplies: sessionReplies,
                                 reviewRequest: reviewRequest,
-                                reviewReturn: reviewReturn)
+                                reviewReturn: reviewReturn, runQuestion: runQuestion)
         // A steer of the reader's that nothing has read yet is not part of the conversation: it
         // waits in the tray — the row it was drawn as while queued, under the same id — until its
         // delivery settles (`applyUserDelivery`).
