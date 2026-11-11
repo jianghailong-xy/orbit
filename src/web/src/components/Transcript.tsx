@@ -144,7 +144,7 @@ import {
 import {
   parseEvidenceReview,
   parseEvidenceSendBack,
-  parseRunNotice,
+  parseRunNotice as parseRunNoticeCard,
   parseRunQuestion,
   parseSessionOpening,
 } from '../lib/orbitTurnCards';
@@ -1251,7 +1251,7 @@ function buildTranscript(
         const evidenceReview = parseEvidenceReview(p) ?? undefined;
         const evidenceSendBack = parseEvidenceSendBack(p) ?? undefined;
         const runQuestion = parseRunQuestion(p) ?? undefined;
-        const runNotice = parseRunNotice(p) ?? undefined;
+        const runNotice = parseRunNoticeCard(p) ?? undefined;
         const sessionOpening = parseSessionOpening(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
