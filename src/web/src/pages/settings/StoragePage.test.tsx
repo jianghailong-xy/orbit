@@ -1,11 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
-import { meQuery, storageUsageQuery, type StorageUsage } from '../lib/queries';
-import { SettingsPage } from './SettingsPage';
-
-vi.mock('../lib/theme', () => ({ useThemeMode: () => ({ mode: 'system', setMode: () => {} }) }));
+import { describe, expect, it } from 'vitest';
+import { meQuery, storageUsageQuery, type StorageUsage } from '../../lib/queries';
+import { StorageSettingsPage } from './StoragePage';
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
@@ -36,16 +34,23 @@ function render(answer?: StorageUsage) {
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <SettingsPage />
+        <StorageSettingsPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-/** The card's own text, tags stripped, up to the card after it. */
-const card = (html: string) => html.slice(html.indexOf('Stored files'), html.indexOf('Shared links')).replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+/** The page's text from its first row on, tags stripped. */
+const card = (html: string) => html.slice(html.indexOf('Stored files')).replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
 
-describe('the Storage card in Settings', () => {
+describe('Settings → Storage', () => {
+  it('is a page of its own, headed Storage, with each ranking a section of rows', () => {
+    const html = render(usage());
+    expect(html).toMatch(/<h1[^>]*>Storage<\/h1>/);
+    const sections = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]);
+    expect(sections).toEqual(['Largest projects', 'Largest tasks', 'Added each week']);
+  });
+
   it('says what the account keeps, where most of it is, and what each week added', () => {
     const text = card(render(usage()));
     expect(text).toContain('|1.5 GB · 3,120 files|');

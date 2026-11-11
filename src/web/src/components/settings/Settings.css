@@ -274,3 +274,74 @@
     grid-template-columns: minmax(0, 1fr) 120px 110px auto;
   }
 }
+
+/* SettingsHeader: the page's name and the line under it (board-2). */
+.settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.settings-header-text {
+  min-width: 0;
+}
+.settings-header-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.settings-header-description {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.settings-header-action {
+  flex-shrink: 0;
+}
+.settings-row-description {
+  max-width: 440px;
+}
+
+/* A Personal page drawn from ui/Card (Profile's sign-in methods and password, Feishu's sections) reads as a
+   SettingsSection: the card's title above, its body as the rounded card. */
+.settings-page .orbit-card {
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.settings-page .orbit-card + .orbit-card,
+.settings-page .settings-section + .orbit-card,
+.settings-page .orbit-card + .settings-section {
+  margin-top: 28px;
+}
+.settings-page .orbit-card > .orbit-card-head {
+  min-height: 0;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+}
+.settings-page .orbit-card > .orbit-card-head > .orbit-card-title {
+  font-size: 15px;
+}
+.settings-page .orbit-card > .orbit-card-body {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  padding: 16px;
+}
+.settings-storage-size {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.settings-card + .settings-section {
+  margin-top: 28px;
+}
+
+/* A page whose body is a table or list of many columns (Shared links, Access tokens) takes the room the
+   window has, rather than the settings rows' 660px. */
+.settings-column:has(> .settings-page--wide) {
+  max-width: 1080px;
+}

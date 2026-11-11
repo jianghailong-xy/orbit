@@ -4,26 +4,28 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { meQuery, type Me, type UserPreferences } from '../lib/queries';
+import { meQuery, type Me, type UserPreferences } from '../../lib/queries';
 
 /**
- * Smart model selection, one switch for the whole account (`preferences.modelRouting`) under Session
- * defaults. Unlike the other switches on the page it is OFF until turned on: an account that never
+ * Smart model selection, one switch for the whole account (`preferences.modelRouting`) under General's
+ * New sessions. Unlike the other switches on the page it is OFF until turned on: an account that never
  * wrote it reads off.
  */
 
 // The theme control reaches for localStorage and matchMedia, and it is not what these tests are about.
-vi.mock('../lib/theme', () => ({ useThemeMode: () => ({ mode: 'system', setMode: () => {} }) }));
-vi.mock('../api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api')>()),
+vi.mock('../../lib/theme', () => ({ useThemeMode: () => ({ mode: 'system', setMode: () => {} }) }));
+vi.mock('../../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api')>()),
   api: vi.fn(),
 }));
-const { api } = await import('../api');
+const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
-const { SettingsPage } = await import('./SettingsPage');
+const { GeneralSettingsPage } = await import('./GeneralPage');
 
 const LABEL = 'Smart model selection';
-const HINT =
+/** The one line the board shortens it to, and the full text kept as the control's tooltip. */
+const HINT = 'Coordinators suggest a tier for each task; Agents you turn this on for run on that tier.';
+const FULL_HINT =
   "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.";
 
 const me = (preferences: UserPreferences): Me => ({
@@ -61,7 +63,7 @@ async function mount(preferences: UserPreferences): Promise<void> {
     created.render(
       <QueryClientProvider client={next}>
         <MemoryRouter>
-          <SettingsPage />
+          <GeneralSettingsPage />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -145,12 +147,13 @@ describe('smart model selection, one switch for the whole account', () => {
     expect(patches()).toEqual([]);
   });
 
-  it('sits in Session defaults under Default permission mode, saying what it does', async () => {
+  it('sits in New sessions under Default permission mode, saying what it does in one line and in full on hover', async () => {
     await mount({});
     expect(label().nextElementSibling?.textContent).toBe(HINT);
-    // The card it sits in is a region named by its title.
+    expect(smartSwitch().closest('[title]')?.getAttribute('title')).toBe(FULL_HINT);
+    // The section it sits in is a region named by its title.
     const card = label().closest<HTMLElement>('section[aria-labelledby]')!;
-    expect(document.getElementById(card.getAttribute('aria-labelledby')!)?.textContent).toBe('Session defaults');
+    expect(document.getElementById(card.getAttribute('aria-labelledby')!)?.textContent).toBe('New sessions');
     const text = card.textContent ?? '';
     expect(text.indexOf('Default permission mode')).toBeGreaterThanOrEqual(0);
     expect(text.indexOf(LABEL)).toBeGreaterThan(text.indexOf('Default permission mode'));
