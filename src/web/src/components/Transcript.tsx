@@ -3502,9 +3502,23 @@ function nodeText(node: ReactNode): string {
 }
 
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
+  const exp = useContext(ExportCtx);
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
+    // An upload keeps its file name in the link's title. When that name is a picture, the reader
+    // meant to show it — the native clients draw it too (MarkdownFileRef.isImage). The saved HTML
+    // file embeds only `![…]` pictures, so it keeps the chip.
+    if (!exp && name && looksLikeImagePath(name)) {
+      return (
+        <ResolvedAttachmentImage
+          id={id}
+          className="md-image"
+          alt={nodeText(children).trim() || name}
+          loadingClassName="md-image md-image-loading"
+        />
+      );
+    }
     return <AttachmentFile id={id} name={name} />;
   }
   if (typeof href === 'string' && isLegacyArtifactSrc(href)) {
