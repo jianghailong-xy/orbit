@@ -195,6 +195,20 @@ public final class APIClient: @unchecked Sendable {
                                       projectId: projectId, includeLanding: includeLanding)
     }
 
+    /// How many rows `GET /sessions?view=<view>&limit=1` answers: 0 or 1. The welcome card's read of
+    /// whether an account has ever had a session (docs/mocks/new-user-onboarding, board 03 rule 1), the
+    /// web's `useNewAccount`. Rows are counted, never decoded: an answer that isn't an array throws.
+    public func sessionRowCount(view: SessionView) async throws -> Int {
+        let rows: [AnyRow] = try await get("sessions", query: [URLQueryItem(name: "view", value: view.queryValue),
+                                                               URLQueryItem(name: "limit", value: "1")])
+        return rows.count
+    }
+
+    /// Any one element of a JSON array, whatever it holds.
+    private struct AnyRow: Decodable {
+        init(from decoder: Decoder) throws {}
+    }
+
     private func listSessions(queryValue: String, runnerId: String?, projectId: String?,
                               includeLanding: Bool = false) async throws -> [Session] {
         var q = [URLQueryItem(name: "view", value: queryValue)]
@@ -1448,6 +1462,15 @@ public final class APIClient: @unchecked Sendable {
     /// new chat runs — the remembered workspace as it stands and the ones it could be.
     public func wikiChats(spaceID: String) async throws -> WikiChatList {
         try await get("wiki/spaces/\(spaceID)/chats")
+    }
+    /// One page of the history (contract `chat.list.page`, board 45 ④): the chats whose title holds `q`, `offset`
+    /// passed over. The counts come back over every chat.
+    public func wikiChats(spaceID: String, q: String, offset: Int) async throws -> WikiChatList {
+        var query: [URLQueryItem] = []
+        let words = q.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !words.isEmpty { query.append(URLQueryItem(name: "q", value: words)) }
+        if offset > 0 { query.append(URLQueryItem(name: "offset", value: String(offset))) }
+        return try await get("wiki/spaces/\(spaceID)/chats", query: query)
     }
     /// `POST /wiki/spaces/:id/chats`: a chat made with the owner's first words, word for word, its first turn filed
     /// under the client's UUID; the page and the selection ride beside the words (`wikiContext`).

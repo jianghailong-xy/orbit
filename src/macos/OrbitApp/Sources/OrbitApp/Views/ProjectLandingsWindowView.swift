@@ -482,41 +482,43 @@ struct ProjectLandingsWindowView: View {
             .padding(.bottom, ends ? 14 : 6)
     }
 
-    /// One settled landing as Orbit's message: its bubble — the task's name, and a foot with the mark
-    /// that says how it ended, its line and the moment it settled — that opens to its record under it.
+    /// One settled landing as the session chat's background-job line (owner 2026-11-11,
+    /// docs/mocks/landings-chat-tools-native): the mark, how it ended, how long its checks took, the
+    /// moment it settled and `Details ›`, the task's name under them; it opens to its steps under it. A
+    /// merge into main is the same line, and opens to its receipt first.
     @ViewBuilder private func rowView(_ row: LandingsWindowRow, ends: Bool,
                                       model: ProjectLandingsModel) -> some View {
         let id = row.id
         let open = expanded.contains(id)
         let landing = row.sessionId.flatMap { model.details[$0] }
+        let merge = row.tone == .merge
+        // How long the checks took: the round's merged record, else the landing's own read.
+        let checkMs = (merge ? LandingSteps.checksDurationMs((row.promotion?.checks ?? []).map(\.durationMs)) : nil)
+            ?? LandingSteps.checksDurationMs((landing?.checks ?? []).map(\.durationMs))
         messageLine(ends: ends) {
             VStack(alignment: .leading, spacing: 4) {
                 Button {
                     PlatformHaptics.tap()
                     toggle(id)
                 } label: {
-                    // A merge into main is an event, not a message: one centred line, as a chat draws
-                    // what happened in it (owner 2026-11-10, docs/mocks/landings-ui-polish ②).
-                    if row.tone == .merge {
-                        LandingsWindowEventLine(row: row)
-                    } else {
-                        LandingsWindowBubble(row: row)
-                    }
+                    LandingLineView(
+                        kind: merge ? .merge : row.tone == .ok ? .ok : .quiet,
+                        title: merge ? row.title : row.detail,
+                        name: merge ? row.detail : row.title,
+                        status: checkMs.map { "\(LandingStepCopy.check) \(LandingPageCopy.duration(ms: $0))" },
+                        time: row.time, open: open)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("landings-row:\(id)")
                 #if os(iOS)
-                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 8, style: .continuous))
                 #endif
                 .contextMenu { menu(landing: landing, row: row, sessionID: row.sessionId, model: model) }
-                .overlay { outline(id, radius: 16) }
+                .overlay { outline(id, radius: 8) }
                 if open {
                     record(row, landing: landing, model: model)
                 }
             }
-            // An incoming message's gutter: a bubble never runs to the window's far edge. A merge's
-            // event line is centred across the whole column.
-            .padding(.trailing, row.tone == .merge ? 0 : 44)
         }
         .id(id)
         .task(id: row.sessionId ?? "") {
@@ -524,13 +526,11 @@ struct ProjectLandingsWindowView: View {
         }
     }
 
-    /// The quiet panel a message opens to, under it: the panel the person's own message opens what
-    /// Orbit attached to (`AttachedNoteBody`).
+    /// What a line opens to hangs under it, off its mark, as the chat hangs a job line's fold.
     private func recordPanel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         content()
-            .padding(.horizontal, 10).padding(.vertical, 8)
+            .padding(.leading, LandingLineView.indent).padding(.bottom, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
     }
 
     /// What a settled row opens to: a merge's receipt first (board 03 e), then the landing's own
@@ -606,19 +606,34 @@ struct ProjectLandingsWindowView: View {
     @ViewBuilder private func cardView(_ card: LandingsWindowCard, ends: Bool,
                                        model: ProjectLandingsModel) -> some View {
         let id = card.sessionId
-        let open = expanded.contains(id)
         let landing = model.details[id]
         let promotion = model.promotion(for: landing)
+        let attempt = landing?.currentAttempt
+        let settled = landing?.settledAt != nil
+        let running = !settled && attempt?.state == "RUNNING" && attempt?.timedOut == false
+        let timedOut = !settled && attempt?.timedOut == true
+        let waiting = !settled && card.state == "AWAITING_DECISION"
+        // What needs a look stays open: a landing that runs, waits for a decision or timed out
+        // (docs/mocks/landings-chat-tools-native d).
+        let open = expanded.contains(id) || running || waiting || timedOut
         messageLine(ends: ends) {
             VStack(alignment: .leading, spacing: 8) {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    LandingStatusCardView(
-                        sessionID: id, landing: landing, title: card.title, now: context.date,
-                        readAt: model.readAt[id], readFailed: model.readFailed.contains(id),
-                        facts: model.facts(landing), promotion: promotion,
-                        waitDoors: waitDoors(card, landing: landing, promotion: promotion, model: model),
-                        acting: model.acting.contains(id),
-                        act: { action in press(action, sessionID: id, landing: landing, row: nil, model: model) })
+                    VStack(alignment: .leading, spacing: 4) {
+                        // A landing that runs is the chat's turn in hand: its Working for head over it.
+                        if running, let started = attempt.flatMap({ RelativeTime.parse($0.startedAt) }) {
+                            Text("\(LandingStepCopy.workingFor) \(ProjectPage.landingClock(max(0, context.date.timeIntervalSince(started))))")
+                                .font(.orbitMeta).foregroundStyle(.secondary)
+                        }
+                        LandingStatusCardView(
+                            sessionID: id, landing: landing, title: card.title, now: context.date,
+                            readAt: model.readAt[id], readFailed: model.readFailed.contains(id),
+                            facts: model.facts(landing), promotion: promotion,
+                            waitDoors: waitDoors(card, landing: landing, promotion: promotion, model: model),
+                            acting: model.acting.contains(id),
+                            act: { action in press(action, sessionID: id, landing: landing, row: nil, model: model) },
+                            open: open)
+                    }
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { toggle(id) }
@@ -787,120 +802,5 @@ struct ProjectLandingsWindowView: View {
         await ViewPoll.run(app, every: 15, hints: { app.projectHints }, inFlight: { model.cardRunning ? 4 : nil }) {
             await model.refresh(app: app, focusID: focusID)
         }
-    }
-}
-
-/// A settled landing as Orbit's message (owner 2026-11-02, docs/mocks/landings-chat-bubbles): the
-/// task's name, whole, as a message reads, and a foot with the mark that says how it ended (✓ landed,
-/// ⇢ merged into main, ◌ nothing to land and every other quiet ending), the row's own line and the
-/// moment it settled. The bubble is as wide as its widest line and no wider than the column.
-private struct LandingsWindowBubble: View {
-    let row: LandingsWindowRow
-
-    private var mark: String {
-        switch row.tone {
-        case .ok: return "✓"
-        case .merge: return "⇢"
-        case .quiet: return "◌"
-        }
-    }
-
-    private var ink: Color {
-        switch row.tone {
-        case .ok: return .green
-        case .merge: return .accentColor
-        case .quiet: return .secondary
-        }
-    }
-
-    var body: some View {
-        LandingsBubbleLayout(spacing: 4) {
-            Text(row.title)
-                .font(.orbitProse)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(mark).fontWeight(.semibold).foregroundStyle(ink)
-                Text(row.detail).foregroundStyle(.secondary).lineLimit(2)
-                Spacer(minLength: 14)
-                if !row.time.isEmpty {
-                    Text(row.time).monospacedDigit().foregroundStyle(.secondary)
-                }
-            }
-            .font(.orbitLabel)
-        }
-        .padding(.horizontal, 13).padding(.top, 9).padding(.bottom, 8)
-        .background { fill }
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    /// The bubble's quiet grey. On iOS it stands on the window's own colour: a long press lifts the
-    /// bubble out of the window, and a bare tint would show the dimmed screen through it.
-    private var fill: some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        return ZStack {
-            #if os(iOS)
-            shape.fill(Color(uiColor: .systemBackground))
-            #endif
-            shape.fill(Color.primary.opacity(0.055))
-        }
-    }
-}
-
-/// A merge into main as the window's event line: `⇢ Merged into main · 15406e9 · 1 task ·
-/// automatically · 23:24`, centred across the column, as a chat draws what happened in it.
-private struct LandingsWindowEventLine: View {
-    let row: LandingsWindowRow
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Text("⇢").fontWeight(.semibold).foregroundStyle(Color.accentColor)
-            (Text(row.title).fontWeight(.semibold).foregroundStyle(Color.primary.opacity(0.8))
-                + Text(([""] + [row.detail, row.time].filter { !$0.isEmpty }).joined(separator: " · "))
-                    .foregroundStyle(.secondary))
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-        }
-        .font(.orbitLabel)
-        .padding(.horizontal, 8).padding(.vertical, 4)
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-    }
-}
-
-/// A bubble's lines: as wide as the widest of them — the words wrapped at the room there is, the foot
-/// at its natural width — and never wider than the room offered; every line then takes that width, so
-/// the foot's time stands at the bubble's trailing edge. A plain stack takes all the room the row
-/// offers, because the foot's spacer is flexible, and every bubble would be the column's width.
-private struct LandingsBubbleLayout: Layout {
-    var spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = bubbleWidth(for: proposal, subviews)
-        let heights = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
-        return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(subviews.count - 1, 0)))
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for subview in subviews {
-            let height = subview.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil)).height
-            subview.place(at: CGPoint(x: bounds.minX, y: y), anchor: .topLeading,
-                          proposal: ProposedViewSize(width: bounds.width, height: height))
-            y += height + spacing
-        }
-    }
-
-    /// Each line at the room there is, or at its natural width where that is less: wrapped words
-    /// report the width they took, and a line with a spacer, which would take all of it, its own.
-    private func bubbleWidth(for proposal: ProposedViewSize, _ subviews: Subviews) -> CGFloat {
-        let room = proposal.width ?? .infinity
-        let widest = subviews.map { subview -> CGFloat in
-            let natural = subview.sizeThatFits(.unspecified).width
-            guard room.isFinite else { return natural }
-            return min(natural, subview.sizeThatFits(ProposedViewSize(width: room, height: nil)).width)
-        }.max() ?? 0
-        return room.isFinite ? min(widest, room) : widest
     }
 }

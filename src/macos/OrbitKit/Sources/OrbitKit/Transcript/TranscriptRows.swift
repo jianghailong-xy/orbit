@@ -451,6 +451,9 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// A stretch of work between two replies — settled thinking and tool calls — folded into one
     /// steps line (see `TranscriptRows.groupToolRuns`, `StepsSummary`).
     case steps([TranscriptItem])
+    /// Turns Orbit opened, each with everything drawn under it, folded into one row — a run of them
+    /// into one group row (`OrbitExchangeFold`; web parity: `OrbitExchangeSolo` / `OrbitExchangeGroup`).
+    case exchanges([OrbitExchange])
     case statusCard(LocalStatusCard)
     case decisionCard(DeliveredDecisionCard)
     case approval(PendingApproval)
@@ -474,6 +477,9 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
         case .steps(let items):      return items.first?.id ?? "steps-empty"
+        // The bare id of the first turn's opening bubble, for `.steps`' reason: it replaces that
+        // bubble's own row, and a scroll aimed at it must still land somewhere.
+        case .exchanges(let turns):  return turns.first?.id ?? "exchanges-empty"
         case .statusCard(let card):  return "local-status-\(card.id)"
         case .decisionCard(let card): return card.id
         case .approval(let appr):    return "approval-\(appr.id)"
@@ -504,6 +510,8 @@ public enum TranscriptRows {
                              decisionCards: [DeliveredDecisionCard] = [],
                              clocks known: ReceiptAnchor.Clocks? = nil,
                              recap: RecapCard? = nil,
+                             foldExchanges: Bool = true,
+                             watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
                              createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
@@ -620,7 +628,11 @@ public enum TranscriptRows {
         // Ids are unique by construction above; a repeat could only come from a malformed stream
         // (two events sharing a tool_use id). Drop it rather than hand the List a diff that aborts.
         var seen = Set<String>()
-        return groupToolRuns(rows).filter { seen.insert($0.id).inserted }
+        let grouped = groupToolRuns(rows)
+        // The turns Orbit opened, folded with their answers (`OrbitExchangeFold`), unless the caller
+        // draws every row as it is — a static export, a sub-agent's own transcript.
+        let folded = foldExchanges ? OrbitExchangeFold.fold(grouped, watchName: watchName) : grouped
+        return folded.filter { seen.insert($0.id).inserted }
     }
 
     /// Fold everything a turn does between two things it says — its settled thinking and its tool
@@ -662,15 +674,10 @@ public enum TranscriptRows {
     /// plan), no transcript or card of its own (Task, Workspace, a spawned child session), and not
     /// a `!`-shell command the user ran — that one is the user's own line, not a step.
     ///
-    /// A picture is the one exclusion that can't be read off the name: `Read` on a .png and an MCP
-    /// screenshot tool answer alike with an image block, and only the result says so. It is excluded
-    /// anyway, because the group is the one fold the card can't open through — the card unfolds
-    /// itself on an image (`ToolCardView.defaultOpen`) and a closed group hides it whole, so a
-    /// screenshot inside a run reaches the reader as nothing at all, and a folded card never
-    /// refetches the bytes the server stripped. The hop out of the run this costs happens once and
-    /// never reverses: an image block that has arrived stays arrived, unlike the running/failed
-    /// states the folded row deliberately reports instead of opening on. Web parity:
-    /// `isGroupableTool`.
+    /// A picture folds like any other read (owner, 11-11: an agent reading its own screenshot is a
+    /// step, not something to show the reader). Opening the line draws the card folded; opening
+    /// the card draws the picture, fetching back bytes the server clipped.
+    /// Web parity: `isGroupableTool`.
     /// A sub-agent's own transcript (`TranscriptState.subagentItems`), as the rows its Agent card
     /// draws: the conversation's folding — runs of steps into one line — and nothing else, since a
     /// nested list has no approvals, queue or scroll target of its own (web parity: the
@@ -678,7 +685,8 @@ public enum TranscriptRows {
     public static func nested(_ items: [TranscriptItem]) -> [TranscriptRow] {
         var state = TranscriptState()
         state.items = items
-        return build(state: state, statusCards: [], canPageOlder: false, showWorkingIndicator: false)
+        return build(state: state, statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+                     foldExchanges: false)
             .filter {
                 switch $0 {
                 case .item, .steps: return true
@@ -689,7 +697,6 @@ public enum TranscriptRows {
 
     private static func isGroupable(_ card: ToolCard) -> Bool {
         if card.id.hasPrefix("shell-") { return false }
-        if card.resultHasImage { return false }
         switch card.name {
         // Task/Agent/Workflow: Claude Code's names for a sub-agent and a team of them (the 08-14
         // Agent→Workspace rename had rewritten "Agent" here). Their cards carry work of their own —

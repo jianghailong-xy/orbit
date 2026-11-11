@@ -114,7 +114,7 @@ export const LOCK_ORDER = [
   {
     rank: 40,
     relation: 'project',
-    modes: 'FOR NO KEY UPDATE (session capacity fence, verdict gate, reconcile, unit L3 scope fence) · FOR KEY SHARE (task/session FK, the X-E5 tick\'s SKIP LOCKED hold)',
+    modes: 'FOR NO KEY UPDATE (K7 promotion requests and candidate creation, session capacity fence, verdict gate, reconcile, unit L3 scope fence) · FOR KEY SHARE (task/session FK, the X-E5 tick\'s SKIP LOCKED hold)',
     why:
       'Above `task` because that is the order every live taker of these two rows takes them in: ' +
       'session_admission_lock_order (0130) reaches the project row FOR NO KEY UPDATE from the same ' +
@@ -145,7 +145,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_wakeup_loop, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_rollup_candidate, project_fuse_episode, project_fuse_held_action',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_wakeup_loop, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_promotion_request, project_task_status_count, project_rollup_candidate, project_fuse_episode, project_fuse_held_action',
     modes: 'INSERT/UPDATE/DELETE · on `project_integration_job` also FOR UPDATE SKIP LOCKED (the claim, one job), FOR NO KEY UPDATE (the progress, release and output gates) and FOR SHARE SKIP LOCKED (the X-E5 insert) · on `project_promotion` also FOR KEY SHARE SKIP LOCKED (the X-E5 tick\'s hold)',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '

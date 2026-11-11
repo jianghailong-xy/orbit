@@ -752,7 +752,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// The options travel as the caller wrote them: the server is what decides whether 0, 2, 3
 		// or 4 of them is a question, and picking them apart here would be a second opinion about
 		// the same rule.
-		copyIfPresent(body, args, "options", "recommendedOption", "ifUnanswered", "clientQuestionId")
+		copyIfPresent(body, args, "options", "recommendedOption", "ifUnanswered", "clientQuestionId", "forRunQuestion")
 		if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
 			body["blocksTaskIds"] = blocked
 		}
@@ -935,6 +935,18 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			"in its place. If its runner may have pushed, the record says so and the merge may already "+
 			"have happened; the next job on this repository and branch can be claimed now.\n"+
 			prettyJSON(raw), false)
+
+	case "integration_request_promotion":
+		id := getString(args, "projectId")
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if id == "" || reason == "" {
+			return toolResult("projectId and a nonblank reason are required", true)
+		}
+		raw, err := s.t.requestPromotion(s.sessionID, id, reason)
+		if err != nil {
+			return toolResult("integration request promotion failed: "+err.Error(), true)
+		}
+		return toolResult("Promotion request recorded. It remains pending until a candidate is created; normal checks and merge authorization still apply.\n"+prettyJSON(raw), false)
 
 	case "integration_observe":
 		id := getString(args, "projectId")
@@ -1554,10 +1566,12 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			chosen := getNumber(args, "option")
 			option = &chosen
 		}
-		if strings.TrimSpace(message) == "" && option == nil {
-			return toolResult("give option (the index of the answer you choose), message, or both", true)
+		if strings.TrimSpace(message) == "" && option == nil && args["answers"] == nil {
+			return toolResult("give answers for a run question, or option (the index of the answer you choose), message, or both", true)
 		}
-		raw, err := s.t.sendSessionReply(s.sessionID, s.orchestrationToken, requestID, sessionReplyBody(message, messageSet, option))
+		body := sessionReplyBody(message, messageSet, option)
+		copyIfPresent(body, args, "answers")
+		raw, err := s.t.sendSessionReply(s.sessionID, s.orchestrationToken, requestID, body)
 		if err != nil {
 			return toolResult("reply failed: "+err.Error(), true)
 		}
@@ -1868,7 +1882,7 @@ var ownerWaitTools = map[string]bool{
 // in an integration object — the line (`line`, `projectBranchName`, `upstreamRef`) and anything a
 // later version adds — belongs to the account owner, which is what `mergeCheckProposal` says by
 // refusing to cover it.
-var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeoutSeconds"}
+var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeoutSeconds", "landingCheckCommand", "landingCheckTimeoutSeconds"}
 
 // waitsForTheOwner says whether a call puts a card in front of the owner and blocks until it is
 // answered.
@@ -2221,7 +2235,8 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 	var project struct {
 		Title       string `json:"title"`
 		Integration struct {
-			MergeCheckCommand string `json:"mergeCheckCommand"`
+			MergeCheckCommand   string  `json:"mergeCheckCommand"`
+			LandingCheckCommand *string `json:"landingCheckCommand"`
 			// The project's main branch by name, which the card's note says every merge into is
 			// still checked; null with no repository bound.
 			UpstreamRef *string `json:"upstreamRef"`
@@ -2280,7 +2295,11 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 			"result is not accepted, so there is nothing for this door to take off: read the landing's "+
 			"own item, or the project's integration read", taskID, what)
 	}
-	if project.Integration.MergeCheckCommand == "" {
+	checkCommand := project.Integration.MergeCheckCommand
+	if project.Integration.LandingCheckCommand != nil {
+		checkCommand = *project.Integration.LandingCheckCommand
+	}
+	if checkCommand == "" {
 		return nil, fmt.Errorf("project %s has no merge check command, so this landing was never stopped "+
 			"by one and there is nothing to skip", projectID)
 	}
@@ -2295,7 +2314,7 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 		"taskTitle":    task.Title,
 		// The command that would NOT run, verbatim: the decision is about that command, and a card
 		// that paraphrased it would be asking about something nobody can see.
-		"checkCommand": project.Integration.MergeCheckCommand,
+		"checkCommand": checkCommand,
 		"failure":      summary,
 		"generation":   landing.Generation,
 		"reason":       reason,
@@ -2356,18 +2375,22 @@ func projectMergeCheckCard(t *Transport, projectID string, proposal map[string]i
 	var project struct {
 		Title       string `json:"title"`
 		Integration struct {
-			MergeCheckCommand        interface{} `json:"mergeCheckCommand"`
-			MergeCheckTimeoutSeconds interface{} `json:"mergeCheckTimeoutSeconds"`
+			LandingCheckCommand        interface{} `json:"landingCheckCommand"`
+			LandingCheckTimeoutSeconds interface{} `json:"landingCheckTimeoutSeconds"`
+			MergeCheckCommand          interface{} `json:"mergeCheckCommand"`
+			MergeCheckTimeoutSeconds   interface{} `json:"mergeCheckTimeoutSeconds"`
 		} `json:"integration"`
 	}
 	if err := json.Unmarshal(raw, &project); err != nil {
 		return nil, fmt.Errorf("read project %s: %w", projectID, err)
 	}
 	input := map[string]interface{}{
-		"projectId":                       projectID,
-		"projectTitle":                    project.Title,
-		"currentMergeCheckCommand":        project.Integration.MergeCheckCommand,
-		"currentMergeCheckTimeoutSeconds": project.Integration.MergeCheckTimeoutSeconds,
+		"projectId":                         projectID,
+		"projectTitle":                      project.Title,
+		"currentLandingCheckCommand":        project.Integration.LandingCheckCommand,
+		"currentLandingCheckTimeoutSeconds": project.Integration.LandingCheckTimeoutSeconds,
+		"currentMergeCheckCommand":          project.Integration.MergeCheckCommand,
+		"currentMergeCheckTimeoutSeconds":   project.Integration.MergeCheckTimeoutSeconds,
 	}
 	for key, value := range proposal {
 		input[key] = value
@@ -3727,13 +3750,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Where this project's finished tasks land, and what is " +
 						"checked before they do, as {line: MAIN | PROJECT_BRANCH, " +
 						"projectBranchName, upstreamRef, mergeCheckCommand, " +
-						"mergeCheckTimeoutSeconds}. The two halves are not the same decision. " +
+						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds}. " +
+						"Landing settings fall back to the merge settings when null. The two halves are not the same decision. " +
 						"THE LINE — line, projectBranchName, upstreamRef — is the account owner's " +
 						"to choose, and a request carrying one is refused whenever this tool is " +
 						"called from inside a session, which is every call you make: read it back " +
 						"from project_get, which carries it as `integration`, and say what you would " +
 						"change rather than changing it. THE MERGE CHECK — mergeCheckCommand, " +
-						"mergeCheckTimeoutSeconds — is yours to propose: this call first puts the " +
+						"mergeCheckTimeoutSeconds, landingCheckCommand, landingCheckTimeoutSeconds — " +
+						"are yours to propose: this call first puts the " +
 						"project, what the check is now and what it would become on a confirmation " +
 						"card and BLOCKS until the owner answers, and the change takes effect only " +
 						"if they approve it. Nothing is written if they decline, and a second " +
@@ -3811,7 +3836,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"Say which one you recommend and why in its description — you know the work best; " +
 				"they are deciding, not designing. " +
 				"Only the conversation this project is coordinated FROM may ask, because the " +
-				"question is filed in the project's name.",
+				"question is filed in the project's name. For a run question, set forRunQuestion to its request-id, " +
+				"give your recommendation, then use session_reply to pass the owner’s answer back to the run.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -3849,6 +3875,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"with the first option tomorrow\". Shown on the card as written, so the " +
 						"owner can decide how urgent this is.",
 				},
+				"forRunQuestion": map[string]interface{}{"type": "string", "description": "The request-id of the run question you cannot answer without the owner."},
 				"clientQuestionId": map[string]interface{}{
 					"type": "string",
 					"description": "Your own key for this question. A call retried under the same key " +
@@ -4041,6 +4068,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The command run on the combined tree before anything lands — on the " +
 						"project branch and again before main. Leave it out for none; with Automatic on a " +
 						"project branch that is a warning, since the branch would merge into main untested.",
+				},
+				"landingCheckCommand": map[string]interface{}{
+					"type": "string", "description": "The project landing check. Null falls back to the merge check.",
+				},
+				"landingCheckTimeoutSeconds": map[string]interface{}{
+					"type": "integer", "minimum": 1, "description": "Landing check budget in seconds; null falls back to the merge check budget.",
 				},
 				"mergeCheckTimeoutSeconds": map[string]interface{}{
 					"type":    "integer",
@@ -4274,6 +4307,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"characters, and kept on the job as the record of why the work was given up.",
 				},
 			}, "projectId", "jobId", "reason"),
+		},
+		{
+			"name":        "integration_request_promotion",
+			"description": "Request a promotion of this project's integration branch into main before all criteria are satisfied. Only the project's current coordinator conversation may ask. Give a nonblank reason of at most 2000 characters. The request remains pending until one candidate consumes it in the candidate's transaction. The landing queue must still be empty and the tip uncovered. Normal promotion checks and owner or Automatic authorization still apply; this request does not authorize a merge.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{"type": "string", "description": "project whose integration branch should be promoted"},
+				"reason":    map[string]interface{}{"type": "string", "description": "why this promotion is needed now; 1 to 2000 characters after trimming"},
+			}, "projectId", "reason"),
 		},
 		{
 			"name": "integration_observe",
@@ -4733,7 +4774,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "notify",
-			"description": "Tell the human this session belongs to that something happened, on their phone and Mac, " +
+			"description": "In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices. " +
+				"Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back. " +
+				"Tell the human this session belongs to that something happened, on their phone and Mac, " +
 				"with a line you write: the thing they said they were waiting for is done, or something went wrong " +
 				"that they would want to hear about before they next look. " +
 				"Notify is only for telling. If you need a credential, or anything else only the owner can do or " +

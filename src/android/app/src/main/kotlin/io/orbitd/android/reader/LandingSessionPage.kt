@@ -2,6 +2,7 @@ package io.orbitd.android.reader
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,12 +11,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -30,9 +33,7 @@ import io.orbitd.android.directory.DirectoryApi
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
-import io.orbitd.android.projects.LandingHead
 import io.orbitd.android.projects.ProjectApi
-import io.orbitd.android.projects.ProjectLandingHead
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.ProjectTime
 import io.orbitd.android.projects.RunSettings
@@ -219,149 +220,196 @@ internal fun LandingRecord(view: LandingView, now: Instant, zone: ZoneId, onLog:
     }
 }
 
-/** An open entry's up arrow, at the right of its head (board 03 e): pressing the entry again folds it. */
-@Composable
-internal fun LandingUpArrow() {
-    Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(14.dp).rotate(180f).testTag("landing:open-arrow"),
-        tint = MaterialTheme.colorScheme.onSurfaceVariant)
-}
+/** How a landing's line says it stands. */
+internal enum class LandingLineKind { OK, MERGE, QUIET, FAILED, RUNNING }
 
-/** The status card's head with the line the window adds under it — the task's name — and, while the entry is open, its up arrow. */
+/** The tag a card's task name keeps, as the window's tests and the device rounds read it. */
+private const val CARD_NAME_TAG = "landing:task-name"
+
+/** Where what a line carries hangs: under its title, off its mark. */
+internal val LANDING_LINE_INDENT = 22.dp
+
+/**
+ * A landing as the session chat's background-job line (owner 2026-11-11, docs/mocks/landings-chat-tools-native;
+ * `BackgroundWakeViews`), on two lines as a phone has room for: the mark, how it ended (red when it failed), a short fact on a chip,
+ * when, and `Details ›`; under them the task's name, up to two lines. Web: `LandingLine`; iOS: `LandingLineView`.
+ */
 @Composable
-private fun LandingCardHead(taskName: String?, expanded: Boolean, head: @Composable () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            head()
-            taskName?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, Modifier.testTag("landing:task-name"), style = MaterialTheme.typography.bodyMedium)
+internal fun LandingLine(kind: LandingLineKind, title: String, name: String?, status: String?, time: String?, open: Boolean,
+    modifier: Modifier = Modifier, nameTag: String = "landing-line:name", titleTag: String = "landing-line:title",
+    statusTag: String = "landing-line:status", markTag: String? = null) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val red = MaterialTheme.colorScheme.error
+    val label = MaterialTheme.typography.bodyMedium
+    Column(modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.width(16.dp).then(markTag?.let { Modifier.testTag(it) } ?: Modifier), contentAlignment = Alignment.Center) {
+                when (kind) {
+                    LandingLineKind.OK -> Icon(painterResource(R.drawable.ic_check_circle), null, Modifier.size(15.dp), tint = LocalOrbitColors.current.success)
+                    LandingLineKind.FAILED -> Icon(painterResource(R.drawable.ic_x_circle), null, Modifier.size(15.dp), tint = red)
+                    LandingLineKind.QUIET -> Icon(painterResource(R.drawable.ic_minus), null, Modifier.size(15.dp), tint = muted)
+                    LandingLineKind.RUNNING -> Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(15.dp), tint = muted)
+                    LandingLineKind.MERGE -> Text("⇢", style = label, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                }
             }
+            Text(title, Modifier.weight(1f, fill = false).testTag(titleTag), style = label,
+                color = if (kind == LandingLineKind.FAILED) red else muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            status?.takeIf { it.isNotEmpty() }?.let {
+                Text(it, Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 1.dp).testTag(statusTag),
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace), color = muted, maxLines = 1, softWrap = false)
+            }
+            time?.takeIf { it.isNotEmpty() }?.let {
+                Text(it, Modifier.testTag("landing-line:time"), style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                    color = muted, maxLines = 1, softWrap = false)
+            }
+            Text(LandingStepCopy.DETAILS, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1, softWrap = false)
+            Icon(painterResource(R.drawable.ic_chevron_forward), null,
+                Modifier.size(12.dp).rotate(if (open) 90f else 0f).testTag(if (open) "landing:open-arrow" else "landing-line:caret"),
+                tint = muted.copy(alpha = 0.6f))
         }
-        if (expanded) Box(Modifier.padding(top = 8.dp)) { LandingUpArrow() }
+        name?.takeIf { it.isNotEmpty() }?.let {
+            Text(it, Modifier.padding(start = LANDING_LINE_INDENT).testTag(nameTag), style = label,
+                color = if (kind == LandingLineKind.MERGE) muted else MaterialTheme.colorScheme.onSurface, maxLines = 2,
+                overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
 /**
- * A landing's status card (the old landing page's card, mockups v4 05): the head over its newest attempt — V6's step clock, budget bar
- * and liveness while it moves; what stopped it while it waits; the outcome once it settled — with [taskName], the line the Landings
- * window adds under the head. A timed-out attempt keeps its own doors (Retry, Re-run the check, Abandon); a landing that waits for a
- * decision carries [waitDoors], the doors to the people who decide (board 02 d), the first of them the primary. [modifier] is the
- * window's press on the card; [expanded] draws the open entry's up arrow.
+ * A landing still in hand (the old landing page's card, mockups v4 05; owner 2026-11-11, docs/mocks/landings-chat-tools-native): its
+ * line — how its newest attempt stands, the task's name under it — and what it carries hung under the line's mark: V6's step clock,
+ * budget bar and liveness while it moves; what stopped it while it waits; the outcome once it settled. No card of its own. A timed-out
+ * attempt keeps its own doors (Retry, Re-run the check, Abandon); a landing that waits for a decision carries [waitDoors], the doors to
+ * the people who decide (board 02 d), the first the primary, under who decides. [modifier] is the window's press on the line; [expanded]
+ * turns its caret.
  */
 @Composable
 internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, card: LandingAttemptCard?, outcome: LandingOutcomeCard?,
     now: Instant, onPress: (LandingMenuAction) -> Unit, modifier: Modifier = Modifier, taskName: String? = null, expanded: Boolean = false,
     waitDoors: List<LandingMenuAction> = emptyList()) {
-    val warning = LocalOrbitColors.current.needsYou
     val success = LocalOrbitColors.current.success
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val shape = RoundedCornerShape(14.dp)
-    val wash = when {
-        outcome?.ok == true -> success.copy(alpha = 0.08f)
-        card?.timedOut == true -> warning.copy(alpha = 0.08f)
-        else -> muted.copy(alpha = 0.1f)
-    }
-    val stroke = when {
-        outcome?.ok == true -> success.copy(alpha = 0.3f)
-        card?.timedOut == true -> warning.copy(alpha = 0.3f)
-        else -> Color.Transparent
-    }
-    Column(Modifier.fillMaxWidth().clip(shape).background(wash, shape).border(1.dp, stroke, shape).then(modifier).padding(12.dp)
-        .testTag("landing-status-card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // A round's word (Merge check, Merge to main) says which of its jobs this is.
+    val word = if (view?.subject == "PROMOTION" && card != null && !card.rightIsClock) card.word else null
+    val name = listOfNotNull(word, taskName).filter { it.isNotEmpty() }.joinToString(" · ").takeIf { it.isNotEmpty() }
+    Column(Modifier.fillMaxWidth().testTag("landing-status-card"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (view == null) {
             // A first read that failed draws the job an integration read last described, frozen at that read, with no door
-            // (iOS `offlineCard`); with none kept, the note says only that the update is unavailable.
+            // (iOS `offlineCard`); with none kept, the line says only that the update is unavailable.
             val frozen = state.offline?.let { kept ->
                 LandingSessionModel.attemptCard(LandingSessionModel.offlinePlaceholder(kept.job.text("landingSessionId").orEmpty(), kept.job),
                     now, kept.readAt, failed = true, kept.facts)
             }
             if (frozen != null) {
-                LandingCardHead(taskName, expanded) {
-                    ProjectLandingHead(frozen.word, LandingHead(frozen.right, frozen.rightIsClock, frozen.detail), running = false, timedOut = false)
+                LandingLine(LandingLineKind.RUNNING, if (frozen.rightIsClock) frozen.word else frozen.right, taskName,
+                    if (frozen.rightIsClock) frozen.right else null, null, expanded, modifier, CARD_NAME_TAG,
+                    titleTag = if (frozen.rightIsClock) "landing-head:title" else "landing-head:right", statusTag = "landing-head:right")
+                Text(frozen.detail, Modifier.padding(start = LANDING_LINE_INDENT).testTag("landing-head:detail"),
+                    style = MaterialTheme.typography.bodySmall, color = muted.copy(alpha = 0.7f))
+                frozen.live?.let { Text(it, Modifier.padding(start = LANDING_LINE_INDENT).testTag("landing:live"),
+                    style = MaterialTheme.typography.bodySmall, color = muted) }
+            } else LandingLine(LandingLineKind.RUNNING, if (state.failed) LandingSessionCopy.UPDATE_UNAVAILABLE else LandingSessionCopy.LOADING_LANDING,
+                taskName, null, null, expanded, modifier.testTag("landing:status-note"), CARD_NAME_TAG)
+            return@Column
+        }
+        when {
+            outcome != null -> LandingLine(if (outcome.ok) LandingLineKind.OK else LandingLineKind.QUIET, outcome.title, taskName,
+                outcome.right, null, expanded, modifier, CARD_NAME_TAG, titleTag = "landing-head:title", statusTag = "landing-head:right",
+                markTag = if (outcome.ok) "landing-head:done" else null)
+            card == null -> LandingLine(LandingLineKind.RUNNING, LandingSessionCopy.QUEUED, taskName, null, null, expanded, modifier, CARD_NAME_TAG)
+            // The old head's tags, on the parts that now say the same: the word (or, when its right slot holds a word, that word),
+            // the clock, the failure's or the timeout's mark.
+            else -> LandingLine(if (card.stoppedOnFailure || card.timedOut) LandingLineKind.FAILED else LandingLineKind.RUNNING,
+                if (card.rightIsClock) card.word else card.right, name, if (card.rightIsClock) card.right else null, null, expanded, modifier,
+                CARD_NAME_TAG, titleTag = if (card.rightIsClock) "landing-head:title" else "landing-head:right", statusTag = "landing-head:right",
+                markTag = when {
+                    card.timedOut -> "landing-head:timed-out"
+                    card.stoppedOnFailure -> "landing-head:failed"
+                    card.running -> "landing-ring:running"
+                    else -> null
+                })
+        }
+        Column(Modifier.fillMaxWidth().padding(start = LANDING_LINE_INDENT), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (outcome != null) {
+                outcome.detail?.takeIf { it.isNotEmpty() }?.let { Text(it, Modifier.testTag("landing-head:detail"), style = MaterialTheme.typography.bodySmall, color = muted) }
+                outcome.tasksHeading?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) }
+                outcome.tasks.forEach { title ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("•", color = muted)
+                        Text(title, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
-                frozen.live?.let { Text(it, Modifier.testTag("landing:live"), style = MaterialTheme.typography.bodySmall, color = muted) }
-            } else LandingCardHead(taskName, expanded) {
-                Text(if (state.failed) LandingSessionCopy.UPDATE_UNAVAILABLE else LandingSessionCopy.LOADING_LANDING, Modifier.testTag("landing:status-note"),
-                    style = MaterialTheme.typography.bodyMedium, color = muted)
-            }
-        } else if (outcome != null) {
-            // A settled success wears the green ✓ the merge card's `Merged into main` row wears (mockup 05 c).
-            LandingCardHead(taskName, expanded) {
-                ProjectLandingHead(outcome.title, LandingHead(outcome.right, false, outcome.detail.orEmpty()), running = false, timedOut = false,
-                    ok = outcome.ok)
-            }
-            outcome.tasksHeading?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) }
-            outcome.tasks.forEach { title ->
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("•", color = muted)
-                    Text(title, style = MaterialTheme.typography.bodyMedium)
+                outcome.checkLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = success) }
+                outcome.treeLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted) }
+            } else if (card != null) {
+                card.detail.takeIf { it.isNotEmpty() }?.let {
+                    Text(it, Modifier.testTag("landing-head:detail"), style = MaterialTheme.typography.bodySmall, color = muted.copy(alpha = 0.7f))
                 }
-            }
-            outcome.checkLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = success) }
-            outcome.treeLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted) }
-        } else if (card == null) {
-            LandingCardHead(taskName, expanded) {
-                Text(LandingSessionCopy.QUEUED, style = MaterialTheme.typography.bodyMedium, color = muted)
-            }
-        } else {
-            // The head's one line is the card's on a narrow landing row; a card has room for the claim, the round and a takeover's
-            // first start in full (mockups v4 05 h–j).
-            LandingCardHead(taskName, expanded) {
-                ProjectLandingHead(card.word, LandingHead(card.right, card.rightIsClock, card.detail), card.running, card.timedOut, detailLines = 3,
-                    failed = card.stoppedOnFailure)
-            }
-            card.budget?.let { budget ->
-                Text(budget, Modifier.testTag("landing:budget"), style = MaterialTheme.typography.bodySmall, color = muted)
-                card.progress?.let { LandingBudgetMeter(it, card.usualProgress) }
-            }
-            card.live?.let { live ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (card.fresh) Box(Modifier.size(7.dp).background(success, CircleShape).testTag("landing:live-dot"))
-                    Text(live, Modifier.testTag("landing:live"), style = MaterialTheme.typography.bodySmall, color = muted)
+                card.budget?.let { budget ->
+                    Text(budget, Modifier.testTag("landing:budget"), style = MaterialTheme.typography.bodySmall, color = muted)
+                    card.progress?.let { LandingBudgetMeter(it, card.usualProgress) }
                 }
-            }
-            val attempt = view.currentAttempt
-            if (card.timedOut && attempt != null) {
-                Text(LandingSessionModel.timeoutLine(attempt, state.facts().mainBranch), Modifier.testTag("landing:timeout-line"),
-                    style = MaterialTheme.typography.bodySmall, color = muted)
-                LandingSessionModel.pushSentence(view, attempt)?.let {
-                    Text(it, Modifier.testTag("landing:push-sentence"), style = MaterialTheme.typography.bodySmall, color = muted)
+                card.live?.let { live ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (card.fresh) Box(Modifier.size(7.dp).background(success, CircleShape).testTag("landing:live-dot"))
+                        Text(live, Modifier.testTag("landing:live"), style = MaterialTheme.typography.bodySmall, color = muted)
+                    }
                 }
-            }
-            if (view.subject == "PROMOTION" && view.settledAt == null && card.running &&
-                attempt?.kind == "CHECK_PROMOTION") {
-                state.currentPromotion()?.let { promotion ->
-                    io.orbitd.android.core.cards.PromotionCards.onPassLine(promotion)?.let {
-                        Text(it, Modifier.testTag("landing:on-pass"), style = MaterialTheme.typography.bodySmall, color = muted)
+                val attempt = view.currentAttempt
+                if (card.timedOut && attempt != null) {
+                    Text(LandingSessionModel.timeoutLine(attempt, state.facts().mainBranch), Modifier.testTag("landing:timeout-line"),
+                        style = MaterialTheme.typography.bodySmall, color = muted)
+                    LandingSessionModel.pushSentence(view, attempt)?.let {
+                        Text(it, Modifier.testTag("landing:push-sentence"), style = MaterialTheme.typography.bodySmall, color = muted)
+                    }
+                }
+                if (view.subject == "PROMOTION" && view.settledAt == null && card.running &&
+                    attempt?.kind == "CHECK_PROMOTION") {
+                    state.currentPromotion()?.let { promotion ->
+                        io.orbitd.android.core.cards.PromotionCards.onPassLine(promotion)?.let {
+                            Text(it, Modifier.testTag("landing:on-pass"), style = MaterialTheme.typography.bodySmall, color = muted)
+                        }
+                    }
+                }
+                card.failure?.let { Text(it, Modifier.testTag("landing:failure"), style = MaterialTheme.typography.bodySmall, color = muted) }
+                if (card.timedOut) {
+                    val gates = LandingSessionModel.gates(view, now, state.updatedAt, state.failed)
+                    val push = attempt?.let { LandingSessionModel.pushSentence(view, it) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (gates.retry) Button(onClick = { onPress(LandingMenuAction.RETRY) }, enabled = !state.acting,
+                            modifier = Modifier.testTag("landing:retry")) { Text(LandingSessionCopy.RETRY) }
+                        if (gates.recheck) Button(onClick = { onPress(LandingMenuAction.RERUN_THE_CHECK) }, enabled = !state.acting,
+                            modifier = Modifier.testTag("landing:rerun")) { Text(LandingSessionCopy.RERUN_THE_CHECK) }
+                        if (gates.abandon) AbandonButton({ onPress(LandingMenuAction.ABANDON) }, !state.acting, Modifier.testTag("landing:abandon"))
+                    }
+                    doorHint(gates, push, attempt)?.let {
+                        Text(it, Modifier.testTag("landing:door-hint"), style = MaterialTheme.typography.bodySmall, color = muted)
                     }
                 }
             }
-            card.failure?.let { Text(it, Modifier.testTag("landing:failure"), style = MaterialTheme.typography.bodySmall, color = muted) }
-            if (card.timedOut) {
-                val gates = LandingSessionModel.gates(view, now, state.updatedAt, state.failed)
-                val push = attempt?.let { LandingSessionModel.pushSentence(view, it) }
+            // A landing that waits for a decision names who decides, then the doors to them: the coordinator first, then the task or
+            // the round's card — on a quiet panel, as the chat's own waiting cards stand.
+            if (waitDoors.isNotEmpty()) Column(Modifier.fillMaxWidth().background(muted.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp).testTag("landing:wait"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (LandingMenuAction.OPEN_COORDINATOR in waitDoors) Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Icon(painterResource(R.drawable.ic_person), null, Modifier.size(14.dp), tint = muted)
+                    Text(LandingSessionCopy.DECISIONS_THE_COORDINATOR, Modifier.testTag("landing:wait-line"),
+                        style = MaterialTheme.typography.bodySmall, color = muted)
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (gates.retry) Button(onClick = { onPress(LandingMenuAction.RETRY) }, enabled = !state.acting,
-                        modifier = Modifier.testTag("landing:retry")) { Text(LandingSessionCopy.RETRY) }
-                    if (gates.recheck) Button(onClick = { onPress(LandingMenuAction.RERUN_THE_CHECK) }, enabled = !state.acting,
-                        modifier = Modifier.testTag("landing:rerun")) { Text(LandingSessionCopy.RERUN_THE_CHECK) }
-                    if (gates.abandon) AbandonButton({ onPress(LandingMenuAction.ABANDON) }, !state.acting, Modifier.testTag("landing:abandon"))
+                    waitDoors.forEachIndexed { index, action ->
+                        val label = when (action) {
+                            LandingMenuAction.OPEN_COORDINATOR -> LandingSessionCopy.OPEN_COORDINATOR
+                            LandingMenuAction.OPEN_TASK -> LandingSessionCopy.OPEN_TASK
+                            else -> LandingSessionCopy.REVIEW_CARD
+                        }
+                        val tag = Modifier.testTag("landing:wait:${action.name.lowercase()}")
+                        if (index == 0) Button(onClick = { onPress(action) }, modifier = tag) { Text(label) }
+                        else OutlinedButton(onClick = { onPress(action) }, modifier = tag) { Text(label) }
+                    }
                 }
-                doorHint(gates, push, attempt)?.let {
-                    Text(it, Modifier.testTag("landing:door-hint"), style = MaterialTheme.typography.bodySmall, color = muted)
-                }
-            }
-        }
-        // A landing that waits for a decision names the people who make it: the coordinator first, then the task or the round's card.
-        if (waitDoors.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            waitDoors.forEachIndexed { index, action ->
-                val label = when (action) {
-                    LandingMenuAction.OPEN_COORDINATOR -> LandingSessionCopy.OPEN_COORDINATOR
-                    LandingMenuAction.OPEN_TASK -> LandingSessionCopy.OPEN_TASK
-                    else -> LandingSessionCopy.REVIEW_CARD
-                }
-                val tag = Modifier.testTag("landing:wait:${action.name.lowercase()}")
-                if (index == 0) Button(onClick = { onPress(action) }, modifier = tag) { Text(label) }
-                else FilledTonalButton(onClick = { onPress(action) }, modifier = tag) { Text(label) }
             }
         }
     }
@@ -400,56 +448,137 @@ private fun LandingBudgetMeter(progress: Float, usual: Float?) {
     }
 }
 
+/** One attempt as the chat's tool rows (owner 2026-11-11, docs/mocks/landings-chat-tools-native): its heading only when there are several,
+ *  then its lines gathered into steps (`LandingSteps`), each a tool row. A step opens to its own lines, the server's sentences as they
+ *  were, a check's to its output too; a step that failed or runs now starts open. */
 @Composable
 private fun LandingTimelineSectionView(section: LandingSection, view: LandingView, now: Instant, zone: ZoneId,
     onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val current = section.jobId == view.currentAttempt?.jobId
+    val attempt = view.currentAttempt
+    val live = current && attempt?.state == "RUNNING" && !attempt.timedOut
     var openLog by remember(section.jobId) { mutableStateOf<LandingLogSelectors?>(null) }
-    Column(Modifier.fillMaxWidth().testTag("landing:section:${section.jobId}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val steps = remember(section) { LandingSteps.steps(section.entries, section.kind) }
+    Column(Modifier.fillMaxWidth().testTag("landing:section:${section.jobId}"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        if ((view.timeline?.sections?.size ?: 0) > 1) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(section.title, Modifier.testTag("landing:section-title:${section.jobId}"), style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold)
             LandingSessionModel.sectionState(section.state)?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = muted)
             }
         }
-        section.entries.forEachIndexed { index, entry ->
-            val selectors = if (entry.kind == "CHECK_FINISHED") LandingLogSelectors(section.jobId, entry.claim, entry.round, entry.checkIndex) else null
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                    ProjectTime.parse(entry.at)?.let {
-                        Text(ProjectPage.landingClockTime(it, zone), Modifier.testTag("landing:entry-time:$index"),
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = muted)
+        val liveCheck = @Composable {
+            val check = attempt?.check
+            if (live && check != null) {
+                val selector = LandingLogSelectors(attempt.jobId, attempt.claim, attempt.round, check.index)
+                LandingLiveCheck(selector, "${LandingSessionModel.checkLabel(check.name)} · live " +
+                    ProjectPage.landingClock(max(0.0, ProjectTime.between(ProjectTime.parse(check.startedAt) ?: now, now))), onLog)
+            }
+        }
+        steps.forEachIndexed { index, step ->
+            val last = index == steps.lastIndex
+            val status = when {
+                LandingSteps.failed(step, section.kind) -> StepStatus.FAILED
+                last && live -> StepStatus.RUNNING
+                last && current && attempt?.state == "QUEUED" -> StepStatus.PENDING
+                else -> StepStatus.OK
+            }
+            key(step.key) {
+                LandingStepRow(section, step, status) {
+                    step.entries.forEach { (entryIndex, entry) ->
+                        LandingEntryLine(section, entryIndex, entry, zone, openLog, { openLog = it }, onLog)
                     }
-                    val mark = landingMark(entry, section.kind, section.entries, index)
-                    Text(mark.first, Modifier.width(16.dp).testTag("landing:mark:$index"), style = MaterialTheme.typography.bodySmall,
-                        color = mark.second)
-                    Text(entry.text, Modifier.weight(1f).testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
-                    if (selectors != null) {
-                        TextButton(onClick = { openLog = if (openLog == selectors) null else selectors },
-                            modifier = Modifier.testTag("landing:log:$index")) { Text("${LandingSessionCopy.LOG} ›", style = MaterialTheme.typography.bodySmall) }
-                    }
-                }
-                entry.reason?.takeIf { it.isNotEmpty() && !entry.text.contains(it) }?.let {
-                    Text(it, Modifier.padding(start = 24.dp), style = MaterialTheme.typography.bodySmall, color = muted)
-                }
-                when {
-                    selectors != null && openLog == selectors -> LandingLogBlock(selectors, onLog)
-                    selectors != null && !LandingSessionModel.checkPassed(entry) -> LandingInlineOutput(selectors, onLog)
+                    if (status == StepStatus.RUNNING) liveCheck()
                 }
             }
         }
-        if (current && view.currentAttempt?.state == "RUNNING" && !view.currentAttempt.timedOut && view.currentAttempt.check != null) {
-            val attempt = view.currentAttempt
-            val check = attempt.check!!
-            val selector = LandingLogSelectors(attempt.jobId, attempt.claim, attempt.round, check.index)
-            LandingLiveCheck(selector, "${LandingSessionModel.checkLabel(check.name)} · live " +
-                ProjectPage.landingClock(max(0.0, ProjectTime.between(ProjectTime.parse(check.startedAt) ?: now, now))), onLog)
-        }
+        // A check streaming before its attempt wrote any line has no step to sit in.
+        if (steps.isEmpty()) liveCheck()
         if (current) LandingSessionModel.noReportBand(view, zone)?.let {
             Text(it, Modifier.fillMaxWidth().background(muted.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 6.dp)
                 .testTag("landing:no-report"), style = MaterialTheme.typography.bodySmall, color = muted)
+        }
+    }
+}
+
+private enum class StepStatus { OK, FAILED, RUNNING, PENDING }
+
+/** One step as the session chat's tool row on Android: the tone bar, the caret, its name in the mono face, its summary line and the
+ *  word that says how it stands (`Complete`, `Failed`, `Running`), as the chat's own tool rows say it. No time on a phone's row; the
+ *  lines it opens to carry theirs. */
+@Composable
+private fun LandingStepRow(section: LandingSection, step: LandingStep, status: StepStatus, content: @Composable ColumnScope.() -> Unit) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    var pressed by remember(section.jobId, step.key) { mutableStateOf<Boolean?>(null) }
+    val open = pressed ?: (status == StepStatus.FAILED || status == StepStatus.RUNNING)
+    val tone = when (step.key) {
+        "queue" -> muted
+        "claim", "sync" -> Color(0xFF5E9BFF)
+        "push" -> Color(0xFFFF9F0A)
+        else -> Color(0xFF14B8A6)
+    }
+    val shape = RoundedCornerShape(if (open) 8.dp else 0.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).background(if (open) muted.copy(alpha = 0.06f) else Color.Transparent)
+        .drawBehind { drawRect(tone, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) }
+        .testTag(if (open) "landing:step-open:${step.key}" else "landing:step:${step.key}")) {
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = step.name) { pressed = !open }
+            .padding(start = 11.dp, end = 8.dp, top = 6.dp, bottom = 6.dp).testTag("landing:step-row:${step.key}"),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(12.dp).rotate(if (open) 90f else 0f), tint = muted.copy(alpha = 0.6f))
+            Text(step.name, Modifier.testTag("landing:step-name"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+            Text(step.summary.text, Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(when (status) {
+                StepStatus.FAILED -> LandingStepWords.FAILED
+                StepStatus.RUNNING -> LandingStepWords.RUNNING
+                StepStatus.PENDING -> LandingStepWords.QUEUED
+                StepStatus.OK -> LandingStepWords.COMPLETE
+            }, Modifier.testTag("landing:step-status"), style = MaterialTheme.typography.bodySmall,
+                color = if (status == StepStatus.FAILED) MaterialTheme.colorScheme.error else muted, maxLines = 1, softWrap = false)
+        }
+        if (open) Column(Modifier.fillMaxWidth().padding(start = 28.dp, end = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
+            content = content)
+    }
+}
+
+/** The status words the chat's own tool rows end in on Android (`TranscriptRowView`). */
+internal object LandingStepWords {
+    const val COMPLETE = "Complete"
+    const val FAILED = "Failed"
+    const val RUNNING = "Running"
+    const val QUEUED = "Queued"
+}
+
+/** One of the server's lines, as it was: its time, its mark and its sentence; a finished check's `Log ›` and, when it failed, the tail
+ *  it died on (05 g). */
+@Composable
+private fun LandingEntryLine(section: LandingSection, index: Int, entry: LandingEntry, zone: ZoneId, openLog: LandingLogSelectors?,
+    setOpenLog: (LandingLogSelectors?) -> Unit, onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val selectors = if (entry.kind == "CHECK_FINISHED") LandingLogSelectors(section.jobId, entry.claim, entry.round, entry.checkIndex) else null
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+            ProjectTime.parse(entry.at)?.let {
+                Text(ProjectPage.landingClockTime(it, zone), Modifier.testTag("landing:entry-time:$index"),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = muted)
+            }
+            val mark = landingMark(entry, section.kind, section.entries, index)
+            Text(mark.first, Modifier.width(16.dp).testTag("landing:mark:$index"), style = MaterialTheme.typography.bodySmall,
+                color = mark.second)
+            Text(entry.text, Modifier.weight(1f).testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
+            if (selectors != null) {
+                TextButton(onClick = { setOpenLog(if (openLog == selectors) null else selectors) },
+                    modifier = Modifier.testTag("landing:log:$index")) { Text("${LandingSessionCopy.LOG} ›", style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+        entry.reason?.takeIf { it.isNotEmpty() && !entry.text.contains(it) }?.let {
+            Text(it, Modifier.padding(start = 24.dp), style = MaterialTheme.typography.bodySmall, color = muted)
+        }
+        when {
+            selectors != null && openLog == selectors -> LandingLogBlock(selectors, onLog)
+            selectors != null && !LandingSessionModel.checkPassed(entry) -> LandingInlineOutput(selectors, onLog)
         }
     }
 }

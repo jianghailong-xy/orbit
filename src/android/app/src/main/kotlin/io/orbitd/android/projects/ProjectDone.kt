@@ -14,7 +14,19 @@ import java.util.Locale
  * a press sends, the receipt, the rows the page shows and which card a coordinator conversation draws. Every number is the
  * server's (`derivedDone.counts`). */
 object ProjectDone {
+    const val staleHeading = "The coordinator’s request went stale"
+    const val staleDetail = "The coordinator has been told and will ask again when the work settles."
+    fun staleRequest(items: JsonObject?): String? {
+        if (items?.obj("doneRequest") != null) return null
+        val stale = items?.obj("latestDoneRequestSuperseded") ?: return null
+        val declined = items.obj("latestDoneRequestDecline")?.text("declinedAt")
+        if (declined != null && declined >= (stale.text("supersededAt") ?: "")) return null
+        return (stale.text("reason") ?: "").trimEnd('.', ' ', '\n') + ". " + staleDetail
+    }
+
     // The card's words, as main's ProjectDone.swift declares them.
+    const val declineHeading = "You said not yet"
+    const val declineHint = "The card comes back after the coordinator changes something."
     const val heading = "Is this project done?"
     const val coordinatorCall = "Coordinator’s call"
     const val doneWhen = "Done when"

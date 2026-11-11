@@ -80,6 +80,20 @@ export const wikiChatOffline = (machine: string): string => fill(panel.offline, 
 // The panel's own controls, which neither the design nor the contract words: names for a reader of the screen.
 export const WIKI_CHAT_HISTORY = 'Chats in this space';
 export const WIKI_CHAT_NO_HISTORY = 'No chats in this space yet';
+// The history the title opens (board 45 ④, owner 11-11), its row menu the session list's own words.
+export const WIKI_CHAT_HISTORY_TITLE = 'Chats';
+export const WIKI_CHAT_SEARCH = 'Search chats';
+export const WIKI_CHAT_NO_MATCH = 'No chats match';
+export const WIKI_CHAT_GROUP_OPEN = 'Open';
+export const WIKI_CHAT_GROUP_COMPLETED = 'Completed';
+export const WIKI_CHAT_SHOW_MORE = 'Show more';
+export const WIKI_CHAT_TRASH_NOTE = 'Chats you move to Trash stay there for 30 days. Restore them from Trash in the session list.';
+export const WIKI_CHAT_ROW_ACTIONS = 'Chat actions';
+export const WIKI_CHAT_RENAME = 'Rename…';
+export const WIKI_CHAT_RENAME_FIELD = 'Chat name';
+export const WIKI_CHAT_COMPLETE = 'Complete';
+export const WIKI_CHAT_MOVE_TO_TRASH = 'Move to Trash';
+export const WIKI_CHAT_ACTION_FAILED = 'That didn’t work. Try again in a moment.';
 export const WIKI_CHAT_OPEN_SESSION = 'Open as a full session';
 export const WIKI_CHAT_CLOSE = 'Hide chat';
 export const WIKI_CHAT_RESIZE = 'Resize chat';
@@ -157,8 +171,14 @@ export interface WikiChatRow {
   title: string;
   status: string;
   open: boolean;
+  /** In the session list's Completed. Absent from an older server, read as not. */
+  completed?: boolean;
+  /** A turn of it is queued or running. Absent from an older server, read as not. */
+  working?: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Its last turn's time, else its creation's: what the list is ordered by. Absent from an older server. */
+  lastActiveAt?: string;
   drafts: number;
   needsYou: number;
 }
@@ -170,16 +190,62 @@ export interface WikiChatList {
   choices: WikiChatWorkspace[];
   fab: WikiChatFabCounts;
   chats: WikiChatRow[];
+  /** More chats match past this page (contract `chat.list.page`). Absent from an older server, read as none. */
+  more?: boolean;
 }
 
-/** The chats read, or null from a server that has no chats yet (404): the button then stays at rest. */
-export async function getWikiChats(spaceId: string): Promise<WikiChatList | null> {
+/**
+ * The chats read, or null from a server that has no chats yet (404): the button then stays at rest. `q` and `offset`
+ * ask for one page of the history (contract `chat.list.page`, board 45 ④); the counts come back over every chat.
+ */
+export async function getWikiChats(spaceId: string, page: { q?: string; offset?: number } = {}): Promise<WikiChatList | null> {
+  const params = new URLSearchParams();
+  const q = page.q?.trim();
+  if (q) params.set('q', q);
+  if (page.offset) params.set('offset', String(page.offset));
+  const query = params.toString();
   try {
-    return await api<WikiChatList>(`/wiki/spaces/${encodeURIComponent(spaceId)}/chats`);
+    return await api<WikiChatList>(`/wiki/spaces/${encodeURIComponent(spaceId)}/chats${query ? `?${query}` : ''}`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
+}
+
+/**
+ * The panel's history (board 45 ④, owner 11-11: Q3 A, Q4 A), as the session list files the chats: Open — the ones
+ * that need the owner, then the ones a turn runs in, then the rest as the server orders them, the one last spoken in
+ * first — and Completed, as ordered.
+ */
+export function wikiChatHistoryGroups(rows: readonly WikiChatRow[]): { open: WikiChatRow[]; completed: WikiChatRow[] } {
+  const rank = (row: WikiChatRow) => (row.needsYou > 0 ? 0 : row.working ? 1 : 2);
+  const open = rows.filter((row) => !row.completed);
+  return {
+    open: open.map((row, at) => ({ row, at })).sort((a, b) => rank(a.row) - rank(b.row) || a.at - b.at).map(({ row }) => row),
+    completed: rows.filter((row) => row.completed),
+  };
+}
+
+/** A history row's second line (board 45 ④ ③): what it needs from the owner, else that it is working, else how long ago it was spoken in. */
+export function wikiChatHistoryLine(row: WikiChatRow, now: number): { tone: 'needs_you' | 'working' | 'quiet'; text: string } {
+  if (row.needsYou > 0) return { tone: 'needs_you', text: row.needsYou === 1 ? fab.needsYouOne : fill(fab.needsYouMany, { n: row.needsYou }) };
+  if (row.working) return { tone: 'working', text: fab.working };
+  return { tone: 'quiet', text: wikiChatAgo(row.lastActiveAt ?? row.updatedAt, now) };
+}
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+/** "Just now", "5m ago", "2h ago", "Yesterday", "3d ago", "2w ago": when a chat was last spoken in. */
+export function wikiChatAgo(iso: string, now: number): string {
+  const diff = now - Date.parse(iso);
+  if (!Number.isFinite(diff) || diff < MINUTE) return 'Just now';
+  if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m ago`;
+  if (diff < DAY) return `${Math.floor(diff / HOUR)}h ago`;
+  if (diff < 2 * DAY) return 'Yesterday';
+  if (diff < 7 * DAY) return `${Math.floor(diff / DAY)}d ago`;
+  return `${Math.floor(diff / (7 * DAY))}w ago`;
 }
 
 /** The address value of a chat not started yet: `?chat=new`. */
@@ -238,6 +304,33 @@ export function wikiChatSearch(search: string, chat: string | null): string {
   return next ? `?${next}` : '';
 }
 
+const CLOSED_KEY = 'orbit.wikiChat.closed';
+
+/**
+ * Whether the owner hid the panel with ✕ in this space (board 45, owner 11-11, Q1 A): kept on the device, across
+ * tabs and restarts, until the round button opens the panel again. While it is, a wiki page no longer opens with
+ * the panel shown.
+ */
+export function readWikiChatClosed(spaceSlug: string): boolean {
+  try {
+    const all = JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '{}') as Record<string, unknown>;
+    return all[spaceSlug] === true;
+  } catch {
+    return false;
+  }
+}
+
+export function writeWikiChatClosed(spaceSlug: string, closed: boolean): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '{}') as Record<string, unknown>;
+    if (closed) all[spaceSlug] = true;
+    else delete all[spaceSlug];
+    localStorage.setItem(CLOSED_KEY, JSON.stringify(all));
+  } catch {
+    // Storage refused: the panel opens by default again next time, which is the lesser loss.
+  }
+}
+
 const OPEN_KEY = 'orbit.wikiChat.open';
 
 /**
@@ -268,7 +361,7 @@ export function writeWikiChatOpen(spaceSlug: string, chat: string | null): void 
 
 /**
  * The panel by the window's width (design §4.1, contract `chat.panel.widths`):
- * - wide (≥ 1440): docked on the right, pushing the page over; dragged between 320 and 560; the directory stays;
+ * - wide (≥ 1440): docked on the right, pushing the page over; dragged between 320 and half the window; the directory stays;
  * - docked (1200–1439): docked on the right; the directory folds into the Contents drawer;
  * - over (640–1199): slides in over the right of the page, with no scrim; Contents drawer;
  * - sheet (< 640): a sheet from the bottom, at half or full height; Contents drawer.
@@ -279,8 +372,16 @@ export const WIKI_CHAT_WIDTH = {
   wide: 1440,
   docked: 1200,
   over: 640,
-  panel: { initial: 400, min: 320, max: 560 },
+  /**
+   * The panel's width (owner 11-11, after board 45: 400 was too narrow on a wide window): a third of the window
+   * between 400 and 720 unless dragged, and dragged between 320 and half the window.
+   */
+  panel: { share: 1 / 3, initial: 400, cap: 720, min: 320, maxShare: 1 / 2 },
 } as const;
+
+/** The widest the panel can be dragged in a window this wide: half of it, never under the narrowest. */
+export const wikiChatPanelMax = (windowWidth: number): number =>
+  Math.max(WIKI_CHAT_WIDTH.panel.min, Math.floor(windowWidth * WIKI_CHAT_WIDTH.panel.maxShare));
 
 export function wikiChatLayout(windowWidth: number): WikiChatLayout {
   if (windowWidth >= WIKI_CHAT_WIDTH.wide) return 'wide';
@@ -289,12 +390,17 @@ export function wikiChatLayout(windowWidth: number): WikiChatLayout {
   return 'sheet';
 }
 
-/** The panel's width: the dragged one where it can be dragged, else the default; a sheet is as wide as the window. */
-export function wikiChatPanelWidth(layout: WikiChatLayout, dragged: number | null): number | null {
-  const { initial, min, max } = WIKI_CHAT_WIDTH.panel;
+/**
+ * The panel's width: the dragged one where it can be dragged (wide), held between 320 and half the window; else a
+ * third of the window between 400 and 720. A sheet is as wide as the window.
+ */
+export function wikiChatPanelWidth(layout: WikiChatLayout, dragged: number | null, windowWidth: number): number | null {
+  const { share, initial, cap, min } = WIKI_CHAT_WIDTH.panel;
   if (layout === 'sheet') return null;
-  if (layout !== 'wide' || dragged === null || !Number.isFinite(dragged)) return initial;
-  return Math.min(max, Math.max(min, Math.round(dragged)));
+  if (layout !== 'wide' || dragged === null || !Number.isFinite(dragged)) {
+    return Math.min(cap, Math.max(initial, Math.round(windowWidth * share)));
+  }
+  return Math.min(wikiChatPanelMax(windowWidth), Math.max(min, Math.round(dragged)));
 }
 
 /** Whether the open panel pushes the page over (it docks) rather than lying over it. */

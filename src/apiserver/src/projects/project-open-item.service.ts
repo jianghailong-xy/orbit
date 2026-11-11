@@ -896,28 +896,44 @@ export class ProjectOpenItemService {
     // one question rather than asking the owner the same thing twice.
     const dedupeKey = `CQ:${asked.clientQuestionId?.trim() || randomKey()}`;
     const now = new Date();
-    const [created] = await this.prisma.projectOpenItem.createManyAndReturn({
-      data: [{
-        projectId,
-        ownerId,
-        kind: 'COORDINATOR_QUESTION' satisfies OpenItemKind,
-        state: 'OPEN',
-        assignee: 'OWNER' satisfies OpenItemAssignee,
-        // The owner is not who this ended up with; it is who it was always for.
-        assigneeReason: 'DEFAULT' satisfies OpenItemAssigneeReason,
-        askedBySessionId: asking,
-        dedupeKey,
-        title: `Coordinator asks: ${question.question}`,
-        payload: question as unknown as Prisma.InputJsonValue,
-        waitingSince: now,
-        assignedAt: now,
-        // Nowhere to escalate to — it is already the owner's. The window becomes their one reminder.
-        escalateAt: null,
-        remindAt: new Date(now.getTime() + project.exceptionEscalationSeconds * 1_000),
-      }],
-      skipDuplicates: true,
-      select: { id: true },
-    });
+    const created = await withTransactionRetry(this.prisma, async tx => {
+      if (asked.forRunQuestion) {
+        const request = await tx.sessionRequest.findFirst({ where: {
+          id: asked.forRunQuestion, ownerId, toSessionId: asking, kind: 'RUN_QUESTION', state: 'OPEN',
+        } });
+        if (!request) throw new ConflictException({ code: 'RUN_QUESTION_NOT_OPEN', message: 'this run question is not open for this coordinator' });
+      }
+      const [created] = await tx.projectOpenItem.createManyAndReturn({
+        data: [{
+          projectId,
+          ownerId,
+          kind: 'COORDINATOR_QUESTION' satisfies OpenItemKind,
+          state: 'OPEN',
+          assignee: 'OWNER' satisfies OpenItemAssignee,
+          // The owner is not who this ended up with; it is who it was always for.
+          assigneeReason: 'DEFAULT' satisfies OpenItemAssigneeReason,
+          askedBySessionId: asking,
+          dedupeKey,
+          title: `Coordinator asks: ${question.question}`,
+          payload: question as unknown as Prisma.InputJsonValue,
+          waitingSince: now,
+          assignedAt: now,
+          // Nowhere to escalate to — it is already the owner's. The window becomes their one reminder.
+          escalateAt: null,
+          remindAt: new Date(now.getTime() + project.exceptionEscalationSeconds * 1_000),
+        }],
+        skipDuplicates: true,
+        select: { id: true },
+      });
+      if (asked.forRunQuestion) {
+        const item = created ?? await tx.projectOpenItem.findFirstOrThrow({ where: { projectId, dedupeKey, state: 'OPEN' }, select: { id: true } });
+        const linked = await tx.sessionRequest.updateMany({ where: {
+          id: asked.forRunQuestion, ownerId, toSessionId: asking, kind: 'RUN_QUESTION', state: 'OPEN',
+        }, data: { escalatedItemId: item.id, replyBy: new Date(now.getTime() + 30 * 86400 * 1000) } });
+        if (!linked.count) throw new ConflictException({ code: 'RUN_QUESTION_NOT_OPEN', message: 'this run question is no longer open' });
+      }
+      return created;
+    }, loggedRetry(this.logger, 'projectOpenItem.askOwner'));
     if (created) {
       // R9: the question is filed and the owner is told, in that order and after the commit.
       void this.push?.notifyOwnerItem(created.id);
@@ -989,6 +1005,9 @@ export class ProjectOpenItemService {
       ...(body.upstreamRef != null ? { upstreamRef: body.upstreamRef } : {}),
       automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
+      ...(body.landingCheckCommand !== undefined ? { landingCheckCommand: body.landingCheckCommand } : {}),
+      ...(body.landingCheckTimeoutSeconds !== undefined
+        ? { landingCheckTimeoutSeconds: body.landingCheckTimeoutSeconds } : {}),
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
       // Named or not named, never defaulted: a suggestion of the one-hour default and no suggestion
       // at all read the same on the card — an empty box says "one hour unless set" — so inventing
@@ -1320,18 +1339,24 @@ export class ProjectOpenItemService {
       ...(text ? { text } : {}),
       answeredByUserId: ownerId,
     };
-    const settled = await this.prisma.projectOpenItem.updateMany({
-      where: { id: itemId, state: 'OPEN' },
-      data: {
-        state: 'RESOLVED',
-        resolution: 'ANSWERED',
-        resolvedAt: new Date(),
-        resolvedBy: 'USER',
-        resolvedByUserId: ownerId,
-        answer: answer as unknown as Prisma.InputJsonValue,
-      },
-    });
-    if (settled.count === 0) throw notOpen();
+    await withTransactionRetry(this.prisma, async tx => {
+      const settled = await tx.projectOpenItem.updateMany({
+        where: { id: itemId, state: 'OPEN' },
+        data: {
+          state: 'RESOLVED',
+          resolution: 'ANSWERED',
+          resolvedAt: new Date(),
+          resolvedBy: 'USER',
+          resolvedByUserId: ownerId,
+          answer: answer as unknown as Prisma.InputJsonValue,
+        },
+      });
+      if (settled.count === 0) throw notOpen();
+      const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { exceptionEscalationSeconds: true } });
+      await tx.sessionRequest.updateMany({ where: { escalatedItemId: itemId, kind: 'RUN_QUESTION', state: 'OPEN' },
+        data: { replyBy: new Date(Date.now() + project.exceptionEscalationSeconds * 1000) } });
+      return settled;
+    }, loggedRetry(this.logger, 'projectOpenItem.answerOpenItem'));
     return {
       itemId,
       state: 'RESOLVED',
@@ -2068,7 +2093,7 @@ export class ProjectOpenItemService {
       const newestLanding = await tx.projectIntegrationJob.findFirst({
         where: { taskId, kind: 'LAND_TASK' },
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-        select: { id: true, generation: true, state: true, checks: true, phase: true },
+        select: { id: true, generation: true, state: true, checks: true, baselineRed: true, phase: true },
       });
       if (expectJobId && newestLanding?.id !== expectJobId) {
         throw new ConflictException({

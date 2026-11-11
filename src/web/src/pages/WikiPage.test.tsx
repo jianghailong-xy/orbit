@@ -456,7 +456,7 @@ describe('the Wiki, for an account the server has not switched it on for', () =>
 
 /**
  * The head (design §12.3.1, §12.3.4, mocks 30 ③ and 31 ④): `Wiki`, the space, Contents, Activity with
- * the number waiting on the owner, Settings and New entry. One space is a label; several are a select.
+ * the number waiting on the owner, and Settings (New entry left with board 45). One space is a label; several are a select.
  */
 const WIKOVA_ID = '0196e000-0000-7000-8000-0000000000b2';
 const WIKIDS_ID = '0196e000-0000-7000-8000-0000000000b3';
@@ -502,13 +502,13 @@ describe('the Wiki head', () => {
     expect(html).not.toContain('wk-space-tag');
   });
 
-  it('puts Contents, Activity, Settings and New entry in that order, Activity carrying every space’s number', () => {
+  it('puts Contents, Activity and Settings in that order, with no New entry (board 45), Activity carrying every space’s number', () => {
     const html = paint('home', '/wiki/orbit', { spaces: THREE_SPACES });
     const at = (needle: string) => html.indexOf(needle);
     expect(at('wk-contents-btn')).toBeGreaterThan(-1);
     expect(at('wk-activity-btn')).toBeGreaterThan(at('wk-contents-btn'));
     expect(at('aria-label="Settings"')).toBeGreaterThan(at('wk-activity-btn'));
-    expect(at('aria-label="New entry"')).toBeGreaterThan(at('aria-label="Settings"'));
+    expect(html).not.toContain('New entry');
     expect(wikiWaiting(THREE_SPACES)).toBe(7);
     expect(html).toContain('class="tp-rail-badge needs-you" title="7 waiting on you" aria-label="7 waiting on you">7</span>');
   });

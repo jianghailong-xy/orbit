@@ -21,7 +21,8 @@ import OrbitKit
 /// whole-card path: nobody hands it a review target).
 struct ProjectDoneCard: View {
     let subject: ProjectDoneSubject
-    /// The coordinator's request, or nil for a card nobody asked for — Orbit then fills in the gaps.
+    /// The coordinator's request, or nil for a card nobody asked for — the server's done check then
+    /// stands in for gaps.
     let request: DoneRequest?
     /// When the coordinator asked; nil when nobody did.
     let askedAt: String?
@@ -648,5 +649,34 @@ private extension View {
     func doneRow() -> some View {
         padding(.horizontal, 12).padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct ProjectDoneDeclineRow: View {
+    let decline: ProjectDoneRequestDecline
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(ProjectDone.declineHeading) · \(ProjectDone.dateTime(decline.declinedAt) ?? "")")
+                .font(.orbitLabel.weight(.bold))
+            Text("“\(decline.note)” \(ProjectDone.declineHint)")
+                .font(.orbitLabel).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+struct ProjectStaleDoneRow: View {
+    let detail: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ProjectDone.staleHeading).font(.orbitLabel.weight(.bold))
+            Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
 }

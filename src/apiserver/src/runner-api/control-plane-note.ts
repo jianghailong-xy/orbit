@@ -1,4 +1,5 @@
 import type {
+  ConfirmationAnswersCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
@@ -231,5 +232,34 @@ export function withConfirmationReturn(
   const stored = { ...payload };
   delete stored.confirmationReturn;
   if (card !== null) stored.confirmationReturn = card;
+  return stored;
+}
+
+/** The same rule for the owner's answers handed to the reviewer (`confirmationAnswers`, §7 Q5). */
+export function withConfirmationAnswers(
+  payload: Record<string, unknown>,
+  card: ConfirmationAnswersCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.confirmationAnswers;
+  if (card !== null) stored.confirmationAnswers = card;
+  return stored;
+}
+
+/**
+ * The same rule for every card that is read by its turn's key and stored on the echo under the field
+ * of its own name (sessions/turn-cards.ts): recorded when the control plane says the turn is one,
+ * removed otherwise, and never taken from the runner.
+ */
+export function withTurnCard<K extends string>(
+  payload: Record<string, unknown>,
+  field: K,
+  card: unknown,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored[field];
+  if (card != null) stored[field] = card;
   return stored;
 }

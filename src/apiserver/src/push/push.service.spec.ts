@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { uuidToBase62 } from '@orbit/shared';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
@@ -21,7 +23,7 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
     session: {
       findMany: async (args: any) => {
         calls.push(args);
-        return [{ id: 's-open' }];
+        return [{ id: 's-open', approvals: [{ id: 'approval-open', toolName: 'Bash' }] }];
       },
     },
     // The owner-item half of the count reads its own rows (see the two tests below); none here.
@@ -50,7 +52,7 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
 /** The badge's other half: one RUNNING session stopped on a tool call. */
 function approvalPrisma() {
   return {
-    session: { findMany: async (): Promise<Array<{ id: string }>> => [{ id: 's-blocked' }] },
+    session: { findMany: async () => [{ id: 's-blocked', approvals: [{ id: 'approval-blocked', toolName: 'Bash' }] }] },
     // Overridden per test with the rows that half should or should not count.
     projectOpenItem: { findMany: async (): Promise<any[]> => [] },
     // Which of those rows nobody owes any more (`openItemsNoLongerOwed`): none, here.
@@ -350,6 +352,7 @@ function agentNotifyHarness(opts: {
   preferences?: Record<string, unknown>;
   tokens?: { token: string; environment: string }[];
   devices?: number;
+  moduleRef?: any;
 } = {}) {
   const sent: string[] = [];
   const rang = { sessions: new Map<string, Date>(), account: null as Date | null, beforeClaim: () => {} };
@@ -380,13 +383,13 @@ function agentNotifyHarness(opts: {
       findMany: async () => opts.tokens ?? [{ token: 'device', environment: 'sandbox' }],
     },
   };
-  const service = new PushService(prisma as any, enabledConfig());
+  const service = new PushService(prisma as any, enabledConfig(), undefined, opts.moduleRef);
   (service as any).authToken = () => 'auth-token';
   (service as any).deliver = async (_t: unknown, body: string) => {
     sent.push(body);
     return opts.devices ?? 1;
   };
-  return { service, sent, rang };
+  return { service, sent, rang, prisma };
 }
 
 const agentInput = { ownerId: 'owner-1', sessionId: 's-1', fallbackTitle: 'runner-a', message: 'x' };
@@ -1004,3 +1007,82 @@ test('a wakeup-missed push that fails is logged, never thrown at the worker', as
 
   assert.equal(sent.length, 0);
 });
+
+
+test('notify from an Automatic task run reaches the coordinator without alerting owner devices', async () => {
+  const run = randomUUID(), coordinator = randomUUID(), taskId = randomUUID();
+  const requests: any[] = [], turns: any[] = [];
+  const harness = agentNotifyHarness({
+    preferences: { notifyAgentMessage: false },
+    moduleRef: { get: () => ({ createTurn: async (...args: any[]) => {
+      turns.push(args);
+      await args[3].coalesce({ session: harness.prisma.session, $queryRaw: async () => [] });
+      await args[3].onTurnWritten({ sessionRequest: { create: async (q: any) => requests.push(q.data) } }, { id: randomUUID() });
+      return { placement: 'queued' };
+    } }) },
+  });
+  const live = { status: 'RUNNING', endReason: null, completedAt: null, archivedAt: null,
+    deletedAt: null, cancelRequestedAt: null, retryAt: null };
+  (harness.prisma as any).$queryRaw = async () => [];
+  harness.prisma.session.findFirst = async (q: any) => {
+    assert.equal(q.where.ownerId, 'owner-1');
+    if (q.select.task) return { title: 'Run', agentNotifiedAt: harness.rang.sessions.get(run) ?? null, task: { id: taskId, title: 'Build', project: {
+      id: randomUUID(), coordinatorEnabled: true, coordinatorSessionId: coordinator, exceptionEscalationSeconds: 7200,
+    } } };
+    if (q.select.status) return live;
+    return { id: q.where.id, title: 'Run', taskId, workspace: null, permissionMode: 'default', engine: 'codex', owner: { preferences: {} } };
+  };
+  const result = await harness.service.notifyAgentMessage({ ...agentInput, sessionId: run, message: 'Ready to review' });
+  assert.deepEqual(result, { delivered: true, recipient: 'coordinator', recipientSessionId: uuidToBase62(coordinator), placement: 'queued' });
+  assert.equal(harness.sent.length, 0);
+  assert.equal(turns[0][1], coordinator);
+  assert.match(turns[0][2].clientTurnId, /^run-notify:v1:/);
+  assert.equal(turns[0][2].content, '');
+  assert.equal(requests[0].kind, 'RUN_NOTIFY');
+  assert.equal(requests[0].fromSessionId, run);
+  assert.equal(requests[0].toSessionId, coordinator);
+  assert.equal(requests[0].requestPreview, 'Ready to review');
+  assert.equal(requests[0].replyBy.getTime() - harness.rang.sessions.get(run)!.getTime(), 7200000);
+  assert.equal(harness.rang.sessions.size, 1);
+  const again = await harness.service.notifyAgentMessage({ ...agentInput, sessionId: run });
+  assert.equal(again.delivered, false);
+  assert.match(again.reason!, /rate limited/);
+  assert.equal(turns.length, 1);
+  assert.equal(harness.sent.length, 0);
+});
+
+for (const project of [null, { coordinatorEnabled: false }]) {
+  test(`notify from a task run ${project ? 'with Automatic off' : 'in no project'} alerts owner devices as before`, async () => {
+    const { service, sent } = agentNotifyHarness({ session: { title: 'Run', task: { project } } });
+    assert.deepEqual(await service.notifyAgentMessage(agentInput), { delivered: true, devices: 1 });
+    assert.equal(sent.length, 1);
+    assert.equal(JSON.parse(sent[0]).sessionID, agentInput.sessionId);
+  });
+}
+
+for (const unavailable of ['missing', 'ended', 'paused', 'fused', 'refused']) {
+  test(`Automatic run notify falls back once when coordinator is ${unavailable}`, async () => {
+    const coordinator = randomUUID();
+    const harness = agentNotifyHarness({ moduleRef: { get: () => ({ createTurn: async () => { throw new Error('refused'); } }) } });
+    let claims = 0;
+    const claim = harness.prisma.session.updateMany;
+    harness.prisma.session.updateMany = async (q: any) => { claims++; return claim(q); };
+    (harness.prisma as any).$queryRaw = async () => unavailable === 'fused' ? [{ id: 'fuse' }] : [];
+    harness.prisma.session.findFirst = async (q: any) => {
+      if (q.select.task) return { title: 'Run', task: { id: randomUUID(), title: 'Build', project: {
+        id: randomUUID(), coordinatorEnabled: true, coordinatorSessionId: unavailable === 'missing' ? null : coordinator, exceptionEscalationSeconds: 7200,
+      } } };
+      if (q.select.status) return { status: unavailable === 'ended' ? 'COMPLETED' : 'RUNNING', endReason: null,
+        completedAt: unavailable === 'ended' ? new Date() : null, archivedAt: null, deletedAt: null,
+        cancelRequestedAt: null, retryAt: unavailable === 'paused' ? new Date() : null };
+      return null;
+    };
+    const result = await harness.service.notifyAgentMessage(agentInput);
+    assert.equal(result.delivered, true);
+    assert.equal(result.recipient, 'owner');
+    assert.equal(result.fallback, unavailable === 'missing' ? 'NO_COORDINATOR' : unavailable === 'fused' ? 'COORDINATOR_PAUSED' : unavailable === 'refused' ? 'UNREACHABLE' : 'REVIEWER_ENDED');
+    assert.equal(claims, 1);
+    assert.equal(harness.sent.length, 1);
+    assert.match(JSON.parse(harness.sent[0]).aps.alert.body, /^Not reviewed by the coordinator · /);
+  });
+}

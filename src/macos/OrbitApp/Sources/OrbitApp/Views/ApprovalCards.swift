@@ -3166,16 +3166,17 @@ struct StartProjectCard: View {
             automaticRow(editable: editable)
             Divider()
             lineRow(editable: editable)
+            // How the work reaches main (§10.5 O-L1, A-Q21), directly under the line it depends on
+            // (owner decision 2026-11-10). A read that does not say — a server that predates it —
+            // offers no choice, and no row.
+            if draft.deliveryMode != nil {
+                Divider()
+                deliveryRow(editable: editable)
+            }
             // A project with no repository has no branch to name, and no row.
             if let upstream = draft.upstream {
                 Divider()
                 mainBranchRow(upstream, editable: editable)
-            }
-            // How the work reaches main (§10.5 O-L1, A-Q21). A read that does not say — a server
-            // that predates it — offers no choice, and no row.
-            if draft.deliveryMode != nil {
-                Divider()
-                deliveryRow(editable: editable)
             }
             Divider()
             mergeCheckRow(editable: editable)
@@ -3422,7 +3423,7 @@ struct StartProjectCard: View {
                     .textInputAutocapitalization(.never)
                     #endif
                     .disabled(!editable)
-                Text(RunSettings.mergeCheckHint(draft.main))
+                Text(draft.mergeCheckHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if !draft.hasMergeCheck {

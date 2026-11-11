@@ -562,6 +562,9 @@ export class ProjectAcceptanceService {
       ...(input.upstreamRef !== undefined ? { upstreamRef: input.upstreamRef } : {}),
       automatic: input.automatic,
       maxConcurrentTasks: input.maxConcurrentTasks,
+      ...(input.landingCheckCommand !== undefined ? { landingCheckCommand: input.landingCheckCommand } : {}),
+      ...(input.landingCheckTimeoutSeconds !== undefined
+        ? { landingCheckTimeoutSeconds: input.landingCheckTimeoutSeconds } : {}),
       mergeCheckCommand: input.mergeCheckCommand ?? null,
       // Absent is a client that does not know the field, and is left absent so `startProjectLine`
       // leaves the binding's budget as it stands rather than clearing one nobody named.
@@ -666,6 +669,10 @@ export class ProjectAcceptanceService {
           : {}),
         automatic: asked.automatic,
         maxConcurrentTasks: asked.maxConcurrentTasks,
+        ...(asked.landingCheckCommand !== undefined || line.landingCheckCommand != null
+          ? { landingCheckCommand: line.landingCheckCommand ?? null } : {}),
+        ...(asked.landingCheckTimeoutSeconds !== undefined || line.landingCheckTimeoutSeconds != null
+          ? { landingCheckTimeoutSeconds: line.landingCheckTimeoutSeconds ?? null } : {}),
         mergeCheckCommand: line.mergeCheckCommand,
         // As the check stands once the start is done: the budget the start named, the one the
         // binding already had when it named none, or null for a check that runs on its default.

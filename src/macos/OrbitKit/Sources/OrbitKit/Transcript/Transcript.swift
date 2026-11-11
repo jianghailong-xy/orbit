@@ -212,6 +212,17 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// cards. Nil for every other turn.
     public var reviewRequest: ConfirmationReviewRequestCard?
     public var reviewReturn: ConfirmationReturnCard?
+    /// The owner's answers handed to this reviewer once they confirmed (`confirmationAnswers`, §7 Q5):
+    /// drawn as `You confirmed`. Nil for every other turn.
+    public var reviewAnswers: ConfirmationAnswersCard?
+    /// Five more of Orbit's own turns (`OrbitTurnCards.swift`): a revision handed to the session that
+    /// dispatched its task, a send-back's note handed to the run, a task run's question and its notify
+    /// handed to the coordinator, and the opening of a session Orbit opened. Nil for every other turn.
+    public var evidenceReview: EvidenceReviewCard?
+    public var evidenceSendBack: EvidenceSendBackCard?
+    public var runQuestion: RunQuestionCard?
+    public var runNotice: RunNoticeCard?
+    public var sessionOpening: SessionOpeningCard?
     /// The control plane wrote this queued turn itself (`QueuedTurnInfo.authoredByOrbit`), so nobody
     /// typed it: taken off the queue unrun, it hands nothing back to the composer.
     public var authoredByOrbit: Bool
@@ -260,6 +271,12 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 authoredByOrbit: Bool = false,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
                 reviewReturn: ConfirmationReturnCard? = nil,
+                reviewAnswers: ConfirmationAnswersCard? = nil,
+                evidenceReview: EvidenceReviewCard? = nil,
+                evidenceSendBack: EvidenceSendBackCard? = nil,
+                runQuestion: RunQuestionCard? = nil,
+                runNotice: RunNoticeCard? = nil,
+                sessionOpening: SessionOpeningCard? = nil,
                 shell: Bool = false, receipt: Bool = false,
                 deliveryCode: String? = nil, deliveryReason: String? = nil) {
         self.id = id
@@ -286,6 +303,12 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.authoredByOrbit = authoredByOrbit
         self.reviewRequest = reviewRequest
         self.reviewReturn = reviewReturn
+        self.reviewAnswers = reviewAnswers
+        self.evidenceReview = evidenceReview
+        self.evidenceSendBack = evidenceSendBack
+        self.runQuestion = runQuestion
+        self.runNotice = runNotice
+        self.sessionOpening = sessionOpening
         self.shell = shell
         self.receipt = receipt
         self.deliveryCode = deliveryCode
@@ -298,7 +321,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
         case note, steer, delivery, itemCard, ownerAnswer, coordinatorDelivery, taskStart, startedCard
         case sessionMessage, externalSender, sessionReplies
-        case authoredByOrbit, reviewRequest, reviewReturn, withdrawable, shell
+        case authoredByOrbit, reviewRequest, reviewReturn, reviewAnswers, withdrawable, shell
+        case evidenceReview, evidenceSendBack, runQuestion, runNotice, sessionOpening
         case receipt, deliveryCode, deliveryReason
     }
     public init(from decoder: Decoder) throws {
@@ -336,6 +360,13 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // And for a review's two turns: a snapshot from before they existed keeps its reading.
         reviewRequest = try? c.decodeIfPresent(ConfirmationReviewRequestCard.self, forKey: .reviewRequest)
         reviewReturn = try? c.decodeIfPresent(ConfirmationReturnCard.self, forKey: .reviewReturn)
+        reviewAnswers = try? c.decodeIfPresent(ConfirmationAnswersCard.self, forKey: .reviewAnswers)
+        // And for the five Orbit turns after it: a snapshot from before they existed keeps its reading.
+        evidenceReview = try? c.decodeIfPresent(EvidenceReviewCard.self, forKey: .evidenceReview)
+        evidenceSendBack = try? c.decodeIfPresent(EvidenceSendBackCard.self, forKey: .evidenceSendBack)
+        runQuestion = try? c.decodeIfPresent(RunQuestionCard.self, forKey: .runQuestion)
+        runNotice = try? c.decodeIfPresent(RunNoticeCard.self, forKey: .runNotice)
+        sessionOpening = try? c.decodeIfPresent(SessionOpeningCard.self, forKey: .sessionOpening)
         shell = (try? c.decodeIfPresent(Bool.self, forKey: .shell)) ?? false
         // A snapshot from before receipts were drawn held none.
         receipt = (try? c.decodeIfPresent(Bool.self, forKey: .receipt)) ?? false
@@ -431,8 +462,8 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// the web transcript renders the same blocks inline via `resultImages()`.
     public var resultImages: [Data]
     /// Whether the result carried an image block at all — true even when `resultImages` is empty
-    /// because the server dropped an oversized image's bytes (`MAX_IMAGE_PAYLOAD`). The card opens
-    /// on this, and opening is what refetches the picture. Web parity: `hasResultImage`.
+    /// because the server dropped an oversized image's bytes (`MAX_IMAGE_PAYLOAD`). The card has a
+    /// picture to open on because of this, and opening is what refetches it. Web parity: `hasResultImage`.
     public var resultHasImage: Bool
     public var status: ToolStatus
     /// seq of the `tool_use` event, and whether the server clipped its `input` to a preview.

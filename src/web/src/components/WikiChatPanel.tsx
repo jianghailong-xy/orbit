@@ -9,8 +9,19 @@ import {
   type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRightOutlined, CaretDownOutlined, CloseOutlined, DownOutlined, PlusOutlined, ReadOutlined } from '@ant-design/icons';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowRightOutlined,
+  CaretDownOutlined,
+  CaretRightOutlined,
+  CloseOutlined,
+  DownOutlined,
+  EllipsisOutlined,
+  LoadingOutlined,
+  PlusOutlined,
+  ReadOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import {
   AgentProvider,
   derivePermissionSemantics,
@@ -21,7 +32,19 @@ import {
   wikiChatCardNeedsYou,
   type SessionTurnIntent,
 } from '@orbit/shared';
-import { api, decideApproval, interruptSession, listApprovals, updateSessionConfig, type PermissionRule } from '../api';
+import {
+  api,
+  completeSession,
+  decideApproval,
+  deleteSession,
+  interruptSession,
+  listApprovals,
+  renameSession,
+  restoreSession,
+  updateSessionConfig,
+  type PermissionRule,
+} from '../api';
+import { Menu } from './ui/Menu';
 import { ApprovalPanel } from './ApprovalPanel';
 import { PendingTray } from './PendingTray';
 import { SessionConversation } from './SessionConversation';
@@ -51,7 +74,7 @@ import { encodeId, routeId } from '../lib/idCodec';
 import { machineName } from '../lib/machineSetup';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
-import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatsQuery, workspacesQuery, type Me } from '../lib/queries';
+import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQuery, wikiChatsQuery, workspacesQuery, type Me } from '../lib/queries';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import { engineTitleFor } from '../lib/sessionProviderChoices';
 import { outlivingSessionWork } from '../lib/sessionActivity';
@@ -69,8 +92,21 @@ import {
   WIKI_CHAT_FOCUS_NEEDS_YOU,
   WIKI_CHAT_EMPTY_HINT,
   WIKI_CHAT_EMPTY_NOTE,
+  WIKI_CHAT_ACTION_FAILED,
+  WIKI_CHAT_COMPLETE,
+  WIKI_CHAT_GROUP_COMPLETED,
+  WIKI_CHAT_GROUP_OPEN,
   WIKI_CHAT_HISTORY,
+  WIKI_CHAT_HISTORY_TITLE,
+  WIKI_CHAT_MOVE_TO_TRASH,
   WIKI_CHAT_NEW,
+  WIKI_CHAT_NO_MATCH,
+  WIKI_CHAT_RENAME,
+  WIKI_CHAT_RENAME_FIELD,
+  WIKI_CHAT_ROW_ACTIONS,
+  WIKI_CHAT_SEARCH,
+  WIKI_CHAT_SHOW_MORE,
+  WIKI_CHAT_TRASH_NOTE,
   WIKI_CHAT_NEW_PARAM,
   WIKI_CHAT_NO_HISTORY,
   WIKI_CHAT_NO_WORKTREE,
@@ -87,7 +123,10 @@ import {
   wikiChatCapped,
   wikiChatCardOf,
   wikiChatContext,
+  wikiChatHistoryGroups,
+  wikiChatHistoryLine,
   wikiChatOffline,
+  wikiChatPanelMax,
   wikiChatQuoteCounts,
   wikiChatRemove,
   wikiChatRunsIn,
@@ -100,6 +139,7 @@ import {
   type WikiChatDraftView,
   type WikiChatLayout,
   type WikiChatList,
+  type WikiChatRow,
   type WikiChatWorkspace,
 } from '../lib/wikiChat';
 import {
@@ -174,8 +214,10 @@ export function WikiChatPanel({
   // Its detail is re-read on the session's own events (useControlPlane refreshes `['session', id]`).
   const session = useQuery(sessionQuery(sessionId));
   const row = list?.chats.find((c) => c.sessionId === chat) ?? null;
-  const title = (fresh ? null : (session.data?.title || row?.title)) || WIKI_CHAT_NEW;
+  const chatTitle = (fresh ? null : (session.data?.title || row?.title)) || WIKI_CHAT_NEW;
   const [history, setHistory] = useState(false);
+  // While the history shows, the title names it (board 45 ④ ①).
+  const title = history ? WIKI_CHAT_HISTORY_TITLE : chatTitle;
   const [sheetFull, setSheetFull] = useState(false);
   // A chat's first message, kept from the create until its own conversation draws it.
   const [opening, setOpening] = useState<{ sessionId: string; message: ChatOpening } | null>(null);
@@ -185,7 +227,14 @@ export function WikiChatPanel({
     <aside
       className={`wk-chat-panel is-${layout}${layout === 'sheet' && sheetFull ? ' is-full' : ''}`}
       style={style}
-      aria-label={title}
+      aria-label={chatTitle}
+      onKeyDown={(event) => {
+        // Esc leaves the history for the chat it was opened over (board 45 ④ ①).
+        if (history && event.key === 'Escape' && !event.defaultPrevented) {
+          event.preventDefault();
+          setHistory(false);
+        }
+      }}
     >
       {layout === 'wide' && <WikiChatResizer width={width ?? WIKI_CHAT_WIDTH.panel.initial} onResize={onResize} />}
       {layout === 'sheet' && (
@@ -197,7 +246,6 @@ export function WikiChatPanel({
         <button
           type="button"
           className="wk-chat-title"
-          aria-haspopup="listbox"
           aria-expanded={history}
           title={WIKI_CHAT_HISTORY}
           onClick={() => setHistory((open) => !open)}
@@ -213,7 +261,7 @@ export function WikiChatPanel({
           className="wk-chat-ib"
           aria-label={WIKI_CHAT_OPEN_SESSION}
           title={WIKI_CHAT_OPEN_SESSION}
-          disabled={fresh}
+          disabled={fresh || history}
           onClick={() => navigate(`/sessions/${encodeId(sessionId!)}`)}
         >
           <ArrowRightOutlined />
@@ -224,14 +272,17 @@ export function WikiChatPanel({
       </div>
       {history && (
         <WikiChatHistory
-          list={list}
+          space={space}
           current={chat}
           onPick={(picked) => {
             setHistory(false);
             onChat(picked);
           }}
+          onCurrentGone={() => onChat(WIKI_CHAT_NEW_PARAM)}
         />
       )}
+      {/* Kept while the history shows, so what was typed stays (board 45 ④ ①). */}
+      <div className="wk-chat-main" hidden={history}>
       {fresh ? (
         <WikiChatNew
           space={space}
@@ -258,6 +309,7 @@ export function WikiChatPanel({
           onNewChat={() => onChat(WIKI_CHAT_NEW_PARAM)}
         />
       )}
+      </div>
     </aside>
   );
 }
@@ -277,7 +329,7 @@ function WikiChatResizer({ width, onResize }: { width: number; onResize: (width:
       aria-orientation="vertical"
       aria-label={WIKI_CHAT_RESIZE}
       aria-valuemin={WIKI_CHAT_WIDTH.panel.min}
-      aria-valuemax={WIKI_CHAT_WIDTH.panel.max}
+      aria-valuemax={wikiChatPanelMax(typeof window === 'undefined' ? WIKI_CHAT_WIDTH.wide : window.innerWidth)}
       aria-valuenow={width}
       onPointerDown={(event) => {
         start.current = { x: event.clientX, width };
@@ -289,28 +341,187 @@ function WikiChatResizer({ width, onResize }: { width: number; onResize: (width:
   );
 }
 
-/** The space's chats, newest first, as the title opens them (design §4.1: the title is the chat history). */
-function WikiChatHistory({ list, current, onPick }: { list: WikiChatList | null | undefined; current: string; onPick: (chat: string) => void }) {
-  const chats = list?.chats ?? [];
+/**
+ * The space's chats, as the title opens them over the whole panel (board 45 ④, owner 11-11: Q3 A, Q4 A; contract
+ * `chat.panel.history`): a search over titles, Open — the ones that need the owner, then the working ones, then the
+ * one last spoken in first — and Completed, folded. A row's ⋯ holds the session list's own Rename…, Open as a full
+ * session, Complete and Move to Trash, through the same doors and with the session list's Undo; Trash itself stays the
+ * session list's. Pages of rules.chatsListed come one at a time (contract `chat.list.page`).
+ */
+function WikiChatHistory({
+  space,
+  current,
+  onPick,
+  onCurrentGone,
+}: {
+  space: WikiSpaceRow;
+  current: string;
+  onPick: (chat: string) => void;
+  /** The chat shown was moved to Trash: the panel turns to a new chat. */
+  onCurrentGone: () => void;
+}) {
+  const [q, setQ] = useState('');
+  const [completedOpen, setCompletedOpen] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
+  const pages = useInfiniteQuery(wikiChatHistoryQuery(space.id, q.trim()));
+  const qc = useQueryClient();
+  const toast = useToast();
+  const navigate = useNavigate();
+  const now = Date.now();
+
+  const rows = useMemo(() => {
+    const seen = new Set<string>();
+    const all: WikiChatRow[] = [];
+    for (const page of pages.data?.pages ?? []) {
+      for (const row of page?.chats ?? []) {
+        if (seen.has(row.sessionId)) continue;
+        seen.add(row.sessionId);
+        all.push(row);
+      }
+    }
+    return all;
+  }, [pages.data]);
+  const groups = wikiChatHistoryGroups(rows);
+  // A search shows what it found in Completed too, without asking for the fold to be opened.
+  const showCompleted = completedOpen || q.trim() !== '';
+
+  const refresh = (id: string) => {
+    void qc.invalidateQueries({ queryKey: wikiChatsQuery(space.id).queryKey });
+    void qc.invalidateQueries({ queryKey: ['session', id] });
+    void qc.invalidateQueries({ queryKey: ['sessions'] });
+  };
+  const failed = (error: unknown) => toast.error(WIKI_CHAT_ACTION_FAILED, error instanceof Error ? error.message : undefined);
+  const restore = useMutation({ mutationFn: (id: string) => restoreSession(id), onSettled: (_d, _e, id) => refresh(id), onError: failed });
+  const complete = useMutation({
+    mutationFn: (row: WikiChatRow) => completeSession(row.sessionId),
+    onSuccess: (_d, row) =>
+      toast.sessionAction({ sessionId: row.sessionId, sessionTitle: row.title, action: 'complete', onUndo: () => restore.mutate(row.sessionId) }),
+    onSettled: (_d, _e, row) => refresh(row.sessionId),
+    onError: failed,
+  });
+  const trash = useMutation({
+    mutationFn: (row: WikiChatRow) => deleteSession(row.sessionId),
+    onSuccess: (_d, row) => {
+      if (row.sessionId === current) onCurrentGone();
+      toast.sessionAction({ sessionId: row.sessionId, sessionTitle: row.title, action: 'trash', onUndo: () => restore.mutate(row.sessionId) });
+    },
+    onSettled: (_d, _e, row) => refresh(row.sessionId),
+    onError: failed,
+  });
+  const rename = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => renameSession(id, title),
+    onSettled: (_d, _e, { id }) => refresh(id),
+    onError: failed,
+  });
+  const saveRename = () => {
+    if (!renaming) return;
+    const title = renaming.draft.trim();
+    const was = rows.find((row) => row.sessionId === renaming.id)?.title ?? '';
+    setRenaming(null);
+    if (title && title !== was) rename.mutate({ id: renaming.id, title });
+  };
+
+  const rowOf = (row: WikiChatRow) => {
+    const line = wikiChatHistoryLine(row, now);
+    if (renaming?.id === row.sessionId) {
+      return (
+        <div key={row.sessionId} className="wk-chat-history-row is-renaming">
+          <input
+            className="wk-chat-history-rename"
+            autoFocus
+            maxLength={200}
+            aria-label={WIKI_CHAT_RENAME_FIELD}
+            value={renaming.draft}
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => setRenaming({ id: row.sessionId, draft: event.target.value })}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                saveRename();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                setRenaming(null);
+              }
+            }}
+            onBlur={saveRename}
+          />
+        </div>
+      );
+    }
+    return (
+      <div key={row.sessionId} className={`wk-chat-history-row${row.sessionId === current ? ' on' : ''}`}>
+        <button
+          type="button"
+          className="wk-chat-history-open"
+          aria-current={row.sessionId === current ? 'true' : undefined}
+          onClick={() => onPick(row.sessionId)}
+        >
+          <span className="t">{row.title || WIKI_CHAT_NEW}</span>
+          <span className={`m is-${line.tone}`}>
+            {line.tone === 'working' && <LoadingOutlined className="spin" />}
+            {line.text}
+          </span>
+        </button>
+        <Menu
+          items={[
+            { key: 'rename', label: WIKI_CHAT_RENAME, onSelect: () => window.setTimeout(() => setRenaming({ id: row.sessionId, draft: row.title }), 0) },
+            { key: 'open', label: WIKI_CHAT_OPEN_SESSION, onSelect: () => navigate(`/sessions/${encodeId(row.sessionId)}`) },
+            ...(row.completed ? [] : [{ key: 'complete', label: WIKI_CHAT_COMPLETE, onSelect: () => complete.mutate(row) }]),
+            { type: 'separator' as const, key: 'divider' },
+            { key: 'trash', label: WIKI_CHAT_MOVE_TO_TRASH, danger: true, onSelect: () => trash.mutate(row) },
+          ]}
+          trigger={
+            <button type="button" className="wk-chat-history-more" aria-label={`${WIKI_CHAT_ROW_ACTIONS}: ${row.title || WIKI_CHAT_NEW}`}>
+              <EllipsisOutlined />
+            </button>
+          }
+        />
+      </div>
+    );
+  };
+
   return (
-    <div className="wk-chat-history" role="listbox" aria-label={WIKI_CHAT_HISTORY}>
-      {chats.length === 0 ? (
-        <div className="wk-chat-history-none">{WIKI_CHAT_NO_HISTORY}</div>
-      ) : (
-        chats.map((row) => (
-          <button
-            type="button"
-            role="option"
-            aria-selected={row.sessionId === current}
-            key={row.sessionId}
-            className={`wk-chat-history-row${row.sessionId === current ? ' on' : ''}`}
-            onClick={() => onPick(row.sessionId)}
-          >
-            <span className="t">{row.title || WIKI_CHAT_NEW}</span>
-            {row.needsYou > 0 && <span className="n">{row.needsYou}</span>}
-          </button>
-        ))
-      )}
+    <div className="wk-chat-history" aria-label={WIKI_CHAT_HISTORY}>
+      <label className="wk-chat-history-search">
+        <SearchOutlined />
+        <input type="search" placeholder={WIKI_CHAT_SEARCH} aria-label={WIKI_CHAT_SEARCH} value={q} onChange={(event) => setQ(event.target.value)} />
+      </label>
+      <div className="wk-chat-history-list">
+        {pages.isPending ? null : rows.length === 0 ? (
+          <div className="wk-chat-history-none">{q.trim() ? WIKI_CHAT_NO_MATCH : WIKI_CHAT_NO_HISTORY}</div>
+        ) : (
+          <>
+            {groups.open.length > 0 && (
+              <section aria-label={WIKI_CHAT_GROUP_OPEN}>
+                <div className="wk-chat-history-group">
+                  {WIKI_CHAT_GROUP_OPEN} <span className="n">{groups.open.length}</span>
+                </div>
+                {groups.open.map(rowOf)}
+              </section>
+            )}
+            {groups.completed.length > 0 && (
+              <section aria-label={WIKI_CHAT_GROUP_COMPLETED}>
+                <button
+                  type="button"
+                  className="wk-chat-history-group is-fold"
+                  aria-expanded={showCompleted}
+                  onClick={() => setCompletedOpen((open) => !open)}
+                >
+                  {WIKI_CHAT_GROUP_COMPLETED} <span className="n">{groups.completed.length}</span>
+                  {showCompleted ? <CaretDownOutlined className="caret" /> : <CaretRightOutlined className="caret" />}
+                </button>
+                {showCompleted && groups.completed.map(rowOf)}
+              </section>
+            )}
+            {pages.hasNextPage && (
+              <button type="button" className="wk-chat-history-more-page" disabled={pages.isFetchingNextPage} onClick={() => void pages.fetchNextPage()}>
+                {WIKI_CHAT_SHOW_MORE}
+              </button>
+            )}
+          </>
+        )}
+        <p className="wk-chat-history-note">{WIKI_CHAT_TRASH_NOTE}</p>
+      </div>
     </div>
   );
 }

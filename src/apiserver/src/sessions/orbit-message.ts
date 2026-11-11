@@ -3,6 +3,7 @@ import type { CoordinatorDeliveryCard, OrbitMessageFrom } from '@orbit/shared';
 import { readCoordinatorDeliveryCards } from '../projects/coordinator-delivery-card';
 import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf } from './orbit-authored-turn';
 import type { TurnCards } from './turn-cards';
+import { orbitResendSourceTurnId } from './watch-turn-key';
 
 /**
  * That the message a session row previews is Orbit's own, as the row records it beside
@@ -31,13 +32,19 @@ export function orbitMessageOf(
 ): OrbitMessageFrom | null {
   if (turn.senderSessionId) return null;
   const platformCard = cards !== undefined && (
-    cards.openItemDelivery !== undefined
+    cards.runQuestion !== undefined
+    || cards.openItemDelivery !== undefined
     || cards.ownerAnswer !== undefined
     || cards.coordinatorDelivery !== undefined
     || cards.taskStart !== undefined
     || cards.projectStarted !== undefined
     || cards.confirmationReviewRequest !== undefined
     || cards.confirmationReturn !== undefined
+    || cards.confirmationAnswers !== undefined
+    || cards.runNotice !== undefined
+    || cards.evidenceReview !== undefined
+    || cards.evidenceSendBack !== undefined
+    || cards.sessionOpening !== undefined
   );
   if (!platformCard && !isOrbitAuthoredTurnOf(session, turn.clientTurnId)) return null;
   return { coordinatorDelivery: cards?.coordinatorDelivery ?? null };
@@ -59,7 +66,18 @@ export async function readOrbitMessageFrom(
   senderSessionId: string | null,
 ): Promise<OrbitMessageFrom | null> {
   if (senderSessionId || !isOrbitAuthoredTurn(turn.clientTurnId)) return null;
+  // A re-send of Orbit's words names the turn it re-sends, and says what that turn said (turn-cards.ts).
+  let card = turn;
+  for (let hop = 0, sourceId = orbitResendSourceTurnId(turn.clientTurnId); sourceId && hop < 8; hop += 1) {
+    const source = await db.conversationTurn.findFirst({
+      where: { id: sourceId, sessionId },
+      select: { id: true, clientTurnId: true, content: true },
+    });
+    if (!source) break;
+    card = source;
+    sourceId = orbitResendSourceTurnId(source.clientTurnId);
+  }
   const coordinatorDelivery: CoordinatorDeliveryCard | undefined =
-    (await readCoordinatorDeliveryCards(db, sessionId, [turn])).get(turn.id);
+    (await readCoordinatorDeliveryCards(db, sessionId, [card])).get(card.id);
   return { coordinatorDelivery: coordinatorDelivery ?? null };
 }

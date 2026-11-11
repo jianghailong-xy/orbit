@@ -1,3 +1,4 @@
+import { questionsWithCoordinator } from '../sessions/run-question';
 import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
@@ -1415,7 +1416,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // and this is the number the client overwrites its row with.
         const reader = await this.prisma.session.findUnique({
           where: { id: sessionId },
-          select: { id: true, status: true, engineTurnActive: true, runningBgShells: true },
+          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true },
         });
         const approvals = reader ? await countLiveApprovals(this.prisma, reader) : 0;
         const decisions = await this.ownerDecisionsOn(sessionId, ownerId);
@@ -1424,6 +1425,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           // The clients OVERWRITE the row's count with this number, so it has to be the same total
           // the list computes — an approval being answered must not take an unanswered owner
           // decision dark with it. The kind is overwritten with it for the same reason.
+          questionWithCoordinator: reader?.taskId ? (await questionsWithCoordinator(this.prisma, [sessionId])).get(sessionId) ?? null : null,
           pendingApprovals: approvals + (decisions?.count ?? 0),
           waitingKind: sessionWaitingKind(approvals, decisions),
         };
@@ -1580,6 +1582,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
       projectMembership: await readSessionProjectMembership(this.prisma, sessionId),
+      questionWithCoordinator: s.taskId ? (await questionsWithCoordinator(this.prisma, [sessionId])).get(sessionId) ?? null : null,
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
       confirmationUnderReview: underReview

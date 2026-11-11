@@ -325,11 +325,10 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
             app.landingJobs.remember(handle, projectId, view)
         } else state.integrationReadFailed = true
     }
-    /** The start row's read, while the sidebar says nobody has started the project. A read that fails keeps the last answer. */
+    /** The page reads the start request and latest Not yet answer. A failed read keeps the last answer. */
     suspend fun loadStart() {
         val row = currentProject
         gateRead = listOf(row?.let { it.text("status") to ProjectDoc.started(it) })
-        if (row?.text("status") != "OPEN" || ProjectDoc.started(row) != false) { state.openItems = null; return }
         val items = try { projects.openItems(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (items != null) state.openItems = items
     }
@@ -486,7 +485,19 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                         rerunCheck = { promotionId -> landingDoor {
                             projects.recheckPromotion(projectId, promotionId, LandingSessionCopy.RERUN_CHECK_REASON) } },
                         onDetails = { promotionReview = it },
-                        onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } })
+                        onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } },
+                        // Why it asks, off the line read and the Automatic the merge's document read carries; Let the agent push
+                        // instead… opens the project's page, whose How it runs has Delivery.
+                        asksReason = PromotionCards.askReason(merge.current, integration?.text("line"), integration?.text("deliveryMode"), merge.automatic),
+                        onLetAgentPush = ::openProject)
+                }
+            }
+            val staleRequest = io.orbitd.android.projects.ProjectDone.staleRequest(state.openItems)
+            if (staleRequest != null) {
+                item(key = "done-request-stale") { io.orbitd.android.projects.ProjectStaleDoneRow(staleRequest) }
+            } else if (state.openItems?.obj("doneRequest") == null) {
+                state.openItems?.obj("latestDoneRequestDecline")?.let { decline ->
+                    item(key = "done-decline") { io.orbitd.android.projects.ProjectDoneDeclineRow(decline) }
                 }
             }
             coordinator?.let { c ->

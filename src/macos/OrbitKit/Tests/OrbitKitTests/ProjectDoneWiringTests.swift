@@ -10,6 +10,14 @@ import XCTest
 /// over the source, the way `StartProjectWiringTests` does, each assertion written so that DETACHING
 /// the wire is what turns it red. What it cannot see is layout; that is what the screenshots are for.
 final class ProjectDoneWiringTests: XCTestCase {
+    func testStaleRowDrawsKitWordsOnProjectPage() throws {
+        let cards = try source(Self.cards)
+        let page = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectPage.swift")
+        XCTAssertTrue(cards.contains("Text(ProjectDone.staleHeading)"))
+        XCTAssertTrue(page.contains("ProjectDone.staleRequest(app.projectSessionsOpenItems)"))
+        XCTAssertTrue(page.contains("ProjectStaleDoneRow(detail: detail)"))
+    }
+
 
     private enum WiringError: Error, CustomStringConvertible {
         case missing(String)

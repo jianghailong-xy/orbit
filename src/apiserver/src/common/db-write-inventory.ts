@@ -103,6 +103,31 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'projects/project-open-item.service.ts#askOwner', shape: 'TX_RETRIED',
+    locks: 'Open item insert (rank 60), then the OPEN session_request CAS (rank 60); neither references the other with a foreign key.',
+    identity: 'Project and clientQuestionId dedupe key; the same request is linked to the same item on replay.', isolation: '', attempts: 4,
+    replay: 'Re-read the committed rows; rollback discards all linked writes and a committed outcome is never replaced.',
+    effects: 'Owner push after commit.',
+    answer: 'Typed 503 after retry exhaustion; the caller may retry the same request.',
+  },
+  {
+    at: 'projects/project-open-item.service.ts#answerOpenItem', shape: 'TX_RETRIED',
+    locks: 'Owner item CAS (rank 60), then linked OPEN session requests (rank 60).',
+    identity: 'Item id and OPEN predicate; one answer restarts the linked questions deadline.', isolation: '', attempts: 4,
+    replay: 'Re-read the committed rows; rollback discards all linked writes and a committed outcome is never replaced.',
+    effects: 'Answer delivery after commit.',
+    answer: 'Typed 503 after retry exhaustion; the caller may retry the same request.',
+  },
+  {
+    at: 'sessions/session-request.service.ts#reply', shape: 'TX_RETRIED',
+    locks: 'Request FOR UPDATE (rank 60), approval CAS, then request outcome. No cross-session lock.',
+    identity: 'Request id and OPEN predicate; approval must still be PENDING.', isolation: '', attempts: 4,
+    replay: 'Re-read the committed rows; rollback discards all linked writes and a committed outcome is never replaced.',
+    effects: 'Approval resolved and session updated frames after commit.',
+    answer: 'Typed 503 after retry exhaustion; the caller may retry the same request.',
+  },
+
+  {
     at: 'owner-requests/owner-requests.service.ts#settle',
     shape: 'TX_RETRIED',
     locks: "The owner_request row by id and owner, through the UPDATE predicated on state = 'PENDING' and the deadline not yet passed; then, only when that matched, one watch_delivery INSERT (enqueueResolutions), whose foreign key takes the same owner_request row FOR KEY SHARE, already held by the UPDATE. No trigger, and no other row.",
@@ -220,7 +245,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: "Everything is re-read inside the closure: the job row, its lease, and whether it is already terminal. A re-run after a conflict therefore re-decides against the committed world rather than replaying a decision made outside it. The writes it implies are idempotent in their own right — `createMany({ skipDuplicates })` on the receipt, and the partial unique index over OPEN items on the exception — except the comment, which is not keyed and does not need to be: a rolled-back attempt takes it with it, and the terminal check above means the only path that could write a second one is already spent. The reads it adds — the task's work sessions, for whether a no-commit answer is a fact about the task or about the branch it was handed, and the state of the candidate a promotion job's failure is about, for whether it is still live and owed an item at all (§4.2) — are inside the same closure and re-decided with it. Closing a moved-on candidate's failures is a conditional UPDATE over its OPEN items, idempotent in its own right like the rest.",
-    effects: 'None inside. The receipt and the item are rows; delivering the item and dispatching what the landing released happen in the controller, after this commits, and both are re-derivable from the committed rows.',
+    effects: 'K3 writes baseline_red from the structured runner result in the terminal job update (0513); its CHECK admits only LAND_TASK/CHECK_FAILED. None inside. The receipt and the item are rows; delivering the item and dispatching what the landing released happen in the controller, after this commits, and both are re-derivable from the committed rows.',
     answer: 'Typed 503 from the global boundary, which the runner treats as "not delivered" and resends. The work itself already happened in the repository, so nothing is lost by making it say so again; what the resend must not do is land a second time, and the terminal check above is what stops it.',
   },
   {
@@ -257,13 +282,23 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary. The runner\'s uploader treats it as a chunk not yet stored; the next flush of the same check carries later chunks, and the missing one is a gap in a best-effort log rather than a fact any decision rests on.',
   },
   {
+    at: 'projects/project-promotion.service.ts#requestPromotion',
+    shape: 'TX_RETRIED',
+    locks: 'project (rank 40) FOR NO KEY UPDATE, then project_promotion_request (0509, rank 60) insert; session is a history reference.',
+    identity: 'One request per successful invocation; failed transaction attempts roll back the insert.',
+    isolation: '', attempts: 4,
+    replay: 'Re-read ownership and the current coordinator pointer under the project row lock, and validate the reason before inserting.',
+    effects: 'None inside; considerCandidate runs after the request commits.',
+    answer: 'The committed request id and the candidate id if one could be created.',
+  },
+  {
     at: 'projects/project-promotion.service.ts#considerCandidate',
     shape: 'TX_RETRIED',
-    locks: 'project_codebase (rank 55) and project_integration_job (rank 60) are read unlocked, then the rows it writes: project_promotion (rank 60) for the new candidate and for whichever older one it supersedes, project_integration_job (rank 60) for that one\'s queued check, project_open_item (rank 60) for that one\'s card and the failures about it it had open (`closePromotionItems`, §4.2). Nothing above rank 60 is locked — the foreign keys take `project` FOR KEY SHARE, which no status write conflicts with; the task and session the candidate and its check name are history references with no key (0423, 0424) and take nothing.',
+    locks: 'project (rank 40) FOR NO KEY UPDATE serializes candidate creation and request consumption. project_promotion_request (rank 60) is read and one request is updated only after candidate insertion, in the same transaction. project_codebase (rank 55) and project_integration_job (rank 60) are read unlocked, then the rows it writes: project_promotion (rank 60) for the new candidate and for whichever older one it supersedes, project_integration_job (rank 60) for that one\'s queued check, project_open_item (rank 60) for that one\'s card and the failures about it it had open (`closePromotionItems`, §4.2). Nothing above rank 60 is locked — the foreign keys take `project` FOR KEY SHARE, which no status write conflicts with; the task and session the candidate and its check name are history references with no key (0423, 0424) and take nothing.',
     identity: 'The candidate\'s source: the partial unique index over `(project_id, source_ref)` on live states. Two landings finishing together therefore produce one live candidate whichever order they commit in — the loser of the index is the transaction that is re-run, and its re-run finds the winner already covering the same tip and makes nothing.',
     isolation: '',
     attempts: 4,
-    replay: 'Everything is re-read inside the closure: whether the queue is empty, which landing is newest, whether a promotion is already in flight, and whether this tip is already covered. A re-run after a conflict therefore re-decides against the committed world; it cannot make a second candidate for a tip that now has one, and it cannot make one for a tip a concurrently committed landing has already moved past.',
+    replay: 'Everything is re-read inside the closure: K7 eligibility from the derived DONE reading or an unconsumed coordinator request, whether the queue is empty, which landing is newest, whether a promotion is already in flight, and whether this tip is already covered. A re-run after a conflict therefore re-decides against the committed world; it cannot make a second candidate for a tip that now has one, and it cannot make one for a tip a concurrently committed landing has already moved past.',
     effects: 'None inside. The check job it queues is a row; the runner picks it up on its next heartbeat, from the committed queue.',
     answer: 'Nothing is answered — no request is waiting on this. The caller logs the failure and the next landing considers the same rows again, which is why the exhausted case is a warning rather than a 503.',
   },
@@ -802,13 +837,37 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'auth/google-login.service.ts#link',
     shape: 'TX_BARE',
-    locks: "Inserts only, nothing read or locked first. For a SIGNUP one `user` row, under its unique email index; then one user_identity row, under its two unique indexes, (provider, subject) and (user_id, provider), taking FOR KEY SHARE through its foreign key on the `user` row it names — the account the email matched, or the one just inserted; then one `activity` row, which has no foreign key and no trigger. None of the three tables has a trigger. It waits only on a concurrent insert of one of those unique keys, until that transaction ends.",
+    locks: "Inserts only, nothing read or locked first. For a SIGNUP one `user` row, under its unique email index; then one user_identity row, under its two unique indexes, (provider, subject) and (user_id, provider), taking FOR KEY SHARE through its foreign key on the `user` row it names — the account the email matched, or the one just inserted; then one `activity` row, which has no foreign key and no trigger; then, for a SIGNUP only, a plain read of email_settings and one email_outbox row (email/email-outbox.ts enqueueWelcome), under its unique (kind, user_id), taking FOR KEY SHARE on the `user` row just inserted. None of these tables has a trigger. It waits only on a concurrent insert of one of those unique keys, until that transaction ends.",
     identity: "The Google account's (provider, subject); for a SIGNUP also the email the account is opened under, and for an AUTO link the (user_id, provider) of the account linked. Those are the keys a second first sign-in of the same Google account — or of another one with the same email — collides on.",
     isolation: '',
     attempts: 1,
     replay: "Not retried: a unique violation is the answer, not a conflict to absorb. The loser rolls back whole — no account without its identity, no link without its Activity row — and GoogleLoginService.exchange reads once more (§5.2's last line), where the linked account is found by case 1, or the account with that email is answered by case 3. No deadlock with another first sign-in: each waits only on the unique keys of rows the other is inserting, and holds nothing the other waits on but rows only it inserted. A transaction that locks the `user` row FOR UPDATE waits behind the FOR KEY SHARE, never the other way round.",
     effects: "None inside. After commit, the exchange issues the session through AuthService.completeLogin.",
     answer: "A unique violation (P2002) is read again once by the exchange. Anything else — a second violation included — reaches the global boundary, a typed 503 for a transient conflict and a 500 otherwise, with nothing written; the ticket was spent at its first presentation, so the person signs in again.",
+  },
+  // An administrator creating an account, or resetting its password (users.util.ts): the account and its welcome email row.
+  {
+    at: 'users/users.util.ts#createOrResetUser',
+    shape: 'TX_BARE',
+    locks: "A reset is one autocommit UPDATE of the `user` row by its email, outside any transaction (a FOR NO KEY UPDATE row lock; password_hash is in no key). A new account is one transaction: one INSERT into `user` under its unique email index; then a plain read of email_settings (no lock) and one INSERT into email_outbox under its unique (kind, user_id), taking FOR KEY SHARE on the `user` row just inserted through its foreign key. None of the three tables has a trigger.",
+    identity: "The email address: a second create of the same address collides on user_email_key, and the account's one WELCOME row on (kind, user_id).",
+    isolation: '',
+    attempts: 1,
+    replay: "Not retried: a unique violation on the email is the answer (the account exists; the administrator asks again with force to reset it). The loser rolls back whole, so there is never an account without its welcome row nor a row without its account. It waits only on a concurrent insert of the same email, and holds nothing anyone else waits on but rows only it inserted.",
+    effects: "None inside. The welcome email is sent later by EmailOutboxWorker, from the committed row.",
+    answer: "A unique violation reaches the global boundary as a 500, as before the transaction existed (the read before it answers an existing address with 409 first); a transient conflict is the typed 503, with nothing written.",
+  },
+  // The welcome email's send (docs/welcome-email-design.md §3.3, migration 0517): one due outbox row claimed, sent, settled.
+  {
+    at: 'email/email-outbox.ts#sendOne',
+    shape: 'TX_BARE',
+    locks: "One email_outbox row: SELECT … FOR UPDATE SKIP LOCKED of the earliest due PENDING row, so a row another worker holds is skipped, never waited on. Then plain reads of `user` (the account and the administrator who created it), the HTTP call to Resend with the row lock held (at most 10 seconds), one UPDATE of the row already held, and, when it is SENT or FAILED, one INSERT into `activity`, which has no foreign key and no trigger. email_outbox has no trigger, and the UPDATE changes no key column, so its foreign key re-checks nothing. Nothing locks an email_outbox row before another table's row.",
+    identity: "The outbox row, and the Idempotency-Key `welcome/<user id>/<generation>/<key_attempt>` read from it.",
+    isolation: '',
+    attempts: 1,
+    replay: "Not retried within the pass: a transaction that fails rolls back, the row stays PENDING with the same key_attempt, and the next pass claims it again and sends under the same Idempotency-Key, which Resend answers with the first result if the first request had been taken. SKIP LOCKED means two workers never hold, and so never send, the same row.",
+    effects: "Inside the transaction, with the row lock held: one POST to Resend (resend.client.ts). Nothing after commit.",
+    answer: "The worker's pass ends and logs the error; the next pass, 15 seconds later, tries again. No caller waits on it.",
   },
   // Linking Google from the profile page, and unlinking it (docs/google-sign-in-design.md §5.3).
   {
@@ -1498,7 +1557,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Every attempt re-locks the task and re-reads every row of §3.5\'s table inside the closure — the reviewer, the turn, whether the request is still the newest, what it already has — so a re-run records against the same facts or is refused; a rolled-back attempt leaves no record.',
-    effects: 'After commit only: a task.changed nudge and a session row refresh for the run whose card the review moved (§5 N5).',
+    effects: 'After commit only: a task.changed nudge and a session row refresh for the run whose card the review moved (§5 N5); the first REVIEW ending a coordinator hold alerts the owner once through PushService.notifyConfirmationRaised (§13 A6).',
     answer: 'Typed 503 after retry exhaustion. A caller that is not the request\'s reviewer, or no session, is a 403; outside a turn, a superseded request and one already reviewed are 409s; malformed input and needsYou after the owner decided are 400s.',
   },
   {
@@ -2388,6 +2447,10 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  // A new account's welcome email row (docs/welcome-email-design.md §3.3): a plain read of email_settings, then one
+  // INSERT into email_outbox under its unique (kind, user_id) and its foreign key to the account just inserted.
+  { at: 'email/email-outbox.ts#enqueueWelcome', under: 'auth/google-login.service.ts#link (a SIGNUP) and users/users.util.ts#createOrResetUser (a new account)' },
+  { at: 'sessions/run-notify.ts#recordRunNotify', under: 'sessions.createTurn onTurnWritten, under the recipient Session lock (rank 30). One session_request INSERT (rank 60), whose recipient foreign key names that locked row. The request id and clientTurnId are minted before the retried transaction; a replay of a committed turn never reaches the hook. Turn and request roll back together, with no external effects. A refused or exhausted createTurn is caught by notifyAgentMessage and falls back to the owner after rollback.' },
   // An owner request's ending delivered to the session that asked (migration 0504): its watch_delivery row.
   { at: 'owner-requests/owner-request-endings.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue, and owner-requests/owner-secrets.service.ts#ack' },
   // A SECRET request's key that was never delivered, ended with the request (migration 0506): its grant row.
@@ -2628,7 +2691,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // row; `bind` is the insert they lock and read back, and a concurrent binder wins it once.
   { at: 'projects/project-integration-line.ts#lockCodebase', under: 'configureProjectIntegration, startProjectLine and startOnFirstIntegration' },
   { at: 'projects/project-integration-line.ts#bind', under: 'configureProjectIntegration and startOnFirstIntegration — before its insert it reads, unlocked, the owner’s newest binding of the same repository that records a chosen upstream (`upstream_ref_chosen_at`, 0422) and starts the new row on that upstream; the new row records no choice of its own' },
-  { at: 'projects/project-integration-line.ts#configureProjectIntegration', under: "projects.configureIntegration, projects.update and projectAcceptance.start (through startProjectLine) — the account owner's integration settings, under the binding lock taken after the project row when that write holds one; a request that names `upstreamRef` also writes `upstream_ref_chosen_at` in the same UPDATE of that row (0422), which neither 0270's lock nor 0231's config guard names; one that names `deliveryMode` writes it and `delivery_mode_chosen_at` in that same UPDATE (0453, §10.5 O-L1), neither of which they name either, so a line that has started still takes them" },
+  { at: 'projects/project-integration-line.ts#configureProjectIntegration', under: "projects.configureIntegration, projects.update and projectAcceptance.start (through startProjectLine) — the account owner's integration settings, under the binding lock taken after the project row when that write holds one; a request that names `upstreamRef` also writes `upstream_ref_chosen_at` in the same UPDATE of that row (0422), which neither 0270's lock nor 0231's config guard names; one that names `landingCheckCommand` or `landingCheckTimeoutSeconds` writes those mutable columns in the same UPDATE (0508), neither named by the lock trigger; one that names `deliveryMode` writes it and `delivery_mode_chosen_at` in that same UPDATE (0453, §10.5 O-L1), neither of which they name either, so a line that has started still takes them" },
   { at: 'projects/project-integration-line.ts#startOnFirstIntegration', under: 'the transaction that queues a project’s first integration — it takes the same binding lock and writes only that row' },
   { at: 'realtime/runner-wake.ts#notifyRunnerWakeOnCommit', under: 'projects/project-integration-job.ts#queueLandTask and #queuePromotionJob — the transaction that writes the job row (the DONE write, an integration retry, a promotion decision) — one pg_notify on the runner-wake channel, taking no lock and writing no row, which Postgres delivers at COMMIT' },
   // Orbit Wiki (0307). Every one of these runs inside `submitChangeset`, `decide`,
@@ -2930,10 +2993,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "projects/project-open-item.service.ts#handToOwner", class: "ONE_ROW_CAS", statements: 1, note: "Moves one item to the account owner when the conversation it was owed to has ended, or the project has none. The predicate repeats the assignment this delivery was for, so an item something else reassigned in the meantime is left exactly as that left it — and asks that the item is still owed (`openItemOwed`), so one about a candidate or a task that has moved on is left for the escalation tick's backstop to close rather than handed to a person." },
   { at: "projects/project-open-item.service.ts#handOver", class: "ONE_ROW_CAS", statements: 1, note: "The coordinator's deliberate hand-over: one conditional UPDATE of an OPEN COORDINATOR item, repeating its project/owner scope and assigned_at read so a competing fact, escalation or second press loses the CAS, and asking openItemOwed so work that moved on is not handed to a person. It writes OWNER/HANDED_OVER, the bounded explanation and the acting session history together, clears escalate_at for the owner-escalation CHECK, and the owner push is after commit; the session id is history rather than a foreign key." },
   { at: "projects/project-open-item.service.ts#resolveByFact", class: "MANY_ROWS", statements: 5, note: "Closes task-failure items, integration items, and delivery reviews whose task was reopened, cancelled or replaced, and revision 29's two (§10.7): a LANDING_UNOBSERVED whose task was replaced, cancelled, declared codeless, reopened or whose work landed, and a LANDED_WITHOUT_CONFIRMATION whose task was cancelled or replaced. Each statement matches only OPEN rows whose task already says so, and names the fact it found the way that item's door table does (`TASK_DONE` / `SUCCESSOR_FILED` / `TASK_CLOSED` / `RETRIED` / `CODELESS` / `LANDED`, the first being a task that is DONE and the second one a successor took over)." },
-  // The three writes a question to the account owner makes (§5.2 R7–R11). Asking and answering are
-  // each one statement outside any transaction, because neither is part of somebody else's fact: the
-  // question is the coordinator's own call, and the answer is the owner's.
-  { at: "projects/project-open-item.service.ts#askOwner", class: "INSERT", statements: 1, note: "The question itself: one createManyAndReturn with skipDuplicates against the partial unique index on (project, dedupe key) for OPEN items, so a tool call retried after a lost response files one question rather than asking the owner the same thing twice. The key is the caller's own `clientQuestionId`, or a fresh one when it sent none — one call, one question. Losing the race returns the row that won; a key held by a question that has since been ANSWERED matches neither and is refused, because filing nothing and reporting success is how a coordinator ends up waiting on an answer nobody was asked for." },
+  // Owner requests and item outcomes outside a transaction. Asking and answering coordinator
+  // questions are transaction units above: they also move a linked run question's deadline.
   // Owner request secrets (migration 0506, docs/design/owner-request-secrets.md): single-statement grant writes. Each is
   // a compare-and-set on the grant's state, so two replicas or a repeated call write once; owner_request_secret has no
   // trigger and these UPDATEs move no key.
@@ -2947,7 +3008,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'owner-requests/owner-secrets.service.ts#replaceSaved', class: 'ONE_ROW_BY_KEY', statements: 1, note: "Replacing a saved secret's value: one UPDATE by (id, owner) of its ciphertext." },
   { at: 'owner-requests/owner-secrets.service.ts#deleteSaved', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'Deleting a saved secret: one DELETE by (id, owner). Grants made from it are copies and stay.' },
   { at: "owner-requests/owner-requests.service.ts#file", class: "INSERT", statements: 1, note: "A session filing an owner request (migration 0503): one createManyAndReturn with skipDuplicates against the unique (asked_by_session_id, client_request_id), so a call retried after a lost response files one request; losing that race reads back the row that won, in whatever state it is now. Its one foreign key takes the user row FOR KEY SHARE and nothing else; the asking session and the project are history columns, not keys. The push is sent after the statement, never inside it." },
-  { at: "projects/project-open-item.service.ts#answerOpenItem", class: "ONE_ROW_CAS", statements: 1, note: "The owner's answer, and the end of the question in the same statement: an UPDATE whose predicate is the item and `state = 'OPEN'`, writing RESOLVED/ANSWERED with the answer beside it. A question gets one answer — a second press, or one racing another window, matches no row and is told so rather than replacing an answer the coordinator may already have acted on. The delivery that follows is `deliverAnswer`, after this has committed, because who is coordinating the project is read after the answer is a fact." },
   { at: "projects/project-open-item.service.ts#returnToCoordinator", class: "ONE_ROW_CAS", statements: 1, note: "The owner handing an escalated item back (§4.7), and the restart of its clock in the same statement: an UPDATE whose predicate is the item, `state = 'OPEN'` and the assignment the press was read from, writing COORDINATOR/DEFAULT with `assigned_at`, `waiting_since` and `escalate_at` moved together. A second press, or one racing the coordinator's own recovery on the same row, matches nothing and is told to read the project again rather than reporting a hand-back it did not make. The delivery that follows is `deliver`, after this has committed — and across the two reads the project's coordinator is resolved twice on purpose: the refusal in front of the write asks whether there is a conversation to hand the item TO, and the delivery asks which one it is NOW, which a rotation between them can have changed." },
   { at: "projects/project-open-item.service.ts#acceptOpenItem", class: "ONE_ROW_CAS", statements: 1, note: "The owner's Accept of work that reached the branch without their confirmation (§10.8): one conditional UPDATE whose predicate is the item in its project and account, the LANDED_WITHOUT_CONFIRMATION kind, `state = 'OPEN'` and `openItemOwed`, writing RESOLVED / ACCEPTED by the USER with the owner's id. A request from a session is refused before any read; a second press, or a task cancelled or replaced meanwhile, matches nothing and is told the item is no longer open, and the row's terminal guard refuses a rewrite either way." },
   { at: "projects/project-open-item.service.ts#resolveOpenItem", class: "ONE_ROW_CAS", statements: 1, note: "The assignee closing an item it handled (§4.7's \"mark handled\"), and the last ending of an item that no fact produces: an UPDATE whose predicate is the item and `state = 'OPEN'`, writing RESOLVED with the resolution the kind has (HANDLED, or WITHDRAWN for a question the conversation that asked it takes back), the moment, the side that pressed (USER with the owner id, or COORDINATOR with the acting session), and the reason — which is the whole of what a hand-closed item adds to the record, since the platform could not verify the ending. A second press, or one racing a platform fact on the same row, matches nothing and is told to read the project again rather than reporting a close it did not make; the row's own terminal guard refuses a rewrite under either." },
@@ -3161,7 +3221,9 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "users/users.controller.ts#setAvatar", class: "ONE_ROW_BY_KEY", statements: 1, note: "Setting one's profile photo (migration 0335): one upsert keyed by user_avatar's primary key, the caller's own user id, so a second photo takes the row over rather than writing another. Its foreign key to user(id) takes FOR KEY SHARE on the caller's user row, which only an admin deleting that account would conflict with; nothing else is locked." },
   { at: "users/users.controller.ts#updatePreferences", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.controller.ts#updateProfile", class: "ONE_ROW_BY_KEY", statements: 1 },
-  { at: "users/users.util.ts#createOrResetUser", class: "INSERT", statements: 2, note: "Two spellings, one write per call — update when the user exists, insert when not." },
+  // Admin → Email (docs/welcome-email-design.md §3.1, migration 0516), and an administrator's Send welcome email (§3.5).
+  { at: "email/email-settings.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1, note: "An administrator's save of the email setting: one INSERT … ON CONFLICT (id) DO UPDATE of the one `email_settings` row (id 1), keyed by its primary key. The table has no foreign key and no trigger, so the statement takes that row and nothing else. Two saves racing both land, the later one whole." },
+  { at: "email/email-outbox.ts#resendWelcome", class: "ONE_ROW_CAS", statements: 1, note: "One UPDATE of the account's WELCOME row by its unique (kind, user_id), predicated on status FAILED or SKIPPED, back to PENDING with attempts cleared and generation + 1; the read after it is a plain SELECT. A worker holding the row FOR UPDATE makes it wait until that send commits, after which the row is SENT or PENDING and the predicate matches nothing. email_outbox's foreign key is to `user` and the UPDATE changes no key column, so no parent is re-checked; no trigger." },
   { at: "watches/watch-delivery.service.ts#claimDue", class: "MANY_ROWS", statements: 1, note: "The delivery lease: a batch of due PENDING deliveries moved to IN_FLIGHT, each under its own lease generation. `FOR UPDATE SKIP LOCKED` passes over a row another claim or settlement holds instead of waiting for it, so the statement has no wait edge; a delivery it skips is still due on the next pass." },
   { at: "watches/watch-delivery.service.ts#defer", class: "ONE_ROW_CAS", statements: 1, note: "A wake a continuous watch may not give yet, put back to PENDING until its window ends, only while the claim's lease generation is still the row's. No attempt is counted; a lost CAS means a takeover holds the row and settles it." },
   { at: "watches/watch-delivery.service.ts#fail", class: "ONE_ROW_CAS", statements: 1, note: "A failed attempt, recorded only while the claim's lease generation is still the row's: back to PENDING on the backoff, or a dead letter at the attempt cap or on a refusal. A lost CAS means a takeover holds the row and settles it. Its caller announces `watch.changed` for the attempt that made the row a dead letter, and for none that still has a retry to come." },
@@ -3481,6 +3543,10 @@ export interface ExcludedSource {
  * skipped, so an exclusion cannot be widened by accident.
  */
 export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
+  {
+    path: 'test-support/promotion-request.ts',
+    why: 'Disposable PostgreSQL fixtures for pre-K7 promotion transitions seed a committed historical request; imported only by specs. The K7 tests separately exercise the real coordinator request door.',
+  },
   {
     path: 'common/transaction-retry.ts',
     why: 'The retry loop itself. Its `$transaction` call IS the mechanism this inventory is about; listing it as a unit of work would make the loop a member of the set it implements.',

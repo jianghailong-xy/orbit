@@ -326,7 +326,7 @@ export function anchorChallengeReason(anchors: readonly WikiAnchor[], ref: strin
   const broken = anchors
     .filter((anchor) => anchor.check?.state === 'changed' || anchor.check?.state === 'missing')
     .map((anchor) => `${describeAnchor(anchor)} ${anchor.check?.state === 'changed' ? 'has changed' : 'is missing'}`);
-  const text = `Anchor re-verification on origin/main at ${ref}: ${broken.join('; ')}. `
+  const text = `Anchor re-verification on the repository's default branch at ${ref}: ${broken.join('; ')}. `
     + 'Agents stop getting this entry until it is re-confirmed, amended or retired.';
   const chars = [...text];
   return chars.length <= WIKI_LIMITS.fieldTextMaxChars ? text : `${chars.slice(0, WIKI_LIMITS.fieldTextMaxChars - 1).join('')}…`;
@@ -362,7 +362,7 @@ export function anchorReportShape(body: unknown): { ref: string; entries: unknow
   const value = (body ?? {}) as Record<string, unknown>;
   const errors: WikiFieldError[] = [];
   if (typeof value.ref !== 'string' || !COMMIT_SHA.test(value.ref)) {
-    errors.push({ path: 'ref', message: 'is required: the 40-character sha origin/main named when the anchors were checked' });
+    errors.push({ path: 'ref', message: 'is required: the 40-character sha the default branch named when the anchors were checked' });
   }
   if (!Array.isArray(value.entries) || value.entries.length === 0) {
     errors.push({ path: 'entries', message: 'must hold at least one entry' });

@@ -929,6 +929,7 @@ final class AppModel {
         linkCards?.removeAll()
         linkCards = nil
         managedRunner?.reset()
+        newAccount = nil
         #if os(iOS)
         disablePush()   // reads the access token, so before the store is cleared below
         #endif
@@ -2027,6 +2028,27 @@ final class AppModel {
         case .machines?:        selectedSection = .runners
         case .workspace?, nil:  break
         }
+    }
+
+    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
+
+    /// Whether this account has never had a session: its Open and Completed lists, one row each, both
+    /// answered empty (board 03, rule 1; the web's `useNewAccount`). Nil until read, and false after a
+    /// read that failed. Kept for this run of the app only: nothing is stored to remember it.
+    private(set) var newAccount: Bool?
+
+    /// Read it again: the pages that can wear the welcome card ask as they appear, as the web's query
+    /// does on mount, so the card goes once a first session exists anywhere.
+    func readNewAccount() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        let open = try? await api.sessionRowCount(view: .open)
+        // A row in Open already says it: Completed is asked only when Open is empty.
+        var completed: Int?
+        if open == 0 { completed = try? await api.sessionRowCount(view: .completed) }
+        let answer = Welcome.isNewAccount(openRows: open, completedRows: completed)
+        guard generation == apiGeneration, self.api === api else { return }
+        newAccount = answer
     }
 
     // MARK: a machine with no workspace (board rules 1–12)
@@ -3131,18 +3153,10 @@ final class AppModel {
     }
 
     /// One poll of what the page's start row needs (docs/mocks/project-start-sessions-page): the
-    /// project's open items — the coordinator's request to start among them — while the sidebar row
-    /// says nobody has started it. A started project, or one the row does not say about, reads
-    /// nothing more than before; a read that fails keeps the last answer rather than drawing none.
+    /// project's open items, including the start request and the owner's latest Not yet answer.
+    /// A failed read keeps the last answer rather than drawing none.
     func loadProjectStart(_ address: SessionProjectAddress) async {
         guard let api else { return }
-        let key = PublicID.storageKey(address.projectID)
-        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
-        // The start row needs the items only on a project nobody has started.
-        guard row?.status == .open, row?.started == false else {
-            projectSessionsOpenItems = nil
-            return
-        }
         let items = try? await api.projectOpenItems(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
         projectSessionsOpenItems = items

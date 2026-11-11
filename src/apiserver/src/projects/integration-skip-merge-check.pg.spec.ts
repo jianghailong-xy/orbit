@@ -795,7 +795,7 @@ test('the skip is ONE generation: the next landing of the same task is handed it
       assert.equal(rerun.jobId, rows[2]!.id);
       const rerunClaim = await claim(stack, w, 'lease-skip-once-2');
       assert.equal(rerunClaim[0]!.jobId, rows[2]!.id);
-      assert.deepEqual(rerunClaim[0]!.checks.map((check) => check.name), ['TASK_ACCEPTANCE', 'MERGE_CHECK'],
+      assert.deepEqual(rerunClaim[0]!.checks.map((check) => check.name), ['TASK_ACCEPTANCE', 'LANDING_CHECK'],
         'the check runs again on the generation after the skipped one');
     } finally {
       await stack.db.$disconnect();

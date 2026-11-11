@@ -2,7 +2,7 @@
 import { act, type JSX } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectLandTask, ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
@@ -10,6 +10,7 @@ import {
   BLOCKERS_DECIDED_TOO,
   CANCEL_MERGE,
   IT_IS_YOURS,
+  LET_THE_AGENT_PUSH_INSTEAD,
   MERGED_AUTOMATICALLY_HEADING,
   MERGE_TO_MAIN,
   MERGING,
@@ -25,6 +26,7 @@ import {
   mergeTo,
   mergedAutomaticallyHeading,
   mergedHeading,
+  promotionAsksBecauseMain,
   promotionItem,
   resolvingPress,
   type PromotionProjectView,
@@ -1168,3 +1170,112 @@ describe('the merge check says what a pass leads to', () => {
 
 // The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
 vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
+
+describe('why a card asks with Automatic on (owner decision 2026-11-10)', () => {
+  /** A project landing directly on main, Orbit landing its work, Automatic on: the one case the
+   *  line is for. */
+  const onMain = (over: Partial<PromotionProjectView> = {}): PromotionProjectView => project({
+    coordinatorEnabled: true,
+    integration: { line: 'MAIN', deliveryMode: 'PLATFORM' },
+    ...over,
+  });
+  const REASON = 'Asks you because this project lands directly on main, where Automatic never merges by itself.';
+
+  it('says why above the presses, and offers the way not to be asked', () => {
+    const html = card(promotion(), { project: onMain() });
+    expect(html).toContain(REASON);
+    expect(html).toContain(LET_THE_AGENT_PUSH_INSTEAD);
+    expect(LET_THE_AGENT_PUSH_INSTEAD).toBe('Let the agent push instead…');
+    expect(html.indexOf(REASON)).toBeLessThan(html.indexOf(mergeTo('main')));
+  });
+
+  it('names the project’s main branch', () => {
+    expect(promotionAsksBecauseMain('feature/v1.1.1')).toBe(
+      'Asks you because this project lands directly on feature/v1.1.1, where Automatic never merges by itself.');
+    const html = card(promotion({ upstreamRef: 'refs/heads/feature/v1.1.1' }), { project: onMain() });
+    expect(html).toContain(promotionAsksBecauseMain('feature/v1.1.1'));
+  });
+
+  it('says nothing when any of the three is false or unknown, or the card is not asking', () => {
+    const without: Array<[string, PromotionProjectView | null]> = [
+      ['the project not read', null],
+      ['Automatic off', onMain({ coordinatorEnabled: false })],
+      ['Automatic unknown', onMain({ coordinatorEnabled: undefined })],
+      ['a project branch', onMain({ integration: { line: 'PROJECT_BRANCH', deliveryMode: 'PLATFORM' } })],
+      ['the agent pushing', onMain({ integration: { line: 'MAIN', deliveryMode: 'AGENT_PUSH' } })],
+      ['no delivery mode', onMain({ integration: { line: 'MAIN' } })],
+      ['no integration', onMain({ integration: undefined })],
+    ];
+    for (const [what, doc] of without) {
+      expect(card(promotion(), { project: doc }), what).not.toContain(LET_THE_AGENT_PUSH_INSTEAD);
+    }
+    expect(card(promotion({ state: 'CONFIRMED' }), { project: onMain() })).not.toContain(LET_THE_AGENT_PUSH_INSTEAD);
+    expect(card(promotion({ state: 'BLOCKED' }), { project: onMain() })).not.toContain(LET_THE_AGENT_PUSH_INSTEAD);
+  });
+
+  describe('the press', () => {
+    let host: HTMLDivElement;
+    let root: Root;
+
+    beforeEach(() => {
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      host = document.createElement('div');
+      document.body.appendChild(host);
+      root = createRoot(host);
+    });
+
+    afterEach(() => {
+      act(() => root.unmount());
+      host.remove();
+      document.getElementById('project-run-delivery')?.remove();
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    });
+
+    function Where() {
+      const location = useLocation();
+      return <output data-where>{`${location.pathname}${location.hash}`}</output>;
+    }
+
+    async function draw() {
+      await act(async () => {
+        root.render(
+          <MemoryRouter initialEntries={['/sessions/somewhere']}>
+            <QueryClientProvider client={client()}>
+              <Routes>
+                <Route path="*" element={<>
+                  <ProjectPromotionCard projectId={PROJECT_ID} promotion={promotion()} item={null}
+                    project={onMain()} now={NOW} bare />
+                  <Where />
+                </>} />
+              </Routes>
+            </QueryClientProvider>
+          </MemoryRouter>,
+        );
+      });
+    }
+
+    const pressLink = async () => {
+      const link = [...host.querySelectorAll('button')].find((each) => each.textContent === LET_THE_AGENT_PUSH_INSTEAD);
+      expect(link, 'the press').toBeTruthy();
+      await act(async () => link!.click());
+    };
+    const where = () => host.querySelector('[data-where]')?.textContent;
+
+    it('opens the project’s How it runs at Delivery from anywhere else', async () => {
+      await draw();
+      await pressLink();
+      expect(where()).toBe(`/projects/${encodeId(PROJECT_ID)}#project-run-delivery`);
+    });
+
+    it('brings Delivery into view where How it runs is already on the page', async () => {
+      const row = document.createElement('div');
+      row.id = 'project-run-delivery';
+      row.tabIndex = -1;
+      document.body.appendChild(row);
+      await draw();
+      await pressLink();
+      expect(where()).toBe('/sessions/somewhere');
+      expect(document.activeElement).toBe(row);
+    });
+  });
+});

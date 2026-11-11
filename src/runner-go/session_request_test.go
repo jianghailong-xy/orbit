@@ -247,3 +247,45 @@ func TestProjectSendAsksTheCoordinatorForAReplyTheSameWayThroughBothDoors(t *tes
 		t.Fatalf("requests =\n%#v\nwant\n%#v", *calls, want)
 	}
 }
+
+func TestRunQuestionAnswersThroughMCPAndCLI(t *testing.T) {
+	srv, calls := recordingServer(t, `{"requestId":"question-request","state":"REPLIED","handOff":"ALREADY"}`)
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv(envMCPOrchestration, "true")
+	t.Setenv("ORBIT_SESSION_ID", "coordinator-session")
+	t.Setenv(envOrchestrationToken, "session-token")
+	answers := `[{"question":0,"option":1},{"question":1,"options":[0,2]},{"question":2,"text":"Use port 5000"}]`
+	if err := cmdSessionCLI([]string{"reply", "question-request", "--answers-json", "-"}, strings.NewReader(answers), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	var decoded []interface{}
+	if err := json.Unmarshal([]byte(answers), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	mcp := &mcpServer{sessionID: "coordinator-session", orchestrationToken: "session-token", allowOrchestration: true, t: NewTransport(srv.URL, "runner-secret")}
+	if res := mcp.callTool("session_reply", map[string]interface{}{"requestId": "question-request", "answers": decoded}); res["isError"] == true {
+		t.Fatalf("answers-only reply refused: %#v", res)
+	}
+	if len(*calls) != 2 || !reflect.DeepEqual((*calls)[0], (*calls)[1]) {
+		t.Fatalf("MCP/CLI mismatch: %#v", calls)
+	}
+	if _, ok := (*calls)[0].body["message"]; ok {
+		t.Fatal("answers-only reply acquired a message")
+	}
+	props := mcpToolProps(toolDescriptors(true, true), "session_reply")
+	if props["answers"] == nil {
+		t.Fatal("coordinator cannot discover structured answers")
+	}
+}
+
+func TestAskOwnerLinksRunQuestion(t *testing.T) {
+	srv, calls := recordingServer(t, `{"itemId":"owner-question","state":"OPEN"}`)
+	mcp := &mcpServer{sessionID: "coordinator-session", t: NewTransport(srv.URL, "runner-secret")}
+	res := mcp.callTool("ask_owner", map[string]interface{}{"projectId": "project", "question": "Which port can we expose?", "forRunQuestion": "question-request", "recommendedOption": 0})
+	if res["isError"] == true {
+		t.Fatalf("ask_owner refused: %#v", res)
+	}
+	if len(*calls) != 1 || (*calls)[0].body["forRunQuestion"] != "question-request" {
+		t.Fatalf("link lost: %#v", calls)
+	}
+}

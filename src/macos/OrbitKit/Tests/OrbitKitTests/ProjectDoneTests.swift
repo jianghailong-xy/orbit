@@ -6,6 +6,22 @@ import XCTest
 /// held to the browser's own examples (`ProjectDoneSettlementCard.test.tsx`) and to the payloads the
 /// server serves. The words themselves are `ProjectDoneCopyParityTests`'.
 final class ProjectDoneTests: XCTestCase {
+    func testStaleRequestDecodesAndYieldsToAnOpenRequestOrNewerDecline() throws {
+        func items(_ extra: String = "") throws -> ProjectOpenItemsView {
+            let json = """
+            {"latestDoneRequestSuperseded":{"reason":"Task reopened.","supersededAt":"2026-11-10T12:00:00Z"}\(extra)}
+            """
+            return try JSONDecoder().decode(ProjectOpenItemsView.self, from: Data(json.utf8))
+        }
+        XCTAssertEqual(ProjectDone.staleRequest(try items()), "Task reopened. " + ProjectDone.staleDetail)
+        XCTAssertNil(ProjectDone.staleRequest(try items(#", "latestDoneRequestDecline":{"note":"Missing", "declinedAt":"2026-11-10T13:00:00Z"}"#)))
+        XCTAssertNotNil(ProjectDone.staleRequest(try items(#", "latestDoneRequestDecline":{"note":"Missing", "declinedAt":"2026-11-10T11:00:00Z"}"#)))
+        let stale = try items().latestDoneRequestSuperseded
+        let open = ProjectOpenItemRow(itemId: "new", kind: .unknown, title: "", waitingSince: "")
+        XCTAssertNil(ProjectDone.staleRequest(ProjectOpenItemsView(doneRequest: open, latestDoneRequestSuperseded: stale)))
+        XCTAssertNil(ProjectDone.staleRequest(nil))
+    }
+
 
     func testDoneCheckFindingsUseShortLines() throws {
         let json = #"""
@@ -96,22 +112,14 @@ final class ProjectDoneTests: XCTestCase {
 
     // MARK: the owner card
 
-    func testACardNobodyAskedForCarriesOrbitsOwnGaps() {
+    func testACardNobodyAskedForCarriesNoGaps() {
         let subject = closeout(criteria: [
             ProjectDoneCriterion(definitionId: "c1", satisfied: true, landingReason: .noReceipt),
-            ProjectDoneCriterion(definitionId: "c2", satisfied: true, landingReason: .nothingToLand),
+            ProjectDoneCriterion(definitionId: "c2", satisfied: false, landingReason: .codeless),
         ])
-        let gaps = ProjectDone.syntheticGaps(subject)
-        XCTAssertEqual(gaps.map(\.criterionKey), ["c1"],
-                       "nothing to land is an outcome, not a gap to paper over")
-        XCTAssertEqual(gaps.first?.title, "The release is on main")
-        XCTAssertEqual(gaps.first?.whyNotProven,
-                       "Orbit cannot prove this criterion is on main: Merged outside Orbit.")
-        let unmet = closeout(criteria: [ProjectDoneCriterion(definitionId: "c2", satisfied: false,
-                                                             landingReason: .codeless)])
-        XCTAssertEqual(ProjectDone.syntheticGaps(unmet).first?.whyNotProven,
-                       "Orbit cannot prove this criterion is met by its work yet.",
-                       "an unmet criterion is a gap whatever its landing says")
+        // The web card dropped `syntheticDoneGaps`: with nobody asking, the server's done check
+        // speaks for what Orbit cannot prove, and the card carries no gaps of its own.
+        XCTAssertEqual(ProjectDone.gaps(subject, request: nil), [])
         XCTAssertEqual(ProjectDone.gaps(subject, request: request), request.gaps,
                        "a request's own gaps are the card's, not Orbit's")
     }
@@ -508,8 +516,6 @@ final class ProjectDoneTests: XCTestCase {
         XCTAssertEqual(ProjectDone.rowDetail(criteria[1], waitingOnWork: false, main: subject.main),
                        "Orbit saw no merge for it. The coordinator checked master has it and asked you to record "
                            + "the project done.")
-        XCTAssertEqual(ProjectDone.syntheticGaps(subject).map(\.whyNotProven),
-                       ["Orbit cannot prove this criterion is on master: Merged outside Orbit."])
         // A document that names none is main, word for word as the cards always said it.
         let unnamed = closeout()
         XCTAssertEqual(unnamed.main, "main")

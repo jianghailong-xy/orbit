@@ -46,6 +46,18 @@ class ProjectCopyParityTest {
             "delivery", "deliveryPlatform", "deliveryAgentPush"))
     @Test fun markdownWords() = assertIn(ProjectMarkdown, swift("${kit}ShareMarkdown.swift"))
     @Test fun crossingsWords() = assertIn(ProjectCrossings, swift("${kit}ProjectCrossings.swift"))
+    @Test fun staleRequestWordsMatchWebAndNewestRowWins() {
+        val web = File(root, "src/web/src/lib/projectDone.ts").readText()
+        for ((key, words) in listOf("DONE_REQUEST_STALE_HEADING" to ProjectDone.staleHeading,
+            "DONE_REQUEST_STALE_DETAIL" to ProjectDone.staleDetail)) {
+            assertTrue(web.contains("export const $key = '$words';"))
+        }
+        fun items(extra: String = "") = Json.parseToJsonElement("""{"latestDoneRequestSuperseded":{"reason":"Task reopened.","supersededAt":"2026-11-10T12:00:00Z"}$extra}""").jsonObject
+        assertEquals("Task reopened. ${ProjectDone.staleDetail}", ProjectDone.staleRequest(items()))
+        assertEquals(null, ProjectDone.staleRequest(items(",\"doneRequest\":{}")))
+        assertEquals(null, ProjectDone.staleRequest(items(",\"latestDoneRequestDecline\":{\"declinedAt\":\"2026-11-10T13:00:00Z\"}")))
+        assertEquals(null, ProjectDone.staleRequest(null))
+    }
     @Test fun derivedDoneWordsMatchWebLiteralsAndDate() {
         val web = File(root, "src/web/src/lib/projectDone.ts").readText()
         for ((key, words) in listOf("DONE_CARD_DERIVED_FROM" to ProjectDone.derivedFrom,
@@ -67,6 +79,11 @@ class ProjectCopyParityTest {
         assertTrue(web.contains("export const DONE_CHECK_LANDINGS = '${ProjectDone.checkLandings}';"))
         assertTrue(web.contains("export const DONE_CARD_FINDINGS_HEADING = '${ProjectDone.findingsHeading}';"))
         assertTrue(web.contains("export const DONE_CARD_FINDINGS_ACCEPTED = '${ProjectDone.findingsAccepted}';"))
+    }
+    @Test fun declineWordsMatchWeb() {
+        val web = File(root, "src/web/src/lib/projectDone.ts").readText()
+        assertTrue(web.contains("export const DONE_DECLINE_HEADING = '${ProjectDone.declineHeading}';"))
+        assertTrue(web.contains("export const DONE_DECLINE_HINT = '${ProjectDone.declineHint}';"))
     }
     @Test fun doneWords() = assertIn(ProjectDone, swift("${kit}ProjectDone.swift"))
     @Test fun attentionWords() {

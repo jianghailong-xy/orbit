@@ -20,6 +20,7 @@ const { api } = await import('../api');
 const { RunnerRegisterGuide } = await import('./RunnerRegisterGuide');
 
 const RUNNER_ID = '0199f0a8-3c2e-7b51-9a6e-1f2d3c4b5a69';
+const OLD_ID = '0199f0a8-3c2e-7b51-9a6e-1f2d3c4b5a70';
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -66,11 +67,12 @@ afterEach(async () => {
 
 describe('Add a runner, once the machine comes online', () => {
   it('names the next step the approval page names, and Start a session opens its new session page', async () => {
-    // The page opens with no machine online; the next read finds the new one.
+    // The page opens with no machine online (an account that has one, offline); the next read finds the new one.
     let reads = 0;
+    const old = { id: OLD_ID, name: 'hpc', online: false };
     vi.mocked(api).mockImplementation(async (path: string) => {
       expect(path).toBe('/runners');
-      return reads++ === 0 ? [] : [{ id: RUNNER_ID, name: 'orbit@austin', online: true }];
+      return reads++ === 0 ? [old] : [old, { id: RUNNER_ID, name: 'orbit@austin', online: true }];
     });
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const page = await open(qc);
@@ -94,6 +96,37 @@ describe('Add a runner, once the machine comes online', () => {
 
     await act(async () => {
       button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await settle();
+    expect(page.querySelector('[data-testid="where"]')?.textContent).toBe(`/runners/${encodeId(RUNNER_ID)}/new`);
+  });
+});
+
+/**
+ * An account with no machine at all is a new one (docs/mocks/new-user-onboarding, P3): the guide is the first
+ * step of its welcome card, and once the machine is online the page moves on to its setup card by itself.
+ */
+describe('Add a runner, for an account with no machine yet', () => {
+  it('is the welcome card’s first step, and moves on to the machine’s new session page once it is online', async () => {
+    let reads = 0;
+    vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path === '/users/me') return { id: 'u', email: 'mia@example.com', name: 'Mia Chen', createdAt: '' };
+      expect(path).toBe('/runners');
+      return reads++ === 0 ? [] : [{ id: RUNNER_ID, name: 'orbit@austin', online: true }];
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const page = await open(qc);
+    const said = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
+    await settle();
+    expect(said(page.querySelector('.msc-title'))).toBe('Welcome to Orbit, Mia');
+    const steps = [...page.querySelectorAll('.msc-step .msc-step-title')].map(said);
+    expect(steps).toEqual(['A computer to work on', 'A model to think with', 'Your first message']);
+    expect(page.querySelector('.runner-cmd-text')?.textContent).toContain('/install.sh');
+    expect(page.textContent).toContain('Waiting for it to connect');
+    expect(page.textContent).not.toContain('Add a runner');
+
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ['runners'] });
     });
     await settle();
     expect(page.querySelector('[data-testid="where"]')?.textContent).toBe(`/runners/${encodeId(RUNNER_ID)}/new`);

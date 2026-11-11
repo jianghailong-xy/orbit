@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -1756,6 +1757,7 @@ test('an item a job with no task opened still reaches the coordinator', { skip, 
     const landed = await reportLanding(stack, w, job);
     assert.equal(landed.accepted, true, 'the landing that leaves something to promote');
 
+    await seedPromotionRequest(stack.db, w.projectId);
     const candidate = await stack.promotions.considerCandidate(w.projectId);
     assert.ok(
       candidate,
@@ -2471,6 +2473,7 @@ test('the owner closes what is theirs, and the two kinds that have a press of th
       const promoted = await integratingWorld(stack, 'promotion-card', 'PARKED');
       const { job } = await claimedLanding(stack, promoted, 'promotion-card');
       await reportLanding(stack, promoted, job);
+      await seedPromotionRequest(stack.db, promoted.projectId);
       const candidate = await stack.promotions.considerCandidate(promoted.projectId);
       assert.ok(candidate, `the landing left no candidate to promote — ${await jobsOf(stack.db, promoted.projectId)}`);
       const [check] = await stack.jobs.dispatch({

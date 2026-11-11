@@ -1,4 +1,4 @@
-import type { CriterionLandingReason, DoneRequest, ProjectDoneFinding, ProjectDoneBy, ProjectOpenItemRow } from '@orbit/shared';
+import type { CriterionLandingReason, DoneRequest, ProjectDoneFinding, ProjectDoneBy, ProjectOpenItemsView, ProjectOpenItemRow } from '@orbit/shared';
 import { api } from '../api';
 import { DEFAULT_MAIN_BRANCH } from './projectStart';
 import { formatSpan } from './watches';
@@ -10,6 +10,9 @@ import { formatSpan } from './watches';
 // Keep each public copy token as a literal declaration.  Native copy-parity tests intentionally
 // read the source (rather than importing the web bundle), so an alias such as
 // `DONE_CARD_HEADING = PROJECT_DONE_COPY.heading` is not enough for them to prove parity.
+export const DONE_DECLINE_HEADING = 'You said not yet';
+export const DONE_DECLINE_HINT = 'The card comes back after the coordinator changes something.';
+
 export const DONE_CARD_HEADING = 'Is this project done?';
 export const DONE_CARD_COORDINATOR_CALL = 'Coordinator’s call';
 export const DONE_CARD_DONE_WHEN = 'Done when';
@@ -390,4 +393,15 @@ export function isWaitingOnWork(reason: CriterionLandingReason | null): boolean 
 
 export function isNeedsYourCall(reason: CriterionLandingReason | null): boolean {
   return reason === 'NO_RECEIPT';
+}
+
+export const DONE_REQUEST_STALE_HEADING = 'The coordinator’s request went stale';
+export const DONE_REQUEST_STALE_DETAIL = 'The coordinator has been told and will ask again when the work settles.';
+
+export function staleDoneRequest(view: Pick<ProjectOpenItemsView, 'doneRequest' | 'latestDoneRequestSuperseded' | 'latestDoneRequestDecline'> | null | undefined): string | null {
+  const stale = view?.latestDoneRequestSuperseded;
+  if (view?.doneRequest || !stale) return null;
+  const declined = view?.latestDoneRequestDecline;
+  if (declined && Date.parse(declined.declinedAt) >= Date.parse(stale.supersededAt)) return null;
+  return `${stale.reason.replace(/[.\s]+$/, '')}. ${DONE_REQUEST_STALE_DETAIL}`;
 }
