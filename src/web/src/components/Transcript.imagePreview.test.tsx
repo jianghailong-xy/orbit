@@ -84,6 +84,9 @@ async function key(name: string): Promise<void> {
   await settle();
 }
 
+// The reply's screenshot comes from a tool call, which folds into the turn's steps line like any
+// other read (512db0583); the viewer pages what is drawn, so open the line to draw it.
+const openSteps = () => click(container.querySelector('.chat-steps-line')!);
 const bubble = (seq: number) => container.querySelector<HTMLElement>(`.chat-user[data-seq="${seq}"]`)!;
 const thumbnails = (scope: Element) => [...scope.querySelectorAll<HTMLButtonElement>('button.chat-image-btn')];
 const viewer = () => document.querySelector<HTMLElement>('[role="dialog"]');
@@ -153,6 +156,7 @@ describe('the viewer', () => {
     await land('tall');
     await land('wide');
     await fail('missing');
+    await openSteps();
 
     await click(thumbnails(bubble(1))[1]);
     expect(viewer()).not.toBeNull();
@@ -179,6 +183,7 @@ describe('the viewer', () => {
     await land('diagram');
     await land('later');
     await fail('missing');
+    await openSteps();
 
     const picture = thumbnails(container.querySelector('.chat-assistant .md')!)[0];
     expect(picture.querySelector('img')!.className).toBe('md-image');
