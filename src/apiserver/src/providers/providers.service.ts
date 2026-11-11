@@ -127,7 +127,7 @@ function cursorKeyCheckAnswer(outcome: CursorKeyCheckOutcome, why: CursorKeyChec
 /** The engines a key's row runs on (shared providerEngines.ts): its protocol, its preset and endpoint,
  *  and whether its key is a Claude subscription token — which only this side can say, holding the key. */
 function keyEngines(row: { runtime: string; presetSlug: string | null; baseUrl: string; apiKeyEnc: string }): AgentProvider[] {
-  return credentialEngines(keyCredential(row), engineTableOptions());
+  return credentialEngines(keyCredential(row), engineTableOptions(row.baseUrl));
 }
 
 /** What uses a key, per engine (docs/provider-engine-contract.md §3.6): the open sessions spending it and
@@ -699,7 +699,7 @@ export class ProvidersService {
       const runs = credentialEngines(keyCredential(
         { runtime, presetSlug: current.presetSlug, baseUrl: dto.baseUrl ?? current.baseUrl, apiKeyEnc: apiKeyEnc ?? current.apiKeyEnc },
         dto.apiKey,
-      ), engineTableOptions());
+      ), engineTableOptions(dto.baseUrl ?? current.baseUrl));
       const stranded = (await readKeyUsage(this.prisma, current)).engines.filter((e) => !runs.includes(e.engine));
       if (stranded.length > 0) {
         throw dialectInUse(current.label, stranded, protocolMoves ? 'protocol' : endpointMoves ? 'endpoint' : 'key');

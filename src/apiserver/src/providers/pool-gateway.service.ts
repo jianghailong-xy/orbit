@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
+import type { LookupFunction } from 'node:net';
 import { AgentProvider } from '@orbit/shared';
 import { ACCOUNT_DISABLED, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
@@ -491,10 +492,11 @@ export async function sendUpstream(
   headers: OutgoingHttpHeaders,
   body: Buffer,
   res: Response,
+  lookup?: LookupFunction,
 ): Promise<Answer> {
   let waited = 0;
   for (let attempt = 1; ; attempt += 1) {
-    const response = await exchangeUpstream(agent, method, url, headers, body, res);
+    const response = await exchangeUpstream(agent, method, url, headers, body, res, lookup);
     if ((response.statusCode ?? 0) < 400) return { response };
     const answer = { response, body: await readAll(response) };
     if (response.statusCode !== 429) return answer;
@@ -511,7 +513,10 @@ export async function sendUpstream(
   }
 }
 
-/** One request to the upstream, resolved with its answer's head; aborted if codex goes away first. */
+/**
+ * One request to the upstream, resolved with its answer's head; aborted if codex goes away first. With
+ * `lookup`, the host's name is resolved by it alone (the address a guard already checked, gateway-upstream.ts).
+ */
 export function exchangeUpstream(
   agent: HttpsAgent,
   method: string,
@@ -519,13 +524,14 @@ export function exchangeUpstream(
   headers: OutgoingHttpHeaders,
   body: Buffer,
   res: Response,
+  lookup?: LookupFunction,
 ): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
     const send = target.protocol === 'https:' ? httpsRequest : httpRequest;
     const request = send(
       target,
-      { method, headers, ...(target.protocol === 'https:' ? { agent } : {}) },
+      { method, headers, ...(target.protocol === 'https:' ? { agent } : {}), ...(lookup ? { lookup } : {}) },
       resolve,
     );
     request.on('error', reject);

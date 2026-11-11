@@ -1133,7 +1133,38 @@ struct TranscriptView: View {
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
                              recap: recapCard,
+                             watchName: watchWakeName,
                              createdWorkspace: console.createdWorkspaceLine)
+    }
+
+    /// The name a folded watch turn gives its one target (`OrbitExchangeFold.orbitTurn`): the watch's
+    /// own record of it first, then the session this client holds — what `WatchWakeCardView` names
+    /// it by.
+    private func watchWakeName(_ wake: WatchWake, _ target: WatchWakeTarget) -> String? {
+        let key = PublicID.storageKey(target.id)
+        if let title = app.watches?.watch(wake.watchId)?.targets
+            .first(where: { PublicID.storageKey($0.targetResourceId) == key })?.targetTitle,
+            !title.isEmpty {
+            return title
+        }
+        return target.kind == .session ? app.session(id: target.id)?.title : nil
+    }
+
+    /// What places a folded Orbit turn under its task: which task a session runs, off the session rows
+    /// this client holds, and which tasks a task waits on, off the project's dependency graph — read
+    /// only once a group is opened (`ConsoleModel.wantExchangeTree`).
+    private var exchangeTreeLookup: ExchangeTreeLookup {
+        let graph = OrbitExchangeFold.upstream(from: console.exchangeGraph)
+        var taskBySession: [String: String] = [:]
+        for session in app.sessions {
+            if let taskId = session.taskId, !taskId.isEmpty { taskBySession[PublicID.storageKey(session.id)] = taskId }
+        }
+        let runs = taskBySession
+        let title = graph.taskTitle
+        return ExchangeTreeLookup(
+            taskOfSession: { id in runs[PublicID.storageKey(id)].map { ($0, title($0)) } },
+            upstreamOf: graph.upstreamOf,
+            taskTitle: graph.taskTitle)
     }
 
     /// The conversation's last row while it is at rest (`RecapCard`), unless it stepped aside for
@@ -1200,6 +1231,13 @@ struct TranscriptView: View {
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
             StepsRowView(items: items, fullPayload: console.fullPayload)
+        case .exchanges(let turns):
+            // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
+            // "Your question". Opened, it draws each turn's rows through this same function.
+            OrbitExchangeFoldView(
+                exchanges: turns, reveal: console.revealedItemID, lookup: exchangeTreeLookup,
+                want: { console.wantExchangeTree(projectID: app.session(id: console.sessionID)?.projectId) },
+                render: { AnyView(transcriptRow($0)) })
         case .statusCard(let card):
             SessionStatusCardView(card: card)
         case .decisionCard(let card):

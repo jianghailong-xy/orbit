@@ -19,6 +19,7 @@ import {
   type TranslateContext,
 } from './anthropic-gateway';
 import { ANTHROPIC_GATEWAY_PATH, anthropicGatewayEnabled, gatewaySmallModel, KEY_GATEWAY_TOKEN_PREFIX } from './key-gateway';
+import { resolveHost, UpstreamRefused, vetUpstream, type HostResolver, type VettedUpstream } from './gateway-upstream';
 import { catalogModels } from './model-catalog';
 import {
   parseJson,
@@ -95,7 +96,10 @@ export function refuseAnthropic(res: Response, status: number, type: string, mes
 @Injectable()
 export class AnthropicGatewayService {
   private readonly log = new Logger('AnthropicGateway');
-  private readonly agent = new HttpsAgent({ keepAlive: true, maxSockets: 256 });
+  /** The connections to the keys' endpoints. Not private: a spec stands its own in to see what connects. */
+  agent = new HttpsAgent({ keepAlive: true, maxSockets: 256 });
+  /** How an endpoint's host is resolved before the guard checks it (gateway-upstream.ts); a spec stands one in. */
+  resolveHost: HostResolver = resolveHost;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -169,6 +173,20 @@ export class AnthropicGatewayService {
   async forward(req: Request, res: Response, caller: AnthropicGatewayCaller): Promise<void> {
     const started = Date.now();
     const path = anthropicGatewayPath(req.originalUrl ?? req.url);
+    // Design §5.3 (D3): the key's endpoint is checked and its host resolved before anything connects.
+    let upstream: VettedUpstream;
+    try {
+      upstream = await vetUpstream(caller.key.baseUrl, this.resolveHost);
+    } catch (e) {
+      if (e instanceof UpstreamRefused) {
+        refuseAnthropic(res, 403, 'permission_error', upstreamRefusalMessage(caller.key.slug, e.reason));
+        this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: POST ${path} refused: ${e.reason}`);
+      } else {
+        refuseAnthropic(res, 529, 'overloaded_error', `The Orbit gateway could not resolve the endpoint of key "${caller.key.slug}": ${(e as Error).message}`);
+        this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: endpoint unresolved: ${(e as Error).message}`);
+      }
+      return;
+    }
     let raw: Buffer;
     try {
       raw = await readBody(req);
@@ -189,7 +207,7 @@ export class AnthropicGatewayService {
       promptCacheKey: caller.sessionId,
     };
     if (path === COUNT_TOKENS) {
-      await this.countTokens(res, caller, message, ctx);
+      await this.countTokens(res, caller, message, ctx, upstream);
       this.log.log(`session ${caller.sessionId} key ${caller.key.slug}: POST ${path} in ${Date.now() - started}ms`);
       return;
     }
@@ -211,13 +229,20 @@ export class AnthropicGatewayService {
     let answer: Answer;
     try {
       answer = await sendUpstream(this.agent, 'POST', upstreamUrl(caller.key.baseUrl, '/responses'),
-        upstreamHeaders(caller.key.apiKeyEnc, payload.length, 'text/event-stream'), payload, res);
+        upstreamHeaders(caller.key.apiKeyEnc, payload.length, 'text/event-stream'), payload, res, upstream.lookup);
     } catch (e) {
       if (!res.headersSent) answerFailure(res, gatewayFailure(null, 'server_error', `the Orbit gateway could not reach it: ${(e as Error).message}`, { ...said, spentUntil: new Date() }));
       this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: OpenAI unreachable: ${(e as Error).message}`);
       return;
     }
     const status = answer.response.statusCode ?? 502;
+    if (status >= 300 && status < 400) {
+      // Never followed (D3): a redirect could point anywhere, an internal address included.
+      answer.response.resume();
+      refuseAnthropic(res, 502, 'api_error', redirectRefusalMessage(caller.key.slug, status));
+      this.log.warn(`session ${caller.sessionId} key ${caller.key.slug} model ${upstreamModel}: POST ${path} → ${status} redirect not followed in ${Date.now() - started}ms`);
+      return;
+    }
     if (answer.body) {
       const error = (parseJson(answer.body) as { error?: { code?: unknown; type?: unknown; message?: unknown } } | undefined)?.error;
       const code = typeof error?.code === 'string' ? error.code : typeof error?.type === 'string' ? error.type : '';
@@ -323,21 +348,41 @@ export class AnthropicGatewayService {
    * POST /v1/messages/count_tokens (design §4.6): OpenAI's input-token count for the translated body, and
    * characters ÷ 4 whenever that cannot be had. An over-count only makes the CLI compact a little early.
    */
-  private async countTokens(res: Response, caller: AnthropicGatewayCaller, message: Record<string, unknown>, ctx: TranslateContext): Promise<void> {
+  private async countTokens(
+    res: Response,
+    caller: AnthropicGatewayCaller,
+    message: Record<string, unknown>,
+    ctx: TranslateContext,
+    upstream: VettedUpstream,
+  ): Promise<void> {
     const payload = Buffer.from(JSON.stringify(toInputTokensRequest(message, ctx)), 'utf8');
     let counted: number | null = null;
     try {
       const answer = await sendUpstream(this.agent, 'POST', upstreamUrl(caller.key.baseUrl, '/responses/input_tokens'),
-        upstreamHeaders(caller.key.apiKeyEnc, payload.length, 'application/json'), payload, res);
-      if (!answer.body) {
+        upstreamHeaders(caller.key.apiKeyEnc, payload.length, 'application/json'), payload, res, upstream.lookup);
+      // A redirect is not followed: read and dropped, and the estimate answers.
+      if (!answer.body && (answer.response.statusCode ?? 0) < 300) {
         const value = (parseJson(await readAll(answer.response)) as { input_tokens?: unknown } | undefined)?.input_tokens;
         if (typeof value === 'number' && Number.isFinite(value) && value >= 0) counted = value;
+      } else if (!answer.body) {
+        answer.response.resume();
       }
     } catch {
       // Unreachable: the estimate below answers.
     }
     if (!res.headersSent) res.status(200).json({ input_tokens: counted ?? estimateInputTokens(message) });
   }
+}
+
+/** The refusal a session on a key whose endpoint the gateway may not call gets (design §5.3), naming the key. */
+export function upstreamRefusalMessage(slug: string, reason: string): string {
+  return `The Orbit gateway does not call the endpoint of key "${slug}": ${reason}. ` +
+    'Claude Code on an OpenAI key goes only to https://api.openai.com and the hosts an administrator allows.';
+}
+
+/** What a session gets when its key's endpoint answers with a redirect, which is never followed. */
+export function redirectRefusalMessage(slug: string, status: number): string {
+  return `The endpoint of key "${slug}" answered with a redirect (${status}), which the Orbit gateway does not follow.`;
 }
 
 /** `<key baseUrl><path>`: an OpenAI key's base names `/v1` (providerPresets.ts `openai`). */

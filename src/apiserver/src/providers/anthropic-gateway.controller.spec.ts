@@ -2,7 +2,9 @@
  * The /api/gw/anthropic route (docs/claude-engine-openai-gateway-design.md §4.1): AnthropicGatewayController and
  * AnthropicGatewayService behind a real HTTP server with main.ts's own body parsers in front, and a recorder
  * standing where the key's OpenAI endpoint stands. Only the database is replaced, by a stand-in answering the one
- * read the gateway makes: the token by its hash. The token's lifecycle on PostgreSQL is key-gateway.pg.spec.ts.
+ * read the gateway makes: the token by its hash; and the key's endpoint is https://api.openai.com/v1, whose name a
+ * stand-in resolver answers with a public address and whose connection a stand-in agent opens to the recorder
+ * (the upstream guard itself is gateway-upstream.spec.ts). The token's lifecycle on PostgreSQL is key-gateway.pg.spec.ts.
  *
  *  - A missing, unknown or foreign-prefixed token, and any token with the deployment flag off, is refused 401 in
  *    Anthropic's error shape; a good token of a disabled account 403.
@@ -13,7 +15,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createServer, request as httpRequest, type IncomingHttpHeaders, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { Agent as HttpsAgent } from 'node:https';
+import { connect, type AddressInfo, type Socket } from 'node:net';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 
@@ -88,7 +91,8 @@ before(async () => {
     });
   });
   await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
-  const upstreamBase = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`;
+  const upstreamPort = (upstream.address() as AddressInfo).port;
+  const upstreamBase = 'https://api.openai.com/v1';
   const rows = new Map([
     [sha256(GOOD), tokenRow(null, upstreamBase)],
     [sha256(DISABLED), tokenRow(new Date(), upstreamBase)],
@@ -96,7 +100,15 @@ before(async () => {
   const prisma = {
     keyGatewayToken: { findUnique: async ({ where }: { where: { tokenHash: string } }) => rows.get(where.tokenHash) ?? null },
   } as unknown as PrismaService;
-  const controller = new AnthropicGatewayController(new AnthropicGatewayService(prisma, new DisabledAccounts(prisma)));
+  const service = new AnthropicGatewayService(prisma, new DisabledAccounts(prisma));
+  service.resolveHost = async () => [{ address: '203.0.113.10', family: 4 }];
+  // Every connection to "api.openai.com" opens to the recorder instead, in plain HTTP.
+  service.agent = new (class extends HttpsAgent {
+    override createConnection(): Socket {
+      return connect(upstreamPort, '127.0.0.1');
+    }
+  })();
+  const controller = new AnthropicGatewayController(service);
   const app = express();
   // main.ts's own layers: the body parsers every other route gets, which must leave this one's body unread.
   app.use(outsideThePoolGateway(json({ limit: '10mb' })));

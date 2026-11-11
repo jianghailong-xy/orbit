@@ -171,12 +171,21 @@ struct WikiChatHost: ViewModifier {
                 }
             }
             .animation(.snappy(duration: 0.25), value: chat.presented)
-            .task(id: space.id) { await chat.load(spaceID: space.id) }
+            .task(id: space.id) {
+                await chat.load(spaceID: space.id)
+                // Board 45: where the panel is the third column, a Wiki page opens with it shown.
+                chat.openByDefault(spaceID: space.id, settingsOnTop: model.nav.wikiSettingsOnTop)
+            }
+            .onChange(of: model.nav.wikiSettingsOnTop) { _, onTop in chat.openByDefault(spaceID: space.id, settingsOnTop: onTop) }
             // The panel's chat streams while it is open on the Wiki (`AppModel.syncConsoleFocus`).
             .onChange(of: chat.focusedSessionID) { _, _ in model.syncConsoleFocus() }
             .onAppear { model.syncConsoleFocus() }
             .onDisappear { model.syncConsoleFocus() }
-            .onChange(of: compact, initial: true) { _, sheet in chat.asSheet = sheet }
+            .onChange(of: compact, initial: true) { _, sheet in
+                chat.asSheet = sheet
+                // A panel the page opened folds away at a phone's width and comes back at a wide one.
+                chat.openByDefault(spaceID: space.id, settingsOnTop: model.nav.wikiSettingsOnTop)
+            }
             // The page chip follows the reader (design §4.2): an entry, a plan's document — a document's page
             // follows its own sections — and nothing on the Wiki's other pages.
             .onChange(of: model.nav.path.last, initial: true) { _, node in follow(node, chat: chat, space: space) }
@@ -229,13 +238,13 @@ struct WikiChatHost: ViewModifier {
                 }
         } else {
             content
-                .inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.close() } })) {
+                .inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.closeByOwner() } })) {
                     panel.inspectorColumnWidth(min: 320, ideal: 400, max: 560)
                 }
         }
         #else
         content
-            .inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.close() } })) {
+            .inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.closeByOwner() } })) {
                 panel.inspectorColumnWidth(min: 320, ideal: 400, max: 560)
             }
         #endif
@@ -309,7 +318,9 @@ struct WikiChatPanel: View {
         VStack(spacing: 0) {
             head
             Divider()
-            if let asking = chat.asking {
+            if chat.history != nil {
+                WikiChatHistoryList(chat: chat, space: space)
+            } else if let asking = chat.asking {
                 WikiChatAskSheet(request: asking, chat: chat)
             } else if chat.chat == WikiChatLogic.newChat {
                 WikiChatNewBody(chat: chat, space: space)
@@ -329,6 +340,7 @@ struct WikiChatPanel: View {
     }
 
     private var title: String {
+        if chat.history != nil { return WikiChatCopy.historyTitle }
         guard chat.chat != WikiChatLogic.newChat else { return WikiChatCopy.newChat }
         let row = chat.openChatRow?.title
         let session = model.session(id: chat.chat)?.title
@@ -337,6 +349,54 @@ struct WikiChatPanel: View {
 
     private var head: some View {
         HStack(spacing: 10) {
+            if compact { historyMenu } else { historyTitle }
+            Spacer(minLength: 8)
+            if !compact {
+                headButton("plus", WikiChatCopy.newChat) { chat.newChat() }
+            }
+            headButton("arrow.right", WikiChatCopy.openSession,
+                       disabled: chat.chat == WikiChatLogic.newChat || chat.history != nil) {
+                // The full session page, where #-references, model switching and slash commands are (design §4.1).
+                let session = chat.chat
+                let folded = chat.foldForSheet()
+                if !folded { chat.close() }
+                Task { @MainActor in
+                    if folded { try? await Task.sleep(nanoseconds: 350_000_000) }
+                    model.route(to: .session(session))
+                }
+            }
+            // ✕ is the owner saying no: the page no longer opens with the panel until the button opens it (board 45).
+            headButton("xmark", WikiChatCopy.close) { chat.closeByOwner() }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, compact ? 18 : 12)
+        .padding(.bottom, 10)
+    }
+
+    /// The third column's title (board 45 ④, Q3 A): pressed, the space's chats over the whole panel, and back.
+    private var historyTitle: some View {
+        Button {
+            chat.toggleHistory()
+        } label: {
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(1)
+                Image(systemName: chat.history != nil ? "chevron.up" : "chevron.down")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(chat.history != nil ? .cancelAction : nil)
+        .accessibilityLabel(title)
+        .accessibilityHint(WikiChatCopy.history)
+    }
+
+    /// A phone's sheet keeps the title's menu of chats.
+    private var historyMenu: some View {
             Menu {
                 Button {
                     chat.newChat()
@@ -374,25 +434,6 @@ struct WikiChatPanel: View {
             .buttonStyle(.plain)
             .accessibilityLabel(title)
             .accessibilityHint(WikiChatCopy.history)
-            Spacer(minLength: 8)
-            if !compact {
-                headButton("plus", WikiChatCopy.newChat) { chat.newChat() }
-            }
-            headButton("arrow.right", WikiChatCopy.openSession, disabled: chat.chat == WikiChatLogic.newChat) {
-                // The full session page, where #-references, model switching and slash commands are (design §4.1).
-                let session = chat.chat
-                let folded = chat.foldForSheet()
-                if !folded { chat.close() }
-                Task { @MainActor in
-                    if folded { try? await Task.sleep(nanoseconds: 350_000_000) }
-                    model.route(to: .session(session))
-                }
-            }
-            headButton("xmark", WikiChatCopy.close) { chat.close() }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, compact ? 18 : 12)
-        .padding(.bottom, 10)
     }
 
     private func headButton(_ symbol: String, _ label: String, disabled: Bool = false,
@@ -408,6 +449,216 @@ struct WikiChatPanel: View {
         .disabled(disabled)
         .accessibilityLabel(label)
         .help(label)
+    }
+}
+
+/// The space's chats over the whole third column (board 45 ④, owner 11-11: Q3 A, Q4 A; the web's `WikiChatHistory`):
+/// a search over titles, Open — what needs the owner, then the working, then the one last spoken in first — and
+/// Completed, folded; each row's second line its needs-you, Working… or how long ago. A row's ⋯ (and its context menu)
+/// holds the session list's Rename…, Open as a full session, Complete and Move to Trash, through the same doors, with
+/// Undo; Trash itself stays the session list's.
+struct WikiChatHistoryList: View {
+    @Environment(AppModel.self) private var model
+    let chat: WikiChatModel
+    let space: WikiSpace
+
+    @State private var words = ""
+    @State private var completedOpen = false
+    @State private var renaming: WikiChatRow?
+    @State private var newTitle = ""
+
+    var body: some View {
+        let read = chat.history ?? WikiChatHistory()
+        let groups = WikiChatLogic.historyGroups(read.rows)
+        let searching = !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField(WikiChatCopy.search, text: $words)
+                    .textFieldStyle(.plain)
+                    .accessibilityLabel(WikiChatCopy.search)
+                    .onChange(of: words) { _, value in chat.searchHistory(value) }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.3)))
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if read.loaded && read.rows.isEmpty {
+                        Text(searching ? WikiChatCopy.noMatch : WikiChatCopy.noHistory)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                            .padding(8)
+                    }
+                    if !groups.open.isEmpty {
+                        groupHeader(WikiChatCopy.groupOpen, count: groups.open.count)
+                        ForEach(groups.open) { row in rowView(row) }
+                    }
+                    if !groups.completed.isEmpty {
+                        let shown = completedOpen || searching
+                        Button {
+                            completedOpen.toggle()
+                        } label: {
+                            HStack {
+                                groupHeader(WikiChatCopy.groupCompleted, count: groups.completed.count)
+                                Spacer()
+                                Image(systemName: shown ? "chevron.down" : "chevron.right")
+                                    .font(.orbitMeta.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.trailing, 8)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityValue(shown ? "expanded" : "collapsed")
+                        if shown {
+                            ForEach(groups.completed) { row in rowView(row) }
+                        }
+                    }
+                    if read.more {
+                        Button(WikiChatCopy.showMore) { chat.moreHistory() }
+                            .buttonStyle(.plain)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(Color.accentColor)
+                            .disabled(read.loading)
+                            .padding(.horizontal, 8)
+                            .padding(.top, 8)
+                    }
+                    Text(WikiChatCopy.trashNote)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 14)
+                        .padding(.bottom, 12)
+                }
+                .padding(.horizontal, 8)
+            }
+        }
+        .alert(WikiChatCopy.rename, isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField(WikiChatCopy.renameField, text: $newTitle)
+            Button(WikiChatCopy.cancel, role: .cancel) { renaming = nil }
+            Button("Save") {
+                if let row = renaming { rename(row, to: newTitle) }
+                renaming = nil
+            }
+        }
+    }
+
+    private func groupHeader(_ name: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(name).fontWeight(.semibold)
+            Text("\(count)")
+        }
+        .font(.orbitMeta)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func rowView(_ row: WikiChatRow) -> some View {
+        let current = PublicID.storageKey(row.sessionId) == PublicID.storageKey(chat.chat)
+        let line = WikiChatLogic.historyLine(row, now: Date())
+        let name = row.title.isEmpty ? WikiChatCopy.newChat : row.title
+        return HStack(spacing: 6) {
+            Button {
+                chat.pick(chat: row.sessionId)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .font(.body.weight(current ? .semibold : .regular))
+                        .foregroundStyle(current ? Color.accentColor : Color.primary)
+                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        if line.tone == .working {
+                            ProgressView().controlSize(.small).scaleEffect(0.6).frame(width: 12, height: 12)
+                        }
+                        Text(line.text)
+                    }
+                    .font(.orbitListSubtitle.weight(line.tone == .needsYou ? .semibold : .regular))
+                    .foregroundStyle(line.tone == .needsYou ? Color.orange : line.tone == .working ? Color.accentColor : Color.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(current ? .isSelected : [])
+            Menu {
+                actions(row)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.orbitBarGlyph)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(WikiChatCopy.rowActions): \(name)")
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 4)
+        .padding(.vertical, 6)
+        .background(current ? Color.accentColor.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+        .contextMenu { actions(row) }
+    }
+
+    @ViewBuilder
+    private func actions(_ row: WikiChatRow) -> some View {
+        Button(WikiChatCopy.rename) {
+            newTitle = row.title
+            renaming = row
+        }
+        Button(WikiChatCopy.openSession) {
+            chat.close()
+            model.route(to: .session(row.sessionId))
+        }
+        if !row.completed {
+            Button(WikiChatCopy.complete) { complete(row) }
+        }
+        Divider()
+        Button(WikiChatCopy.moveToTrash, role: .destructive) { trash(row) }
+    }
+
+    private func rename(_ row: WikiChatRow, to title: String) {
+        let words = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty, words != row.title else { return }
+        Task { @MainActor in
+            if let error = await chat.renameChat(row.sessionId, title: words) { failed(error) }
+        }
+    }
+
+    private func complete(_ row: WikiChatRow) {
+        Task { @MainActor in
+            if let error = await chat.completeChat(row.sessionId) { failed(error); return }
+            model.showToast("Session completed", sessionID: row.sessionId, sessionTitle: row.title,
+                            undo: { restore(row) })
+        }
+    }
+
+    private func trash(_ row: WikiChatRow) {
+        Task { @MainActor in
+            if let error = await chat.trashChat(row.sessionId) { failed(error); return }
+            model.showToast("Moved to Trash", sessionID: row.sessionId, sessionTitle: row.title,
+                            tone: .neutral, icon: "trash", undo: { restore(row) })
+        }
+    }
+
+    private func restore(_ row: WikiChatRow) {
+        Task { @MainActor in
+            if let error = await chat.restoreChat(row.sessionId) { failed(error) }
+        }
+    }
+
+    private func failed(_ error: Error) {
+        model.showToast(WikiChatCopy.actionFailed, detail: error.localizedDescription, tone: .error)
     }
 }
 

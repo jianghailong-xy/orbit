@@ -7,6 +7,7 @@ import { splitHighlight } from '../lib/searchHighlight';
 import { findMatches, type FindSegment } from '../lib/findMatches';
 import { elementForSeq as elementForSeqIn } from '../lib/transcriptDeepLink';
 import { REVEAL_EVENT, relTime } from './Transcript';
+import { EXCHANGE_REVEAL_EVENT } from './OrbitExchangeFold';
 
 /**
  * Find within the open session (⌘F / Ctrl+F).
@@ -269,6 +270,13 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
         await new Promise((r) => setTimeout(r, 0));
         await new Promise((r) => requestAnimationFrame(() => r(null)));
         if (!openRef.current) return;
+        // A hit inside a folded turn Orbit opened: its fold opens the way down to it first.
+        const exchange = elementForSeq(hit.seq)?.closest('[data-orbit-fold]');
+        if (exchange) {
+          exchange.dispatchEvent(new CustomEvent(EXCHANGE_REVEAL_EVENT, { detail: { seq: hit.seq } }));
+          await new Promise((r) => requestAnimationFrame(() => r(null)));
+          if (!openRef.current) return;
+        }
         // A hit folded into a steps line opens it first, so the match is drawn and painted.
         const folded = elementForSeq(hit.seq)?.closest('.chat-steps:not(.is-open)');
         if (folded) {

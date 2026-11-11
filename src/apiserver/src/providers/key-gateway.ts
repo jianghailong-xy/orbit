@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { AgentProvider, keyDialect, providerPreset, type EngineTableOptions } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import type { PrismaService } from '../prisma/prisma.service';
+import { upstreamUrlRefusal } from './gateway-upstream';
 import { catalogModels } from './model-catalog';
 import { POOL_GATEWAY_TOKEN_TTL_MS } from './shared-pool';
 
@@ -21,9 +22,13 @@ export function anthropicGatewayEnabled(): boolean {
   return process.env[ANTHROPIC_GATEWAY_FLAG]?.trim().toLowerCase() === 'true';
 }
 
-/** The compatibility table's options as this deployment has them (shared providerEngines.ts). */
-export function engineTableOptions(): EngineTableOptions {
-  return anthropicGatewayEnabled() ? { anthropicGateway: true } : {};
+/**
+ * The compatibility table's options as this deployment has them for a key whose endpoint is `baseUrl` (shared
+ * providerEngines.ts): the gateway counts as on only for an endpoint it may call (design §5.3), so a key aimed
+ * anywhere else is never offered Claude Code.
+ */
+export function engineTableOptions(baseUrl: string): EngineTableOptions {
+  return anthropicGatewayEnabled() && upstreamUrlRefusal(baseUrl) === null ? { anthropicGateway: true } : {};
 }
 
 /** A key gateway token starts with this; a pool's start `orbit-gw-` and `orbit-gwl-` (shared-pool.ts). */

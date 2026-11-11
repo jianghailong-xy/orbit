@@ -148,7 +148,7 @@ CREATE INDEX "provider_slug_alias_provider_id_idx" ON "provider_slug_alias" ("pr
 | DeepSeek key（Anthropic 方言） | `claude`、`opencode`、`dsh` |
 | 遗留 `runtime='dsh'` 行 | `dsh`、`claude`、`opencode` |
 | Claude 订阅 token（`sk-ant-oat…`） | 只有 `claude`；方言不是 Anthropic 时没有可用 engine |
-| OpenAI Responses key | `codex`、`opencode` |
+| OpenAI Responses key | `codex`、`opencode`；部署开关 `ORBIT_CLAUDE_OPENAI_GATEWAY=true` 时为 `codex`、`claude`、`opencode`（默认仍是 `codex`，D7） |
 | Moonshot key | `kimi`、`opencode` |
 | Gemini key | `antigravity`、`opencode` |
 | Cursor key（`runtime='cursor'`） | 只有 `cursor`：它不是模型 API，OpenCode 用不了（`keyEngines`，`openCodeDialect` 不认它） |
@@ -161,6 +161,10 @@ CREATE INDEX "provider_slug_alias_provider_id_idx" ON "provider_slug_alias" ("pr
 - 订阅 token 的判定需要解密 key（`trim()` 后以 `sk-ant-oat` 开头），只能在服务端做。共享模块接收调用方给的布尔值；客户端从接口的 `engines` 字段读取结果（§6.3）。
 - 订阅 token 的规则优先于遗留行的默认：持有订阅 token 的遗留 `runtime='dsh'` 行只能跑 `claude`，默认 engine 也是 `claude`。
 - 停用不影响兼容性：停用的 key 仍然「兼容」，只是不可用（§3.6）。
+- OpenAI key 上的 `claude` 走 Orbit 自己的网关 `/api/gw/anthropic`（`docs/claude-engine-openai-gateway-design.md` §4.2），只在部署开关 `ORBIT_CLAUDE_OPENAI_GATEWAY` 为 `true` 时成立（`docs/configuration.md`，默认关，D6）：
+  - 开关不是凭据的字段。持有开关的服务端在算 `engines` 时传 `EngineTableOptions { anthropicGateway: true }`（`key-gateway.ts` 的 `engineTableOptions()`）；不传等于全部关闭。`keyEngines`、`resolveProviderExec` 的兼容校验、`resolvedCredentialEngines`、领取时的 `pausedPendingSessions` 都读同一个 `engineTableOptions()`，领取 SQL 里 `claude` 也只在开关开时接受 `runtime='codex'` 的 key。
+  - 关闭时，每类凭据的 `engines`、解析结果和派发环境与网关出现前逐字段相同，由 `src/apiserver/src/providers/gateway-flag-parity.spec.ts` 对照从改动前的 main（ccdef0955）录下的 `fixtures/gateway-flag-parity.json` 保证；打开时只有 OpenAI key 的 `engines` 和该 key 上 `claude` 会话的环境不同。
+  - ChatGPT 登录（Codex 账号池）不提供给 Claude Code（D4），账号池仍只跑池的 engine。
 
 共享模块 `src/shared/src/providerEngines.ts` 从包入口导出：
 
@@ -423,12 +427,15 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 | `claude` | Anthropic 方言 key（含 DeepSeek key、遗留 dsh 行） | 现有的 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL` 等（`custom-provider.ts` 的 claudeEnv） |
 | `dsh` | DeepSeek key | `ORBIT_DSH_API_KEY`、`ORBIT_DSH_BASE_URL`（key 的 baseUrl） |
 | `opencode` | 任一可用 key | `OPENCODE_CONFIG_CONTENT`：只写这一把 key，按其方言的 AI SDK 包（`openCodeKeyConfig`） |
+| `claude` | OpenAI Responses key（仅 `ORBIT_CLAUDE_OPENAI_GATEWAY=true`，§2.1） | `ANTHROPIC_BASE_URL` = `PUBLIC_ORIGIN` + `/api/gw/anthropic`；`ANTHROPIC_AUTH_TOKEN` = 本次构建铸的 `orbit-gwk-` 会话 token（`withKeyGatewayToken`，库里只存哈希），没铸 token 的构建为空，绝不是 key；`ANTHROPIC_MODEL`；`ANTHROPIC_DEFAULT_HAIKU_MODEL` = key 的 mini 模型（有才注入）；`CLAUDE_CODE_INLINE_TOOLS=false`；`CLAUDE_CODE_MAX_CONTEXT_TOKENS` 按 preset 的窗口留出八分之一；`ENABLE_CLAUDEAI_MCP_SERVERS=0`、`CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP=1` 与 Anthropic 方言 key 的 claudeEnv 相同 |
 | `codex` | Responses key | `OPENAI_BASE_URL`、`OPENAI_API_KEY` |
 | `kimi` | Moonshot key | `KIMI_MODEL_*` |
 | `antigravity` | Gemini key | `GEMINI_API_KEY`、`GOOGLE_GEMINI_BASE_URL` |
 | `cursor` | Cursor key | 只有 `ORBIT_CURSOR_API_KEY`（`custom-provider.ts` 的 `CURSOR_KEY_VAR`），没有 endpoint：runner 读出后以 `CURSOR_API_KEY` 交给 CLI，memory 存储，这个变量本身到不了 CLI（`docs/cursor-runtime-contract.md` §16.3） |
 
 同一把 DeepSeek key 在三种 engine 上的 endpoint 都是它自己的 `baseUrl`。
+
+OpenAI key 上的 `claude` 是唯一拿不到 key 本身的注入：key 留在 API 服务端，网关用它向 `<baseUrl>/responses` 发 OpenAI Responses（`docs/claude-engine-openai-gateway-design.md` §4.2）。token 绑定（会话、key、用户），会话结束、key 停用或换 secret/endpoint/协议、账号停用时失效；领取、reclaim 和切换 provider 的 reload 各铸一枚。开关关闭时这一行不存在：该组合在兼容校验处被拒（`engineIncompatible`），其他各行的注入与开关无关（`gateway-flag-parity.spec.ts`）。
 
 ### 4.3 其它读 engine 的地方
 

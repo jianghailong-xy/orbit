@@ -702,7 +702,7 @@ export function resolveProviderExec(args: {
     const engine = args.engine ?? native;
     const apiKey = customRow.sessionToken ?? decryptSecret(customRow.apiKeyEnc);
     const credential = keyCredential(customRow, apiKey);
-    const table = engineTableOptions();
+    const table = engineTableOptions(customRow.baseUrl);
     if (!isEngineCompatible(engine, credential, table)) {
       throw engineIncompatible(customRow.slug ?? args.declaredProvider ?? '', engine, credentialEngines(credential, table));
     }

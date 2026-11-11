@@ -212,6 +212,8 @@ services:
       # Optional: Claude Code on an OpenAI API key through this server's /api/gw/anthropic gateway (docs/configuration.md).
       # `true` turns it on; anything else leaves every key's engines and dispatch environment as they were.
       ORBIT_CLAUDE_OPENAI_GATEWAY: "${ORBIT_CLAUDE_OPENAI_GATEWAY:-}"
+      # Optional: hosts besides api.openai.com that gateway may call (comma-separated; public https only, no redirects).
+      ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"
       # Optional: the proxies in front of the gateway (a CDN such as Cloudflare, a load balancer, a TLS proxy on the host),
       # as addresses and CIDR ranges separated by commas or spaces (docs/configuration.md). The apiserver reads a
       # visitor's own address through them from X-Forwarded-For, as the register approval page shows it; unset, a visitor

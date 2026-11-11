@@ -1873,11 +1873,32 @@ final class ConsoleModel {
         return true
     }
 
+    /// The item a record link or a search hit last asked for. A fold over the turns Orbit opened
+    /// (`OrbitExchangeFoldView`) that holds it opens the way down to it, as a steps line's row is
+    /// scrolled to in its stead.
+    private(set) var revealedItemID: String?
+
+    /// The project's dependency graph, for the task tree a group of folded Orbit turns opens to. Read
+    /// once, and only once a group is opened (`wantExchangeTree`): a conversation nobody opens a group
+    /// in costs no request.
+    private(set) var exchangeGraph: ProjectDependencyGraph?
+    private var exchangeGraphAsked = false
+
+    func wantExchangeTree(projectID: String?) {
+        guard !exchangeGraphAsked, let projectID, !projectID.isEmpty else { return }
+        exchangeGraphAsked = true
+        Task { @MainActor [weak self, api] in
+            let graph = try? await api.projectDependencyGraph(projectID)
+            self?.exchangeGraph = graph
+        }
+    }
+
     /// Ask the transcript to scroll to the record's row. The row is found as the transcript draws it
     /// (`TranscriptRows.build`), so a tool call folded into a run is reached through the run's row.
     private func markRecord(_ anchor: TranscriptAnchor, page: [RunEvent]) {
         let state = reducer.state
         guard let itemID = TranscriptRecordAnchor.itemID(for: anchor, page: page, in: state.items) else { return }
+        revealedItemID = itemID
         let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
                                         showWorkingIndicator: false, decisionCards: decisionCards)
         scrollTick += 1
