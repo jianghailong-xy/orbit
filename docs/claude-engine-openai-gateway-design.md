@@ -1,4 +1,4 @@
-<!-- 2026-11-11 · draft for the owner's review. No board yet; no project or task exists for it. -->
+<!-- 2026-11-11 · draft for the owner's review. Board: docs/mocks/claude-openai-gateway/01-architecture.html (+ PNGs). No project or task exists for it yet. -->
 
 # Claude Code on an OpenAI key, through Orbit's own gateway
 
