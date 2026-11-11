@@ -10,7 +10,10 @@ import {
   CreateProviderPoolDto,
   TestModelProviderDto,
   UpdateModelProviderDto,
+  UpdateProviderModelTierDto,
 } from './dto';
+import { PrismaService } from '../prisma/prisma.service';
+import { subagentTierView } from '../runner-api/subagent-route';
 import { CodexLoginService } from './codex-login.service';
 import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProvidersService } from './providers.service';
@@ -28,6 +31,7 @@ export class ProvidersController {
     private readonly providers: ProvidersService,
     private readonly codexLogin: CodexLoginService,
     private readonly balances: DeepSeekBalanceService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @PatScope('workspaces:read', { workspaceConfinable: false })
@@ -108,6 +112,20 @@ export class ProvidersController {
   @Patch('mine/:id')
   updateMine(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateModelProviderDto) {
     return this.providers.update(user.userId, id, dto);
+  }
+
+  // The Providers page's Tier column and the SubAgents settings' provider list (docs/subagent-design.md §7).
+  @PatScope('workspaces:read', { workspaceConfinable: false })
+  @Get('subagent-tiers')
+  subagentTiers(@CurrentUser() user: AuthUser) {
+    return subagentTierView(this.prisma, user.userId);
+  }
+
+  // The owner's tier for a model the catalogue gives none. Human-only: the runner's provider doors take no tier.
+  @PatScope('workspaces:write', { workspaceConfinable: false })
+  @Patch('mine/:id/model-tier')
+  setModelTier(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateProviderModelTierDto) {
+    return this.providers.setModelTier(user.userId, id, dto.model, dto.tier ?? null);
   }
 
   @PatScope('workspaces:write', { workspaceConfinable: false })

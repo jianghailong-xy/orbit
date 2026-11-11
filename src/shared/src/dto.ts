@@ -2231,6 +2231,46 @@ export interface SubagentRunCreateResponse {
 }
 
 /**
+ * One model of the Providers page's Tier column (GET /providers/subagent-tiers, docs/subagent-design.md §7):
+ * the tiers routeSubagent reads for it. Clients show `levels` joined with " · ", all four as "S–XL by effort",
+ * and none as "Not set": a model with no tier stays out of automatic routing.
+ */
+export interface ProviderModelTier {
+  model: string;
+  /** The tiers this model fills, lowest first, at whatever effort each takes. Empty: not routed. */
+  levels: SubagentSize[];
+  /** `catalogue`: the preset or the built-in tier table. `owner`: set on this page. Null: nobody has. */
+  source: 'catalogue' | 'owner' | null;
+  /** The owner may set or clear it (PATCH /providers/mine/:providerId/model-tier): a model of a key's own
+   *  list that the catalogue gives no tier. */
+  editable: boolean;
+  /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
+  outputPricePerMTok: number | null;
+}
+
+/** One provider as the SubAgents settings and the Tier column list it, in the owner's provider order. */
+export interface ProviderTierRow {
+  /** What `UserPreferences.subagentBlockedProviders` names. */
+  slug: string;
+  label: string;
+  kind: 'builtin' | 'key' | 'pool';
+  /** A key of the owner's own: the id the tier write takes. Null for anything else. */
+  providerId: string | null;
+  billing: 'subscription' | 'key';
+  models: ProviderModelTier[];
+}
+
+export interface SubagentTiersResponse {
+  providers: ProviderTierRow[];
+}
+
+/** PATCH /providers/mine/:id/model-tier: set or clear (null) the owner's tier for one model of that key. */
+export interface ProviderModelTierUpdate {
+  model: string;
+  tier: SubagentSize | null;
+}
+
+/**
  * The runner's report when a SubAgent run ends (§5.1 step 5). `RUNNING` with `wake: true` is the one report
  * that does not end it: the foreground call waiting for it stopped waiting, so its end is to wake the parent (§2).
  */

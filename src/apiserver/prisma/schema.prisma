@@ -6944,6 +6944,9 @@ model ModelProvider {
   // passed as --model (e.g. "deepseek-chat"). For a preset-backed row this is a snapshot taken
   // at write time; reads serve the preset's current list instead (see presetSlug).
   models        Json     @default("[]")
+  // The owner's SubAgent tier per model id (S/M/L/XL) for models the catalogue gives none (docs/subagent-design.md §7).
+  // Written only by PATCH /providers/mine/:id/model-tier; a model list edit leaves it alone.
+  modelTiers    Json     @default("{}") @map("model_tiers")
   defaultModel  String?  @map("default_model")
   // The vendor preset (@orbit/shared PROVIDER_PRESETS) this row was created from — its identity,
   // fixed for life: the logo it shows and the vendor it "is", even when its own slug had to be

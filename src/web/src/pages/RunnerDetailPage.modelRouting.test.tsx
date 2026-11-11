@@ -227,7 +227,10 @@ describe('smart model selection on the Agent', () => {
   it('preserves the saved optimize mode when editing another setting with the account switch off', async () => {
     const { writes } = mount(workspace({ modelRoutingOptimizeFor: 'intelligence' }), { modelRouting: false });
     await openEditor();
-    expect(form().querySelector('[aria-label="Optimize For"]')).toBeNull();
+    // Only the SubAgents group's control, which writes the same field (docs/subagent-design.md §7).
+    const controls = form().querySelectorAll('[aria-label="Optimize For"]');
+    expect(controls).toHaveLength(1);
+    expect(controls[0].closest('.subagents-group')).not.toBeNull();
     await click(form().querySelector<HTMLElement>('.rd-set-row [role="switch"]')!);
     await click(byText('button', 'Save'));
     expect(writes[0].body.modelRoutingOptimizeFor).toBe('intelligence');
