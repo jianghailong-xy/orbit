@@ -133,6 +133,10 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// while it is pending, its one line once it has ended — drawn where it was asked, by its own
         /// `createdAt`, and re-read from the account's requests on every render.
         case ownerRequest(requestID: String)
+        /// One batch of cross-project requests into the project this conversation coordinates
+        /// (`CrossingBatches`), by its id (`crossing-batch-<first row>`): placed at its first row's
+        /// `requestedAt` and re-read from the project's handoffs on every render, live or answered.
+        case crossingBatch(batchID: String)
     }
 
     /// Where this row belongs, which is the whole difference between a question and a record.
@@ -221,6 +225,7 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .fusePause(let itemID):              return "fuse-\(itemID)"
         // The web card's DOM id, `owner-request-<id>`.
         case .ownerRequest(let requestID):        return "owner-request-\(PublicID.storageKey(requestID))"
+        case .crossingBatch(let batchID):         return batchID
         }
     }
 }
@@ -387,7 +392,7 @@ public enum DeliveryAnchor {
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
-             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest:
+             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest, .crossingBatch:
             return items.last?.id
         }
     }

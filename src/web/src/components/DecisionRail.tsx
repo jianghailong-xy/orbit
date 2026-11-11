@@ -17,6 +17,7 @@ import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/que
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import './ui/Typography.css';
 import { streamPoll } from '../lib/listBudget';
+import type { CrossingPointer } from './CrossingDecisionCard';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -654,6 +655,8 @@ export function DecisionStrip({
   onToggle,
   onReveal = () => {},
   onOpenCriteria,
+  crossings = [],
+  onRevealCrossing = () => {},
   onRevealConfirmation = () => {},
   onRevealOwnerConfirmation = () => {},
   onRevealException = () => {},
@@ -689,6 +692,11 @@ export function DecisionStrip({
   onReveal?: (row: PendingDecisionRow) => void;
   /** Where the reader goes to answer a proposal: its card, in the conversation it was sent to. */
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
+  /** Batches of cross-project requests into this conversation's project, still waiting on their
+   *  card here — named by the card's own question. */
+  crossings?: ReadonlyArray<CrossingPointer>;
+  /** Where the reader goes to answer a batch: its card, by its id. */
+  onRevealCrossing?: (id: string) => void;
   /** Where the reader goes to start the project on the plan it states: its card. */
   onRevealConfirmation?: () => void;
 }) {
@@ -733,6 +741,16 @@ export function DecisionStrip({
         go: () => onOpenCriteria(row),
       }))
       : []),
+    // Cross-project requests into this project, one card per batch: after the weakenings, which are
+    // questions about the ruler itself, and before evidence measured against it.
+    ...[...crossings]
+      .sort((a, b) => (b.ageSeconds ?? 0) - (a.ageSeconds ?? 0))
+      .map((pointer) => ({
+        key: `crossing:${pointer.id}`,
+        label: pointer.label,
+        ageSeconds: pointer.ageSeconds,
+        go: () => onRevealCrossing(pointer.id),
+      })),
     ...oldestFirst(decisions).map((row) => ({
       key: `evidence:${decisionRowKey(row)}`,
       label: row.title,
@@ -845,6 +863,7 @@ export function SessionDecisionStrip({
   exceptions = [],
   needsYou,
   onOpenCriteria,
+  crossings = [],
 }: {
   sessionId: string;
   /** The project this session coordinates, when it coordinates one. Its held criteria proposals
@@ -864,6 +883,9 @@ export function SessionDecisionStrip({
   exceptions?: ReadonlyArray<ExceptionCardPointer>;
   needsYou?: ReadonlyArray<ExceptionCardPointer>;
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
+  /** The batches of cross-project requests still waiting on a card in this conversation
+   *  (`useCrossingDecisionCards`). */
+  crossings?: ReadonlyArray<CrossingPointer>;
 }) {
   const [open, setOpen] = useState(false);
   const phone = useMediaQuery(PHONE_QUERY);
@@ -884,14 +906,14 @@ export function SessionDecisionStrip({
   // thing that keeps a reader from mistaking a broken query for an empty queue; the strip is
   // otherwise silent while the first read is in flight, so it never flashes.
   const ownerExceptions = needsYou ?? exceptions;
-  if (pending.isError && ownerExceptions.length === 0) {
+  if (pending.isError && ownerExceptions.length === 0 && crossings.length === 0) {
     return (
       <div className="decision-strip decision-strip-unread" role="status">
         {`${STRIP_LABEL}: this queue could not be read.`}
       </div>
     );
   }
-  if (!pending.data && ownerExceptions.length === 0) return null;
+  if (!pending.data && ownerExceptions.length === 0 && crossings.length === 0) return null;
   const queue: PendingDecisionQueue = pending.data ?? {
     decidingSessionId: sessionId,
     count: 0,
@@ -904,6 +926,8 @@ export function SessionDecisionStrip({
       criteria={criteria.data ?? null}
       confirmation={confirmation}
       onOpenCriteria={onOpenCriteria}
+      crossings={crossings}
+      onRevealCrossing={(id) => revealCard(document.getElementById(id))}
       open={open}
       phone={phone}
       hasCard={(row) => cards?.has(decisionRowKey(row)) ?? false}
