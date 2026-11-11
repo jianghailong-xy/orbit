@@ -5,8 +5,8 @@
 // providers that were configured months ago. Shared so the apiserver (the resolver) and the web
 // form (the gallery) can never disagree; the native clients read the resolved rows off the API.
 //
-// Endpoints and model ids verified against vendor docs 2026-07. `brand`/`keyUrl` are for the web
-// gallery only — they're here so adding a vendor stays a single-file edit.
+// Endpoints and model ids verified against vendor docs 2026-07; `outputPricePerMTok` read from
+// models.dev 2026-11-11, which a refresh replaces. `brand`/`keyUrl` are for the web gallery only — they're here so adding a vendor stays a single-file edit.
 //
 // The model lists below are a floor, not the whole truth: a vendor the runtime CLI speaks to
 // natively takes its list from that CLI (modelsFromRuntime), and every third-party vendor refreshes
@@ -16,6 +16,13 @@ export interface ProviderPresetModel {
   value: string;
   label: string;
   contextWindow?: number;
+  /**
+   * The SubAgent router's tier for this model (docs/subagent-design.md §4.2). Orbit's own judgement,
+   * kept with the list: models.dev has no such field. A model without one is not routed onto.
+   */
+  tier?: 'S' | 'M' | 'L' | 'XL';
+  /** USD per million output tokens, from models.dev (`cost.output`): what Cost and the tie-breaks order keys by. */
+  outputPricePerMTok?: number;
 }
 
 /**
@@ -160,8 +167,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/anthropic',
     models: [
-      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', contextWindow: 1_000_000 },
-      { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', contextWindow: 1_000_000 },
+      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', contextWindow: 1_000_000, tier: 'L', outputPricePerMTok: 1.98 },
+      { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', contextWindow: 1_000_000, tier: 'M', outputPricePerMTok: 0.6 },
     ],
     defaultModel: 'deepseek-v4-pro',
     catalog: { source: 'deepseek', match: /^deepseek-/ },
@@ -193,9 +200,9 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     runtime: 'kimi',
     baseUrl: 'https://api.moonshot.ai/v1',
     models: [
-      { value: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextWindow: 256_000 },
-      { value: 'kimi-k2.7-code-highspeed', label: 'Kimi K2.7 Code Highspeed', contextWindow: 256_000 },
-      { value: 'kimi-k2.6', label: 'Kimi K2.6', contextWindow: 256_000 },
+      { value: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextWindow: 256_000, tier: 'L', outputPricePerMTok: 4 },
+      { value: 'kimi-k2.7-code-highspeed', label: 'Kimi K2.7 Code Highspeed', contextWindow: 256_000, tier: 'L', outputPricePerMTok: 8 },
+      { value: 'kimi-k2.6', label: 'Kimi K2.6', contextWindow: 256_000, tier: 'M', outputPricePerMTok: 4 },
     ],
     defaultModel: 'kimi-k2.7-code',
     catalog: { source: 'moonshotai', match: /^kimi-/ },
@@ -224,8 +231,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'Z.AI (GLM)',
     baseUrl: 'https://api.z.ai/api/anthropic',
     models: [
-      { value: 'glm-5.2', label: 'GLM-5.2' },
-      { value: 'glm-4.7', label: 'GLM-4.7' },
+      { value: 'glm-5.2', label: 'GLM-5.2', tier: 'L', outputPricePerMTok: 4.4 },
+      { value: 'glm-4.7', label: 'GLM-4.7', tier: 'M', outputPricePerMTok: 2.2 },
     ],
     defaultModel: 'glm-5.2',
     // Z.AI ships as `zai` there; `zhipuai` is the CN sibling platform, on a different endpoint.
@@ -238,9 +245,9 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'MiniMax',
     baseUrl: 'https://api.minimax.io/anthropic',
     models: [
-      { value: 'MiniMax-M3', label: 'MiniMax-M3', contextWindow: 1_000_000 },
-      { value: 'MiniMax-M2.7', label: 'MiniMax-M2.7', contextWindow: 204_800 },
-      { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7 Highspeed', contextWindow: 204_800 },
+      { value: 'MiniMax-M3', label: 'MiniMax-M3', contextWindow: 1_000_000, tier: 'L', outputPricePerMTok: 1.2 },
+      { value: 'MiniMax-M2.7', label: 'MiniMax-M2.7', contextWindow: 204_800, tier: 'M', outputPricePerMTok: 1.2 },
+      { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7 Highspeed', contextWindow: 204_800, tier: 'M', outputPricePerMTok: 2.4 },
     ],
     defaultModel: 'MiniMax-M2.7',
     catalog: { source: 'minimax', match: /^MiniMax-/ },
@@ -252,9 +259,9 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'Qwen (Model Studio)',
     baseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic',
     models: [
-      { value: 'qwen3.7-max', label: 'Qwen3.7 Max' },
-      { value: 'qwen3.7-plus', label: 'Qwen3.7 Plus' },
-      { value: 'qwen3.6-flash', label: 'Qwen3.6 Flash' },
+      { value: 'qwen3.7-max', label: 'Qwen3.7 Max', tier: 'L', outputPricePerMTok: 7.5 },
+      { value: 'qwen3.7-plus', label: 'Qwen3.7 Plus', tier: 'M', outputPricePerMTok: 1.6 },
+      { value: 'qwen3.6-flash', label: 'Qwen3.6 Flash', tier: 'S', outputPricePerMTok: 1.5 },
     ],
     defaultModel: 'qwen3.7-max',
     catalog: { source: 'alibaba', match: /^qwen\d/ },

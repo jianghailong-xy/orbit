@@ -32,12 +32,8 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { assertEngineSession } from '../sessions/engine-session';
 import { sessionProviderExec } from './session-provider-exec';
 import { stripNul } from './strip-nul';
-import {
-  notRoutedDecision,
-  SubagentRunCreateDto,
-  SubagentRunUpdateDto,
-  truncateResultSummary,
-} from './subagent-run';
+import { shadowDecision, SubagentRunCreateDto, SubagentRunUpdateDto, truncateResultSummary } from './subagent-run';
+import { planSubagentRoute } from './subagent-route';
 
 const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 
@@ -73,9 +69,10 @@ export class RunnerSubagentsController {
    * A parent session's `mcp__orbit__delegate` call opens a SubAgent run (docs/subagent-design.md §5.1 step 2).
    * Refused when the session's Agent has SubAgents turned off (403 SUBAGENTS_DISABLED) or already runs as many
    * as it allows at once (409 SUBAGENT_LIMIT_REACHED), counted under the parent row's lock so two calls cannot
-   * both take the last place. The row is written RUNNING and the answer says how to run the child: until
-   * routing exists (§8 P1), on the parent's own engine, credential, model and effort, in the shape a claim
-   * hands the runner. A retry with the same tool_use id answers with the run it opened.
+   * both take the last place. The row is written RUNNING with the router's decision (routeSubagent, §4.1,
+   * §4.2) — in shadow (§8 P2): the answer still runs the child on the parent's own engine, credential, model
+   * and effort, in the shape a claim hands the runner. A retry with the same tool_use id answers with the run
+   * it opened, whose decision is frozen.
    */
   @Post('sessions/:id/subagents')
   @HttpCode(200)
@@ -92,6 +89,8 @@ export class RunnerSubagentsController {
         select: {
           ownerId: true,
           status: true,
+          workspaceId: true,
+          assignedRunnerId: true,
           provider: true,
           effort: true,
           permissionMode: true,
@@ -158,6 +157,13 @@ export class RunnerSubagentsController {
         effort,
         env: resolvedExec.env,
       };
+      const route = opened ? null : await planSubagentRoute(tx, {
+        ownerId: session.ownerId,
+        workspaceId: session.workspaceId,
+        runnerId: session.assignedRunnerId,
+        dto,
+        parent: { engine: provider, provider: session.provider ?? provider, model: resolvedExec.model, effort: effort ?? null },
+      });
       const row =
         opened ??
         (await tx.subagentRun.create({
@@ -169,13 +175,7 @@ export class RunnerSubagentsController {
             definitionSource: dto.definitionSource,
             background: dto.background ?? false,
             status: 'RUNNING',
-            decision: notRoutedDecision({
-              dto,
-              engine: provider,
-              provider: session.provider,
-              model: resolvedExec.model,
-              effort: effort ?? null,
-            }) as unknown as Prisma.InputJsonValue,
+            decision: shadowDecision(route!, resolvedExec.model) as unknown as Prisma.InputJsonValue,
           },
         }));
       return {

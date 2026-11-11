@@ -1,13 +1,16 @@
 /**
  * SubAgent runs through the runner doors (docs/subagent-design.md §5.1, §6.1, §6.2), on a real PostgreSQL:
  *
- *   1. POST /runner/sessions/:id/subagents opens a run on the parent's own engine and model (not routed
- *      yet), PATCH …/:runId ends it DONE, and the one `subagent_run` row holds what was posted, the status,
+ *   1. POST /runner/sessions/:id/subagents opens a run on the parent's own engine and model (routing is in
+ *      shadow), PATCH …/:runId ends it DONE, and the one `subagent_run` row holds what was posted, the status,
  *      the changed files — while the parent's `cost_usd` rises by exactly the run's cost, once.
  *   2. The fifth POST on a session with four RUNNING is refused, and a POST for an agent with SubAgents
  *      turned off is refused.
  *   3. A top-level `mcp__orbit__delegate` tool_use joins `runningSubagents`, its `{ runId, status: "running" }`
  *      receipt leaves it there, and its terminal background_task removes it.
+ *   4. The shadow decision (docs/subagent-design.md §4.1, §4.2): the row's decision names the tier, where it
+ *      came from, Optimize For, the engine, provider, model and effort routing would pick, English reasons
+ *      and each removed candidate with its reason — while the run's target is still the parent's model.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-run.pg.spec.ts
  *
@@ -30,7 +33,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerSubagentsController } from './runner-subagents.controller';
-import { SUBAGENT_NOT_ROUTED_REASON, SubagentRunCreateDto, SubagentRunUpdateDto } from './subagent-run';
+import { SubagentRunCreateDto, SubagentRunUpdateDto } from './subagent-run';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -71,20 +74,24 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
   const subagents = new RunnerSubagentsController(prisma as never, silent());
 
   /** A live parent session of that runner, under an agent with SubAgents on or off. */
-  async function parentSession(opts: { subagentsEnabled?: boolean; costUsd?: number } = {}) {
+  async function parentSession(opts: {
+    subagentsEnabled?: boolean; costUsd?: number; runnerId?: string; model?: string; effort?: string; optimizeFor?: string;
+  } = {}) {
     const workspaceId = randomUUID();
+    const onRunner = opts.runnerId ?? runnerId;
     await prisma.workspace.create({
       data: {
-        id: workspaceId, ownerId, runnerId, name: `orbit-worker-${workspaceId.slice(-8)}`, enabled: true,
+        id: workspaceId, ownerId, runnerId: onRunner, name: `orbit-worker-${workspaceId.slice(-8)}`, enabled: true,
         ...(opts.subagentsEnabled === undefined ? {} : { subagentsEnabled: opts.subagentsEnabled }),
+        ...(opts.optimizeFor ? { modelRoutingOptimizeFor: opts.optimizeFor } : {}),
       },
     });
     const sessionId = randomUUID();
     await prisma.session.create({
       data: {
-        id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
+        id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: onRunner,
         title: 'split the parser work', prompt: 'split the parser work', provider: 'claude', engine: 'claude',
-        model: 'claude-opus-5-5', effort: 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        model: opts.model ?? 'claude-opus-5-5', effort: opts.effort ?? 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, costUsd: opts.costUsd ?? 0,
       },
     });
@@ -104,9 +111,10 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       sizeReason: 'a read-only sweep of one package',
     }));
     assert.equal(opened.status, 'RUNNING');
-    assert.equal(opened.decision.tierSource, 'not-routed');
-    assert.deepEqual(opened.decision.reasons, [SUBAGENT_NOT_ROUTED_REASON]);
+    assert.equal(opened.decision.tierSource, 'size');
     assert.equal(opened.decision.level, 'M');
+    assert.equal(opened.decision.applied, false, 'a shadow decision');
+    assert.equal(opened.decision.reasons.at(-1), "Shadow decision: this SubAgent runs on the parent's model, claude-opus-5-5");
     assert.equal(opened.exec.provider, 'claude', "the target is the parent's own engine");
     assert.equal(opened.exec.model, 'claude-opus-5-5', "and the parent's own model");
     assert.equal(opened.exec.effort, 'high', "and the parent's own effort");
@@ -142,7 +150,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(row.costUsd, 0.12);
     assert.deepEqual(row.usage, { inputTokens: 1200, outputTokens: 340 });
     assert.ok(row.endedAt instanceof Date, 'ended_at is set');
-    assert.equal((row.decision as { tierSource?: string }).tierSource, 'not-routed');
+    assert.equal((row.decision as { tierSource?: string }).tierSource, 'size');
 
     const after = (await prisma.session.findUniqueOrThrow({ where: { id: sessionId } })).costUsd;
     assert.equal(after, before + 0.12, 'the parent cost_usd rose by exactly 0.12');
@@ -232,5 +240,89 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
         status: 'completed', toolUseId: 'toolu_01DelegateBg', summary: 'SubAgent finished' } },
     ]);
     assert.deepEqual(await running(), [], 'its terminal background_task removes it');
+  });
+
+  await t.test('the shadow decision: tier, source, Optimize For, the pick, English reasons and every removal with its reason', async () => {
+    // The parent runs Sonnet on a machine with Claude signed in, Codex signed out and Kimi not installed.
+    const machineId = randomUUID();
+    const machine = (await prisma.runner.create({
+      data: {
+        id: machineId, name: 'the machine routing reads', ownerId, tokenHash: sha256(`subagent-route-${machineId}`),
+        engines: [
+          { engine: 'claude', installed: true, auth: 'yes' },
+          { engine: 'codex', installed: true, auth: 'no' },
+          { engine: 'kimi', installed: false, auth: 'unknown' },
+        ],
+        modelCatalog: {
+          claude: [
+            { value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 },
+            { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 },
+          ],
+        },
+      },
+    })) as Runner;
+    const tag = machineId.slice(-8);
+    const deepseek = `deepseek-${tag}`;
+    const glm = `glm-${tag}`;
+    const shared = `shared-qwen-${tag}`;
+    const custom = `house-${tag}`;
+    await prisma.modelProvider.createMany({
+      data: [
+        { slug: deepseek, label: 'DeepSeek', runtime: 'claude', baseUrl: 'https://api.deepseek.com/anthropic', apiKeyEnc: 'x',
+          presetSlug: 'deepseek', followsPreset: true, ownerId, position: 1 },
+        { slug: glm, label: 'Z.AI (GLM)', runtime: 'claude', baseUrl: 'https://api.z.ai/api/anthropic', apiKeyEnc: 'x',
+          presetSlug: 'glm', followsPreset: true, ownerId, position: 2 },
+        { slug: custom, label: 'House endpoint', runtime: 'claude', baseUrl: 'https://llm.house.invalid', apiKeyEnc: 'x',
+          models: [{ value: 'house-coder', label: 'House Coder' }], ownerId, position: 3 },
+        // A shared provider: only admins may use it, and this owner is a member.
+        { slug: shared, label: 'Qwen', runtime: 'claude', baseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic', apiKeyEnc: 'x',
+          presetSlug: 'qwen', followsPreset: true, ownerId: null },
+      ],
+    });
+    t.after(() => prisma.modelProvider.deleteMany({ where: { slug: { in: [deepseek, glm, shared, custom] } } }).then(() => undefined));
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [glm] } } });
+
+    const sessionId = await parentSession({ runnerId: machineId, model: 'claude-sonnet-5-5', effort: 'medium', optimizeFor: 'cost' });
+    const opened = await subagents.createSubagentRun(machine, sessionId, create({
+      toolUseId: 'toolu_01RoutedShadow', type: 'general', definitionSource: 'builtin',
+      size: 'L', sizeReason: 'one service plus its spec',
+    }));
+    assert.equal(opened.exec.provider, 'claude', "the target is still the parent's engine");
+    assert.equal(opened.exec.model, 'claude-sonnet-5-5', "and the parent's model, not the routed one");
+
+    const row = await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } });
+    const decision = row.decision as unknown as typeof opened.decision;
+    t.diagnostic(`subagent_run.decision ${JSON.stringify(decision)}`);
+    assert.deepEqual(decision, opened.decision, 'the answer carries the stored decision');
+    assert.equal(decision.level, 'L');
+    assert.equal(decision.tierSource, 'size');
+    assert.equal(decision.optimizeFor, 'cost');
+    assert.equal(decision.engine, 'claude');
+    assert.equal(decision.provider, 'claude', 'Cost: the subscription with headroom before the DeepSeek key');
+    assert.equal(decision.model, 'claude-opus-5-5');
+    assert.equal(decision.effort, 'high');
+    assert.equal(decision.applied, false);
+    assert.equal(decision.policyVersion, 'p2-shadow-1');
+    assert.deepEqual(decision.reasons, [
+      'Tier L, set by the caller: one service plus its spec',
+      'Picked claude-opus-5-5 · high on claude (claude) (Cost): a subscription with 100% of its quota left, used before any metered key',
+      '2 candidates in tier L; ties go by the owner\'s provider order',
+      `${decision.candidates.length} candidates removed, each with its reason`,
+      "Shadow decision: this SubAgent runs on the parent's model, claude-sonnet-5-5",
+    ]);
+    const why = (provider: string) => decision.candidates
+      .filter((c) => c.provider === provider).map((c) => [c.engine, c.model, c.reason]);
+    assert.deepEqual(why('codex'), [['codex', null, "codex is signed out on the parent's runner"]]);
+    assert.deepEqual(why('kimi'), [['kimi', null, "kimi is not installed on the parent's runner"]]);
+    assert.deepEqual(why(glm), [[null, null, 'Blocked in the SubAgents settings']]);
+    assert.deepEqual(why(shared), [[null, null, 'A shared provider, which only admins may use']]);
+    assert.deepEqual(why(custom), [
+      ['claude', 'house-coder', 'The model has no tier'],
+      ['opencode', null, "opencode is not installed on the parent's runner"],
+    ]);
+    assert.deepEqual(why(deepseek), [
+      ['opencode', null, "opencode is not installed on the parent's runner"],
+      ['dsh', null, "dsh is not installed on the parent's runner"],
+    ]);
   });
 });

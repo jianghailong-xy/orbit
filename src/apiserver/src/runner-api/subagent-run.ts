@@ -1,5 +1,4 @@
 import {
-  AgentProvider,
   SUBAGENT_RUN_STATUSES,
   type SubagentDecision,
   type SubagentRunCreateRequest,
@@ -18,6 +17,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import type { SubagentRoutingDecision } from '../tasks/model-routing';
 import { stripNul } from './strip-nul';
 
 /**
@@ -103,32 +103,15 @@ export class SubagentRunUpdateDto implements SubagentRunUpdateRequest {
 /** How much of a SubAgent's result `subagent_run.result_summary` keeps. */
 export const SUBAGENT_RESULT_SUMMARY_MAX = 20_000;
 
-export const SUBAGENT_POLICY_VERSION = 'p1-not-routed';
-
-export const SUBAGENT_NOT_ROUTED_REASON = "Routing not enabled yet: runs on the parent session's model";
-
 /**
- * The decision recorded before routing exists (§8 P1): the parent session's own engine, credential, model
- * and effort, with the level the parent or the definition asked for kept for the later report.
+ * The router's decision as `subagent_run.decision` stores it while routing is in shadow (§8 P2): what it
+ * would pick, `applied: false`, and a last reason naming the parent's model, which the SubAgent runs on.
  */
-export function notRoutedDecision(args: {
-  dto: SubagentRunCreateRequest;
-  engine: AgentProvider;
-  provider: string | null;
-  model: string;
-  effort: string | null;
-}): SubagentDecision {
+export function shadowDecision(route: SubagentRoutingDecision, parentModel: string): SubagentDecision {
   return {
-    level: args.dto.size ?? args.dto.definitionSize ?? null,
-    tierSource: 'not-routed',
-    optimizeFor: null,
-    engine: args.engine,
-    provider: args.provider,
-    model: args.model,
-    effort: args.effort,
-    reasons: [SUBAGENT_NOT_ROUTED_REASON],
-    candidates: [],
-    policyVersion: SUBAGENT_POLICY_VERSION,
+    ...route,
+    reasons: [...route.reasons, `Shadow decision: this SubAgent runs on the parent's model, ${parentModel}`],
+    applied: false,
   };
 }
 

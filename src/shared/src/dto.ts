@@ -2095,21 +2095,29 @@ export type SubagentRunStatus = (typeof SUBAGENT_RUN_STATUSES)[number];
 export type SubagentSize = 'S' | 'M' | 'L' | 'XL';
 
 /** Where a SubAgent run's level came from; `not-routed` until routing is on (§8 P1). */
-export type SubagentTierSource = 'not-routed' | 'size' | 'definition' | 'type-default' | 'named-model';
+export type SubagentTierSource =
+  'not-routed' | 'named-model' | 'definition-model' | 'size' | 'definition-size' | 'type-default';
 
-/** The router's record of one choice (`subagent_run.decision`). Reasons are English. */
+/**
+ * The router's record of one choice (`subagent_run.decision`, docs/subagent-design.md §4.1, §4.2). Reasons are
+ * English. While routing is in shadow (§8 P2) `applied` is false and the SubAgent runs on the parent's own
+ * model, whatever engine, provider and model this names.
+ */
 export interface SubagentDecision {
   level: SubagentSize | null;
   tierSource: SubagentTierSource;
   optimizeFor: string | null;
-  engine: AgentProvider;
+  /** Null when no candidate was left in the tier. */
+  engine: string | null;
   provider: string | null;
-  model: string;
+  model: string | null;
   effort: string | null;
   reasons: string[];
-  /** Candidates that were dropped, each with why. */
-  candidates: Array<{ provider: string; model: string; reason: string }>;
+  /** Candidates that were dropped, each with why. A null model: the whole provider or engine went. */
+  candidates: Array<{ provider: string; engine: string | null; model: string | null; effort: string | null; reason: string }>;
   policyVersion: string;
+  /** Whether the SubAgent runs on what this names. */
+  applied: boolean;
 }
 
 /** What the runner sends when the parent model calls `delegate` (§5.1 step 2). */

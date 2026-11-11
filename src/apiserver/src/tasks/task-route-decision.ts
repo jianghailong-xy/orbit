@@ -10,6 +10,7 @@ import {
   type PlanUsageWindow,
   type RunnerModelCatalog,
 } from '@orbit/shared';
+import { runnerAccountPausedUntil } from '../common/account-pause';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -223,8 +224,8 @@ async function routeEnvironment(
   };
 }
 
-type RouteAgent = NonNullable<Awaited<ReturnType<TaskRouteReads['workspace']>>>;
-type RouteRunner = NonNullable<Awaited<ReturnType<TaskRouteReads['runner']>>>;
+export type RouteAgent = NonNullable<Awaited<ReturnType<TaskRouteReads['workspace']>>>;
+export type RouteRunner = NonNullable<Awaited<ReturnType<TaskRouteReads['runner']>>>;
 
 /** What reasons call a reported window: by its length, else by the slot it was reported in. */
 function windowName(window: PlanUsageWindow | undefined, slot: string): string {
@@ -245,7 +246,7 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
  * Anthropic does not offer Claude in (docs/claude-region-check-contract.md §12) it is ruled out the way a
  * signed-out one is: `sessions.create` would refuse the run there with CLAUDE_REGION_UNSUPPORTED.
  */
-function engineState(
+export function engineState(
   engine: AccountEngine,
   agent: RouteAgent,
   runner: RouteRunner,
@@ -282,7 +283,9 @@ function engineState(
     if (!quota || window.utilization > quota.utilization) quota = { utilization: window.utilization, window: name };
   }
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
-  return { signedOut, quota, ...(regionBlocked ? { regionBlocked } : {}) };
+  // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
+  const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
+  return { signedOut, quota, ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}) };
 }
 
 /** The engine a task's newest work run was created on: what a verification looks past (§6). */

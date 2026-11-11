@@ -27,6 +27,7 @@ interface CatalogEntry {
   release_date?: unknown;
   modalities?: { output?: unknown };
   limit?: { context?: unknown };
+  cost?: { output?: unknown };
 }
 
 /** Resolved model lists by preset slug. A slug is absent until a refresh finds models for it. */
@@ -98,11 +99,18 @@ export function parseModelCatalog(payload: unknown, presets: ProviderPreset[] = 
     if (!preset.catalog) continue;
     const models = vendors[preset.catalog.source]?.models;
     if (!models || typeof models !== 'object') continue;
+    // A shipped model's tier is Orbit's own judgement, which models.dev does not carry: kept across a
+    // refresh, beside the price the refresh brings.
+    const tiers = new Map(preset.models.map((m) => [m.value, m.tier]));
     const fresh = Object.values(models)
       .filter((m) => usable(m, preset.catalog!.match))
       .sort(byNewest)
       .slice(0, PER_VENDOR_LIMIT)
-      .map(toPresetModel);
+      .map((m) => {
+        const model = toPresetModel(m);
+        const tier = tiers.get(model.value);
+        return tier ? { ...model, tier } : model;
+      });
     // Nothing recognizable for this vendor (a renamed source, a shape we don't understand) — leave
     // the slug unset so reads keep falling back to the shipped list.
     if (fresh.length === 0) continue;
@@ -137,9 +145,11 @@ function byNewest(a: CatalogEntry, b: CatalogEntry): number {
 function toPresetModel(m: CatalogEntry): ProviderPresetModel {
   const id = m.id as string;
   const context = m.limit?.context;
+  const price = m.cost?.output;
   return {
     value: id,
     label: typeof m.name === 'string' && m.name.trim() ? m.name.trim() : id,
     ...(typeof context === 'number' && context > 0 ? { contextWindow: context } : {}),
+    ...(typeof price === 'number' && Number.isFinite(price) && price >= 0 ? { outputPricePerMTok: price } : {}),
   };
 }
