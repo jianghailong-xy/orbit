@@ -871,6 +871,102 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
   });
 });
 
+describe('the project column in a window too narrow for it', { timeout: 60_000 }, () => {
+  // The list and the column are 320px each by default, with a 1px divider before each: the column fits
+  // beside a conversation of 480px from a split of 1122px.
+  const NARROW = 1121;
+  const WIDE = 1122;
+  const column = (): HTMLElement | null => mounted().querySelector<HTMLElement>('aside.session-project-column');
+  const button = (): HTMLButtonElement => {
+    const found = projectSessionsButton();
+    if (!found) throw new Error('no Project sessions button');
+    return found;
+  };
+  let observed: Array<{ callback: ResizeObserverCallback; targets: Set<Element> }> = [];
+  let width = NARROW;
+  beforeEach(() => {
+    observed = [];
+    width = NARROW;
+    vi.stubGlobal('ResizeObserver', class {
+      private readonly entry: { callback: ResizeObserverCallback; targets: Set<Element> };
+      constructor(callback: ResizeObserverCallback) {
+        this.entry = { callback, targets: new Set() };
+        observed.push(this.entry);
+      }
+      observe(el: Element) { this.entry.targets.add(el); }
+      unobserve(el: Element) { this.entry.targets.delete(el); }
+      disconnect() { this.entry.targets.clear(); }
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get(this: HTMLElement) { return this.classList.contains('workspace-split') ? width : 0; },
+    });
+  });
+  afterEach(() => {
+    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+  });
+  const resizeTo = async (next: number): Promise<void> => {
+    width = next;
+    const split = mounted().querySelector('.workspace-split')!;
+    await act(async () => {
+      for (const { callback, targets } of observed) {
+        if (targets.has(split)) callback([], {} as ResizeObserver);
+      }
+    });
+    await settle();
+  };
+
+  it('starts folded where the conversation would go under 480px, with the button plain, and unfolds as the window widens', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(column()).toBeNull();
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    // The list keeps the project's row selected, and the coordinator is open.
+    expect(projectRow().classList.contains('active')).toBe(true);
+    await resizeTo(WIDE);
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    expect(column()!.classList.contains('session-project-column-over')).toBe(false);
+    // Narrow again, it folds by itself again.
+    await resizeTo(NARROW);
+    await until(() => expect(column()).toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('unfolds over the conversation on the button while too narrow, and folds again on ✕', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(column()).toBeNull();
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    expect(column()!.classList.contains('session-project-column-over')).toBe(true);
+    await click(column()!.querySelector('.session-project-page-header .session-folder-back'), 'the column ✕');
+    await until(() => expect(column()).toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('keeps a hand fold through widening until the button is pressed again', async () => {
+    width = WIDE;
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).toBeNull());
+    await resizeTo(NARROW);
+    await resizeTo(WIDE + 400);
+    expect(column()).toBeNull();
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    expect(column()!.classList.contains('session-project-column-over')).toBe(false);
+  });
+});
+
 describe('project sessions page', { timeout: 60_000 }, () => {
   it('reads one DONE project detail for its title and progress when the Open sidebar has no summary', async () => {
     projects = [];

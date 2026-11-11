@@ -3153,6 +3153,7 @@ button.toast--pill:focus-visible {
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */
 .workspace-split {
   display: flex;
+  position: relative;
   height: 100%;
   min-height: 0;
   /* One gutter token drives every horizontal gap. It lives on the panes (.session-col /
@@ -3169,6 +3170,18 @@ button.toast--pill:focus-visible {
   flex-direction: column;
   min-height: 0;
   padding: 24px var(--pane-gutter);
+}
+/* The project column unfolded on demand in a window too narrow for it beside the conversation:
+   it lies over the conversation's right edge rather than squeezing it under 480px. */
+.session-project-column-over {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
 }
 /* Draggable divider between the session list and the conversation. The visible
    1px line matches the old column border; ::before widens the grab area. */

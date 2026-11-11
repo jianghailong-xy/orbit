@@ -924,6 +924,9 @@ const PROJECT_COLUMN_COPY = { label: 'Project sessions', close: 'Hide project se
 // Whether the user folded the project column by hand (owner 2026-11-11, board 4): kept per browser, and
 // it stays folded until the title bar's Project sessions button is pressed again.
 const PROJECT_COLUMN_FOLDED_KEY = 'orbit.projectColumnFolded';
+// Narrower than this, the conversation does not take the column beside it: the column folds by itself,
+// and unfolds again once the window is wide enough (owner 2026-11-11, board 4).
+const PROJECT_COLUMN_MIN_CONVERSATION = 480;
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 320;
@@ -2538,8 +2541,28 @@ export function WorkspaceView({
   });
   const [resizing, setResizing] = useState<'list' | 'project' | null>(null);
   const [projectColumnFolded, setProjectColumnFolded] = useState<boolean>(() => localStorage.getItem(PROJECT_COLUMN_FOLDED_KEY) === '1');
+  // The split's width, so the column can tell whether the conversation keeps 480px beside it. Unmeasured
+  // (no layout yet), the window counts as wide enough.
+  const [splitEl, setSplitEl] = useState<HTMLDivElement | null>(null);
+  const [splitWidth, setSplitWidth] = useState<number | null>(null);
+  useEffect(() => {
+    if (!splitEl) return;
+    // A split with no box yet (hidden, or not laid out) measures 0, which is no width at all.
+    const measure = (): void => setSplitWidth(splitEl.clientWidth || null);
+    const ro = new ResizeObserver(measure);
+    ro.observe(splitEl);
+    measure();
+    return () => ro.disconnect();
+  }, [splitEl]);
+  // List, its divider, the conversation, the column's divider and the column side by side.
+  const projectColumnCrowds = splitWidth !== null &&
+    splitWidth - colWidth - projectColWidth - 2 < PROJECT_COLUMN_MIN_CONVERSATION;
+  // Unfolded on demand by the title bar's button while the window is too narrow: the column then lies
+  // over the conversation's right edge instead of squeezing it, until it is folded or the window widens.
+  const [projectColumnOnDemand, setProjectColumnOnDemand] = useState(false);
   const foldProjectColumn = (folded: boolean): void => {
     setProjectColumnFolded(folded);
+    setProjectColumnOnDemand(!folded && projectColumnCrowds);
     localStorage.setItem(PROJECT_COLUMN_FOLDED_KEY, folded ? '1' : '0');
   };
 
@@ -3300,7 +3323,12 @@ export function WorkspaceView({
   // Beside a conversation of the project, or its Landings window; never over a new session's draft.
   const showProjectColumn = !!columnProjectId && (!!selectedId || !!landingsProjectId);
   // Folded by hand, the column hides and ?project= stays, so the title bar's button brings it back.
-  const projectColumnOpen = showProjectColumn && !projectColumnFolded;
+  // Too narrow, it is folded by itself unless the button asked for it; that fold is not a hand fold, so
+  // the column comes back once the window is wide enough.
+  const projectColumnOpen = showProjectColumn && !projectColumnFolded && (!projectColumnCrowds || projectColumnOnDemand);
+  useEffect(() => {
+    if (!projectColumnCrowds || !showProjectColumn) setProjectColumnOnDemand(false);
+  }, [projectColumnCrowds, showProjectColumn]);
   // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
   useEffect(() => {
     if (!projectColumnOpen) return;
@@ -3310,6 +3338,7 @@ export function WorkspaceView({
       if (focused instanceof HTMLElement && (focused.isContentEditable ||
         focused.closest('input, textarea, select, [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'))) return;
       setProjectColumnFolded(true);
+      setProjectColumnOnDemand(false);
       localStorage.setItem(PROJECT_COLUMN_FOLDED_KEY, '1');
     };
     window.addEventListener('keydown', onKey);
@@ -9218,7 +9247,7 @@ export function WorkspaceView({
   );
 
   return (
-    <div className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
+    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
       <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
         {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -10578,16 +10607,19 @@ export function WorkspaceView({
       </div>
       {projectColumnOpen && columnProjectId && (
         <>
-          <div
-            className={`session-resizer${resizing === 'project' ? ' resizing' : ''}`}
-            onMouseDown={(e) => startResize(e, 'project')}
-            role="separator"
-            aria-orientation="vertical"
-          />
+          {!projectColumnOnDemand && (
+            <div
+              className={`session-resizer${resizing === 'project' ? ' resizing' : ''}`}
+              onMouseDown={(e) => startResize(e, 'project')}
+              role="separator"
+              aria-orientation="vertical"
+            />
+          )}
           {/* The project's sessions page, moved beside the conversation as it is (owner 2026-11-11,
               docs/mocks/project-sessions-column board 2): the row of the open conversation is the
               selected one, and ✕ folds the column (the button in the title bar brings it back). */}
-          <aside className="session-col session-project-column" style={{ width: projectColWidth }}
+          <aside className={`session-col session-project-column${projectColumnOnDemand ? ' session-project-column-over' : ''}`}
+            style={{ width: projectColWidth }}
             aria-label={PROJECT_COLUMN_COPY.label}>
             {projectPageHead(() => foldProjectColumn(true), PROJECT_COLUMN_COPY.close, <CloseOutlined />)}
             <div className="workspace-sessions session-col-list autohide-scrollbar">
