@@ -113,6 +113,7 @@ import {
   WIKI_REPO_PREMISE_REASONS,
   WIKI_REPO_TRANSIENT_REASONS,
   WIKI_REPO_WRONG_REPOSITORY_REASONS,
+  WIKI_REPO_ATTENTION_REASONS,
   WIKI_REPO_PROBE,
   wikiRepoFailureReason,
   wikiRepoReasonIsPremise,
@@ -1303,6 +1304,13 @@ describe('wiki contract', () => {
     expect(health.notifyNoNotes.afterRuns).toBe(WIKI_MAINTENANCE_HEALTH.notifyNoNotesAfterRuns);
     expect(health.notifyNoNotes.minSessions).toBe(WIKI_MAINTENANCE_HEALTH.notifyNoNotesMinSessions);
     expect(health.notifyNoNotes.once).toMatch(/exactly afterRuns long/u);
+    // The repository's half (docs/wiki-repo-tiers-design.md §6, §7.1): its tier and reason, and the red streak told once.
+    expect(keysOf(health.repo)).toEqual(['look', 'workspace', 'runner', 'pending', 'tier', 'reason', 'detail', 'checkedAt']);
+    expect(health.notifyRepository.afterRuns).toBe(WIKI_MAINTENANCE_HEALTH.notifyRepositoryAfterRuns);
+    expect(health.notifyRepository.reasons).toEqual([...WIKI_REPO_ATTENTION_REASONS]);
+    expect(CONTRACT.repoOps.reasons.premise).toEqual(expect.arrayContaining([...WIKI_REPO_ATTENTION_REASONS]));
+    expect(health.notifyRepository.once).toMatch(/exactly afterRuns/u);
+    expect(health.notifyRepository.reset).toMatch(/back to 0/u);
     // The looks win in the order the contract lists them.
     const now = new Date('2026-09-28T12:00:00.000Z');
     const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
@@ -2285,10 +2293,10 @@ describe('wiki contract', () => {
       id: '', kind: 'verify', state: 'queued', waitingFor: null, priority: 0, attempts: 0, createdAt: '', updatedAt: '',
       startedAt: null, endedAt: null, nextAttemptAt: null, failureKind: null, error: null, ahead: null, progress: null,
       calls: { total: 0, queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0, inputTokens: 0, outputTokens: 0 },
-      nextCall: null, requests: [],
+      nextCall: null, requests: [], repo: null,
     };
     expect(read.job).toEqual(Object.keys(job));
-    expect(keysOf(read.jobRules)).toEqual(['ahead', 'progress', 'calls', 'nextCall', 'requests']);
+    expect(keysOf(read.jobRules)).toEqual(['ahead', 'progress', 'calls', 'nextCall', 'requests', 'repo']);
     const call: WikiJobCallView = {
       id: '', step: '', unit: '', attempt: 1, attempts: 0, state: 'queued', enqueuedAt: '', startedAt: null, endedAt: null,
       inputTokens: null, outputTokens: null, httpStatus: null, error: null, errorKind: null, ahead: null,

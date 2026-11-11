@@ -1298,7 +1298,32 @@
         "once": "Sent by the end of the one run that makes the streak exactly afterRuns long, off the run rows; after the run's row is written, best-effort: no run fails for it.",
         "reset": "A run that is not such a run ends the streak, and the next is told once more, at its own third."
       },
-      "client": "The Wiki home's status line, on the web at every width and on iOS: after the entries, the review count (desktop only) and the anchors, the maintenance part in the space's look — the same words and the same parts on both, locked by src/shared/src/wiki-health.fixture.json.",
+      "notifyRepository": {
+        "afterRuns": 3,
+        "reasons": [
+          "wrong_repository",
+          "root_mismatch",
+          "path_overlap",
+          "fetch_refused"
+        ],
+        "why": "A red reason (repoOps.reasons: another repository's folder, or a credential the remote refused) is one somebody has to set right, and the run goes on succeeding without the repository (docs/wiki-repo-tiers-design.md section 6): the failing streak never counts it.",
+        "when": "Counted at the end of every maintenance run its facts made (finishWikiMaintenanceJob → WikiMaintenance.noteRepoAttention) on the cursor row's repo_attention_runs (migration 0519): a run whose repo_reason is one of reasons counts one more; a run that read the repository (repo_tier git or folder) sets it back to 0; any other run — no probe, or a reason that is not red — leaves it where it was. A backfill counts nothing.",
+        "push": "PushService.notifyWikiRepositoryAttention: one alert to the owner's devices under notify.push's kind and thread, its words the reason's: title 'Wiki code checks paused for <runs> runs', body '<space>: <repo_detail>. Fix it in the wiki's Settings.'",
+        "once": "Sent by the one run end whose increment made repo_attention_runs exactly afterRuns: one UPDATE … RETURNING on the cursor row, so of ends racing only one reads that number back. After the statement, outside any transaction, best-effort: no run fails for it.",
+        "reset": "A run that reads the repository sets repo_attention_runs back to 0, so the next streak is told once more, at its own third run."
+      },
+      "repo": {
+        "look": "repoOps.looks: whether the space's machine can be asked at all — what a client from before the tiers reads, kept as it was.",
+        "workspace": "{id, workDir} of the workspace the operations read, or null.",
+        "runner": "{id, name, version, capability, online} of its machine, or null.",
+        "pending": "The space's repository operations that have not settled.",
+        "tier": "repoOps.tiers: what the maintenance run that probed last — under way or ended, its latest attempt — read of the repository (wiki_maintenance_run.repo_tier); null while no run has probed.",
+        "reason": "repoOps.reasons: why it read less than git (repo_reason); null on git and folder.",
+        "detail": "That reason as one English sentence (wikiRepoDetail: '~/work/app was not found on MacBook'), with a home directory said as ~ and redacted as a failure's words are, the owner's environment values among them, when the run wrote it (repo_detail, migration 0519); on folder what the folder is ('~/work/app is not a git checkout'); null on git. A run from before 0519 is said from its reason alone.",
+        "checkedAt": "When that run's probe read it (repo_checked_at), else when its latest attempt started; null with tier."
+      },
+      "client": "The Wiki home's status line, on the web at every width, on iOS and on Android: after the entries, the review count (desktop only) and the anchors, the maintenance part in the space's look, then — while maintenance is on — the repository's part (docs/wiki-repo-tiers-design.md section 7.2): nothing on git; 'Reading the folder, not git' in grey on folder, leading to Settings, its hint 'Commit anchors are not checked: <detail>.'; 'Code checks paused: <detail>' with an amber dot on sessions, red for a red reason; '<detail>' with a red dot on wrong_repository; the last two followed by 'Fix in Settings'. A narrow screen (a phone, iOS, Android) says 'Reading the folder' / 'Code checks paused' / 'Wrong folder' only. The same words and the same parts on every client, locked by src/shared/src/wiki-health.fixture.json (parts and text wide, narrowParts and narrowText narrow; line the phone's).",
+      "repoRunTier": "Activity's Runs card tags each maintenance run with what it read (jobs.read's job.repo {tier, reason, detail}, design section 7.4): 'git', 'folder' or 'sessions only' — wrong_repository too — and on the last its detail, amber, or red for a red reason; locked by src/shared/src/wiki-server-execution.fixture.json runs.tiers.",
       "executor": "jobs.executor.read (P9): { mode: server, serverExecutes: true }, since P11 the same for every account. Absent from a control plane that predates it, which a client reads as not saying so: it draws none of the server's parts (jobs.executor.read.readBy).",
       "systemModel": "The System model as systemModel.read answers its state — { state, model, since, checkedAt, workerSeenAt }, never its address or key — read while executor.serverExecutes holds, which since P11 it always does; null from a control plane that left the account on the runner, where the model was none of the account's business."
     }
@@ -2585,13 +2610,14 @@
       "why": "A server run has no task and no session to open (design section 2.2): what it is doing — its step, its calls, where they wait — is on Activity, and this read is what the Runs card and a run's page draw.",
       "limits": { "jobs": 10, "callsPerJob": 40 },
       "answer": "{ spaceId, jobs }: the space's newest limits.jobs rows of wiki_job, newest first by created_at.",
-      "job": ["id", "kind", "state", "waitingFor", "priority", "attempts", "createdAt", "updatedAt", "startedAt", "endedAt", "nextAttemptAt", "failureKind", "error", "ahead", "progress", "calls", "nextCall", "requests"],
+      "job": ["id", "kind", "state", "waitingFor", "priority", "attempts", "createdAt", "updatedAt", "startedAt", "endedAt", "nextAttemptAt", "failureKind", "error", "ahead", "progress", "calls", "nextCall", "requests", "repo"],
       "jobRules": {
         "ahead": "While the job is queued: how many queued jobs of the deployment the claim takes before it, in lease.claim's order: a space's jobs hold the places priority DESC, created_at, id give them, and the space's own order says which takes which — an articles job waiting for its round (priority) holds the place after the round's, and the round its; null in every other state.",
         "progress": "The pipeline's own progress (jobs.progress) as { step, done, total }: done and total as the pipeline wrote them, or for the import's shape (import.server.progress) the notes read or failed against the notes it was handed; null when the pipeline wrote none.",
         "calls": "Its calls counted by state — total, queued, running, succeeded, failed, cancelled — and the input and output tokens they reported, over every one of its rows.",
         "nextCall": "Of its queued calls, the one the queue reaches first: { ahead, enqueuedAt }, ahead counted as request.ahead is; null while none waits.",
-        "requests": "Its newest limits.callsPerJob calls by enqueued_at, given oldest first; calls.total counts the ones left out."
+        "requests": "Its newest limits.callsPerJob calls by enqueued_at, given oldest first; calls.total counts the ones left out.",
+        "repo": "A maintain job's run row (repo_tier, repo_reason, repo_detail; migrations 0514, 0519) as { tier, reason, detail }: what the run read of the repository, Activity's tag (maintenance.health.repoRunTier); null for any other kind and before its probe."
       },
       "request": ["id", "step", "unit", "attempt", "attempts", "state", "enqueuedAt", "startedAt", "endedAt", "inputTokens", "outputTokens", "httpStatus", "error", "errorKind", "ahead"],
       "requestRules": {

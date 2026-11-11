@@ -39,7 +39,9 @@ internal object RelativeTime {
 
 /** A part of the Wiki home's status line (OrbitKit `WikiStatusPart`). */
 internal data class WikiStatusPart(val text: String, val tone: Tone = Tone.PLAIN, val mark: Mark = Mark.NONE,
-    val link: Link = Link.NONE, val strong: Boolean = false) {
+    val link: Link = Link.NONE, val strong: Boolean = false,
+    /** The folder tier's cost, on the wide line only (the web's `title`); null when there is nothing more to say. */
+    val hint: String? = null) {
     enum class Tone { PLAIN, MUTED, WARN, ERROR }
     enum class Mark { NONE, CHECK, DOT, SPIN }
     enum class Link { NONE, SETTINGS, RUN }
@@ -110,6 +112,8 @@ internal object WikiHealthLogic {
         }
         val repo = health.repo ?: return null
         if (!health.maintenance.enabled && repo.pending <= 0) return null
+        // The repository part says it already: the latest run read nothing for this very reason (`repoParts`).
+        if (repoParts(health, false).isNotEmpty() && repo.reason == repo.look) return null
         return when (repo.look) {
             "runner_offline" -> reason(WikiHealthCopy.reasonRunnerOffline, WikiStatusPart.Tone.WARN)
             "runner_upgrade" -> reason(WikiHealthCopy.reasonRunnerUpgrade, WikiStatusPart.Tone.WARN)
@@ -117,14 +121,42 @@ internal object WikiHealthLogic {
         }
     }
 
-    /** The status line's whole maintenance part: the look's parts, and the server's reason before their links —
-     * the web's `wikiStatusParts`. */
-    fun parts(health: WikiSpaceHealth, now: Instant): List<WikiStatusPart> {
+    /** What the latest run read of the repository, said after the maintenance part while maintenance is on — the web's
+     * `wikiRepoParts` (docs/wiki-repo-tiers-design.md §7.2, mock 44 ⑤): nothing on git; grey on the folder, its hint
+     * saying what that costs, leading to Settings; amber while the code checks wait, red when the folder is another
+     * repository's or its remote refused the credentials, and on a wide screen `Fix in Settings` after them. [narrow]
+     * is a phone's line, which says the short words only. */
+    fun repoParts(health: WikiSpaceHealth, narrow: Boolean): List<WikiStatusPart> {
+        val repo = health.repo
+        val tier = repo?.tier
+        if (!health.maintenance.enabled || tier.isNullOrEmpty() || tier == "git") return emptyList()
+        if (tier == "folder") {
+            return listOf(if (narrow) WikiStatusPart(WikiHealthCopy.repoFolderShort, WikiStatusPart.Tone.MUTED, link = WikiStatusPart.Link.SETTINGS)
+                else WikiStatusPart(WikiHealthCopy.repoFolder, WikiStatusPart.Tone.MUTED, link = WikiStatusPart.Link.SETTINGS,
+                    hint = WikiHealthCopy.repoFolderHint(repo.detail)))
+        }
+        val wrong = tier == "wrong_repository"
+        val tone = if (wrong || WikiHealthCopy.repoNeedsAttention(repo.reason)) WikiStatusPart.Tone.ERROR else WikiStatusPart.Tone.WARN
+        val detail = repo.detail?.takeIf { it.isNotEmpty() }
+        val said = when {
+            narrow -> if (wrong) WikiHealthCopy.repoWrongShort else WikiHealthCopy.repoPaused
+            wrong -> detail ?: WikiHealthCopy.repoWrongShort
+            else -> detail?.let(WikiHealthCopy::repoPaused) ?: WikiHealthCopy.repoPaused
+        }
+        val words = WikiStatusPart(said, tone, WikiStatusPart.Mark.DOT, strong = true)
+        return if (narrow) listOf(words) else listOf(words, WikiStatusPart(WikiHealthCopy.repoFix, link = WikiStatusPart.Link.SETTINGS))
+    }
+
+    /** The status line's whole maintenance part — the web's `wikiStatusParts`: the look's parts, then the server's
+     * reason and the repository's words before their links, and `Fix in Settings` last. [narrow] is a phone's line. */
+    fun parts(health: WikiSpaceHealth, now: Instant, narrow: Boolean = false): List<WikiStatusPart> {
         val parts = parts(health.maintenance, now)
-        val reason = serverReason(health) ?: return parts
+        val repo = repoParts(health, narrow)
+        val isFix = { one: WikiStatusPart -> one.link != WikiStatusPart.Link.NONE && one.text == WikiHealthCopy.repoFix }
+        val said = listOfNotNull(serverReason(health)) + repo.filterNot(isFix)
         val link = parts.indexOfFirst { it.link != WikiStatusPart.Link.NONE }
-        if (link < 0) return parts + reason
-        return parts.take(link) + reason + parts.drop(link)
+        val placed = if (link < 0) parts + said else parts.take(link) + said + parts.drop(link)
+        return placed + repo.filter(isFix)
     }
 }
 
@@ -465,7 +497,8 @@ internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiS
         val parts = mutableListOf(WikiStatusPart("${WikiArticleCopy.count(count)} ${WikiCopy.entryNoun(count)}"))
         space.rootCommitSha?.takeIf { it.isNotEmpty() }?.let { parts += WikiStatusPart(WikiCopy.anchorsVerified(it.take(7), "")) }
         // The look's parts and — while the server runs this account's wiki — its reason before the links (P9).
-        health?.let { parts += WikiHealthLogic.parts(it, now) }
+        // A phone's line: the repository's short words (design §7.2); the whole sentence is in Settings.
+        health?.let { parts += WikiHealthLogic.parts(it, now, narrow = true) }
         return parts
     }
     fun statusLine(now: Instant) = WikiHealthLogic.text(statusParts(now))

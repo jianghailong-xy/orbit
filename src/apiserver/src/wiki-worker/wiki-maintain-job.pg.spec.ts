@@ -980,7 +980,7 @@ function sessionsExtractor(fx: Fixture): (hit: Hit) => string {
  */
 async function assertSessionsRun(
   h: Harness, fx: Fixture, reason: string, play: RunnerPlay, title: string,
-  over: { tier?: string; attempts?: number; repoWaitMs?: number } = {},
+  over: { tier?: string; attempts?: number; repoWaitMs?: number; detail?: RegExp } = {},
 ): Promise<{ backoffs: number[] }> {
   h.model.answer = sessionsExtractor(fx);
   const page = pageOf(fx);
@@ -1010,6 +1010,13 @@ async function assertSessionsRun(
   const snapshots = await h.sql.query(`SELECT 1 FROM "wiki_repo_op" WHERE "space_id" = $1 AND "kind" = 'snapshot'`, [fx.spaceId]);
   assert.equal(snapshots.rowCount, ['no_workspace', 'runner_offline', 'runner_missing', 'runner_upgrade'].includes(reason) ? 0 : attempts, 'how many times the runner was asked');
   assert.deepEqual(await runTier(h, fx.runId), { repo_tier: tier, repo_reason: reason });
+  // What the health line says of it (migration 0519): the reason as one sentence, and when the probe read it.
+  const { rows: [said] } = await h.sql.query<{ repo_detail: string | null; repo_checked_at: Date | null }>(
+    `SELECT "repo_detail", "repo_checked_at" FROM "wiki_maintenance_run" WHERE "id" = $1`, [fx.runId],
+  );
+  assert.ok(said!.repo_detail, 'the run wrote its reason as a sentence');
+  if (over.detail) assert.match(said!.repo_detail!, over.detail);
+  assert.ok(said!.repo_checked_at, 'and when it read the repository');
   const report = run.report as Record<string, unknown>;
   assert.deepEqual(report.repo, { tier, reason });
   assert.equal(report.dossiers, 2);
@@ -1068,15 +1075,15 @@ test('a space whose maintenance names no workspace runs on tier sessions for no_
  * Every premise a runner names: the runner is asked once, the job is not retried, and the run ends succeeded on tier
  * sessions — or tier wrong_repository for another repository's checkout, which does only what tier sessions does.
  */
-const PREMISES: Array<{ reason: string; tier: string; error: string }> = [
-  { reason: 'no_work_dir', tier: 'sessions', error: 'the operation names no working directory to read the repository in' },
-  { reason: 'not_found', tier: 'sessions', error: '/tmp/maintain-spec was not found on this machine: stat /tmp/maintain-spec: no such file or directory' },
-  { reason: 'not_git', tier: 'sessions', error: '/tmp/maintain-spec is not a git checkout: exit status 128' },
-  { reason: 'too_many_files', tier: 'sessions', error: '/tmp/maintain-spec has more than 100000 files to read' },
-  { reason: 'wrong_repository', tier: 'wrong_repository', error: 'the checkout /tmp/maintain-spec is a clone of github.com/x/other, not of the space\'s repository github.com/x/app: nothing was read' },
-  { reason: 'root_mismatch', tier: 'wrong_repository', error: 'the checkout /tmp/maintain-spec does not start from the space\'s first commit bbbb: it is another repository behind the same URL, so nothing was read' },
-  { reason: 'path_overlap', tier: 'wrong_repository', error: '/tmp/maintain-spec shares 12% of its files with the last snapshot' },
-  { reason: 'fetch_refused', tier: 'sessions', error: 'the snapshot operation could not fetch origin\'s default branch into the checkout /tmp/maintain-spec, so nothing was read: git authentication failed: the remote refused the saved Git credential' },
+const PREMISES: Array<{ reason: string; tier: string; error: string; detail: RegExp }> = [
+  { reason: 'no_work_dir', tier: 'sessions', error: 'the operation names no working directory to read the repository in', detail: /^The workspace has no working directory$/u },
+  { reason: 'not_found', tier: 'sessions', error: '/tmp/maintain-spec was not found on this machine: stat /tmp/maintain-spec: no such file or directory', detail: /^\/tmp\/maintain-spec was not found on maintain-[0-9a-f]{8}$/u },
+  { reason: 'not_git', tier: 'sessions', error: '/tmp/maintain-spec is not a git checkout: exit status 128', detail: /^\/tmp\/maintain-spec is not a git checkout$/u },
+  { reason: 'too_many_files', tier: 'sessions', error: '/tmp/maintain-spec has more than 100000 files to read', detail: /^\/tmp\/maintain-spec has too many files to read$/u },
+  { reason: 'wrong_repository', tier: 'wrong_repository', error: 'the checkout /tmp/maintain-spec is a clone of github.com/x/other, not of the space\'s repository github.com/x/app: nothing was read', detail: /^\/tmp\/maintain-spec is a clone of github\.com\/x\/other, not this wiki's repository$/u },
+  { reason: 'root_mismatch', tier: 'wrong_repository', error: 'the checkout /tmp/maintain-spec does not start from the space\'s first commit bbbb: it is another repository behind the same URL, so nothing was read', detail: /^\/tmp\/maintain-spec does not share this wiki's first commit$/u },
+  { reason: 'path_overlap', tier: 'wrong_repository', error: '/tmp/maintain-spec shares 12% of its files with the last snapshot', detail: /^\/tmp\/maintain-spec shares few files with the last snapshot$/u },
+  { reason: 'fetch_refused', tier: 'sessions', error: 'the snapshot operation could not fetch origin\'s default branch into the checkout /tmp/maintain-spec, so nothing was read: git authentication failed: the remote refused the saved Git credential', detail: /^The git remote refused the credentials on maintain-[0-9a-f]{8}$/u },
 ];
 
 for (const premise of PREMISES) {
@@ -1084,7 +1091,7 @@ for (const premise of PREMISES) {
     const h = await boot();
     await clearWork(h);
     const fx = await fixture(h, { title: 'Premise Wiki', wholeFile: true });
-    await assertSessionsRun(h, fx, premise.reason, { snapshotError: premise.error, snapshotReason: premise.reason }, 'Premise Wiki', { tier: premise.tier });
+    await assertSessionsRun(h, fx, premise.reason, { snapshotError: premise.error, snapshotReason: premise.reason }, 'Premise Wiki', { tier: premise.tier, detail: premise.detail });
   });
 }
 

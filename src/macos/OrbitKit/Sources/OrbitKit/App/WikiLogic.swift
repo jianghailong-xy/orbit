@@ -1039,18 +1039,19 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// counts, else the entries read here — the commit the anchors were last verified at, and where the
     /// maintenance run stands (mock 12 ④), as the web's status row carries them. The count waiting for
     /// review is left out — the banner right below says it (mock 12 ①).
-    public func statusParts(now: Date) -> [WikiStatusPart] {
+    public func statusParts(now: Date, narrow: Bool = false) -> [WikiStatusPart] {
         let count = health?.entries ?? entries.count
         var parts = [WikiStatusPart("\(WikiArticleCopy.count(count)) \(WikiCopy.entryNoun(count))")]
         if let sha = space.rootCommitSha, !sha.isEmpty {
             parts.append(WikiStatusPart(WikiCopy.anchorsVerified(ref: String(sha.prefix(7)), ago: "")))
         }
-        if let health { parts += WikiHealthLogic.parts(health, now: now) }
+        if let health { parts += WikiHealthLogic.parts(health, now: now, narrow: narrow) }
         return parts
     }
 
-    /// The same line as one text (`WikiHealthLogic.text`): what VoiceOver reads.
-    public func statusLine(now: Date) -> String { WikiHealthLogic.text(statusParts(now: now)) }
+    /// The same line as one text (`WikiHealthLogic.text`), a phone's — the repository's short words, as the
+    /// fixture's `line` says it.
+    public func statusLine(now: Date) -> String { WikiHealthLogic.text(statusParts(now: now, narrow: true)) }
 
     public var statusLine: String { statusLine(now: Date()) }
 }
