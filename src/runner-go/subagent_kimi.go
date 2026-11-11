@@ -71,7 +71,16 @@ func runKimiChild(ctx context.Context, c subagentChild) (ExecResult, string, err
 				sessionMu.Lock()
 				id := expected
 				sessionMu.Unlock()
+				// A call's arguments come in its tool_call_update (its tool_call carries rawInput null): told to
+				// the changedFiles collector before the update's result, and after the call it completes.
+				update := kimiChildToolInput(*item.message)
+				if update != nil && update["kind"] == "tool_call_update" {
+					c.emit(evSubagentToolInput, update)
+				}
 				handleKimiNotification(id, *item.message, c.emit, &activeMu, &active, gauge, nil)
+				if update != nil && update["kind"] == "tool_call" {
+					c.emit(evSubagentToolInput, update)
+				}
 			}
 		}
 		for {
@@ -159,4 +168,23 @@ func kimiChildFailure(ctx context.Context, sessionID string, err error) (ExecRes
 		return ExecResult{Status: stCancelled}, sessionID, nil
 	}
 	return ExecResult{Status: stFailed}, sessionID, fmt.Errorf("%w", err)
+}
+
+// kimiChildToolInput is a session/update's tool arguments as an evSubagentToolInput payload (plus the update's
+// kind), or nil for an update that carries none.
+func kimiChildToolInput(msg kimiRPCMessage) map[string]interface{} {
+	if msg.Method != "session/update" {
+		return nil
+	}
+	update := mapValue(rawObject(msg.Params)["update"])
+	kind := firstString(update, "sessionUpdate", "session_update")
+	if kind != "tool_call" && kind != "tool_call_update" {
+		return nil
+	}
+	id := firstString(update, "toolCallId", "tool_call_id")
+	input := mapValue(firstPresent(update, "rawInput", "raw_input"))
+	if id == "" || input == nil {
+		return nil
+	}
+	return map[string]interface{}{"kind": kind, "toolUseId": id, "input": input}
 }

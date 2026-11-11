@@ -230,3 +230,40 @@ func TestSubagentResumeRefusalSaysWhy(t *testing.T) {
 		t.Fatalf("a Codex run with its thread was refused: %v", err)
 	}
 }
+
+// Kimi opens a call with rawInput null and completes its arguments in a tool_call_update: the child runner tells
+// the collector through evSubagentToolInput, which never reaches the parent's stream.
+func TestSubagentFileCollectorTakesKimisLateToolInput(t *testing.T) {
+	c := newSubagentFileCollector("/work/tree")
+	c.note(evToolUse, map[string]interface{}{"id": "0:tool_1", "name": "Edit", "input": nil})
+	c.note(evSubagentToolInput, map[string]interface{}{"toolUseId": "0:tool_1", "input": map[string]interface{}{"path": "demo.go"}})
+	c.note(evToolResult, map[string]interface{}{"toolUseId": "0:tool_1", "isError": false})
+	c.note(evToolUse, map[string]interface{}{"id": "0:tool_2", "name": "Read", "input": nil})
+	c.note(evSubagentToolInput, map[string]interface{}{"toolUseId": "0:tool_2", "input": map[string]interface{}{"path": "other.go"}})
+	c.note(evToolResult, map[string]interface{}{"toolUseId": "0:tool_2", "isError": false})
+	if want := []string{"demo.go"}; !reflect.DeepEqual(c.changed, want) {
+		t.Fatalf("changed = %v, want %v", c.changed, want)
+	}
+	if out, ok := rewriteSubagentEvent("run1", "toolu_parent", evSubagentToolInput, map[string]interface{}{"toolUseId": "0:tool_1"}); ok {
+		t.Fatalf("a tool input reached the parent's stream: %v", out)
+	}
+
+	got := kimiChildToolInput(kimiRPCMessage{Method: "session/update", Params: []byte(`{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"0:tool_1","status":"in_progress","rawInput":{"path":"demo.go"}}}`)})
+	if got["toolUseId"] != "0:tool_1" || got["kind"] != "tool_call_update" || asString(mapValue(got["input"])["path"]) != "demo.go" {
+		t.Fatalf("kimiChildToolInput = %v", got)
+	}
+	if kimiChildToolInput(kimiRPCMessage{Method: "session/update", Params: []byte(`{"update":{"sessionUpdate":"tool_call","toolCallId":"x","rawInput":null}}`)}) != nil {
+		t.Fatal("a call with no arguments yet was reported")
+	}
+}
+
+// Kimi lets a call of Orbit's own server run past the longest wait `orbit mcp` holds, and `orbit mcp` is told that
+// deadline, so a foreground delegate is not cut off at Kimi's 60-second default.
+func TestKimiOrbitMCPToolTimeoutCoversTheLongestWait(t *testing.T) {
+	entry, _ := kimiMCPConfigRecord(AgentExecConfig{}, "/usr/bin/orbit")["orbit"].(map[string]interface{})
+	ms, _ := entry["toolTimeoutMs"].(int)
+	longest := time.Duration(maxSessionWaitPolls) * sessionWaitInterval
+	if time.Duration(ms)*time.Millisecond < longest || longestInlineWait(kimiOrbitMCPToolTimeout) < longest {
+		t.Fatalf("toolTimeoutMs = %d, longest wait %s", ms, longest)
+	}
+}

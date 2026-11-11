@@ -420,35 +420,34 @@ func rewriteSubagentEvent(runID, parentToolUseID, eventType string, payload map[
 	return out, true
 }
 
+// evSubagentToolInput is a child engine's tool input that came after its tool_use (Kimi's ACP opens a call with
+// rawInput null and completes its arguments in a tool_call_update): {toolUseId, input}. Only the changedFiles
+// collector reads it; rewriteSubagentEvent drops it, so it never reaches the parent's stream.
+const evSubagentToolInput = "subagent_tool_input"
+
 // subagentFileCollector gathers changedFiles from the child's edit tools: a path counts once its call's
 // result came back without an error.
 type subagentFileCollector struct {
 	cwd     string
+	names   map[string]string   // child tool id → its tool's name
 	pending map[string][]string // child tool id → the paths it writes
 	changed []string
 	seen    map[string]bool
 }
 
 func newSubagentFileCollector(cwd string) *subagentFileCollector {
-	return &subagentFileCollector{cwd: cwd, pending: map[string][]string{}, seen: map[string]bool{}}
+	return &subagentFileCollector{cwd: cwd, names: map[string]string{}, pending: map[string][]string{}, seen: map[string]bool{}}
 }
 
 // note reads one child event, before it is rewritten.
 func (c *subagentFileCollector) note(eventType string, payload map[string]interface{}) {
 	switch eventType {
 	case evToolUse:
-		tool, ok := subagentEditTools[asString(payload["name"])]
-		if !ok {
-			return
-		}
-		input, _ := payload["input"].(map[string]interface{})
-		var paths []string
-		for _, p := range tool.paths(input) {
-			paths = append(paths, c.relative(p))
-		}
-		if len(paths) > 0 {
-			c.pending[asString(payload["id"])] = paths
-		}
+		id := asString(payload["id"])
+		c.names[id] = asString(payload["name"])
+		c.expect(id, payload["input"])
+	case evSubagentToolInput:
+		c.expect(asString(payload["toolUseId"]), payload["input"])
 	case evToolResult:
 		id := asString(payload["toolUseId"])
 		paths, ok := c.pending[id]
@@ -465,6 +464,22 @@ func (c *subagentFileCollector) note(eventType string, payload map[string]interf
 				c.changed = append(c.changed, path)
 			}
 		}
+	}
+}
+
+// expect records the files a call of an edit tool writes, from its input.
+func (c *subagentFileCollector) expect(id string, rawInput interface{}) {
+	tool, ok := subagentEditTools[c.names[id]]
+	if !ok {
+		return
+	}
+	input, _ := rawInput.(map[string]interface{})
+	var paths []string
+	for _, p := range tool.paths(input) {
+		paths = append(paths, c.relative(p))
+	}
+	if len(paths) > 0 {
+		c.pending[id] = paths
 	}
 }
 
