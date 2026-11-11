@@ -125,6 +125,9 @@ struct RunnersListView: View {
                 InfrastructureKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
                                           cursorModel: Infrastructure.cursorModel(lists.runners.filter { $0.online == true }),
                                           open: opensPools ? push : nil)
+                if let agents = model.agents {
+                    InfrastructureModelTiersSection(agents: agents)
+                }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
             .modifier(ManagedRunnerAboveList(display: managed, runnerID: model.managedRunner?.status?.runnerId))

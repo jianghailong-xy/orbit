@@ -2017,6 +2017,9 @@ struct AgentFormContent: View {
     @State private var workDir = ""
     @State private var enabled = true
     @State private var modelRouting = false
+    @State private var subagentsEnabled = true
+    @State private var optimizeFor = SubagentSettings.OptimizeFor.cost
+    @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
     @State private var confirmingDelete = false
 
     /// Not editable fields: an agent holds no engine or provider. This is what the project last ran
@@ -2090,6 +2093,9 @@ struct AgentFormContent: View {
                 }
             }
 
+            SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled, optimizeFor: $optimizeFor,
+                                    maxRunning: $subagentsMaxRunning)
+
             if let env = agent.env, !env.isEmpty {
                 Section("Environment") {
                     ForEach(env.sorted(by: { $0.key < $1.key }), id: \.key) { k, v in
@@ -2142,6 +2148,9 @@ struct AgentFormContent: View {
         workDir = agent.workDir ?? ""
         enabled = agent.enabled ?? true
         modelRouting = agent.modelRouting ?? false
+        subagentsEnabled = agent.subagentsEnabled ?? true
+        optimizeFor = SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
+        subagentsMaxRunning = SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
@@ -2158,6 +2167,9 @@ struct AgentFormContent: View {
         || workDir != (agent.workDir ?? "")
         || enabled != (agent.enabled ?? true)
         || modelRouting != (agent.modelRouting ?? false)
+        || subagentsEnabled != (agent.subagentsEnabled ?? true)
+        || optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
+        || subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
     /// Save (only if changed and still valid) then close. An emptied name is invalid — the form was
@@ -2179,7 +2191,13 @@ struct AgentFormContent: View {
             workDir: workDir.isEmpty ? nil : workDir,
             enabled: enabled,
             // Only when moved: the switch is written by the user API alone, and only by a press.
-            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil
+            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil,
+            // SubAgents: each only when moved, like the switch above.
+            modelRoutingOptimizeFor: optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
+                ? optimizeFor.rawValue : nil,
+            subagentsEnabled: subagentsEnabled != (agent.subagentsEnabled ?? true) ? subagentsEnabled : nil,
+            subagentsMaxRunning: subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+                ? subagentsMaxRunning : nil
         )
         Task { await agents.save(agent.id, req) }
     }
