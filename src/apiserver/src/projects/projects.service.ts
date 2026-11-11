@@ -787,6 +787,8 @@ const COORDINATOR_STATUS_SESSION_SELECT = {
   // Read by the approval count below: the live set a card's `background_job_id` has to be in to
   // still be a question on a conversation that is not generating (migration 0291).
   runningBgShells: true,
+  // And the SubAgents still running, whose cards are questions on it too (docs/subagent-design.md §5.3).
+  runningSubagents: true,
 } satisfies Prisma.SessionSelect;
 
 type CoordinatorStatusSessionRow = Prisma.SessionGetPayload<{

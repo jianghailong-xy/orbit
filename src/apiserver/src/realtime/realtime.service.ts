@@ -1419,7 +1419,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // and this is the number the client overwrites its row with.
         const reader = await this.prisma.session.findUnique({
           where: { id: sessionId },
-          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true },
+          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
         });
         const approvals = reader ? await countLiveApprovals(this.prisma, reader) : 0;
         const decisions = await this.ownerDecisionsOn(sessionId, ownerId);
@@ -1477,6 +1477,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // Read by the approval count below: the set a card's `background_job_id` has to be in to
         // be a question on a conversation that is not generating (migration 0291).
         runningBgShells: true,
+        runningSubagents: true,
         engineStartedAt: true,
         enginePhase: true,
         runClaimedAt: true,

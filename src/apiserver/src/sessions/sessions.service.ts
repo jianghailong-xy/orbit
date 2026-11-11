@@ -235,7 +235,13 @@ import {
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
-import { countLiveApprovals, readByLiveBackgroundJob, readByRunningSubagent } from './abandoned-approvals';
+import {
+  countLiveApprovals,
+  liveSubagentCards,
+  readByLiveBackgroundJob,
+  readByRunningSubagent,
+  runningSubagentCards,
+} from './abandoned-approvals';
 import { holdsWorkspaceWriteValues, withoutEnvValues } from './workspace-write-card-values';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
@@ -3504,6 +3510,30 @@ export class SessionsService {
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
     }
+    // And the cards a running SubAgent asked (docs/subagent-design.md §5.3): its child engine reads them
+    // while the parent sits idle, so a background SubAgent waiting on a person lights its row the same way.
+    const withSubagents = await this.prisma.session.findMany({
+      where: {
+        ...open,
+        runningSubagents: { isEmpty: false },
+        approvals: { some: { status: 'PENDING', subagentRunId: { not: null } } },
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        approvals: { where: { status: 'PENDING', subagentRunId: { not: null } }, select: { id: true, toolName: true, subagentRunId: true } },
+      },
+    });
+    const subagentCards = await visibleQuestions(this.prisma, await runningSubagentCards(
+      this.prisma,
+      withSubagents.flatMap((w) => (w.approvals ?? []).map((card) => ({ ...card, sessionId: w.id }))),
+    ));
+    for (const session of withSubagents) {
+      if (!session.workspaceId || needsYou.has(session.id)) continue;
+      if (!subagentCards.some((card) => card.sessionId === session.id)) continue;
+      needsYou.add(session.id);
+      row(session.workspaceId).needsYou += 1;
+    }
     // The activity tallies, after `needsYou` because a session counted there is counted only there
     // (see the doc above).
     for (const session of running) {
@@ -4194,16 +4224,34 @@ export class SessionsService {
       rows.filter((r) => r.runningBgShells.length > 0).map((r) => [r.id, r.runningBgShells]),
     );
     const candidates = [...new Set([...generating, ...shells.keys()])];
-    const cards = candidates.length === 0
+    const asked = candidates.length === 0
       ? []
       : await this.prisma.approval.findMany({
           where: { sessionId: { in: candidates }, status: 'PENDING' },
           select: { id: true, toolName: true, sessionId: true, backgroundJobId: true },
         });
+    // The third class: the cards of a SubAgent still running, which its child engine reads whatever the
+    // parent's turn is doing (docs/subagent-design.md §5.3). Its candidates are the sessions not generating
+    // with a SubAgent in flight (`runningSubagentCount`), a handful at most.
+    const withSubagents = rows.filter((r) => !generating.has(r.id) && r.runningSubagentCount > 0).map((r) => r.id);
+    const subagentCards = withSubagents.length === 0
+      ? []
+      : await liveSubagentCards(this.prisma, { sessionId: { in: withSubagents } });
+    const readBySubagent = new Set(subagentCards.map((card) => card.id));
+    const cards = [
+      ...asked,
+      ...subagentCards
+        .filter((card) => !asked.some((a) => a.id === card.id))
+        .map((card) => ({ ...card, backgroundJobId: null })),
+    ];
     const heldQuestions = await questionsWithCoordinator(this.prisma, sessions.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
     for (const card of await visibleQuestions(this.prisma, cards)) {
-      if (!generating.has(card.sessionId) && !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? [])) {
+      if (
+        !generating.has(card.sessionId) &&
+        !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? []) &&
+        !readBySubagent.has(card.id)
+      ) {
         continue;
       }
       byId.set(card.sessionId, (byId.get(card.sessionId) ?? 0) + 1);
@@ -10801,6 +10849,7 @@ export class SessionsService {
     cancelRequestedAt: true,
     engineTurnActive: true,
     runningBgShells: true,
+    runningSubagents: true,
     mergeStatus: true,
     commitStatus: true,
     mergeRecovery: true,

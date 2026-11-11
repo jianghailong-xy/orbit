@@ -5,11 +5,16 @@
  *   1. Modes. A SubAgent whose definition names a mode wider than its parent's is refused (403
  *      PERMISSION_MODE_WIDER_THAN_SESSION) and no run is written; one that names none runs in the parent's own
  *      mode; one that names a narrower mode runs in it; a read-only definition runs in plan.
+ *   1b. No exemption: an Auto parent's SubAgent asking for bypassPermissions is refused too (isWiderThanParent),
+ *      while a Bypass parent's may run anything.
  *   2. Approvals. A SubAgent's card is filed under the parent's session, names its run, and carries the child's
  *      call id prefixed with the run id. The parent's own calls returning — its own Bash and the `delegate` call
  *      itself — collect the parent's card and leave the SubAgent's; so does the parent's turn ending, and the
  *      listing still offers it on the parked session. A run id of another session is 404. The run ending collects
  *      the card, with the sentence naming the SubAgent.
+ *   3. Needs you. With the parent idle (AWAITING_INPUT, no turn in flight) and its background SubAgent waiting on
+ *      a card, the session list's pendingApprovals is 1, countLiveApprovals is 1, the workspace's needsYou is 1 and
+ *      the session is in PushService.needsYouSessions; answering the card takes every one of them back to 0.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/subagent-approvals.pg.spec.ts
  *
@@ -40,7 +45,9 @@ import {
   APPROVAL_ABANDONED_CALL_MESSAGE,
   APPROVAL_ABANDONED_STATUS,
   APPROVAL_ABANDONED_SUBAGENT_MESSAGE,
+  countLiveApprovals,
 } from './abandoned-approvals';
+import { PushService } from '../push/push.service';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -150,6 +157,28 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
     assert.equal(fromEdits.exec.permissionMode, 'acceptEdits', "and under an Accept Edits parent, in Accept Edits");
   });
 
+  await t.test('(1b) an Auto parent\'s SubAgent may not run bypassPermissions; a Bypass parent\'s may', async () => {
+    const { sessionId } = await parent('auto');
+    await assert.rejects(
+      subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_auto_wide', permissionMode: 'bypassPermissions' })),
+      (err: { getStatus(): number; getResponse(): { code?: string; message?: string } }) => {
+        assert.equal(err.getStatus(), 403);
+        assert.equal(err.getResponse().code, PERMISSION_MODE_WIDER_THAN_SESSION);
+        assert.match(err.getResponse().message ?? '', /runs in "auto".*"bypassPermissions"/);
+        assert.doesNotMatch(err.getResponse().message ?? '', /bypassPermissions\)/, 'and Bypass is not among the modes it may name');
+        return true;
+      },
+      "an Auto parent's SubAgent asking for bypassPermissions is refused",
+    );
+    assert.equal(await db.subagentRun.count({ where: { sessionId } }), 0, 'and no run was written');
+    const narrower = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_auto_edits', permissionMode: 'acceptEdits' }));
+    assert.equal(narrower.exec.permissionMode, 'acceptEdits', 'a narrower mode is still allowed');
+
+    const bypass = await parent('bypassPermissions');
+    const anything = await subagents.createSubagentRun(runner, bypass.sessionId, create({ toolUseId: 'toolu_bypass', permissionMode: 'bypassPermissions' }));
+    assert.equal(anything.status, 'RUNNING', "a Bypass parent's SubAgent may run anything");
+  });
+
   await t.test('(2) a SubAgent\'s card survives its parent\'s calls and turn, and goes with its run', async () => {
     const f = await parent('default');
     const other = await parent('default');
@@ -242,5 +271,40 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
     assert.equal(ended.message, APPROVAL_ABANDONED_SUBAGENT_MESSAGE, 'saying it was the SubAgent that ended');
     assert.equal(ended.decidedAt, null, 'nobody decided it');
     assert.deepEqual(await sessions.listApprovals(ownerId, f.sessionId, 'PENDING'), [], 'and nothing is offered any more');
+  });
+
+  await t.test('(3) an idle parent\'s SubAgent card is a question in every needs-you count, until it is answered', async () => {
+    const push = new PushService(prisma, { get: () => undefined } as never);
+    const f = await parent('default');
+    // The parent's turn ended with a background SubAgent running: idle, no turn in flight, the delegate call in flight.
+    const delegateId = `toolu_${randomUUID().slice(0, 8)}`;
+    const { runId } = await subagents.createSubagentRun(runner, f.sessionId, create({ toolUseId: delegateId, background: true }));
+    await db.conversationTurn.update({ where: { id: f.turnId }, data: { status: 'ANSWERED' } });
+    await db.session.update({
+      where: { id: f.sessionId },
+      data: { status: RunStatus.AWAITING_INPUT, engineTurnActive: false, runningSubagents: [delegateId] },
+    });
+    const card = await api.createApproval({ id: runnerId, ownerId } as never, f.sessionId, {
+      toolName: 'Bash', input: { command: 'go test ./quota/...' }, toolUseId: `${runId}:toolu_bash`, subagentRunId: runId,
+    });
+
+    async function signals() {
+      const row = (await sessions.list(ownerId, {})).find((s: { id: string }) => s.id === f.sessionId) as { pendingApprovals: number } | undefined;
+      const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
+      const workspace = (await sessions.workspaceSessionCounts(ownerId)).find((w: { workspaceId: string }) => w.workspaceId === session.workspaceId) as { needsYou: number } | undefined;
+      return {
+        pendingApprovals: row?.pendingApprovals,
+        countLiveApprovals: await countLiveApprovals(db as never, session),
+        workspaceNeedsYou: workspace?.needsYou ?? 0,
+        inNeedsYouSessions: (await push.needsYouSessions(ownerId)).includes(f.sessionId),
+      };
+    }
+    assert.deepEqual(await signals(), { pendingApprovals: 1, countLiveApprovals: 1, workspaceNeedsYou: 1, inNeedsYouSessions: true },
+      "the idle parent's row says a person is needed: its SubAgent waits on the card");
+
+    await sessions.decideApproval(ownerId, f.sessionId, card.id, { behavior: 'allow' });
+    assert.equal((await db.approval.findUniqueOrThrow({ where: { id: card.id } })).status, 'ALLOWED');
+    assert.deepEqual(await signals(), { pendingApprovals: 0, countLiveApprovals: 0, workspaceNeedsYou: 0, inNeedsYouSessions: false },
+      'answered, it is no longer counted anywhere');
   });
 });

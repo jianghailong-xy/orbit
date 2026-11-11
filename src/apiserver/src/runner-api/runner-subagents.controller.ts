@@ -23,8 +23,8 @@ import { Prisma, RunStatus, type Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
 import {
   ALWAYS_ALLOWED_TOOLS,
-  isWiderThanStarter,
-  modesItMayStart,
+  isWiderThanParent,
+  modesASubagentMayRunIn,
   resolvePermissionMode,
   widerModeRefusal,
 } from '../common/permission-mode';
@@ -150,15 +150,16 @@ export class RunnerSubagentsController {
       );
       // A read-only definition runs in plan mode; anything else in the mode its definition names, or as the
       // parent does when it names none — never wider than the parent (§5.3), by the rule a session starting
-      // another is held to (SessionsService.assertChildModeOrNarrow).
+      // another is held to (SessionsService.assertChildModeOrNarrow), but with no exemption: an Auto parent's
+      // SubAgent may not run Bypass either (isWiderThanParent).
       const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
-      if (!dto.readonly && dto.permissionMode && isWiderThanStarter({ mode: parentMode, engine: provider }, dto.permissionMode, provider)) {
+      if (!dto.readonly && dto.permissionMode && isWiderThanParent({ mode: parentMode, engine: provider }, dto.permissionMode, provider)) {
         throw widerModeRefusal(
           parentMode,
           dto.permissionMode,
           provider,
           `Remove permissionMode from the SubAgent's definition to run it in this session's mode, or name one it may ` +
-            `run in (${modesItMayStart({ mode: parentMode, engine: provider }, provider).join(', ')}).`,
+            `run in (${modesASubagentMayRunIn({ mode: parentMode, engine: provider }, provider).join(', ')}).`,
         );
       }
       const childMode = (dto.readonly ? PermissionMode.PLAN : dto.permissionMode ?? parentMode) as PermissionMode;
