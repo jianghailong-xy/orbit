@@ -21,6 +21,53 @@ export const WIKI_REPO_OP_CAPABILITY = 'wiki-repo-op/v1';
 export const WIKI_REPO_OP_READ_CAPABILITY = 'wiki-repo-op-read/v1';
 
 /**
+ * The capability a runner declares when it reads a working directory that is not a git checkout as a folder
+ * (docs/wiki-repo-tiers-design.md §4.3, contract `repoOps.folderCapability`). Its Go twin is `wikiRepoOpFolderCapabilityV1`
+ * in `src/runner-go/wiki_repo_folder.go`. The server writes `allowFolder: true` into an operation's input only for a runner
+ * that declares it; one that does not answers a folder not_git as before, and the run is on tier sessions.
+ */
+export const WIKI_REPO_OP_FOLDER_CAPABILITY = 'wiki-repo-op-folder/v1';
+
+/** What the health line says of a folder that is not git when the runner cannot read folders yet (design §4.3). */
+export const WIKI_REPO_UPGRADE_TO_READ_FOLDERS = 'Upgrade the runner to read folders';
+
+/**
+ * The folder tier's numbers and rules (contract `repoOps.folder`, docs/wiki-repo-tiers-design.md §2.3 and §4):
+ *
+ *   exclude         read before any .gitignore, and no .gitignore takes one back — secrets and build output;
+ *   maxFiles        the most files a folder may have after its exclusions: more is no snapshot, `too_many_files`;
+ *   minPathOverlap  a folder's snapshot shares at least this share of the last snapshot's paths, or it is another
+ *                   directory's: not kept, and the run is on tier `wrong_repository` for `path_overlap`.
+ */
+export const WIKI_REPO_FOLDER = {
+  exclude: [
+    '.git/', '.env', '.env.*', '*.pem', '*.key', '*.p12', 'id_rsa*', 'id_ed25519*', '.ssh/', '.aws/', '.npmrc', '.netrc',
+    'node_modules/', '.venv/', 'venv/', '__pycache__/', 'target/', 'dist/', 'build/', '.next/', '.gradle/', 'DerivedData/',
+  ],
+  maxFiles: 100_000,
+  minPathOverlap: 0.5,
+} as const;
+
+/** What a snapshot was read from (`wiki_repo_snapshot.source`, migration 0521): a git commit, or a folder's tree hash. */
+export const WIKI_REPO_SNAPSHOT_SOURCES = ['git', 'folder'] as const;
+export type WikiRepoSnapshotSource = (typeof WIKI_REPO_SNAPSHOT_SOURCES)[number];
+
+/**
+ * How much of the last snapshot's paths a new one still has (design §2.3): |new ∩ last| / |last|. 1 when the last
+ * snapshot had no paths, which nothing can be compared with.
+ */
+export function wikiRepoPathOverlap(last: Iterable<string>, next: Iterable<string>): number {
+  const now = new Set(next);
+  let total = 0;
+  let shared = 0;
+  for (const path of new Set(last)) {
+    total += 1;
+    if (now.has(path)) shared += 1;
+  }
+  return total === 0 ? 1 : shared / total;
+}
+
+/**
  * What a repository operation asks for (contract `repoOps.kinds`). Four questions, and no fifth: a pipeline
  * that needs more than these changes this list first.
  */
@@ -149,9 +196,9 @@ export type WikiRepoLook = (typeof WIKI_REPO_LOOKS)[number];
  * How much of the repository a maintenance run read (contract `repoOps.tiers`, docs/wiki-repo-tiers-design.md §2):
  *
  *   git               a git checkout of the space's repository, read at origin/main as always;
- *   folder            a directory that is not a git checkout, scanned as it stands (P4: not read yet);
+ *   folder            a directory that is not a git checkout, scanned as it stands, named by its tree hash;
  *   sessions          nothing could be read: the run learns from the sessions alone, and the code checks wait;
- *   wrong_repository  what was read is another repository's (P4: not read yet).
+ *   wrong_repository  what was read is another repository's: its origin, its first commit, or — a folder — its paths.
  *
  * The tier is what the run found, not a setting: the run row keeps it (`wiki_maintenance_run.repo_tier`).
  */

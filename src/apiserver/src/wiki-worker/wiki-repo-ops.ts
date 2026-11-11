@@ -3,17 +3,23 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   WIKI_REPO_OPS,
+  WIKI_REPO_FOLDER,
   WIKI_REPO_OP_CAPABILITY,
+  WIKI_REPO_OP_FOLDER_CAPABILITY,
   WIKI_REPO_OP_KINDS,
   WIKI_REPO_OP_READ_CAPABILITY,
   WIKI_REPO_OP_RESULT_STATES,
   WIKI_REPO_TIER_REASONS,
   wikiMaintenanceSettings,
+  wikiRepoFailureReason,
+  wikiRepoPathOverlap,
   type WikiRepoFileRead,
   type WikiRepoFileState,
   type WikiRepoLook,
   type WikiRepoOpKind,
   type WikiRepoOpState,
+  type WikiRepoSnapshotSource,
+  type WikiRepoTierReason,
 } from '@orbit/shared';
 // A value import, not a type one: `WikiRepoOps` is a provider, and Nest reads its constructor's
 // parameter metadata out of the emitted JavaScript — a type-only import leaves that slot `Object` and the
@@ -151,7 +157,10 @@ export interface WikiRepoOpRead {
 
 /** The space's snapshot, header and payload: the index the pipelines query, reassembled. */
 export interface WikiRepoSnapshotRead {
+  /** The commit — or, on a folder, the tree hash — the index was read at. */
   sha: string;
+  /** What the index was read from (migration 0521): git, or a working directory that is not a git checkout. */
+  source: WikiRepoSnapshotSource;
   bytes: number;
   digest: string;
   fragments: number;
@@ -172,6 +181,8 @@ export interface WikiRepoReadiness {
     capability: boolean;
     /** It declared `wiki-repo-op-read/v1`: with it, a read answers with the whole file. */
     wholeFile: boolean;
+    /** It declared `wiki-repo-op-folder/v1`: a working directory that is not git is read as a folder (design §4.3). */
+    folder: boolean;
     online: boolean;
   } | null;
   /** Operations of this space that have not settled: what a reader is waiting on. */
@@ -260,12 +271,21 @@ export class WikiRepoOps {
         `the space's workspace ${workspaceId} has no working directory to read the repository in`,
       );
     }
+    // A runner that reads folders (design §4.3) is allowed to, for every kind: a working directory that is not git is
+    // then read as a folder — its snapshot, a read at its tree hash, its anchors — and a git checkout as always.
+    const folder = workspace.runnerId
+      ? await this.prisma.runner.findFirst({
+        where: { id: workspace.runnerId, ownerId: job.ownerId, capabilities: { has: WIKI_REPO_OP_FOLDER_CAPABILITY } },
+        select: { id: true },
+      })
+      : null;
+    const opInput = { ...(input.input ?? {}), ...(folder ? { allowFolder: true } : {}) };
     await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$executeRaw`
         INSERT INTO "wiki_repo_op" ("id", "job_id", "owner_id", "space_id", "workspace_id", "runner_id", "kind", "input", "state")
         VALUES (${id}::uuid, ${job.id}::uuid, ${job.ownerId}::uuid, ${job.spaceId}::uuid,
                 ${workspace.id}::uuid, ${workspace.runnerId}::uuid, ${input.kind},
-                ${JSON.stringify(input.input ?? {})}::jsonb, 'queued')
+                ${JSON.stringify(opInput)}::jsonb, 'queued')
         ON CONFLICT ("id") DO NOTHING`;
       // The wake travels with the row (runner-wake.ts): a machine that beats before this commits would
       // find nothing and wait out the tick it was woken to skip.
@@ -444,8 +464,19 @@ export class WikiRepoOps {
         if (settled.count === 0) throw new WikiRepoOpRefused('STALE_CLAIM');
 
         if (state === 'succeeded') {
-          const answer = await settleSnapshot(tx, row, result as Record<string, unknown> | null)
-            ?? await settleRead(tx, row, result as Record<string, unknown> | null);
+          const snapshot = await settleSnapshot(tx, row, result as Record<string, unknown> | null);
+          if (snapshot instanceof FolderSnapshotRefused) {
+            // A folder that is another directory's (design §2.3): the snapshot is not kept, and the operation is failed
+            // with the reason, so the run that asked reads it as the premise it is.
+            await tx.wikiRepoOp.update({
+              where: { id: row.id },
+              data: { state: 'failed', error: snapshot.error, result: { reason: snapshot.reason, overlap: snapshot.overlap } },
+            });
+            await tx.wikiRepoOpFragment.deleteMany({ where: { opId: row.id } });
+            await notifyRepoOpSettled(tx, row.id);
+            return { accepted: true, state: 'failed' as WikiRepoOpState };
+          }
+          const answer = snapshot ?? await settleRead(tx, row, result as Record<string, unknown> | null);
           // A snapshot answers with its shape, never the payload: the payload is the cache's, and echoing a
           // megabyte of it into the row would double the bytes for a reader that has to be told where it is
           // anyway. A read answers with what became of each item, its text being the cache's too.
@@ -727,7 +758,7 @@ async function settleSnapshot(
   tx: Prisma.TransactionClient,
   row: { id: string; spaceId: string; ownerId: string; kind: string },
   result: Record<string, unknown> | null,
-): Promise<Record<string, unknown> | null> {
+): Promise<Record<string, unknown> | FolderSnapshotRefused | null> {
   if (row.kind !== 'snapshot') return null;
   const sha = String(result?.sha ?? '').toLowerCase();
   if (!/^[0-9a-f]{40}$/.test(sha)) {
@@ -789,6 +820,20 @@ async function settleSnapshot(
     throw new WikiRepoOpRefused('INVALID_RESULT', 'the snapshot is not as many bytes as the result says');
   }
 
+  // What the index was read from: a folder's says so (`source`), and a git snapshot — before the folder tier or since —
+  // says nothing, which reads git.
+  let index: SnapshotIndexShape | null = null;
+  try {
+    index = JSON.parse(payload) as SnapshotIndexShape;
+  } catch {
+    index = null;
+  }
+  const source: WikiRepoSnapshotSource = index?.source === 'folder' ? 'folder' : 'git';
+  if (source === 'folder') {
+    const refused = await folderOverlapRefusal(tx, row, index?.files ?? []);
+    if (refused !== null) return refused;
+  }
+
   // One snapshot per space, replaced whole: the old header goes (its fragments with it, by the foreign
   // key) before the new one is written, in this transaction.
   await tx.wikiRepoSnapshot.deleteMany({ where: { spaceId: row.spaceId } });
@@ -797,6 +842,7 @@ async function settleSnapshot(
       spaceId: row.spaceId,
       ownerId: row.ownerId,
       sha,
+      source,
       digest,
       sizeBytes: BigInt(bytes),
       fragmentCount: fragments,
@@ -814,6 +860,56 @@ async function settleSnapshot(
   // writes its own rows back, which the next snapshot drops.
   await tx.wikiRepoFile.deleteMany({ where: { spaceId: row.spaceId, sha: { not: sha } } });
   return { sha, bytes, digest, fragments };
+}
+
+/**
+ * Whether a folder's snapshot is another directory's (docs/wiki-repo-tiers-design.md §2.3): the share of the last
+ * snapshot's paths it still has, `|new ∩ last| / |last|`, below `repoOps.folder.minPathOverlap`. Compared only with a
+ * snapshot the space holds — a git one too, by its paths alone; a space that never held one accepts its first, since a
+ * repository address proves nothing of a folder. Null when the snapshot is kept; otherwise why it is not, in words that
+ * name the folder and the space's repository.
+ */
+async function folderOverlapRefusal(
+  tx: Prisma.TransactionClient,
+  row: { id: string; spaceId: string; ownerId: string },
+  files: ReadonlyArray<{ path?: unknown }>,
+): Promise<FolderSnapshotRefused | null> {
+  const last = await tx.wikiRepoSnapshotFragment.findMany({
+    where: { spaceId: row.spaceId, snapshot: { ownerId: row.ownerId } },
+    orderBy: { ordinal: 'asc' },
+    select: { content: true },
+  });
+  if (last.length === 0) return null;
+  let lastPaths: string[];
+  try {
+    const held = JSON.parse(last.map((fragment) => fragment.content).join('')) as { files?: Array<{ path?: unknown }> };
+    lastPaths = (held.files ?? []).map((file) => String(file.path ?? '')).filter((path) => path !== '');
+  } catch {
+    return null;
+  }
+  const overlap = wikiRepoPathOverlap(lastPaths, files.map((file) => String(file.path ?? '')));
+  if (overlap >= WIKI_REPO_FOLDER.minPathOverlap) return null;
+  const [where] = await tx.$queryRaw<Array<{ workDir: string | null; repoUrlNorm: string | null }>>`
+    SELECT w."work_dir" AS "workDir", s."repo_url_norm" AS "repoUrlNorm"
+      FROM "wiki_repo_op" o
+      JOIN "workspace" w ON w."id" = o."workspace_id"
+      JOIN "wiki_space" s ON s."id" = o."space_id"
+     WHERE o."id" = ${row.id}::uuid`;
+  const folder = where?.workDir ?? 'the folder';
+  const of = where?.repoUrlNorm ? ` of ${where.repoUrlNorm}` : '';
+  return new FolderSnapshotRefused('path_overlap', overlap, `${folder} shares ${Math.floor(overlap * 100)}% of its files with the last `
+    + `snapshot${of}: it reads as another directory, so this snapshot was not kept`);
+}
+
+/** What a snapshot's index is read for here: what it was read from, and its paths. */
+interface SnapshotIndexShape {
+  source?: unknown;
+  files?: Array<{ path?: unknown }>;
+}
+
+/** A folder's snapshot that is not kept, and why (`folderOverlapRefusal`): the operation is failed with the reason. */
+class FolderSnapshotRefused {
+  constructor(readonly reason: WikiRepoTierReason, readonly overlap: number, readonly error: string) {}
 }
 
 /**
@@ -1011,7 +1107,7 @@ export async function readWikiRepoSnapshot(
 ): Promise<WikiRepoSnapshotRead | null> {
   const header = await prisma.wikiRepoSnapshot.findFirst({
     where: { spaceId: input.spaceId, ownerId: input.ownerId },
-    select: { sha: true, digest: true, sizeBytes: true, fragmentCount: true },
+    select: { sha: true, source: true, digest: true, sizeBytes: true, fragmentCount: true },
   });
   if (!header) return null;
   const fragments = await prisma.wikiRepoSnapshotFragment.findMany({
@@ -1021,6 +1117,7 @@ export async function readWikiRepoSnapshot(
   });
   return {
     sha: header.sha,
+    source: header.source === 'folder' ? 'folder' : 'git',
     bytes: Number(header.sizeBytes),
     digest: header.digest,
     fragments: header.fragmentCount,
@@ -1146,8 +1243,8 @@ export async function readWikiRepoFiles(
       signal: request.signal,
     });
     if (settled.state !== 'succeeded') {
-      throw new WikiRepoOpRefused(
-        'INVALID_RESULT',
+      throw new WikiRepoReadFailed(
+        wikiRepoFailureReason(settled.result?.reason, settled.error),
         `a read of ${one.length === 1 ? one[0] : `${one.length} files`} ${settled.state}: ${settled.error ?? 'no reason given'}`,
       );
     }
@@ -1162,6 +1259,17 @@ export async function readWikiRepoFiles(
   });
   for (const path of missing) out.set(path, read.get(path) ?? null);
   return out;
+}
+
+/**
+ * A read the runner failed, with the reason it named (contract `repoOps.reasons`): `folder_moved` when the folder is at
+ * another tree hash than the one the read was asked at, which a run answers by reading a new snapshot (design §4.2).
+ */
+export class WikiRepoReadFailed extends WikiRepoOpRefused {
+  constructor(readonly reason: WikiRepoTierReason, message: string) {
+    super('INVALID_RESULT', message);
+    this.name = 'WikiRepoReadFailed';
+  }
 }
 
 /** Waiters hear about a settled operation over the channel; a poll answers when one is lost. */
@@ -1461,7 +1569,8 @@ export async function readWikiRepoReadiness(
   const reported = !!runnerRow.capabilitiesReportedAt;
   const capability = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_CAPABILITY);
   const wholeFile = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_READ_CAPABILITY);
-  const runner = { id: runnerRow.id, name: runnerRow.name, version: runnerRow.version, capability, wholeFile, online };
+  const folder = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_FOLDER_CAPABILITY);
+  const runner = { id: runnerRow.id, name: runnerRow.name, version: runnerRow.version, capability, wholeFile, folder, online };
   // A machine that cannot be handed repository work at all, and one that can but reads only the old
   // bounded window, are both the runner to upgrade: the reason the status line gives is the same one, and
   // the second still runs the steps (cut short) while the first would make them wait.

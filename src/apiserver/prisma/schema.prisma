@@ -8770,6 +8770,9 @@ model WikiRepoSnapshot {
   digest        String @db.Char(64)
   sizeBytes     BigInt @map("size_bytes")
   fragmentCount Int    @map("fragment_count")
+  /// What the index was read from (migration 0521): `git`, or `folder`, a working directory that is not a git checkout,
+  /// whose sha is its tree hash (docs/wiki-repo-tiers-design.md §4.2).
+  source        String   @default("git")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 

@@ -594,7 +594,8 @@ export interface WikiMaintainBuilt {
 
 /** The repository's anchors, as the space's snapshot answers them: a path the tree has, a commit origin/main reaches. */
 export interface WikiMaintainRepoGate {
-  anchors(raw: unknown): Array<Record<string, string>>;
+  /** The anchors that hold up in the tree the run reads; on a folder, a commit it names comes back deferred. */
+  anchors(raw: unknown): Array<Record<string, string | boolean>>;
 }
 
 const DATE_IN_TEXT = /started (\d{4}-\d{2}-\d{2})/u;

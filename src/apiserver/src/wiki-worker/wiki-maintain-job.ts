@@ -68,16 +68,18 @@ import {
   type WikiNewDesignDoc,
   type WikiUnplacedEntry,
 } from './wiki-maintain-plan';
-import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
+import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportDeferredAnchors, wikiImportIsObject } from './wiki-import-extract';
 import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
 import {
   WIKI_REPO_PROBE,
+  WIKI_REPO_UPGRADE_TO_READ_FOLDERS,
   WIKI_REPO_WRONG_REPOSITORY_REASONS,
   wikiRepoFailureReason,
   wikiRepoReasonIsPremise,
   type WikiAnchorCheckInput,
   type WikiAnchorDueEntry,
   type WikiRepoFileRead,
+  type WikiRepoSnapshotSource,
   type WikiRepoTier,
   type WikiRepoTierReason,
 } from '@orbit/shared';
@@ -88,6 +90,7 @@ import {
   waitForWikiRepoOp,
   wikiRepoStepsCanRun,
   WikiRepoOpRefused,
+  WikiRepoReadFailed,
   WikiRepoOpWaitCancelled,
   WikiRepoOpWaitTimedOut,
   type WikiRepoOps,
@@ -330,12 +333,15 @@ interface WikiMaintainPageRead {
 
 /** The repository at one commit, as this run reads it. */
 interface WikiMaintainSnapshot {
+  /** The commit — or, read from a folder, its tree hash (docs/wiki-repo-tiers-design.md §4.2). */
   sha: string;
+  /** What it was read from: on a folder there are no commits, and no diffs between them. */
+  source: WikiRepoSnapshotSource;
   index: WikiPlanSnapshotIndex & { readme?: string; commits?: string[] | null };
   files: string[];
   sizes: Map<string, number>;
   about: string;
-  anchors: WikiImportRepo;
+  anchors: WikiMaintainRepoGate;
 }
 
 /** A written section the documents step compares: where it is written, its plan definition, and the paths its sources name. */
@@ -448,6 +454,12 @@ class WikiMaintainRun {
   private position = '';
   /** Whether the space's runner reads whole files; a bounded one is asked with the old limits. */
   private wholeFile = false;
+  /** Whether the space's runner reads a working directory that is not git as a folder (`wiki-repo-op-folder/v1`). */
+  private readsFolders = false;
+  /** A folder's snapshot was taken again this run, after a read found it moved: it is taken again once at most. */
+  private snapshotRetaken = false;
+  /** The tree hash a folder's reads were asked at before its snapshot was taken again: read at the new one instead. */
+  private folderSha = '';
   /** When the run first started: what its seconds run from, and what an anchor check of this run's was made after. */
   private runStarted = new Date();
   /** What the attempts before this one finished (contract `jobs.carry`): read as the attempt starts, folded into the report. */
@@ -818,10 +830,11 @@ class WikiMaintainRun {
     }
     // Whether this machine reads whole files (repoOps.cache, 0406): a bounded one is asked with the old limits.
     this.wholeFile = readiness.runner?.wholeFile === true;
-    const held = await prisma.wikiRepoSnapshot.findFirst({ where: { spaceId: job.spaceId, ownerId: job.ownerId }, select: { sha: true } });
+    // Whether it reads a working directory that is not git as a folder (design §4.3): the enqueue allows it then.
+    this.readsFolders = readiness.runner?.folder === true;
     let settled: WikiRepoOpWait;
     try {
-      settled = await this.operation('snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of the default branch');
+      settled = await this.askSnapshot();
     } catch (error) {
       // An operation that did not settle within the wait is transient (op_timeout): tried again like a failed fetch.
       if (!(error instanceof WikiJobInfraError) || !error.message.startsWith('REPO_OP_WAIT:')) throw error;
@@ -831,24 +844,68 @@ class WikiMaintainRun {
       await this.probeFailed(settled);
       return;
     }
+    await this.takeSnapshot(settled);
+    const snapshot = this.snapshot!;
+    await this.readTier(snapshot.source === 'folder' ? 'folder' : 'git', null);
+    this.jobContext.log(snapshot.source === 'folder'
+      ? `the folder at tree ${snapshot.sha.slice(0, 12)} (${snapshot.files.length} files): it is not a git checkout, so commit anchors are not checked`
+      : `the repository at ${snapshot.sha.slice(0, 12)} (${snapshot.files.length} files)`);
+  }
+
+  /** The snapshot operation: the space's held sha skipped, and a folder allowed when the runner can read one. */
+  private async askSnapshot(skip = true): Promise<WikiRepoOpWait> {
+    const { job } = this.jobContext;
+    const held = skip
+      ? await this.deps.prisma.wikiRepoSnapshot.findFirst({ where: { spaceId: job.spaceId, ownerId: job.ownerId }, select: { sha: true } })
+      : null;
+    // A runner that reads folders is allowed to by the enqueue (`allowFolder`), for this and every other operation.
+    return this.operation('snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of the default branch');
+  }
+
+  /** The space's snapshot row, read back after a snapshot operation named its sha: the index the run's steps query. */
+  private async takeSnapshot(settled: WikiRepoOpWait): Promise<void> {
+    const { prisma } = this.deps;
+    const { job } = this.jobContext;
     const sha = String(settled.result?.sha ?? '');
     const snapshot = await readWikiRepoSnapshot(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });
     if (!snapshot || snapshot.sha !== sha) {
       throw new WikiJobInfraError(`REPO_OP_FAILED: the space holds no snapshot of ${sha.slice(0, 12)}, the commit the snapshot named`);
     }
-    const raw = JSON.parse(snapshot.index) as WikiPlanSnapshotIndex & { readme?: string; commits?: string[] | null };
+    const raw = JSON.parse(snapshot.index) as WikiPlanSnapshotIndex & { readme?: string; commits?: string[] | null; source?: string };
     const files = (raw.files ?? []).map((file) => file.path);
     const sizes = new Map((raw.files ?? []).map((file) => [file.path, Number(file.size) || 0]));
+    const source: WikiRepoSnapshotSource = snapshot.source === 'folder' || raw.source === 'folder' ? 'folder' : 'git';
+    const tree = new WikiImportRepo({ files, commits: raw.commits ?? [] }, '', repositoryName(this.context.repo.urlNorm));
     this.snapshot = {
       sha: snapshot.sha,
+      source,
       index: raw,
       files,
       sizes,
       about: typeof raw.readme === 'string' ? cutRunes(raw.readme, WIKI_MAINTAIN_JOB.aboutMaxChars) : '',
-      anchors: new WikiImportRepo({ files, commits: raw.commits ?? [] }, '', repositoryName(this.context.repo.urlNorm)),
+      // A folder has the paths and no commits (design §5.1): a path is held to its files as on git, and a commit the
+      // extraction names is kept, deferred to the first run that reads git, rather than read as another repository's.
+      anchors: source === 'folder'
+        ? { anchors: (raw: unknown) => [...tree.anchors(raw), ...wikiImportDeferredAnchors({ commits: wikiImportIsObject(raw) ? raw.commits : [] })] }
+        : tree,
     };
-    await this.readTier('git', null);
-    this.jobContext.log(`the repository at ${snapshot.sha.slice(0, 12)} (${files.length} files)`);
+  }
+
+  /**
+   * A folder that moved under a read (`folder_moved`, design §4.2): its snapshot is taken again — once a run — and the
+   * read is asked again at the new tree hash. True when there is a new snapshot to read at.
+   */
+  private async snapshotAgain(): Promise<boolean> {
+    if (this.snapshot?.source !== 'folder' || this.snapshotRetaken) return false;
+    this.snapshotRetaken = true;
+    const settled = await this.askSnapshot(false);
+    if (settled.state !== 'succeeded') {
+      this.jobContext.log(`the folder moved under a read, and its snapshot could not be taken again: ${settled.error ?? settled.state}`);
+      return false;
+    }
+    await this.takeSnapshot(settled);
+    this.jobContext.log(`the folder moved under a read: its snapshot was taken again, at tree ${this.snapshot.sha.slice(0, 12)}`);
+    return true;
   }
 
   /**
@@ -870,6 +927,8 @@ class WikiMaintainRun {
     if (wikiRepoReasonIsPremise(reason)) {
       const wrong = (WIKI_REPO_WRONG_REPOSITORY_REASONS as readonly string[]).includes(reason);
       this.jobContext.log(`the snapshot ${settled.state} (${reason}): ${settled.error ?? ''}`);
+      // A folder that is not git, on a runner that cannot read folders yet (design §4.3): the run is on tier sessions.
+      if (reason === 'not_git' && !this.readsFolders) this.jobContext.log(WIKI_REPO_UPGRADE_TO_READ_FOLDERS);
       await this.readTier(wrong ? 'wrong_repository' : 'sessions', reason);
       return;
     }
@@ -1552,7 +1611,8 @@ class WikiMaintainRun {
       this.jobContext.log('the repository cannot be read: the code anchors keep their last checks and wait for a run that reads it');
       return;
     }
-    const proof = await this.anchorProof();
+    const folder = this.snapshot.source === 'folder';
+    const proof = folder ? { sha: this.snapshot.sha, source: 'folder' as const, reaches: new Set<string>(), changed: new Map() } : await this.anchorProof();
     let after: string | null = null;
     let entries = 0;
     let changed = 0;
@@ -1634,7 +1694,7 @@ class WikiMaintainRun {
           const written = await this.deps.wiki.recordAnchorChecks(
             { ownerId: job.ownerId, jobId: job.id },
             job.spaceId,
-            { ref, entries: reported.slice(from, from + WIKI_ANCHOR_RULES.reportEntriesMax) },
+            { ref, entries: reported.slice(from, from + WIKI_ANCHOR_RULES.reportEntriesMax), ...(folder ? { source: 'folder' } : {}) },
           );
           for (const outcome of written.outcomes) {
             if (outcome.status !== 'recorded') {
@@ -1973,6 +2033,11 @@ class WikiMaintainRun {
     const what = `${paths.length === 1 ? paths[0] : `${paths.length} files`} at ${sha.slice(0, 12)}`;
     let last = '';
     for (let attempt = 1; attempt <= 3; attempt += 1) {
+      // A folder read at the tree hash it had: once it moved, it is read at the one its new snapshot names.
+      if (this.snapshot?.source === 'folder' && sha === this.folderSha) {
+        sha = this.snapshot.sha;
+        sizes = this.snapshot.sizes;
+      }
       try {
         return await readWikiRepoFiles({
           prisma: this.deps.prisma,
@@ -1992,6 +2057,15 @@ class WikiMaintainRun {
         // Not asked again and not reworded: the executor hands the job back, nothing counted (design §5.4).
         if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
         last = (error as Error)?.message ?? String(error);
+        if (error instanceof WikiRepoReadFailed && error.reason === 'folder_moved') {
+          // The folder changed since its snapshot (design §4.2): its snapshot is taken again once, and read there; a folder
+          // that moves again leaves what needed it to a later run.
+          const before = this.snapshot?.sha ?? '';
+          if (!(await this.snapshotAgain())) {
+            throw new WikiJobInfraError(`REPO_OP_FAILED: reading ${what} found the folder moved, after its snapshot was taken again: ${last}`);
+          }
+          this.folderSha = before;
+        }
       }
     }
     throw new WikiJobInfraError(`REPO_OP_FAILED: reading ${what} failed 3 times: ${last}`);

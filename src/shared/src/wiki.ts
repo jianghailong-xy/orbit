@@ -956,10 +956,13 @@ export type WikiAnchor = WikiAnchorInput & {
  */
 export interface WikiAnchorCheck {
   state: WikiAnchorState;
+  /** The commit it was checked on — or, with `source: 'folder'`, the folder's tree hash. */
   ref: string | null;
   at: string | null;
   regionSha256?: string;
   baselineSha256?: string;
+  /** Checked on a folder that is not a git checkout (docs/wiki-repo-tiers-design.md §5.1); absent on git. */
+  source?: 'folder';
 }
 
 /** A source as a proposer cites it. `{ kind: 'turn', session: 'self' }` is the calling session. */
