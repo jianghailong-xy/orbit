@@ -4,9 +4,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Runner } from '../components/TasksSidePanel';
-import { meQuery, type UserPreferences } from '../lib/queries';
-import { RunnerDetailPage } from './RunnerDetailPage';
+import type { Runner } from '../TasksSidePanel';
+import { meQuery, type UserPreferences } from '../../lib/queries';
+import { MachineWorkspacesEditor } from './MachineWorkspacesEditor';
 
 /**
  * Smart model selection on the Agent's settings (docs/model-routing-design.md §9; the web mock §1):
@@ -16,8 +16,8 @@ import { RunnerDetailPage } from './RunnerDetailPage';
  * account's switch (`preferences.modelRouting`) is on; off — the default — the Agent has none of it.
  */
 
-vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
-const { api } = await import('../api');
+vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
+const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 // Public ids, the spelling the web holds every id in (= uuidToBase62 of a v7 uuid).
@@ -130,9 +130,9 @@ function mount(
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+        <MemoryRouter initialEntries={['/settings/workspaces']}>
           <Routes>
-            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+            <Route path="/settings/workspaces" element={<MachineWorkspacesEditor runnerId={RUNNER_ID} workspaceId="" />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,

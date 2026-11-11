@@ -227,3 +227,115 @@
 .settings-empty {
   color: var(--text-2);
 }
+
+/* A machine's page (board-3): its name, a status pill and ⋯, then the sections. */
+.machine-page > .settings-section,
+.machine-page > .rd-section,
+.machine-page > .machine-capacity {
+  margin-top: 32px;
+}
+.machine-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.machine-title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.machine-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.machine-pill .settings-dot {
+  margin-right: 0;
+}
+.machine-pill--online {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.machine-pill--attention {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.machine-pill--offline {
+  background: var(--fill-muted);
+  color: var(--text-2);
+}
+.machine-more.orbit-button {
+  border-radius: 16px;
+}
+.machine-metaline {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.machine-attention {
+  margin-top: 20px;
+}
+.machine-section-note {
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-align: right;
+}
+.machine-engines {
+  border-radius: 12px;
+}
+.machine-disk-bar.rd-disk-bar {
+  width: 180px;
+  margin-top: 0;
+}
+.machine-workspace-row {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.machine-workspace-row + .machine-workspace-row .settings-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.machine-workspace-row:hover .settings-row-title {
+  color: var(--brand);
+}
+.machine-workdir {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  background: none;
+  padding: 0;
+}
+.machine-workspace-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+}
+.machine-empty {
+  padding: 16px 0;
+}
+.machine-about-value {
+  font-size: 13px;
+  color: var(--text-1);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.machine-about-value small {
+  margin-left: 5px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.machine-about-value small.warn {
+  color: var(--warning);
+  font-weight: 500;
+}

@@ -143,7 +143,7 @@ async function mount(machines: Array<ReturnType<typeof machine>>) {
           <Probe />
           <Routes>
             <Route path="/infrastructure" element={<InfrastructurePage />} />
-            <Route path="/runners/:id" element={<div>machine page</div>} />
+            <Route path="/settings/machines/:id" element={<div>machine page</div>} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -282,9 +282,9 @@ describe('a machine card’s head on /infrastructure', () => {
     const details = card('wikova').querySelector<HTMLAnchorElement>('.re-manage');
     expect(details?.textContent).toBe('Details →');
     expect(details?.getAttribute('aria-label')).toBe('Details of wikova');
-    expect(details?.getAttribute('href')).toBe(`/runners/${encodeId(WIKOVA.runner.id)}`);
+    expect(details?.getAttribute('href')).toBe(`/settings/machines/${encodeId(WIKOVA.runner.id)}`);
     await click(details);
-    expect(path).toBe(`/runners/${encodeId(WIKOVA.runner.id)}`);
+    expect(path).toBe(`/settings/machines/${encodeId(WIKOVA.runner.id)}`);
   });
 });
 

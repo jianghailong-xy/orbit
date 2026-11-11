@@ -10,15 +10,18 @@ export function SettingsSection({
   title,
   description,
   action,
+  className,
   children,
 }: {
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
+  /** A page's own name for the section, beside settings-section. */
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="settings-section">
+    <section className={className ? `settings-section ${className}` : 'settings-section'}>
       <div className="settings-section-head">
         <h2 className="settings-section-title">{title}</h2>
         {action != null && <div className="settings-section-action">{action}</div>}

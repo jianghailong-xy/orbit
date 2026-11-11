@@ -294,7 +294,7 @@ describe('a machine’s engines, on its card', () => {
     const thinkpad = machineCard('ThinkPad');
     expect(thinkpad.classList.contains('offline')).toBe(true);
     await click(thinkpad.querySelector('a.re-manage'));
-    expect(path).toBe(`/runners/${THINKPAD}`);
+    expect(path).toBe(`/settings/machines/${THINKPAD}`);
 
     act(() => root?.unmount());
     host?.remove();

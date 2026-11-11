@@ -1,14 +1,15 @@
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getToken } from './api';
-import { encodeId } from './lib/idCodec';
+import { encodeId, routeId } from './lib/idCodec';
 import { useManagedRunner } from './lib/managedRunner';
 import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
 import { SettingsLayout } from './components/settings';
-import { SettingsMachinePage, SettingsWorkspacePage } from './components/settings/SettingsInterimPages';
+import { SettingsWorkspacePage } from './components/settings/SettingsInterimPages';
+import { MachineSettingsPage } from './components/settings/MachineSettingsPage';
 import { useRememberOutsideSettings } from './lib/settingsReturn';
 import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
 import { WorkspaceConsole } from './components/WorkspaceConsole';
@@ -29,7 +30,6 @@ import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { SetupPage } from './pages/SetupPage';
-import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
@@ -66,6 +66,61 @@ function InfrastructureRedirect({ keys = false }: { keys?: boolean }) {
   return <Navigate to={{ pathname: '/infrastructure', search, hash }} replace />;
 }
 
+// /settings/machines/:id, drawn afresh for each machine so nothing typed on one carries to the next.
+function SettingsMachineRoute() {
+  const { id } = useParams();
+  return <MachineSettingsPage key={id} />;
+}
+
+// A machine's old page, /runners/:id, is its Settings page now. `?workspace=<id>` opened that
+// workspace's editor there, which is the workspace's own Settings address now.
+function RunnerRedirect() {
+  const { id } = useParams();
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  const workspace = params.get('workspace');
+  if (workspace) return <Navigate to={`/settings/workspaces/${routeId(workspace)}`} replace />;
+  return <Navigate to={{ pathname: `/settings/machines/${routeId(id)}`, search }} replace />;
+}
+
+// /infrastructure's machines live in Settings now: a link that named a machine (and an engine on it to
+// sign in, `?runner=<id>&engine=<engine>`) opens that machine's page; otherwise the first machine's,
+// or General when there is none. Its #keys and #pools are still the old page's, until Settings'
+// Providers pages take them over (task s4).
+function InfrastructureRoute() {
+  const { search, hash } = useLocation();
+  const runners = useQuery(runnersQuery());
+  if (hash === '#keys' || hash === '#pools') {
+    return (
+      <DocView>
+        <InfrastructurePage />
+      </DocView>
+    );
+  }
+  const params = new URLSearchParams(search);
+  const runner = routeId(params.get('runner'));
+  if (runner) {
+    const engine = params.get('engine');
+    return (
+      <Navigate
+        to={{ pathname: `/settings/machines/${runner}`, search: engine ? `?engine=${encodeURIComponent(engine)}` : '' }}
+        replace
+      />
+    );
+  }
+  if (runners.isPending) {
+    return (
+      <main className="app-main">
+        <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
+          <Spinner aria-busy="true" />
+        </div>
+      </main>
+    );
+  }
+  const first = (runners.data ?? [])[0] as { id: string } | undefined;
+  return <Navigate to={first ? `/settings/machines/${first.id}` : '/settings/general'} replace />;
+}
+
 // Signed out on an in-app page: log in first, then come back to it. The page (path + query) rides
 // along as `next`, which LoginPage follows after a successful login — so an Orbit link clicked on
 // a share page, or a pasted task URL, isn't lost to the default landing. The bare root has nowhere
@@ -83,7 +138,7 @@ function LoginRedirect() {
 // needs the workspaces list, so this is a component (not a static <Navigate>). With no workspace to open
 // yet, fall back to onboarding: a brand-new account (no runners) → the registration guide; the first
 // machine online → its new session page, where its first workspace is made in the conversation
-// (board rule 11); every machine offline → Infrastructure, which says so. BootGate pre-warms both
+// (board rule 11); every machine offline → the first machine's Settings page, which says so. BootGate pre-warms both
 // queries, so on a fresh load these read straight from cache and redirect in one shot.
 //
 // An account with no runner at all, while the server offers managed runners
@@ -120,7 +175,7 @@ function DefaultLanding() {
   }
   const online = runnerList.find((runner) => runner.online);
   if (online) return <Navigate to={machineDraftPath(online.id)} replace />;
-  return <Navigate to="/infrastructure" replace />;
+  return <Navigate to={`/settings/machines/${runnerList[0].id}`} replace />;
 }
 
 export function App() {
@@ -206,7 +261,7 @@ export function App() {
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
             <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
-            <Route path="machines/:id" element={<SettingsMachinePage />} />
+            <Route path="machines/:id" element={<SettingsMachineRoute />} />
             <Route path="providers/pools" element={<InfrastructurePage section="pools" />} />
             <Route path="providers/:vendor" element={<InfrastructurePage section="keys" />} />
             <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
@@ -256,14 +311,7 @@ export function App() {
                 key is its own two-page flow — pick a vendor, then paste a key — so
                 "/providers/new/anthropic" can be linked to directly; the pages under /providers and
                 /runners keep their addresses. Keep the old admin-only path as a redirect. */}
-            <Route
-              path="infrastructure"
-              element={
-                <DocView>
-                  <InfrastructurePage />
-                </DocView>
-              }
-            />
+            <Route path="infrastructure" element={<InfrastructureRoute />} />
             <Route path="providers" element={<InfrastructureRedirect keys />} />
             <Route
               path="providers/new"
@@ -485,14 +533,7 @@ export function App() {
                 </FlushView>
               }
             />
-            <Route
-              path="runners/:id"
-              element={
-                <DocView>
-                  <RunnerDetailPage />
-                </DocView>
-              }
-            />
+            <Route path="runners/:id" element={<RunnerRedirect />} />
             {/* Both workspace paths share one WorkspaceConsole layout route, so WorkspaceView
                 survives navigation between them without remounting. These children render no view
                 of their own — the layout draws it from the address — so each says `element={null}`

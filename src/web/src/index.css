@@ -2158,27 +2158,6 @@ button.toast--pill:focus-visible {
   text-decoration: underline;
 }
 /* ---- Runner detail / settings page ---- */
-.rd-head {
-  margin-bottom: 8px;
-}
-.rd-back,
-.rd-link {
-  color: var(--text-2);
-  font-size: 13px;
-  cursor: pointer;
-}
-.rd-back:hover,
-.rd-link:hover {
-  color: var(--brand);
-}
-.rd-back .anticon {
-  margin-right: 4px;
-}
-.rd-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 .rd-sub {
   font-size: 13px;
   color: var(--text-3);
@@ -2200,31 +2179,6 @@ button.toast--pill:focus-visible {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
-}
-/* A section heading with more than one control: they stay one group at the right edge
-   rather than pushing the title around. */
-.rd-section-actions {
-  display: flex;
-  gap: 8px;
-}
-/* The runner's identity line: status/slots/version/host as one scannable row, so the
-   agent list clears the fold instead of sitting under an eight-field grid. */
-.rd-metaline {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0 8px;
-  margin: 6px 0 0 19px;
-  font-size: 13px;
-  color: var(--text-3);
-}
-.rd-metaline > span + span::before {
-  content: '·';
-  margin-right: 8px;
-  color: var(--text-4);
-}
-.rd-meta-ok {
-  color: var(--success);
 }
 /* Needs Attention: one card per item, under the title and across both columns — two abreast on a
    desktop, one alone taking the row. Amber for a warning, red for what already stops sessions, grey
@@ -2291,18 +2245,7 @@ button.toast--pill:focus-visible {
 .rd-attention-action {
   margin-top: 9px;
 }
-/* The machine's contents on the left, its settings and facts in a narrower column on the right. */
-.rd-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
-  gap: 0 24px;
-  align-items: start;
-}
-.rd-col {
-  min-width: 0;
-}
-/* A settings panel: label left, value or control right, hairlines between rows — Capacity and
-   About. */
+/* A panel with hairlines between its rows: abandoned checkouts. */
 .rd-box {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
@@ -2310,37 +2253,6 @@ button.toast--pill:focus-visible {
 }
 .rd-box > * + * {
   border-top: 1px solid var(--border-subtle);
-}
-.rd-kv,
-.rd-kv-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 13px;
-}
-.rd-kv {
-  min-height: 42px;
-  padding: 7px 14px;
-}
-.rd-kv-label {
-  flex: none;
-  color: var(--text-2);
-}
-.rd-kv-value {
-  min-width: 0;
-  color: var(--text-1);
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-.rd-kv-value small {
-  margin-left: 5px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.rd-kv-value small.warn {
-  color: var(--warning);
-  font-weight: 500;
 }
 .rd-inline-link {
   margin-left: 8px;
@@ -2835,32 +2747,10 @@ button.toast--pill:focus-visible {
     grid-template-columns: 1fr;
   }
 }
-/* A phone's width: one column, in the order the iPhone's runner page reads — Needs Attention,
-   Capacity, Engines, Workspaces, About. The two column boxes step aside (display: contents) so
-   their sections can be ordered as one list. */
+/* A phone's width: Needs Attention's cards one to a row. */
 @media (max-width: 640px) {
   .rd-attention {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .rd-cols {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .rd-col {
-    display: contents;
-  }
-  .rd-capacity {
-    order: 1;
-  }
-  .rd-engines {
-    order: 2;
-  }
-  .rd-workspaces {
-    order: 3;
-  }
-  .rd-about {
-    order: 4;
   }
 }
 /* Edit-in-place: the clicked row stays as a header and the editor expands below

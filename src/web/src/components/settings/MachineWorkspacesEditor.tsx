@@ -1,140 +1,64 @@
 import {
-  ArrowLeftOutlined,
-  BranchesOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
-  CloudDownloadOutlined,
   CopyOutlined,
-  DashboardOutlined,
   DeleteOutlined,
-  DisconnectOutlined,
   DownOutlined,
   EditOutlined,
-  HddOutlined,
   ImportOutlined,
-  KeyOutlined,
-  LoginOutlined,
   MessageOutlined,
   MinusCircleOutlined,
   MoreOutlined,
   PlayCircleOutlined,
   PlusOutlined,
   RobotOutlined,
-  SyncOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine, type RunnerRepoHealth } from '@orbit/shared';
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { AgentProvider, ENGINE_CLI_NAMES, type RunnerRepoHealth } from '@orbit/shared';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   api,
   askClaudeHistory,
-  cleanUpWorkspaceRepo,
   countImportedSessions,
   getClaudeHistory,
   importClaudeHistory,
   removeImportedSessions,
   revokeWorkspacePermissionRule,
   type ClaudeHistoryResult,
-} from '../api';
-import { routeId, encodeId } from '../lib/idCodec';
-import { machineDraftPath } from '../lib/machineSetup';
-import { machineEmpty, START_A_SESSION } from '../lib/machineSetupCopy';
+} from '../../api';
+import { routeId, encodeId } from '../../lib/idCodec';
+import { machineDraftPath } from '../../lib/machineSetup';
+import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import {
   meQuery,
   providersQuery,
-  publishedRunnerVersionQuery,
   workspacePermissionRulesQuery,
   workspaceSessionCountsQuery,
-} from '../lib/queries';
-import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
-import { useRefreshSessionLists } from '../lib/useControlPlane';
-import { AbandonedCheckouts } from '../components/AbandonedCheckouts';
-import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
-import { AccountSelect, offersAccount } from '../components/AccountSelect';
-import { AUTO_COMPACT_VARIABLE, AutoCompactSelect, withAutoCompact } from '../components/AutoCompactSelect';
-import { MachineEngines, accountsGroup, ownSignInPanel, useOpenAccounts } from '../components/RunnerEngines';
-import { useRunnerTokenRotation } from '../components/RunnerTokenRotation';
-import type { Runner } from '../components/TasksSidePanel';
-import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
-import { Checkbox } from '../components/ui/Checkbox';
-import { useConfirm } from '../components/ui/ConfirmDialog';
-import { Dialog } from '../components/ui/Dialog';
-import { Input } from '../components/ui/Input';
-import { Menu, type MenuItem } from '../components/ui/Menu';
-import { NumberInput } from '../components/ui/NumberInput';
-import { PasswordInput } from '../components/ui/PasswordInput';
-import { Select } from '../components/ui/Select';
-import { Spinner } from '../components/ui/Spinner';
-import { Switch } from '../components/ui/Switch';
-import { Textarea } from '../components/ui/Textarea';
-import { copyText } from '../lib/clipboard';
-import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
-import {
-  KEEP_FREE_TIERS,
-  compareRunnerVersions,
-  formatDiskGb,
-  keepFreeLabel,
-  latestRunnerVersion,
-  runnerAttention,
-  runnerCanUpdateNow,
-  runnerDisk,
-  type AttentionItem,
-  type AttentionKind,
-} from '../lib/runnerAttention';
-import {
-  RUNNER_ABOUT,
-  RUNNER_ABOUT_HOSTNAME,
-  RUNNER_ABOUT_LAST_CHECK_IN,
-  RUNNER_ABOUT_LAST_UPDATE,
-  RUNNER_ABOUT_NAME,
-  RUNNER_ABOUT_REGISTERED,
-  RUNNER_ABOUT_REPOS_FOLDER,
-  RUNNER_ABOUT_RUNS_AS,
-  RUNNER_ABOUT_VERSION,
-  RUNNER_CAPACITY,
-  RUNNER_CAPACITY_FOOTER,
-  RUNNER_COPY_COMMAND,
-  RUNNER_DISK,
-  RUNNER_ENGINES,
-  RUNNER_ENGINES_FOOTER,
-  RUNNER_ENGINES_OFFLINE_FOOTER,
-  RUNNER_KEEP_FREE,
-  RUNNER_LINE_SEPARATOR,
-  RUNNER_MAX_CONCURRENT,
-  RUNNER_NEEDS_ATTENTION,
-  RUNNER_OFFLINE,
-  RUNNER_ONLINE,
-  RUNNER_REPAIR,
-  RUNNER_ROOT_NO_BYPASS,
-  RUNNER_RUNS_AS_REGULAR_USER,
-  RUNNER_RUNS_AS_ROOT,
-  RUNNER_SET_A_RESERVE,
-  RUNNER_SIGN_IN,
-  RUNNER_UPDATE_ENGINES_NOW,
-  RUNNER_UPDATE_RUNNER_NOW,
-  RUNNER_UPDATE_RUNNER_REQUESTED,
-  RUNNER_VERSION_INSTALLS_WHEN_IDLE,
-  RUNNER_VERSION_LATEST,
-  RUNNER_VERSION_NOT_ROLLED_OUT,
-  RUNNER_WORKSPACES,
-  attentionQuotaResets,
-  runnerDiskUsed,
-  runnerOfflineLastSeen,
-  runnerRunningOf,
-  runnerUpdatedFromTo,
-  runnerVersionTag,
-  runnerWorkspaceRunning,
-} from '../lib/runnerCopy';
-import { useClaudeRegionCheckAgain } from '../lib/claudeRegion';
-import { CLAUDE_REGION_CHECK_AGAIN } from '../lib/claudeRegionCopy';
-import { ago } from '../lib/runnerEngines';
-import { useToast } from '../lib/toast';
-import { sessionEngineOf } from '../lib/workspaceDefaults';
-import { defaultModelLabel, engineTitleFor, engineVia } from '../lib/sessionProviderChoices';
-import { BrandMark } from '../components/NewSessionProviderHero';
+} from '../../lib/queries';
+import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../../lib/sessionImport';
+import { useRefreshSessionLists } from '../../lib/useControlPlane';
+import { ClaudeHistoryOffer, type ImportMode } from '../ClaudeHistoryOffer';
+import { AccountSelect, offersAccount } from '../AccountSelect';
+import { AUTO_COMPACT_VARIABLE, AutoCompactSelect, withAutoCompact } from '../AutoCompactSelect';
+import type { Runner } from '../TasksSidePanel';
+import { Badge } from '../ui/Badge';
+import { Button } from '../ui/Button';
+import { Checkbox } from '../ui/Checkbox';
+import { useConfirm } from '../ui/ConfirmDialog';
+import { Input } from '../ui/Input';
+import { Menu } from '../ui/Menu';
+import { PasswordInput } from '../ui/PasswordInput';
+import { Select } from '../ui/Select';
+import { Spinner } from '../ui/Spinner';
+import { Switch } from '../ui/Switch';
+import { Textarea } from '../ui/Textarea';
+import { runnerWorkspaceRunning } from '../../lib/runnerCopy';
+import { useToast } from '../../lib/toast';
+import { sessionEngineOf } from '../../lib/workspaceDefaults';
+import { defaultModelLabel, engineTitleFor, engineVia } from '../../lib/sessionProviderChoices';
+import { BrandMark } from '../NewSessionProviderHero';
 
 interface Workspace {
   id: string;
@@ -196,60 +120,17 @@ const HISTORY_POLL_MS = 2500;
  *  on screen while the rest of the form is still being filled in. */
 const HISTORY_DEBOUNCE_MS = 500;
 
-const fmtTime = (d?: string | null): string =>
-  d
-    ? new Date(d).toLocaleString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : '—';
-
-/** A day, with the year only when it isn't this one: `Jun 18`, `Dec 3, 2025`. */
-const fmtDate = (d?: string | null): string => {
-  const at = d ? new Date(d) : null;
-  if (!at || Number.isNaN(at.getTime())) return '—';
-  return at.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    ...(at.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
-  });
-};
-
-/** When a quota window resets, in the reader's own zone — the item carries it raw for this. */
-const fmtReset = (iso: string): string =>
-  new Date(iso).toLocaleString([], {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-
-const MIB = 1024 * 1024;
-
-/** Each Needs Attention card's mark, by what it is about. */
-const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
-  offline: <DisconnectOutlined />,
-  noCliSignedIn: <LoginOutlined />,
-  engineSignedOut: <LoginOutlined />,
-  claudeRegionUnsupported: <WarningOutlined />,
-  checkoutStuck: <BranchesOutlined />,
-  quotaNearLimit: <DashboardOutlined />,
-  diskLow: <HddOutlined />,
-  cannotSelfUpdate: <CloudDownloadOutlined />,
-  engineNotUpdating: <SyncOutlined />,
-};
-
-// Runner detail / settings page. Clicking a runner lands here (not the chat
-// console) — you manage the runner and the workspaces that run under it. The live
-// conversation belongs to a workspace, reached via each workspace's "对话" button.
-export function RunnerDetailPage({ runnerId: givenRunnerId, workspaceId }: { runnerId?: string; workspaceId?: string } = {}) {
-  // /runners/<base62> — decode the route param to the runner's UUID. Settings' workspace page names
-  // the runner and the workspace to open instead (SettingsWorkspacePage).
-  const params = useParams();
-  const runnerId = routeId(givenRunnerId ?? params.id);
+/**
+ * The old inline workspace editor, as it was on a runner's page: this machine's workspaces, each row
+ * opening its editor in place, and the create form. Settings' workspace addresses draw it —
+ * /settings/workspaces/:id opened on that workspace, /settings/workspaces/new?machine=<id> on the
+ * create form — so nothing a machine's page used to edit becomes unreachable.
+ *
+ * TODO(s5, task 34vULVKvcdivsOtyXTP72 "Settings Workspaces page with per-row saves"): replaced by the
+ * Workspaces page, which saves row by row; this file goes with it.
+ */
+export function MachineWorkspacesEditor({ runnerId: givenRunnerId, workspaceId }: { runnerId: string; workspaceId: string }) {
+  const runnerId = routeId(givenRunnerId);
   const navigate = useNavigate();
   const [confirm, confirmation] = useConfirm();
   const message = useToast();
@@ -270,130 +151,14 @@ export function RunnerDetailPage({ runnerId: givenRunnerId, workspaceId }: { run
   const configuredProviders = useQuery(providersQuery()).data ?? [];
   // Each workspace's sessions in flight, for its row's "N running" — the sidebar's own tallies.
   const sessionCounts = useQuery(workspaceSessionCountsQuery()).data ?? [];
-  // The newest runner release anyone can see: this instance's /dl/version.json, or any of the
-  // account's runners, whichever is newer.
-  const publishedVersion = useQuery(publishedRunnerVersionQuery()).data;
-  const latestVersion = latestRunnerVersion(publishedVersion, runners.data ?? []);
   // The account's switch for smart model selection: off (the default), the Agent has no switch of
   // its own for it, and its Model line reads as it always has.
   const smartSelection = useQuery(meQuery()).data?.preferences?.modelRouting === true;
 
-  // Rename / delete the runner — same API a machine card's ⋯ on Infrastructure uses.
-  const [renaming, setRenaming] = useState(false);
-  const [renameVal, setRenameVal] = useState('');
-  // The Actions button, when the rename was asked from its menu: where focus returns.
-  const [renameFrom, setRenameFrom] = useState<RefObject<HTMLButtonElement | null> | undefined>();
-  const renameInput = useRef<HTMLInputElement>(null);
-  const actionsButton = useRef<HTMLButtonElement>(null);
-  const renameMut = useMutation({
-    mutationFn: (displayName: string) =>
-      api(`/runners/${runnerId}`, { method: 'PATCH', body: { displayName } }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['runners'] });
-      setRenaming(false);
-    },
-    onError: (e: Error) => message.error("Couldn't rename the runner", e.message),
-  });
-
-  // What is typed into Max Concurrent, shown until its save settles. The ref is what a save reads:
-  // it is written the moment the field reports a value — including the in-range one it corrects an
-  // out-of-range entry to as focus leaves — which the state would only have by the next render.
-  const [maxDraft, setMaxDraft] = useState<number | null>(null);
-  const maxTyped = useRef<number | null>(null);
-  // Capacity saves as it changes — Max Concurrent on blur or Enter, Keep Free on pick — with the
-  // PATCH the rename uses. The value goes into the runner list at once, so a control doesn't snap
-  // back to the old number while the save lands.
-  const capacityMut = useMutation({
-    mutationFn: (patch: { maxConcurrent?: number; minFreeDiskMb?: number | null }) =>
-      api(`/runners/${runnerId}`, { method: 'PATCH', body: patch }),
-    onMutate: async (patch) => {
-      await qc.cancelQueries({ queryKey: ['runners'] });
-      const previous = qc.getQueryData<Runner[]>(['runners']);
-      if (previous) {
-        qc.setQueryData<Runner[]>(
-          ['runners'],
-          previous.map((r) => (r.id === runnerId ? { ...r, ...patch } : r)),
-        );
-      }
-      return { previous };
-    },
-    onError: (e: Error, _patch, context) => {
-      if (context?.previous) qc.setQueryData(['runners'], context.previous);
-      message.error("Couldn't save the capacity", e.message);
-    },
-    onSettled: () => {
-      setMaxDraft(null);
-      void qc.invalidateQueries({ queryKey: ['runners'] });
-    },
-  });
-  // Where the disk card's "Set a Reserve…" lands.
-  const capacityRef = useRef<HTMLElement>(null);
-  const keepFreeRef = useRef<HTMLButtonElement>(null);
   // The workspace whose Configure (or Close editor) waits for its row's menu to hand focus back to the
   // row's button: the editor's Name field opened any sooner can mount in the same commit that removes
   // the menu, whose focus return then still lands on the button.
   const configureOnFocus = useRef<string | null>(null);
-  // The sign-in panel open in Engines — a row's own, or the one a Needs Attention card's Sign In
-  // opens on that engine's row — and the row that card brought into view.
-  const [signIn, setSignIn] = useState<string | null>(null);
-  const [signInEngine, setSignInEngine] = useState<LoginEngine | null>(null);
-  // Which engines' accounts are listed under their rows in Engines: the same folds as this machine's
-  // card on Infrastructure.
-  const [openAccounts, foldAccounts] = useOpenAccounts();
-  // Update Engines: POST /runners/:id/engine-update takes no engine — it updates every CLI on the
-  // machine, so it is the machine's to offer: from Engines' head, and from a Needs Attention card.
-  const engineUpdate = useMutation({
-    mutationFn: () => api(`/runners/${runnerId}/engine-update`, { method: 'POST' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
-    onError: (e: Error) => message.error("Couldn't start the engine update", e.message),
-  });
-  const dismissEngineUpdate = useMutation({
-    mutationFn: () => api(`/runners/${runnerId}/install`, { method: 'DELETE' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
-  });
-  // The model picker lists what these CLIs report, re-read hourly by the runner — and on the spot
-  // after it installs a newer engine. This asks for a pass now, for a model a CLI learned about
-  // some other way. There is no relay to watch: the refreshed catalog simply arrives
-  // on a heartbeat, which is why the toast promises a minute rather than showing progress.
-  const refreshModels = useMutation({
-    mutationFn: () => api(`/runners/${runnerId}/refresh-models`, { method: 'POST' }),
-    onSuccess: () => {
-      message.success('Re-reading this machine’s model lists — the picker updates within a minute.');
-      void qc.invalidateQueries({ queryKey: ['runners'] });
-    },
-    onError: (e: Error) => message.error("Couldn't refresh the model lists", e.message),
-  });
-  // Update Runner Now: the runner checks for its release at once rather than at its next 10-minute
-  // check, by the same rules — a turn in flight still holds the install. Nothing answers but the
-  // update state its next heartbeats report, which the list's refetch brings to this page.
-  const runnerUpdate = useMutation({
-    mutationFn: () => api(`/runners/${runnerId}/self-update`, { method: 'POST' }),
-    onSuccess: () => {
-      message.success(RUNNER_UPDATE_RUNNER_REQUESTED);
-      void qc.invalidateQueries({ queryKey: ['runners'] });
-    },
-    onError: (e: Error) => message.error("Couldn't start the runner update", e.message),
-  });
-  // Check again (docs/claude-region-check-contract.md §7), for a machine blocked for the Claude region.
-  const regionCheck = useClaudeRegionCheckAgain({ id: runnerId ?? '', region: runner?.region });
-  const rotation = useRunnerTokenRotation();
-  // Repair a checkout stuck mid-merge — the same request and words as a session's merge bar.
-  const repairMut = useMutation({
-    mutationFn: (workspaceId: string) => cleanUpWorkspaceRepo(workspaceId),
-    onSuccess: () => {
-      message.success(REPO_CLEANUP_QUEUED);
-      void qc.invalidateQueries({ queryKey: ['workspaces'] });
-    },
-    onError: (e: Error) => message.error("Couldn't clean up the checkout", e.message),
-  });
-  const deleteMut = useMutation({
-    mutationFn: () => api(`/runners/${runnerId}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['runners'] });
-      navigate('/infrastructure');
-    },
-    onError: (e: Error) => message.error("Couldn't delete the runner", e.message),
-  });
 
   // Add / edit a workspace bound to this runner (controlled inputs, like the
   // rename dialog — a pre-filled edit is just the fields' initial state).
@@ -656,8 +421,7 @@ export function RunnerDetailPage({ runnerId: givenRunnerId, workspaceId }: { run
   // A sidebar row's Configure lands here as ?workspace=<id>: that workspace's editor opens on its row
   // once the row is drawn (rows draw once the runner is known), and the parameter goes, so a reload
   // or Back does not open it again.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const configureParam = workspaceId ?? searchParams.get('workspace');
+  const configureParam = workspaceId;
   const configureTarget =
     runner && configureParam && configureParam !== 'new'
       ? workspaces.find((a) => a.id === routeId(configureParam))
@@ -667,10 +431,6 @@ export function RunnerDetailPage({ runnerId: givenRunnerId, workspaceId }: { run
   useEffect(() => {
     if (!createRequested) return;
     openCreate();
-    setSearchParams((params) => {
-      params.delete('workspace');
-      return params;
-    }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createRequested]);
   const scrollToEditor = useRef<string | null>(null);
@@ -678,10 +438,6 @@ export function RunnerDetailPage({ runnerId: givenRunnerId, workspaceId }: { run
     if (!configureTarget) return;
     scrollToEditor.current = configureTarget.id;
     openEdit(configureTarget);
-    setSearchParams((params) => {
-      params.delete('workspace');
-      return params;
-    }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configureTarget?.id]);
   // Brought to the top once its editor has opened under it: the editor grows in (rd-form-expand), and
@@ -1281,562 +1037,65 @@ export function RunnerDetailPage({ runnerId: givenRunnerId, workspaceId }: { run
     );
   }
   if (!runner) {
-    return (
-      <div className="runners-empty">
-        Runner not found —{' '}
-        <span className="rd-link" onClick={() => navigate('/infrastructure')}>
-          back to Machines & models
-        </span>
-        .
-      </div>
-    );
+    return <p className="settings-empty">This machine doesn't exist, or isn't yours.</p>;
   }
-
   const shownName = runner.displayName || runner.name;
-  const nowMs = Date.now();
-  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion });
-
-  // Capacity's readings: the tightest disk its workspaces sit on, and the floor it keeps free.
-  const disk = runnerDisk(workspaces);
-  const reserveMb = runner.minFreeDiskMb != null && runner.minFreeDiskMb > 0 ? runner.minFreeDiskMb : null;
-  const diskWarn = !!disk && (disk.usedPercent >= 90 || (reserveMb !== null && disk.freeBytes < reserveMb * MIB));
-  // Keep Free's picks, as minFreeDiskMb with 0 standing for Off (a Select value can't be null). A
-  // floor set to something other than a tier is shown as it is, in order, rather than as "Off".
-  const keepFreeOptions = [
-    ...KEEP_FREE_TIERS.map((tier) => ({ value: tier.mb ?? 0, label: tier.label })),
-    ...(reserveMb !== null && !KEEP_FREE_TIERS.some((tier) => tier.mb === reserveMb)
-      ? [{ value: reserveMb, label: keepFreeLabel(reserveMb) }]
-      : []),
-  ].sort((a, b) => a.value - b.value);
-
-  const commitMaxConcurrent = () => {
-    const next = maxTyped.current;
-    maxTyped.current = null;
-    if (next === null) return;
-    if (next === runner.maxConcurrent) setMaxDraft(null);
-    else capacityMut.mutate({ maxConcurrent: next });
-  };
-
-  // About's version line: current, catching up by itself, or stuck until someone upgrades it. A
-  // runner that reports where its updates stand says which; an older one is judged by runsAsRoot.
-  const version = runner.version?.trim() || null;
-  const versionNote = (() => {
-    if (!version || !latestVersion) return null;
-    const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
-    if (stuck) return { text: stuck.short, warn: true };
-    if (compareRunnerVersions(version, latestVersion) >= 0) return { text: RUNNER_VERSION_LATEST, warn: false };
-    const state = runner.selfUpdate?.state;
-    if (state === 'heldByRollout') return { text: RUNNER_VERSION_NOT_ROLLED_OUT, warn: false };
-    if (state === 'enabled' || state === 'waitingForIdle') {
-      return { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false };
-    }
-    if (state) return null;
-    return runner.runsAsRoot ? { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false } : null;
-  })();
-  // The last update it installed into itself, for a runner that reports it: when, and its versions.
-  const lastUpdate = (() => {
-    const report = runner.selfUpdate;
-    if (!report) return null;
-    const versions =
-      report.lastUpdatedFrom && report.lastUpdatedTo
-        ? runnerUpdatedFromTo(report.lastUpdatedFrom, report.lastUpdatedTo)
-        : report.lastUpdatedTo;
-    const parts = [report.lastUpdatedAt ? fmtTime(report.lastUpdatedAt) : null, versions];
-    return parts.filter(Boolean).join(RUNNER_LINE_SEPARATOR) || '—';
-  })();
-  const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
-  // An engine update shares the runner's one relay slot with an engine's install. Only a run in
-  // `update` mode is Engines' news; an install's belongs to the row that started it.
-  const relay = runner.install;
-  const updating = relay?.mode === 'update';
-  const relayInFlight = relay?.status === 'pending' || relay?.status === 'installing';
-
-  /** `from`: the menu's button the rename was asked from, where focus returns. */
-  const openRename = (from?: RefObject<HTMLButtonElement | null>) => {
-    setRenameVal(shownName);
-    setRenameFrom(from);
-    setRenaming(true);
-  };
-  const focusKeepFree = () => {
-    capacityRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-    keepFreeRef.current?.focus({ preventScroll: true });
-  };
-  const copyCommand = (command: string) =>
-    void copyText(command).then((ok) =>
-      ok ? message.success('Command copied') : message.error("Couldn't copy the command"),
-    );
-
-  /** The one thing a card offers, where it has one. */
-  const attentionAction = (item: AttentionItem): ReactNode => {
-    const action = item.action;
-    switch (action?.kind) {
-      case 'signIn': {
-        // Signed in where the engine is listed, below: its row's sign-in opens — under Default, in
-        // its group of accounts opened for it — and the row comes into view.
-        const engine = action.engine;
-        return engine && engine !== 'opencode' && engine !== 'dsh' ? (
-          <Button
-            size="small"
-            onClick={() => {
-              setSignIn(ownSignInPanel(runner, engine));
-              setSignInEngine(engine);
-              foldAccounts(accountsGroup(runner.id, engine), true);
-            }}
-          >
-            {RUNNER_SIGN_IN}
-          </Button>
-        ) : null;
-      }
-      case 'repair': {
-        const workspaceId = action.workspaceId;
-        const root = typeof item.params.root === 'string' ? item.params.root : '';
-        return workspaceId ? (
-          <Button
-            size="small"
-            loading={repairMut.isPending}
-            onClick={() => {
-              const cleanup = repoCleanupConfirm(root);
-              void confirm({
-                title: cleanup.title,
-                description: cleanup.content,
-                confirmText: cleanup.okText,
-                onConfirm: () => repairMut.mutateAsync(workspaceId).catch(() => {}),
-              });
-            }}
-          >
-            {RUNNER_REPAIR}
-          </Button>
-        ) : null;
-      }
-      case 'setReserve':
-        return (
-          <Button size="small" onClick={focusKeepFree}>
-            {RUNNER_SET_A_RESERVE}
-          </Button>
-        );
-      case 'copyCommand': {
-        const command = action.command;
-        return command ? (
-          <Button size="small" icon={<CopyOutlined />} onClick={() => copyCommand(command)}>
-            {RUNNER_COPY_COMMAND}
-          </Button>
-        ) : null;
-      }
-      case 'updateEngines':
-        return (
-          <Button size="small" disabled={engineUpdate.isPending} onClick={() => engineUpdate.mutate()}>
-            {RUNNER_UPDATE_ENGINES_NOW}
-          </Button>
-        );
-      case 'updateRunner':
-        return (
-          <Button size="small" disabled={runnerUpdate.isPending} onClick={() => runnerUpdate.mutate()}>
-            {RUNNER_UPDATE_RUNNER_NOW}
-          </Button>
-        );
-      case 'checkRegion':
-        return (
-          <Button size="small" disabled={!runner.online} loading={regionCheck.checking} onClick={regionCheck.checkAgain}>
-            {CLAUDE_REGION_CHECK_AGAIN}
-          </Button>
-        );
-      default:
-        return null;
-    }
-  };
-
-  // A quota card says when the window resets first, in the reader's own time zone.
-  const attentionDetail = (item: AttentionItem): string => {
-    const resetsAt = item.params.resetsAt;
-    return typeof resetsAt === 'string'
-      ? `${attentionQuotaResets(fmtReset(resetsAt))} ${item.detail}`
-      : item.detail;
-  };
-
-  // Rename, Rotate token, Delete. Max Concurrent is no longer here: it lives in Capacity, where it
-  // saves as it changes.
-  const kebab: MenuItem[] = [
-    {
-      key: 'rename',
-      icon: <EditOutlined />,
-      label: 'Rename',
-      onSelect: () => openRename(actionsButton),
-    },
-    {
-      key: 'rotate',
-      icon: <KeyOutlined />,
-      label: 'Rotate token',
-      onSelect: () => rotation.confirmRotate(runner, actionsButton),
-    },
-    { type: 'separator', key: 'divider' },
-    {
-      key: 'delete',
-      icon: <DeleteOutlined />,
-      label: 'Delete',
-      danger: true,
-      onSelect: () =>
-        void confirm({
-          title: `Delete “${shownName}”?`,
-          description:
-            'This removes the runner and its workspaces from your account. Re-register the machine to add it back.',
-          confirmText: 'Delete',
-          danger: true,
-          cancelText: 'Cancel',
-          onConfirm: () => deleteMut.mutateAsync(),
-          returnFocus: actionsButton,
-        }),
-    },
-  ];
-
-  const runsAs =
-    runner.runsAsRoot === true
-      ? RUNNER_RUNS_AS_ROOT
-      : runner.runsAsRoot === false
-        ? RUNNER_RUNS_AS_REGULAR_USER
-        : '—';
 
   return (
     <>
       <div className="rd-page">
-      <div className="rd-head">
-        <span className="rd-back" onClick={() => navigate('/infrastructure')}>
-          <ArrowLeftOutlined /> Machines & models
-        </span>
-      </div>
-
-      <div className="rd-title-row">
-        <span
-          className="runner-dot"
-          style={{ background: runner.online ? 'var(--success-solid)' : 'var(--dot-idle)' }}
-          title={runner.online ? RUNNER_ONLINE : RUNNER_OFFLINE}
-        />
-        <h1 className="page-title" style={{ margin: 0 }}>
-          {shownName}
-        </h1>
-        <div style={{ flex: 1 }} />
-        <Menu align="end" items={kebab} trigger={<Button ref={actionsButton} icon={<MoreOutlined />}>Actions</Button>} />
-      </div>
-
-      {/* Who it is at a glance, on one line under the name; the facts behind it are in About. */}
-      <div className="rd-metaline">
-        {runner.online ? (
-          <span className="rd-meta-ok">{RUNNER_ONLINE}</span>
-        ) : (
-          <span>
-            {runner.lastHeartbeatAt
-              ? runnerOfflineLastSeen(fmtTime(runner.lastHeartbeatAt))
-              : RUNNER_OFFLINE}
-          </span>
-        )}
-        {runner.online && typeof runner.maxConcurrent === 'number' && (
-          <span>{runnerRunningOf(runner.activeSessions ?? 0, runner.maxConcurrent)}</span>
-        )}
-        {version && <span>{runnerVersionTag(version)}</span>}
-        {runner.hostname && <span>{runner.hostname}</span>}
-      </div>
-
-      {/* Only when something needs a person, above both columns: each card says what happened,
-          why it matters, and offers the one thing that fixes it. */}
-      {attention.length > 0 && (
-        <section className="rd-attention" aria-label={RUNNER_NEEDS_ATTENTION}>
-          {attention.map((item, index) => (
-            <div key={`${item.kind}:${index}`} className={`rd-attention-card ${item.tone}`}>
-              <span className="rd-attention-icon">{ATTENTION_ICON[item.kind]}</span>
-              <div className="rd-attention-main">
-                <div className="rd-attention-title">{item.title}</div>
-                <div className="rd-attention-detail">{attentionDetail(item)}</div>
-                {item.action && <div className="rd-attention-action">{attentionAction(item)}</div>}
-              </div>
+        <section className="rd-section rd-workspaces" style={{ marginTop: 0 }}>
+          <div className="rd-section-head">
+            <div className="rd-section-title">
+              Workspaces on <Link to={`/settings/machines/${runner.id}`}>{shownName}</Link>
             </div>
-          ))}
-        </section>
-      )}
-
-      {/* Two columns from 641px: the machine's contents on the left, its settings and facts on the
-          right. Narrower, one column in the phone's order — Capacity, Engines, Workspaces, About —
-          which index.css sets with `order`, so the columns themselves never move. */}
-      <div className="rd-cols">
-        <div className="rd-col rd-col-main">
-          {/* What software this machine runs, and each engine's sign-in: the rows of its card in
-              Infrastructure, where an engine is signed in, installed and its accounts managed. Which
-              version is installed is the same class of fact as the runner version, so updating them
-              lives in this section's head and nowhere else. */}
-          <section className="rd-section rd-engines">
-            <div className="rd-section-head">
-              <div className="rd-section-title">{RUNNER_ENGINES}</div>
-              {/* Understated on purpose: Orbit updates these every 30 min, so this is the escape
-                  hatch for when that isn't soon enough — not the way the CLIs are meant to stay
-                  current. The models button sits here for the same reason it exists: what a CLI
-                  offers is a fact about this machine's engines, and updating one is exactly when
-                  the other goes stale. */}
-              {runner.online && (
-                <div className="rd-section-actions">
-                  <Button size="small" disabled={refreshModels.isPending} onClick={() => refreshModels.mutate()}>
-                    Refresh models
-                  </Button>
-                  <Button
-                    size="small"
-                    disabled={relayInFlight || engineUpdate.isPending}
-                    onClick={() => engineUpdate.mutate()}
-                  >
-                    {relayInFlight && updating ? 'Updating…' : 'Update engines'}
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {/* The run's report. Unlike an install it is not retired by the next probe: the summary —
-                what moved, what was skipped and why — exists nowhere else once it's gone. */}
-            {updating && relay?.status && (
-              <div className={`rd-engine-relay${relay.status === 'failed' ? ' bad' : ''}`}>
-                <div className="rd-engine-relay-row">
-                  {relay.status === 'pending'
-                    ? 'Queued — the runner picks this up on its next check-in.'
-                    : relay.status === 'installing'
-                      ? 'Updating this machine’s engine CLIs…'
-                      : relay.message || 'Nothing to update.'}
-                </div>
-                {relay.status !== 'pending' && relay.command && (
-                  <div className="rd-engine-relay-hint">
-                    Orbit ran <code className="re-cmd">{relay.command}</code>
-                  </div>
-                )}
-                {(relay.status === 'done' || relay.status === 'failed') && (
-                  <div className="rd-engine-relay-hint">
-                    <button className="re-link" type="button" onClick={() => dismissEngineUpdate.mutate()}>
-                      Dismiss
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}`}>
-              <MachineEngines
-                runner={runner}
-                signIn={signIn}
-                onSignIn={setSignIn}
-                focusEngine={signInEngine}
-                openAccounts={openAccounts}
-                onFoldAccounts={(engine, open) => foldAccounts(accountsGroup(runner.id, engine), open)}
-                machinePage
-                fleet={runners.data}
-              />
-            </div>
-            {runner.engines && (
-              <div className="rd-hint">{runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}</div>
-            )}
-          </section>
-
-          {/* What worktree GC may never remove: finished sessions' checkouts that still hold
-              uncommitted work. Renders nothing while there are none. */}
-          <AbandonedCheckouts
-            runnerId={runner.id}
-            canDiscard={runner.capabilities?.includes('abandoned-checkout-v1') === true}
-          />
-
-          <section className="rd-section rd-workspaces">
-            <div className="rd-section-head">
-              <div className="rd-section-title">{RUNNER_WORKSPACES}</div>
-              {/* Kept in place while the create form is open — disabled rather than removed, so the
-                  header doesn't reflow out from under the pointer. */}
-              <Button
-                // With none yet, the way in is a session (below): the form stays, for the advanced use.
-                variant={workspacesQ.isSuccess && workspaces.length === 0 ? 'default' : 'primary'}
-                icon={<PlusOutlined />}
-                disabled={formOpen && !editing}
-                onClick={() => switchTo(openCreate)}
-              >
-                Add workspace
-              </Button>
-            </div>
-            {workspacesQ.isLoading ? (
-              <div style={{ padding: 24, textAlign: 'center' }}>
-                <Spinner />
-              </div>
-            ) : workspaces.length === 0 && !(formOpen && !editing) ? (
-              <div className="rd-empty">
-                {machineEmpty(runner.displayName || runner.name)}
-                <div className="rd-empty-action">
-                  <Button variant="primary" onClick={() => navigate(machineDraftPath(runner.id))}>
-                    {START_A_SESSION}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="rd-workspace-list">
-                {formOpen && !editing && (
-                  <div className="rd-workspace-form-wrap">{workspaceForm('create')}</div>
-                )}
-                {workspaces.map((a) =>
-                  formOpen && editing?.id === a.id ? (
-                    <div key={a.id} className="rd-workspace-editing">
-                      {workspaceRow(a)}
-                      <div className="rd-workspace-form-wrap">{workspaceForm('edit')}</div>
-                    </div>
-                  ) : (
-                    workspaceRow(a)
-                  ),
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <div className="rd-col rd-col-side">
-          <section className="rd-section rd-capacity" ref={capacityRef}>
-            <div className="rd-section-head">
-              <div className="rd-section-title">{RUNNER_CAPACITY}</div>
-            </div>
-            <div className="rd-box">
-              <div className="rd-kv">
-                <span className="rd-kv-label">{RUNNER_MAX_CONCURRENT}</span>
-                {/* Saved on blur from around the field, so it runs after the field has settled what
-                    was typed (1–64, whole) — and on Enter, which the field settles first as well. */}
-                <span onBlur={commitMaxConcurrent}>
-                  <NumberInput
-                    className="rd-max-concurrent"
-                    aria-label={RUNNER_MAX_CONCURRENT}
-                    size="small"
-                    min={1}
-                    max={64}
-                    precision={0}
-                    value={maxDraft ?? runner.maxConcurrent ?? null}
-                    onValueChange={(v) => {
-                      maxTyped.current = v;
-                      setMaxDraft(v);
-                    }}
-                    onPressEnter={commitMaxConcurrent}
-                  />
-                </span>
-              </div>
-              <div className="rd-disk">
-                <div className="rd-kv-row">
-                  <span className="rd-kv-label">{RUNNER_DISK}</span>
-                  <span className="rd-kv-value">
-                    {disk
-                      ? runnerDiskUsed(
-                          formatDiskGb(disk.totalBytes - disk.freeBytes),
-                          formatDiskGb(disk.totalBytes),
-                        )
-                      : '—'}
-                  </span>
-                </div>
-                {disk && (
-                  <div className={`rd-disk-bar${diskWarn ? ' warn' : ''}`}>
-                    <span style={{ width: `${disk.usedPercent}%` }} />
-                  </div>
-                )}
-              </div>
-              <div className="rd-kv">
-                <span className="rd-kv-label">{RUNNER_KEEP_FREE}</span>
-                <Select
-                  ref={keepFreeRef}
-                  className="rd-keep-free"
-                  aria-label={RUNNER_KEEP_FREE}
-                  size="small"
-                  value={String(reserveMb ?? 0)}
-                  options={keepFreeOptions.map((option) => ({ value: String(option.value), label: option.label }))}
-                  onValueChange={(value) => {
-                    if (value === null) return;
-                    const mb = Number(value);
-                    capacityMut.mutate({ minFreeDiskMb: mb === 0 ? null : mb });
-                  }}
-                  matchTriggerWidth={false}
-                />
-              </div>
-            </div>
-            <div className="rd-hint">{RUNNER_CAPACITY_FOOTER}</div>
-          </section>
-
-          <section className="rd-section rd-about">
-            <div className="rd-section-head">
-              <div className="rd-section-title">{RUNNER_ABOUT}</div>
-              {/* Like Update engines: the escape hatch for when its own 10-minute check isn't soon
-                  enough. Offered only where a check now can change something. */}
-              {canUpdateNow && (
-                <Button size="small" disabled={runnerUpdate.isPending} onClick={() => runnerUpdate.mutate()}>
-                  {RUNNER_UPDATE_RUNNER_NOW}
-                </Button>
-              )}
-            </div>
-            <div className="rd-box">
-              <AboutRow label={RUNNER_ABOUT_NAME}>
-                {shownName}
-                <button type="button" className="rd-inline-link" onClick={() => openRename()}>
-                  Rename
-                </button>
-              </AboutRow>
-              <AboutRow label={RUNNER_ABOUT_HOSTNAME}>{runner.hostname || '—'}</AboutRow>
-              <AboutRow label={RUNNER_ABOUT_VERSION}>
-                {version ?? '—'}
-                {versionNote && (
-                  <small className={versionNote.warn ? 'warn' : undefined}>{versionNote.text}</small>
-                )}
-              </AboutRow>
-              {lastUpdate && <AboutRow label={RUNNER_ABOUT_LAST_UPDATE}>{lastUpdate}</AboutRow>}
-              <AboutRow label={RUNNER_ABOUT_RUNS_AS}>{runsAs}</AboutRow>
-              <AboutRow label={RUNNER_ABOUT_REPOS_FOLDER}>{runner.reposRoot || '—'}</AboutRow>
-              <AboutRow label={RUNNER_ABOUT_LAST_CHECK_IN}>
-                {runner.lastHeartbeatAt ? ago(runner.lastHeartbeatAt, nowMs) : '—'}
-              </AboutRow>
-              <AboutRow label={RUNNER_ABOUT_REGISTERED}>{fmtDate(runner.enrolledAt)}</AboutRow>
-            </div>
-            {/* Root costs one permission mode: claude refuses Bypass under root. Said here because
-                the picker only ever drops it without a word. */}
-            {runner.runsAsRoot && <div className="rd-hint">{RUNNER_ROOT_NO_BYPASS}</div>}
-          </section>
-        </div>
-      </div>
-      </div>
-
-      <Dialog
-        className="runner-dialog"
-        title="Rename runner"
-        open={renaming}
-        onClose={() => setRenaming(false)}
-        initialFocus={renameInput}
-        returnFocus={renameFrom}
-        footer={
-          <>
-            <Button onClick={() => setRenaming(false)}>Cancel</Button>
-            <Button variant="primary" loading={renameMut.isPending} onClick={() => renameMut.mutate(renameVal.trim())}>
-              Save
+            {/* Kept in place while the create form is open — disabled rather than removed, so the
+                header doesn't reflow out from under the pointer. */}
+            <Button
+              // With none yet, the way in is a session (below): the form stays, for the advanced use.
+              variant={workspacesQ.isSuccess && workspaces.length === 0 ? 'default' : 'primary'}
+              icon={<PlusOutlined />}
+              disabled={formOpen && !editing}
+              onClick={() => switchTo(openCreate)}
+            >
+              Add workspace
             </Button>
-          </>
-        }
-      >
-        <Input
-          ref={renameInput}
-          value={renameVal}
-          onChange={(e) => setRenameVal(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) renameMut.mutate(renameVal.trim());
-          }}
-          placeholder={runner.name}
-          maxLength={60}
-        />
-        <div style={{ marginTop: 8, color: 'var(--text-3)', fontSize: 12 }}>
-          Leave empty to use the machine name ({runner.name}).
-        </div>
-      </Dialog>
+          </div>
+          {workspacesQ.isLoading ? (
+            <div style={{ padding: 24, textAlign: 'center' }}>
+              <Spinner />
+            </div>
+          ) : workspaces.length === 0 && !(formOpen && !editing) ? (
+            <div className="rd-empty">
+              {machineEmpty(shownName)}
+              <div className="rd-empty-action">
+                <Button variant="primary" onClick={() => navigate(machineDraftPath(runner.id))}>
+                  {START_A_SESSION}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="rd-workspace-list">
+              {formOpen && !editing && <div className="rd-workspace-form-wrap">{workspaceForm('create')}</div>}
+              {workspaces.map((a) =>
+                formOpen && editing?.id === a.id ? (
+                  <div key={a.id} className="rd-workspace-editing">
+                    {workspaceRow(a)}
+                    <div className="rd-workspace-form-wrap">{workspaceForm('edit')}</div>
+                  </div>
+                ) : (
+                  workspaceRow(a)
+                ),
+              )}
+            </div>
+          )}
+        </section>
+      </div>
 
       {confirmation}
-      {rotation.dialogs}
     </>
   );
 }
-
-/** One fact in About: its name on the left, the value on the right. */
-function AboutRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="rd-kv">
-      <span className="rd-kv-label">{label}</span>
-      <span className="rd-kv-value">{children}</span>
-    </div>
-  );
-}
-
 /**
  * What this workspace's sessions no longer ask about — the "always allow" answers that outlived
  * the session they were given in.

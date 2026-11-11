@@ -4,8 +4,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Runner } from '../components/TasksSidePanel';
-import { RunnerDetailPage } from './RunnerDetailPage';
+import type { Runner } from '../TasksSidePanel';
+import { MachineWorkspacesEditor } from './MachineWorkspacesEditor';
 
 /**
  * A workspace says how large its Claude Code sessions' conversations get before they are compacted,
@@ -13,8 +13,8 @@ import { RunnerDetailPage } from './RunnerDetailPage';
  * environment, so the saved env is what each claim here is about.
  */
 
-vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
-const { api } = await import('../api');
+vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
+const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
@@ -104,9 +104,9 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+        <MemoryRouter initialEntries={['/settings/workspaces']}>
           <Routes>
-            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+            <Route path="/settings/workspaces" element={<MachineWorkspacesEditor runnerId={RUNNER_ID} workspaceId="" />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,

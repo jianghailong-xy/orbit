@@ -1,26 +1,31 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { routeId } from '../../lib/idCodec';
 import { workspacesQuery } from '../../lib/queries';
-import { RunnerDetailPage } from '../../pages/RunnerDetailPage';
+import { MachineWorkspacesEditor } from './MachineWorkspacesEditor';
 import { Spinner } from '../ui/Spinner';
 
 /*
- * Settings' Machines and Workspaces rows open the pages that manage them today, in Settings' right-hand
- * column, until each group has its own page (the project's later tasks replace these).
+ * TODO(s5, task 34vULVKvcdivsOtyXTP72): Settings' Workspaces rows open the old inline workspace editor
+ * in Settings' right-hand column until the Workspaces page replaces it.
  */
 
-/** /settings/machines/:id — the machine's page, drawn afresh for each machine. */
-export function SettingsMachinePage() {
-  const { id } = useParams();
-  return <RunnerDetailPage key={id} />;
-}
-
-/** /settings/workspaces/:id — its machine's page, with this workspace's editor open. */
+/**
+ * /settings/workspaces/:id — its machine's workspaces with this one's editor open; and
+ * /settings/workspaces/new?machine=<id>, the create form on that machine.
+ */
 export function SettingsWorkspacePage() {
   const { id } = useParams();
+  const [params] = useSearchParams();
   const workspaces = useQuery(workspacesQuery());
+  if (id === 'new') {
+    const machine = params.get('machine');
+    if (!machine) return <p className="settings-empty">Pick a machine for the new workspace first.</p>;
+    return <MachineWorkspacesEditor key={`new:${machine}`} runnerId={machine} workspaceId="new" />;
+  }
+  const wanted = routeId(id);
   const workspace = (workspaces.data as Array<{ id: string; runnerId?: string | null }> | undefined)?.find(
-    (w) => w.id === id,
+    (w) => w.id === wanted,
   );
   if (workspaces.isPending) {
     return (
@@ -33,5 +38,5 @@ export function SettingsWorkspacePage() {
   if (!workspace.runnerId) {
     return <p className="settings-empty">This workspace isn't on any machine.</p>;
   }
-  return <RunnerDetailPage key={workspace.id} runnerId={workspace.runnerId} workspaceId={workspace.id} />;
+  return <MachineWorkspacesEditor key={workspace.id} runnerId={workspace.runnerId} workspaceId={workspace.id} />;
 }

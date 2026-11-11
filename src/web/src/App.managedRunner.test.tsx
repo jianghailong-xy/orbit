@@ -43,7 +43,11 @@ vi.mock('./components/AppShell', async () => {
   };
 });
 vi.mock('./components/RunnerRegisterGuide', () => ({ RunnerRegisterGuide: () => <p>register a machine</p> }));
-vi.mock('./pages/RunnerDetailPage', () => ({ RunnerDetailPage: () => <p>a machine’s page</p> }));
+vi.mock('./components/settings/MachineSettingsPage', () => ({ MachineSettingsPage: () => <p>a machine’s page</p> }));
+vi.mock('./components/settings', async () => {
+  const { Outlet } = await import('react-router-dom');
+  return { SettingsLayout: () => <Outlet /> };
+});
 vi.mock('./pages/InfrastructurePage', () => ({ InfrastructurePage: () => <p>infrastructure</p> }));
 // The console's own view, reduced to what WorkspaceConsole hands it: whose runner, and what managed state.
 vi.mock('./components/WorkspaceView', () => ({
@@ -187,18 +191,18 @@ const LANDINGS = [
     shows: 'Mac|no managed state',
   },
   {
-    label: 'one machine offline, no workspace: Infrastructure',
+    label: 'one machine offline, no workspace: its Settings page',
     runners: [runner(MAC, 'Mac', false)],
     workspaces: [],
-    lands: '/infrastructure',
-    shows: 'infrastructure',
+    lands: `/settings/machines/${MAC}`,
+    shows: 'a machine’s page',
   },
   {
-    label: 'every machine offline, no workspace: Infrastructure',
+    label: 'every machine offline, no workspace: the first one’s Settings page',
     runners: [runner(MAC, 'Mac', false), runner(HPC, 'HPC', false)],
     workspaces: [],
-    lands: '/infrastructure',
-    shows: 'infrastructure',
+    lands: `/settings/machines/${MAC}`,
+    shows: 'a machine’s page',
   },
   {
     label: 'a workspace: its console',

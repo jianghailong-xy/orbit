@@ -41,8 +41,8 @@ import type { Runner } from '../components/TasksSidePanel';
  * Last, the account pools (AccountPools): several of those keys' Claude subscriptions dispatched under
  * one name, a Codex pool of the user's ChatGPT accounts, and the shared pools they are in.
  *
- * The head's Add makes any of the three. `/runners` and `/providers` land here (App.tsx), and
- * `#keys` / `#pools` bring that section into view.
+ * The head's Add makes any of the three. `/providers` lands here (App.tsx), and `#keys` / `#pools`
+ * bring that section into view; `/runners` and bare `/infrastructure` open a machine's Settings page.
  */
 export function InfrastructurePage({ section }: { section?: 'keys' | 'pools' } = {}) {
   const message = useToast();
