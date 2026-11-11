@@ -1147,6 +1147,8 @@ questionWithCoordinator?: { count: number; since: string; dueAt: string } | null
 
 协调会话这一侧的 `NO_REPLY`（§4.1）和 `RECIPIENT_ENDED` 判定照旧，只是结局的去处换成 §16。
 
+**R 的卡片（2026-11-11，owner 认可 `docs/mocks/orbit-turn-cards/`）**：`run-question:v1:` 轮次的回显和排队行带 `runQuestion`（`RunQuestionCard`：问题与选项、`replyBy`、请求与审批状态，以及答过之后的 `answers`（按问题原文）和 `answeredBy`：`SESSION` 是协调会话经 `session_reply` 答的，`OWNER` 是 owner 答的）。客户端画成 `Question from a task run` 卡片：任务标题、问题与选项（只读，卡片上不放作答按钮）、一句状态（`The run is waiting. This session answers it; if it hasn't by <时间>, you're asked.` / `Passed to you at <时间>.` / `Answered by this session.` / `Answered by you.` / `Closed without an answer.`）、`Open task session`，给 agent 的原文收在 `What the coordinator was told` 折叠里。
+
 ---
 
 ## 15. 执行会话的 notify（M）
@@ -1179,6 +1181,8 @@ Nothing is waiting for your reply. If the owner should know or decide, use ask_o
 { "delivered": true, "recipient": "owner", "fallback": "NO_COORDINATOR", "devices": 2 }               // 兜底
 { "delivered": false, "reason": "rate limited — try again in 41s" }                                   // 与今天相同
 ```
+
+**M 的卡片（2026-11-11，同上效果图）**：`run-notify:v1:` 轮次的回显和排队行带 `runNotice`（`RunNoticeCard`：任务、`request_preview` 原话、请求状态；交出时状态由 OPEN 变 READ）。客户端画成灰色 `Notice from a task run` 卡片：任务标题、加引号的原话、`Nothing to reply to. It did not reach you.`，原文收在 `What the coordinator was told` 折叠里。
 
 **M6（兜底）**：§16 列出的情况发生时：
 - 调用那一刻就不可达（没有协调会话、已结束、暂停、熔断、`createTurn` 拒绝）：走今天的 `notifyAgentMessage` 的发送部分（M3 已经 claim 过），正文前面加 `Not reviewed by the coordinator · `，结果带 `fallback`。

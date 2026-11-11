@@ -46,6 +46,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { AdminController } from '../users/admin.controller';
 import { AnthropicGatewayController } from './anthropic-gateway.controller';
+import { AnthropicLoginGatewayService } from './anthropic-login-gateway.service';
 import { AnthropicGatewayService } from './anthropic-gateway.service';
 import { ANTHROPIC_GATEWAY_FLAG } from './key-gateway';
 import { ProviderPlanUsageService } from './plan-usage.service';
@@ -168,7 +169,9 @@ suite('key_gateway_token, end to end on real PostgreSQL', { timeout: 600_000 }, 
 
   @Module({
     controllers: [AnthropicGatewayController],
-    providers: [{ provide: AnthropicGatewayService, useValue: gateway }],
+    providers: [{ provide: AnthropicGatewayService, useValue: gateway },
+      // The login pools' upstream (design §9): present, and never reached by a key's token.
+      { provide: AnthropicLoginGatewayService, useValue: {} }],
   })
   class GatewayDoors {}
   const app = await NestFactory.create(GatewayDoors, { bodyParser: false, logger: false, abortOnError: false });

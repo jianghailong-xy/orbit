@@ -12,8 +12,14 @@
  *   cd <pre>/src/apiserver && npx tsc -p tsconfig.test.json
  *   node -e "require('./build/providers/gateway-flag-parity.cases').recordParity()" > src/providers/fixtures/gateway-flag-parity.json
  *
- * The one hook is `keyRow`: what the claim does to the key row before it builds the run. Before the project
- * the claim used the row as it was; now it passes through withKeyGatewayToken.
+ * The hooks are `keyRow`: what the claim does to the key row before it builds the run (before the project the
+ * claim used the row as it was; now it passes through withKeyGatewayToken), and `pool`: the credential a pool's
+ * slug classifies as and the row its claim dispatches on (before, the pool's credential as the case names it and
+ * sharedPoolExecRow; now, for a Codex pool, engine-provider.ts's classification and QueueService.resolveLoginPool's
+ * row, which ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY widens to Claude Code).
+ *
+ * The `claude-on-*-codex-pool` cases (P2b, docs/claude-engine-openai-gateway-design.md §9) were recorded the same
+ * way at d07cdd060, the project tip before P2b, and added to the fixture.
  */
 import { AgentProvider } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
@@ -76,9 +82,11 @@ const KEYS = {
 };
 
 /** The owner's account pools by slug: a Claude one of keys, and a Codex one of logins and keys. */
-const POOLS: Record<string, { shared: boolean; engine: string; dispatches: () => ModelProviderRow }> = {
+export const POOLS: Record<string, { shared: boolean; engine: string; dispatches: () => ModelProviderRow }> = {
   'claude-pool': { shared: false, engine: 'claude', dispatches: () => KEYS.poolMember },
   'codex-pool': { shared: false, engine: 'codex', dispatches: () => sharedPoolExecRow('orbit-gwl-parity-session-token') },
+  // A Codex pool the owner is one of the people of (shared): it runs on its API keys, on an `orbit-gw-` token.
+  'shared-codex-pool': { shared: true, engine: 'codex', dispatches: () => sharedPoolExecRow('orbit-gw-parity-shared-token') },
 };
 
 /** What the reads dispatch makes see: the owner's keys and pools, nothing shared, no aliases. */
@@ -94,9 +102,14 @@ export function fakeDb(): Prisma.TransactionClient {
     },
     providerSlugAlias: { findUnique: async () => null },
     providerPool: {
-      findFirst: async ({ where }: { where: { slug: string; ownerId?: string } }) => {
-        const pool = where.ownerId === OWNER ? POOLS[where.slug] : undefined;
-        return pool ? { shared: pool.shared, engine: pool.engine, id: `pool-${where.slug}` } : null;
+      findFirst: async ({ where }: { where: { slug: string; ownerId?: string; shared?: boolean; engine?: string; people?: unknown } }) => {
+        const pool = POOLS[where.slug];
+        if (!pool) return null;
+        // The owner's own (by owner), or a shared one they are one of the people of (by `people`).
+        const reached = where.ownerId === OWNER ? !pool.shared : where.people !== undefined && pool.shared;
+        if (!reached || (where.shared !== undefined && where.shared !== pool.shared)) return null;
+        if (where.engine !== undefined && where.engine !== pool.engine) return null;
+        return { shared: pool.shared, engine: pool.engine, id: `pool-${where.slug}` };
       },
     },
     // Written only by a token mint, which only the gateway's dispatch does.
@@ -136,6 +149,11 @@ export const PARITY_CASES: ParityCase[] = [
   { name: 'runner-login/codex', provider: 'codex', providerBuiltin: true, engine: AgentProvider.CODEX, model: 'gpt-5.1', credential: { kind: 'login', engine: 'codex' } },
   { name: 'account-pool/claude', provider: 'claude-pool', providerBuiltin: false, engine: AgentProvider.CLAUDE, model: 'claude-opus-5-5', credential: { kind: 'pool', slug: 'claude-pool', engine: AgentProvider.CLAUDE } },
   { name: 'account-pool/codex', provider: 'codex-pool', providerBuiltin: false, engine: AgentProvider.CODEX, model: 'gpt-5.1', credential: { kind: 'pool', slug: 'codex-pool', engine: AgentProvider.CODEX } },
+  // Refused before P2b; the one combination ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY opens (design §9).
+  { name: 'account-pool/claude-on-own-codex-pool', provider: 'codex-pool', providerBuiltin: false, engine: AgentProvider.CLAUDE, model: 'gpt-5.6-sol', credential: { kind: 'pool', slug: 'codex-pool', engine: AgentProvider.CODEX } },
+  { name: 'account-pool/codex-on-shared-codex-pool', provider: 'shared-codex-pool', providerBuiltin: false, engine: AgentProvider.CODEX, model: 'gpt-5.1', credential: { kind: 'pool', slug: 'shared-codex-pool', engine: AgentProvider.CODEX } },
+  // Never opened: a shared pool is not offered Claude Code (decision D4).
+  { name: 'account-pool/claude-on-shared-codex-pool', provider: 'shared-codex-pool', providerBuiltin: false, engine: AgentProvider.CLAUDE, model: 'gpt-5.1', credential: { kind: 'pool', slug: 'shared-codex-pool', engine: AgentProvider.CODEX } },
   keyCase('anthropic-key', KEYS.anthropic, AgentProvider.CLAUDE, 'claude-opus-5-5'),
   keyCase('anthropic-key', KEYS.anthropic, AgentProvider.OPENCODE, 'claude-opus-5-5'),
   keyCase('deepseek-key', KEYS.deepseek, AgentProvider.CLAUDE, 'deepseek-chat'),
@@ -170,7 +188,22 @@ export type KeyRowHook = (
   row: KeyRow | null,
 ) => Promise<ModelProviderRow | null>;
 
-export async function buildParity(c: ParityCase, keyRow: KeyRowHook = async (_db, _s, _e, row) => row): Promise<ParityResult> {
+/** What a pool's slug classifies as, and the row its claim dispatches on. */
+export interface PoolHook {
+  credential: (db: Prisma.TransactionClient, c: ParityCase) => Promise<ResolvedCredential>;
+  row: (db: Prisma.TransactionClient, c: ParityCase) => ModelProviderRow | null;
+}
+
+const POOL_BEFORE: PoolHook = {
+  credential: async (_db, c) => c.credential,
+  row: (_db, c) => POOLS[c.provider]?.dispatches() ?? null,
+};
+
+export async function buildParity(
+  c: ParityCase,
+  keyRow: KeyRowHook = async (_db, _s, _e, row) => row,
+  poolHook: PoolHook = POOL_BEFORE,
+): Promise<ParityResult> {
   const db = fakeDb();
   const session = {
     id: `0190f3c2-0000-7000-8000-0000000c${c.name.length.toString().padStart(4, '0')}`,
@@ -187,8 +220,7 @@ export async function buildParity(c: ParityCase, keyRow: KeyRowHook = async (_db
   const resolution = await resolutionOf(db, session);
   // The claim's row: the key the slug names (wrapped as the claim wraps it), else the pool's.
   const configured = c.credential.kind === 'key' ? c.credential.row : null;
-  const pool = POOLS[c.provider];
-  const customRow = (await keyRow(db, session, c.engine, configured)) ?? (pool ? pool.dispatches() : null);
+  const customRow = (await keyRow(db, session, c.engine, configured)) ?? (c.credential.kind === 'pool' ? poolHook.row(db, c) : null);
   let env: Record<string, string> | null = null;
   let refusal: string | null = null;
   try {
@@ -212,7 +244,8 @@ export async function buildParity(c: ParityCase, keyRow: KeyRowHook = async (_db
   } catch (error) {
     refusal = error instanceof Error ? error.message : String(error);
   }
-  return { resolution, env, refusal, engines: resolvedCredentialEngines(c.credential) };
+  const credential = c.credential.kind === 'pool' ? await poolHook.credential(db, c) : c.credential;
+  return { resolution, env, refusal, engines: resolvedCredentialEngines(credential) };
 }
 
 /** Every case, keyed by name, as JSON: what the fixture holds. */

@@ -17,6 +17,12 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { anthropicGatewayEnabled, engineTableOptions, withKeyGatewayToken } from '../providers/key-gateway';
+import {
+  claudeCodexLoginEnabled,
+  codexLoginClaudeExecRow,
+  isOwnCodexLoginPool,
+  poolTableOptions,
+} from '../providers/codex-login-claude';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
@@ -287,7 +293,13 @@ export class QueueService {
           unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
         }
         if (!unavailable && engine) {
-          const engines = provider ? credentialEngines(keyCredential(provider), engineTableOptions(provider.baseUrl)) : [poolEngine!];
+          const engines = provider
+            ? credentialEngines(keyCredential(provider), engineTableOptions(provider.baseUrl))
+            : credentialEngines({
+                kind: 'pool',
+                engine: poolEngine!,
+                ownLogin: poolEngine === AgentProvider.CODEX && (await isOwnCodexLoginPool(this.prisma, session.ownerId, slug)),
+              }, poolTableOptions());
           if (!engines.includes(engine)) incompatible = engineIncompatibleMessage(slug, engine, engines);
         }
         const key = `${session.ownerId}:${slug}`;
@@ -523,13 +535,17 @@ export class QueueService {
                       AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
                   ) OR EXISTS (
                     SELECT 1 FROM "provider_pool" pp
-                    WHERE pp.slug = s.provider AND pp.engine = s."engine" AND (
+                    WHERE pp.slug = s.provider AND ((pp.engine = s."engine" AND (
                       (pp.owner_id = s.owner_id AND NOT pp.shared)
                       OR (pp.engine = 'codex' AND EXISTS (
                         SELECT 1 FROM "provider_pool_person" person
                         WHERE person.pool_id = pp.id AND person.user_id = s.owner_id
                       ))
-                    )
+                    ))
+                    -- Claude Code on a Codex pool of the owner's own, never a shared one, through /api/gw/anthropic,
+                    -- with ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on.
+                    OR (${claudeCodexLoginEnabled()} AND s."engine" = 'claude' AND pp.engine = 'codex'
+                      AND pp.owner_id = s.owner_id AND NOT pp.shared))
                   )
                 ))
               ))
@@ -970,7 +986,7 @@ export class QueueService {
     const customRow = declaredIsBuiltin
       ? keyRow
       : (keyRow ??
-        (await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
+        (await this.resolveLoginPool(this.prisma, session, declared!, true, engine)) ??
         (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
         (await this.resolveSharedPool(this.prisma, session, declared!, true)));
     // A Claude pool of the owner's own that none of its members can run still dispatches, on the Claude
@@ -1627,6 +1643,11 @@ export class QueueService {
    * Every door that builds such a session's engine environment resolves it here — the claim, a restarted
    * runner's reclaim, a provider-switch reload (RunnerApiController) — and each mints its own token.
    * `db` is the caller's client: the reload runs inside the transaction that holds this session's row.
+   *
+   * A Claude Code session (`engine` claude) on such a pool, with ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on, is chosen
+   * an account the same way, among the accounts its owner signed in themselves and never the pool's API keys
+   * (decision D4: no other person's account), and dispatches as codexLoginClaudeExecRow: /api/gw/anthropic with
+   * the same pool session token. With the switch off it dispatches as before, which Claude Code cannot run.
    */
   async resolveLoginPool(
     db: Prisma.TransactionClient | PrismaService,
@@ -1639,16 +1660,18 @@ export class QueueService {
     },
     slug: string,
     atClaim = false,
+    engine?: AgentProvider | null,
   ): Promise<ModelProviderRow | null> {
     const pool = await this.accountPool(session.ownerId, slug, db);
     if (pool?.engine !== AgentProvider.CODEX) return null;
     const now = new Date();
+    const claude = engine === AgentProvider.CLAUDE && claudeCodexLoginEnabled();
     // accountPool found it as a pool of the session's owner's own, never a shared one: its accounts first.
     const { chosen, next, notice } = choosePoolCredential(
       {
         ownerId: session.ownerId,
-        accounts: pool.logins,
-        keys: await sharedPoolKeyCandidates(db, pool.id, now),
+        accounts: claude ? pool.logins.filter((login) => login.userId === session.ownerId) : pool.logins,
+        keys: claude ? [] : await sharedPoolKeyCandidates(db, pool.id, now),
         ownKeyFirst: pool.ownKeyFirst,
       },
       { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
@@ -1680,7 +1703,7 @@ export class QueueService {
     if (atClaim && (notice || session.poolSwitchNotice)) {
       await new PoolNotices(this.prisma, this.realtime).carrier(session.id);
     }
-    return sharedPoolExecRow(token);
+    return claude ? codexLoginClaudeExecRow(token) : sharedPoolExecRow(token);
   }
 
   /**

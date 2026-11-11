@@ -44,6 +44,16 @@ final class WikiChatLogicTests: XCTestCase {
         XCTAssertFalse(WikiChatLogic.opensByDefault(sheet: false, settingsOnTop: false, hiddenByOwner: true), "✕")
     }
 
+    /// The column is a third of the Wiki's width between 400 and 720, and drags up to half of it (the web's widths).
+    func testTheColumnIsAThirdOfTheWikisWidth() {
+        XCTAssertEqual(WikiChatLogic.Column.ideal(1000), 400)
+        XCTAssertEqual(WikiChatLogic.Column.ideal(1440), 480)
+        XCTAssertEqual(WikiChatLogic.Column.ideal(2055), 685)
+        XCTAssertEqual(WikiChatLogic.Column.ideal(3008), 720)
+        XCTAssertEqual(WikiChatLogic.Column.max(2055), 1027)
+        XCTAssertEqual(WikiChatLogic.Column.max(500), 320)
+    }
+
     /// Open: needs you, then working, then as served; Completed as served (the web's `wikiChatHistoryGroups`).
     func testTheHistoryFilesOpenAndCompleted() {
         func row(_ id: String, completed: Bool = false, working: Bool = false, needsYou: Int = 0) -> WikiChatRow {

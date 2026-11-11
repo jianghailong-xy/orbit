@@ -109,6 +109,8 @@ public enum SteerDelivery {
             && b.taskStart == nil && b.startedCard == nil
             && b.sessionMessage == nil && b.sessionReplies == nil
             && b.reviewRequest == nil && b.reviewReturn == nil && b.reviewAnswers == nil
+            && b.evidenceReview == nil && b.evidenceSendBack == nil && b.runQuestion == nil
+            && b.runNotice == nil && b.sessionOpening == nil
             && WatchWakeText.parse(b.text) == nil
             && BackgroundWakeText.parse(b.text) == nil && BackgroundWakeText.parse(b.note) == nil
     }

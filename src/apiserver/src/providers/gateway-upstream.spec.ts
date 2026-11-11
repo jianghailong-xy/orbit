@@ -25,6 +25,7 @@ import { DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
 import type { PrismaService } from '../prisma/prisma.service';
 import { AnthropicGatewayController } from './anthropic-gateway.controller';
+import type { AnthropicLoginGatewayService } from './anthropic-login-gateway.service';
 import { AnthropicGatewayService } from './anthropic-gateway.service';
 import { GATEWAY_UPSTREAM_HOSTS_ENV, isNonPublicAddress, upstreamUrlRefusal, vetUpstream } from './gateway-upstream';
 import { ANTHROPIC_GATEWAY_FLAG, engineTableOptions } from './key-gateway';
@@ -148,7 +149,7 @@ before(async () => {
       return net.connect(upstreamPort, '127.0.0.1');
     }
   })();
-  controller = new AnthropicGatewayController(service);
+  controller = new AnthropicGatewayController(service, {} as AnthropicLoginGatewayService);
   const app = express();
   app.all(/^\/api\/gw\/anthropic(\/.*)?$/, (req, res) => void controller.forward(req, res));
   gateway = createServer(app);

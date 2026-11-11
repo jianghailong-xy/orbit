@@ -37,6 +37,8 @@ final class UserTurnRowWiringTests: XCTestCase {
         "CoordinatorDeliveryLineView(", "TaskStartCardView(",
         "ProjectStartedCardView(", "ReviewRequestedCardView(", "SentBackByReviewerCardView(",
         "YouConfirmedCardView(",
+        "EvidenceToReviewCardView(", "EvidenceSentBackCardView(", "RunQuestionCardView(",
+        "RunNoticeCardView(", "SessionOpeningRowView(",
         "SessionReplyCardsView(", "WatchWakeCardView(", "BackgroundWakeCardView(",
     ]
 

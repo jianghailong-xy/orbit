@@ -338,7 +338,7 @@ memory and connection counts with 20 concurrent sessions.
 | D1 | Who translates | **A** a translator written in the API server · B a LiteLLM container behind the gateway, which still does tokens, keys and usage | **A**: no new container in Compose, Kubernetes or self-hosted installs, and errors, quota and haiku mapping stay in Orbit's code. LiteLLM's mapping serves as a reference in tests. |
 | D2 | Upstream API | **A** Responses · B Chat Completions | **A**: OpenAI's current API, encrypted reasoning that survives turns, and the same API the Codex gateway already reads. |
 | D3 | Which keys may use the gateway | **A** host `api.openai.com`, plus hosts an admin lists · B any OpenAI-dialect row, with private addresses blocked | **A** first (§5.3); B later if people ask for Azure or other Responses-compatible hosts. |
-| D4 | ChatGPT logins (Codex pools) on Claude Code | **A** not offered · B offered later as an opt-in | **A**: ChatGPT's Codex backend is not a public API, and on a hosted multi-user service an account ban is the owner's risk. |
+| D4 | ChatGPT logins (Codex pools) on Claude Code | **A** not offered · B offered later as an opt-in | **A**: ChatGPT's Codex backend is not a public API, and on a hosted multi-user service an account ban is the owner's risk. **Amended 2026-11-11:** offered on the account owner's own Codex login pool only, behind its own flag, with no disguise (§9). |
 | D5 | Claude Code's web search (an Anthropic server tool) | **A** first release: the tool reports "not available on this model"; mapped to OpenAI's `web_search` in P3 · B mapped from P1 | **A**: the mapping is the largest single piece and the rest does not depend on it. |
 | D6 | Rollout | **A** deployment flag, default off, until the P3 quality gate passes · B on from P1 | **A**: the engine only shows up once it is known to work. |
 | D7 | Default engine for an OpenAI key | **A** stays `codex` · B `claude` | **A**: nothing changes for anyone who doesn't pick Claude Code. |
@@ -353,6 +353,7 @@ Each phase depends on the one before it.
 | **P0 Spike** | Record what Claude Code (the version the runner ships) sends to a fake Anthropic endpoint: paths, headers, effort fields, haiku requests, count_tokens, and the overflow wording. Write the translator against those fixtures. Run it once against OpenAI from a scratch script. | A recorded 10-turn session with parallel tool calls, a subagent, reasoning carried across turns and one compaction completes through the translator against OpenAI. Each P0 question in this document has a recorded answer. |
 | **P1 Wiring** | `gw/anthropic` route, `key_gateway_token` and its migration, dispatch environment, compatibility behind the D6 flag, contract §2.1 and §4.2 updated, tenant-isolation cases. | With the flag on, a session on an OpenAI key and Claude Code runs end to end on a real runner. With it off, the dispatch environment and `engines` of every existing session are unchanged (the `provider-engine-resolution` comparison). |
 | **P2 Production behaviour** | Error and quota mapping (§5.4), rate-limit waits, key marking, usage and cost (§5.5), count_tokens, haiku mapping, load check (§5.6). | Each row of §5.4 has a test that drives the real CLI through the gateway against a fake upstream (`anthropic-gateway-cli.e2e.ts`, `npm run test:gateway-cli`). 20 concurrent sessions stay within the server's memory budget. |
+| **P2b Owner's Codex login pool** | Claude Code on the account owner's own Codex login pool behind `ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY` (§9). | The probe accepts an undisguised request; specs show no account token in the environment, shared pools refused and flag-off parity; a real-runner session on the owner's pool. |
 | **P3 Quality and release** | The same task set on `codex` + GPT and on `claude` + GPT; web search mapping (D5); copy, docs and the connection-form line. | The owner reads the comparison and decides whether to turn the flag on. |
 
 ## 8. What P0 answered
@@ -418,3 +419,88 @@ end-to-end run against OpenAI settles them.
   is sent (`basic.json`).
 - Subagents send the main request's shape on the session model, with `cc_is_subagent=true` in the billing block
   (`subagent-r2.json`).
+
+## 9. Claude Code on the owner's own Codex login pool (P2b)
+
+Decision D4 as amended on 2026-11-11: Claude Code may run on the account owner's **own** Codex login pool, the
+ChatGPT accounts they signed in to a pool they made and did not share. Shared pools, and other people's accounts,
+are not offered. It sits behind its own deployment flag, `ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY` (off by default,
+separate from `ORBIT_CLAUDE_OPENAI_GATEWAY`; [configuration](configuration.md)). No impersonation: Orbit never
+sends Codex's system prompt, a Codex user agent or any other disguise to get a request accepted.
+
+### 9.1 The probe
+
+Before anything was built, one request was sent on 2026-11-11 to ChatGPT's Codex backend through the login gateway's
+own auth (production `/api/gw/codex`, on the session token of a codex session on the owner's pool `codex-pool`,
+from the HPC runner):
+
+- Body: a real `claude -p` 2.1.322 first request, recorded locally with its full system prompt (5,599 characters;
+  the checked-in fixtures elide it), translated by `anthropic-gateway/request.ts` for `gpt-5.6-sol`. Its
+  `instructions` were Claude Code's own prompt; 21 tools; `max_output_tokens` and `reasoning` as translated.
+- Headers: `content-type`, `accept: text/event-stream`, `user-agent: claude-cli/2.1.322 (external, sdk-cli)` and
+  the Orbit token. The login gateway of that time added its codex-turn extras (`version`, `x-codex-routing-hint`,
+  zstd); the shipped upstream sends none of them (§9.3).
+- Answer: **200**, a complete stream, model `gpt-5.6-sol`, 15,505 input and 5 output tokens, text "ok",
+  `x-codex-plan-type: pro`. The backend did not refuse Claude Code's own instructions or client, so the build went
+  ahead.
+
+### 9.2 Dispatch
+
+- **Compatibility.** The shared table gains `{ kind: 'pool', engine: 'codex', ownLogin: true }` with
+  `EngineTableOptions.codexLoginGateway`. With the flag on, such a pool runs `codex` (still the default, D7) and
+  `claude`. `ownLogin` is decided on the server (`codex-login-claude.ts` `isOwnCodexLoginPool`: `shared = false`,
+  `owner_id` = the session's owner, `engine = 'codex'`) and only while the flag is on. The pool views
+  (`GET /providers/pools`) carry `engines` only with the flag on; the runner's provider list (`listUsable`) names
+  them for the caller's own pool. The claim's SQL takes `engine = 'claude'` on such a pool only with the flag on.
+- **Account.** Each claim chooses the account as for codex (`QueueService.resolveLoginPool` →
+  `choosePoolCredential`), but among the accounts the session's owner signed in themselves, and never the pool's
+  API keys. The choice is recorded in `pool_codex_account_id`, as for codex.
+- **Environment.** `ANTHROPIC_BASE_URL` = `PUBLIC_ORIGIN` + `/api/gw/anthropic`; `ANTHROPIC_AUTH_TOKEN` = the
+  pool's own `orbit-gwl-` session token (`mintPoolLoginToken`, the same `pool_login_token` table, hash only, no
+  account named). No `OPENAI_*`, `CODEX_HOME`, account id or account token. No `ANTHROPIC_DEFAULT_HAIKU_MODEL`: a
+  ChatGPT plan serves the models its Codex catalogue lists, so the haiku slot falls back to the session model.
+  The model space is Codex's, as the runner's own Codex catalogue reports it; `CLAUDE_CODE_MAX_CONTEXT_TOKENS`
+  comes from that catalogue's window for the model, with the usual eighth held back. No table or column was
+  added.
+
+### 9.3 The gateway
+
+`/api/gw/anthropic` answers a login pool's token with `AnthropicLoginGatewayService`. The token must belong to an
+open session on engine `claude` on its owner's own unshared Codex pool, with the flag on and no end asked for
+(`PoolLoginGatewayService.caller(token, 'claude')`). `/api/gw/codex` refuses such a session's token, and
+`/api/gw/anthropic` refuses a codex session's.
+
+- The request is translated as an OpenAI key's is (§4.3) and sent to `CHATGPT_CODEX_BASE/responses` with
+  `content-type`, `accept`, `Authorization: Bearer <access token>`, `ChatGPT-Account-ID`, and Claude Code's own
+  `User-Agent` as it came. Nothing else is sent: no `version`, `x-codex-routing-hint`, zstd body or guardian
+  metadata (those stay codex-only in `loginProviderRequest`), and no Codex prompt.
+- The account checks, the refresh (ahead of expiry, and once on a 401), the rate-limit wait, the `spent_until` and
+  `throttled_until` marks, the transcript notices and the usage ledger are the login gateway's own code, split
+  out of `PoolLoginGatewayService.forward` (`accountFor`, `exchange`, `readUsage`, `answeredWhole`,
+  `streamEnded`), which codex's path now calls too.
+- Failures reach the CLI in Anthropic's shape with §5.4's statuses, worded for "the ChatGPT account <email> of
+  the pool "<label>"". A spent subscription is a 429 starting "You hit your usage limit on …", resetting at the
+  reset the login gateway records. The login gateway's own refusals (signed out, paused, no account, disabled)
+  are 403 `permission_error` with `x-should-retry: false`; an unreachable backend is 529.
+- `count_tokens` answers the characters ÷ 4 estimate (§4.6): the Codex backend has no count endpoint.
+
+### 9.4 Usage and cost
+
+Each answer's usage goes into `pool_login_usage` with its price, as for codex sessions (`PoolLoginLedger`). It is
+also booked on the session (`cost_usd` plus a `usage` row, priced with `openai-prices`), and turn-complete then
+books none of the CLI's own figure (`gatewayBooksSpend` counts a Claude session's login-pool token). D8 holds.
+
+### 9.5 Copy
+
+Where the engine picker lists the pool under Claude Code (web, iOS/macOS, Android), it says: "Runs Claude Code on
+your ChatGPT account outside the official Codex CLI. OpenAI may restrict the account."
+
+### 9.6 Specs
+
+- `gateway-flag-parity.spec.ts`: three new cases (Claude Code on the own pool, Codex and Claude Code on a shared
+  pool), recorded at d07cdd060. Off, nothing differs; on, only the own pool's `engines` and its Claude Code
+  session do.
+- `codex-login-claude.pg.spec.ts`: on real PostgreSQL, the claim's environment holds no account token or id. Shared
+  and other people's pools are refused. The request on the wire is Claude Code's own, usage and cost are booked,
+  and the spent and refresh paths work.
+

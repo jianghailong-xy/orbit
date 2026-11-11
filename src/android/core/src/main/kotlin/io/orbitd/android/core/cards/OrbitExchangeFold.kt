@@ -31,14 +31,25 @@ object OrbitExchangeFold {
         Triple("project", "project update", "project updates"),
         Triple("watch", "watch", "watches"),
         Triple("job", "background job", "background jobs"),
+        Triple("notice", "run notice", "run notices"),
+        Triple("message", "message", "messages"),
         Triple("reply", "reply", "replies"),
     )
 
-    /** Facts a coordinator is told that are bad news: they stay in view, as they always were drawn (web `LOUD_DELIVERIES`). */
-    val loudDeliveries = setOf("TASK_DISPATCH_REFUSED", "PROJECT_BLOCKER_RAISED", "TASK_RUN_STOPPED")
+    /**
+     * Facts a coordinator is told that are bad news: they stay in view, as they always were drawn (web `LOUD_DELIVERIES`). A stopped
+     * run is not one of them: in real coordinators every such notice was a run waiting on purpose, and what needs the owner reaches
+     * them as a card of its own.
+     */
+    val loudDeliveries = setOf("TASK_DISPATCH_REFUSED", "PROJECT_BLOCKER_RAISED")
 
-    /** The cards a turn can carry that are never folded: somebody's words, an item to act on, a run's or a project's start, a review. */
-    private val keptCards = listOf("sessionMessage", "openItemDelivery", "ownerAnswer", "taskStart", "projectStarted",
+    fun messageFrom(title: String) = "Message from $title"
+    const val message = "Message"
+    fun runNoticeFor(title: String) = "Run notice: $title"
+    const val runNotice = "Run notice"
+
+    /** The cards a turn can carry that are never folded: an item to act on, an owner's answer, a run's or a project's start, a review. */
+    private val keptCards = listOf("openItemDelivery", "ownerAnswer", "taskStart", "projectStarted",
         "confirmationReviewRequest", "confirmationReturn")
 
     /** What an exchange is about, as far as a tree can place it: `TASK` or `SESSION`. */
@@ -53,8 +64,8 @@ object OrbitExchangeFold {
 
     /**
      * What a turn's opening event says happened, when Orbit opened the turn and it is one the reader can be spared: a fact told to a
-     * coordinator, a watch or a background job coming back, another session's reply. Null for everything else, and for those that
-     * went wrong — a refused start, a blocker, a stopped run, a failed target or job, a delivery nobody confirmed — which stay drawn
+     * coordinator, a watch or a background job coming back, a task run's notice or message, another session's reply. Null for everything
+     * else, and for those that went wrong — a refused start, a blocker, a failed target or job, a delivery nobody confirmed — which stay drawn
      * (web `orbitTurnOf`). [wakeName] names a watch's target the way the wake's own line does.
      */
     fun turnOf(event: RunEvent, wakeName: (String, JsonObject) -> String? = { _, _ -> null }): Head? {
@@ -63,6 +74,20 @@ object OrbitExchangeFold {
         if (payload["steer"] == JsonPrimitive(true)) return null
         if (payload.text("delivery") in setOf("failed", "unconfirmed")) return null
         if (keptCards.any { payload[it] is JsonObject }) return null
+        // Another session's message: a task's run reporting to its coordinator, folded under that task (web `orbitTurnOf`).
+        payload.obj("sessionMessage")?.let { card ->
+            val fromTitle = card.text("fromTitle").orEmpty()
+            val fromTask = card.text("fromTaskId")?.takeIf { it.isNotEmpty() }
+            val task = if (fromTask != null) fromTitle.removePrefix("Task: ") else null
+            val from = card.text("fromSessionId").orEmpty()
+            return Head(messageFrom(task ?: fromTitle), message, "message",
+                if (fromTask != null) Target("TASK", fromTask, task) else Target("SESSION", from, fromTitle))
+        }
+        // A task run's notify that could not reach the owner, handed to the coordinator (web `parseRunNotice`).
+        runNotice(payload.text("controlPlaneNote") ?: payload.text("text"))?.let { (taskId, taskTitle) ->
+            return Head(if (taskTitle != null) runNoticeFor(taskTitle) else runNotice, runNotice, "notice",
+                taskId?.let { Target("TASK", it, taskTitle) })
+        }
         val replies = payload.objects("sessionReplies")
         if (replies.isNotEmpty()) {
             val reply = replies.singleOrNull() ?: return null
@@ -102,6 +127,21 @@ object OrbitExchangeFold {
         return null
     }
 
+    private val runNoticeHead = Regex("^<orbit-run-notice task=\"([^\"]*)\" run-session=\"[^\"]*\"[^>]*>\n")
+    private val runNoticeTitle = Regex("A run of the task “([\\s\\S]*?)” used notify\\.")
+
+    /**
+     * A task run's `notify` handed to its coordinator because it could not reach the owner (apiserver `<orbit-run-notice>`): the task
+     * it is about, by id and title (web `parseRunNotice`). Recorded as the turn's control-plane note with no card beside it, so it is
+     * read off the words. Null for anything else.
+     */
+    fun runNotice(note: String?): Pair<String?, String?>? {
+        val trimmed = note?.trim() ?: return null
+        val head = runNoticeHead.find(trimmed) ?: return null
+        if (!trimmed.contains("</orbit-run-notice>")) return null
+        return head.groupValues[1].ifEmpty { null } to runNoticeTitle.find(trimmed)?.groupValues?.get(1)
+    }
+
     /** The words a person typed: the echo without what delivery appended to it. */
     private fun personWords(payload: JsonObject): String {
         val text = payload.text("text").orEmpty()
@@ -138,15 +178,15 @@ object OrbitExchangeFold {
 
     object NoLookup : Lookup
 
-    /** A task in a group's tree: [key] is unique in the tree — the task's id, `session:<id>`, or `other`. */
+    /** A task in a group's tree: [key] is unique in the tree — the task's id, or `other`. */
     class Branch<E>(val key: String, val taskId: String?, var title: String, val exchanges: MutableList<E> = mutableListOf(),
         val children: MutableList<Branch<E>> = mutableListOf())
 
     /**
      * A group's exchanges as a tree of the tasks they are about (web `buildExchangeTree`): each exchange under its task, and a task
      * under the task it waits on when that task is in the same group too (the first one to appear, when it waits on several). A task
-     * whose prerequisites are not in the group is a root; a session no task is known to run is a branch of its own; exchanges about
-     * no task gather in one branch, last. Null when the group is about one thing only.
+     * whose prerequisites are not in the group is a root; exchanges about no task — a background job, a session no task is known to
+     * run, such as a landing — gather in one branch, last. Null when the group is about one thing only.
      */
     fun <E> tree(exchanges: List<E>, target: (E) -> Target?, lookup: Lookup): List<Branch<E>>? {
         val branches = LinkedHashMap<String, Branch<E>>()
@@ -158,13 +198,10 @@ object OrbitExchangeFold {
                 "SESSION" -> lookup.taskOfSession(t.id)
                 else -> null
             }
-            val placed = task ?: t?.takeIf { it.kind == "SESSION" }?.let { it.id to it.title }
-            if (placed == null) { other += ex; return@forEach }
-            val key = if (task != null) lookup.key(task.first) else "session:${lookup.key(placed.first)}"
-            val branch = branches.getOrPut(key) {
-                Branch(key, task?.first, (if (task != null) task.second ?: lookup.taskTitle(task.first) else placed.second).orEmpty())
-            }
-            if (branch.title.isEmpty() && !placed.second.isNullOrEmpty()) branch.title = placed.second!!
+            if (task == null) { other += ex; return@forEach }
+            val key = lookup.key(task.first)
+            val branch = branches.getOrPut(key) { Branch(key, task.first, (task.second ?: lookup.taskTitle(task.first)).orEmpty()) }
+            if (branch.title.isEmpty() && !task.second.isNullOrEmpty()) branch.title = task.second!!
             branch.exchanges += ex
         }
         if (branches.size + (if (other.isEmpty()) 0 else 1) < 2) return null
@@ -172,11 +209,8 @@ object OrbitExchangeFold {
         val roots = mutableListOf<Branch<E>>()
         order.forEach { key ->
             val branch = branches.getValue(key)
-            if (branch.title.isEmpty()) {
-                val id = branch.taskId ?: key.removePrefix("session:")
-                branch.title = "${if (branch.taskId != null) "Task" else "Session"} ${lookup.key(id).takeLast(8)}"
-            }
-            val prerequisites = branch.taskId?.let { lookup.upstreamOf(it).map(lookup::key) }.orEmpty()
+            if (branch.title.isEmpty()) branch.title = "Task ${lookup.key(branch.taskId!!).takeLast(8)}"
+            val prerequisites = lookup.upstreamOf(branch.taskId!!).map(lookup::key)
             val up = order.filter { it != key && it in prerequisites }.firstOrNull { !isBelow(branches.getValue(it), branch) }
             if (up != null) branches.getValue(up).children += branch else roots += branch
         }

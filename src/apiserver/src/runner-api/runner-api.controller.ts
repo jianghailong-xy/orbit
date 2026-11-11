@@ -346,6 +346,7 @@ import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-revi
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
 import {
   withConfirmationAnswers,
+  withTurnCard,
   withConfirmationReturn,
   withConfirmationReviewRequest,
   withControlPlaneNote,
@@ -3844,7 +3845,7 @@ export class RunnerApiController {
       const customRow = declaredIsBuiltin
         ? keyRow
         : (keyRow ??
-          (await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
+          (await this.queue.resolveLoginPool(this.prisma, s, declared!, false, engines.get(s.id))) ??
           (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
           (await this.queue.resolveSharedPool(this.prisma, s, declared!)));
       // As on the claim: a Claude pool of the owner's own that none of its members can run is rebuilt on
@@ -5541,7 +5542,7 @@ export class RunnerApiController {
     const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
       ? keyRow
       : (keyRow ??
-        (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
+        (await this.queue.resolveLoginPool(tx, session, session.provider!, false, engine)) ??
         (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
         (await this.queue.resolveSharedPool(tx, session, session.provider!)));
     // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
@@ -8112,7 +8113,13 @@ export class RunnerApiController {
       // the card its echo is stored with. A batch of ordinary messages costs one indexed read.
       const turnCards = await readTurnCards(
         tx,
-        { id: sessionId, ownerId: session.ownerId, taskId: session.taskId, runSource: session.runSource },
+        {
+          id: sessionId,
+          ownerId: session.ownerId,
+          taskId: session.taskId,
+          runSource: session.runSource,
+          promptByOrbit: session.promptByOrbit,
+        },
         userTurns,
       );
       for (const e of durable) {
@@ -8132,6 +8139,9 @@ export class RunnerApiController {
         e.payload = withConfirmationReviewRequest(e.payload, cards?.confirmationReviewRequest ?? null);
         e.payload = withConfirmationReturn(e.payload, cards?.confirmationReturn ?? null);
         e.payload = withConfirmationAnswers(e.payload, cards?.confirmationAnswers ?? null);
+        for (const field of ['runNotice', 'evidenceReview', 'evidenceSendBack', 'sessionOpening'] as const) {
+          e.payload = withTurnCard(e.payload, field, cards?.[field] ?? null);
+        }
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);

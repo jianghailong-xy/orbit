@@ -25,6 +25,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { codexLoginView, codexPoolUnavailableReason, maskedAccount, POOL_LOGIN_SELECT } from './codex-login';
 import { engineTableOptions, revokeKeyGatewayTokens } from './key-gateway';
+import { claudeCodexLoginEnabled, poolTableOptions } from './codex-login-claude';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -472,7 +473,7 @@ export class ProvidersService {
         OR: [{ ownerId, shared: false }, { engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } }],
       },
       orderBy: { createdAt: 'asc' },
-      select: { slug: true, label: true, shared: true, engine: true },
+      select: { slug: true, label: true, shared: true, engine: true, ownerId: true },
     });
     return [
       // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
@@ -493,9 +494,12 @@ export class ProvidersService {
       // OpenAI's own endpoint, whose models are the Codex CLI's; so does a pool of one's own that holds
       // a ChatGPT login the server signed in (migration 0323) — it is Codex throughout, and its account
       // is what a session on it spends.
-      ...pools.map(({ shared, engine, ...pool }) => {
+      // With ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on, a Codex pool of the caller's own also runs Claude Code, after
+      // Codex (codex-login-claude.ts); a shared pool, or one somebody else made, never does.
+      ...pools.map(({ shared, engine, ownerId: poolOwnerId, ...pool }) => {
         const runtime = shared || engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
-        return { ...pool, runtime, engines: [runtime], builtin: false };
+        const ownLogin = runtime === AgentProvider.CODEX && !shared && poolOwnerId === ownerId;
+        return { ...pool, runtime, engines: credentialEngines({ kind: 'pool', engine: runtime, ownLogin }, poolTableOptions()), builtin: false };
       }),
     ];
   }
@@ -1240,6 +1244,11 @@ export class ProvidersService {
             account?.userId === ownerId,
           ),
           members: [],
+          // With ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on, the engines this pool of the owner's own runs, Codex first
+          // (codex-login-claude.ts): what the pickers offer Claude Code on. Absent with it off, as before.
+          ...(claudeCodexLoginEnabled()
+            ? { engines: credentialEngines({ kind: 'pool', engine: AgentProvider.CODEX, ownLogin: true }, poolTableOptions()) }
+            : {}),
         };
       }
       const quota = members.map(({ provider: row, pausedUntil }) => {

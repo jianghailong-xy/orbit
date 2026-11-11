@@ -51,6 +51,7 @@ import type { QueueService } from '../queue/queue.service';
 import { RunnerApiController, type RetryPlanTransaction } from '../runner-api/runner-api.controller';
 import { transactionDouble } from '../test-support/prisma-transaction-double';
 import { AnthropicGatewayController } from './anthropic-gateway.controller';
+import type { AnthropicLoginGatewayService } from './anthropic-login-gateway.service';
 import { AnthropicGatewayService, resetsPhrase } from './anthropic-gateway.service';
 import { ANTHROPIC_GATEWAY_FLAG } from './key-gateway';
 import { encryptSecret } from './provider-crypto';
@@ -168,7 +169,7 @@ before(async () => {
       return net.connect(upstreamPort, '127.0.0.1');
     }
   })();
-  const controller = new AnthropicGatewayController(service);
+  const controller = new AnthropicGatewayController(service, {} as AnthropicLoginGatewayService);
   const app = express();
   app.use((req, res, next) => {
     const json = res.json.bind(res);
