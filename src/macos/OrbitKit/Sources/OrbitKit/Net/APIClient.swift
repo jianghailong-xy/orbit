@@ -195,6 +195,20 @@ public final class APIClient: @unchecked Sendable {
                                       projectId: projectId, includeLanding: includeLanding)
     }
 
+    /// How many rows `GET /sessions?view=<view>&limit=1` answers: 0 or 1. The welcome card's read of
+    /// whether an account has ever had a session (docs/mocks/new-user-onboarding, board 03 rule 1), the
+    /// web's `useNewAccount`. Rows are counted, never decoded: an answer that isn't an array throws.
+    public func sessionRowCount(view: SessionView) async throws -> Int {
+        let rows: [AnyRow] = try await get("sessions", query: [URLQueryItem(name: "view", value: view.queryValue),
+                                                               URLQueryItem(name: "limit", value: "1")])
+        return rows.count
+    }
+
+    /// Any one element of a JSON array, whatever it holds.
+    private struct AnyRow: Decodable {
+        init(from decoder: Decoder) throws {}
+    }
+
     private func listSessions(queryValue: String, runnerId: String?, projectId: String?,
                               includeLanding: Bool = false) async throws -> [Session] {
         var q = [URLQueryItem(name: "view", value: queryValue)]

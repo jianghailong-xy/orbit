@@ -8,7 +8,8 @@ import OrbitKit
 // workspace. The web's MachineSetupCard, iOS-ized as the board draws it: grouped options with a tick,
 // capsule buttons. The rules are OrbitKit's (`MachineSetup`, `MachineSetupState`).
 
-private enum SetupInk {
+/// The setup card's colours, shared with the welcome card that grows out of it (`WelcomeCard`).
+enum SetupInk {
     /// The card, off the page behind it in both appearances.
     static let card = Color(light: .white, dark: Color(red: 0.17, green: 0.17, blue: 0.18))
     /// The folder options' grouped band.
@@ -17,6 +18,52 @@ private enum SetupInk {
                              dark: Color(red: 0.25, green: 0.75, blue: 0.40))
     static let warn = Color(light: Color(red: 0.76, green: 0.443, blue: 0.047),
                             dark: Color(red: 0.95, green: 0.65, blue: 0.25))
+}
+
+/// One numbered step of the setup card, a tick once it is done; the welcome card's steps too.
+struct SetupStepRow<Content: View>: View {
+    let number: Int
+    let done: Bool
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Group {
+                if done {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.orbitProse)
+                        .foregroundStyle(Color.green)
+                } else {
+                    Text(verbatim: "\(number)")
+                        .font(.orbitLabel.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .overlay { Circle().strokeBorder(Color.secondary.opacity(0.5), lineWidth: 1) }
+                }
+            }
+            .frame(width: 22, height: 22)
+            VStack(alignment: .leading, spacing: 2) { content() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 11)
+    }
+}
+
+extension View {
+    /// The setup card's surface: off the page behind it, a hairline, a soft shadow.
+    func setupCardSurface() -> some View {
+        self
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(SetupInk.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+    }
 }
 
 /// A machine's own new session page. The machine's row is read again while the page is up, so a
@@ -114,6 +161,9 @@ private struct MachineDraftContent: View {
     @Environment(AppModel.self) private var app
     let setup: MachineSetupModel
 
+    /// A new account's bare machine: the card greets it and offers first messages (web `machineWelcome`).
+    private var welcome: Bool { app.newAccount == true && setup.bare }
+
     /// What moves the waiting message: it goes when this says it can.
     private struct Send: Equatable {
         let ready: Bool
@@ -128,7 +178,7 @@ private struct MachineDraftContent: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 12) {
-                        MachineSetupCard(setup: setup, ready: ready)
+                        MachineSetupCard(setup: setup, ready: ready, welcome: welcome)
                         if let held = setup.state.held, let registry = app.consoleRegistry {
                             HeldFirstMessageView(held: held, machine: RunnerPageFormat.displayName(setup.runner),
                                                  sending: setup.state.sendingHeld,
@@ -170,6 +220,11 @@ private struct MachineDraftContent: View {
             }
         }
         .task { await draft.prepareDraft() }
+        // A new account's first machine wears the welcome card (docs/mocks/new-user-onboarding): read
+        // whether it is one as the page appears, as the web's query does.
+        .task { await app.readNewAccount() }
+        // The welcome placeholder, except on a machine that is offline, which keeps its own.
+        .onChange(of: welcome && setup.online, initial: true) { _, now in draft.welcomes = now }
         // Both steps done with a message waiting: it goes by itself (rule 6).
         .onChange(of: Send(ready: ready, held: setup.state.held, busy: draft.sending), initial: true) { _, _ in
             setup.sendHeldIfReady()
@@ -182,6 +237,9 @@ private struct MachineSetupCard: View {
     @Environment(AppModel.self) private var app
     let setup: MachineSetupModel
     let ready: Bool
+    /// A new account's first machine (docs/mocks/new-user-onboarding): the welcome card's head in place
+    /// of "Set up <machine>", and its first messages to try as a third step.
+    var welcome = false
 
     private var runner: Runner { setup.runner }
     private var machine: String { RunnerPageFormat.displayName(runner) }
@@ -190,25 +248,20 @@ private struct MachineSetupCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            head
+            if welcome { WelcomeHead() } else { head }
             if let notice { noticeLine(notice) }
             Divider().padding(.top, 12)
             step(number: 1, done: setup.state.folder != nil) { folderStep }
             Divider()
             step(number: 2, done: setup.credential.done) { engineStep }
             Divider()
+            if welcome {
+                WelcomeExamplesStep(step: 3, console: setup.draft)
+                Divider()
+            }
             foot
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 14)
-        .padding(.bottom, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SetupInk.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
-        }
-        .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+        .setupCardSurface()
     }
 
     private var head: some View {
@@ -264,25 +317,7 @@ private struct MachineSetupCard: View {
     }
 
     private func step<Content: View>(number: Int, done: Bool, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Group {
-                if done {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.orbitProse)
-                        .foregroundStyle(Color.green)
-                } else {
-                    Text(verbatim: "\(number)")
-                        .font(.orbitLabel.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 22)
-                        .overlay { Circle().strokeBorder(Color.secondary.opacity(0.5), lineWidth: 1) }
-                }
-            }
-            .frame(width: 22, height: 22)
-            VStack(alignment: .leading, spacing: 2) { content() }
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.vertical, 11)
+        SetupStepRow(number: number, done: done, content: content)
     }
 
     @ViewBuilder private var folderStep: some View {

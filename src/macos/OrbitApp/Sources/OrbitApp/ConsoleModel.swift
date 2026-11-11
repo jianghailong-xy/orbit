@@ -1963,6 +1963,19 @@ final class ConsoleModel {
     /// terminal status when the stream missed the (un-replayable) terminal transition.
     var sessionStatus: RunStatus { ComposerLogic.reconcileStatus(stream: state.status, server: serverStatus) }
 
+    /// A new account's welcome card stands over this draft (docs/mocks/new-user-onboarding): the empty
+    /// composer says what to write. Set by the page drawing the card.
+    var welcomes = false
+    /// Bumped to ask the composer to take focus (`fillFromWelcome`).
+    var focusRequests = 0
+
+    /// A first message picked on the welcome card: into the composer, to be read, changed and sent
+    /// there. Nothing is sent.
+    func fillFromWelcome(_ example: String) {
+        composerText = example
+        focusRequests &+= 1
+    }
+
     /// What an empty composer says on a machine's new session page, which has no workspace to send to.
     var machinePlaceholder: String? {
         draftAgent.flatMap { $0.standsInForMachine ? MachineSetupCopy.composerPlaceholderFor(machine: $0.name) : nil }
