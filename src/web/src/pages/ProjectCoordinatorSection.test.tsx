@@ -551,7 +551,7 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
 
     // The server's own sentence, and the write it names...
     expect(container.textContent).toMatch(/rebind this project/i);
-    expect(buttonLabels().some((l) => /Rebind/i.test(l))).toBe(true);
+    expect(buttonLabels()).toContain('Start a new coordinator in…');
     // ...and NOT a Retry. The refusal is a property of committed rows: the same press returns the
     // same 409 forever, so an affordance that only repeats it is an affordance that cannot work.
     expect(buttonLabels().some((l) => /^Retry$/i.test(l))).toBe(false);
@@ -571,61 +571,59 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     expect(buttonLabels().some((l) => /Rebind/i.test(l))).toBe(false);
   });
 
-  // The one test here that drives a dialog portal and a select's list as well as this section —
-  // two more paints. What it waits on is a loaded machine's render, not a hang, so the case budget
-  // is the suite's.
-  it('rebinds the landing rather than retrying, from a read that already says no press can win', async () => {
+  // The one test here that drives two dialog portals as well as this section — two more paints.
+  // What it waits on is a loaded machine's render, not a hang, so the case budget is the suite's.
+  it('starts the next coordinator elsewhere rather than retrying, from a read that already says no press can win', async () => {
     const writes: Array<[string, unknown]> = [];
-    serve(unavailableStatus(), (path) => {
-      writes.push([path, apiMock.mock.calls.at(-1)?.[1]]);
-      return Promise.resolve({
-        projectId: PROJECT,
-        coordinatorWorkspaceId: 'w-other',
-        coordinatorSessionId: null,
-        moved: true,
-      });
-    });
+    serve(unavailableStatus());
     await mount(section());
 
     // The card says so before anything is pressed, and offers no Retry to press.
     expect(buttonLabels().some((l) => /^Retry$/i.test(l))).toBe(false);
 
-    // The picker reads the workspace list, which nothing asked for until now.
+    // The picker reads the workspace and runner lists, which nothing asked for until now.
     apiMock.mockImplementation((path: string, init?: unknown) => {
       if (path === '/workspaces') {
         return Promise.resolve([
-          { id: 'w-other', name: 'orbit-spare' },
-          { id: '3CuIHiSJZBQ7nLVUwc7ekz', name: 'orbit-main' },
+          { id: 'w-other', name: 'orbit-spare', enabled: true, runnerId: 'r-1', lastProvider: 'claude' },
+          { id: 'w-off', name: 'orbit-off', enabled: false, runnerId: 'r-1' },
+          { id: '3CuIHiSJZBQ7nLVUwc7ekz', name: 'orbit-main', enabled: true, runnerId: 'r-1' },
         ]) as Promise<never>;
       }
+      if (path === '/runners') return Promise.resolve([{ id: 'r-1', online: true }]) as Promise<never>;
       if (!init) return read(path, unavailableStatus());
       writes.push([path, init]);
-      return Promise.resolve({
-        projectId: PROJECT,
-        coordinatorWorkspaceId: 'w-other',
-        coordinatorSessionId: null,
-        moved: true,
-      }) as Promise<never>;
+      return Promise.resolve({ sessionId: SERVED, created: true, workspaceId: 'w-other' }) as Promise<never>;
     });
 
-    await press(/Rebind workspace/);
-    expect(document.body.textContent).toContain('Rebind coordination workspace');
-
-    // Pick the spare and confirm. The dialog is a portal, so the option is found on the document.
-    await pickWorkspace('orbit-spare', 'the spare workspace is offered');
-
-    const ok = [...document.querySelectorAll('[role="dialog"] button')].find((b) =>
-      /^Rebind$/.test((b.textContent ?? '').trim()),
-    );
-    expect(ok, 'the dialog confirms with Rebind').toBeTruthy();
+    await press(/^Start a new coordinator in…$/);
+    await settle();
+    const rows = () => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button.move-dialog-option')];
+    const spare = rows().find((b) => (b.textContent ?? '').includes('orbit-spare'));
+    const off = rows().find((b) => (b.textContent ?? '').includes('orbit-off'));
+    expect(spare, 'a usable workspace is offered').toBeTruthy();
+    expect(off?.disabled, 'a disabled workspace is greyed').toBe(true);
+    expect(off?.textContent).toContain('This workspace is disabled.');
     await act(async () => {
-      (ok as HTMLElement).click();
+      spare!.click();
+    });
+    await settle();
+
+    // Asked first, in the words of what moves; then the replace door, naming the workspace.
+    expect(document.body.textContent).toContain('Start a new coordinator in orbit-spare?');
+    const ok = [...document.querySelectorAll<HTMLElement>('[role="alertdialog"] button, [role="dialog"] button')].find((b) =>
+      /start in orbit-spare/i.test((b.textContent ?? '').trim()),
+    );
+    expect(ok, 'the question confirms with Start in orbit-spare').toBeTruthy();
+    await act(async () => {
+      ok!.click();
     });
     await settle();
 
     expect(writes).toHaveLength(1);
-    expect(writes[0][0]).toBe(`/projects/${PROJECT}/coordinator/rebind`);
+    expect(writes[0][0]).toBe(`/projects/${PROJECT}/coordinator/replace`);
     expect(writes[0][1]).toEqual({ method: 'POST', body: { workspaceId: 'w-other' } });
+    expect(landedOn).toBe(`/sessions/${SERVED}`);
   });
 
   // The mirror of the test above, and the one place the two doors onto the landing column must not
@@ -653,8 +651,8 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
 
     await press(/Choose a workspace/);
     expect(document.body.textContent).toContain('Choose the coordination workspace');
-    // Said where the decision is made, because it cannot be taken back after it.
-    expect(document.body.textContent).toMatch(/cannot be moved to another workspace later/);
+    // Said where the decision is made: it is not final, the coordinator can be moved later.
+    expect(document.body.textContent).toMatch(/You can move it to another workspace later/);
 
     await pickWorkspace('orbit-spare', 'the workspaces this owner has are offered');
 

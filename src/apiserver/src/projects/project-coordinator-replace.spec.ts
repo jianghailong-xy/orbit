@@ -31,6 +31,8 @@ const STANDING = '00000000-0000-7000-8000-0000000000b1';
 /** The one `sessions.create` hands back. A different id, which is what a replacement means. */
 const OPENED = '00000000-0000-7000-8000-0000000000b2';
 const HOME = '00000000-0000-7000-8000-0000000000c1';
+/** Another of the owner's workspaces, for "start a new coordinator there". */
+const ELSEWHERE = '00000000-0000-7000-8000-0000000000c2';
 
 interface SessionRow {
   id: string;
@@ -127,7 +129,7 @@ function store(standing: SessionRow | null, workspaceUsable = true) {
       const { text, values: bound } = renderRawQuery(args);
       const values = bound as string[];
       if (text.includes('FROM "workspace"')) {
-        return values[0] === HOME && values[1] === OWNER ? [{ id: HOME }] : [];
+        return [HOME, ELSEWHERE].includes(values[0]) && values[1] === OWNER ? [{ id: values[0] }] : [];
       }
       if (text.includes('FROM "session"')) {
         // The rows the CAS locks, in the order it asked for them.
@@ -292,4 +294,46 @@ test('a project whose conversation is gone still gets one from either press', as
 
   assert.equal(replaced.created, true);
   assert.equal(project.coordinatorSessionId, OPENED);
+});
+
+// ── Starting the next one somewhere else ─────────────────────────────────────────────────────
+
+test('a replacement that names another workspace opens there, and the project goes with it', async () => {
+  const { service, project, sessions, writes, created, completed } = store(sessionRow());
+
+  const replaced = await service.coordinator(OWNER, PROJECT, ELSEWHERE, 'replace');
+
+  assert.deepEqual(replaced, { sessionId: OPENED, created: true, workspaceId: ELSEWHERE });
+  // The outgoing conversation is completed where it is; it does not move.
+  assert.deepEqual(completed, [STANDING]);
+  assert.equal(sessions.find((s) => s.id === STANDING)!.workspaceId, HOME);
+  // The new one opens in the named workspace, and ONE write records both pointers, so the guard
+  // (0126) never sees a project naming one place and coordinated from another.
+  assert.deepEqual(created, [{ workspaceId: ELSEWHERE, title: 'Ship the coordinator' }]);
+  assert.deepEqual(writes, [{ coordinatorSessionId: OPENED, coordinatorWorkspaceId: ELSEWHERE }]);
+  assert.equal(project.coordinatorWorkspaceId, ELSEWHERE);
+});
+
+test('a dead landing is no refusal when the replacement names somewhere that works', async () => {
+  // The Unavailable card's way out: its workspace was disabled, and the owner starts the next
+  // coordinator elsewhere instead of rebinding first.
+  const { service, project, completed } = store(sessionRow(), false);
+
+  const replaced = await service.coordinator(OWNER, PROJECT, ELSEWHERE, 'replace');
+
+  assert.equal(replaced.workspaceId, ELSEWHERE);
+  assert.deepEqual(completed, [STANDING]);
+  assert.equal(project.coordinatorSessionId, OPENED);
+  assert.equal(project.coordinatorWorkspaceId, ELSEWHERE);
+});
+
+test('opening, as opposed to replacing, still refuses another workspace', async () => {
+  const { service, project, created, writes } = store(sessionRow());
+
+  const refused = await thrown(() => service.coordinator(OWNER, PROJECT, ELSEWHERE));
+
+  assert.ok(refused instanceof ConflictException);
+  assert.deepEqual(created, []);
+  assert.deepEqual(writes, []);
+  assert.equal(project.coordinatorWorkspaceId, HOME);
 });

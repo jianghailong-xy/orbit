@@ -78,6 +78,7 @@ import {
   projectsPath,
   projectsQueryKey,
   runnersQuery,
+  sessionFoldersQuery,
   workspacesQuery,
 } from '../lib/queries';
 import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
@@ -88,6 +89,20 @@ import { Alert } from '../components/ui/Alert';
 import { Badge, type BadgeProps } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { SessionMoveModal } from '../components/SessionMoveModal';
+import {
+  START_COORDINATOR_COPY,
+  startCoordinatorAction,
+  startCoordinatorParagraphs,
+  startCoordinatorTitle,
+  type OutgoingCoordinator,
+} from '../lib/coordinatorWorkspace';
+import {
+  CoordinatorWorkspaceDialog,
+  coordinatorSessionPath,
+  replaceProjectCoordinator,
+  type CoordinatorResult,
+} from '../components/StartCoordinatorIn';
 import { Dialog } from '../components/ui/Dialog';
 import { Empty } from '../components/ui/Empty';
 import { Popconfirm } from '../components/ui/Popconfirm';
@@ -1274,6 +1289,7 @@ export function ProjectDetailPage() {
                 projectId={id}
                 layout={narrow ? 'narrow' : 'desktop'}
                 openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
+                projectTitle={p.title}
               />
             </div>
           </div>
@@ -1361,19 +1377,9 @@ export function ProjectDetailPage() {
   );
 }
 
-/** What POST /projects/:id/coordinator answers with. `created` tells the session this call opened
- *  apart from the one it found already bound; both are this project's coordinator, and this unit
- *  opens either of them the same way. */
-export interface CoordinatorResult {
-  sessionId: string;
-  created: boolean;
-  workspaceId: string | null;
-}
-
-/** Where a resolved coordinator is read. Through `encodeId`, like every other link in the app, so
- *  a response carrying the raw UUID and one carrying the short public id land on one route. */
-export const coordinatorSessionPath = (sessionId: string): string =>
-  `/sessions/${encodeURIComponent(encodeId(sessionId))}`;
+// What POST /projects/:id/coordinator answers with, where its conversation is read, and the
+// replace door: shared with the Move panel's "Start new here…" (components/StartCoordinatorIn).
+export { coordinatorSessionPath, replaceProjectCoordinator, type CoordinatorResult };
 
 /**
  * Why a reader is arriving, when a door opened a coordinator ON THEIR BEHALF — the one piece of
@@ -1466,24 +1472,6 @@ function useOpenProjectCoordinator(projectId: string, intent?: string) {
 }
 
 /**
- * Leave a COMPLETED coordinator behind and open this project's next one.
- *
- * A different route from the open above, not a flag on it, and the card is why: `openProjectCoordinator`
- * is what every link to a coordinator presses, and it RESOLVES — pressing it on a finished
- * conversation hands that same conversation back. Only this one replaces, and it is reachable only
- * from the button that says it will.
- *
- * No body. Where the replacement opens is fixed by the project, and a workspace named here would be
- * a move rather than a replacement — that is `rebindProjectCoordinator`.
- *
- * On a conversation that is still open the server COMPLETES it before the new one is created, which
- * is the whole reason the caller asks first: this request ends a conversation that may be mid-turn.
- */
-export function replaceProjectCoordinator(projectId: string): Promise<CoordinatorResult> {
-  return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST' });
-}
-
-/**
  * The Coordinator, as the project header's right-hand column.
  *
  * Self-contained on the same terms as every other card on this page: it runs its own read, draws
@@ -1499,17 +1487,24 @@ export function ProjectCoordinatorSection({
   projectId,
   layout,
   openTaskCount,
+  projectTitle = 'This project',
 }: {
   projectId: string;
   layout: CoordinatorCardLayout;
   /** Open tasks in this project — the card says what the conversation is FOR, and the status
    *  payload deliberately carries no task tally. */
   openTaskCount?: number;
+  /** The project's name, for the sentences that say what moves with a new coordinator. */
+  projectTitle?: string;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [confirm, confirmation] = useConfirm();
-  const [rebinding, setRebinding] = useState(false);
+  // Start a new coordinator in… (docs/mocks/coordinator-move-workspace 03-final ④–⑥) and Move…
+  // (②–③): the picker, and the Move panel opened on the coordinator conversation.
+  const [pickingWorkspace, setPickingWorkspace] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const foldersQ = useQuery({ ...sessionFoldersQuery(), enabled: moving });
   const [choosingLanding, setChoosingLanding] = useState(false);
   // The workspace the reader named for a coordinator that has never opened. Kept rather than sent
   // and forgotten, because every later press has to carry the same choice — a Retry that fell back
@@ -1521,7 +1516,8 @@ export function ProjectCoordinatorSection({
 
   const replace = useMutation({
     mutationKey: ['project', projectId, 'coordinator', 'replace'],
-    mutationFn: () => replaceProjectCoordinator(projectId),
+    // A workspace named here is "start it THERE"; none keeps the one the project is coordinated in.
+    mutationFn: (workspaceId?: string) => replaceProjectCoordinator(projectId, workspaceId),
     onSuccess: (result) => {
       // The card is read from the project document, and the pointer it draws just moved.
       qc.invalidateQueries({ queryKey: ['project', projectId] });
@@ -1564,7 +1560,7 @@ export function ProjectCoordinatorSection({
       // That is asked about first, in the words of what it does rather than "are you sure".
       case 'replace':
         if (status.data?.coordination.session?.lifecycleState === SessionLifecycleState.COMPLETED) {
-          replace.mutate();
+          replace.mutate(undefined);
           return;
         }
         void confirm({
@@ -1579,8 +1575,17 @@ export function ProjectCoordinatorSection({
             'conversation stays readable.',
           confirmText: 'Complete and start a new one',
           cancelText: 'Keep this coordinator',
-          onConfirm: () => replace.mutate(),
+          onConfirm: () => replace.mutate(undefined),
         });
+        return;
+      // The same, in a workspace the reader picks. It also stands in for rebinding: a project whose
+      // workspace broke starts its next coordinator somewhere that works, in one step.
+      case 'start-elsewhere':
+        setPickingWorkspace(true);
+        return;
+      // The conversation itself goes, and the project's coordination with it (the session's Move).
+      case 'move':
+        setMoving(true);
         return;
       // Two different things, and only the second is a write of its own. Naming the landing of a
       // coordinator that has never opened records nothing: the name rides along with the open that
@@ -1590,9 +1595,6 @@ export function ProjectCoordinatorSection({
       // Moving one that DOES have a home is the other case, and there the write is the point.
       case 'change-workspace':
         setChoosingLanding(true);
-        return;
-      case 'rebind-workspace':
-        setRebinding(true);
         return;
       // The workspace itself is what is broken; it is repaired where it is configured.
       case 'enable-workspace':
@@ -1664,8 +1666,8 @@ export function ProjectCoordinatorSection({
               description={failure.message}
               action={
                 unavailable ? (
-                  <Button size="small" onClick={() => setRebinding(true)}>
-                    Rebind workspace…
+                  <Button size="small" onClick={() => setPickingWorkspace(true)}>
+                    {START_COORDINATOR_COPY.menuTitle}
                   </Button>
                 ) : (
                   // Retries the press that FAILED, not the other one: a replacement that lost a race
@@ -1675,7 +1677,7 @@ export function ProjectCoordinatorSection({
                   <Button
                     size="small"
                     danger
-                    onClick={() => (replace.error ? replace.mutate() : open.mutate(landing))}
+                    onClick={() => (replace.error ? replace.mutate(replace.variables) : open.mutate(landing))}
                   >
                     Retry
                   </Button>
@@ -1689,11 +1691,57 @@ export function ProjectCoordinatorSection({
         </>
       )}
 
-      {rebinding ? (
-        <CoordinatorRebindDialog
-          projectId={projectId}
+      {pickingWorkspace ? (
+        <CoordinatorWorkspaceDialog
+          projectTitle={projectTitle}
           currentWorkspaceId={boundWorkspaceId}
-          onClose={() => setRebinding(false)}
+          onClose={() => setPickingWorkspace(false)}
+          onPick={(to) => {
+            setPickingWorkspace(false);
+            // Where it already is: the plain Start a new coordinator, asked as it always is.
+            if (to.current) {
+              act('replace');
+              return;
+            }
+            const lifecycle = status.data?.coordination.session?.lifecycleState;
+            const outgoing: OutgoingCoordinator = !status.data?.coordination.session
+              || status.data.coordination.session.deletedAt
+              ? 'none'
+              : lifecycle === SessionLifecycleState.COMPLETED
+                ? 'completed'
+                : 'open';
+            void confirm({
+              width: 480,
+              title: startCoordinatorTitle(to.name),
+              description: (
+                <div className="move-confirm-body">
+                  {startCoordinatorParagraphs({
+                    project: projectTitle,
+                    to: to.name,
+                    from: status.data?.coordination.workspaceName ?? null,
+                    outgoing,
+                  }).map((p) => <p key={p}>{p}</p>)}
+                </div>
+              ),
+              confirmText: startCoordinatorAction(to.name, outgoing),
+              cancelText: START_COORDINATOR_COPY.keep,
+              danger: outgoing === 'open',
+              onConfirm: () => replace.mutate(to.workspaceId),
+            });
+          }}
+        />
+      ) : null}
+
+      {moving && status.data?.coordination.session && boundWorkspaceId ? (
+        <SessionMoveModal
+          open
+          session={{ id: status.data.coordination.session.id, title: status.data.coordination.session.title }}
+          workspace={{ id: boundWorkspaceId, name: status.data.coordination.workspaceName ?? '' }}
+          folders={(foldersQ.data ?? []).filter((f) => f.workspaceId === boundWorkspaceId)}
+          onClose={() => {
+            setMoving(false);
+            void qc.invalidateQueries({ queryKey: ['project', projectId] });
+          }}
         />
       ) : null}
 
@@ -1720,101 +1768,6 @@ export const COORDINATOR_UNAVAILABLE = 'COORDINATOR_UNAVAILABLE';
 
 export function isCoordinatorUnavailable(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && error.code === COORDINATOR_UNAVAILABLE;
-}
-
-/** What POST /projects/:id/coordinator/rebind answers with. `moved` is false when the project
- *  already recorded this landing — a replay writes nothing. */
-export interface CoordinatorRebindResult {
-  projectId: string;
-  coordinatorWorkspaceId: string;
-  coordinatorSessionId: string | null;
-  moved: boolean;
-}
-
-/**
- * Move where this project's coordinator opens.
- *
- * The verb behind every `COORDINATOR_UNAVAILABLE`, whose `requiredAction` has always read "rebind
- * this project's coordination workspace, then open the coordinator again". It writes the landing
- * and nothing else — not the session pointer, which is a rotation, and not the coordinator
- * identity — so a project with a live conversation keeps it and opens the NEXT one elsewhere.
- */
-export function rebindProjectCoordinator(
-  projectId: string,
-  workspaceId: string,
-): Promise<CoordinatorRebindResult> {
-  return api<CoordinatorRebindResult>(`/projects/${encodeURIComponent(projectId)}/coordinator/rebind`, { method: 'POST', body: { workspaceId } });
-}
-
-/** Pick the workspace this project's coordinator opens in. Mounted only while open, so a project
- *  page that nobody rebinds never asks for the workspace list. */
-function CoordinatorRebindDialog({
-  projectId,
-  currentWorkspaceId,
-  onClose,
-}: {
-  projectId: string;
-  currentWorkspaceId: string | null;
-  onClose: () => void;
-}) {
-  const qc = useQueryClient();
-  const workspaces = useQuery(workspacesQuery());
-  const [picked, setPicked] = useState<string | null>(null);
-  const rebind = useMutation({
-    mutationFn: (workspaceId: string) => rebindProjectCoordinator(projectId, workspaceId),
-    onSuccess: () => {
-      // Both the project document and the status read live under this prefix, and the refusal the
-      // card is showing is decided by the row this just wrote.
-      void qc.invalidateQueries({ queryKey: ['project', projectId] });
-      onClose();
-    },
-  });
-
-  return (
-    <Dialog
-      className="project-coordinator-dialog"
-      open
-      title="Rebind coordination workspace"
-      onClose={onClose}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            disabled={!picked}
-            loading={rebind.isPending}
-            onClick={() => picked && rebind.mutate(picked)}
-          >
-            Rebind
-          </Button>
-        </>
-      }
-    >
-      <div className="orbit-typography orbit-typography-secondary">
-        The coordinator opens in this workspace from now on. The conversation already recorded is
-        left where it is — this decides where the NEXT one opens.
-      </div>
-      <Select
-        style={{ width: '100%' }}
-        placeholder="Workspace"
-        loading={workspaces.isPending}
-        value={picked}
-        onValueChange={setPicked}
-        options={(workspaces.data ?? []).map((w: { id: string; name: string }) => ({
-          value: w.id,
-          label: w.id === currentWorkspaceId ? `${w.name} (current)` : w.name,
-        }))}
-      />
-      {rebind.error ? (
-        <Alert
-          style={{ marginTop: 12 }}
-          type="error"
-          title="Could not rebind"
-          description={rebind.error.message}
-        />
-      ) : null}
-    </Dialog>
-  );
 }
 
 /**
@@ -1862,8 +1815,7 @@ function CoordinatorLandingDialog({
       }
     >
       <div className="orbit-typography orbit-typography-secondary">
-        The conversation opens here now and stays here — a coordinator cannot be moved to another
-        workspace later.
+        The conversation opens here now. You can move it to another workspace later.
       </div>
       <Select
         style={{ width: '100%' }}
