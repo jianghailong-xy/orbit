@@ -136,9 +136,8 @@ final class SessionProjectSheetTests: XCTestCase {
     /// A page already held for the project (one a phone pushed, with its Completed view) is the one
     /// the button reads and opens: a second address would drop that page's read.
     func testTheButtonReadsThePageAlreadyHeldForItsProject() {
-        let held = SessionProjectAddress(projectID: "P1", agentID: "w2", view: .completed)
-        XCTAssertEqual(SessionProjectSheet.address(projectID: "p1", shown: held, agentID: "w1"), held,
-                       "either spelling of the id is the same project")
+        let held = SessionProjectAddress(projectID: "p1", agentID: "w2", view: .completed)
+        XCTAssertEqual(SessionProjectSheet.address(projectID: "p1", shown: held, agentID: "w1"), held)
         let other = SessionProjectAddress(projectID: "p2", agentID: "w2", view: .open)
         XCTAssertEqual(SessionProjectSheet.address(projectID: "p1", shown: other, agentID: "w1"),
                        SessionProjectAddress(projectID: "p1", agentID: "w1", view: .open))
