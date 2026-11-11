@@ -110,6 +110,12 @@ import {
   WIKI_REPO_LOOKS,
   WIKI_REPO_TIERS,
   WIKI_REPO_TIER_REASONS,
+  WIKI_REPO_PREMISE_REASONS,
+  WIKI_REPO_TRANSIENT_REASONS,
+  WIKI_REPO_WRONG_REPOSITORY_REASONS,
+  WIKI_REPO_PROBE,
+  wikiRepoFailureReason,
+  wikiRepoReasonIsPremise,
   WIKI_REPO_OP_CAPABILITY,
   WIKI_REPO_OP_KINDS,
   WIKI_REPO_OP_READ_CAPABILITY,
@@ -349,9 +355,7 @@ describe('wiki contract', () => {
   it('reads the repository by tier, and a repository that cannot be read is no gate for a maintenance run (repo tiers P1)', () => {
     const tiers = CONTRACT.repoOps.tiers;
     expect(tiers.names).toEqual([...WIKI_REPO_TIERS]);
-    expect(tiers.reasons).toEqual([...WIKI_REPO_TIER_REASONS]);
-    // Every readiness that is not ready is a reason, and so is the old runner's not-git answer.
-    expect([...WIKI_REPO_LOOKS.filter((look) => look !== 'ready'), 'not_git']).toEqual([...WIKI_REPO_TIER_REASONS]);
+    expect(tiers.reasons).toMatch(/^repoOps\.reasons:/u);
     for (const name of WIKI_REPO_TIERS) expect(typeof tiers[name], name).toBe('string');
     expect(existsSync(path.join(ROOT, tiers.migration)), `${tiers.migration} does not exist`).toBe(true);
     const sql = readFileSync(path.join(ROOT, tiers.migration), 'utf8');
@@ -365,13 +369,45 @@ describe('wiki contract', () => {
     // The probe is the first step after the context, and it no longer fails the run when the repository cannot be read.
     expect(at('probe (stoppedAt repo):')).toBe(at('context:') + 1);
     expect(at('snapshot:')).toBe(-1);
-    expect(steps[at('probe')]).toMatch(/run on tier sessions/u);
-    expect(steps[at('probe')]).toMatch(/not_git/u);
+    expect(steps[at('probe')]).toMatch(/runs on tier sessions/u);
+    expect(steps[at('probe')]).toMatch(/classified by its reason \(repoOps\.reasons\)/u);
+    expect(steps[at('probe')]).toMatch(/as repoOps\.probe says/u);
     expect(steps[at('extract:')]).toMatch(/from the space's title/u);
     expect(steps[at('anchors:')]).toMatch(/On tier sessions only the server's anchors \(criterion, record, merge_evidence\)/u);
     expect(steps[at('docs:')]).toMatch(/docs\.skipped no_repository/u);
     expect(job.docs.skipped).toContain('no_repository');
     expect(job.report).toMatch(/repo \{tier, reason\}/u);
+  });
+
+  it('classifies a repository failure by its reason: a premise is never retried, a transient one up to probe.maxAttempts (repo tiers §6)', () => {
+    const reasons = CONTRACT.repoOps.reasons;
+    expect(reasons.premise).toEqual([...WIKI_REPO_PREMISE_REASONS]);
+    expect(reasons.transient).toEqual([...WIKI_REPO_TRANSIENT_REASONS]);
+    expect(reasons.wrongRepository).toEqual([...WIKI_REPO_WRONG_REPOSITORY_REASONS]);
+    expect([...WIKI_REPO_TIER_REASONS]).toEqual([...reasons.premise, ...reasons.transient]);
+    // Every readiness that is not ready is a premise, and every wrong-repository reason is one too.
+    for (const look of WIKI_REPO_LOOKS.filter((one) => one !== 'ready')) expect(reasons.premise, look).toContain(look);
+    for (const reason of reasons.wrongRepository) expect(reasons.premise, reason).toContain(reason);
+    expect(CONTRACT.repoOps.probe.maxAttempts).toBe(WIKI_REPO_PROBE.maxAttempts);
+    expect(WIKI_REPO_PROBE.maxAttempts).toBe(3);
+    for (const reason of WIKI_REPO_PREMISE_REASONS) expect(wikiRepoReasonIsPremise(reason), reason).toBe(true);
+    for (const reason of WIKI_REPO_TRANSIENT_REASONS) expect(wikiRepoReasonIsPremise(reason), reason).toBe(false);
+
+    // A reason the runner names wins; one the contract does not know is read from the words, and then op_failed.
+    expect(wikiRepoFailureReason('not_found', 'anything')).toBe('not_found');
+    expect(wikiRepoFailureReason('from_the_future', '/w is not a git checkout: exit status 128')).toBe('not_git');
+    // An old runner's words (runner-go wiki_repo_ops.go wikiRepoOpCheckout, network_git.go, failAbandonedWikiRepoOps).
+    const words: Array<[string, string]> = [
+      ['the operation names no working directory to read the repository in', 'no_work_dir'],
+      ['/w is not a git checkout: exit status 128', 'not_git'],
+      ['the checkout /w is a clone of github.com/x/other, not of the space\'s repository github.com/x/app: nothing was read', 'wrong_repository'],
+      ['the checkout /w does not start from the space\'s first commit bbb: it is another repository behind the same URL, so nothing was read', 'root_mismatch'],
+      ['the snapshot operation could not fetch origin\'s default branch into the checkout /w, so nothing was read: git authentication failed: the remote refused', 'fetch_refused'],
+      ['the snapshot operation could not fetch origin\'s default branch into the checkout /w, so nothing was read: Could not resolve host', 'fetch_failed'],
+      ['the runner\'s claim has been silent since 2026-11-11T05:00:00Z and no answer came: the runner gave up on it or is gone, so it is closed', 'runner_lost'],
+      ['the machine went away', 'op_failed'],
+    ];
+    for (const [error, reason] of words) expect(wikiRepoFailureReason(undefined, error), error).toBe(reason);
   });
 
   it('ships every closed set exactly as the contract lists it', () => {

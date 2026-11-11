@@ -158,7 +158,7 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps, type WikiRepoOpWake } from './wiki-repo-ops';
-import { toUuid, WIKI_ANCHOR_RULES, WIKI_DOCS_BUILD_JOB, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_MAINTENANCE_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
+import { toUuid, WIKI_ANCHOR_RULES, WIKI_DOCS_BUILD_JOB, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_MAINTENANCE_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS, WIKI_REPO_PROBE } from '@orbit/shared';
 import { WikiJobExecutor, WikiJobInfraError, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
@@ -582,6 +582,10 @@ interface RunnerPlay {
   failSnapshot?: boolean;
   /** Every snapshot fails with this error, as the runner words it (`wikiRepoOpCheckout` on a folder that is not git). */
   snapshotError?: string;
+  /** Every snapshot fails with this reason beside its words, as a runner with `repoOps.reasons` answers (kept as result.reason). */
+  snapshotReason?: string;
+  /** Every snapshot stays queued, as on a runner that never answers it. */
+  holdSnapshots?: boolean;
   holdReads?: boolean;
   /** An anchors operation stays queued, as on a runner whose fetch hangs. */
   holdAnchors?: boolean;
@@ -619,8 +623,12 @@ async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
       await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"='the machine went away', "ended_at"=now() WHERE "id"=$1`, [row.id]);
       continue;
     }
+    if (over.holdSnapshots === true && row.kind === 'snapshot') continue;
     if (over.snapshotError !== undefined && row.kind === 'snapshot') {
-      await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"=$2, "ended_at"=now() WHERE "id"=$1`, [row.id, over.snapshotError]);
+      await h.sql.query(
+        `UPDATE "wiki_repo_op" SET "state"='failed', "error"=$2, "result"=$3::jsonb, "ended_at"=now() WHERE "id"=$1`,
+        [row.id, over.snapshotError, over.snapshotReason === undefined ? null : JSON.stringify({ reason: over.snapshotReason })],
+      );
       for (const listener of [...settledListeners]) listener(row.id);
       continue;
     }
@@ -967,21 +975,40 @@ function sessionsExtractor(fx: Fixture): (hit: Hit) => string {
  * One run on the sessions tier (design §2.1 tier 0): it ends succeeded, proposes the case files' entries, moves the
  * cursor, asks the runner for no anchors, diff or read, writes no document, and says which tier it ran on and why.
  */
-async function assertSessionsRun(h: Harness, fx: Fixture, reason: string, play: RunnerPlay, title: string): Promise<void> {
+async function assertSessionsRun(
+  h: Harness, fx: Fixture, reason: string, play: RunnerPlay, title: string,
+  over: { tier?: string; attempts?: number; repoWaitMs?: number } = {},
+): Promise<{ backoffs: number[] }> {
   h.model.answer = sessionsExtractor(fx);
   const page = pageOf(fx);
   h.maintenance.dossierPage = (async () => page) as unknown as WikiMaintenance['dossierPage'];
-  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), play);
+  const tier = over.tier ?? 'sessions';
+  const attempts = over.attempts ?? 1;
+  // The infra backoff each retry was put on (seconds ahead of now when the attempt before it ended), which the case
+  // then skips so as not to wait it out.
+  const backoffs: number[] = [];
+  await pass(h, worker(h, { repoWaitMs: over.repoWaitMs }), async () => {
+    const { rows: [row] } = await h.sql.query<{ state: string; ahead: number | null }>(
+      `SELECT "state", EXTRACT(EPOCH FROM ("next_attempt_at" - now()))::float8 AS "ahead" FROM "wiki_job" WHERE "id" = $1`, [fx.jobId],
+    );
+    if (row.state === 'queued' && row.ahead !== null && row.ahead > 0) {
+      backoffs.push(Math.round(row.ahead));
+      await h.sql.query(`UPDATE "wiki_job" SET "next_attempt_at" = now() WHERE "id" = $1`, [fx.jobId]);
+    }
+    return ['succeeded', 'failed'].includes(row.state);
+  }, play, 2_000);
   const job = await jobOf(h, fx.jobId);
   assert.equal(job.state, 'succeeded', job.error ?? '');
 
   const run = await runRow(h, fx.runId);
   assert.equal(run.outcome, 'succeeded', run.error ?? '');
   assert.equal(run.failureKind, null);
-  assert.equal(run.attempts, 1, 'a repository that cannot be read is not retried');
-  assert.deepEqual(await runTier(h, fx.runId), { repo_tier: 'sessions', repo_reason: reason });
+  assert.equal(run.attempts, attempts, attempts === 1 ? 'a repository that cannot be read is not retried' : `tried ${attempts} times`);
+  const snapshots = await h.sql.query(`SELECT 1 FROM "wiki_repo_op" WHERE "space_id" = $1 AND "kind" = 'snapshot'`, [fx.spaceId]);
+  assert.equal(snapshots.rowCount, ['no_workspace', 'runner_offline', 'runner_missing', 'runner_upgrade'].includes(reason) ? 0 : attempts, 'how many times the runner was asked');
+  assert.deepEqual(await runTier(h, fx.runId), { repo_tier: tier, repo_reason: reason });
   const report = run.report as Record<string, unknown>;
-  assert.deepEqual(report.repo, { tier: 'sessions', reason });
+  assert.deepEqual(report.repo, { tier, reason });
   assert.equal(report.dossiers, 2);
   assert.equal(report.offTopic, 1);
   const ops = report.ops as Record<string, number>;
@@ -1006,6 +1033,7 @@ async function assertSessionsRun(h: Harness, fx: Fixture, reason: string, play: 
     .then((result) => result.rows.map((row) => row.kind));
   assert.deepEqual(kinds.filter((kind) => kind !== 'snapshot'), []);
   assert.equal((report.docs as Record<string, unknown>).skipped, 'no_repository');
+  return { backoffs };
 }
 
 test('a workspace that is not a git checkout: the run goes on from the sessions — succeeded, entries proposed, the cursor moved, the run row on tier sessions for not_git', { skip }, async () => {
@@ -1029,6 +1057,88 @@ test('a space whose maintenance names no workspace runs on tier sessions for no_
   await assertSessionsRun(h, fx, 'no_workspace', {}, 'Nowhere Wiki');
   const asked = await h.sql.query(`SELECT 1 FROM "wiki_repo_op" WHERE "space_id" = $1`, [fx.spaceId]);
   assert.equal(asked.rowCount, 0);
+});
+
+// ── The failure classification (docs/wiki-repo-tiers-design.md §6, contract `repoOps.reasons`) ────────────────────
+
+/**
+ * Every premise a runner names: the runner is asked once, the job is not retried, and the run ends succeeded on tier
+ * sessions — or tier wrong_repository for another repository's checkout, which does only what tier sessions does.
+ */
+const PREMISES: Array<{ reason: string; tier: string; error: string }> = [
+  { reason: 'no_work_dir', tier: 'sessions', error: 'the operation names no working directory to read the repository in' },
+  { reason: 'not_found', tier: 'sessions', error: '/tmp/maintain-spec was not found on this machine: stat /tmp/maintain-spec: no such file or directory' },
+  { reason: 'not_git', tier: 'sessions', error: '/tmp/maintain-spec is not a git checkout: exit status 128' },
+  { reason: 'too_many_files', tier: 'sessions', error: '/tmp/maintain-spec has more than 100000 files to read' },
+  { reason: 'wrong_repository', tier: 'wrong_repository', error: 'the checkout /tmp/maintain-spec is a clone of github.com/x/other, not of the space\'s repository github.com/x/app: nothing was read' },
+  { reason: 'root_mismatch', tier: 'wrong_repository', error: 'the checkout /tmp/maintain-spec does not start from the space\'s first commit bbbb: it is another repository behind the same URL, so nothing was read' },
+  { reason: 'path_overlap', tier: 'wrong_repository', error: '/tmp/maintain-spec shares 12% of its files with the last snapshot' },
+  { reason: 'fetch_refused', tier: 'sessions', error: 'the snapshot operation could not fetch origin\'s default branch into the checkout /tmp/maintain-spec, so nothing was read: git authentication failed: the remote refused the saved Git credential' },
+];
+
+for (const premise of PREMISES) {
+  test(`a premise the runner names, ${premise.reason}: asked once, not retried, the run succeeded on tier ${premise.tier}`, { skip }, async () => {
+    const h = await boot();
+    await clearWork(h);
+    const fx = await fixture(h, { title: 'Premise Wiki', wholeFile: true });
+    await assertSessionsRun(h, fx, premise.reason, { snapshotError: premise.error, snapshotReason: premise.reason }, 'Premise Wiki', { tier: premise.tier });
+  });
+}
+
+test('an old runner names no reason: its words are read as the premise they say — wrong_repository, root_mismatch, fetch_refused — and none is retried', { skip }, async () => {
+  for (const premise of PREMISES.filter((one) => ['wrong_repository', 'root_mismatch', 'fetch_refused', 'no_work_dir'].includes(one.reason))) {
+    const h = await boot();
+    await clearWork(h);
+    const fx = await fixture(h, { title: 'Old Runner Wiki', wholeFile: true });
+    await assertSessionsRun(h, fx, premise.reason, { snapshotError: premise.error }, 'Old Runner Wiki', { tier: premise.tier });
+  }
+});
+
+test('the readiness premises — runner_offline, runner_missing, runner_upgrade — run on tier sessions and ask the runner nothing', { skip }, async () => {
+  const breaks: Array<{ reason: string; change: (h: Harness, fx: Fixture) => Promise<unknown> }> = [
+    { reason: 'runner_offline', change: (h, fx) => h.sql.query(`UPDATE "runner" SET "last_heartbeat_at" = now() - interval '1 hour' WHERE "id" = $1`, [fx.runnerId]) },
+    { reason: 'runner_missing', change: (h, fx) => h.sql.query(`UPDATE "workspace" SET "runner_id" = NULL WHERE "id" = $1`, [fx.workspaceId]) },
+    { reason: 'runner_upgrade', change: (h, fx) => h.sql.query(`UPDATE "runner" SET "capabilities" = '{}' WHERE "id" = $1`, [fx.runnerId]) },
+  ];
+  for (const one of breaks) {
+    const h = await boot();
+    await clearWork(h);
+    const fx = await fixture(h, { title: 'Readiness Wiki', wholeFile: true });
+    await one.change(h, fx);
+    await assertSessionsRun(h, fx, one.reason, {}, 'Readiness Wiki');
+  }
+});
+
+test(`a fetch the network fails (fetch_failed) is tried ${WIKI_REPO_PROBE.maxAttempts} times on the infra backoff, then the run goes on from the sessions and succeeded`, { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { title: 'Flaky Network Wiki', wholeFile: true });
+  const error = 'the snapshot operation could not fetch origin\'s default branch into the checkout /tmp/maintain-spec, so nothing was read: fatal: unable to access: Could not resolve host';
+  const { backoffs } = await assertSessionsRun(h, fx, 'fetch_failed', { snapshotError: error, snapshotReason: 'fetch_failed' }, 'Flaky Network Wiki', { attempts: WIKI_REPO_PROBE.maxAttempts });
+  assert.equal(WIKI_REPO_PROBE.maxAttempts, 3);
+  // The first retry goes out at once and the second after 10 s (jobs.retry, WIKI_JOB.retryBackoffSeconds).
+  assert.deepEqual(backoffs.length, 1, `one retry waited: ${JSON.stringify(backoffs)}`);
+  assert.ok(backoffs[0]! >= 8 && backoffs[0]! <= WIKI_JOB.retryBackoffSeconds[1]!, `the second retry was backed off ${backoffs[0]} s`);
+  // The same fetch from an old runner, in its words alone: the same three tries.
+  const h2 = await boot();
+  await clearWork(h2);
+  const fx2 = await fixture(h2, { title: 'Flaky Network Wiki', wholeFile: true });
+  await assertSessionsRun(h2, fx2, 'fetch_failed', { snapshotError: error }, 'Flaky Network Wiki', { attempts: 3 });
+});
+
+test('the other transient failures — a runner gone silent (runner_lost), one that never answers (op_timeout), a failure with no reason (op_failed) — are tried 3 times, then the run succeeded on tier sessions', { skip }, async () => {
+  const transients: Array<{ reason: string; play: RunnerPlay; repoWaitMs?: number }> = [
+    { reason: 'runner_lost', play: { snapshotError: 'the runner\'s claim has been silent since 2026-11-11T05:00:00Z and no answer came: the runner gave up on it or is gone, so it is closed' } },
+    { reason: 'op_failed', play: { snapshotError: 'the machine went away' } },
+    { reason: 'op_timeout', play: { holdSnapshots: true }, repoWaitMs: 200 },
+  ];
+  for (const one of transients) {
+    const h = await boot();
+    await clearWork(h);
+    const fx = await fixture(h, { title: 'Transient Wiki', wholeFile: true });
+    await assertSessionsRun(h, fx, one.reason, one.play, 'Transient Wiki', { attempts: 3, repoWaitMs: one.repoWaitMs });
+    await h.sql.query(`DELETE FROM "wiki_repo_op" WHERE "space_id" = $1`, [fx.spaceId]);
+  }
 });
 
 test('a git checkout\'s run is on tier git with no reason, and still checks its anchors through the runner', { skip }, async () => {
