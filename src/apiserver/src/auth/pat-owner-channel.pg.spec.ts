@@ -254,6 +254,12 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 404,
     },
     {
+      route: 'POST /sessions/:id/task-moves/decision',
+      path: `/sessions/${nobody()}/task-moves/decision`,
+      body: { decision: 'APPROVE', moves: [{ handoffId: nobody(), crossingKey: 'a'.repeat(64) }] },
+      login: 404,
+    },
+    {
       route: 'POST /projects/:id/start',
       path: `/projects/${toStart}/start`,
       body: await startBody(toStart),
