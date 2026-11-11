@@ -4231,7 +4231,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
           {/* A question's result, once read, is only the replay above said again. */}
           {isDelegate
-            ? node.result && !node.result.isError && <DelegateResult content={resultContent} run={run} seq={node.seq} />
+            ? node.result && !node.result.isError && (
+                <DelegateResult content={resultContent} run={run} seq={node.seq} steps={node.children} />
+              )
             : node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
                 <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
               )}
@@ -4434,10 +4436,13 @@ function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
   return null;
 }
 
-/** What a SubAgent handed back, as Markdown: its call's result, or a background run's once it ended. */
-function DelegateResult({ content, run, seq }: { content: unknown; run?: SubagentRunView; seq: number }) {
+/** What a SubAgent handed back, as Markdown: its call's result, or a background run's once it ended — unless
+ *  the child's own last message, drawn just above it, already says it word for word. */
+function DelegateResult({ content, run, seq, steps }: { content: unknown; run?: SubagentRunView; seq: number; steps: Node[] }) {
   const text = delegateResultText(content, run);
-  return text ? <ToolResult seq={seq} content={text} compact markdown /> : null;
+  const last = steps[steps.length - 1];
+  if (!text || (last?.kind === 'assistant' && last.text.trim() === text.trim())) return null;
+  return <ToolResult seq={seq} content={text} compact markdown />;
 }
 
 /** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */

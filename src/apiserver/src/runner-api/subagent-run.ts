@@ -124,18 +124,29 @@ export function shadowDecision(
   };
 }
 
-/** A model id as a runner's catalogue names it (`claude-opus-5-5` reads "Opus 5.5"), else the id. */
-function catalogLabel(model: string, catalog: RunnerModelCatalog | null | undefined): string {
-  for (const rows of Object.values(catalog ?? {})) {
-    const label = rows?.find((row) => row.value === model)?.label;
-    if (label) return label;
-  }
-  return model;
+/**
+ * How the owner's tables name each model id: the provider rows' tables as the API serves them (`withPreset`), then
+ * the runner's catalogue. The first name found for an id wins.
+ */
+export function modelLabels(
+  providers: Array<{ models?: unknown }>,
+  catalog?: RunnerModelCatalog | null,
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  const add = (rows: unknown) => {
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const { value, label } = (row ?? {}) as { value?: unknown; label?: unknown };
+      if (typeof value === 'string' && typeof label === 'string' && label && !labels.has(value)) labels.set(value, label);
+    }
+  };
+  for (const provider of providers) add(provider.models);
+  for (const rows of Object.values(catalog ?? {})) add(rows);
+  return labels;
 }
 
 /**
  * A `subagent_run` row as `GET /sessions/:id/subagents` answers it. The model is the one the SubAgent runs
- * on: the router's pick once applied, the parent's while the decision is a shadow.
+ * on: the router's pick once applied, the parent's while the decision is a shadow, named by `modelLabels`.
  */
 export function subagentRunView(
   row: {
@@ -149,7 +160,7 @@ export function subagentRunView(
     createdAt: Date;
     endedAt: Date | null;
   },
-  catalog?: RunnerModelCatalog | null,
+  labels?: ReadonlyMap<string, string>,
 ): SubagentRunView {
   const decision = (row.decision ?? {}) as Partial<SubagentDecision>;
   const shadow = decision.applied === false && decision.runModel !== undefined;
@@ -162,7 +173,7 @@ export function subagentRunView(
     status: row.status as SubagentRunStatus,
     level: decision.level ?? null,
     model,
-    modelLabel: model ? catalogLabel(model, catalog) : null,
+    modelLabel: model ? labels?.get(model) ?? model : null,
     effort,
     reasons: Array.isArray(decision.reasons) ? decision.reasons.filter((r) => typeof r === 'string') : [],
     costUsd: row.costUsd,

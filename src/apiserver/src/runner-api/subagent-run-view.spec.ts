@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { subagentRunView } from './subagent-run';
+import { modelLabels, subagentRunView } from './subagent-run';
 
 const base = {
   toolUseId: 'toolu_1',
@@ -12,7 +12,7 @@ const base = {
   createdAt: new Date('2026-11-11T10:00:00.000Z'),
   endedAt: new Date('2026-11-11T10:03:12.000Z'),
 };
-const catalog = { claude: [{ value: 'claude-opus-5-5', label: 'Opus 5.5' }] } as never;
+const labels = modelLabels([], { claude: [{ value: 'claude-opus-5-5', label: 'Opus 5.5' }] } as never);
 
 test('a shadow decision names the model the SubAgent runs on, labelled by the runner catalogue', () => {
   const view = subagentRunView(
@@ -24,7 +24,7 @@ test('a shadow decision names the model the SubAgent runs on, labelled by the ru
         reasons: ['Tier M, set by the caller', "Shadow decision: this SubAgent runs on the parent's model, claude-opus-5-5"],
       },
     },
-    catalog,
+    labels,
   );
   assert.deepEqual(view, {
     toolUseId: 'toolu_1', type: 'explore', background: false, status: 'DONE', level: 'M',
@@ -38,7 +38,7 @@ test('a shadow decision names the model the SubAgent runs on, labelled by the ru
 test('an applied decision names its own pick; an unknown model keeps its id', () => {
   const view = subagentRunView(
     { ...base, endedAt: null, status: 'RUNNING', decision: { level: 'S', model: 'deepseek-chat', effort: 'low', applied: true, reasons: [] } },
-    catalog,
+    labels,
   );
   assert.equal(view.model, 'deepseek-chat');
   assert.equal(view.modelLabel, 'deepseek-chat');
@@ -52,4 +52,14 @@ test('an older shadow row without runModel falls back to the decision, and bad r
   assert.equal(view.modelLabel, null);
   assert.equal(view.level, null);
   assert.deepEqual(view.reasons, ['ok']);
+});
+
+test('a provider table names a model ahead of the runner catalogue', () => {
+  const labels = modelLabels(
+    [{ models: [{ value: 'deepseek-flash', label: 'DeepSeek V4.1 Flash' }, { value: 'x' }] }, { models: 'not a list' }, {}],
+    { claude: [{ value: 'deepseek-flash', label: 'catalogue' }, { value: 'claude-opus-5-5', label: 'Opus 5.5' }] } as never,
+  );
+  assert.equal(labels.get('deepseek-flash'), 'DeepSeek V4.1 Flash');
+  assert.equal(labels.get('x'), undefined);
+  assert.equal(labels.get('claude-opus-5-5'), 'Opus 5.5');
 });

@@ -1,5 +1,5 @@
 import type { SubagentRunView } from '@orbit/shared';
-import { subagentRunView } from '../runner-api/subagent-run';
+import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
@@ -255,7 +255,7 @@ import {
   type EngineProviderDeps,
   type SessionSwitch,
 } from '../providers/engine-provider';
-import { ownsModel } from '../providers/preset-overlay';
+import { ownsModel, withPreset } from '../providers/preset-overlay';
 import { sessionHeldKey } from '../providers/held-key';
 import {
   newTerminalResumeHandoffOwner,
@@ -5255,8 +5255,15 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('session not found');
     const rows = await this.prisma.subagentRun.findMany({ where: { sessionId: id }, orderBy: { createdAt: 'asc' } });
+    if (rows.length === 0) return [];
+    // The owner's keys and the shared rows anyone may pick: only their model names are read.
+    const providers = await this.prisma.modelProvider.findMany({
+      where: { OR: [{ ownerId: userId }, { ownerId: null }] },
+      select: { runtime: true, presetSlug: true, followsPreset: true, models: true, defaultModel: true },
+    });
     const catalog = session.assignedRunner?.modelCatalog as RunnerModelCatalog | null | undefined;
-    return rows.map((row) => subagentRunView(row, catalog));
+    const labels = modelLabels(providers.map((row) => withPreset(row)), catalog);
+    return rows.map((row) => subagentRunView(row, labels));
   }
 
   async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {

@@ -176,6 +176,27 @@ describe('the SubAgent block', () => {
     expect(detail.textContent).not.toContain('Find them.');
   });
 
+  it("shows the result once when the child's own last message already says it", () => {
+    const said = 'Three callers, all in **quota/**.';
+    const withReply: RunEvent[] = [
+      ...events.slice(0, 3),
+      ev(4, 'assistant', { text: said, parentToolUseId: 'toolu_fg' }),
+      { ...events[3], seq: 5 },
+    ];
+    act(() =>
+      root.render(
+        <MemoryRouter>
+          <SubagentRunsCtx.Provider value={new Map([[FG.toolUseId, FG]])}>
+            <Transcript events={withReply} />
+          </SubagentRunsCtx.Provider>
+        </MemoryRouter>,
+      ),
+    );
+    const fg = card(1);
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    expect(fg.textContent!.split('Three callers, all in').length - 1).toBe(1);
+  });
+
   it('draws the row before its run is read, with no meta and no Why', () => {
     render([]);
     const fg = card(1);
