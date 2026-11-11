@@ -16,6 +16,24 @@
 >
 > - 2026-11-11（来自 P4 的真实 runner 演练）：文件夹档抽取时不收条目写的 commit 锚点，不标 `deferred`，也不算作别的仓库的；
 >   否则这些锚点在文件夹上永远核不了，条目永远不进推送块（§5.1、§5.2）。
+- 2026-11-11（P5 文档同步，按项目分支上落地的代码改；契约 `docs/wiki-contract.md` §20、§26.7–26.9、§27 写的是代码的行为）：
+  - §6、§7：红色原因连续 3 次只发一次推送（`PushService.notifyWikiRepositoryAttention`，kind `wiki-maintenance-failing`，标题
+    `Wiki code checks paused for <runs> runs`）。Following 的 Needs attention 只列 watch，wiki 的告警在那里没有一行，这一条没有做。
+  - §2.1：「本地 git（没有 origin）」一档没有做。没有 origin 的 git checkout 在 fetch 时失败，原因是瞬时的 `fetch_failed`，重试 3 次后按第 0 档跑。
+  - §3、§5.1：服务端锚点（`criterion`、`record`、`merge_evidence`）今天没有任何检查会写（契约 `anchorRules.verify.typesNote`），所以第 0 档的
+    anchors 一步什么都不写，报告的 `anchors` 全是 0；不是「每一档都核」。
+  - §4.2：`folder_moved` 之后重建一次快照再读；再变一次，这次尝试按 infra 结束（`REPO_OP_FAILED`），作业按退避重试，不是「推迟这一节」。
+  - §6：瞬时原因多两个：`runner_lost`（服务端收尾沉默的操作）和 `op_failed`（不认识的失败，也按瞬时重试）；操作超时的原因名是 `op_timeout`。
+    凭据被拒（`fetch_refused`）是第 0 档，但健康行按红色原因画红点，不是琥珀（§7.2）。
+  - §2.3、§7.1：`path_overlap` 的健康行 detail 是 `<dir> shares few files with the last snapshot`；带百分比的那句
+    `<dir> shares N% of its files with the last snapshot of <repo>` 是操作的错误文字。
+  - §3.1：其他作业（plan、docs_build、docs_follow、import、articles）没有改成走「读出档位」的入口，读不到时的等待或失败和原因文字都照旧；
+    只是 runner 声明了文件夹能力时，服务端给每一种操作都写 `allowFolder`，它们也读得到文件夹。
+  - §7.3、§8：探测有自己的能力 `wiki-repo-op-probe/v1` 和路由 `POST /api/wiki/spaces/:id/maintenance/probe`；探测操作不挂作业
+    （`wiki_repo_op.job_id` 可空，迁移 0530）。打开维护（`PATCH /api/wiki/spaces/:id`）探测出别的仓库时以 409 `WIKI_MAINTENANCE_WRONG_REPOSITORY` 拒绝；
+    `POST …/maintenance/run` 次数用完时回 409 `WIKI_MAINTENANCE_DAILY_LIMIT`，维护关着回 400，运行的 `due` 记 `owner`。
+  - §8 的迁移：`repo_tier`、`repo_reason` 在 0514；0519 另给运行行加 `repo_detail`、`repo_checked_at`，给 `wiki_cursor` 加 `repo_attention_runs`；
+    `wiki_repo_snapshot.source` 在 0521。
 
 ---
 
@@ -223,8 +241,8 @@ runner 的失败回答多一个 `reason`（`repoOps.reasons`），服务端照�
 | `folder_moved` | 瞬时 | — | 重建一次快照（§4.2） | 不显示 |
 
 - 前提错误不进 `WIKI_JOB.maxAttempts` 的重试循环，一次运行里也不重复问 runner。
-- 红色的（要 owner 去修）连续 3 次运行都出现时，发一次通知，并在 Following 的 Needs attention 里出现一条。复用今天「Maintenance failed 3 times」
-  的通知通道，文案换成原因。修好、读到一次之后计数清零。
+- 红色的（要 owner 去修）连续 3 次运行都出现时，发一次推送通知（kind `wiki-maintenance-failing`）。复用今天「Maintenance failed 3 times」
+  的通知通道，文案换成原因。修好、读到一次之后计数清零。（不在 Following 的 Needs attention 里出现：见顶部的修订。）
 - 维护运行自己的失败分类（infra / content，`maintenance.job.recovery`）不变：仓库降档不算运行失败。
 
 ---
