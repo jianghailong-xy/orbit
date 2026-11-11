@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>SubAgent · design board</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  /* Board chrome only; every board class is prefixed sa- so nothing collides with index.css. */
+  .sa-part { margin-top: 22px; }
+  .sa-part:first-of-type { margin-top: 0; }
+  .sa-three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .sa-two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .sa-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .sa-col-h { font-size: 13px; font-weight: 700; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
+  .sa-box { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 9px 12px; }
+  .sa-box h4 { margin: 0 0 3px; font-size: 13px; font-weight: 650; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .sa-box p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+  .sa-box.sa-new { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .sa-box.sa-new h4 { color: var(--brand-strong); }
+  .sa-box.sa-bad { border-color: var(--error-border); background: var(--error-bg); }
+  .sa-box.sa-warn { border-color: var(--warning-border); background: var(--warning-bg); }
+  .sa-down { text-align: center; color: var(--text-4); font-size: 16px; line-height: 14px; }
+  .sa-tag { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; white-space: nowrap; }
+  .sa-tag.p1 { background: #e8f5e9; color: #2e7d32; }
+  .sa-tag.p2 { background: #fff3e0; color: #b35c00; }
+  .sa-tag.p3 { background: #f3e5f5; color: #6a1b9a; }
+  .sa-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; }
+  .sa-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .sa-tbl th, .sa-tbl td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; line-height: 1.5; }
+  .sa-tbl th { font-size: 11.5px; color: var(--text-3); font-weight: 700; }
+  .sa-tbl td.sa-em { font-weight: 650; color: var(--text-1); }
+
+  /* The transcript pane: real chat classes from index.css inside a plain frame. */
+  .sa-pane { background: var(--bg-base); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .sa-pane .chat-user-wrap { display: flex; justify-content: flex-end; margin: 4px 0 10px; }
+  .sa-pane .chat-user { max-width: 80%; }
+  .sa-pane .chat-assistant { margin: 6px 0; font-size: 14px; line-height: 1.6; }
+  .sa-pane .chat-tool-meta { margin-left: auto; }
+  .sa-ok { color: var(--success-solid); font-weight: 700; }
+  .sa-spin { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #c9b8f5; border-top-color: #7c3aed; }
+  .sa-bg { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 4px; background: #f1ebfd; color: #6d28d9; line-height: 18px; }
+  .sa-why { font-size: 12px; color: var(--text-3); padding: 2px 10px 8px 40px; line-height: 1.55; }
+  .sa-why b { color: var(--text-2); font-weight: 600; }
+  .sa-step { font-size: 12.5px; color: var(--text-2); padding: 2px 0; }
+  .sa-step .sa-mono { color: var(--text-1); }
+  .sa-result { font-size: 13px; color: var(--text-1); padding: 6px 0 2px; border-top: 1px dashed var(--border-subtle); margin-top: 6px; line-height: 1.6; }
+
+  /* Phone frame (393 pt wide, drawn at 1:1 px). */
+  .sa-phone { width: 393px; border-radius: 44px; border: 10px solid #111; background: #fff; overflow: hidden; font-family: -apple-system, Inter, "Noto Sans SC", sans-serif; }
+  .sa-ph-bar { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 15px; font-weight: 600; }
+  .sa-ph-nav { padding: 4px 16px 10px; font-size: 17px; font-weight: 600; text-align: center; border-bottom: .5px solid #e3e3e8; }
+  .sa-ph-body { padding: 10px 14px 18px; font-size: 15px; line-height: 1.45; }
+  .sa-ph-user { margin: 4px 0 12px auto; max-width: 78%; background: #f0f0f3; border-radius: 18px; padding: 8px 13px; width: fit-content; }
+  .sa-ph-card { border-left: 3px solid #7c3aed; padding: 7px 10px; margin: 8px 0; background: #faf8ff; border-radius: 0 10px 10px 0; }
+  .sa-ph-row { display: flex; align-items: center; gap: 7px; font-size: 14px; }
+  .sa-ph-row .t { font-weight: 600; }
+  .sa-ph-row .s { color: #6b6b70; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+  .sa-ph-sub { font-size: 12.5px; color: #8a8a8d; margin-top: 3px; padding-left: 22px; }
+  .sa-ph-live { font-size: 12.5px; color: #6b6b70; margin-top: 3px; padding-left: 22px; font-style: italic; }
+
+  .sa-qs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .sa-q { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; }
+  .sa-q h4 { margin: 0 0 6px; font-size: 13px; font-weight: 650; }
+  .sa-opt { font-size: 12px; color: var(--text-2); line-height: 1.55; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); margin-top: 6px; }
+  .sa-opt b { color: var(--text-1); }
+  .sa-opt.sa-rec { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .sa-rec-l { font-size: 10.5px; font-weight: 700; color: var(--brand-strong); margin-left: 4px; }
+  .sa-phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .sa-ph { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 9px 11px; }
+  .sa-ph h4 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+  .sa-ph p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+
+  .sa-set { width: 100%; }
+  .sa-set-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; }
+  .sa-set-row:first-child { border-top: 0; }
+  .sa-set-row .sa-hint { color: var(--text-3); font-size: 12px; }
+  .sa-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; font-size: 12.5px; }
+  .sa-seg span { padding: 3px 11px; }
+  .sa-seg span.on { background: var(--text-1); color: #fff; }
+  .sa-sw { width: 34px; height: 20px; border-radius: 10px; background: #34c759; position: relative; flex: none; }
+  .sa-sw::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  .sa-sw.off { background: #d1d5db; }
+  .sa-sw.off::after { right: auto; left: 2px; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet zh">
+
+<!-- ───────────────────────── part 1 ───────────────────────── -->
+<section id="part-1" class="sa-part">
+  <h1 class="m-h1">SubAgent · 父会话把一段活交给最合适的 Provider，过程内嵌在消息流里</h1>
+  <p class="m-sub">父会话的模型调用 <span class="a-mono">delegate</span>；Orbit 在<b>同一台 runner、同一个 worktree</b> 里起一个子引擎进程（可以是另一种引擎、另一把 key），按难度和 Optimize For 从<b>所有已启用的 Provider</b> 里选模型。子 Agent 直接改文件、不提交；可以前台等，也可以后台跑；可以并行，冲突由父 Agent 自己避开。</p>
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">今天</span> vs <span class="m-k new">SubAgent</span></div>
+    <div class="sa-three">
+      <div class="sa-col">
+        <div class="sa-col-h"><span class="m-k">① 今天</span>引擎自带的 Agent 工具</div>
+        <div class="sa-box"><h4>内嵌在消息流里，体验对</h4><p>Claude Code 的 Agent、Codex 的 spawn_agent、Cursor 的 subagent：同一个 cwd，前台或后台，结果交回父模型</p></div>
+        <div class="sa-down">↓</div>
+        <div class="sa-box sa-bad"><h4>只能用父会话自己的引擎和账号</h4><p>Claude 会话的子 Agent 只能是 Claude 模型、吃同一份额度；DeepSeek / Codex / Kimi 这些已经配好的 Provider 用不上。选什么模型全靠模型自己写参数，Orbit 看不见也管不着</p></div>
+      </div>
+      <div class="sa-col">
+        <div class="sa-col-h"><span class="m-k">② 今天</span><span class="a-mono">session_create</span>（L3 编排）</div>
+        <div class="sa-box"><h4>可以换引擎、换 key</h4><p>新开一个独立会话，有自己的 worktree</p></div>
+        <div class="sa-down">↓</div>
+        <div class="sa-box sa-bad"><h4>太重，而且不在消息流里</h4><p>引擎 / provider / model 全要调用方手填；改动在另一个分支上，父会话拿不到；过程在另一个会话里，要点过去才看得见</p></div>
+      </div>
+      <div class="sa-col">
+        <div class="sa-col-h"><span class="m-k new">③ SubAgent</span>两者之长</div>
+        <div class="sa-box sa-new"><h4>形态 = 引擎自带的 Agent 工具</h4><p>同一个 worktree、内嵌折叠块、前台 / 后台、可续跑、不能再嵌套</p></div>
+        <div class="sa-down">↓</div>
+        <div class="sa-box sa-new"><h4>执行者 = Orbit 按难度路由</h4><p>候选是所有已启用的 Provider；按 <b>档位 × Optimize For × 额度</b>选；每次选择都写理由、始终显示在块头</p></div>
+        <div class="sa-down">↓</div>
+        <div class="sa-box sa-new"><h4>定义 = 仓库里现成的文件</h4><p>读 <span class="a-mono">.claude/agents/</span>、<span class="a-mono">.cursor/agents/</span>，另有内置 <span class="a-mono">explore</span> 和 <span class="a-mono">general</span></p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 2 ───────────────────────── -->
+<section id="part-2" class="sa-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">④ Web 消息流</span>和今天的 Agent 卡同一个组件、同一种紫色；多出来的只有块头右侧的「档位 · 模型」和展开后一行灰色 Why</div>
+    <div class="sa-two">
+      <div class="sa-pane">
+        <div class="chat-user-wrap"><div class="chat-user">Add a retry with backoff to the quota poller, and make sure nothing else calls the old helper.</div></div>
+        <div class="chat-assistant">I'll have one SubAgent find every caller while another writes the spec, then do the change myself.</div>
+
+        <div class="m-mark" style="margin-top:14px"><span class="m-n">1</span><div class="chat-tool-card chat-tone-agent chat-tool-task">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">›</span><span class="chat-tool-icon">✦</span>
+            <span class="chat-tool-name">SubAgent</span>
+            <span class="chat-tool-summary">explore · Find every caller of pollQuota</span>
+            <span class="chat-tool-meta">S · DeepSeek Chat · 41s</span><span class="sa-ok">✓</span>
+          </div>
+        </div></div>
+
+        <div class="m-mark" style="margin-top:16px"><span class="m-n">2</span><div class="chat-tool-card chat-tone-agent chat-tool-task">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">›</span><span class="chat-tool-icon">✦</span>
+            <span class="chat-tool-name">SubAgent</span>
+            <span class="chat-tool-summary">spec-writer · Write the backoff spec</span>
+            <span class="sa-bg">Background</span>
+            <span class="chat-tool-meta">M · GPT-5.6 Sol · medium</span><span class="sa-spin"></span>
+          </div>
+          <div class="chat-tool-live">Edit src/apiserver/src/quota/poller.spec.ts</div>
+        </div></div>
+
+        <div class="chat-assistant" style="margin-top:12px">Three callers, all in <code>quota/</code>. Changing the helper now while the spec is being written.</div>
+        <div class="chat-tool-card chat-tone-write"><div class="chat-tool-row"><span class="chat-tool-caret">›</span><span class="chat-tool-icon">✎</span><span class="chat-tool-name">Edit</span><span class="chat-tool-summary mono">poller.ts</span></div></div>
+      </div>
+
+      <div class="sa-pane">
+        <div class="m-mark"><span class="m-n">3</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span>
+            <span class="chat-tool-name">SubAgent</span>
+            <span class="chat-tool-summary">spec-writer · Write the backoff spec</span>
+            <span class="chat-tool-meta">M · GPT-5.6 Sol · medium · 3m 12s · $0.21</span><span class="sa-ok">✓</span>
+          </div>
+          <div class="sa-why m-mark" style="margin:4px 10px 6px 30px"><span class="m-n">4</span><b>Why</b> · Tier M, set by the caller: one service plus its spec · Optimize For: Cost · cheapest of 5 providers with quota on this runner</div>
+          <div class="chat-tool-detail">
+            <div class="chat-subagent">
+              <div class="sa-step">Read <span class="sa-mono">quota/poller.ts</span></div>
+              <div class="sa-step">Search <span class="sa-mono">pollQuota(</span> in src/apiserver</div>
+              <div class="sa-step">Write <span class="sa-mono">quota/poller.spec.ts</span> <span style="color:var(--success-solid)">+84</span></div>
+              <div class="sa-step">Run <span class="sa-mono">npx vitest run quota/poller.spec.ts</span> · 6 passed</div>
+              <div class="sa-result">Added <code>poller.spec.ts</code> with six cases: first retry after 1 s, doubling up to 30 s, reset on success, and a stop at the account's reset time. Nothing committed; the file is in the working tree.</div>
+            </div>
+          </div>
+        </div></div>
+
+        <div class="m-mark" style="margin-top:18px"><span class="m-n">5</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span>
+            <span class="chat-tool-name">SubAgent</span>
+            <span class="chat-tool-summary">general · Port the retry to the Go runner</span>
+            <span class="chat-tool-meta">L · Claude Opus 5.5 · high</span><span class="sa-spin"></span>
+          </div>
+          <div class="sa-why" style="padding-left:30px"><b>Why</b> · Tier L, set by the caller: runner and server change together · Moved to the Claude pool after your own account hit its limit</div>
+          <div class="chat-tool-detail"><div class="chat-subagent">
+            <div class="sa-step">Read <span class="sa-mono">runner-go/quota/poll.go</span></div>
+            <div class="sa-step" style="color:var(--warning-solid)">Waiting for approval · Run <span class="sa-mono">go test ./quota/...</span></div>
+          </div></div>
+        </div></div>
+        <div class="m-mark" style="margin-top:14px;padding:10px 12px;border:1px solid var(--warning-border);background:var(--warning-bg);border-radius:8px;font-size:13px"><span class="m-n">6</span>
+          <div style="font-size:12px;color:var(--text-3);margin-bottom:3px">SubAgent · Port the retry to the Go runner</div>
+          <b>Run</b> <span class="sa-mono">go test ./quota/...</span>? <span style="float:right"><span class="a-btn" style="padding:1px 10px">Deny</span> <span class="a-btn primary" style="padding:1px 10px">Allow</span></span>
+        </div>
+      </div>
+    </div>
+    <ul class="m-notes">
+      <li><span class="m-n">1</span><span><b>折叠态一行</b>：名字 <span class="a-mono">SubAgent</span> · 类型（<span class="a-mono">explore</span> / <span class="a-mono">general</span> / 仓库里的定义名）· 任务描述；右侧灰色「档位 · 模型 · 用时」。和今天 Agent 卡的差别只有右侧这串。</span></li>
+      <li><span class="m-n">2</span><span><b>后台</b>：块留在发起它的位置，带 <span class="a-mono">Background</span> 标，下面一行显示它此刻在做什么（沿用 <span class="a-mono">SubagentLiveLine</span>）。父 Agent 继续往下写；结束时父会话收到一条通知并起新一轮。</span></li>
+      <li><span class="m-n">3</span><span><b>展开态</b>：子 Agent 的每一步，和今天的嵌套 transcript 一样；最后是它交回给父 Agent 的结果。完成后右侧补上用时和花费。</span></li>
+      <li><span class="m-n">4</span><span><b>Why 一行灰字</b>：档位从哪来、按什么模式选、候选里为什么是它。只在展开后出现，折叠态不加任何颜色和标签（「用户的话是视觉中心」）。</span></li>
+      <li><span class="m-n">5</span><span><b>额度失败</b>换同档下一个候选（一次 delegate 最多换 2 次），Why 里写明。块里显示它在等审批。</span></li>
+      <li><span class="m-n">6</span><span><b>审批卡</b>出现在父会话的审批区（今天的 <span class="a-mono">ApprovalPanel</span>），上方一行灰字写明来自哪个 SubAgent。子 Agent 不能向人提问，拿不准就写进结果交回。</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 3 ───────────────────────── -->
+<section id="part-3" class="sa-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">⑤ iOS / macOS / Android</span>同一个块的移动端画法：折叠一行，第二行灰色「档位 · 模型」</div>
+    <div style="display:flex;gap:40px;align-items:flex-start">
+      <div class="sa-phone">
+        <div class="sa-ph-bar"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="sa-ph-nav">Quota poller retry</div>
+        <div class="sa-ph-body">
+          <div class="sa-ph-user">Add a retry with backoff to the quota poller.</div>
+          <div>I'll split this: one SubAgent finds the callers, another writes the spec.</div>
+          <div class="sa-ph-card m-mark"><span class="m-n">1</span>
+            <div class="sa-ph-row"><span style="color:#7c3aed">✦</span><span class="t">SubAgent</span><span class="s">Find every caller of pollQuota</span><span class="sa-ok">✓</span></div>
+            <div class="sa-ph-sub">explore · S · DeepSeek Chat · 41s</div>
+          </div>
+          <div class="sa-ph-card m-mark" style="margin-top:16px"><span class="m-n">2</span>
+            <div class="sa-ph-row"><span style="color:#7c3aed">✦</span><span class="t">SubAgent</span><span class="s">Write the backoff spec</span><span class="sa-spin"></span></div>
+            <div class="sa-ph-sub">Background · M · GPT-5.6 Sol</div>
+            <div class="sa-ph-live">Edit poller.spec.ts</div>
+          </div>
+          <div style="margin-top:10px">Three callers, all in quota/. Changing the helper now.</div>
+        </div>
+      </div>
+      <ul class="m-notes" style="flex:1;margin-top:0">
+        <li><span class="m-n">1</span><span>窄屏上一行放不下「档位 · 模型」，移到第二行灰字，类型放在最前。点开进入子 Agent 的步骤列表，Why 在列表顶部。</span></li>
+        <li><span class="m-n">2</span><span>后台块多一行斜体「正在做什么」。三个客户端共用一份事件形状（<span class="a-mono">subagent</span> 节点），不各自解析。</span></li>
+        <li><span class="m-n">·</span><span>会话列表行不变：后台 SubAgent 还在跑时，状态沿用今天的 <span class="a-mono">Running Agent</span>（<span class="a-mono">runningSubagentCount</span> 把它算进去）。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 4 ───────────────────────── -->
+<section id="part-4" class="sa-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">⑥ 组件与时序</span>不建新会话：子进程挂在父会话的进程树下（像 bg_run），事件写进父会话的事件流</div>
+    <div style="display:grid;grid-template-columns:300px 24px 330px 24px 1fr;align-items:stretch">
+      <div class="sa-col">
+        <div class="sa-col-h">runner（父会话所在机器）</div>
+        <div class="sa-box"><h4>父会话进程 · 例如 Claude Code</h4><p>cwd = 会话 worktree（或不开 worktree 时的 workDir）</p></div>
+        <div class="sa-box sa-new"><h4><span class="a-mono">orbit mcp</span> · delegate <span class="sa-tag p1">P1</span></h4><p>启动时扫描 cwd 下 <span class="a-mono">.claude/agents</span> / <span class="a-mono">.cursor/agents</span> / <span class="a-mono">.codex/agents</span>，写进工具描述</p></div>
+        <div class="sa-box sa-new"><h4>subagent.go · 子引擎进程 <span class="sa-tag p1">P1</span></h4><p>同一 cwd 起 claude / codex / kimi / dsh / cursor / opencode；事件改写为 <span class="a-mono">parentToolUseId</span> = delegate 调用；收集 changedFiles；不提交、不 finalize</p></div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;color:var(--text-4);font-size:20px">⇄</div>
+      <div class="sa-col">
+        <div class="sa-col-h">Orbit 服务端</div>
+        <div class="sa-box sa-new"><h4><span class="a-mono">POST /runner/sessions/:id/subagents</span> <span class="sa-tag p1">P1</span></h4><p>开关 · 并发上限 · 权限模式不宽于父会话 → 路由 → 写 subagent_run → 下发执行目标（与 session claim 同形状的凭证环境）</p></div>
+        <div class="sa-box sa-new"><h4><span class="a-mono">routeSubagent()</span> 纯函数 <span class="sa-tag p2">P2</span></h4><p>与 routeTaskRun 共用档位表和引擎状态读取（模型目录、额度、暂停、区域）</p></div>
+        <div class="sa-box"><h4>runningSubagents · 审批 · background-wake</h4><p>名单加入 <span class="a-mono">mcp__orbit__delegate</span>；审批带 <span class="a-mono">subagentRunId</span>；后台结束沿用 bg_run 的唤醒</p></div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;color:var(--text-4);font-size:20px">→</div>
+      <div class="sa-col">
+        <div class="sa-col-h">数据</div>
+        <div class="sa-box sa-new"><h4>新表 <span class="a-mono">subagent_run</span> <span class="sa-tag p1">P1</span></h4><p>父会话 · tool_use_id · 类型 / 定义来源 · 前台或后台 · 状态 · <b>decision</b>（档位、来源、Optimize For、引擎、Provider、模型、effort、英文理由、被去掉的候选及原因）· 换候选记录 · 结果摘要 · changedFiles · 花费</p></div>
+        <div class="sa-box"><h4>父会话 <span class="a-mono">cost_usd</span> += SubAgent 花费</h4><p>今天读会话花费的预算和上限自动把它算进去</p></div>
+        <div class="sa-box"><h4>不新增 Session 行</h4><p>session_create 的子会话会拿到自己的新 worktree（从 workDir HEAD 分出），看不到父会话未提交的改动，所以不走那条路</p></div>
+      </div>
+    </div>
+    <table class="sa-tbl" style="margin-top:16px">
+      <tr><th style="width:150px">父会话发生的事</th><th>SubAgent</th></tr>
+      <tr><td>一轮结束</td><td>后台 SubAgent 继续跑，会话显示 <span class="a-mono">Running Agent</span>；结束时唤醒父会话（待定 C）</td></tr>
+      <tr><td>空闲停放</td><td><b>等它们结束再停放</b>：停放的检查点提交会把写了一半的文件提交进去</td></tr>
+      <tr><td>停止 / 结束</td><td>先停掉所有 SubAgent（宽限 10 s），再提交和收尾</td></tr>
+      <tr><td>runner 重启</td><td>和 bg_run 一样随之结束，记 INTERRUPTED，唤醒父会话说明原因</td></tr>
+      <tr><td>并行写同一文件</td><td>不加锁（owner 已定）；后结束的结果里写 <span class="a-mono">Also changed by &lt;run&gt;: &lt;path&gt;</span>，父 Agent 自己核对</td></tr>
+    </table>
+  </div>
+</section>
+
+
+<!-- ───────────────────────── part 5 ───────────────────────── -->
+<section id="part-5" class="sa-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">⑦ 怎么选执行者</span>先定档（参考 Cursor：父 Agent 判断、定义文件指定），再在候选池里按 Optimize For 选</div>
+    <div class="sa-two">
+      <div class="sa-col">
+        <div class="sa-col-h">定档：第一条命中即止</div>
+        <table class="sa-tbl">
+          <tr><th>#</th><th>来源</th><th>结果</th></tr>
+          <tr><td>1</td><td><span class="a-mono">delegate(model=…)</span> 父 Agent 点名</td><td class="sa-em">用它，不路由</td></tr>
+          <tr><td>2</td><td>定义文件 <span class="a-mono">model: &lt;id&gt;</span></td><td class="sa-em">用它，不路由（<span class="a-mono">inherit</span> = 父会话的模型）</td></tr>
+          <tr><td>3</td><td><span class="a-mono">delegate(size=S…XL)</span> 父 Agent 判断</td><td class="sa-em">这个档</td></tr>
+          <tr><td>4</td><td>定义文件 <span class="a-mono">size:</span></td><td class="sa-em">这个档</td></tr>
+          <tr><td>5</td><td>内置类型默认</td><td class="sa-em"><span class="a-mono">explore</span> = S，其余 = M；Balance 至少 M、Intelligence 至少 L</td></tr>
+        </table>
+        <p class="m-cap">不在派发路径上跑分类器：父模型刚读完上下文，它给的档位不花钱、比服务端看 prompt 准。路由器仍是纯函数。</p>
+      </div>
+      <div class="sa-col">
+        <div class="sa-col-h">候选池 → 排序</div>
+        <div class="sa-box"><h4>候选 = 所有已启用的 Provider × 它们能跑的引擎 × 模型</h4><p>去掉：owner 屏蔽的 · 这台 runner 没装 / 没登录的引擎 · 额度 ≥ 90% 或暂停的账号 · 没有档位的模型（自定义 endpoint 要先标档位才进池，点名仍可用）</p></div>
+        <div class="sa-down">↓</div>
+        <div class="sa-box"><h4>同档里按 Optimize For 排</h4><p><b>Cost</b>：边际花费最低的先（有余量的订阅 → 最便宜的 key）· <b>Balance</b>：额度余量多的先 · <b>Intelligence</b>：档内更强的模型先。并列时按 owner 在 Providers 页排的顺序</p></div>
+        <div class="sa-down">↓</div>
+        <div class="sa-box"><h4>额度 / 容量失败 → 同档下一个；活本身失败 → 交回父 Agent</h4><p>不自动升档重跑；结果里写明失败，父 Agent 决定是加档再派还是自己做</p></div>
+      </div>
+    </div>
+    <div class="sa-two" style="margin-top:16px">
+      <div class="sa-box">
+        <h4>Agent 设置 · SubAgents（新的一组）</h4>
+        <div class="sa-set">
+          <div class="sa-set-row"><span>SubAgents<br><span class="sa-hint">Let this agent hand work to other providers in the same folder</span></span><span class="sa-sw"></span></div>
+          <div class="sa-set-row"><span>Optimize For</span><span class="sa-seg"><span class="on">Cost</span><span>Balance</span><span>Intelligence</span></span></div>
+          <div class="sa-set-row"><span>Providers<br><span class="sa-hint">All enabled providers. Block one to keep SubAgents off it.</span></span><span class="a-btn" style="padding:2px 10px">5 of 6 · Edit</span></div>
+          <div class="sa-set-row"><span>Running at once<br><span class="sa-hint">Per session, foreground and background together</span></span><span class="a-btn" style="padding:2px 10px">4</span></div>
+        </div>
+      </div>
+      <div class="sa-box">
+        <h4>Providers 页 · 每个模型多一列 Tier</h4>
+        <table class="sa-tbl" style="margin-top:4px">
+          <tr><th>Provider</th><th>Model</th><th>Tier</th><th>Price / M out</th></tr>
+          <tr><td>DeepSeek</td><td class="sa-mono">deepseek-chat</td><td>S · M</td><td>from preset</td></tr>
+          <tr><td>Claude</td><td class="sa-mono">claude-sonnet-5-5</td><td>M</td><td>from preset</td></tr>
+          <tr><td>Claude</td><td class="sa-mono">claude-opus-5-5</td><td>L · XL</td><td>from preset</td></tr>
+          <tr><td>Codex</td><td class="sa-mono">gpt-5.6-sol</td><td>S–XL by effort</td><td>from preset</td></tr>
+          <tr><td>My endpoint</td><td class="sa-mono">qwen-coder</td><td style="color:var(--warning-solid)">Not set</td><td>—</td></tr>
+        </table>
+        <p class="m-cap">preset 的档位和价格跟目录走；自定义 endpoint 没标档位就不进自动路由。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── part 6 ───────────────────────── -->
+<section id="part-6" class="sa-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">待定 · 要你拍板</span>三处会改变行为的选择，各带推荐</div>
+    <div class="sa-qs" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="sa-q"><h4>A. Cost 模式怎么算订阅账号</h4>
+        <div class="sa-opt sa-rec"><b>1 · 有余量的订阅先用，再用按量计费的 key</b><span class="sa-rec-l">推荐</span><br>订阅多用一次不多花钱；订阅之间按额度余量排，key 之间按 models.dev 价格排</div>
+        <div class="sa-opt"><b>2 · 订阅按同档 API 价折算，和 key 一起比价</b><br>看起来公平，但订阅额度闲置，实际花更多钱</div>
+      </div>
+      <div class="sa-q"><h4>B. 默认开还是关</h4>
+        <div class="sa-opt sa-rec"><b>1 · 默认开，Optimize For = Cost</b><span class="sa-rec-l">推荐</span><br>配合 A-1，多数 SubAgent 跑在已付费的订阅上；花费在块头和报告里都看得见</div>
+        <div class="sa-opt"><b>2 · 默认关，按 Agent 打开</b><br>L3 编排的做法；更保守，但多数人不会去开</div>
+      </div>
+      <div class="sa-q"><h4>C. 一轮结束时还有后台 SubAgent</h4>
+        <div class="sa-opt sa-rec"><b>1 · 会话保持 Running，结束时唤醒父会话</b><span class="sa-rec-l">推荐</span><br>和 bg_run 一致；停放推迟到它们结束</div>
+        <div class="sa-opt"><b>2 · 一轮结束就停掉</b><br>简单，但「后台」只在一轮之内有效</div>
+      </div>
+    </div>
+    <div class="m-stage-l" style="margin-top:18px"><span class="m-k">分期</span>先把最难的「同 cwd 子进程 + 内嵌 + 生命周期」单独做对，再加路由</div>
+    <div class="sa-phases">
+      <div class="sa-ph"><h4><span class="sa-tag p1">P1</span> 能派、能看</h4><p>delegate（前台 / 后台 / 续跑）· explore / general · 读定义文件 · 同 cwd 子进程 · 三端内嵌块 · subagent_run · 花费计入父会话 · 生命周期 · 审批。执行者 = 父会话的引擎和模型</p></div>
+      <div class="sa-ph"><h4><span class="sa-tag p2">P2</span> 路由（影子）</h4><p>按模型的档位表 · 候选池 · Optimize For · 额度换候选。只记决策，不改执行者，跑两天对比</p></div>
+      <div class="sa-ph"><h4><span class="sa-tag p3">P3</span> 路由生效</h4><p>跨 Provider / 引擎执行 · SubAgents 设置 · Providers 页 Tier 列</p></div>
+      <div class="sa-ph"><h4>P4 报告</h4><p>按档位、模型统计次数、成功率、花费、换候选次数、没给 size 的比例；据此调内置默认档位</p></div>
+    </div>
+  </div>
+</section>
+
+
+</div>
+</body>
+</html>
