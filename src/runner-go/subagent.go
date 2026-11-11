@@ -912,8 +912,8 @@ type subagentChild struct {
 	// stateDir is where engine state that holds the conversation lives: scratch for a new conversation, the
 	// opening run's scratch for a resume of it.
 	stateDir string
-	prompt        string
-	emit          emitFn
+	prompt   string
+	emit     emitFn
 }
 
 // subagentChildRunner runs one SubAgent to its end in child mode: the engine's own launch and event parsing, under
@@ -966,13 +966,19 @@ func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagent
 	// Every engine's `orbit mcp` reads it: a SubAgent is neither offered nor served delegate (§0).
 	child.Agent.Env[envSubagentRunID] = runID
 	child.Agent.AppendSystemPrompt = subagentSystemPrompt(def)
-	// No delegate: a SubAgent cannot hand work on (§5.1 step 3). Its `orbit mcp` offers none either; this keeps
-	// the engine's own tool list without it too.
-	child.Agent.DisallowedTools = appendUnique(exec.DisallowedTools, append([]string{delegateEngineToolName}, def.DisallowedTools...)...)
+	child.Agent.DisallowedTools = appendUnique(exec.DisallowedTools, def.DisallowedTools...)
+	if provider == providerClaude {
+		// No delegate: a SubAgent cannot hand work on (§5.1 step 3). Its `orbit mcp` offers none either; this keeps
+		// Claude Code's own tool list without it too. Not on the other engines: Kimi and DSH refuse any denylist,
+		// and their `orbit mcp` already leaves delegate out.
+		child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, delegateEngineToolName)
+	}
 	if def.Readonly {
 		// The server already narrows a read-only run to plan mode (§5.3); kept here so the child never reads wider.
 		child.Agent.PermissionMode = "plan"
-		child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
+		if provider == providerClaude {
+			child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
+		}
 	}
 	child.RuntimeSessionID = engineSession
 	// The session's own business, which a child has no part in: naming it, and its live mode (the server's

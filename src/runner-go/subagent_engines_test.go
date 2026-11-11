@@ -197,8 +197,13 @@ func TestEveryEngineHasAChildRunner(t *testing.T) {
 	if !strings.HasPrefix(child.Agent.AppendSystemPrompt, subagentPreamble) {
 		t.Fatalf("child system prompt = %q", child.Agent.AppendSystemPrompt)
 	}
-	if !containsString(child.Agent.DisallowedTools, delegateEngineToolName) {
-		t.Fatalf("child may delegate: %v", child.Agent.DisallowedTools)
+	// Only Claude Code takes a denylist for it: Kimi and DSH refuse any, and every `orbit mcp` leaves delegate out.
+	if len(child.Agent.DisallowedTools) != 0 {
+		t.Fatalf("a Codex child was given a denylist: %v", child.Agent.DisallowedTools)
+	}
+	claudeChild := subagentChildJob(parent, AgentExecConfig{}, subagentDefinition{Readonly: true}, "run9", providerClaude, "")
+	if !containsString(claudeChild.Agent.DisallowedTools, delegateEngineToolName) || !containsString(claudeChild.Agent.DisallowedTools, "Write") {
+		t.Fatalf("a Claude child may delegate or write: %v", claudeChild.Agent.DisallowedTools)
 	}
 	if parent.Agent.Env[envSubagentRunID] != "" || parent.RuntimeSessionID != "parent-thread" {
 		t.Fatalf("the parent's claim was changed: %+v", parent)

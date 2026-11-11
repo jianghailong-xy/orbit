@@ -68,17 +68,9 @@ func runDshChild(ctx context.Context, c subagentChild) (ExecResult, string, erro
 		engineSession = c.engineSession
 	}
 	child := subagentChildJob(c.parent, c.exec, c.def, c.runID, providerDsh, engineSession)
-	// DSH enforces no tool denylist (dshToolPolicyError) and has no plan mode, so what child mode adds is enforced
-	// another way: delegate is withheld by its `orbit mcp` itself (ORBIT_SUBAGENT_RUN_ID), and a read-only SubAgent
-	// runs under DSH's read-only file policy without asking anyone (Don't Ask). A denylist the server or the
-	// definition asks for is still refused, as a session's is.
-	var denied []string
-	for _, rule := range appendUnique(append([]string(nil), c.exec.DisallowedTools...), c.def.DisallowedTools...) {
-		if rule != delegateEngineToolName {
-			denied = append(denied, rule)
-		}
-	}
-	child.Agent.DisallowedTools = denied
+	// DSH has no plan mode: a read-only SubAgent runs under DSH's read-only file policy without asking anyone
+	// (Don't Ask). Delegate is withheld by its `orbit mcp` itself (ORBIT_SUBAGENT_RUN_ID); a denylist the server
+	// or the definition asks for is refused, as a session's is (dshToolPolicyError).
 	if c.def.Readonly {
 		child.Agent.PermissionMode = "dontAsk"
 	}
