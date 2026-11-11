@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Main checkout Git · 设计板</title>
+<style>
+:root{
+  --bg-base:#fff;--bg-raised:#fff;--bg-subtle:#fafbfc;--bg-sunken:#f7f8fa;--bg-hover:#f5f6f7;
+  --border:#dee0e3;--border-subtle:#eceef1;
+  --text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;--text-4:#a8acb3;
+  --brand:#3370ff;--brand-strong:#245ae0;--brand-tint:#eaf1ff;--brand-border:#bcd3ff;
+  --success:#1a7f37;--success-bg:#e8f6ec;--success-border:#b6e7c4;
+  --warning:#c2710c;--warning-bg:#fff4e6;--warning-border:#ffd591;
+  --danger:#d83931;--add:#1a7f37;--del:#d83931;
+  --mono:'SF Mono',Menlo,monospace;
+}
+*{box-sizing:border-box;font-variant-ligatures:none}
+body{margin:0;background:#e9ebef;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:var(--text-1)}
+.board{width:1640px;padding:36px 40px 40px;background:#f2f3f5;margin:0 0 24px}
+.board h1{font-size:26px;margin:0 0 6px}
+.board .lead{font-size:15px;color:#4e5560;margin:0 0 24px;line-height:1.6;max-width:1400px}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:12px}
+.ftitle{font-size:15px;font-weight:600;color:#333a44}
+.ftitle .n{display:inline-flex;width:22px;height:22px;border-radius:11px;background:#1f2329;color:#fff;font-size:13px;align-items:center;justify-content:center;margin-right:8px}
+.ftitle .tag{font-size:12px;font-weight:500;color:#8f959e;margin-left:8px}
+.notes{background:#fff;border:1px solid #dfe2e6;border-radius:12px;padding:18px 20px;font-size:13.5px;line-height:1.65;color:#363c45}
+.notes h3{margin:0 0 8px;font-size:14.5px}
+.notes ol,.notes ul{margin:0;padding-left:20px}
+.notes li{margin:0 0 6px}
+.notes code{font-family:var(--mono);font-size:12px;background:#f2f3f5;padding:1px 4px;border-radius:4px}
+.mk{display:inline-flex;width:20px;height:20px;border-radius:10px;background:#f54a45;color:#fff;font-size:12px;font-weight:700;align-items:center;justify-content:center;flex:none}
+.mkpos{position:absolute;z-index:5;box-shadow:0 0 0 2px #fff}
+.cut{color:#8f959e;text-decoration:line-through}
+
+/* ---- app frame ---- */
+.app{background:var(--bg-base);border:1px solid #d5d8dd;border-radius:12px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.06);position:relative}
+.topbar{height:44px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--border-subtle);font-size:13.5px}
+.topbar .t{font-weight:600}
+.topbar .d{color:var(--text-3);font-size:12.5px}
+.chat{padding:16px 22px 8px;display:flex;flex-direction:column;gap:10px}
+.u{align-self:flex-end;max-width:72%;background:#f0f2f5;border-radius:14px;padding:9px 13px;font-size:14px;line-height:1.55}
+.a{font-size:14px;line-height:1.6;color:var(--text-1)}
+.a p{margin:0 0 6px}
+.tool{font-size:12.5px;color:var(--text-3);font-family:var(--mono)}
+.foot{font-size:12px;color:var(--text-4)}
+.today-notice{color:var(--warning);font-size:13px;line-height:1.5}
+.sys{font-size:13px;line-height:1.55;color:var(--text-2);display:flex;gap:7px}
+.sys .ic{flex:none;width:16px;text-align:center}
+.sys.ok .ic{color:var(--success)}
+.sys.no .ic{color:var(--warning)}
+.sys b{color:var(--text-1);font-weight:600}
+.sys code,.card code{font-family:var(--mono);font-size:12px;color:var(--text-1)}
+.sys .lnk{color:var(--brand);margin-left:6px}
+
+/* the new card */
+.card{border:1px solid var(--border);border-radius:10px;background:var(--bg-raised)}
+.card-h{padding:11px 14px 8px;display:flex;gap:9px;align-items:flex-start}
+.card-h .ic{flex:none;width:18px;height:18px;border-radius:9px;background:var(--warning-bg);color:var(--warning);font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:1px;border:1px solid var(--warning-border)}
+.card-t{font-size:14px;font-weight:600;line-height:1.45}
+.card-s{font-size:12.5px;color:var(--text-2);line-height:1.5;margin-top:2px}
+.files{border-top:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);background:var(--bg-subtle);padding:4px 0}
+.f{display:flex;align-items:center;gap:8px;padding:3px 14px 3px 41px;font-family:var(--mono);font-size:12px}
+.f .st{width:12px;color:var(--text-3)}
+.f .st.m{color:var(--warning)}.f .st.n{color:var(--success)}.f .st.d{color:var(--danger)}
+.f .p{flex:1;color:var(--text-1)}
+.f .add{color:var(--add)}.f .del{color:var(--del)}
+.f.more{color:var(--brand);font-family:inherit}
+.acts{display:flex;gap:8px;padding:10px 14px 11px 41px;align-items:center;flex-wrap:wrap}
+.btn{height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--border);background:var(--bg-raised);font-size:13px;display:inline-flex;align-items:center;gap:6px;color:var(--text-1);white-space:nowrap}
+.btn.p{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:500}
+.btn.ghost{border-color:transparent;color:var(--text-2)}
+.btn.dis{opacity:.45}
+.btn.sm{height:26px;font-size:12.5px;padding:0 10px}
+.hint{font-size:12px;color:var(--text-3);padding:0 14px 11px 41px;margin-top:-4px;line-height:1.5}
+.menu{position:absolute;background:#fff;border:1px solid var(--border);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:5px;font-size:13px;width:290px;z-index:4}
+.menu .mi{padding:7px 10px;border-radius:6px}
+.menu .mi.h{background:var(--bg-hover)}
+.menu .mi small{display:block;color:var(--text-3);font-size:11.5px;margin-top:2px;line-height:1.4}
+
+/* composer zone */
+.dock{padding:8px 22px 16px;border-top:1px solid transparent}
+.mc-strip{display:flex;align-items:center;gap:8px;border:1px solid var(--border-subtle);background:var(--bg-subtle);border-radius:8px;padding:5px 8px 5px 10px;font-size:12px;margin-bottom:8px}
+.mc-strip .lbl{color:var(--text-2)}
+.mc-strip .dot{width:7px;height:7px;border-radius:4px;background:var(--warning-solid,#fa8c16)}
+.wtbar{border:1px solid var(--border-subtle);border-radius:8px;background:var(--bg-subtle);display:flex;align-items:center;gap:8px;min-height:32px;padding:3px 6px 3px 10px;font-size:12px;margin-bottom:8px}
+.br{display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);font-family:var(--mono)}
+.dim{color:var(--text-3)}
+.stat{font-family:var(--mono);color:var(--text-3)}
+.stat .add{color:var(--add)}.stat .del{color:var(--del)}
+.sp{flex:1}
+.composer{border:1px solid var(--border);border-radius:12px;height:64px;padding:10px 12px;color:var(--text-4);font-size:14px}
+
+/* drawer */
+.drawer{display:flex;height:100%}
+.dl{width:270px;border-right:1px solid var(--border-subtle);background:var(--bg-subtle);display:flex;flex-direction:column}
+.dl .hd{padding:12px 14px 8px;font-size:12px;color:var(--text-3)}
+.dl .it{display:flex;align-items:center;gap:8px;padding:5px 14px;font-size:12.5px;font-family:var(--mono)}
+.dl .it.on{background:var(--brand-tint)}
+.cb{width:14px;height:14px;border-radius:3.5px;border:1.5px solid var(--brand);background:var(--brand);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px;flex:none}
+.cb.off{background:#fff;border-color:#b9bec6}
+.dr{flex:1;display:flex;flex-direction:column;min-width:0}
+.dr .fh{padding:10px 16px;border-bottom:1px solid var(--border-subtle);font-family:var(--mono);font-size:12.5px;display:flex;gap:10px}
+.code{font-family:var(--mono);font-size:12px;line-height:1.7;padding:6px 0;flex:1}
+.code div{padding:0 16px;white-space:pre}
+.code .h{color:var(--text-3);background:#f5f7fb}
+.code .a1{background:#e9f7ee}.code .d1{background:#fdeceb}
+.dfoot{border-top:1px solid var(--border-subtle);padding:12px 16px;display:flex;gap:10px;align-items:center;background:#fff}
+.inp{flex:1;height:32px;border:1px solid var(--border);border-radius:7px;padding:0 10px;display:flex;align-items:center;font-size:13px;color:var(--text-1)}
+.inp.ph{color:var(--text-4)}
+.ohead{height:46px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--border-subtle);font-size:14px}
+.ohead .x{margin-left:auto;color:var(--text-3)}
+.pill{font-size:11.5px;padding:1px 7px;border-radius:10px;background:#f0f2f5;color:var(--text-2)}
+.pill.w{background:var(--warning-bg);color:var(--warning)}
+
+/* dialog */
+.scrim{background:rgba(31,35,41,.32);padding:40px;border-radius:12px}
+.dlg{background:#fff;border-radius:12px;width:460px;padding:20px 22px 16px;box-shadow:0 12px 40px rgba(0,0,0,.2)}
+.dlg h4{margin:0 0 8px;font-size:16px}
+.dlg p{margin:0 0 10px;font-size:13.5px;line-height:1.6;color:var(--text-2)}
+.dlg .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.tog{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--border-subtle);border-radius:10px;background:#fff}
+.tog .k{width:36px;height:20px;border-radius:10px;background:var(--brand);position:relative}
+.tog .k:after{content:'';position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:8px;background:#fff}
+
+/* tables */
+table.t{border-collapse:collapse;width:100%;font-size:13px;background:#fff;border-radius:12px;overflow:hidden}
+table.t th,table.t td{border-bottom:1px solid #eceef1;padding:9px 12px;text-align:left;vertical-align:top;line-height:1.55}
+table.t th{background:#f7f8fa;font-weight:600;color:#3b414a;font-size:12.5px}
+table.t td code{font-family:var(--mono);font-size:11.5px;background:#f2f3f5;padding:1px 4px;border-radius:4px}
+.decide{background:#fff8e6;border:1px solid #f7d58a;border-radius:12px;padding:16px 20px;font-size:13.5px;line-height:1.65}
+.decide h3{margin:0 0 8px;font-size:14.5px}
+.decide ol{margin:0;padding-left:20px}.decide li{margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<!-- ======================= BOARD 1 ======================= -->
+<section class="board" data-png="01-worktree-session">
+  <h1>① Worktree 会话：主 checkout 里冒出了改动</h1>
+  <p class="lead">一个隔离会话这一轮结束时，Workspace 指向的原始目录（下称 <b>Main checkout</b>）多了未提交的改动。今天只有一行橙色文字，而且说成“这一轮留下的”；新设计把它变成对话里的一张卡，人只做一个决定：<b>归这个会话 / 归 main / 先存起来</b>。Orbit 自己完成剩下的 Git 机械动作。</p>
+  <div class="row">
+    <div class="col" style="width:560px">
+      <div class="ftitle"><span class="n">A</span>今天<span class="tag">src/runner-go/repohealth.go:179 · Transcript.tsx:2154</span></div>
+      <div class="app">
+        <div class="topbar"><span class="t">Fix retry backoff</span><span class="d">orbit · worktree</span></div>
+        <div class="chat">
+          <div class="u">The retry loop hammers the API after a 429 — give it real backoff.</div>
+          <div class="a"><p>Added exponential backoff with jitter to the client and a test for the 429 path.</p></div>
+          <div class="tool">✎ Edit src/api/client.ts · ✎ Write src/api/retry.ts · ✎ Write src/api/retry.test.ts</div>
+          <div class="foot">Worked for 3m 12s</div>
+          <div class="today-notice">⚠ This turn left 3 files modified in the shared checkout /root/orbit, outside this session's worktree: src/api/client.ts, src/api/retry.ts, src/api/retry.test.ts. Those edits are not on orbit/fix-retry-backoff, so they won't be merged from here — and a deploy built from that directory would ship them. Re-apply them in the worktree if they belong to this session.</div>
+        </div>
+        <div class="dock">
+          <div class="wtbar"><span class="br">⑂ orbit/fix-retry-backoff</span><span class="stat">0 files</span><span class="sp"></span><span class="btn sm dis">Merge to main</span></div>
+          <div class="composer">Reply…</div>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>今天的问题</h3>
+        <ol>
+          <li><b>说成了因果</b>：“This turn left…”。探测只是在每轮结束时对比路径集合，它只能证明“这一轮期间出现了”，证明不了是谁写的（也可能是人或别的进程）。</li>
+          <li><b>没有出路</b>：只能叫人“自己去 worktree 里重做一遍”，没有任何按钮。</li>
+          <li><b>之后就看不见了</b>：<code>repoHealth</code> 其实一直在上报 <code>dirty</code>，但界面只显示卡死（merge/rebase 中）的状态，普通的未提交改动在任何地方都不显示。</li>
+          <li>同一路径内容再变不会再报；超过 20 个路径会被截断，而且不说明。</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="col" style="width:640px">
+      <div class="ftitle"><span class="n">B</span>新设计<span class="tag">同一时刻</span></div>
+      <div class="app" style="position:relative">
+        <div class="topbar"><span class="t">Fix retry backoff</span><span class="d">orbit · worktree</span></div>
+        <div class="chat">
+          <div class="u">The retry loop hammers the API after a 429 — give it real backoff.</div>
+          <div class="a"><p>Added exponential backoff with jitter to the client and a test for the 429 path.</p></div>
+          <div class="tool">✎ Edit src/api/client.ts · ✎ Write src/api/retry.ts · ✎ Write src/api/retry.test.ts</div>
+          <div class="foot">Worked for 3m 12s</div>
+
+          <div class="card" style="position:relative">
+            <span class="mk mkpos" style="left:-10px;top:10px">1</span>
+            <div class="card-h"><span class="ic">!</span>
+              <div><div class="card-t">3 files changed in the main checkout during this turn</div>
+              <div class="card-s"><code>/root/orbit</code> on <code>main</code>, outside this session's worktree. Orbit saw them appear; it can't tell who wrote them.</div></div>
+            </div>
+            <div class="files" style="position:relative">
+              <span class="mk mkpos" style="right:12px;top:6px">2</span>
+              <div class="f"><span class="st m">M</span><span class="p">src/api/client.ts</span><span class="add">+12</span><span class="del">−3</span></div>
+              <div class="f"><span class="st n">A</span><span class="p">src/api/retry.ts</span><span class="add">+41</span></div>
+              <div class="f"><span class="st n">A</span><span class="p">src/api/retry.test.ts</span><span class="add">+58</span></div>
+            </div>
+            <div class="acts" style="position:relative">
+              <span class="mk mkpos" style="left:12px;top:15px">3</span>
+              <span class="btn p">Move to this worktree</span>
+              <span class="btn">Review and commit to main…</span>
+              <span class="btn ghost" style="padding:0 8px">⋯</span>
+            </div>
+            <div class="hint">Copies them onto <code>orbit/fix-retry-backoff</code>, then clears them from the main checkout. A recovery branch is saved first.</div>
+          </div>
+        </div>
+        <div class="menu" style="right:26px;top:470px">
+          <span class="mk mkpos" style="left:-10px;top:8px">4</span>
+          <div class="mi h">Save to a rescue branch and clean<small>Keeps everything on orbit/rescue-…, then returns the main checkout to its last commit. Ignored files are left alone.</small></div>
+          <div class="mi">Ask the agent about it<small>Puts a prompt in the composer; nothing changes until you send it.</small></div>
+          <div class="mi">Leave as is</div>
+        </div>
+        <div class="dock">
+          <div class="mc-strip" style="position:relative"><span class="mk mkpos" style="left:-10px;top:3px">5</span><span class="dot"></span><span class="lbl">Main checkout</span><span class="br" style="font-size:11.5px;padding:1px 6px">main</span><span class="dim">3 uncommitted files</span><span class="sp"></span><span class="btn sm ghost" style="color:var(--brand)">Review</span></div>
+          <div class="wtbar"><span class="br">⑂ orbit/fix-retry-backoff</span><span class="stat">0 files</span><span class="sp"></span><span class="btn sm dis">Merge to main</span></div>
+          <div class="composer">Reply…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col" style="width:330px">
+      <div class="notes">
+        <h3>标注</h3>
+        <ol>
+          <li><b>如实的说法</b>：“changed … during this turn” + “can't tell who wrote them”。不说“这一轮写的”，也不指认任何会话。原来的 system notice 改成一张带动作的卡，和最近 landings 改成对话轮次是同一个思路。</li>
+          <li><b>文件就是证据</b>：列出路径和 +/−（超过 8 个就折叠，写明 “and 14 more”；截断时直接说 “Orbit stopped counting at 200 files”）。点任意一行打开 ② 的审阅抽屉。</li>
+          <li><b>一个推荐动作</b>：Move 是主按钮（大多数时候就是 agent 写错了目录）；Commit to main 是次选，因为它会改 main，先进审阅界面。</li>
+          <li>不常用的放在 ⋯ 里：存到 rescue 分支再清理（就是现有 Clean up checkout 的能力，放宽到普通 dirty 也能用）；<b>Ask the agent</b> 让人用一句话让 agent 自己处理。</li>
+          <li><b>持续状态</b>：只要 Main checkout 还是脏的，worktree 栏上方就有一条灰色提示，和卡片是不是还在屏幕上无关。不标红，不进 Needs attention：脏不等于坏，只有卡死才算。</li>
+        </ol>
+      </div>
+      <div class="notes">
+        <h3>什么时候出现</h3>
+        <ul>
+          <li>卡片：每轮结束时采样，出现<b>新增或内容变化</b>的路径就出（原来只比路径集合，改成路径加内容指纹）。</li>
+          <li>灰条：跟着 heartbeat 的 <code>repoHealth</code>（60 s 一次）。从任何会话都能看到同一个 Main checkout。</li>
+          <li>同一批改动在同一会话里只出一张卡；会话开始前就脏的不出卡，只有灰条。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= BOARD 2 ======================= -->
+<section class="board" data-png="02-review-drawer">
+  <h1>② 审阅 Main checkout：复用会话的 diff 抽屉</h1>
+  <p class="lead">点卡片上的文件、“Review and commit to main…” 或灰条上的 Review，打开的就是会话 diff 抽屉（<code>WorktreeDiffDrawer</code>），只是数据换成 Main checkout。左边勾选文件，底部填 commit message。Move、Commit、Save 三个出口都在底栏。</p>
+  <div class="row">
+    <div class="col" style="width:1180px">
+      <div class="app" style="height:560px;display:flex;flex-direction:column">
+        <div class="ohead"><b>Main checkout</b><span class="pill">/root/orbit</span><span class="pill">main · 62325fb</span><span class="pill w">3 uncommitted</span><span class="dim" style="font-size:12px">Checked 12s ago</span><span class="x">✕</span></div>
+        <div class="drawer" style="flex:1;min-height:0">
+          <div class="dl">
+            <div class="hd">Choose files to commit · 3 of 3</div>
+            <div class="it on" style="position:relative"><span class="cb">✓</span><span style="color:var(--warning)">M</span><span style="flex:1">src/api/client.ts</span></div>
+            <div class="it"><span class="cb">✓</span><span style="color:var(--success)">A</span><span style="flex:1">src/api/retry.ts</span></div>
+            <div class="it"><span class="cb">✓</span><span style="color:var(--success)">A</span><span style="flex:1">src/api/retry.test.ts</span></div>
+            <div style="flex:1"></div>
+            <div style="padding:12px 14px;font-size:11.5px;color:var(--text-3);line-height:1.5;border-top:1px solid var(--border-subtle);position:relative"><span class="mk mkpos" style="left:4px;top:-12px">3</span>Not shown: files your <code>.gitignore</code> ignores.<br>Untracked files are included.</div>
+          </div>
+          <div class="dr">
+            <div class="fh"><span>src/api/client.ts</span><span class="add" style="color:var(--add)">+12</span><span style="color:var(--del)">−3</span></div>
+            <div class="code">
+<div class="h">@@ -18,9 +18,18 @@ export async function request(path, init) {</div>
+<div>   const url = new URL(path, base);</div>
+<div class="d1">-  for (let i = 0; i &lt; 5; i++) {</div>
+<div class="d1">-    const res = await fetch(url, init);</div>
+<div class="d1">-    if (res.status !== 429) return res;</div>
+<div class="a1">+  for (let attempt = 0; attempt &lt; MAX_ATTEMPTS; attempt++) {</div>
+<div class="a1">+    const res = await fetch(url, init);</div>
+<div class="a1">+    if (res.status !== 429) return res;</div>
+<div class="a1">+    await sleep(backoff(attempt, res.headers.get('retry-after')));</div>
+<div>   }</div>
+<div>   throw new RateLimitError(url);</div>
+            </div>
+            <div class="dfoot" style="position:relative">
+              <span class="mk mkpos" style="left:-10px;top:-10px">1</span>
+              <div class="inp ph">Commit message</div>
+              <span class="btn p">Commit 3 files to main</span>
+              <span class="btn">Move to a worktree ▾</span>
+              <span class="btn ghost">⋯</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="gap:20px">
+        <div class="col" style="width:580px">
+          <div class="ftitle"><span class="n">2</span>Move to a worktree ▾ <span class="tag">从灰条进来时，目标会话由人选</span></div>
+          <div class="menu" style="position:static;width:100%">
+            <div class="mi h">Fix retry backoff <span class="dim" style="font-family:var(--mono);font-size:11.5px">orbit/fix-retry-backoff</span><small>The session you opened this from</small></div>
+            <div class="mi">Bump eslint to 9 <span class="dim" style="font-family:var(--mono);font-size:11.5px">orbit/bump-eslint</span></div>
+            <div class="mi" style="color:var(--text-4)">Migrate settings table <span style="font-family:var(--mono);font-size:11.5px">orbit/settings-v2</span><small>Working now — available when this turn ends</small></div>
+          </div>
+        </div>
+        <div class="col" style="width:580px">
+          <div class="ftitle"><span class="n">4</span>Shared 模式也一样 <span class="tag">会话就在 Main checkout 里工作</span></div>
+          <div class="app"><div class="dock" style="padding:12px 14px">
+            <div class="mc-strip" style="background:#fff;border-color:var(--border)"><span class="lbl">Main checkout</span><span class="br" style="font-size:11.5px;padding:1px 6px">main</span><span class="stat">3 files <span class="add">+111</span> <span class="del">−3</span></span><span class="sp"></span><span class="btn sm">Review and commit…</span></div>
+            <div class="mc-strip" style="background:#fff;border-color:var(--border)"><span class="lbl">Main checkout</span><span class="br" style="font-size:11.5px;padding:1px 6px">main</span><span class="dim">Clean · 1 commit not pushed</span><span class="sp"></span><span class="btn sm">Push to origin/main</span></div>
+            <div class="composer" style="height:44px">Reply…</div>
+          </div></div>
+          <div class="notes" style="padding:12px 16px">Shared 会话今天<b>没有任何 Git 栏</b>（<code>SessionOutputs</code> 在 <code>isolationStatus</code> 为空时什么都不画）。新设计给它同一条 Main checkout 栏，审阅和提交走同一个抽屉；这里没有 Move，因为会话本身就在 Main checkout 里。</div>
+        </div>
+      </div>
+    </div>
+    <div class="col" style="width:360px">
+      <div class="notes">
+        <h3>标注</h3>
+        <ol>
+          <li><b>Commit 只做一件事</b>：把勾选的文件在 Main checkout 当前分支上提交成一个 commit。<b>不 push、不算会话合并、不算任务落地</b>，结果行会明说。没写 message 时按钮不可点。</li>
+          <li>Move 的目标默认是打开抽屉的那个会话。目标会话正在跑一轮时，不能选（agent 正在写的目录不能往里塞东西）。</li>
+          <li>边界写清楚：ignored 文件不在列表里，也不会被 Move、Commit 或清理；untracked 文件算在内。</li>
+          <li>Shared 和 Worktree 两种模式用同一个抽屉、同一套动作。</li>
+          <li><b>Push</b>：Commit 结果行上直接给 Push 按钮；之后只要本地比 upstream 多出 commit，灰条就显示 “N commits not pushed · Push”（④ 的第二条）。</li>
+          <li><b>受管分支</b>：如果当前分支是某个项目的 integration line 或 landing 目标，Commit 和 Push 前加一句 “This skips project X's landing check”，由人决定，不拦截。</li>
+        </ol>
+      </div>
+      <div class="notes">
+        <h3>“你看到的”就是“会执行的”</h3>
+        <p style="margin:0">抽屉打开时，runner 给这份快照算一个<b>指纹</b>（HEAD + 每个文件的内容 hash）。按下任何动作时，指纹随请求带回去，runner 执行前重新算一遍：</p>
+        <ul style="margin-top:6px">
+          <li>一致 → 执行；</li>
+          <li>不一致（有人又改了、HEAD 动了）→ <b>什么都不做</b>，回一句 “changed since you looked — review again”，抽屉自动刷新。</li>
+        </ul>
+        <p style="margin:6px 0 0">同一台机器上同一个目录的所有操作（Move、Commit、Save、会话 Merge）由 runner 里按真实路径加的一把锁串行。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= BOARD 3 ======================= -->
+<section class="board" data-png="03-outcomes">
+  <h1>③ 结果和拒绝：都作为一行写回对话</h1>
+  <p class="lead">每个动作结束后，runner 把结果写成会话里的一行 system 记录（不是一闪而过的 toast），能回看。失败时<b>一律不改任何东西</b>，并说明下一步可以做什么。</p>
+  <div class="row">
+    <div class="col" style="width:760px">
+      <div class="ftitle">成功</div>
+      <div class="app"><div class="chat" style="padding:14px 18px;gap:12px">
+        <div class="sys ok"><span class="ic">✓</span><span><b>Moved 3 files into this worktree.</b> The main checkout is clean again. A copy of what it held is on <code>orbit/rescue-5f2c1a9</code>.<span class="lnk">View changes</span></span></div>
+        <div class="sys ok"><span class="ic">✓</span><span><b>Committed 3 files to main</b> in the main checkout as <code>8d41e0c</code> “Add retry backoff”. Not pushed yet. This session's branch is unchanged.<span class="lnk">Push to origin/main</span></span></div>
+        <div class="sys ok"><span class="ic">✓</span><span><b>Pushed main to origin</b> (<code>62325fb..8d41e0c</code>).</span></div>
+        <div class="sys ok"><span class="ic">✓</span><span><b>Saved 3 files to <code>orbit/rescue-5f2c1a9</code></b> and returned the main checkout to <code>62325fb</code>. Ignored files were left alone.<span class="lnk">Open in a new session</span></span></div>
+      </div></div>
+      <div class="ftitle" style="margin-top:8px">拒绝（什么都没改）</div>
+      <div class="app"><div class="chat" style="padding:14px 18px;gap:12px">
+        <div class="sys no"><span class="ic">!</span><span><b>Nothing moved:</b> the main checkout changed since you looked (<code>src/api/retry.ts</code>). <span class="lnk">Review again</span></span></div>
+        <div class="sys no"><span class="ic">!</span><span><b>Nothing moved:</b> <code>src/api/client.ts</code> is also changed in this worktree, in the same lines. Commit it to main or save it to a rescue branch instead, or <span class="lnk" style="margin:0">ask the agent to combine them</span>.</span></div>
+        <div class="sys no"><span class="ic">!</span><span><b>Push rejected:</b> origin/main has 2 commits the main checkout doesn't. Nothing was changed, and Orbit never force-pushes. <span class="lnk">Ask the agent to rebase and push</span></span></div>
+        <div class="sys no"><span class="ic">!</span><span><b>Push failed:</b> the runner's git couldn't authenticate to origin (“Permission denied (publickey)”). Your commit is still in the main checkout.</span></div>
+        <div class="sys no"><span class="ic">!</span><span><b>Can't commit right now:</b> the main checkout is in the middle of a rebase. <span class="lnk">Clean up checkout</span></span></div>
+        <div class="sys no"><span class="ic">!</span><span><b>Waiting for the runner</b> — orbit-hpc hasn't checked in for 3 min. Nothing has been changed; this runs when it's back, or you can cancel. <span class="lnk">Cancel</span></span></div>
+      </div></div>
+    </div>
+    <div class="col" style="width:780px">
+      <div class="notes">
+        <h3>每个动作 runner 端怎么做（人不用关心，但要可审计）</h3>
+        <table class="t">
+          <tr><th style="width:120px">动作</th><th>步骤</th><th style="width:200px">失败时</th></tr>
+          <tr><td><b>Move</b></td><td>① 核对指纹 ② 先把 Main checkout 现状存成 <code>orbit/rescue-*</code>（现成的 <code>rescueWorkingTree</code>）③ 用 3-way 把改动应用到目标 worktree（先 <code>--check</code>）④ 只把这些路径在 Main checkout 里恢复到 HEAD，删掉这些 untracked 文件</td><td>③ 有冲突 → 目标和来源都不动；④ 前来源又变了 → 只复制、不清理，并如实写出来</td></tr>
+          <tr><td><b>Commit</b></td><td>① 核对指纹 ② 用临时 index 只放勾选的文件，<code>commit-tree</code> ③ <code>update-ref</code> 时带上预期的旧 HEAD（CAS）④ 把真实 index 里这些路径对齐到新 HEAD，未勾选的 staged/unstaged 内容不动</td><td>HEAD 变了 → 不提交；处于 merge/rebase 中、detached、没有 HEAD → 拒绝</td></tr>
+          <tr><td><b>Push</b></td><td>① 只推当前分支到它的 upstream（没有 upstream 时推到 <code>origin/&lt;同名&gt;</code> 并设为 upstream）② 普通 <code>git push</code>，<b>永不 --force</b> ③ 用 runner 机器上已有的 git 凭据</td><td>non-fast-forward 或认证失败 → 原样报出 git 的原因（去掉敏感信息），本地 commit 不动</td></tr>
+          <tr><td><b>Save &amp; clean</b></td><td>现有 Clean up checkout，放宽成 <code>dirty</code> 也能用，并加上指纹核对</td><td>rescue 分支没建成就不清理（现有行为）</td></tr>
+        </table>
+        <p style="margin:10px 0 0">崩溃恢复：每步都可以安全重做。commit 已经存在就不再建；ref 已经指向它就跳过；rescue 分支名由内容 hash 决定，重做不会多出分支。</p>
+      </div>
+      <div class="notes">
+        <h3>和会话 Merge 的关系</h3>
+        <ul>
+          <li>Merge 今天已经会在“分支改的文件在 Main checkout 里也有未提交改动”时拒绝（<code>ffClash</code>，worktree.go:1968）。这条保留，文案后面加一个 <b>Review main checkout</b> 链接，直接打开 ② 的抽屉。</li>
+          <li>先 Commit to main、后 Merge：Merge 本来就会 rebase 到最新的 main，不用加新逻辑。</li>
+          <li>先 Merge、后提交：抽屉里的指纹已经包含 HEAD，过期后自动要求重新审阅。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= BOARD 4 ======================= -->
+<section class="board" data-png="04-mode-switch">
+  <h1>④ 切换 Worktree isolation：不拦截，只把后果说清楚</h1>
+  <p class="lead">今天打开或关闭开关都没有任何检查（<code>PATCH /workspaces/:id {enableWorktree}</code> 原样写入）。新设计不做原项目那套 desired/effective 状态机，切换照常立即生效，只在<b>Main checkout 有未提交改动</b>时先告诉人新会话会看不到它们。开关本身永远不碰目录里的任何文件。</p>
+  <div class="row">
+    <div class="col" style="width:520px">
+      <div class="ftitle"><span class="n">A</span>打开（Main checkout 是脏的）</div>
+      <div class="scrim"><div class="dlg">
+        <h4>Turn on worktree isolation?</h4>
+        <p>The main checkout <code style="font-family:var(--mono);font-size:12px">/root/orbit</code> has 3 uncommitted files. New sessions start from the last commit on <b>main</b> (62325fb), so they won't see those files.</p>
+        <p>Nothing in the checkout is changed. Sessions already running keep working in the main checkout until they end.</p>
+        <div class="btns"><span class="btn">Review files</span><span class="btn">Cancel</span><span class="btn p">Turn on</span></div>
+      </div></div>
+    </div>
+    <div class="col" style="width:520px">
+      <div class="ftitle"><span class="n">B</span>关闭（还有 worktree 会话没合并）</div>
+      <div class="scrim"><div class="dlg">
+        <h4>Turn off worktree isolation?</h4>
+        <p>New sessions will work directly in <code style="font-family:var(--mono);font-size:12px">/root/orbit</code>. The 2 sessions with unmerged worktrees keep them — merge or discard them from each session as before.</p>
+        <div class="btns"><span class="btn">Cancel</span><span class="btn p">Turn off</span></div>
+      </div></div>
+      <div class="tog"><div><div style="font-size:13.5px;font-weight:600">Worktree isolation</div><div style="font-size:12px;color:var(--text-3)">Each session runs in its own git worktree. Off → sessions run directly in the working directory, sharing it.</div></div><span class="k"></span></div>
+    </div>
+    <div class="col" style="width:480px">
+      <div class="notes">
+        <h3>规则</h3>
+        <table class="t">
+          <tr><th>情况</th><th>行为</th></tr>
+          <tr><td>开 / 关，Main checkout 干净</td><td>和今天一样，直接切，不弹窗</td></tr>
+          <tr><td>开，Main checkout 脏</td><td>弹窗 A；Review files 打开 ② 的抽屉</td></tr>
+          <tr><td>开，Main checkout 卡死</td><td>弹窗 A 换一句：“is stuck in a rebase — new sessions can be created, but merges stay blocked until it's cleaned up”，加一个 Clean up checkout 按钮</td></tr>
+          <tr><td>关，有未合并的 worktree</td><td>弹窗 B；既有 worktree 原样保留，不自动合并或删除</td></tr>
+          <tr><td>runner 离线 / 没上报</td><td>照常切换；弹窗写 “Orbit can't see this checkout right now”，不猜</td></tr>
+          <tr><td>新 worktree 建不出来</td><td>会话失败并说明原因，<b>绝不悄悄退回 Shared</b>（核对现有行为，不是就修）</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= BOARD 5 ======================= -->
+<section class="board" data-png="05-scope">
+  <h1>⑤ 改动范围，以及相比原项目砍掉了什么</h1>
+  <p class="lead">按现在的产品理念：<b>人定信封，agent 在信封内自由</b>；人只对目标、风险和不可委托的授权负责；Orbit 要“calm, precise, honest about boundaries”。所以人只回答“这些改动归谁”，Git 机械动作交给 runner，并且每一步都有恢复点。原项目 16 个任务里有一半是在给这个决定造一个通用 Git 客户端，这次先不做。</p>
+  <div class="row">
+    <div class="col" style="width:1000px">
+      <table class="t">
+        <tr><th style="width:110px">层</th><th>改动</th><th style="width:250px">主要文件</th></tr>
+        <tr><td><b>runner-go</b></td><td>
+          ① Main checkout 快照：分支、HEAD、逐文件状态 + 内容 hash + 指纹；按需取逐文件 diff（有上限，heartbeat 只带计数和指纹，不带 patch）<br>
+          ② 脏检测按“路径 + 内容”比较，修掉 “This turn left” 文案，事件带上 <code>paths</code>、计数和是否截断<br>
+          ③ 四个动作：<code>move</code>、<code>commit</code>、<code>push</code>、<code>rescue</code>（复用 <code>cleanupRepoRoot</code>）；按真实路径加锁，和 <code>mergeToMain</code> 共用这把锁</td>
+          <td><code>repohealth.go</code>、<code>worktree.go</code>、<code>runloop.go</code>、<code>session.go</code>、新 <code>maincheckout.go</code> + 真实 Git 测试</td></tr>
+        <tr><td><b>apiserver</b></td><td>
+          把 repo-cleanup 的中转扩成通用的 checkout action：<code>{kind, root, fingerprint, files, message, targetSessionId}</code>；一次只允许一个进行中的请求，超时就失败，不会永远挂起<br>
+          结果写成发起会话里的 system 事件；<code>repoHealth</code> 白名单加上 <code>dirty</code>、指纹和计数<br>
+          新接口：<code>GET /workspaces/:id/main-checkout</code>（快照 + diff）、<code>POST …/main-checkout/actions</code>；鉴权沿用 workspace owner；一个 migration（Runner 上的 action 字段）</td>
+          <td><code>workspaces.controller/service.ts</code>、<code>runner-api.controller.ts</code>、<code>common/runner-repo-health.ts</code>、<code>schema.prisma</code> + pg spec</td></tr>
+        <tr><td><b>Web</b></td><td>
+          对话里的 Main checkout 卡（替换按 <code>noticeKind</code> 渲染的 ⚠ 行）；worktree 栏上方的灰条，Shared 会话也有这条栏；diff 抽屉加上 Main checkout 数据源、勾选和底栏；结果行；切换弹窗；Merge 的 ffClash 文案加审阅链接</td>
+          <td><code>Transcript.tsx</code>、<code>SessionOutputs.tsx</code>、<code>WorkspaceView.tsx</code>、<code>RunnerDetailPage.tsx</code>、<code>api.ts</code>、<code>index.css</code></td></tr>
+        <tr><td><b>iOS / macOS / Android</b></td><td><b>和 Web 同时全做</b>：卡片、灰条（含 Push）、审阅抽屉（iOS/macOS 用 sheet，Android 用 bottom sheet）、目标会话选择、结果行、切换弹窗</td>
+          <td><code>TranscriptReducer.swift</code>、<code>ConsoleView.swift</code>、<code>WorktreeBar.swift</code>、<code>APIClient.swift</code>、<code>TranscriptRows.kt</code>、<code>WorktreeBar.kt</code>、<code>RunnerScreens.kt</code></td></tr>
+        <tr><td><b>共享</b></td><td>DTO 和错误码放在 <code>src/shared</code>，Web 和 apiserver 都用它；文案全部英文，过 <code>copyLanguage.test.ts</code></td><td><code>src/shared/src/</code></td></tr>
+      </table>
+    </div>
+    <div class="col" style="width:540px">
+      <div class="notes">
+        <h3>相比原项目砍掉的（以及为什么）</h3>
+        <ul>
+          <li><span class="cut">RepositoryCheckout 实体 + 数据库操作账本 + lease/fence</span> → 一台机器上的写者只有它的 runner，runner 里按真实路径加锁，再加指纹 CAS，就已经够了。</li>
+          <li><span class="cut">NO_OVERLAP / DISJOINT_HUNKS / HIGH / UNKNOWN 四级分类</span> → Move 用 3-way 应用，冲突就整体不动；Merge 继续用现有的 ffClash。</li>
+          <li><span class="cut">desired/effective 模式切换状态机</span> → 切换不碰文件，只要把后果说清楚。</li>
+          <li><span class="cut">默认零选择</span> → 卡片已经把文件列给人看过了，默认全选，人可以取消勾选（待你定 ②）。</li>
+          <li><span class="cut">兼容旧 runner 的一整套能力协商</span> → 只加一个 capability 位；旧 runner 上按钮不出现，只显示新文案。</li>
+        </ul>
+      </div>
+      <div class="decide" style="background:#eef7f0;border-color:#b6e7c4">
+        <h3>已定（11-11）</h3>
+        <ol>
+          <li>原生客户端和 Web <b>同时全做</b>。</li>
+          <li>Commit <b>默认全选</b>，人可以取消勾选。</li>
+          <li><b>保留</b> ⋯ 里的 “Ask the agent about it”：不改任何文件，只把一句话放进输入框。</li>
+          <li><b>提供 Push</b>：只推当前分支，永不 force，被拒就如实说明。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

@@ -682,6 +682,12 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadSpaces(); wikiRefusal(error) }
     }
 
+    /** Check again and run now — Use this folder with [acceptFolder] (docs/wiki-repo-tiers-design.md §7.3): null once the run
+     * is made, else the server's sentence (409 WIKI_MAINTENANCE_RUNNING, WIKI_MAINTENANCE_DAILY_LIMIT). */
+    suspend fun runMaintenanceNow(space: WikiSpace, acceptFolder: Boolean): String? =
+        try { client.runMaintenanceNow(space.id, acceptFolder); null }
+        catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { wikiRefusal(error) }
+
     /** Create wiki: the space, in one request, and then that space on screen — a home that finds it in the spaces list, so it is
      * read before it is picked. Nothing is left to say of one that landed, whoever is still there to hear it: the home shows it.
      * Null on success, else the sentence to show. */

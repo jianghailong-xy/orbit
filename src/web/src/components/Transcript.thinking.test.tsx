@@ -82,7 +82,7 @@ describe('a settled stretch of reasoning', () => {
 });
 
 describe('a stretch still being written', () => {
-  it('holds the live reasoning in a scrolling viewport, with its clock running', () => {
+  it('folds the live reasoning to one row, with its clock and size running', () => {
     // `LiveSeconds` prints `Date.now() - startedAt` as it renders, through a formatter that rounds,
     // so a 12s reading tolerates 500ms of the render itself — and a loaded host's mount runs past
     // that. Date alone is frozen: the test's own clock is what moves, not the tolerance.
@@ -94,9 +94,12 @@ describe('a stretch still being written', () => {
     );
     vi.useRealTimers();
 
-    expect(html).toContain('chat-think-port');
-    expect(html).toContain('weighing it up');
-    expect(html).toContain('12s');
+    // Folded by default (docs/mocks/thinking-fold-live): the row, not the text (Transcript.thinkingFold
+    // opens it).
+    expect(html).not.toContain('chat-think-port');
+    expect(html).not.toContain('weighing it up');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('12s · 14 chars');
   });
 
   it('runs no clock on a page that opened mid-block', () => {
@@ -108,7 +111,7 @@ describe('a stretch still being written', () => {
       </StreamingDraftsCtx.Provider>,
     );
 
-    expect(html).toContain('chat-think-port');
-    expect(html).not.toMatch(/\d+s</);
+    expect(html).toContain('14 chars');
+    expect(html).not.toMatch(/\d+s\b/);
   });
 });

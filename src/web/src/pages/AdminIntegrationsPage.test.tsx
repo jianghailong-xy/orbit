@@ -79,7 +79,7 @@ afterEach(async () => {
 describe('Admin → Integrations', () => {
   it('shows the switch, on, with how many apps accounts connected, and switches it off with one PUT', async () => {
     await open();
-    expect([...container!.querySelectorAll('.admin-nav-link')].map((a) => a.textContent)).toEqual(['Users', 'Sign-in', 'Integrations']);
+    expect([...container!.querySelectorAll('.admin-nav-link')].map((a) => a.textContent)).toEqual(['Users', 'Sign-in', 'Email', 'Integrations']);
     expect(container!.querySelector('.admin-nav-link.active')?.textContent).toBe('Integrations');
     const card = container!.querySelector('.orbit-card')!;
     expect(card.querySelector('.orbit-card-title')?.textContent).toBe('Feishu bots');

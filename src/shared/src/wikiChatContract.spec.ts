@@ -40,6 +40,9 @@ import {
   wikiChatDraftState,
   wikiChatFabCounts,
   wikiChatFabState,
+  wikiChatListPage,
+  WIKI_CHAT_LIST_QUERY_MAX,
+  type WikiChatRow,
   wikiChatNoteLabel,
   wikiChatPlanFace,
   wikiChatPlanMovedNote,
@@ -205,6 +208,31 @@ describe('wiki chat contract', () => {
     expect(surface.chat.unchanged).toMatch(/Outside a chat nothing here applies/u);
     const excluded = CONTRACT.refusals.find((r: { code: string }) => r.code === 'WIKI_SESSION_EXCLUDED');
     expect(excluded.when).toMatch(/wiki_draft from a session that is not a wiki chat/u);
+  });
+
+  it('lists one page of chats: the title search, the one last spoken in first, offset and more (chat.list.page)', () => {
+    const page = CONTRACT.chat.list.page as string;
+    expect(page).toContain(`at most ${WIKI_CHAT_LIST_QUERY_MAX} characters`);
+    expect(CONTRACT.chat.list.answer).toBe('{ spaceId, workspace, choices, fab, chats, more }');
+    for (const field of ['completed', 'working', 'lastActiveAt']) expect(CONTRACT.chat.list.chats).toContain(field);
+    const row = (sessionId: string, title: string, lastActiveAt: string): WikiChatRow => ({
+      sessionId, title, status: 'AWAITING_INPUT', open: true, completed: false, working: false,
+      createdAt: '2026-11-01T00:00:00.000Z', updatedAt: lastActiveAt, lastActiveAt, drafts: 0, needsYou: 0,
+    });
+    const rows = [
+      row('a', 'Heartbeat rationale', '2026-11-10T08:00:00.000Z'),
+      row('b', 'Split chapter 4', '2026-11-11T08:00:00.000Z'),
+      row('c', 'heartbeat again', '2026-11-10T08:00:00.000Z'),
+    ];
+    expect(wikiChatListPage(rows).chats.map((r) => r.sessionId), 'last spoken in first, ties by the newer id').toEqual(['b', 'c', 'a']);
+    expect(wikiChatListPage(rows, { q: '  HEARTBEAT ' }).chats.map((r) => r.sessionId), 'words of the title, without case').toEqual(['c', 'a']);
+    expect(wikiChatListPage(rows, { q: '' }).chats).toHaveLength(3);
+    expect(wikiChatListPage(rows, { offset: 1 }).chats.map((r) => r.sessionId)).toEqual(['c', 'a']);
+    const many = Array.from({ length: WIKI_CHAT_RULES.chatsListed + 1 }, (_, i) => row(String(i).padStart(3, '0'), `chat ${i}`, `2026-11-${String(1 + (i % 9)).padStart(2, '0')}T00:00:00.000Z`));
+    expect(wikiChatListPage(many)).toMatchObject({ more: true });
+    expect(wikiChatListPage(many).chats).toHaveLength(WIKI_CHAT_RULES.chatsListed);
+    expect(wikiChatListPage(many, { offset: WIKI_CHAT_RULES.chatsListed })).toMatchObject({ more: false });
+    expect(wikiChatListPage(many, { offset: WIKI_CHAT_RULES.chatsListed }).chats).toHaveLength(1);
   });
 
   it('presses only on the owner door, writes confirmed (a principle the owner\'s), and lets no mode touch a card', () => {
@@ -425,8 +453,8 @@ describe('wiki chat contract', () => {
     expect(CONTRACT.chat.create.body).toContain('attachmentIds?');
     expect(DESIGN).toContain('就是 session 页的 composer，是同一个组件');
     expect(keysOf(panel.widths)).toEqual(['atLeast1440', 'from1200', 'from640', 'below640']);
-    expect(panel.widths.atLeast1440).toMatch(/400 wide by default, dragged between 320 and 560/u);
-    for (const row of ['| ≥ 1440 | 右侧停靠，默认 400，可拖 320–560 | 照旧 |', '| 1200–1439 | 右侧停靠 |', '| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 |', '| < 640 | 底部 sheet，半屏与全屏两档 |']) {
+    expect(panel.widths.atLeast1440).toMatch(/a third of the window wide by default but never under 400 nor over 720, dragged between 320 and half the window/u);
+    for (const row of ['| ≥ 1440 | 右侧停靠，默认窗口宽的 1/3（400–720），可拖 320 到窗口宽的一半（owner 11-11 定） | 照旧 |', '| 1200–1439 | 右侧停靠，默认同上（这一档是 400–480） |', '| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 |', '| < 640 | 底部 sheet，半屏与全屏两档 |']) {
       expect(DESIGN).toContain(row);
     }
     expect(panel.drawer).toMatch(/The entry drawer opens to the left of the panel/u);

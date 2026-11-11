@@ -244,7 +244,7 @@ final class SessionMoveWiringTests: XCTestCase {
         XCTAssertTrue(sheet.contains(".navigationTitle(SessionMoveCopy.title)"))
         let title = try slice(sheet, from: "private var title: some View {", to: "\n    }")
         let order = try positions(["Text(SessionMoveCopy.title)",
-                                   "Text(SessionHeader.title(for: session, fallbackAgent: workspace.name))",
+                                   "Text(SessionMoveCopy.sessionLine(SessionHeader.title(for: session, fallbackAgent: workspace.name),",
                                    ".foregroundStyle(.secondary)"], in: title)
         XCTAssertEqual(order, order.sorted(), "Move, and the session's title under it in grey")
         XCTAssertTrue(sheet.contains("ToolbarItem(placement: .principal) { title }"))

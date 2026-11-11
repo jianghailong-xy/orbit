@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { WIKI_CHAT_LIST_QUERY_MAX, type WikiChatListPage } from '@orbit/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -64,8 +65,10 @@ export class WikiChatController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
+    @Query('q') q?: unknown,
+    @Query('offset') offset?: unknown,
   ) {
-    return this.chats.list(user.userId, id, actingSession(request.headers));
+    return this.chats.list(user.userId, id, actingSession(request.headers), chatListPage(q, offset));
   }
 
   /** Every card of one chat, oldest first (contract `chat.drafts.read`): `:id` is the chat's session. */
@@ -162,4 +165,15 @@ export class WikiChatController {
   ) {
     return this.drafts.seen(user.userId, user.userId, id, actingSession(request.headers));
   }
+}
+
+/** `?q=` and `?offset=` of a chats read (contract `chat.list.page`), or a 400 that says what they take. */
+function chatListPage(q: unknown, offset: unknown): WikiChatListPage {
+  if (q !== undefined && (typeof q !== 'string' || q.length > WIKI_CHAT_LIST_QUERY_MAX)) {
+    throw new BadRequestException(`q is words a chat's title holds, at most ${WIKI_CHAT_LIST_QUERY_MAX} characters`);
+  }
+  if (offset !== undefined && (typeof offset !== 'string' || !/^(?:0|[1-9]\d{0,5})$/u.test(offset))) {
+    throw new BadRequestException('offset is how many chats to pass over, a whole number from 0');
+  }
+  return { q: q as string | undefined, offset: offset === undefined ? undefined : Number(offset) };
 }

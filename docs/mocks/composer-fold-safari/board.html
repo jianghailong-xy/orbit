@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Folded composer bar, Safari style (iPhone)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f2f2f4; color: #1c1c1e; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; padding: 36px 40px 40px; background: #f2f2f4; width: 1060px; }
+  .b-part h1 { font-size: 26px; margin: 0 0 6px; }
+  .b-part h2 { font-size: 21px; margin: 0 0 6px; }
+  .b-lead { color: #55555c; margin: 0 0 22px; max-width: 960px; }
+  .b-row { display: flex; gap: 40px; align-items: flex-start; }
+  .b-col { width: 460px; }
+  .b-cap { font-weight: 700; font-size: 17px; margin: 0 0 10px; }
+  .b-cap small { font-weight: 400; color: #6b6b72; font-size: 14px; margin-left: 6px; }
+  .b-notes { margin: 14px 0 0; padding: 0; list-style: none; }
+  .b-notes li { display: flex; gap: 10px; margin: 0 0 8px; font-size: 14.5px; }
+  .b-num { flex: none; width: 22px; height: 22px; border-radius: 11px; background: #ff3b30; color: #fff;
+           font: 700 13px/22px Inter, sans-serif; text-align: center; }
+  .b-num.blue { background: #0a84ff; }
+  .b-box { background: #fff; border-radius: 14px; padding: 16px 20px; margin-top: 18px; }
+  .b-box h3 { margin: 0 0 8px; font-size: 17px; }
+  .b-box p, .b-box li { font-size: 14.5px; margin: 0 0 6px; }
+  .b-box ol { margin: 0; padding-left: 22px; }
+  .b-rec { color: #0a7d32; font-weight: 700; }
+  table.b-t { border-collapse: collapse; width: 100%; font-size: 14px; }
+  table.b-t td, table.b-t th { border-top: 1px solid #e3e3e8; padding: 7px 8px; text-align: left; vertical-align: top; }
+  table.b-t th { color: #6b6b72; font-weight: 600; }
+
+  /* ── the phone ─────────────────────────────────────────── */
+  .ph { position: relative; width: 440px; height: 956px; border-radius: 56px; background: #000; overflow: hidden;
+        box-shadow: 0 0 0 10px #1c1c1e, 0 18px 40px rgba(0,0,0,.25); margin: 10px;
+        font-family: Inter, "Noto Sans SC", sans-serif; color: #e8e8ea; }
+  .ph.crop { height: 200px; border-radius: 0 0 46px 46px; box-shadow: 0 0 0 1px #c7c7cc; margin: 0; }
+  .ph-status { position: absolute; top: 18px; left: 44px; right: 40px; display: flex; justify-content: space-between;
+               font: 600 17px Inter, sans-serif; }
+  .ph-island { position: absolute; top: 12px; left: 50%; width: 124px; height: 36px; margin-left: -62px; background: #000;
+               border-radius: 18px; box-shadow: 0 0 0 1px #111; }
+  .ph-nav { position: absolute; top: 62px; left: 0; right: 0; height: 44px; display: flex; align-items: center;
+            justify-content: center; font: 600 17px Inter, sans-serif; }
+  .ph-nav .back { position: absolute; left: 16px; width: 40px; height: 40px; border-radius: 20px;
+                  background: rgba(60,60,66,.7); display: grid; place-items: center; color: #fff; font-size: 20px; }
+  .tx { position: absolute; left: 22px; right: 22px; top: 120px; font-size: 17px; line-height: 1.62; color: #dcdce0; }
+  .ph.crop .tx { top: auto; bottom: -40px; }
+  .tx p { margin: 0 0 14px; }
+  .tx code { font: 15px "JetBrains Mono", monospace; background: #1c1c1f; padding: 1px 5px; border-radius: 5px; }
+  .tx ul { margin: 0 0 14px; padding-left: 20px; }
+  .tx b { color: #f2f2f4; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 140px; height: 5px; margin-left: -70px; border-radius: 3px; background: #e8e8ea; }
+  .fade { position: absolute; left: 0; right: 0; bottom: 0; height: 86px;
+          background: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,.9) 45%, #000 70%); }
+
+  /* glass, as the iOS 26 .glassEffect reads on black */
+  .glass { background: rgba(44,44,48,.62); backdrop-filter: blur(14px) saturate(1.4);
+           box-shadow: inset 0 0 0 .5px rgba(255,255,255,.16), inset 0 1px 0 rgba(255,255,255,.08), 0 6px 18px rgba(0,0,0,.45); }
+
+  /* today: FoldedBandBar, 36pt capsule, 16pt gutters, 10pt foot over the safe area */
+  .bar { position: absolute; left: 16px; right: 16px; bottom: 44px; height: 36px; border-radius: 18px;
+         display: flex; align-items: center; padding: 0 4px 0 14px; }
+  .bar .ph-text { flex: 1; font-size: 15px; color: #6e6e74; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .marks { display: flex; gap: 10px; align-items: center; white-space: nowrap; margin-right: 6px; }
+  .mk { display: inline-flex; gap: 4px; align-items: center; font-size: 13px; color: #9a9aa0; font-variant-numeric: tabular-nums; }
+  .add { color: #30d158; font: 13px "JetBrains Mono", monospace; }
+  .del { color: #ff453a; font: 13px "JetBrains Mono", monospace; }
+  .landed { color: #30d158; font-weight: 600; font-size: 13px; }
+  .attn { width: 15px; height: 15px; border-radius: 8px; background: #ff9f0a; color: #000; font: 800 11px/15px Inter; text-align: center; }
+  .disc { position: relative; width: 28px; height: 28px; border-radius: 14px; background: rgba(255,255,255,.07);
+          display: grid; place-items: center; margin: 0 4px; }
+  .disc svg.arc, .jd svg.arc { position: absolute; inset: -2px; width: calc(100% + 4px); height: calc(100% + 4px); }
+
+  /* proposal: the Safari pill */
+  .pill { position: absolute; left: 50%; transform: translateX(-50%); bottom: 22px; height: 30px; border-radius: 15px;
+          display: flex; align-items: center; gap: 8px; padding: 0 13px; white-space: nowrap; max-width: 250px; }
+  .pill .ph-text { font-size: 13px; color: #8e8e93; }
+  .pill .draft { font-size: 13px; color: #e8e8ea; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+  .pill .marks { margin: 0; }
+  .jd { position: absolute; right: 16px; bottom: 22px; width: 30px; height: 30px; border-radius: 15px; display: grid; place-items: center; }
+  .ghost { outline: 1.5px dashed rgba(255,214,10,.7); outline-offset: 2px; }
+
+  .pin { position: absolute; width: 22px; height: 22px; border-radius: 11px; background: #ff3b30; color: #fff;
+         font: 700 13px/22px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #000; z-index: 5; }
+  .pin.blue { background: #0a84ff; }
+  .tag { position: absolute; font: 600 12px Inter, sans-serif; color: #ffd60a; z-index: 5; }
+  .meas { position: absolute; border-left: 1px solid #ffd60a; z-index: 5; }
+  .crops { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 40px; }
+  .crops .lbl { font-weight: 700; font-size: 15px; margin: 0 0 8px; }
+  .crops .lbl small { font-weight: 400; color: #6b6b72; }
+</style>
+</head>
+<body>
+
+<script>
+const ICON = {
+  term: '<svg width="14" height="12" viewBox="0 0 14 12"><rect x=".75" y=".75" width="12.5" height="10.5" rx="2" fill="none" stroke="#9a9aa0" stroke-width="1.3"/><path d="M3.5 4l2 2-2 2M7 8.2h3" fill="none" stroke="#9a9aa0" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  task: '<svg width="13" height="13" viewBox="0 0 13 13"><rect x=".75" y=".75" width="11.5" height="11.5" rx="2.5" fill="none" stroke="#9a9aa0" stroke-width="1.3"/><path d="M3.6 6.6l2 2 3.8-4.2" fill="none" stroke="#9a9aa0" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  pen: '<svg width="13" height="13" viewBox="0 0 13 13"><path d="M2 11l.6-2.6L9 2l2 2-6.4 6.4z" fill="none" stroke="#9a9aa0" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+  down: (c = '#fff') => `<svg width="14" height="15" viewBox="0 0 14 15"><path d="M7 1.5v12M1.8 8.4 7 13.5l5.2-5.1" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  arc: '<svg class="arc" viewBox="0 0 34 34"><circle cx="17" cy="17" r="15.5" fill="none" stroke="#0a84ff" stroke-width="2" stroke-linecap="round" stroke-dasharray="29 100" transform="rotate(-100 17 17)"/></svg>',
+};
+
+const TEXT = `
+  <p>I rebuilt the apiserver and web images and ran the upgrade with <code>--no-pull --prune</code>, same brief as the earlier upgrades. It reports which containers were rebuilt and whether any migration ran.</p>
+  <ul><li><b>What I'm checking from here:</b> I'm watching orbitd.io for the text "Evidence to review" to show on the task page, then I'll read the card on the phone.</li>
+  <li><b>What's left:</b> the Android build waits on the same tag, so it goes out with the next release.</li></ul>
+  <p>Tasks, comments, and session history survive context limits, restarts, and a closed browser, so the next session can continue without reconstructing the work from scratch.</p>
+  <p>The landing ran the acceptance commands again on the combined tree. Two specs were slow but green; nothing failed.</p>
+  <p>Next I'll check the deployment's version endpoint, then report back with the receipt.</p>
+  <p>Meanwhile the runner kept the background process list: 27 processes, all finished.</p>
+  <p>The release notes list the composer fold, the session list's new rows, and the wiki fixes, in that order.</p>`;
+
+function marks({ term = '27', add = '+3,598', del = '−32', landed, tasks } = {}) {
+  let h = '<span class="marks">';
+  if (term) h += `<span class="mk">${ICON.term}${term}</span>`;
+  if (tasks) h += `<span class="mk">${ICON.task}${tasks}</span>`;
+  if (landed) h += `<span class="landed">${landed}</span>`;
+  else if (add) h += `<span class="add">${add}</span><span class="del">${del}</span>`;
+  return h + '</span>';
+}
+
+function todayBar({ working = true } = {}) {
+  return `<div class="bar glass" id="today-bar"><span class="ph-text">Message…</span>${marks()}
+    <span class="disc">${ICON.down()}${working ? ICON.arc : ''}</span></div>`;
+}
+
+// The proposal: a pill that hugs what it says, centered, sunk into the home-indicator strip,
+// and the jump to the latest as its own 30pt disc at the trailing gutter.
+function pill({ content, working = true, jump = true, attn = false, id = '' } = {}) {
+  const body = (attn ? '<span class="attn">!</span>' : '') + (content ?? marks());
+  return `<div class="pill glass" ${id ? `id="${id}"` : ''}>${body}</div>` +
+    (jump ? `<div class="jd glass">${ICON.down()}${working ? ICON.arc : ''}</div>` : '');
+}
+
+function phone(inner, { crop = false, fade = false, id = '' } = {}) {
+  const chrome = crop ? '' : `<div class="ph-island"></div><div class="ph-status"><span>9:41</span><span>●●● ▮</span></div>
+    <div class="ph-nav"><span class="back">‹</span>Upgrade orbitd.io</div>`;
+  return `<div class="ph${crop ? ' crop' : ''}" ${id ? `id="${id}"` : ''}>${chrome}<div class="tx">${TEXT}</div>
+    ${fade ? '<div class="fade"></div>' : ''}${inner}<div class="home"></div></div>`;
+}
+const W = (html) => document.write(html);
+</script>
+
+<!-- ═══════════════ part 1: today vs the proposal ═══════════════ -->
+<section class="b-part" id="part-1">
+  <h1>回看历史时，输入栏收起：参考 Safari 地址栏</h1>
+  <p class="b-lead">往上翻历史时，今天输入栏收成一条 36pt、左右撑满的玻璃条（<code>FoldedBandBar</code>）。它几乎和展开的输入框一样宽，压着正文，读起来还是"一个输入框"。
+  Safari 往下滚时，地址栏缩成屏幕底部居中的一个小胶囊，只留域名，正文几乎全露出来。下面按这个思路收：只留有信息量的东西，胶囊贴着内容宽度，沉到 Home 条那一带。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <p class="b-cap">① 今天 <small>iOS 26 · 440pt 宽（你的 Pro Max）</small></p>
+      <script>W(phone(todayBar()))</script>
+      <ul class="b-notes">
+        <li><span class="b-num">1</span><span>撑满宽度（左右各 16pt），高 36pt，底边离安全区 10pt：它压住的正文是一整条：<b>36pt</b> 高、<b>408pt</b> 宽。</span></li>
+        <li><span class="b-num">2</span><span>"Message…" 是占位字，什么也没说，却占了整条的一半多。</span></li>
+        <li><span class="b-num">3</span><span>有用的只有右边：后台进程数、改动行数、回到最新（转圈 = 正在跑）。</span></li>
+      </ul>
+    </div>
+    <div class="b-col">
+      <p class="b-cap">② 建议：Safari 式小胶囊 <small>方案 A</small></p>
+      <script>W(phone(pill({ id: 'p-a' }), { fade: true }))</script>
+      <ul class="b-notes">
+        <li><span class="b-num blue">1</span><span><b>居中小胶囊</b>，高 30pt，宽度跟着内容走（这里约 150pt，最宽 250pt），字号 13pt。点它 = 展开输入栏，停在原位，和今天一样。</span></li>
+        <li><span class="b-num blue">2</span><span><b>去掉 "Message…"</b>：只放标记（进程、任务、改动 / 已合入）。草稿、要处理的提示见下一张。</span></li>
+        <li><span class="b-num blue">3</span><span><b>回到最新</b>单独一颗 30pt 圆钮，放在右侧边距，转圈照旧。胶囊和圆钮都沉到离屏幕底 22pt（Home 条正上方），和 Safari 一样占用 Home 条那一带。</span></li>
+        <li><span class="b-num blue">4</span><span>底部加一层渐隐（86pt，黑到透明），小字底下不会糊着正文，和 Safari 底栏的底色同一个作用。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ part 2: the pill's states + the motion ═══════════════ -->
+<section class="b-part" id="part-2">
+  <h2>胶囊里放什么：各状态</h2>
+  <p class="b-lead">规则：胶囊只说一件"现在该看的"事，其余的展开后再看。下面都是屏幕底部 200pt 的截取，按今天 <code>FoldedBand</code> 已有的数据画，不新增任何读取。</p>
+  <div class="crops">
+    <div><p class="lbl">a. 正在跑，有改动 <small>（最常见）</small></p><script>W(phone(pill(), { crop: true, fade: true }))</script></div>
+    <div><p class="lbl">b. 跑完了，没合入 <small>（圆钮不转）</small></p><script>W(phone(pill({ working: false }), { crop: true, fade: true }))</script></div>
+    <div><p class="lbl">c. 有没发出去的草稿 <small>（草稿优先，标记让位）</small></p><script>W(phone(pill({ content: `${ICON.pen}<span class="draft">Also check the Android build…</span>` }), { crop: true, fade: true }))</script></div>
+    <div><p class="lbl">d. 有东西等你处理 <small>（橙色 ! 打头，和今天一样）</small></p><script>W(phone(pill({ attn: true, working: false }), { crop: true, fade: true }))</script></div>
+    <div><p class="lbl">e. 已合入，有任务 <small>（合并槽自己的绿字）</small></p><script>W(phone(pill({ working: false, content: marks({ term: '', tasks: '3/4', landed: '✓ In main' }) }), { crop: true, fade: true }))</script></div>
+    <div><p class="lbl">f. 什么标记都没有 <small>（只剩这时才写 Message…）</small></p><script>W(phone(pill({ working: false, content: '<span class="ph-text">Message…</span>' }), { crop: true, fade: true }))</script></div>
+  </div>
+  <div class="b-box">
+    <h3>动起来的样子</h3>
+    <ol>
+      <li>收起：输入栏两侧向中间收，同时变矮（36→30pt）、往下沉，"Message…" 淡出，标记从 15pt 缩到 13pt 留在胶囊里；回到最新的圆钮从输入栏的发送位"掉"到右下角。0.3 s smooth，和今天收起用同一个动画参数。</li>
+      <li>展开：倒过来放。触发时机不变：点胶囊展开；手指再拖一下又收起；回到最底部自动展开。</li>
+      <li>减弱动态效果打开时：只做淡入淡出，不做缩放；转圈照旧停住。</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ═══════════════ part 3: decisions + landing ═══════════════ -->
+<section class="b-part" id="part-3">
+  <h2>待定 · 要你拍板</h2>
+  <div class="b-row">
+    <div class="b-col">
+      <p class="b-cap">方案 A：胶囊 + 单独的回到最新 <small class="b-rec">推荐</small></p>
+      <script>W(phone(pill(), { crop: true, fade: true }))</script>
+      <p style="font-size:14.5px;margin:10px 0 0">一下点到最新；转圈还在，能看出"下面还在写"。代价：右下角多一颗小圆钮，不像 Safari 那样只有一个东西。</p>
+    </div>
+    <div class="b-col">
+      <p class="b-cap">方案 B：只有胶囊，最像 Safari</p>
+      <script>W(phone(pill({ jump: false, content: `<span class="mk" style="color:#0a84ff">●</span>${marks()}` }), { crop: true, fade: true }))</script>
+      <p style="font-size:14.5px;margin:10px 0 0">只有一个居中胶囊，"正在跑"变成开头的蓝点。代价：回到最新要两下（先展开，再点浮着的圆钮）。</p>
+    </div>
+  </div>
+  <div class="b-box">
+    <h3>另外两点，按推荐默认</h3>
+    <table class="b-t">
+      <tr><th style="width:34%">问题</th><th style="width:33%">推荐</th><th>另一种</th></tr>
+      <tr><td>胶囊沉到 Home 条那一带（离底 22pt）吗？</td><td><span class="b-rec">沉</span>：正文多露出约 28pt，Safari 也这样放。</td><td>留在今天的高度（离安全区 10pt），只缩宽度。</td></tr>
+      <tr><td>像 Safari 那样"手指往回推一点就展开"吗？</td><td><span class="b-rec">不加</span>：回看历史时人会上下来回滚着读，一推就展开会一直弹出来。保持点按展开。</td><td>加上，往最新方向滑超过 ~40pt 就展开。</td></tr>
+    </table>
+  </div>
+  <div class="b-box">
+    <h3>落地（按代价排）</h3>
+    <ol>
+      <li><b>只改 iPhone 的视图</b>：<code>FoldedBandBar.swift</code> 换成胶囊 + 圆钮，<code>ConsoleView.composerBand</code> 改摆放位置和动画。</li>
+      <li><code>FoldedBand</code> 只多一条规则：没有标记时才显示 placeholder，有草稿时草稿优先；补 <code>FoldedBandTests</code>。</li>
+      <li><code>TailPinning.foldsBand</code> 的 <code>foldedInset</code> 跟着新高度改（30 + 22），否则收起判定会差一点；补 <code>ComposerBandFoldWiringTests</code>。</li>
+      <li>Web、Mac、Android 今天都没有这个收起条，不动。</li>
+    </ol>
+  </div>
+</section>
+
+<script>
+// Pins on part 1's phones, placed after layout from the drawn elements.
+window.drawMarks = () => {
+  document.querySelectorAll('.pin').forEach((n) => n.remove());
+  const pin = (phoneEl, x, y, n, blue) => {
+    const p = document.createElement('div');
+    p.className = 'pin' + (blue ? ' blue' : ''); p.textContent = n;
+    p.style.left = `${x - 11}px`; p.style.top = `${y - 11}px`; phoneEl.appendChild(p);
+  };
+  const rel = (el, ph) => { const a = el.getBoundingClientRect(), b = ph.getBoundingClientRect();
+    return { l: a.left - b.left, t: a.top - b.top, r: a.right - b.left, b: a.bottom - b.top, w: a.width, h: a.height }; };
+  const phones = document.querySelectorAll('#part-1 .ph');
+  const [t, a] = phones;
+  const bar = rel(t.querySelector('.bar'), t);
+  pin(t, bar.l + 4, bar.t - 14, 1);
+  pin(t, bar.l + 40, bar.t - 14, 2);
+  pin(t, bar.r - 90, bar.t - 14, 3);
+  const p = rel(a.querySelector('.pill'), a);
+  const j = rel(a.querySelector('.jd'), a);
+  pin(a, p.l - 14, p.t + 4, 1, true);
+  pin(a, p.l + p.w / 2, p.t - 16, 2, true);
+  pin(a, j.l + j.w / 2, j.t - 16, 3, true);
+  pin(a, 30, 956 - 92, 4, true);
+};
+</script>
+</body>
+</html>

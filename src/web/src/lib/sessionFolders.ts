@@ -136,6 +136,10 @@ export const MOVE_COPY = {
   ending: 'Ending the session…',
   moving: 'Moving…',
   endTimedOut: 'The session hasn’t finished ending, so it wasn’t moved. Try again once it has ended.',
+  /** After the session's title when it is a project's coordinator. */
+  coordinatorOf: (project: string) => `Coordinator of ${project}`,
+  /** Under Move to Another Workspace for a project's coordinator. */
+  coordinatorMoves: 'The project’s coordinator moves with it.',
 } as const;
 
 /** Why a request failed, in a clause: the server's own sentence when it gave one. */
@@ -182,6 +186,9 @@ export interface MoveTargetRow {
   target: SessionMoveTarget;
   /** The row opens the workspace's step: the session can leave its workspace, and go to this one. */
   enabled: boolean;
+  /** A project's coordinator whose conversation cannot go here, to a workspace a new coordinator
+   *  could open in: the row offers Start new here… instead. */
+  startsNew: boolean;
   /** The grey line under the name: `<Provider> · <runner>`, or why the session can't go there, in
    *  the server's words. An offline runner keeps the row open and carries its own pill. */
   detail: string;
@@ -197,6 +204,8 @@ export const moveTargetRows = (
   answer.targets.map((target) => ({
     target,
     enabled: answer.reason == null && target.reason == null,
+    startsNew:
+      answer.reason == null && target.reason != null && answer.coordinates != null && target.startsCoordinator === true,
     detail:
       target.reason ?? [providerName(target.provider), target.runnerName].filter(Boolean).join(' · '),
   }));
@@ -232,7 +241,8 @@ export const moveTargetFooter = (target: SessionMoveTarget): string => {
   return sentences.join(' ');
 };
 
-export const moveConfirmTitle = (target: SessionMoveTarget): string => `Move to ${target.name}?`;
+export const moveConfirmTitle = (target: SessionMoveTarget, answer?: SessionMoveTargets): string =>
+  answer?.coordinates ? `Move the coordinator to ${target.name}?` : `Move to ${target.name}?`;
 
 /** The confirmation's paragraphs (§5.3): the conversation goes, the agent's memory of it is
  *  summarized when another runner rebuilds it, the changes stay on their branch in the old
@@ -246,6 +256,12 @@ export const moveConfirmParagraphs = (
   if (target.conversation === 'rebuilt') {
     paragraphs.push('Earlier parts of the conversation are summarized for the agent.');
   }
+  // A project's coordinator takes its project along (the server writes both in one transaction).
+  if (answer.coordinates) {
+    paragraphs.push(
+      `${answer.coordinates.title} is coordinated from ${target.name} from now on, and its row moves to ${target.name}’s list. Its tasks keep running where they are.`,
+    );
+  }
   if (answer.branch && answer.changedFiles > 0) {
     const unmerged = answer.unmergedFiles;
     if (unmerged > 0) {
@@ -258,7 +274,15 @@ export const moveConfirmParagraphs = (
       paragraphs.push(`Changes made so far stay on branch ${answer.branch} in ${fromWorkspace}.`);
     }
   }
-  if (answer.needsEnd) paragraphs.push('The session ends first.');
+  if (answer.needsEnd) {
+    // An ended coordinator is not handed Orbit's updates (it is never revived for them): they wait
+    // on the project page until someone messages it again.
+    paragraphs.push(
+      answer.coordinates
+        ? 'The session ends first. Until you message it again, Orbit’s updates for the project wait on the project page.'
+        : 'The session ends first.',
+    );
+  }
   return paragraphs;
 };
 

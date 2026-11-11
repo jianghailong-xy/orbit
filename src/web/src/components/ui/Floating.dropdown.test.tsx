@@ -62,4 +62,9 @@ describe('useDropdownPlacement', () => {
     placement.alignOffset({ side: 'bottom', align: 'end', positioner: { width: 143.75, height: 218 } });
     expect(subpixel(positioner)).toBe('0.25px');
   });
+
+  it('never moves a list too tall for either side beside its trigger', async () => {
+    const { placement } = await placementFor('end', 143.796875);
+    expect(placement.collisionAvoidance).toEqual({ side: 'flip', align: 'none', fallbackAxisSide: 'none' });
+  });
 });

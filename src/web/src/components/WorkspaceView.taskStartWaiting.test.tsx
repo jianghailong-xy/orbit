@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ConfirmationAnswersCard,
+  EvidenceReviewCard,
+  EvidenceSendBackCard,
+  RunNoticeCard,
+  RunQuestionCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
@@ -166,6 +171,60 @@ const RETURNED: ConfirmationReturnCard = {
   reason: 'Two of the six findings are not fixed on the branch.',
   problems: [{ key: 'p1', text: 'P1-3 still sends the reply twice' }],
 };
+const EVIDENCE_REVIEW: EvidenceReviewCard = {
+  evidenceId: '01a0cca7-0000-7000-8000-0000000000d1',
+  taskId: '01a0cca7-0000-7000-8000-0000000000d2',
+  title: 'iOS/macOS: new account welcome card',
+  revision: '1',
+  runSessionId: '01a0cca7-0000-7000-8000-0000000000d3',
+  dueAt: null,
+  claim: 'iOS and macOS now show the welcome card.',
+  state: 'OPEN',
+  latestRevision: '1',
+  decision: null,
+};
+const EVIDENCE_REVIEW_BLOCK = '<orbit-evidence-review task="t" revision="1">\nA run submitted evidence.\n</orbit-evidence-review>';
+const SEND_BACK: EvidenceSendBackCard = {
+  decisionId: '01a0cca7-0000-7000-8000-0000000000e1',
+  taskId: '01a0cca7-0000-7000-8000-0000000000d2',
+  title: 'iOS/macOS: new account welcome card',
+  revision: '1',
+  note: 'The macOS screenshot is missing.',
+  by: 'OWNER',
+  bySessionId: null,
+  byTitle: null,
+};
+const SEND_BACK_TOLD = '<orbit-evidence-send-back task="t" revision="1">\nSent back.\n</orbit-evidence-send-back>';
+const RUN_QUESTION: RunQuestionCard = {
+  requestId: '01a0cca7-0000-7000-8000-0000000000f1',
+  approvalId: '01a0cca7-0000-7000-8000-0000000000f2',
+  taskId: '01a0cca7-0000-7000-8000-0000000000f3',
+  taskTitle: 'K4, K5 baseline red',
+  runSessionId: '01a0cca7-0000-7000-8000-0000000000f4',
+  replyBy: '2026-10-06T06:10:00.000Z',
+  state: 'OPEN',
+  approvalStatus: 'PENDING',
+  questions: [{ question: 'Keep its place?', options: [{ label: 'Keep' }, { label: 'Back' }] }],
+  answers: null,
+  answeredBy: null,
+};
+const RUN_QUESTION_BLOCK = '<orbit-run-question task="t">\nA run asked.\n</orbit-run-question>';
+const RUN_NOTICE: RunNoticeCard = {
+  requestId: '01a0cca7-0000-7000-8000-0000000000a9',
+  taskId: '01a0cca7-0000-7000-8000-0000000000f3',
+  taskTitle: 'K4, K5 baseline red',
+  runSessionId: '01a0cca7-0000-7000-8000-0000000000f4',
+  message: 'The emulator is down.',
+  state: 'OPEN',
+};
+const RUN_NOTICE_BLOCK = '<orbit-run-notice task="t">\nA run used notify.\n</orbit-run-notice>';
+const ANSWERS: ConfirmationAnswersCard = {
+  decisionId: '01a0cca7-0000-7000-8000-0000000000c1',
+  taskId: '01a0cca7-0000-7000-8000-0000000000c2',
+  title: 'Welcome email for new accounts',
+  decidedAt: '2026-11-11T05:13:08.000Z',
+  answers: [{ key: 'n1', question: 'How should it reach main?', choice: 'Merge to main now', text: null, notShown: false }],
+};
 const FROM: SessionMessageCard = {
   fromSessionId: '01a0cca7-8609-70ed-a0e2-d4b55b832b61',
   fromTitle: 'Worker: migration review',
@@ -190,6 +249,11 @@ const EVERY_CARD: Required<TurnCards> = {
   projectStarted: STARTED,
   confirmationReviewRequest: REVIEW_REQUEST,
   confirmationReturn: RETURNED,
+  confirmationAnswers: ANSWERS,
+  evidenceReview: EVIDENCE_REVIEW,
+  evidenceSendBack: SEND_BACK,
+  runQuestion: RUN_QUESTION,
+  runNotice: RUN_NOTICE,
   sessionMessage: FROM,
   sessionReplies: [REPLY],
 };
@@ -202,8 +266,13 @@ const ACCEPTED_ONE_CARD_EACH: { field: keyof TurnCards; content: string; drawnAs
   { field: 'coordinatorDelivery', content: 'From Orbit · project “Queue parity” has finished work that has not landed on main', drawnAs: '.coordinator-delivery' },
   { field: 'taskStart', content: BRIEF, drawnAs: '.tsc' },
   { field: 'projectStarted', content: 'The owner started this project.', drawnAs: '.psc' },
-  { field: 'confirmationReviewRequest', content: '<orbit-confirmation-review/>', drawnAs: '.crc:not(.is-returned)' },
-  { field: 'confirmationReturn', content: '<orbit-confirmation-return/>', drawnAs: '.crc.is-returned' },
+  { field: 'confirmationReviewRequest', content: '<orbit-confirmation-review/>', drawnAs: '.crc:not(.is-returned):not(.is-confirmed):not(.is-neutral):not(.crc-evidence-review):not(.crc-run-question)' },
+  { field: 'confirmationReturn', content: '<orbit-confirmation-return/>', drawnAs: '.crc.is-returned:not(.crc-evidence-send-back)' },
+  { field: 'confirmationAnswers', content: '<orbit-confirmation-answers/>', drawnAs: '.crc.is-confirmed' },
+  { field: 'evidenceReview', content: '<orbit-evidence-review/>', drawnAs: '.crc-evidence-review' },
+  { field: 'evidenceSendBack', content: '<orbit-evidence-send-back/>', drawnAs: '.crc-evidence-send-back' },
+  { field: 'runQuestion', content: '<orbit-run-question/>', drawnAs: '.crc-run-question' },
+  { field: 'runNotice', content: '<orbit-run-notice/>', drawnAs: '.crc-run-notice' },
   { field: 'sessionMessage', content: 'please review the migration before I merge it', drawnAs: '.smc' },
   { field: 'sessionReplies', content: 'what did the coordinator say?', drawnAs: '.src-wrap' },
 ];

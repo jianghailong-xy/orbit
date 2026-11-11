@@ -50,7 +50,8 @@ final class WikiChatWiringTests: XCTestCase {
 
     /// On a phone the panel is a sheet of two heights whose half height leaves the page readable and scrollable
     /// (design §9: `presentationBackgroundInteraction`, iOS 17); on an iPad or a Mac it is the third column beside
-    /// the page (docs/wiki-design.md §12.3.5), 400 wide by default between 320 and 560 as the web's docked panel.
+    /// the page (docs/wiki-design.md §12.3.5), a third of the Wiki's width between 400 and 720 by default and dragged
+    /// between 320 and half of it, as the web's docked panel (owner 11-11).
     func testThePanelIsATwoHeightSheetOnAPhoneAndTheThirdColumnElsewhere() throws {
         let views = code(try source("Views/WikiChatViews.swift"))
         let host = try slice(views, from: "struct WikiChatHost: ViewModifier {", to: "extension View {")
@@ -59,8 +60,11 @@ final class WikiChatWiringTests: XCTestCase {
                             ".presentationDetents([.medium, .large], selection: $detent)",
                             ".presentationBackgroundInteraction(.enabled(upThrough: .medium))",
                             ".presentationDragIndicator(.visible)"], "the phone's sheet")
-        XCTAssertTrue(host.contains(".inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.close() } })) {"))
-        XCTAssertTrue(host.contains("panel.inspectorColumnWidth(min: 320, ideal: 400, max: 560)"))
+        // Dismissing the column is the owner's ✕ (board 45): kept until the button opens it again.
+        XCTAssertTrue(host.contains(".inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.closeByOwner() } })) {"))
+        XCTAssertTrue(host.contains("panel.inspectorColumnWidth(min: CGFloat(WikiChatLogic.Column.min), ideal: CGFloat(WikiChatLogic.Column.ideal(Double(available))),"))
+        XCTAssertTrue(host.contains("max: CGFloat(WikiChatLogic.Column.max(Double(available))))"))
+        XCTAssertTrue(host.contains(".onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in available = width }"))
         XCTAssertTrue(host.contains("return hSize == .compact"), "a sheet exactly where the width is compact")
         // The deployment target is iOS 17, where every one of these exists.
         let project = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -82,12 +86,59 @@ final class WikiChatWiringTests: XCTestCase {
         // The chat as a column makes the Wiki directory, page and chat (design §9's third column): the source list
         // folds while it is open, so the page keeps its width, and comes back as it was — never saved as the reader's.
         let shell = try slice(main, from: "struct MainView: View {", to: "private var sidebar: some View {")
-        assertOrder(shell, [".onChange(of: columnVisibility) { _, now in", "if now == .all { foldedForChat = false }",
-                            "if !foldedForChat { sidebarVisible = (now == .all) }", ".onChange(of: wikiChatColumn) { _, open in",
-                            "if open, columnVisibility == .all {\n                foldedForChat = true\n                columnVisibility = .doubleColumn",
-                            "} else if !open, foldedForChat {\n                columnVisibility = .all",
+        // An iPad window taller than wide folds it the same way (three columns leave the detail too narrow), and it
+        // comes back on the turn back to landscape — macOS keeps its source list.
+        assertOrder(shell, ["#if os(iOS)\n        .onGeometryChange(for: Bool.self) { $0.size.width < $0.size.height } action: { now in",
+                            "portrait = now\n            refold()\n        }\n        #endif",
+                            ".onChange(of: columnVisibility) { _, now in", "if now == .all { folded = false }",
+                            "if !folded { sidebarVisible = (now == .all) }", ".onChange(of: wikiChatColumn) { _, _ in refold() }",
+                            "let wantsFold = wikiChatColumn || portrait",
+                            "if wantsFold, columnVisibility == .all {\n            folded = true\n            columnVisibility = .doubleColumn",
+                            "} else if !wantsFold, folded {\n            columnVisibility = .all",
                             "guard model.selectedSection == .wiki, let chat = model.wikiChat else { return false }",
                             "return chat.presented && !chat.asSheet"], "the source list beside the chat's column")
+    }
+
+    // MARK: open by default and the history (board 45, owner 11-11)
+
+    /// Where the panel is the third column a Wiki page opens with it shown, once the chats are read, on a turn to or
+    /// from Settings and on a change of width; ✕ is kept per space on the device and the button undoes it (Q1 A).
+    func testThePanelOpensWithTheWikiAndRemembersX() throws {
+        let views = code(try source("Views/WikiChatViews.swift"))
+        let host = try slice(views, from: "struct WikiChatHost: ViewModifier {", to: "extension View {")
+        assertOrder(host, ["await chat.load(spaceID: space.id)",
+                           "chat.openByDefault(spaceID: space.id, settingsOnTop: model.nav.wikiSettingsOnTop)",
+                           ".onChange(of: model.nav.wikiSettingsOnTop) { _, onTop in chat.openByDefault(spaceID: space.id, settingsOnTop: onTop) }",
+                           "chat.asSheet = sheet"], "the default opening")
+        let width = try slice(host, from: "chat.asSheet = sheet", to: ".onChange(of: model.nav.path.last")
+        XCTAssertTrue(width.contains("chat.openByDefault(spaceID: space.id, settingsOnTop: model.nav.wikiSettingsOnTop)"),
+                      "a change of width folds or brings back a panel the page opened")
+        let panel = try slice(views, from: "struct WikiChatPanel: View {", to: "struct WikiChatHistoryList: View {")
+        XCTAssertTrue(panel.contains("headButton(\"xmark\", WikiChatCopy.close) { chat.closeByOwner() }"))
+        let model = code(try source("WikiChatModel.swift"))
+        assertOrder(model, ["func openFromButton(spaceID: String) {", "setHiddenByOwner(spaceID, false)",
+                            "func closeByOwner() {", "setHiddenByOwner(spaceID, true)",
+                            "func openByDefault(spaceID: String, settingsOnTop: Bool) {",
+                            "WikiChatLogic.opensByDefault(sheet: asSheet, settingsOnTop: settingsOnTop, hiddenByOwner: hiddenByOwner(spaceID))",
+                            "if openedByDefault && !fits { presented = false }",
+                            "chat = WikiChatLogic.toOpen(read.chats)"], "✕ and the button")
+    }
+
+    /// The column's title opens the space's chats over the whole panel (Q3 A): a search, Open and Completed (Q4 A),
+    /// a row's ⋯ and context menu with the session list's four actions and Undo; a phone's sheet keeps its menu.
+    func testTheTitleOpensTheHistoryOverThePanel() throws {
+        let views = code(try source("Views/WikiChatViews.swift"))
+        let panel = try slice(views, from: "struct WikiChatPanel: View {", to: "struct WikiChatHistoryList: View {")
+        assertOrder(panel, ["if chat.history != nil {", "WikiChatHistoryList(chat: chat, space: space)",
+                            "if compact { historyMenu } else { historyTitle }", "chat.toggleHistory()"], "the title and the list")
+        let list = try slice(views, from: "struct WikiChatHistoryList: View {", to: "private struct WikiChatNewBody: View {")
+        assertOrder(list, ["WikiChatLogic.historyGroups(read.rows)", "TextField(WikiChatCopy.search, text: $words)",
+                           "chat.searchHistory(value)", "WikiChatCopy.groupOpen", "WikiChatCopy.groupCompleted",
+                           "Button(WikiChatCopy.showMore) { chat.moreHistory() }", "Text(WikiChatCopy.trashNote)"], "the list")
+        assertOrder(list, ["Button(WikiChatCopy.rename) {", "Button(WikiChatCopy.openSession) {", "Button(WikiChatCopy.complete) { complete(row) }",
+                           "Button(WikiChatCopy.moveToTrash, role: .destructive) { trash(row) }"], "a row's actions")
+        XCTAssertTrue(list.contains(".contextMenu { actions(row) }"))
+        XCTAssertTrue(list.contains("undo: { restore(row) }"))
     }
 
     // MARK: the round button

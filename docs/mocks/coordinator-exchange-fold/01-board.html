@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>协调会话 · Orbit 来回折叠</title>
+<style>
+  body { margin: 0; background: #eceef2; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', sans-serif; color: #1d2330; }
+  .board { width: 2240px; padding: 48px; box-sizing: border-box; background: #eceef2; }
+  h1 { font-size: 34px; margin: 0 0 8px; }
+  .sub { font-size: 17px; color: #5b6475; margin-bottom: 28px; line-height: 1.6; }
+  .row { display: flex; gap: 28px; align-items: flex-start; margin-bottom: 32px; }
+  .frame { background: #fff; border-radius: 14px; padding: 18px 18px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .frame h2 { font-size: 19px; margin: 0 0 4px; }
+  .frame .cap { font-size: 14px; color: #5b6475; margin: 0 0 12px; line-height: 1.55; max-width: 640px; }
+  .frame img { display: block; border: 1px solid #e3e6eb; border-radius: 8px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; vertical-align: 2px; }
+  .t-now { background: #fde8e8; color: #b42318; } .t-a { background: #e3f0ff; color: #1757c2; } .t-b { background: #eef0f3; color: #4a5263; }
+  .panel { background: #fff; border-radius: 14px; padding: 22px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 15px; line-height: 1.65; }
+  .panel h2 { font-size: 20px; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid #e8eaee; }
+  th { color: #5b6475; font-weight: 600; background: #f6f7f9; }
+  code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; background: #f1f3f6; padding: 1px 5px; border-radius: 4px; }
+  .q { background: #fff8e6; border: 1px solid #f3d27a; border-radius: 10px; padding: 14px 18px; margin-top: 14px; }
+  .q b { color: #8a5a00; }
+  .num { font-size: 26px; font-weight: 700; color: #b42318; }
+  ul { margin: 6px 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>协调会话 · Orbit 发起的来回折叠成一行</h1>
+  <div class="sub">
+    问题：协调会话里大部分轮次不是你发起的，是 Orbit 送来的（证据待判、可以开工、watch 提醒、后台作业结束），每一轮下面还跟着协调者的一整段回复。真正要你看的内容被淹没了。<br>
+    实测：Runner link v1 的协调会话（10-25 → 11-05）共 <b>555</b> 轮，其中 Orbit 送来的 <b>260</b> 轮：项目通知 107（证据待判 92）、watch 提醒 101、后台作业 31、例外项 16、会话回信 5。watch 那 101 轮，回复中位数只有 155 字，内容基本是“这是之前设的提醒，不用再做什么”。<br>
+    截图全部来自真实 Web 控制台（vite + 假 API），对话按那个协调会话的真实内容改写。界面文字为英文，标注用中文。
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2><span class="tag t-now">① 现在</span>每轮 Orbit 消息 + 整段回复，全部展开</h2>
+      <p class="cap">7 轮 Orbit 来回占满整屏，你自己问的两句（“哪些在等我？”“为什么 B4b 被退回了？”）夹在中间很难找到。按 ⌘F 也只能一条一条翻。</p>
+      <img src="shots/today.png" width="560">
+    </div>
+    <div style="display:flex; flex-direction:column; gap:28px;">
+      <div class="row" style="margin:0">
+        <div class="frame">
+          <h2><span class="tag t-a">② 方案 A（推荐）</span>连续的 Orbit 来回收成一行</h2>
+          <p class="cap">相邻的 Orbit 来回合成一行：<code>⋯ 7 Orbit updates handled · 3 evidence, 1 can start, 2 watches, 1 background job · 5:14 PM – 6:49 PM</code>。你的提问和回答、最新一轮 Orbit 消息照常展开。</p>
+          <img src="shots/A-group.png" width="683">
+        </div>
+        <div class="frame">
+          <h2><span class="tag t-a">③ A · 点开这一行</span>每个来回一行：发生了什么 — 协调者怎么处理的</h2>
+          <p class="cap">左边是 Orbit 送来的事（与现在胶囊上的句子相同），右边是协调者回复的第一句（通常就是结论：“我确认了 B1…”“我把 B4b 的第 1 版退回了…”）。</p>
+          <img src="shots/A-group-open.png" width="683">
+        </div>
+      </div>
+      <div class="row" style="margin:0">
+        <div class="frame">
+          <h2><span class="tag t-a">④ A · 再点开一行</span>就是今天的完整样子</h2>
+          <p class="cap">展开后与 ① 完全相同：胶囊、步骤、整段回复，一样不少。折叠不删除任何内容，⌘F 搜到折叠里的内容时自动展开（与步骤行相同）。</p>
+          <img src="shots/A-row-open.png" width="683">
+        </div>
+        <div class="frame">
+          <h2><span class="tag t-b">⑤ 方案 B</span>不合并，每个来回各自一行</h2>
+          <p class="cap">不合成一组，逐行列出。一眼就能看到每件事，代价是 7 轮就占 7 行；一天几十轮时仍然很长。</p>
+          <img src="shots/B-rows.png" width="683">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2><span class="tag t-a">⑥ A · 手机</span>点开组后</h2>
+      <p class="cap">窄屏一行放不下两段：第一行“发生了什么 + 时间”，第二行协调者回复的第一句。组标题只留数量和时间段。</p>
+      <img src="shots/A-phone.png" width="390">
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:24px;">
+      <div class="panel">
+        <h2>规则</h2>
+        <table>
+          <tr><th style="width:26%">情况</th><th>怎么画</th></tr>
+          <tr><td>Orbit 发起的一轮</td><td>折叠成一行：<code>→ 发生了什么 — 回复第一句 · 时间 ›</code>。包括：协调者通知（证据、可开工、启动失败、run 停止、未落地…）、watch 提醒、后台作业 / 定时唤醒、会话回信（session reply）。</td></tr>
+          <tr><td>相邻 ≥2 轮</td><td>（A）合成一组 <code>⋯ N Orbit updates handled · 分类计数 · 起止时间 ›</code>；（B）逐行。</td></tr>
+          <tr><td>你自己发的消息 + 回复</td><td>从不折叠。它们把 Orbit 来回切成段落。</td></tr>
+          <tr><td>最新一轮</td><td>不折叠（正在跑的、刚结束的），你打开会话时看到的就是最新状态。</td></tr>
+          <tr><td>要你处理的</td><td>不折叠：这一轮里协调者发了 owner 卡片（<code>ask_owner</code>、<code>request_owner_action</code>），或者是例外项 / 阻塞 / 启动失败 / run 停止这类坏消息。</td></tr>
+          <tr><td>其他会话发来的消息（session_send）</td><td>不折叠：那是另一个 agent 写的话，通常有内容。</td></tr>
+          <tr><td>展开状态</td><td>只在本页面有效，刷新后恢复折叠；⌘F 命中折叠内容时自动展开。</td></tr>
+          <tr><td>导出 / 分享链接</td><td>全部展开（与步骤行相同）。</td></tr>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>改动范围</h2>
+        <ul>
+          <li>Web：<code>components/Transcript.tsx</code>（NodeList 按轮切分，新增 ExchangeRow / ExchangeGroup），<code>index.css</code>，新增测试。纯前端，不改服务端和事件格式。</li>
+          <li>iOS / macOS（OrbitKit 会话视图）与 Android 用同样的规则，Web 定稿后跟进。</li>
+        </ul>
+      </div>
+      <div class="q">
+        <b>待你定</b>
+        <ol style="margin:6px 0 0; padding-left:20px;">
+          <li><b>A 还是 B？</b>推荐 A：协调会话一天几十轮 Orbit 来回，逐行（B）仍然很长。</li>
+          <li><b>哪些端先做？</b>推荐先做 Web，验证后再跟进 iOS / macOS / Android。如果你主要在 iPhone 上看协调会话，可以 iOS 先做。</li>
+          <li><b>只在协调会话里折叠，还是所有会话都折叠？</b>推荐所有会话：任务会话里的 watch / 后台作业提醒同样是噪音，规则一样。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

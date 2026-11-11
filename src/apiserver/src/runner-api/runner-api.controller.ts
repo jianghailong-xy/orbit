@@ -345,6 +345,8 @@ import { appendEvidenceReviewContext } from '../tasks/evidence-review';
 import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-review.service';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
 import {
+  withConfirmationAnswers,
+  withTurnCard,
   withConfirmationReturn,
   withConfirmationReviewRequest,
   withControlPlaneNote,
@@ -8118,7 +8120,13 @@ export class RunnerApiController {
       // the card its echo is stored with. A batch of ordinary messages costs one indexed read.
       const turnCards = await readTurnCards(
         tx,
-        { id: sessionId, ownerId: session.ownerId, taskId: session.taskId, runSource: session.runSource },
+        {
+          id: sessionId,
+          ownerId: session.ownerId,
+          taskId: session.taskId,
+          runSource: session.runSource,
+          promptByOrbit: session.promptByOrbit,
+        },
         userTurns,
       );
       for (const e of durable) {
@@ -8137,6 +8145,10 @@ export class RunnerApiController {
         if (cards?.runQuestion) e.payload.runQuestion = cards.runQuestion;
         e.payload = withConfirmationReviewRequest(e.payload, cards?.confirmationReviewRequest ?? null);
         e.payload = withConfirmationReturn(e.payload, cards?.confirmationReturn ?? null);
+        e.payload = withConfirmationAnswers(e.payload, cards?.confirmationAnswers ?? null);
+        for (const field of ['runNotice', 'evidenceReview', 'evidenceSendBack', 'sessionOpening'] as const) {
+          e.payload = withTurnCard(e.payload, field, cards?.[field] ?? null);
+        }
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);

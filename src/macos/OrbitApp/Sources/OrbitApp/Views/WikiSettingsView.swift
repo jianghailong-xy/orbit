@@ -31,6 +31,8 @@ struct WikiSettingsActions {
     var moveToTrash: () -> Void = {}
     /// The Trash row: Trash's page, pushed over this one.
     var openTrash: () -> Void = {}
+    /// Check again and run now (false), or Use this folder once it was confirmed (true): docs/wiki-repo-tiers-design.md §7.3.
+    var runNow: (Bool) -> Void = { _ in }
 }
 
 /// The settings page, drawn from the space as the server kept it.
@@ -44,10 +46,17 @@ struct WikiSettingsPage: View {
     var server: WikiSystemModelStatus? = nil
     /// How many wikis are in Trash: the Trash row under Move to Trash… while any is.
     var trashed = 0
+    /// The space's health: what the maintenance card says of the last run's read (`WikiRepoCardLogic`); nil until read.
+    var health: WikiSpaceHealth? = nil
+    /// The moment the card's `checked 2h ago` is said from.
+    var now = Date()
     var busy = false
     var actions = WikiSettingsActions()
 
+    @State private var confirmingFolder = false
+
     private var mode: WikiReviewMode { WikiModeLogic.mode(of: space.settings) }
+    private var repoCard: WikiRepoCard? { health.flatMap { WikiRepoCardLogic.card($0, now: now) } }
     private var maintenance: WikiMaintenanceSettings { space.settings?.maintenance ?? .default }
 
     var body: some View {
@@ -118,6 +127,7 @@ struct WikiSettingsPage: View {
         case .maintenance:
             Section {
                 if maintenance.enabled {
+                    if let card = repoCard { repoRows(card) }
                     LabeledContent(WikiModeCopy.status) {
                         HStack(spacing: 5) {
                             Circle().fill(.green).frame(width: 7, height: 7)
@@ -160,6 +170,48 @@ struct WikiSettingsPage: View {
                 Text(WikiModeCopy.trashNote)
             }
             if trashed > 0 { trashRow }
+        }
+    }
+
+    /// What the last run read and the ways to set it right (docs/wiki-repo-tiers-design.md §7.3, mock 44 ⑤): the tag and
+    /// the sentence with when it was checked, then Check again and run now — off with its reason when the day is used up
+    /// or a run is under way — Change workspace…, which opens the same sheet as Edit…, and Use this folder, asked once.
+    @ViewBuilder
+    private func repoRows(_ card: WikiRepoCard) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(card.tag)
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(repoTint(card.tone))
+            Text(card.line)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        Button(WikiRepoCardCopy.checkAndRun) { actions.runNow(false) }
+            .disabled(!card.canRun)
+        Button(WikiRepoCardCopy.changeWorkspace, action: actions.setUp)
+        if card.useFolder {
+            Button(WikiRepoCardCopy.useFolder) { confirmingFolder = true }
+                .disabled(!card.canRun)
+                .orbitConfirmation(WikiRepoCardCopy.useFolderTitle, isPresented: $confirmingFolder) {
+                    Button(WikiRepoCardCopy.useFolder) { actions.runNow(true) }
+                    Button(WikiModeCopy.cancel, role: .cancel) {}
+                } message: {
+                    Text(WikiRepoCardCopy.useFolderNote)
+                }
+        }
+        if let blocked = card.blocked {
+            Text(blocked)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func repoTint(_ tone: WikiRepoCard.Tone) -> Color {
+        switch tone {
+        case .muted: return .secondary
+        case .warn: return .orange
+        case .error: return .red
         }
     }
 
@@ -327,15 +379,20 @@ struct WikiMaintenanceForm: View {
     let workspaceNote: (WikiStartLogic.WorkspaceChoice?) -> String
     /// The write: nil once it landed and the sheet can close, else the refusal, which stays here.
     let submit: (WikiMaintenanceChoice) async -> String?
+    /// The settings' probe of the workspace the form stands on (§7.3); nil where nothing is asked (Create wiki).
+    let probe: ((String) async -> WikiRepoProbeAnswer?)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var choice: WikiMaintenanceChoice
     @State private var saving = false
     @State private var refusal: String?
+    @State private var probed: WikiRepoProbeAnswer?
+    @State private var probing = false
 
     init(title: String, note: String, submitLabel: String, groups: [WikiStartLogic.WorkspaceGroup], opensOn: String?,
          initial: WikiMaintenanceChoice, server: WikiSystemModelStatus? = nil,
          workspaceNote: @escaping (WikiStartLogic.WorkspaceChoice?) -> String,
+         probe: ((String) async -> WikiRepoProbeAnswer?)? = nil,
          submit: @escaping (WikiMaintenanceChoice) async -> String?) {
         self.title = title
         self.note = note
@@ -345,6 +402,7 @@ struct WikiMaintenanceForm: View {
         self.initial = initial
         self.server = server
         self.workspaceNote = workspaceNote
+        self.probe = probe
         self.submit = submit
         _choice = State(initialValue: initial)
     }
@@ -393,7 +451,21 @@ struct WikiMaintenanceForm: View {
                         Text(WikiModeCopy.repoFrom)
                     }
                 } footer: {
-                    Text(workspaceNote(chosenChoice))
+                    VStack(alignment: .leading, spacing: 8) {
+                        if probe != nil, chosen != nil {
+                            WikiProbeAnswerView(answer: probed, checking: probing)
+                        }
+                        Text(workspaceNote(chosenChoice))
+                    }
+                }
+                .task(id: chosen) {
+                    guard let probe, let chosen else { return }
+                    probed = nil
+                    probing = true
+                    let answer = await probe(chosen)
+                    guard !Task.isCancelled else { return }
+                    probed = answer
+                    probing = false
                 }
                 if let server {
                     // Set by the deployment: shown, never picked, and nothing here writes a provider.
@@ -459,7 +531,7 @@ struct WikiMaintenanceForm: View {
                             if refusal == nil { dismiss() }
                         }
                     }
-                    .disabled(saving || chosen == nil)
+                    .disabled(saving || chosen == nil || probed?.canTurnOn == false)
                 }
             }
         }
@@ -489,10 +561,12 @@ struct WikiSetUpSheet: View {
                             groups: [WikiStartLogic.WorkspaceGroup(repository: nil, choices: offered)],
                             opensOn: WikiStartLogic.opensOn(offered, current: current.workspaceId, from: wiki.fromWorkspaceID),
                             initial: WikiMaintenanceChoice(current), server: wiki.serverModel,
-                            workspaceNote: { _ in WikiModeCopy.repoFromNote }) { choice in
+                            workspaceNote: { _ in WikiModeCopy.repoFromNote },
+                            probe: { workspaceID in await wiki.probeWorkspace(space, workspaceID: workspaceID) }) { choice in
             let answer = await wiki.updateSpace(space, WikiSpaceUpdate(maintenance: choice.maintenance))
             if answer == nil {
                 await wiki.loadPlan()
+                await wiki.loadSettingsHealth(space)
                 model.showToast(WikiCopy.settingsSaved)
             }
             return answer
@@ -541,8 +615,10 @@ struct WikiSettingsView: View {
     var body: some View {
         if let wiki = model.wiki, let space = wiki.currentSpace {
             WikiSettingsPage(space: space, workspaces: wiki.spaceWorkspaces[space.id], workspaceLabel: { id in workspaceLabel(id) },
-                             server: wiki.serverModel, trashed: wiki.trash.count, busy: wiki.busy, actions: actions(wiki, space))
+                             server: wiki.serverModel, trashed: wiki.trash.count, health: wiki.settingsHealth[space.id],
+                             busy: wiki.busy, actions: actions(wiki, space))
                 .task {
+                    await wiki.loadSettingsHealth(space)
                     await wiki.loadSpaces()
                     await wiki.loadSystemModel()
                     await wiki.loadSpaceWorkspaces(space)
@@ -581,7 +657,16 @@ struct WikiSettingsView: View {
                 Task { finish(await wiki.updateSpace(space, WikiSpaceUpdate(maintenance: WikiMaintenanceUpdate(enabled: false)))) }
             },
             moveToTrash: { confirmingMove = true },
-            openTrash: { model.push(.wikiTrash) })
+            openTrash: { model.push(.wikiTrash) },
+            runNow: { acceptFolder in
+                Task {
+                    if let refused = await wiki.runMaintenanceNow(space, acceptFolder: acceptFolder) {
+                        notice = refused
+                    } else {
+                        model.showToast(WikiRepoCardCopy.runStarted)
+                    }
+                }
+            })
     }
 
     private func name(of space: WikiSpace, in wiki: WikiModel) -> String {
@@ -605,5 +690,50 @@ struct WikiSettingsView: View {
 
     private func finish(_ answer: String?) {
         if let answer { notice = answer } else { model.showToast(WikiCopy.settingsSaved) }
+    }
+}
+
+/// The probe's answer under the workspace picker (mock 44 ⑤): green for git, purple for a folder, amber for a folder that
+/// is not there, red for another repository's — Turn on is off then — grey when the runner could not be asked.
+struct WikiProbeAnswerView: View {
+    let answer: WikiRepoProbeAnswer?
+    let checking: Bool
+
+    private var tint: Color {
+        switch answer?.tone {
+        case "ok": return .green
+        case "folder": return .purple
+        case "paused": return .orange
+        case "wrong": return .red
+        default: return .secondary
+        }
+    }
+
+    private var glyph: String {
+        switch answer?.tone {
+        case "ok": return "checkmark"
+        case "folder": return "folder"
+        case "paused", "wrong": return "exclamationmark.triangle"
+        default: return "questionmark.circle"
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: glyph)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(answer?.title ?? (checking ? WikiRepoCardCopy.probeChecking : WikiRepoCardCopy.probeFailed))
+                    .fontWeight(answer == nil ? .regular : .semibold)
+                if let note = answer?.note { Text(note) }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.orbitLabel)
+        .foregroundStyle(tint)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .textCase(nil)
     }
 }

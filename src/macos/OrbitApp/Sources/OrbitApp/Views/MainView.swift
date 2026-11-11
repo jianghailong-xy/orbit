@@ -19,9 +19,13 @@ struct MainView: View {
     #endif
     /// `.doubleColumn` hides only the sidebar — `.detailOnly` would take the session list with it.
     @State private var columnVisibility: NavigationSplitViewVisibility = .doubleColumn
-    /// The first column folded while the wiki chat is a column beside the page (wiki-chat design §9: the directory,
-    /// the page and the chat), so the page keeps its width; it comes back as it was once the chat closes.
-    @State private var foldedForChat = false
+    /// The first column folded for the shell rather than by the reader: while the wiki chat is a column beside the
+    /// page (wiki-chat design §9: the directory, the page and the chat), so the page keeps its width, or while an iPad
+    /// window is taller than wide, where three columns leave the detail too narrow to read. It comes back as it was
+    /// once neither holds, and is never saved as the reader's choice.
+    @State private var folded = false
+    /// The window is taller than wide: an iPad turned to portrait, or a tall Stage Manager window.
+    @State private var portrait = false
 
     var body: some View {
         @Bindable var model = model
@@ -51,24 +55,51 @@ struct MainView: View {
                 .orbitPaneBackground()
         }
         .task { model.startPolling() }
-        .onAppear { columnVisibility = sidebarVisible ? .all : .doubleColumn }
+        #if os(iOS)
+        .onGeometryChange(for: Bool.self) { $0.size.width < $0.size.height } action: { now in
+            portrait = now
+            refold()
+        }
+        #endif
+        .onAppear {
+            columnVisibility = sidebarVisible ? .all : .doubleColumn
+            refold()
+        }
         .onChange(of: columnVisibility) { _, now in
-            // Brought back by hand while the chat is open: the reader's again, nothing to restore.
-            if now == .all { foldedForChat = false }
-            if !foldedForChat { sidebarVisible = (now == .all) }
-        }
-        .onChange(of: wikiChatColumn) { _, open in
-            if open, columnVisibility == .all {
-                foldedForChat = true
-                columnVisibility = .doubleColumn
-            } else if !open, foldedForChat {
-                columnVisibility = .all
+            #if os(iOS)
+            // A full-screen image viewer coming or going re-picks the split's columns by itself;
+            // that is not the reader's choice, so put back what they had instead of saving it. A
+            // fold the shell wants (a turn to portrait under the viewer) still goes through.
+            if FullScreenCoverHold.shared.holding {
+                let open = folded ? !(wikiChatColumn || portrait) : sidebarVisible
+                let kept: NavigationSplitViewVisibility = open ? .all : .doubleColumn
+                if now != kept {
+                    columnVisibility = kept
+                    return
+                }
             }
+            #endif
+            // Brought back by hand while folded: the reader's again, nothing to restore.
+            if now == .all { folded = false }
+            if !folded { sidebarVisible = (now == .all) }
         }
+        .onChange(of: wikiChatColumn) { _, _ in refold() }
         // Stream lifecycle: start exactly the focused session's SSE and stop any other, from the
         // always-present shell so it never depends on a console view unmounting (see syncConsoleFocus).
         .onChange(of: model.focusedConsoleSessionID, initial: true) { _, _ in model.syncConsoleFocus() }
         .toastHost()
+    }
+
+    /// Folds an open first column while the chat column or a portrait window wants the width, and brings it back once
+    /// neither does — only if the shell folded it; one hidden by hand stays hidden.
+    private func refold() {
+        let wantsFold = wikiChatColumn || portrait
+        if wantsFold, columnVisibility == .all {
+            folded = true
+            columnVisibility = .doubleColumn
+        } else if !wantsFold, folded {
+            columnVisibility = .all
+        }
     }
 
     /// The wiki chat open as a column beside the Wiki's page — the inspector, not a phone's sheet.

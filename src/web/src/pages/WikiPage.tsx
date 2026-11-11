@@ -15,7 +15,6 @@ import { WikiEntryDrawer } from '../components/WikiEntryDrawer';
 import { WikiHome, WikiHomeState } from '../components/WikiHome';
 import { WikiIndexPage } from '../components/WikiIndexPage';
 import { WikiMaintenanceStatus } from '../components/WikiMaintenanceStatus';
-import { WikiNewEntryButton } from '../components/WikiNewEntry';
 import { WikiPlanRoute } from '../components/WikiPlanPage';
 import { WikiReviewPage } from '../components/WikiReviewPage';
 import { WikiRunDrawer } from '../components/WikiRunPage';
@@ -296,7 +295,8 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
 }
 
 /**
- * The chrome every Wiki view wears: the title row (the space, Contents, Activity, Settings, Share, New entry),
+ * The chrome every Wiki view wears: the title row (the space, Contents, Activity, Settings, Share — no New entry since
+ * board 45: an entry of the owner's own is said in the chat, whose card writes it as theirs),
  * the search line and the status row. It is the project page's own title row and toolbar, which is
  * what the design's mock links and draws — the counts are the page's counts, not a new row of numbers.
  *
@@ -337,7 +337,6 @@ function WikiFrame({
           {space && <WikiActivityButton spaceSlug={space.slug} waiting={wikiWaiting(rows)} on={activity} />}
           {space && <WikiSettingsButton spaceSlug={space.slug} />}
           {space && <WikiShareButton spaceId={space.id} spaceSlug={space.slug} />}
-          {space && <WikiNewEntryButton spaceId={space.id} />}
         </div>
       </div>
 

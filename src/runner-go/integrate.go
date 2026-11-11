@@ -158,6 +158,7 @@ func (l *integrationLocalLock) TryLock() bool {
 
 // integrationResult is what one job came to, in the shape the report sends.
 type integrationResult struct {
+	BaselineRed     bool
 	State           string
 	Phase           string
 	SourceSha       string
@@ -602,6 +603,38 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 			// Nothing is pushed. The branch a person is looking at is untouched, which is what the
 			// item says (§4.2's `branchUnchanged`).
 			result.State, result.Phase = "CHECK_FAILED", "CHECK"
+			if spec.Name == "LANDING_CHECK" && outcome.ExitCode != nil && !outcome.TimedOut && base != targetSha {
+				// Attribution failures leave the combined CHECK_FAILED verdict intact.
+				// Nest it under this job so scratch sweeping protects both trees together.
+				baseline := filepath.Join(scratch, ".baseline")
+				baselineSha := base
+				if absorbedBySource {
+					baselineSha = targetSha
+				}
+				if _, err := git(repoRoot, "worktree", "add", "--detach", baseline, baselineSha); err != nil {
+					return result
+				}
+				defer removeIntegrationWorktree(repoRoot, baseline)
+				// Rebuild M from T0 and U: a source-side absorb can contain task commits.
+				if absorbedBySource {
+					if _, _, err := integrationMerge(baseline, upstreamSha, "Baseline upstream merge"); err != nil {
+						return result
+					}
+				}
+				if err := prepareIntegrationTree(stop, baseline, progress); err != nil {
+					if stopped, ok := integrationStopResult(err, "CHECK"); ok {
+						return stopped
+					}
+					return result
+				}
+				attribution, err := runIntegrationCheckTracked(stop, baseline, spec, len(result.Checks)+1, len(cmd.Checks)+1, progress)
+				if err != nil {
+					return integrationStepEnded(err, "CHECK")
+				}
+				attribution.Scope = "BASELINE"
+				result.Checks = append(result.Checks, attribution)
+				result.BaselineRed = !attribution.TimedOut && attribution.ExitCode != nil && *attribution.ExitCode != spec.ExpectedExitCode
+			}
 			return result
 		}
 	}
@@ -2374,6 +2407,7 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 		SourceFullyApplied:   result.SourceFullyApplied,
 		FilesChanged:         result.FilesChanged,
 		Checks:               result.Checks,
+		BaselineRed:          result.BaselineRed,
 		Conflicts:            result.Conflicts,
 		ErrorCode:            result.ErrorCode,
 		ErrorDetail:          result.ErrorDetail,
