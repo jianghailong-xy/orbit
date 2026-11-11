@@ -226,6 +226,26 @@ describe('the viewer', () => {
     expect(position()).toBe('1 / 3');
   });
 
+  it('draws an upload linked by name as a picture when its name is one, and keeps a document a chip', async () => {
+    await draw([
+      {
+        seq: 1,
+        type: 'assistant',
+        turnId: 't1',
+        ts: at,
+        payload: { text: '- [01 Worktree session](orbit-attachment:shot "01-worktree-session.png")\n- [The plan](orbit-attachment:doc "plan.pdf")' },
+      },
+    ]);
+    expect(resolver.mock.calls.map(([id]) => id)).toEqual(['shot']);
+    await land('shot');
+    const reply = container.querySelector('.chat-assistant .md')!;
+    const pictures = thumbnails(reply);
+    expect(pictures.map((button) => button.querySelector('img')!.getAttribute('alt'))).toEqual(['01 Worktree session']);
+    expect(reply.querySelector('.chat-file-name')?.textContent).toBe('plan.pdf');
+    await click(pictures[0]);
+    expect(shown()).toBe('blob:shot');
+  });
+
   it('opens a queued turn’s picture on its own, since a queued turn is drawn outside the conversation', async () => {
     await act(async () => {
       root.render(
