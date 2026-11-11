@@ -530,3 +530,28 @@ struct WorkingIndicatorView: View {
             .accessibilityLabel("Working")
     }
 }
+
+/// The head of a turn, under the message that opened it: "Worked for 1m 4s", or, while the turn
+/// runs, "Working for 12s" counting up once a second (`TurnHead`; web parity: `TurnHead` in
+/// Transcript.tsx).
+struct TurnHeadRowView: View {
+    /// Only drawn when it has something to say (`TranscriptRows.build`): one with no end yet is the
+    /// running turn.
+    let line: TurnHeadLine
+
+    var body: some View {
+        if line.endTs == nil {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                label(at: context.date)
+            }
+        } else {
+            label(at: Date())
+        }
+    }
+
+    private func label(at now: Date) -> some View {
+        Text(TurnHead.label(line, running: true, now: now) ?? "")
+            .font(.orbitLabel).monospacedDigit().foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}

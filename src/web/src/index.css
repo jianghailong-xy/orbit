@@ -6296,6 +6296,24 @@ button.toast--pill:focus-visible {
 .move-dialog-option.off .move-dialog-name small {
   color: var(--text-3);
 }
+/* A project's coordinator whose conversation cannot go to this workspace, where a new coordinator
+   could open instead: the row stays greyed and carries Start new here…. */
+.move-dialog-option.has-start-new {
+  cursor: default;
+}
+.move-dialog-start-new {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.move-dialog-start-new:hover:not(:disabled) {
+  text-decoration: underline;
+}
 .move-dialog-count {
   flex: none;
   font-size: 12.5px;
@@ -23637,13 +23655,22 @@ div.landing-jobs-open {
 .smc-body {
   margin-top: 6px;
 }
+/* A long message shows its first 8 lines, fading out, until "Show more" (SessionMessageCard). */
+.smc-body.is-clamped {
+  max-height: 12.4em;
+  max-height: 8lh;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
 .smc-more {
+  margin: 4px 0 2px;
   padding: 0;
   border: 0;
   background: none;
   color: var(--brand);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .smc-meta {

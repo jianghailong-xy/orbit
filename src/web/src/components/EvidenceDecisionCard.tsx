@@ -941,7 +941,8 @@ export const DECISION_RECEIPT_REASON = 'the reason it was sent back';
 /** When a receipt says it was decided: the clock on the day it happened, the date as well after. */
 export function decisionReceiptTime(decidedAt: string, now: Date = new Date()): string {
   const at = new Date(decidedAt);
-  const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // `numeric` hour, as the transcript's own times read ("7:14 PM", not "07:14 PM").
+  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   if (at.toDateString() === now.toDateString()) return time;
   return `${at.toLocaleDateString([], { month: 'numeric', day: 'numeric' })} ${time}`;
 }

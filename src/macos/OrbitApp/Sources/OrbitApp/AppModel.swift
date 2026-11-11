@@ -3406,6 +3406,34 @@ final class AppModel {
         }
     }
 
+    /// The Move panel's Start new here… (docs/mocks/coordinator-move-workspace 03-final): the project's
+    /// next coordinator opened in `target`, the conversation being moved completed where it is, and
+    /// the new one put on screen as the project page's Start a new coordinator does. Nil once it is;
+    /// otherwise why not, for the panel to say.
+    func startCoordinator(ofProject projectID: String, in target: SessionMoveTarget) async -> String? {
+        guard let api else { return APIClient.failureReason(APIError.notConfigured) }
+        do {
+            let opened = try await api.replaceProjectCoordinator(projectID, workspaceID: target.workspaceId)
+            Task { await reloadSessionLists() }
+            if let projects {
+                Task { await projects.detail(projectID).load() }
+            }
+            openProjectCoordinator(sessionID: opened.sessionId, agentID: opened.workspaceId ?? target.workspaceId)
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
+    /// The coordinator conversation the project page's Move… opens the Move panel on: the copy the app
+    /// holds, else the server's. Nil when neither can be had.
+    func sessionForMove(_ id: String) async -> Session? {
+        if let held = session(id: id) { return held }
+        guard let api, let fetched = try? await api.session(id) else { return nil }
+        sessionDetails.store(fetched)
+        return fetched
+    }
+
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`
     /// writes a folder: the Open snapshot — whose agent filter is what takes the row out of the
     /// workspace's Open list — the pane's own Completed rows, and the detail cache.

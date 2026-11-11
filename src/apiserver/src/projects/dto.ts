@@ -432,6 +432,12 @@ export class OpenProjectCoordinatorDto {
   @IsOptional() @IsPublicId() workspaceId?: string;
 }
 
+export class ReplaceProjectCoordinatorDto {
+  /** Where the replacement opens. Optional: without it, where the last coordinator ran. Naming
+   *  another workspace moves the project's coordination there with the new conversation. */
+  @IsOptional() @IsPublicId() workspaceId?: string;
+}
+
 export class RebindProjectCoordinatorDto {
   /**
    * Where this project's coordinator belongs from now on.
