@@ -145,6 +145,8 @@ const LINE_COLUMNS = {
   integrationRef: true,
   integrationRefSource: true,
   integrationStartedAt: true,
+  landingCheckCommand: true,
+  landingCheckTimeoutSeconds: true,
   mergeCheckCommand: true,
   mergeCheckTimeoutSeconds: true,
   deliveryMode: true,
@@ -284,6 +286,9 @@ export function projectIntegrationView(
     source: row && line ? (row.integrationRefSource as IntegrationRefSource) : null,
     locked: !!row?.integrationStartedAt,
     startedAt: row?.integrationStartedAt ?? null,
+    landingCheckCommand: row?.landingCheckCommand ?? null,
+    landingCheckTimeoutSeconds: row?.landingCheckTimeoutSeconds ?? null,
+    landingCheckCommandAbsentReason: row?.landingCheckCommand == null ? 'FALLS_BACK_TO_MERGE_CHECK' : null,
     mergeCheckCommand: row?.mergeCheckCommand ?? null,
     mergeCheckCommandAbsentReason: row?.mergeCheckCommand ? null : 'NOT_CONFIGURED',
     mergeCheckTimeoutSeconds: row?.mergeCheckTimeoutSeconds ?? null,
@@ -604,7 +609,7 @@ interface InFlightJobRow extends IntegrationCheckSource {
 function currentCheckOf(raw: unknown): ProjectIntegrationCheck<Date> | null {
   if (!raw || typeof raw !== 'object') return null;
   const check = raw as Record<string, unknown>;
-  if ((check.name !== 'TASK_ACCEPTANCE' && check.name !== 'MERGE_CHECK')
+  if ((check.name !== 'TASK_ACCEPTANCE' && check.name !== 'MERGE_CHECK' && check.name !== 'LANDING_CHECK')
     || typeof check.index !== 'number' || typeof check.count !== 'number'
     || typeof check.budgetSeconds !== 'number' || typeof check.startedAt !== 'string') return null;
   const startedAt = new Date(check.startedAt);
@@ -738,7 +743,7 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     check,
     stepStartedAt: running ? row.stepStartedAt : null,
     outputMovedAt: running ? row.outputMovedAt : null,
-    typicalMs: check?.name === 'MERGE_CHECK' ? typicalMs.get(row.projectId) ?? null : null,
+    typicalMs: (check?.name === 'MERGE_CHECK' || check?.name === 'LANDING_CHECK') ? typicalMs.get(row.projectId) ?? null : null,
     liveness: livenessOf(row, timedOut),
     blockingReason: blockingReasonOf(row),
     retryable: timedOut && row.kind === 'LAND_TASK',
@@ -821,7 +826,7 @@ async function readTypicalCheckMs(
             FROM jsonb_array_elements(
                    CASE WHEN jsonb_typeof(finished."checks") = 'array'
                         THEN finished."checks" ELSE '[]'::jsonb END) c
-           WHERE c->>'name' = 'MERGE_CHECK'
+           WHERE c->>'name' IN ('MERGE_CHECK', 'LANDING_CHECK')
              AND c->>'timedOut' = 'false'
              AND (c->>'exitCode') ~ '^[0-9]+$'
              AND (c->>'expectedExitCode') ~ '^[0-9]+$'
@@ -898,6 +903,8 @@ async function readInFlightJobsForProjects(
            st."acceptance_command" AS "acceptanceCommand",
            st."acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
            st."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+           cb."landing_check_command" AS "landingCheckCommand",
+           cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
            cb."merge_check_command" AS "mergeCheckCommand",
            cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            j."skip_merge_check" AS "skipMergeCheck",
@@ -993,7 +1000,7 @@ async function readInFlightJobsForProjects(
               COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC`);
   const typical = await readTypicalCheckMs(prisma, [...new Set(rows
     .filter((row) => row.state === 'RUNNING'
-      && currentCheckOf(row.currentCheck)?.name === 'MERGE_CHECK')
+      && ['MERGE_CHECK', 'LANDING_CHECK'].includes(currentCheckOf(row.currentCheck)?.name ?? ''))
     .map((row) => row.projectId))]);
   const byProject = new Map<string, ProjectIntegrationJob<Date>[]>();
   for (const row of rows) {
@@ -1335,6 +1342,7 @@ export function lastLandingCheck(checks: unknown): 'PASSING' | 'FAILING' | 'UNKN
   let complete = true;
   for (const check of checks) {
     if (!check || typeof check !== 'object') { complete = false; continue; }
+    if (check.name === 'LANDING_CHECK' && check.skipped === 'PATHS_EXEMPT') continue;
     if (check.timedOut === true) return 'FAILING';
     if (typeof check.expectedExitCode !== 'number' || typeof check.exitCode !== 'number'
       || check.timedOut !== false) { complete = false; continue; }
@@ -1465,6 +1473,8 @@ export interface IntegrationSettings {
   projectBranchName?: string;
   /** A full `refs/heads/…` ref. */
   upstreamRef?: string;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
   mergeCheckCommand?: string | null;
   mergeCheckTimeoutSeconds?: number | null;
   /** This project's escalation window in seconds (§4.6). The column's CHECK bounds it, 300 to a week. */
@@ -1484,6 +1494,8 @@ async function lockCodebase(
            "integration_ref" AS "integrationRef",
            "integration_ref_source" AS "integrationRefSource",
            "integration_started_at" AS "integrationStartedAt",
+           "landing_check_command" AS "landingCheckCommand",
+           "landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
            "merge_check_command" AS "mergeCheckCommand",
            "merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            "delivery_mode" AS "deliveryMode",
@@ -1621,6 +1633,8 @@ export async function configureProjectIntegration(
   const bindingNamed = settings.line !== undefined
     || settings.projectBranchName !== undefined
     || settings.upstreamRef !== undefined
+    || settings.landingCheckCommand !== undefined
+    || settings.landingCheckTimeoutSeconds !== undefined
     || settings.mergeCheckCommand !== undefined
     || settings.mergeCheckTimeoutSeconds !== undefined
     || settings.deliveryMode !== undefined;
@@ -1685,6 +1699,10 @@ export async function configureProjectIntegration(
       ...(settings.upstreamRef !== undefined ? { upstreamRefChosenAt: new Date() } : {}),
       integrationRef,
       ...(chosen ? { integrationRefSource: 'EXPLICIT' } : {}),
+      ...(settings.landingCheckCommand !== undefined
+        ? { landingCheckCommand: settings.landingCheckCommand?.trim() || null } : {}),
+      ...(settings.landingCheckTimeoutSeconds !== undefined
+        ? { landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds } : {}),
       ...(settings.mergeCheckCommand !== undefined
         ? { mergeCheckCommand: settings.mergeCheckCommand?.trim() || null }
         : {}),
@@ -1802,6 +1820,8 @@ export interface StartLineSettings {
    * project stands on once the start is done — absent only for a project with no binding.
    */
   upstreamRef?: string;
+  landingCheckCommand?: string | null;
+  landingCheckTimeoutSeconds?: number | null;
   mergeCheckCommand: string | null;
   /**
    * The check's budget in seconds. Asked for, it is written — null once more running the check on
@@ -1831,16 +1851,21 @@ export async function defaultStartLine(
   const row = await readProjectCodebase(tx, projectId);
   const mergeCheckCommand = row?.mergeCheckCommand ?? null;
   const mergeCheckTimeoutSeconds = row?.mergeCheckTimeoutSeconds ?? null;
+  const landingSettings = {
+    ...(row?.landingCheckCommand != null ? { landingCheckCommand: row.landingCheckCommand } : {}),
+    ...(row?.landingCheckTimeoutSeconds != null
+      ? { landingCheckTimeoutSeconds: row.landingCheckTimeoutSeconds } : {}),
+  };
   const decided = row ? decidedLine(row) : null;
   if (row && decided) {
     return decided === 'PROJECT_BRANCH'
-      ? { line: decided, projectBranchName: row.integrationRef, mergeCheckCommand, mergeCheckTimeoutSeconds }
-      : { line: decided, mergeCheckCommand, mergeCheckTimeoutSeconds };
+      ? { line: decided, projectBranchName: row.integrationRef, mergeCheckCommand, mergeCheckTimeoutSeconds, ...landingSettings }
+      : { line: decided, mergeCheckCommand, mergeCheckTimeoutSeconds, ...landingSettings };
   }
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
-    return { line: 'MAIN', mergeCheckCommand, mergeCheckTimeoutSeconds };
+    return { line: 'MAIN', mergeCheckCommand, mergeCheckTimeoutSeconds, ...landingSettings };
   }
-  return { line: await projectDefaultLine(tx, projectId), mergeCheckCommand, mergeCheckTimeoutSeconds };
+  return { line: await projectDefaultLine(tx, projectId), mergeCheckCommand, mergeCheckTimeoutSeconds, ...landingSettings };
 }
 
 /**
@@ -1876,6 +1901,11 @@ export async function startProjectLine(
   // Only when the start NAMED a budget: absent is a client that does not know the field, and
   // reading that as "no budget" would clear one its owner never saw (`StartProjectDto`). `null` is
   // the naming that says "back to the default", and it is written like any other value.
+  const namedLanding = {
+    ...(settings.landingCheckCommand !== undefined ? { landingCheckCommand: settings.landingCheckCommand } : {}),
+    ...(settings.landingCheckTimeoutSeconds !== undefined
+      ? { landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds } : {}),
+  };
   const namedTimeout = settings.mergeCheckTimeoutSeconds !== undefined
     ? { mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds }
     : {};
@@ -1883,7 +1913,8 @@ export async function startProjectLine(
   const locked = !!row?.integrationStartedAt;
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
     if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null
-      || settings.mergeCheckTimeoutSeconds != null || settings.upstreamRef !== undefined
+      || settings.mergeCheckTimeoutSeconds != null || settings.landingCheckCommand != null
+      || settings.landingCheckTimeoutSeconds != null || settings.upstreamRef !== undefined
       || settings.deliveryMode === 'AGENT_PUSH') {
       throw repositoryUnknown('this project has no repository to integrate into, so it can have '
         + 'no project branch, main branch, merge check or AGENT_PUSH delivery: its coordination '
@@ -1898,7 +1929,7 @@ export async function startProjectLine(
     ownerId,
     projectId,
     settings: locked
-      ? { mergeCheckCommand, ...namedTimeout, ...namedDelivery }
+      ? { mergeCheckCommand, ...namedLanding, ...namedTimeout, ...namedDelivery }
       : {
         line: settings.line,
         ...(settings.line === 'PROJECT_BRANCH' && settings.projectBranchName !== undefined
@@ -1906,6 +1937,7 @@ export async function startProjectLine(
           : {}),
         ...(settings.upstreamRef !== undefined ? { upstreamRef: settings.upstreamRef } : {}),
         mergeCheckCommand,
+        ...namedLanding,
         ...namedTimeout,
         ...namedDelivery,
       },
@@ -1914,6 +1946,8 @@ export async function startProjectLine(
   const line = decidedLine(written)!;
   const stands = {
     upstreamRef: written.upstreamRef,
+    landingCheckCommand: written.landingCheckCommand,
+    landingCheckTimeoutSeconds: written.landingCheckTimeoutSeconds,
     mergeCheckCommand: written.mergeCheckCommand,
     mergeCheckTimeoutSeconds: written.mergeCheckTimeoutSeconds,
     locked,

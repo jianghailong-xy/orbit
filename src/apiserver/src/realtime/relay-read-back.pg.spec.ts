@@ -352,11 +352,14 @@ test('a batch another apiserver stored reaches the streams on this one in seq or
     assert.equal(holder.output().includes(last), false);
 
     // The owner's lists on the holder: the session's row, rebuilt from the database, whose preview only the batch carried.
+    // Seq 2's own ingest announces the row too (its preview is seq 2's reply), and on a slow machine that frame
+    // lands after `before`; the rebuild is the frame that carries the preview only the batch had.
     const names = [always, uuidToBase62(always)];
-    const updated = await until(() => control.frames.slice(before).find((f) => f.type === 'session.updated'
-      && (names.includes(f.sessionId) || names.includes(f.data?.id))) ?? null, 10_000);
-    assert.ok(updated, `a session.updated after the give-up: ${JSON.stringify(control.frames.slice(before))}`);
-    assert.equal(updated.data.lastAssistantText, last);
+    const ofSession = (f: Record<string, any>) => f.type === 'session.updated' // eslint-disable-line @typescript-eslint/no-explicit-any
+      && (names.includes(f.sessionId) || names.includes(f.data?.id));
+    const updated = await until(() => control.frames.slice(before).find((f) => ofSession(f)
+      && f.data?.lastAssistantText === last) ?? null, 10_000);
+    assert.ok(updated, `a session.updated after the give-up, with the batch's last reply: ${JSON.stringify(control.frames.slice(before).filter(ofSession))}`);
     st.diagnostic(`the stream: ${JSON.stringify(stream.frames.map((f) => `${f.seq}:${f.type}`))}; the owner's lists: ${updated.type} `
       + `with lastAssistantText ${JSON.stringify(updated.data.lastAssistantText)}`);
 

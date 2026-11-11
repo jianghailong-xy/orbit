@@ -234,6 +234,9 @@ import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
 import { HeldFirstMessage, MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
+import { ManagedWelcomeCard, useNewAccount } from './WelcomeCard';
+import { WELCOME_PLACEHOLDER } from '../lib/welcomeCopy';
+import type { LoginEngine } from '@orbit/shared';
 import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
 import {
   currentEngineChoice,
@@ -3639,6 +3642,26 @@ export function WorkspaceView({
     !!setup.folder &&
     !!runner.online &&
     (setupCredential.step === 'signedIn' || setupCredential.step === 'onKey');
+  // A new account's first draft wears the welcome card (docs/mocks/new-user-onboarding): on its managed
+  // runner's default workspace in place of the runner's notice and the engine hero, and on a bare
+  // machine as the setup card's greeting. Only while the account has never had a session.
+  const managedDraft =
+    !selected &&
+    !!managed &&
+    !!workspaceId &&
+    !!managed.status.workspaceId &&
+    routeId(managed.status.workspaceId) === routeId(workspaceId);
+  const newAccount = useNewAccount(composing && (bareMachine || managedDraft));
+  const managedWelcome = newAccount && managedDraft && !bareMachine;
+  const machineWelcome = newAccount && bareMachine;
+  // Before a first session can start there is no draft engine to sign in, so the runner's own first one.
+  const welcomeEngine: LoginEngine =
+    !managedDraftBlocked && isLoginProvider(pickedEngine) ? (pickedEngine as LoginEngine) : firstEngineOn(runner.engines);
+  const welcomeCredential = setupCredentialOf(
+    runner,
+    welcomeEngine,
+    managedDraftBlocked && !draftHere ? null : currentDraftEngine.provider,
+  );
   // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
   // provider of it reads, listed or not (a key since removed, the legacy built-in `dsh`).
   const shownEngineProviders = useMemo(
@@ -3693,6 +3716,11 @@ export function WorkspaceView({
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
+  };
+  // A first message from the welcome card: into the composer, to be read, changed and sent there.
+  const pickWelcomeExample = (example: string): void => {
+    setText(example);
+    setTimeout(() => taRef.current?.focus(), 0);
   };
   // The setup card's Use an API key (rule 5): with a key or pool that can run here, that is the draft's
   // credential, this engine's first; with none yet, the keys are where one is connected.
@@ -8515,6 +8543,8 @@ export function WorkspaceView({
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
+        : managedWelcome || (machineWelcome && composerTakesWork)
+          ? WELCOME_PLACEHOLDER
         : managedDraftBlocked || !composerTakesWork
           ? (managed?.display.title ?? 'Runner offline')
           : replyTo
@@ -9972,6 +10002,7 @@ export function WorkspaceView({
                   onFolder={setup.pickFolder}
                   onEngine={(engine) => pickDraft(engine as AgentProvider, engine)}
                   onUseApiKey={pickApiKey}
+                  welcome={machineWelcome ? { composerText: text, onExample: pickWelcomeExample } : undefined}
                 />
                 {setup.held && (
                   <HeldFirstMessage
@@ -9987,6 +10018,22 @@ export function WorkspaceView({
                     <SessionStatusCard card={card} />
                   </RevealedOnArrival>
                 ))}
+              </div>
+            </div>
+          ) : managedWelcome && managed ? (
+            <div key="welcome" className="workspace-sessions workspace-draft">
+              <div className="msc-draft">
+                <ManagedWelcomeCard
+                  managed={managed}
+                  runner={runner}
+                  engine={welcomeEngine}
+                  credential={welcomeCredential}
+                  composerText={text}
+                  startsNow={!managedDraftBlocked}
+                  onExample={pickWelcomeExample}
+                  onUseApiKey={pickApiKey}
+                  onChangeCredential={() => pickDraft(welcomeEngine as AgentProvider, welcomeEngine)}
+                />
               </div>
             </div>
           ) : composing ? (
@@ -10052,7 +10099,7 @@ export function WorkspaceView({
         />
         {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
             waking, failed (with Retry), removed. */}
-        {managed && managed.display.kind !== 'available' && <ManagedRunnerNotice managed={managed} />}
+        {managed && managed.display.kind !== 'available' && !managedWelcome && <ManagedRunnerNotice managed={managed} />}
         {/* What this session is waiting on: live watches it observes. A watch waits on the server,
             not in a process, so it gets its own strip rather than a row in the tray below
             (docs/watch-contract.md §9.2). Hidden when there are none. */}

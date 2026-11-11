@@ -11,19 +11,33 @@ import (
 	"syscall"
 )
 
-// The install layout a runner can update itself in. The real binary lives in ~/.orbit/bin of
-// the account the background service runs as, which that account can write, and
-// /usr/local/bin/orbit — where everyone's PATH finds it — is only a symlink to it. The
-// service names the resolved path, and resolvedExecutable follows the symlink, so a
-// self-update replaces the copy in ~/.orbit/bin. Older installs put the real file in
-// /usr/local/bin, which is root's while the service runs as an ordinary account: a release
-// could be downloaded but never swapped in. `orbit register` (adoptUserBin) and
-// `sudo /usr/local/bin/orbit upgrade` (migrateLegacyInstall) move such an install over.
+// The install layout a runner can update itself in. The binary the background service runs is
+// the copy in ~/.orbit/bin of the account it runs as, which that account can write, so a
+// self-update replaces it there. /usr/local/bin/orbit, where everyone's PATH and sudo's
+// secure_path find `orbit`, is root's own regular file: root runs it under every `sudo orbit …`,
+// so it is never a symlink into an account's home, which the account — and any agent it runs —
+// could replace. It does not follow the runner's self-updates; `sudo /usr/local/bin/orbit upgrade`
+// brings it up to date. A machine set up with `orbit host setup` has the same layout, with hostd
+// keeping /usr/local/bin/orbit current, and install.sh installs into ~/.orbit/bin without
+// touching /usr/local/bin/orbit.
+//
+// Two older layouts are moved over. The oldest put the only binary in /usr/local/bin, root's while
+// the service runs as an ordinary account, so a release could be downloaded but never swapped in:
+// `orbit register` (adoptUserBin) and `sudo /usr/local/bin/orbit upgrade` (migrateLegacyInstall)
+// give the account its own copy and point the service at it, leaving /usr/local/bin/orbit where it
+// is. Later releases of both instead replaced /usr/local/bin/orbit with a symlink to that copy;
+// both now put a root-owned copy back in its place (repairMachineLink). The command that does so
+// has itself already run the account's file as root, as every `sudo orbit …` did before it; it is
+// the last that does.
 
 // userBinPath is where the runner binary of the account whose home is home lives.
 func userBinPath(home string) string {
 	return filepath.Join(home, ".orbit", "bin", "orbit")
 }
+
+// sharedBinaryPath is the orbit everyone's PATH and sudo find, and that root runs: the machine's
+// binary. A var so tests can stand a temporary directory in for /usr/local/bin.
+var sharedBinaryPath = machineBinaryPath
 
 // rootOwnedDir reports whether dir belongs to root — the legacy /usr/local/bin, where a
 // runner running as an ordinary account can never replace its binary. A var so tests can say
@@ -36,6 +50,16 @@ var rootOwnedDir = func(dir string) bool {
 	st, ok := fi.Sys().(*syscall.Stat_t)
 	return ok && st.Uid == 0
 }
+
+// rootsAlone reports whether path is a file no account but root can change: the rule hostd holds
+// its binary to. A var so tests can say which of their files stand for root's.
+var rootsAlone = func(path string) bool {
+	return checkMachineBinary(path, "/", 0) == nil
+}
+
+// machineOwner is the uid and gid the machine's binary is given. A var so a test, which cannot
+// hand a file to root, can check everything else a repair does.
+var machineOwner = func() (int, int) { return 0, 0 }
 
 // lookupUser resolves the account a service definition names. A var so tests can stand a
 // temporary home in for an account the machine running them does not have.
@@ -51,18 +75,13 @@ func sameFile(a, b string) bool {
 	return err == nil && os.SameFile(fa, fb)
 }
 
-// moveToUserBin copies the binary at exe into userBinPath(home) and leaves a symlink to the
-// copy where exe was, so whatever names exe — the PATH, a service definition not rewritten
-// yet — runs the copy its owner can update. The copy is complete before the symlink replaces
-// exe, so a failure leaves the old install working. Running as root, uid and gid get what
-// this creates; otherwise the symlink, the one step that needs root, goes through sudo.
-func moveToUserBin(exe, home string, uid, gid int, root bool, sudo string) (string, error) {
+// copyToUserBin puts a copy of the binary at exe at userBinPath(home) and leaves exe as it is.
+// Running as root, uid and gid get what this creates; otherwise this process is the account and
+// writes into its own home. Nothing is written when exe already is that file.
+func copyToUserBin(exe, home string, uid, gid int, root bool) (string, error) {
 	to := userBinPath(home)
 	if sameFile(exe, to) {
 		return to, nil
-	}
-	if !root && sudo == "" {
-		return "", fmt.Errorf("replacing %s with a symlink needs root", exe)
 	}
 	binDir := filepath.Dir(to)
 	orbitDir := filepath.Dir(binDir)
@@ -80,23 +99,16 @@ func moveToUserBin(exe, home string, uid, gid int, root bool, sudo string) (stri
 			}
 		}
 	}
-	_, statErr := os.Lstat(to)
-	existed := statErr == nil
 	if err := copyExecutable(exe, to, uid, gid, root); err != nil {
-		return "", err
-	}
-	if err := linkOver(exe, to, root, sudo); err != nil {
-		if !existed {
-			_ = os.Remove(to)
-		}
 		return "", err
 	}
 	return to, nil
 }
 
-// copyExecutable writes a copy of src at dst through a temporary name, so dst is only ever
-// the file it was or the complete copy.
-func copyExecutable(src, dst string, uid, gid int, root bool) error {
+// copyExecutable writes a copy of src at dst through a temporary name in dst's directory, so dst
+// is only ever the file it was or the complete copy, with owner and mode set before it gets there.
+// chown says whether to give it uid and gid.
+func copyExecutable(src, dst string, uid, gid int, chown bool) error {
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return err
@@ -105,11 +117,16 @@ func copyExecutable(src, dst string, uid, gid int, root bool) error {
 	if err := os.WriteFile(tmp, data, 0o755); err != nil {
 		return err
 	}
-	if root {
+	if chown {
 		if err := os.Lchown(tmp, uid, gid); err != nil {
 			_ = os.Remove(tmp)
 			return err
 		}
+	}
+	// WriteFile's mode passes through the umask, and a chown can drop set-id bits: say it outright.
+	if err := os.Chmod(tmp, 0o755); err != nil {
+		_ = os.Remove(tmp)
+		return err
 	}
 	if err := os.Rename(tmp, dst); err != nil {
 		_ = os.Remove(tmp)
@@ -118,57 +135,84 @@ func copyExecutable(src, dst string, uid, gid int, root bool) error {
 	return nil
 }
 
-// linkOver replaces path with a symlink to target: renamed into place in-process when we are
-// root, so path never goes missing, and through `sudo ln -sf` otherwise.
-func linkOver(path, target string, root bool, sudo string) error {
-	if !root {
-		if err := run(sudo, "ln", "-sf", target, path); err != nil {
-			return fmt.Errorf("could not link %s to %s", path, target)
-		}
-		return nil
+// repairMachineLink puts a root-owned regular file back at sharedBinaryPath where an earlier
+// register or upgrade left a symlink to a file an account can change, so no later `sudo orbit …`
+// runs that file. The copy holds what the link led to and is complete, root's and mode 0755 in
+// /usr/local/bin before it is renamed over the link, so the path never goes missing. As root it
+// happens in-process; otherwise through sudo, `install` into a temporary name beside the link and
+// `mv` over it. Anything else at the path — root's own file, a link to one, nothing, a directory
+// root does not own — is left as it is, so running it again does nothing. Returns whether it
+// replaced the link, and the error that kept it from doing so.
+func repairMachineLink(root bool, sudo string) (bool, error) {
+	path := sharedBinaryPath
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode()&os.ModeSymlink == 0 || !rootOwnedDir(filepath.Dir(path)) {
+		return false, nil
 	}
-	tmp := fmt.Sprintf("%s.link-%d", path, os.Getpid())
-	if err := os.Symlink(target, tmp); err != nil {
-		return err
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil || rootsAlone(target) {
+		// A dangling link runs nothing; one to root's own file is root's to keep.
+		return false, nil
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
+	if root {
+		uid, gid := machineOwner()
+		return true, copyExecutable(target, path, uid, gid, true)
 	}
-	return nil
+	if sudo == "" {
+		return false, fmt.Errorf("replacing %s needs root", path)
+	}
+	uid, gid := machineOwner()
+	tmp := fmt.Sprintf("%s.new-%d", path, os.Getpid())
+	if err := run(sudo, "install", "-o", strconv.Itoa(uid), "-g", strconv.Itoa(gid), "-m", "0755", target, tmp); err != nil {
+		return false, fmt.Errorf("could not put a root-owned copy of %s at %s", target, tmp)
+	}
+	if err := run(sudo, "mv", "-f", tmp, path); err != nil {
+		_ = run(sudo, "rm", "-f", tmp)
+		return false, fmt.Errorf("could not move %s over %s", tmp, path)
+	}
+	return true, nil
 }
 
-// adoptUserBin is `orbit register`'s half of the move. The service about to be installed for
-// u would run exe; when exe sits in a directory only root can write, it moves into u's
-// ~/.orbit/bin first and the service runs the moved copy. defs are the installed services
-// already running exe. Returns the binary the service should run: exe itself whenever
-// nothing moved — exe is already u's to replace, u is root, another account's service runs
-// the same file (moving it into u's home would take it away from them), or there is no way
-// to get root for the symlink.
-func adoptUserBin(exe string, u *user.User, defs []serviceDef, root bool, sudo string) string {
+// noteMachineLinkRepair says what repairMachineLink did, or why it could not, on the path it was
+// asked to: register's or upgrade's own output.
+func noteMachineLinkRepair(replaced bool, err error) {
+	path := sharedBinaryPath
+	switch {
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "note: %s links to a file this account can change, so every `sudo orbit …` runs that file as root, and it could not be replaced (%v). Put root's own copy there: sudo install -o 0 -g 0 -m 0755 %s %s.new && sudo mv -f %s.new %s\n",
+			path, err, path, path, path, path)
+	case replaced:
+		fmt.Printf("✓ %s is root's own copy again, not a link to a file this account can change; `sudo %s upgrade` keeps it current.\n", path, path)
+	}
+}
+
+// adoptUserBin is `orbit register`'s half of the layout. The service about to be installed for u
+// would run exe; when exe sits in a directory only root can write, u gets its own copy in
+// ~/.orbit/bin and the service runs that, while exe stays as it is for everyone else who runs it.
+// Before that, a /usr/local/bin/orbit an earlier register left linked to u's copy becomes root's
+// own file again (repairMachineLink). Returns the binary the service should run: exe itself when
+// nothing was copied — exe is already u's to replace, u is root, or the copy failed.
+func adoptUserBin(exe string, u *user.User, root bool, sudo string) string {
+	if u.Uid != "0" {
+		if !root && sudo != "" {
+			if fi, err := os.Lstat(sharedBinaryPath); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+				fmt.Printf("\nChecking %s, which root runs; replacing a link there needs root — you may be prompted for your password.\n", sharedBinaryPath)
+			}
+		}
+		noteMachineLinkRepair(repairMachineLink(root, sudo))
+	}
 	if u.Uid == "0" || !rootOwnedDir(filepath.Dir(exe)) {
 		return exe
 	}
-	for _, d := range defs {
-		if d.user != u.Username {
-			fmt.Fprintf(os.Stderr, "note: %s also runs %s (as %s), so the binary stays there and this runner cannot update itself.\n",
-				d.path, exe, d.user)
-			return exe
-		}
-	}
-	if !root && sudo != "" {
-		fmt.Printf("\nMoving orbit into %s so the runner can update itself — linking %s to it needs root; you may be prompted for your password.\n",
-			filepath.Dir(userBinPath(u.HomeDir)), exe)
-	}
 	uid, _ := strconv.Atoi(u.Uid)
 	gid, _ := strconv.Atoi(u.Gid)
-	to, err := moveToUserBin(exe, u.HomeDir, uid, gid, root, sudo)
+	to, err := copyToUserBin(exe, u.HomeDir, uid, gid, root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "note: could not move %s into %s (%v); the runner cannot update itself until `sudo %s upgrade` does.\n",
+		fmt.Fprintf(os.Stderr, "note: could not copy %s into %s (%v); the runner cannot update itself until `sudo %s upgrade` does.\n",
 			exe, filepath.Dir(userBinPath(u.HomeDir)), err, exe)
 		return exe
 	}
-	fmt.Printf("✓ moved orbit to %s (%s links to it), so the runner can update itself.\n", to, exe)
+	fmt.Printf("✓ copied orbit to %s, which the runner runs and updates; %s stays root's.\n", to, exe)
 	return to
 }
 
@@ -295,17 +339,25 @@ func (d serviceDef) withProgram(content, to string) string {
 	return strings.Join(lines, "\n")
 }
 
-// migrateLegacyInstall is `sudo /usr/local/bin/orbit upgrade`'s half of the move, run as root before the
-// release is swapped in. When exe sits in a directory only root can write and the runner
-// service that runs it belongs to one ordinary account, the binary moves into that account's
-// ~/.orbit/bin, exe becomes a symlink to it, and the service definition is rewritten to name
-// the new path. A service running as root, a binary several accounts' services share, or no
-// service at all leaves everything as it is. The returned func restarts the rewritten
-// services — call it once the release is in place, so they come back on it; nil means
-// nothing moved.
-func migrateLegacyInstall(exe string) func() {
+// migrateLegacyInstall is `sudo /usr/local/bin/orbit upgrade`'s half of the layout, run as root
+// before the release is swapped in. exe is the binary this process runs, symlinks resolved. It
+// returns where the release goes, and a func to call once it is there (nil when there is nothing
+// to do).
+//
+// A /usr/local/bin/orbit linked to an account's copy becomes root's own file again
+// (repairMachineLink), and the release goes there: the account's runner updates its own copy. When
+// exe sits in a directory only root can write, the release replaces it where it is, and afterwards
+// each ordinary account whose runner service runs it gets its own copy of the new release in
+// ~/.orbit/bin, its service definition rewritten to name that copy and restarted on it. A service
+// running as root, a template instance and the host broker go on running exe.
+func migrateLegacyInstall(exe string) (string, func()) {
+	replaced, err := repairMachineLink(true, "")
+	noteMachineLinkRepair(replaced, err)
+	if replaced {
+		return sharedBinaryPath, nil
+	}
 	if !rootOwnedDir(filepath.Dir(exe)) {
-		return nil
+		return exe, nil
 	}
 	var defs []serviceDef
 	switch runtime.GOOS {
@@ -314,47 +366,55 @@ func migrateLegacyInstall(exe string) func() {
 	case "darwin":
 		defs = launchdServicesRunning(exe)
 	}
-	return migrateServices(exe, defs)
+	return exe, migrateServices(exe, defs)
 }
 
-// migrateServices is migrateLegacyInstall once the services running exe are known.
+// migrateServices is migrateLegacyInstall once the services running exe are known: the func that,
+// called once the release is at exe, gives each ordinary account among them its own copy and
+// moves its services onto it. nil when none of them is an ordinary account's.
 func migrateServices(exe string, defs []serviceDef) func() {
-	if len(defs) == 0 {
-		return nil
-	}
-	owner := defs[0].user
-	for _, d := range defs[1:] {
-		if d.user != owner {
-			fmt.Fprintf(os.Stderr, "note: %s is run by services of more than one account (%s as %s, %s as %s), so it stays where it is.\n",
-				exe, defs[0].path, owner, d.path, d.user)
-			return nil
-		}
-	}
-	u, err := lookupUser(owner)
-	if err != nil || u.Uid == "0" {
-		// Root's runner can replace its binary where it is; a template's %i is no account.
-		return nil
-	}
-	uid, _ := strconv.Atoi(u.Uid)
-	gid, _ := strconv.Atoi(u.Gid)
-	to, err := moveToUserBin(exe, u.HomeDir, uid, gid, true, "")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "note: could not move %s into %s (%v); it stays where it is.\n",
-			exe, filepath.Dir(userBinPath(u.HomeDir)), err)
-		return nil
-	}
-	fmt.Printf("moved orbit to %s (%s links to it), so %s's runner can update itself\n", to, exe, owner)
+	var accounts []*user.User
+	byAccount := map[string][]serviceDef{}
 	for _, d := range defs {
-		b, err := os.ReadFile(d.path)
-		if err == nil {
-			err = os.WriteFile(d.path, []byte(d.withProgram(string(b), to)), 0o644)
+		u, err := lookupUser(d.user)
+		if err != nil || u.Uid == "0" {
+			// Root's runner can replace its binary where it is; a template's %i is no account.
+			continue
 		}
-		if err != nil {
-			// The symlink still leads the old path to the moved binary.
-			fmt.Fprintf(os.Stderr, "note: could not rewrite %s (%v); it reaches %s through %s\n", d.path, err, to, d.program)
+		if _, ok := byAccount[u.Username]; !ok {
+			accounts = append(accounts, u)
+		}
+		byAccount[u.Username] = append(byAccount[u.Username], d)
+	}
+	if len(accounts) == 0 {
+		return nil
+	}
+	return func() {
+		for _, u := range accounts {
+			uid, _ := strconv.Atoi(u.Uid)
+			gid, _ := strconv.Atoi(u.Gid)
+			to, err := copyToUserBin(exe, u.HomeDir, uid, gid, true)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "note: could not copy %s into %s (%v); %s's runner goes on running %s\n",
+					exe, filepath.Dir(userBinPath(u.HomeDir)), err, u.Username, exe)
+				continue
+			}
+			fmt.Printf("copied orbit to %s, so %s's runner can update itself; %s stays root's\n", to, u.Username, exe)
+			var moved []serviceDef
+			for _, d := range byAccount[u.Username] {
+				b, err := os.ReadFile(d.path)
+				if err == nil {
+					err = os.WriteFile(d.path, []byte(d.withProgram(string(b), to)), 0o644)
+				}
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "note: could not rewrite %s (%v); it goes on running %s\n", d.path, err, d.program)
+					continue
+				}
+				moved = append(moved, d)
+			}
+			restartServices(moved, u.Uid)
 		}
 	}
-	return func() { restartServices(defs, u.Uid) }
 }
 
 // restartServices brings the rewritten services back up on the binary they now name.

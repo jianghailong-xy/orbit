@@ -1224,13 +1224,22 @@ object RunSettings {
     const val deliveryPlatform = "Orbit lands it"
     const val deliveryAgentPush = "The agent pushes it"
     fun deliveryPlatformHint(main: String) = "The agent doesn’t push to $main: Orbit lands its branch once the work is accepted."
-    fun deliveryAgentPushHint(main: String) = "The agent pushes to $main itself, and Orbit checks the commits are there."
+    fun deliveryAgentPushHint(main: String) = "No merge card. The agent pushes to $main itself, and Orbit records each commit once it sees it there."
     /** Why the agent may not push here: the project lands on a project branch, or no line is decided. */
     fun deliveryNeedsMainLine(main: String) = "The agent can push only on a project that lands directly into $main. On a project branch, " +
         "Orbit lands the work."
     /** The delivery a line stands for: the agent pushes only on a main line, so on any other — a project branch, or none decided — it
      * is Orbit's, whatever was chosen while the line was main. */
     fun delivery(line: String?, mode: String?) = if (line == "MAIN" && mode == "AGENT_PUSH") "AGENT_PUSH" else "PLATFORM"
+    /** How it runs asks before the agent takes over while a merge into main is still live: one the check is on, one asking the owner,
+     * or one confirmed and merging. Those stay; only the tasks finished from then on are the agent's. */
+    fun agentPushConfirmTitle(main: String) = "Let the agent push to $main?"
+    fun agentPushConfirmBody(main: String) = "Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing " +
+        "into $main. Merges already waiting for you stay until you answer them."
+    const val agentPushConfirm = "Let the agent push"
+    private val liveMergeStates = setOf("CHECKING", "READY", "CONFIRMED", "RECHECKING")
+    /** Whether [promotion] (`GET /projects/:id/promotions/current`) is a merge still live — the case that asks first. */
+    fun mergeLive(promotion: JsonObject?) = promotion?.text("state") in liveMergeStates
 
     // The main branch: the branch a project's tasks start from and its finished work ends up on (`project_codebase.upstream_ref`),
     // main until the owner chooses another. Every sentence here that says where work goes names the project's own, so a project on
@@ -1263,8 +1272,8 @@ object RunSettings {
         "failed checks, and merges the branch into main once the merge check passes — with a " +
         "receipt you can revert. The criteria and anything irreversible stay yours."
     const val automaticHintMain = "The coordinator runs it for you: it decides when each task is done and handles conflicts " +
-        "and failed checks. Merging into main always asks you — a project that lands directly on " +
-        "main never merges by itself. The criteria and anything irreversible stay yours."
+        "and failed checks. Merging into main always asks you — to skip that card, choose “The agent pushes it” under Delivery. " +
+        "The criteria and anything irreversible stay yours."
     /** The start card's one sentence under the switch, for the line and merge check chosen (`automaticSays`). */
     const val automaticOnChecked = "The coordinator decides when each task is done and merges into main once the merge check " +
         "passes — with a receipt you can revert."
@@ -1299,6 +1308,8 @@ object RunSettings {
     const val mergeCheck = "Merge check"
     const val mergeCheckHint = "Runs on the combined tree before anything lands — on the project branch and again before main."
     fun mergeCheckHint(main: String) = "Runs on the combined tree before anything lands — on the project branch and again before $main."
+    /** …while the agent pushes its own work: the check is the agent's, on its work rebased onto main, and Orbit runs none. */
+    fun mergeCheckHintAgentPush(main: String) = "Run by the agent before it pushes, on its work rebased onto $main. Orbit doesn’t run it."
     const val mergeCheckPlaceholder = "No check — work lands once it rebases cleanly"
     const val noMergeCheckWarning = "No merge check: with Automatic on, the branch merges into main with nothing run on the combined tree."
     fun noMergeCheckWarning(main: String) = "No merge check: with Automatic on, the branch merges into $main with nothing run on the combined tree."
@@ -1316,10 +1327,15 @@ object RunSettings {
     const val notLoaded = "How it runs could not be loaded"
     const val lineDecidedAtStart = "decided when you start"
     const val lineSuggested = "the coordinator suggests"
-    /** What Automatic means for the line — the two constants above, said of the project's main branch. */
-    fun automaticHint(line: String?, main: String = defaultMainBranch) = if (line == "MAIN") "The coordinator runs it for you: it decides when " +
-        "each task is done and handles conflicts and failed checks. Merging into $main always asks you — a project that lands directly on " +
-        "$main never merges by itself. The criteria and anything irreversible stay yours."
+    /** What Automatic means for the line — the two constants above, said of the project's main branch. A main line points at the
+     * Delivery row that skips the card; a read with no delivery mode draws no such row ([hasDelivery] false), and says why it asks. */
+    fun automaticHint(line: String?, main: String = defaultMainBranch, hasDelivery: Boolean = true) = if (line == "MAIN") {
+        if (hasDelivery) "The coordinator runs it for you: it decides when each task is done and handles conflicts and failed checks. " +
+            "Merging into $main always asks you — to skip that card, choose “The agent pushes it” under Delivery. The criteria and " +
+            "anything irreversible stay yours."
+        else "The coordinator runs it for you: it decides when each task is done and handles conflicts and failed checks. Merging into " +
+            "$main always asks you — a project that lands directly on $main never merges by itself. The criteria and anything irreversible stay yours."
+    }
         else "The coordinator runs it for you: it decides when each task is done, handles conflicts and failed checks, and merges the " +
         "branch into $main once the merge check passes — with a receipt you can revert. The criteria and anything irreversible stay yours."
     fun tasksAtATime(count: Int?) = "${if (count == 1) "task" else "tasks"} at a time"

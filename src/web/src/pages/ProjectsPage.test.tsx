@@ -252,7 +252,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the status PATCH, the coordinator status GET, its three writes, the two task-page levels and the per-row prerequisite read — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the coordinator status GET, its three writes, the two task-page levels and the per-row prerequisite read — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
     // Fails if any call grows extra args or a query string, if a path changes, or if a tenth
@@ -273,12 +273,9 @@ describe('ProjectsPage', () => {
       // reads, because a method that drifted to POST or a path that grew a segment would be a
       // different verb against the same button — and this endpoint cascades.
       "`/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' }",
-      // The account owner's own write to `project.status`, and the only one this app has: PATCH,
-      // with a body carrying nothing but the status being claimed. Held as literally as the rest,
-      // because the shape of this body is the unit — a second field smuggled in here would make a
-      // status press write something nobody confirmed, and the method drifting to PUT would
-      // replace the project document with three characters of it.
-      "`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } }",
+      // No status PATCH here any more: the account owner's write to `project.status` moved to
+      // lib/projectDone.ts (`updateProjectStatus`, re-exported from this page) with the DONE gate,
+      // and is held there.
       '`/projects/${encodeURIComponent(id!)}`',
       // The write that opens the conversation with this project's coordinator, and the reason it
       // is one: resolve-or-create, so a stale or trashed binding is repaired server-side rather
@@ -320,6 +317,12 @@ describe('ProjectsPage', () => {
       // is what proves there is no THIRD task-page spelling and no sixth endpoint in the file.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`',
     ]);
+    // The status write that moved to lib/projectDone.ts keeps its exact shape there: PATCH, with a
+    // body carrying nothing but the status being claimed.
+    const doneSource = readFileSync(fileURLToPath(new URL('../lib/projectDone.ts', import.meta.url)), 'utf8');
+    expect([...doneSource.matchAll(API_CALL)].map((m) => m[1].trim().replace(/,$/, ''))).toContain(
+      "`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status } }",
+    );
     // Tasks are created by agents, not from this page: the list above is the whole of what it puts
     // on the wire, so a POST to /tasks reappearing anywhere in the file fails it.
     expect(source).not.toContain("api('/tasks'");

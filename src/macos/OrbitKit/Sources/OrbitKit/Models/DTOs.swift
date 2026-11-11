@@ -1220,6 +1220,10 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     }
     public let confirmationReturn: JSONValue?
     public var reviewReturnCard: ConfirmationReturnCard? { ConfirmationReturnCard.parseCard(confirmationReturn) }
+    /// An Automatic task run's question routed to its coordinator (`runQuestion`, turn-cards.ts) —
+    /// held raw. No client draws a card for it yet, web included, so the turn reads as its words. Nil
+    /// on every other turn, and from an older server.
+    public let runQuestion: JSONValue?
     /// Every card this turn is drawn as while it waits, each read as above — the one place the queue's
     /// cards are gathered, so the row reconciled in place and the row first seen in a listing carry
     /// the same ones (`TranscriptReducer.reconcileQueuedTurns`).
@@ -1240,7 +1244,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 externalSender: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
-                confirmationReturn: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
+                confirmationReturn: JSONValue? = nil, runQuestion: JSONValue? = nil,
+                placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
                 deliveryReason: String? = nil) {
         self.turnId = turnId
@@ -1264,6 +1269,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.authoredByOrbit = authoredByOrbit
         self.confirmationReviewRequest = confirmationReviewRequest
         self.confirmationReturn = confirmationReturn
+        self.runQuestion = runQuestion
     }
 }
 

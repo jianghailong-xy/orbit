@@ -485,7 +485,11 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                         rerunCheck = { promotionId -> landingDoor {
                             projects.recheckPromotion(projectId, promotionId, LandingSessionCopy.RERUN_CHECK_REASON) } },
                         onDetails = { promotionReview = it },
-                        onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } })
+                        onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } },
+                        // Why it asks, off the line read and the Automatic the merge's document read carries; Let the agent push
+                        // instead… opens the project's page, whose How it runs has Delivery.
+                        asksReason = PromotionCards.askReason(merge.current, integration?.text("line"), integration?.text("deliveryMode"), merge.automatic),
+                        onLetAgentPush = ::openProject)
                 }
             }
             val staleRequest = io.orbitd.android.projects.ProjectDone.staleRequest(state.openItems)
