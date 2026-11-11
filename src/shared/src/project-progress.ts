@@ -782,7 +782,7 @@ export type TaskIntegrationHandler = 'COORDINATOR' | 'OWNER';
  * transaction that asks (J-T8), so no queued row waits on a cancellation.
  */
 export type LandTaskBlockingReasonCode =
-  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_RUNNER'
+  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_BASELINE' | 'WAITING_RUNNER'
   | 'WAITING_AUTOMATIC_RUNNER' | 'WAITING_SERIAL_SLOT' | 'WAITING_DISPATCH'
   | 'WAITING_LOCAL_LOCK' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
 
@@ -1235,6 +1235,9 @@ export interface ProjectOpenItemRow<Instant = string> {
    *  shape this build reads — an item an older build opened, a pause, a question — and the card
    *  then draws what it drew before this existed. */
   facts: OpenItemFacts | null;
+  /** K4: the measured baseline and the tasks held by its shared item. */
+  baseline?: { upstreamSha: string; targetSha: string; mergeTreeSha: string; check: IntegrationCheckResult } | null;
+  heldTaskIds?: string[];
   /** The coordinator's rerun of it while that rerun is in flight, or null. Absent from a server
    *  that predates it. */
   handling?: OpenItemHandling<Instant> | null;

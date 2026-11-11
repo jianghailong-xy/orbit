@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchNameSql, isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
+import { baselineHoldSql } from './baseline-hold';
 
 /**
  * Where each task on a page sits between "done" and "on main"
@@ -56,12 +57,14 @@ export interface QueueBlockingFacts {
   blockingTaskTitle: string | null;
   blockingJobKind: string | null;
   syncHandlingGeneration: number | null;
+  baselineItemId?: string | null;
+  baselineHeldCount?: number | null;
 }
 
 /** The reason codes a QUEUED job can read, and the one a claimed job waiting on this runner's own
  *  lock reads (§2.7a, §7.2 V6). */
 export type QueueBlockingCode =
-  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_RUNNER'
+  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_BASELINE' | 'WAITING_RUNNER'
   | 'WAITING_AUTOMATIC_RUNNER' | 'WAITING_SERIAL_SLOT' | 'WAITING_DISPATCH' | 'WAITING_LOCAL_LOCK';
 
 interface TaskIntegrationRow {
@@ -94,6 +97,7 @@ interface TaskIntegrationRow {
   blockingJobKind: string | null;
   blockingTaskTitle: string | null;
   blockingOpenItemId: string | null;
+  baselineHeldCount?: number | null;
   /** The generation an OPEN MAIN_SYNC conflict's item is being handled by (H1), while it runs. */
   syncHandlingGeneration: number | null;
   itemId: string | null;
@@ -152,6 +156,8 @@ export function queueBlockingSummary(code: QueueBlockingCode, facts: QueueBlocki
       return 'Waiting to land: it was cancelled and will not start';
     case 'WAITING_TASK_WORK':
       return 'Waiting to land: the task’s work session is still running, and its branch can still move';
+    case 'WAITING_BASELINE':
+      return `Waiting to land: ${facts.baselineItemId ? `baseline item ${facts.baselineItemId}` : 'a baseline item'} is open; the project branch with the latest ${facts.mainBranch ?? 'main'} fails its checks on its own; ${facts.baselineHeldCount ?? 0} landings wait until that is fixed`;
     case 'WAITING_MAIN_SYNC': {
       // A conflict the task's own new generation is landing again is still a hold — the claim reads
       // the item, not that generation (§3.1 M2) — so the reason says so and names the generation
@@ -191,6 +197,7 @@ function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow
     case 'CANCELLING':
     case 'WAITING_TASK_WORK':
     case 'WAITING_MAIN_SYNC':
+    case 'WAITING_BASELINE':
     case 'WAITING_SERIAL_SLOT':
     case 'WAITING_RUNNER':
     case 'WAITING_AUTOMATIC_RUNNER':
@@ -203,6 +210,8 @@ function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow
         blockingTaskTitle: row.blockingTaskTitle,
         blockingJobKind: row.blockingJobKind,
         syncHandlingGeneration: row.syncHandlingGeneration,
+        baselineItemId: row.blockingOpenItemId,
+        baselineHeldCount: row.baselineHeldCount,
       });
     case 'CONFLICT': {
       const files = row.jobConflictCount
@@ -241,7 +250,7 @@ function landTaskOf(row: TaskIntegrationRow, now: Date): LandTaskIntegrationView
     if ((code === 'WAITING_MAIN_SYNC' || code === 'WAITING_SERIAL_SLOT') && row.blockingJobId) {
       blockingReason.jobId = row.blockingJobId;
     }
-    if (code === 'WAITING_MAIN_SYNC' && row.blockingOpenItemId) {
+    if ((code === 'WAITING_MAIN_SYNC' || code === 'WAITING_BASELINE') && row.blockingOpenItemId) {
       blockingReason.openItemId = row.blockingOpenItemId;
     }
   }
@@ -322,7 +331,7 @@ export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskInteg
   // job must not hide an outstanding exception.
   const retryInFlight = row.itemHandlingJobId !== null && row.itemHandlingJobId === row.jobId
     && (row.jobState === 'QUEUED' || row.jobState === 'RUNNING');
-  if (itemState && !retryInFlight) {
+  if (itemState && !retryInFlight && row.queueBlockCode !== 'WAITING_BASELINE') {
     return {
       ...none,
       state: itemState,
@@ -386,7 +395,7 @@ export async function readTaskIntegrationViews(
     -- This project's own line only: a task filed elsewhere before keeps that line's jobs there.
     newest_job AS (
       SELECT DISTINCT ON (j."task_id")
-             j."task_id", j."id", j."state", j."phase", j."generation", j."target_ref",
+             j."task_id", j."id", j."kind", j."state", j."phase", j."generation", j."target_ref",
              j."serial_key", j."session_id", j."landing_id", j."error_code", j."cancel_requested_at",
              cardinality(j."conflicts") AS "conflict_count", j."checks",
              j."created_at", j."started_at", j."claimed_at", j."heartbeat_at", j."finished_at"
@@ -445,6 +454,7 @@ export async function readTaskIntegrationViews(
                     AND work."starts_task_work" = true
                     AND work."deleted_at" IS NULL AND work."finished_at" IS NULL
                ) THEN 'WAITING_TASK_WORK'
+               WHEN baseline_block."openItemId" IS NOT NULL THEN 'WAITING_BASELINE'
                WHEN sync_block."jobId" IS NOT NULL THEN 'WAITING_MAIN_SYNC'
                WHEN runner_wait."wait" IS NOT NULL THEN 'WAITING_RUNNER'
                WHEN running_block."jobId" IS NOT NULL THEN 'WAITING_SERIAL_SLOT'
@@ -464,7 +474,9 @@ export async function readTaskIntegrationViews(
                   CASE WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."taskTitle" END
                 WHEN running_block."ownerId" = ${ownerId}::uuid THEN running_block."taskTitle"
            END AS "blockingTaskTitle",
-           CASE WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."openItemId" END AS "blockingOpenItemId",
+           CASE WHEN baseline_block."ownerId" = ${ownerId}::uuid THEN baseline_block."openItemId"
+                WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."openItemId" END AS "blockingOpenItemId",
+           baseline_block."heldCount" AS "baselineHeldCount",
            CASE WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."handlingGeneration" END AS "syncHandlingGeneration",
            open_item."id" AS "itemId", open_item."kind" AS "itemKind",
            open_item."assignee" AS "itemAssignee", open_item."created_at" AS "itemCreatedAt",
@@ -530,6 +542,15 @@ export async function readTaskIntegrationViews(
            AND f."task_id" IS DISTINCT FROM newest_job."task_id"
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
+      LEFT JOIN LATERAL (
+        SELECT i."id" AS "openItemId", i."owner_id" AS "ownerId",
+               (SELECT count(DISTINCT held."task_id")::int FROM "project_integration_job" held
+                 WHERE held."state" = 'QUEUED' AND ${baselineHoldSql('held')}) AS "heldCount"
+          FROM "project_open_item" i
+          JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
+         WHERE newest_job."state" = 'QUEUED' AND ${baselineHoldSql('newest_job')}
+         ORDER BY i."created_at", i."id" LIMIT 1
+      ) baseline_block ON true
       -- J1: one RUNNING job per repository and target ref.
       LEFT JOIN LATERAL (
         SELECT r."id" AS "jobId", r."owner_id" AS "ownerId", r."kind" AS "kind", rt."title" AS "taskTitle"

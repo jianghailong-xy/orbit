@@ -2902,7 +2902,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0512 adds nullable project JSON only; no preserved rows, triggers or DONE fence change.
       '0512_project_done_task_epochs',
       // 0513 adds attribution and admits its explicit retry; no preserved row or fence changes.
-      '0513_integration_baseline_red'],
+      '0513_integration_baseline_red',
+      // 0518 constrains enqueue event causes only; no preserved rows or DONE fence changes.
+      '0518_integration_baseline_hold'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

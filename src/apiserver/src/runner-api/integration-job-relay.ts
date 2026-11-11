@@ -21,6 +21,7 @@ import {
   UpstreamMovedCommitsEnriched,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { baselineHoldSql } from '../projects/baseline-hold';
 import {
   INTEGRATION_CLAIM_STALE_MS,
   INTEGRATION_JOBS_PER_HEARTBEAT,
@@ -50,6 +51,7 @@ import {
   openItemKindForJobState,
   pushBoundaryPassed,
   queueLandingBehindTheWork,
+  queueBaselineHeld,
   shortBranchName,
   timedOutErrorCode,
   workBranchEndedOn,
@@ -673,6 +675,10 @@ async function claimOne(
               AND i."kind" = 'INTEGRATION_CONFLICT'
               AND i."state" = 'OPEN'
               AND f."task_id" IS DISTINCT FROM c."task_id")
+         AND NOT EXISTS (
+           SELECT 1 FROM "project_open_item" i
+             JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
+            WHERE ${baselineHoldSql('c')})
          AND (
            -- A queued job whose repository and target ref nobody holds. A QUEUED row somebody asked
            -- to stop is never claimed: J-T8 ends those in the transaction that asks, so one that is
@@ -2071,6 +2077,11 @@ export async function applyIntegrationJobResult(
     if (body.baselineRed === true && job.kind !== 'LAND_TASK') {
       throw new IntegrationJobRefused('INVALID_RESULT', 'only LAND_TASK may report baselineRed');
     }
+    if (body.baselineRed === true && ![body.upstreamSha, body.targetShaBefore, body.checks?.find((check) => check.scope === 'BASELINE')?.treeSha]
+      .every((sha) => typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha))) {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'baselineRed requires upstreamSha, targetShaBefore and the BASELINE check treeSha');
+    }
+
     // §10.6: OBSERVED and OBSERVE are an observation's alone, and an observation ends only OBSERVED,
     // ERROR or CANCELLED — said by the kind of the row, now that it is read.
     if (job.kind !== 'LAND_TASK' && body.checks?.some((check) => check.skipped !== undefined)) {
@@ -2159,7 +2170,8 @@ export async function applyIntegrationJobResult(
     //   * the project, FOR KEY SHARE;
     //   * the tasks its receipts and comment name, FOR KEY SHARE;
     //   * then the binding.
-    if (stoppedLanding) {
+    // K5 needs the same lower-rank parents before enqueueing; its task lock also serializes generations.
+    if (stoppedLanding || body.baselineRed === true) {
       recoveryHeld = await MergeReceiptService.lockLandedRecoveries(
         tx, [job.sessionId, ...repairs.flatMap((repair) => repair.sessionIds)], true);
       await tx.$queryRaw(Prisma.sql`
@@ -2168,7 +2180,7 @@ export async function applyIntegrationJobResult(
         SELECT "id" FROM "task"
          WHERE "id" = ANY(${orderedIds([job.taskId, ...repairs.flatMap((repair) => repair.taskIds)])}::uuid[])
          ORDER BY "id"
-         FOR KEY SHARE`);
+         ${body.baselineRed === true ? Prisma.sql`FOR UPDATE` : Prisma.sql`FOR KEY SHARE`}`);
       await tx.$queryRaw(Prisma.sql`
         SELECT "id" FROM "project_codebase"
          WHERE "project_id" = ${job.projectId}::uuid AND "slot" = 'primary'
@@ -2785,41 +2797,54 @@ export async function applyIntegrationJobResult(
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
         title: integrationItemTitle(state, job.kind, task?.title ?? candidateTask?.title ?? 'a task', mainBranch,
           candidateRow?.sourceKind ?? null),
-        dedupeKey: integrationDedupeKey(state, job.id),
+        dedupeKey: body.baselineRed === true
+          ? `ICB:${job.serialKey}:${body.upstreamSha}:${body.targetShaBefore}`
+          : integrationDedupeKey(state, job.id),
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.
         heldByOwner: await ownerHoldOnHandledItems(tx, job.id),
-        payload: failurePayload(state, {
-          kind: job.kind,
-          phase: body.phase ?? null,
-          targetRef: job.targetRef,
-          targetSha: body.targetShaBefore ?? null,
-          conflicts: body.conflicts ?? [],
-          checks,
-          baselineRed: body.baselineRed === true,
-          errorCode: body.errorCode ?? null,
-          errorDetail,
-          // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
-          // does not read it, so the replay it does stays byte-for-byte the same.
-          upstreamMovedCommits,
-          outdatedRunner,
-          candidateSourceKind: candidateRow?.sourceKind ?? null,
-          // §4.2 / §2.9: the same rule for the landing session and the round it failed in — the
-          // card reads them, the delivery text never does.
-          landingSessionId,
-          round: job.round ?? null,
-          generation: job.generation,
-          retry: job.retryOfJobId
-            ? {
-                retryOfJobId: job.retryOfJobId,
-                failureClass: job.retryFailureClass,
-                reason: job.retryReason,
-                requestedBySessionId: job.retryRequestedBySessionId,
-                requestedByUserId: job.retryRequestedByUserId,
-              }
-            : null,
-          skippedCheck: skippedMergeCheck(job),
-        }),
+        payload: {
+          ...(body.baselineRed === true ? {
+            baseline: {
+              upstreamSha: body.upstreamSha!, targetSha: body.targetShaBefore!,
+              // Read from the check stored on this job, not mainSyncSha: a source-side absorb includes task work.
+              mergeTreeSha: checks.find((check) => check.scope === 'BASELINE')!.treeSha!,
+              check: checks.find((check) => check.scope === 'BASELINE')!,
+            },
+            heldTaskIds: liveTaskId ? [liveTaskId] : [],
+          } : {}),
+          ...failurePayload(state, {
+            kind: job.kind,
+            phase: body.phase ?? null,
+            targetRef: job.targetRef,
+            targetSha: body.targetShaBefore ?? null,
+            conflicts: body.conflicts ?? [],
+            checks,
+            baselineRed: body.baselineRed === true,
+            errorCode: body.errorCode ?? null,
+            errorDetail,
+            // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
+            // does not read it, so the replay it does stays byte-for-byte the same.
+            upstreamMovedCommits,
+            outdatedRunner,
+            candidateSourceKind: candidateRow?.sourceKind ?? null,
+            // §4.2 / §2.9: the same rule for the landing session and the round it failed in — the
+            // card reads them, the delivery text never does.
+            landingSessionId,
+            round: job.round ?? null,
+            generation: job.generation,
+            retry: job.retryOfJobId
+              ? {
+                  retryOfJobId: job.retryOfJobId,
+                  failureClass: job.retryFailureClass,
+                  reason: job.retryReason,
+                  requestedBySessionId: job.retryRequestedBySessionId,
+                  requestedByUserId: job.retryRequestedByUserId,
+                }
+              : null,
+            skippedCheck: skippedMergeCheck(job),
+          }),
+        },
       });
       openItemId = opened?.itemId ?? openItemId;
       if (opened) {
@@ -2829,6 +2854,10 @@ export async function applyIntegrationJobResult(
       // opened, in this transaction — the old card ends RETRIED and points at the new failure, which
       // is in front of somebody; nothing about it is closed quietly.
       if (opened) await supersedeHandledItems(tx, job.id, opened.itemId);
+      if (body.baselineRed === true && liveTaskId) await queueBaselineHeld(tx, {
+        ownerId: job.ownerId, projectId: job.projectId, taskId: liveTaskId,
+        sessionId: job.sessionId!, sourceRef: job.sourceRef, runnerId: job.runnerId,
+      });
     }
     // §2.2 J-T5: the task's landing answers what was open about landing it, in this same
     // transaction — beside the receipt that says the work is there, which is the fact the item was
@@ -2850,7 +2879,7 @@ export async function applyIntegrationJobResult(
     // not the answer about a branch the work did not end on. Whether the work that exception is
     // about went in with it is the coordinator's to check, so the item goes back in front of it.
     const rearmedItemId = job.kind === 'LAND_TASK' && job.taskId && receiptState !== null && !leftWorkBehind
-      ? await rearmItemFixedBy(tx, job.taskId)
+      ? await rearmItemFixedBy(tx, job.taskId, job.serialKey)
       : null;
 
     // §2.9 LS2: the facts this result IS — each check's result, a refused push, the answer itself,

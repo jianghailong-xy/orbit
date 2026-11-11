@@ -1,3 +1,5 @@
+import { readTaskIntegrationViews } from './project-task-integration';
+import { openItemMessage } from './project-open-item';
 import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -1740,7 +1742,7 @@ test('the integration-retry PostgreSQL target is explicitly disposable', { skip 
 });
 
 
-test('baseline attribution is stored, constrained, classified and explicitly retryable',
+test('baseline attribution is stored, constrained, classified and its queued generation is released by retry',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -1748,9 +1750,11 @@ test('baseline attribution is stored, constrained, classified and explicitly ret
       const failed = await failedLanding(stack, w, 'baseline-red', {
         ...RED_MERGE_CHECK,
         baselineRed: true,
+        upstreamSha: 'f'.repeat(40),
+        mainSyncSha: 'b'.repeat(40),
         checks: [
           { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK' },
-          { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK', scope: 'BASELINE' },
+          { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK', scope: 'BASELINE', treeSha: '9'.repeat(40) },
         ],
       });
       const row = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: failed.job.jobId } });
@@ -1761,7 +1765,9 @@ test('baseline attribution is stored, constrained, classified and explicitly ret
       const rerun = await retry(stack, w, failed.task.taskId, 'the upstream baseline has been repaired');
       assert.equal(rerun.failureClass, 'BASELINE_RED');
       const newest = (await landings(stack.db, failed.task.taskId))[1]!;
-      assert.equal(newest.retryFailureClass, 'BASELINE_RED');
+      assert.equal(rerun.jobId, newest.id, 'retry releases the generation K5 already queued');
+      assert.equal(newest.retryFailureClass, null, 'this generation was queued by the baseline result, without a retry decision');
+      assert.equal((await itemsOf(stack.db, failed.task.taskId))[0]?.resolution, 'RETRIED');
       const queued = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: newest.id } });
       assert.equal(queued.baselineRed, false, 'a new generation starts without attribution');
       for (const state of ['QUEUED', 'RUNNING', 'LANDED', 'ERROR', 'READY', 'CONFLICT', 'CANCELLED']) {
@@ -1804,6 +1810,7 @@ test('baselineRed results are refused at the relay for wrong state, missing scop
       };
       await refuse(landing, { ...RED_MERGE_CHECK, state: 'ERROR', baselineRed: true, checks: [baseline] }, /CHECK_FAILED/);
       await refuse(landing, { ...RED_MERGE_CHECK, baselineRed: true }, /BASELINE check/);
+      await refuse(landing, { ...RED_MERGE_CHECK, baselineRed: true, checks: [baseline] }, /requires upstreamSha/);
       await report(stack, w, landing, LANDED);
       const [promotion] = await claim(stack, w, 'baseline-invalid-promotion');
       assert.equal(promotion?.kind, 'CHECK_PROMOTION');
@@ -1812,3 +1819,132 @@ test('baselineRed results are refused at the relay for wrong state, missing scop
       await stack.db.$disconnect();
     }
   });
+
+
+const BASELINE_RED: Failure = {
+  ...RED_MERGE_CHECK,
+  baselineRed: true,
+  upstreamSha: 'f'.repeat(40),
+  mainSyncSha: 'b'.repeat(40),
+  checks: [
+    { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK', scope: 'COMBINED' },
+    { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK', scope: 'BASELINE', treeSha: '9'.repeat(40) },
+  ],
+};
+
+for (const ending of ['fix landed', 'retry', 'resolve'] as const) {
+  test(`K4/K5: one baseline item holds two deliveries; ${ending} releases them in queue order`,
+    { skip, timeout: 180_000 }, async () => {
+      const stack = await connect();
+      try {
+        const w = await world(stack, `baseline-${ending.replace(' ', '-')}`);
+        const first = await failedLanding(stack, w, 'first', BASELINE_RED);
+        const item = await stack.db.projectOpenItem.findFirstOrThrow({
+          where: { projectId: w.projectId, kind: 'INTEGRATION_CHECK_FAILED', state: 'OPEN' },
+        });
+        const failed = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: first.job.jobId } });
+        assert.equal(item.dedupeKey, `ICB:${failed.serialKey}:${failed.upstreamSha}:${failed.targetShaBefore}`);
+        const message = (payload: unknown) => openItemMessage({
+          id: item.id, kind: 'INTEGRATION_CHECK_FAILED', title: item.title, projectId: w.projectId,
+          taskId: item.taskId, payload,
+        });
+        const deliveredText = message(item.payload);
+        const second = await doneTask(stack, w, 'second');
+        assert.equal((await claim(stack, w, 'held')).length, 0, 'OPEN baseline holds later tasks too');
+        // A report already in flight from an older dispatcher can still arrive. Seed only its claim
+        // fence, then use the production result transaction; current dispatch must refuse it above.
+        const secondJob = (await landings(stack.db, second.taskId))[0]!;
+        await stack.db.projectIntegrationJob.update({ where: { id: secondJob.id }, data: {
+          state: 'RUNNING', phase: 'CHECK', claimGeneration: 1, claimLeaseOwner: 'older-dispatcher',
+          claimedAt: new Date(), heartbeatAt: new Date(), startedAt: new Date(),
+        } });
+        await report(stack, w, { ...first.job, jobId: secondJob.id, claimGeneration: '1', leaseOwner: 'older-dispatcher' }, BASELINE_RED);
+        const items = await stack.db.projectOpenItem.findMany({ where: {
+          projectId: w.projectId, kind: 'INTEGRATION_CHECK_FAILED', state: 'OPEN',
+        } });
+        assert.equal(items.length, 1);
+        const payload = items[0]!.payload as unknown as {
+          heldTaskIds: string[]; baseline: { upstreamSha: string; targetSha: string; mergeTreeSha: string; check: IntegrationCheckResult };
+        };
+        assert.deepEqual(payload.heldTaskIds, [first.task.taskId, second.taskId]);
+        assert.deepEqual(payload.baseline, { upstreamSha: failed.upstreamSha, targetSha: failed.targetShaBefore,
+          mergeTreeSha: '9'.repeat(40), check: BASELINE_RED.checks![1] });
+        assert.equal(message(payload), deliveredText, 'G6: appending a held task changes no delivery bytes');
+        const held = await stack.db.projectIntegrationJob.findMany({
+          where: { projectId: w.projectId, kind: 'LAND_TASK', state: 'QUEUED' },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        });
+        assert.equal(held.length, 2);
+        assert.deepEqual(held.map((job) => job.taskId), [first.task.taskId, second.taskId]);
+        for (const job of held) {
+          const event = await stack.db.projectIntegrationJobEvent.findFirstOrThrow({ where: { jobId: job.id, key: 'enqueued' } });
+          assert.equal((event.data as { cause: string }).cause, 'BASELINE_HELD');
+          await assert.rejects(stack.db.projectIntegrationJobEvent.create({ data: {
+            jobId: job.id, key: 'invalid-cause', kind: 'ENQUEUED', text: 'invalid cause', data: { cause: 'UNKNOWN' },
+          } }), /project_integration_job_event_enqueue_cause_chk/);
+          await assert.rejects(stack.db.projectIntegrationJobEvent.create({ data: {
+            jobId: job.id, key: 'invalid-baseline-kind', kind: 'ENQUEUED', text: 'invalid kind',
+            data: { cause: 'BASELINE_HELD', kind: 'CHECK_PROMOTION' },
+          } }), /project_integration_job_event_baseline_held_chk/);
+        }
+        const views = await readTaskIntegrationViews(stack.db as PrismaService, w.ownerId, w.projectId,
+          [first.task.taskId, second.taskId]);
+        for (const taskId of [first.task.taskId, second.taskId]) {
+          assert.equal(views.get(taskId)!.state, 'QUEUED', 'baseline red is a queue hold, not a task failure');
+          const reason = views.get(taskId)!.landTask!.blockingReason!;
+          assert.equal(reason.code, 'WAITING_BASELINE');
+          assert.equal(reason.openItemId, item.id);
+          assert.match(reason.summary, /2 landings/);
+          assert.ok(reason.summary.includes(item.id));
+        }
+        assert.equal((await claim(stack, w, 'reader-and-dispatch')).length, 0);
+        await receiveOpenItem(stack.db, item.id);
+        const list = await stack.openItems.list(w.ownerId, w.projectId);
+        const visible = [...list.needsYou, ...list.withCoordinator].find((row) => row.itemId === item.id)!;
+        assert.deepEqual(visible.baseline, payload.baseline);
+        assert.deepEqual(visible.heldTaskIds, payload.heldTaskIds);
+
+        // All J-T1b gates still apply even though the newest generation is already QUEUED.
+        assert.equal((await denied(() => retry(stack, w, first.task.taskId, ''))).status, 400);
+        assert.equal((await denied(() => retry(stack, w, first.task.taskId, 'fixed', second.sessionId))).status, 403);
+        await stack.db.projectOpenItem.update({ where: { id: item.id }, data: { assignee: 'OWNER', escalateAt: null } });
+        const ownedRefusal = await denied(() => retry(stack, w, first.task.taskId, 'fixed'));
+        assert.equal(ownedRefusal.status, 409);
+        assert.equal(ownedRefusal.code, 'INTEGRATION_RETRY_OWNER_ITEM');
+        await stack.db.projectOpenItem.update({ where: { id: item.id }, data: { assignee: 'COORDINATOR', escalateAt: item.escalateAt } });
+
+        if (ending === 'fix landed') {
+          await stack.db.projectOpenItem.update({ where: { id: item.id }, data: { assignee: 'OWNER', escalateAt: null } });
+          const fix = await doneTask(stack, w, 'baseline-fix');
+          await stack.db.task.update({ where: { id: fix.taskId }, data: { fixesOpenItemId: item.id } });
+          const fixViews = await readTaskIntegrationViews(stack.db as PrismaService, w.ownerId, w.projectId, [fix.taskId]);
+          assert.notEqual(fixViews.get(fix.taskId)!.landTask!.blockingReason?.code, 'WAITING_BASELINE');
+          const [claimed] = await claim(stack, w, 'fix-exempt');
+          assert.equal(claimed?.jobId, (await landings(stack.db, fix.taskId))[0]!.id);
+          await report(stack, w, claimed!, LANDED);
+        } else if (ending === 'retry') {
+          const released = await retry(stack, w, first.task.taskId, 'the upstream baseline is repaired');
+          assert.equal(released.jobId, held[0]!.id);
+          assert.equal((await landings(stack.db, first.task.taskId)).length, 2, 'no third generation');
+        } else {
+          await stack.openItems.resolveOpenItem(w.ownerId, w.projectId, item.id,
+            { note: 'the baseline has been repaired; release the queued landings' },
+            { kind: 'SESSION', sessionId: w.coordinatorSessionId });
+        }
+        const closed = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: item.id } });
+        assert.equal(closed.state, 'RESOLVED');
+        assert.equal(closed.resolution, ending === 'fix landed' ? 'LANDED' : ending === 'retry' ? 'RETRIED' : 'HANDLED');
+        assert.equal(closed.resolvedBy, ending === 'fix landed' ? 'PLATFORM' : 'COORDINATOR');
+        for (const expected of held) {
+          const jobs = await claim(stack, w, `resumed-${expected.id}`);
+          const next = jobs.find((job) => job.kind === 'LAND_TASK');
+          assert.equal(next?.jobId, expected.id, 'released landings follow their enqueue order');
+          await report(stack, w, next!, RED_MERGE_CHECK);
+          assert.equal((await landings(stack.db, expected.taskId!)).length, 2,
+            'J5: a task-owned red still queues no next generation');
+        }
+      } finally {
+        await stack.db.$disconnect();
+      }
+    });
+}

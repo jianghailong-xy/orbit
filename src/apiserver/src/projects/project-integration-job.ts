@@ -1030,9 +1030,25 @@ export async function endTimedOutLanding(
   return errorCode;
 }
 
+/** K5: the result transaction queues the same delivery behind the baseline hold, without a retry decision. */
+export async function queueBaselineHeld(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string; sessionId: string; sourceRef: string; runnerId: string | null },
+): Promise<void> {
+  const codebase = await tx.projectCodebase.findFirstOrThrow({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  await queueLandTask(tx, {
+    ...input, codebase,
+    session: { id: input.sessionId, branch: shortBranchName(input.sourceRef), runnerId: input.runnerId },
+    cause: 'BASELINE_HELD',
+  });
+}
+
 /**
  * Queue the next generation of a task's landing because its coordinator asked for it (§2.3 J-T1b) —
- * the one way a landing that stopped is attempted again without the task being completed again (J5).
+ * the explicit retry door for a stopped landing (J5); K5 queues baseline-held work in its result transaction.
  *
  * The branch is the one a DONE written now would hand the line (`landingWorkSession`), not the one
  * the failed generation was handed: a task that was run again after its landing failed has its work

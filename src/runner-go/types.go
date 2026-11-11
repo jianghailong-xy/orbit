@@ -688,6 +688,7 @@ type IntegrationCheckSpec struct {
 // IntegrationCheckResult is what one check came to. ExitCode is nil when the command never
 // produced one — it could not start, or its budget killed it.
 type IntegrationCheckResult struct {
+	TreeSha          string   `json:"treeSha,omitempty"`
 	Scope            string   `json:"scope,omitempty"`
 	Skipped          string   `json:"skipped,omitempty"`
 	Files            []string `json:"files,omitempty"`

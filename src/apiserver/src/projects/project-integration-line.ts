@@ -27,6 +27,7 @@ import {
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { baselineHoldSql } from './baseline-hold';
 import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
@@ -588,6 +589,10 @@ interface InFlightJobRow extends IntegrationCheckSource {
   runnerWaitName: string | null;
   /** Whether that runner declares `promotion-automatic-land/v1` (M-T12). */
   runnerLandsAutomatically: boolean | null;
+  /** The shared baseline item holding this queued landing (K4). */
+  baselineBlockItemId: string | null;
+  baselineBlockOwnerId: string | null;
+  baselineHeldCount: number | null;
   /** The OPEN MAIN_SYNC item holding every later landing on this serial key (M2). */
   syncBlockJobId: string | null;
   syncBlockOwnerId: string | null;
@@ -658,6 +663,13 @@ function blockingReasonOf(row: InFlightJobRow): IntegrationJobBlockingReason | n
   }
   if (row.workHeld) {
     return { code: 'WAITING_TASK_WORK', summary: queueBlockingSummary('WAITING_TASK_WORK', queueFacts(row)) };
+  }
+  if (row.baselineBlockItemId) {
+    const itemId = mine(row.baselineBlockOwnerId) ? row.baselineBlockItemId : null;
+    return { code: 'WAITING_BASELINE',
+      summary: queueBlockingSummary('WAITING_BASELINE', {
+        ...queueFacts(row), baselineItemId: itemId, baselineHeldCount: row.baselineHeldCount,
+      }), ...(itemId ? { openItemId: itemId } : {}) };
   }
   if (row.syncBlockJobId) {
     const mineSync = row.syncBlockOwnerId === row.ownerId;
@@ -929,6 +941,8 @@ async function readInFlightJobsForProjects(
                  AND work."deleted_at" IS NULL AND work."finished_at" IS NULL)) AS "workHeld",
            runner_wait."wait" AS "runnerWait", runner_wait."name" AS "runnerWaitName",
            runner_wait."landsAutomatically" AS "runnerLandsAutomatically",
+           baseline_block."openItemId" AS "baselineBlockItemId",
+           baseline_block."ownerId" AS "baselineBlockOwnerId", baseline_block."heldCount" AS "baselineHeldCount",
            sync_block."jobId" AS "syncBlockJobId", sync_block."ownerId" AS "syncBlockOwnerId",
            sync_block."openItemId" AS "syncBlockOpenItemId", sync_block."taskTitle" AS "syncBlockTaskTitle",
            sync_block."handlingGeneration" AS "syncHandlingGeneration",
@@ -982,6 +996,15 @@ async function readInFlightJobsForProjects(
            AND f."task_id" IS DISTINCT FROM j."task_id"
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
+      LEFT JOIN LATERAL (
+        SELECT i."id" AS "openItemId", i."owner_id" AS "ownerId",
+               (SELECT count(DISTINCT held."task_id")::int FROM "project_integration_job" held
+                 WHERE held."state" = 'QUEUED' AND ${baselineHoldSql('held')}) AS "heldCount"
+          FROM "project_open_item" i
+          JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
+         WHERE j."state" = 'QUEUED' AND ${baselineHoldSql('j')}
+         ORDER BY i."created_at", i."id" LIMIT 1
+      ) baseline_block ON true
       -- J1: one RUNNING job per repository and target ref, whichever project queued it.
       LEFT JOIN LATERAL (
         SELECT r."id" AS "jobId", r."owner_id" AS "ownerId", r."kind" AS "kind", rt."title" AS "taskTitle"
