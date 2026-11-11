@@ -70,7 +70,7 @@ var subagentEditTools = map[string]string{
 
 // delegateToolDescriptor is the tool's contract (§2). Offered only to a top-level session (callers check
 // envSubagentRunID).
-func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[string]interface{}) map[string]interface{} {
+func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[string]interface{}, defs []subagentDefinition) map[string]interface{} {
 	str := func(desc string) map[string]interface{} {
 		return map[string]interface{}{"type": "string", "description": desc}
 	}
@@ -84,12 +84,11 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			" a turn in this session with the result when it ends: end your turn then instead of polling. With" +
 			" background: true it returns { runId, status: \"running\" } at once and Orbit wakes this session with the" +
 			" result when it ends. SubAgents share your working tree; give parallel ones disjoint files. A SubAgent cannot" +
-			" ask the user anything and cannot delegate further. Types: \"general\" (default; any work, may edit files)" +
-			" and \"explore\" (read-only: finding and reading code, answering how something works).",
+			" ask the user anything and cannot delegate further. " + subagentTypesDescription(defs),
 		"inputSchema": obj(map[string]interface{}{
 			"description": str("3 to 8 words saying what the SubAgent does; shown on its block."),
 			"prompt":      str("The complete brief. The SubAgent has none of your context: say what to do, where, and what to hand back."),
-			"type":        str("\"general\" (default) or \"explore\"."),
+			"type":        str("One of the types listed in this tool's description; default \"general\"."),
 			"size": map[string]interface{}{
 				"type": "string", "enum": []string{"S", "M", "L", "XL"},
 				"description": "How hard the work is: S mechanical, M a well-specified change, L cross-module or unknown cause, XL design-level.",
@@ -98,7 +97,7 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			"model":      str("A model id to run on, skipping Orbit's choice."),
 			"background": map[string]interface{}{
 				"type":        "boolean",
-				"description": "Return at once and be woken with the result when the SubAgent ends (default false).",
+				"description": "Return at once and be woken with the result when the SubAgent ends (default false, or the type's is_background).",
 			},
 			"resume": str("The runId of a finished SubAgent of this session to continue: it keeps its own conversation and gets prompt as its next message."),
 		}, "description", "prompt"),
@@ -231,6 +230,7 @@ type subagentRun struct {
 	background  bool
 	model       string
 	engine      string
+	kind        string
 	// The child engine's own conversation id, which resume continues.
 	engineSession string
 	done          chan struct{}
@@ -413,6 +413,8 @@ type subagentRecord struct {
 	RunID         string `json:"runId"`
 	Engine        string `json:"engine"`
 	EngineSession string `json:"engineSession"`
+	// Type is the definition the run ran as, which a resume without a type runs as again.
+	Type string `json:"type,omitempty"`
 }
 
 func subagentDir(sessionID, runID string) string {
@@ -469,16 +471,6 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		return subagentReport{}, errors.New("prompt is required")
 	}
 	kind := strings.TrimSpace(getString(args, "type"))
-	if kind == "" {
-		kind = "general"
-	}
-	if kind != "general" && kind != "explore" {
-		return subagentReport{}, fmt.Errorf("unknown SubAgent type %q: use \"general\" or \"explore\"", kind)
-	}
-	background, err := bgOptionalBool(args, "background")
-	if err != nil {
-		return subagentReport{}, err
-	}
 	// Resume continues a finished run's own conversation, on the engine it ran on.
 	var resumeFrom *subagentRecord
 	if resumeID := strings.TrimSpace(getString(args, "resume")); resumeID != "" {
@@ -487,23 +479,24 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 			return subagentReport{}, err
 		}
 		resumeFrom = rec
+		if kind == "" {
+			kind = rec.Type
+		}
+	}
+	// Read from the directory the child runs in, so a definition on the session's own branch is found.
+	def, err := findSubagentDefinition(sessionSubagentDefinitions(s.execDir), kind)
+	if err != nil {
+		return subagentReport{}, err
+	}
+	background, err := subagentBackground(args, def)
+	if err != nil {
+		return subagentReport{}, err
 	}
 	// Child mode exists for Claude Code so far; P1 runs every SubAgent on the parent's own engine.
 	if engine := runtimeProvider(s.job); engine != providerClaude {
 		return subagentReport{}, fmt.Errorf("SubAgents cannot run on the %s engine on this runner yet. Do the work yourself", engine)
 	}
-	body := map[string]interface{}{
-		"toolUseId":        toolUseID,
-		"type":             kind,
-		"definitionSource": "builtin",
-		"background":       background,
-		"readonly":         kind == "explore",
-	}
-	for _, key := range []string{"size", "sizeReason", "model"} {
-		if v := strings.TrimSpace(getString(args, key)); v != "" {
-			body[key] = v
-		}
-	}
+	body := subagentStartBody(args, def, toolUseID, background)
 	var created subagentCreateResponse
 	if err := s.t.do(nil, "POST", "/runner/sessions/"+s.sessionID+"/subagents", body, &created, 30*time.Second); err != nil {
 		return subagentReport{}, err
@@ -525,11 +518,11 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	}
 	run := &subagentRun{
 		id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"),
-		background: background, model: created.Exec.Model, engine: providerClaude, engineSession: engineSession,
+		background: background, model: created.Exec.Model, engine: providerClaude, engineSession: engineSession, kind: def.Name,
 		done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning,
 	}
 	s.subagents.add(run)
-	go s.runSubagent(run, created.Exec, subagentPreamble+"\n\n"+prompt, resumeFrom != nil)
+	go s.runSubagent(run, created.Exec, def, prompt, resumeFrom != nil)
 	s.subagents.mu.Lock()
 	defer s.subagents.mu.Unlock()
 	return run.reportLocked(), nil
@@ -543,7 +536,7 @@ func (s *bgJobService) subagentRecord(runID string) (*subagentRecord, error) {
 		if status == subagentStatusRunning {
 			return nil, fmt.Errorf("SubAgent %s is still running; resume it once it has ended", runID)
 		}
-		return &subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession}, nil
+		return &subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession, Type: run.kind}, nil
 	}
 	raw, err := os.ReadFile(filepath.Join(subagentDir(s.sessionID, runID), "run.json"))
 	if err != nil {
@@ -557,11 +550,11 @@ func (s *bgJobService) subagentRecord(runID string) (*subagentRecord, error) {
 }
 
 // runSubagent runs the child to its end, then reports it: the PATCH, the parent's answer, and a wake when one is owed.
-func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, prompt string, resume bool) {
+func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, def subagentDefinition, prompt string, resume bool) {
 	ctx := s.bg.ctx
 	dir := subagentDir(s.sessionID, run.id)
 	_ = os.MkdirAll(dir, 0o700)
-	_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession})
+	_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession, Type: run.kind})
 	files := newSubagentFileCollector(s.execDir)
 	emit := func(eventType string, payload map[string]interface{}) {
 		files.note(eventType, payload)
@@ -569,7 +562,7 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, promp
 			s.bg.emit(eventType, out)
 		}
 	}
-	res, err := runClaudeChild(ctx, s.job, exec, run.id, run.engineSession, resume, s.execDir, dir, prompt, emit)
+	res, err := runClaudeChild(ctx, s.job, exec, def, run.id, run.engineSession, resume, s.execDir, dir, prompt, emit)
 	status, result := subagentStatusDone, strings.TrimSpace(res.Result)
 	switch {
 	case ctx.Err() != nil:
@@ -676,11 +669,19 @@ func (s *bgJobService) patchSubagent(runID string, report subagentReport, usage 
 	}
 }
 
-// runClaudeChild runs Claude Code as a SubAgent: launched by the session's own argv and spawn code in the parent's
-// cwd, in child mode — its own scratch dir, its own conversation, one prompt, no checkout of its own, nothing
-// finalized and nothing committed. Every stream message is parsed by the session's own handleMessage.
-func runClaudeChild(ctx context.Context, parent *ClaimedSession, exec AgentExecConfig, runID, engineSession string,
-	resume bool, cwd, scratch, prompt string, emit emitFn) (ExecResult, error) {
+// subagentBackground is the call's background, or the definition's is_background when the call leaves it out.
+func subagentBackground(args map[string]interface{}, def subagentDefinition) (bool, error) {
+	if _, set := args["background"]; !set && def.Background != nil {
+		return *def.Background, nil
+	}
+	return bgOptionalBool(args, "background")
+}
+
+// claudeChildSession is the session a Claude SubAgent is spawned as, and its argv: the parent's, in child mode,
+// with the definition applied — the preamble and the definition's body as its appended system prompt, plan mode
+// and no edit tools when it is read-only, and its tools (--tools) and disallowedTools.
+func claudeChildSession(parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID, engineSession string,
+	resume bool, scratch string) (*ClaimedSession, []string) {
 	child := *parent
 	child.Provider = providerClaude
 	child.Agent = exec
@@ -693,9 +694,28 @@ func runClaudeChild(ctx context.Context, parent *ClaimedSession, exec AgentExecC
 		child.Agent.Env[k] = v
 	}
 	child.Agent.Env[envSubagentRunID] = runID
+	child.Agent.AppendSystemPrompt = subagentSystemPrompt(def)
+	child.Agent.DisallowedTools = appendUnique(exec.DisallowedTools, def.DisallowedTools...)
+	if def.Readonly {
+		// The server already narrows a read-only run to plan mode (§5.3); kept here so the child never reads wider.
+		child.Agent.PermissionMode = "plan"
+		child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
+	}
 	child.SessionUUID = engineSession
 	args := claudeCommandArgs(&child, scratch, !resume)
-	sp, err := spawnClaude(ctx, &child, cwd, args)
+	if len(def.Tools) > 0 {
+		args = append(args, "--tools", strings.Join(def.Tools, ","))
+	}
+	return &child, args
+}
+
+// runClaudeChild runs Claude Code as a SubAgent: launched by the session's own argv and spawn code in the parent's
+// cwd, in child mode — its own scratch dir, its own conversation, one prompt, no checkout of its own, nothing
+// finalized and nothing committed. Every stream message is parsed by the session's own handleMessage.
+func runClaudeChild(ctx context.Context, parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID,
+	engineSession string, resume bool, cwd, scratch, prompt string, emit emitFn) (ExecResult, error) {
+	child, args := claudeChildSession(parent, exec, def, runID, engineSession, resume, scratch)
+	sp, err := spawnClaude(ctx, child, cwd, args)
 	if err != nil {
 		return ExecResult{}, err
 	}

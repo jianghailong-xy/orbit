@@ -228,7 +228,8 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		}
 		// A SubAgent cannot hand work on again (subagent.go).
 		if os.Getenv(envSubagentRunID) == "" {
-			tools = append(tools, delegateToolDescriptor(schemaObject))
+			cwd, _ := os.Getwd()
+			tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)))
 		}
 		if s.onlyTools != nil {
 			tools = onlyMCPTools(tools, s.onlyTools)

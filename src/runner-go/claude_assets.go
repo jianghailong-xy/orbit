@@ -138,13 +138,21 @@ func scanSkills(dir, agentID string) []SlashCommandInfo {
 }
 
 // readFrontmatter returns the `name` and `description` from a file's leading
-// `---`-fenced YAML block. Minimal by design: it handles only the flat
-// `key: value` lines orbit's command/skill files use (single-line values, no
-// nested/multi-line YAML), which is all the composer hint needs.
+// `---`-fenced YAML block (readFrontmatterFields).
 func readFrontmatter(path string) (name, description string) {
+	fields, _, _ := readFrontmatterFields(path)
+	return fields["name"], fields["description"]
+}
+
+// readFrontmatterFields returns every `key: value` of a file's leading `---`-fenced YAML block, and the body
+// after it. Minimal by design: flat single-line values with surrounding quotes stripped, plus block-list items
+// (`  - x` under a key with no value of its own), which are joined onto that key with commas. ok is false when
+// the file cannot be read or has no frontmatter; the body is then the whole file.
+func readFrontmatterFields(path string) (fields map[string]string, body string, ok bool) {
+	fields = map[string]string{}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", ""
+		return fields, "", false
 	}
 	lines := strings.Split(string(data), "\n")
 	i := 0
@@ -152,23 +160,37 @@ func readFrontmatter(path string) (name, description string) {
 		i++
 	}
 	if i >= len(lines) || strings.TrimSpace(lines[i]) != "---" {
-		return "", ""
+		return fields, string(data), false
 	}
+	listKey := ""
 	for i++; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "---" {
+		line := strings.TrimSpace(lines[i])
+		if line == "---" {
 			break
+		}
+		if item, isItem := strings.CutPrefix(line, "- "); isItem && listKey != "" {
+			item = strings.Trim(strings.TrimSpace(item), `"'`)
+			if fields[listKey] == "" {
+				fields[listKey] = item
+			} else {
+				fields[listKey] += ", " + item
+			}
+			continue
 		}
 		key, val, ok := strings.Cut(lines[i], ":")
 		if !ok {
 			continue
 		}
+		key = strings.TrimSpace(key)
 		val = strings.Trim(strings.TrimSpace(val), `"'`)
-		switch strings.TrimSpace(key) {
-		case "name":
-			name = val
-		case "description":
-			description = val
+		fields[key] = val
+		listKey = ""
+		if val == "" {
+			listKey = key
 		}
 	}
-	return name, description
+	if i < len(lines) {
+		body = strings.Join(lines[i+1:], "\n")
+	}
+	return fields, body, true
 }
