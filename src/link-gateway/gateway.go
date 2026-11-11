@@ -94,9 +94,37 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 	return g
 }
 
+// rateLimitedListener holds new connections to the handshake rate across all clients (LINK_HANDSHAKE_RATE) as they
+// are accepted, before any TLS: a connection past it is closed at once, with a reset, so a refusal costs an accept and
+// a close instead of most of a TLS handshake. In one restart at 200,000 runners the gateway refused 3.67M attempts
+// after TLS, which took 3.5-4 cores (task 34paLvEDFObkoBxYLAJSN). The runner sees its connection fail and backs off,
+// with jitter, as from any connection that fails (src/runner-go/link_client.go linkRetryWait).
+type rateLimitedListener struct {
+	net.Listener
+	g *gateway
+}
+
+func (l rateLimitedListener) Accept() (net.Conn, error) {
+	for {
+		nc, err := l.Listener.Accept()
+		if err != nil {
+			return nil, err
+		}
+		if ok, _ := l.g.globalLimit.allow(""); ok {
+			return nc, nil
+		}
+		l.g.metrics.handshakes.inc("rate_limited")
+		if tc, ok := nc.(*net.TCPConn); ok {
+			// A reset rather than a FIN: the gateway keeps no TIME_WAIT for a connection it never served.
+			_ = tc.SetLinger(0)
+		}
+		_ = nc.Close()
+	}
+}
+
 // ServeHTTP is the runners' port: every request is an upgrade request, checked in this order before anything is
-// upgraded (README.md, "Handshake"): draining, WebSocket, the handshake rate, the client address's rate, the
-// connection token, the runner's connection slots.
+// upgraded (README.md, "Handshake"): draining, WebSocket, the client address's rate, the connection token, the
+// runner's connection slots. The handshake rate across all clients was checked before TLS (rateLimitedListener).
 func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	started := g.now()
 	m := g.metrics
@@ -109,11 +137,6 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		m.handshakes.inc("not_websocket")
 		w.Header().Set("Upgrade", "websocket")
 		refuseHTTP(w, http.StatusUpgradeRequired, "WEBSOCKET_REQUIRED", "", "this is the Orbit runner link: it speaks WebSocket only", 0)
-		return
-	}
-	if ok, wait := g.globalLimit.allow(""); !ok {
-		m.handshakes.inc("rate_limited")
-		refuseHTTP(w, http.StatusTooManyRequests, "RATE_LIMITED", "", "this gateway is taking too many new connections", wait)
 		return
 	}
 	ip := clientIP(r)
@@ -381,13 +404,19 @@ func serveMain(args []string) int {
 		ErrorLog:          log.New(errorLogWriter{g}, "", 0),
 	}
 
+	ln, err := net.Listen("tcp", cfg.ListenAddr)
+	if err != nil {
+		logger.Error("the runners' port could not be opened", "err", err)
+		return 1
+	}
+	limited := rateLimitedListener{Listener: ln, g: g}
 	errs := make(chan error, 2)
 	go func() { errs <- fmt.Errorf("metrics server: %w", metricsSrv.ListenAndServe()) }()
 	go func() {
 		if tlsSetup.config == nil {
-			errs <- fmt.Errorf("link server: %w", linkSrv.ListenAndServe())
+			errs <- fmt.Errorf("link server: %w", linkSrv.Serve(limited))
 		} else {
-			errs <- fmt.Errorf("link server: %w", linkSrv.ListenAndServeTLS("", ""))
+			errs <- fmt.Errorf("link server: %w", linkSrv.ServeTLS(limited, "", ""))
 		}
 	}()
 	logger.Info("link gateway serving", "version", version, "listen", cfg.ListenAddr, "metrics", cfg.MetricsAddr,

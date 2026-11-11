@@ -61,7 +61,7 @@ It is one static binary with these subcommands:
 | `LINK_HELLO_TIMEOUT` | `10s` | How long after the upgrade a Hello may take. |
 | `LINK_HANDSHAKE_TIMEOUT` | `5s` | How long the TLS handshake and the upgrade request may take, together. |
 | `LINK_IP_RATE`, `LINK_IP_BURST` | `1`, `20` | New connections per second per client address, and the burst allowed. Behind a web gateway every runner is one address: `deploy/runner-link/behind-web-gateway.env` raises these to the limit across all clients. |
-| `LINK_HANDSHAKE_RATE`, `LINK_HANDSHAKE_BURST` | `200`, `400` | New connections per second across all clients, and the burst allowed. |
+| `LINK_HANDSHAKE_RATE`, `LINK_HANDSHAKE_BURST` | 100 per CPU, at least `200`; the burst a second of it | New connections per second across all clients, and the burst allowed. Checked as a connection is accepted, before TLS: one past it is reset at once, which costs the gateway next to nothing, and the runner backs off as from any connection that fails. The default counts the CPUs the gateway may use (`GOMAXPROCS`, which follows the container's CPU limit): 2,800 a second at 28. A vCPU completes about 500 handshakes a second, and past about twice that a core they time out rather than level off, so the default leaves most of the CPU to the connections already open while bringing 800,000 runners back in under 5 minutes after a restart. |
 | `LINK_DRAIN_BATCH`, `LINK_DRAIN_BATCH_INTERVAL` | `250`, `1s` | How many connections are sent Drain at a time, and how far apart. |
 | `LINK_DRAIN_RECONNECT_MIN`, `LINK_DRAIN_RECONNECT_MAX` | `1s`, `30s` | The range the per-connection reconnect delay is drawn from, uniformly. |
 | `LINK_DRAIN_GRACE` | `15s` | How long past its delay a drained connection may stay open before the gateway closes it. |
@@ -80,7 +80,10 @@ request waits 10s for the runner.
 
 ## Handshake
 
-The gateway checks each upgrade request in this order. Nothing is upgraded until every check has passed. A refusal is
+Before any TLS, a new connection past the handshake rate across all clients (`LINK_HANDSHAKE_RATE`) is closed with a
+TCP reset as it is accepted: no handshake is spent on it, and it is counted `rate_limited`.
+
+Then the gateway checks each upgrade request in this order. Nothing is upgraded until every check has passed. A refusal is
 an HTTP response with `Connection: close`. Its JSON body has a `code`, named after the CloseCode the same refusal would
 carry after the upgrade, a `message` and, where it applies, `reason` and `retryAfterMs`. A `Retry-After` header carries
 the same delay.
@@ -89,7 +92,6 @@ the same delay.
 | --- | --- |
 | The gateway is draining. | `503 DRAINING`, `Retry-After: 5`. |
 | The request is a WebSocket upgrade. | `426 WEBSOCKET_REQUIRED`. |
-| The handshake rate across all clients. | `429 RATE_LIMITED`, with a Retry-After. |
 | The new-connection rate of the client address. | `429 RATE_LIMITED`, with a Retry-After. |
 | The connection token in `Authorization: Bearer`. | `401 UNAUTHENTICATED`, with a `reason`. |
 | The runner's connection slots. | `429 TOO_MANY_CONNECTIONS`, `Retry-After: 30`. |

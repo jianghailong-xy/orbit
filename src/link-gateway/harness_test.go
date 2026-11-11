@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,6 +48,8 @@ type harness struct {
 	srv  *httptest.Server
 	url  string
 	logs *syncBuffer
+	// tlsHandshakes counts the TLS handshakes the gateway began: the ClientHellos it read.
+	tlsHandshakes atomic.Int64
 }
 
 func testConfig() config {
@@ -77,8 +81,15 @@ func newHarness(t *testing.T, mutate func(*config)) *harness {
 	srv := httptest.NewUnstartedServer(g)
 	srv.Config.ReadHeaderTimeout = cfg.HandshakeTimeout
 	srv.EnableHTTP2 = false
+	// As serveMain does: the handshake rate across all clients is held below TLS.
+	srv.Listener = rateLimitedListener{Listener: srv.Listener, g: g}
+	h := &harness{t: t, keys: k, g: g, srv: srv, logs: logs}
+	srv.TLS = &tls.Config{GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
+		h.tlsHandshakes.Add(1)
+		return nil, nil
+	}}
 	srv.StartTLS()
-	h := &harness{t: t, keys: k, g: g, srv: srv, url: "wss://" + srv.Listener.Addr().String(), logs: logs}
+	h.url = "wss://" + srv.Listener.Addr().String()
 	t.Cleanup(func() {
 		for _, c := range g.reg.snapshot() {
 			c.closeWith(linkpb.CloseCode_CLOSE_CODE_UNSPECIFIED, "test over", 0, websocket.StatusGoingAway, "shutdown")

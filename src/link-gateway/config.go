@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -180,6 +181,17 @@ func defaultLinkTuning() linkTuning {
 	}
 }
 
+// defaultHandshakeRate is LINK_HANDSHAKE_RATE's default, and LINK_HANDSHAKE_BURST's (a second of it): 100 new
+// connections a second for each CPU the gateway may use (GOMAXPROCS, which follows the container's CPU limit), and
+// never under 200. A vCPU completes about 500 TLS handshakes a second at 1.5-1.8 ms each, and past about twice that a
+// core the handshakes time out and are retried rather than level off (task 34paLvEDFObkoBxYLAJSN, series D), so a
+// fifth of it leaves the rest for the connections already open. At 28 vCPUs that is 2,800 a second, which brings
+// 800,000 runners back in under 5 minutes after a restart, inside the 10 min 45 s the reaper holds their work; at the
+// old 200 a second a lone gateway got about 130,000 back in that time.
+func defaultHandshakeRate(cpus int) int {
+	return max(100*cpus, 200)
+}
+
 // letsEncrypt is the ACME directory used unless LINK_ACME_DIRECTORY_URL names another.
 const letsEncrypt = "https://acme-v02.api.letsencrypt.org/directory"
 
@@ -252,8 +264,8 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		HandshakeTimeout:   dur("LINK_HANDSHAKE_TIMEOUT", 5*time.Second),
 		IPRate:             num("LINK_IP_RATE", 1),
 		IPBurst:            integer("LINK_IP_BURST", 20),
-		HandshakeRate:      num("LINK_HANDSHAKE_RATE", 200),
-		HandshakeBurst:     integer("LINK_HANDSHAKE_BURST", 400),
+		HandshakeRate:      num("LINK_HANDSHAKE_RATE", float64(defaultHandshakeRate(runtime.GOMAXPROCS(0)))),
+		HandshakeBurst:     integer("LINK_HANDSHAKE_BURST", defaultHandshakeRate(runtime.GOMAXPROCS(0))),
 		MaxConnsPerRunner:  defaultMaxConnsPerRunner,
 		DrainBatch:         integer("LINK_DRAIN_BATCH", 250),
 		DrainBatchInterval: dur("LINK_DRAIN_BATCH_INTERVAL", time.Second),
