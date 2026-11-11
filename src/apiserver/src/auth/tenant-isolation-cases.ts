@@ -551,6 +551,13 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────
   'GET /sessions/:id': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/compact': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'GET /sessions/:id/task-moves': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/task-moves/decision': {
+    request: (of) => ({
+      params: { id: of.sessionId },
+      body: { decision: 'DENY', moves: [{ handoffId: of.handoffId, crossingKey: 'a'.repeat(64) }] },
+    }),
+  },
   // A landing session's check output (contract §2.9 LS2): the subject the session belongs to is the
   // account's, and another account's session is the same 404 as one that does not exist.
   'GET /sessions/:id/landing/log': { request: (of) => ({ params: { id: of.landingSessionId } }) },
@@ -1287,6 +1294,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   // Where a space's chats run, set to another account's workspace: not one this space's chats may run in.
   'PATCH /wiki/spaces/:id body chat.workspaceId': {
     request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { chat: { workspaceId: of.workspaceId } } }),
+  },
+  // A batch answer naming another account's move from the caller's own session: the rows are read by
+  // (id, the caller) before anything is locked or written, so it is the 404 of a move that does not exist.
+  'POST /sessions/:id/task-moves/decision body moves[].handoffId': {
+    request: (of, mine) => ({
+      params: { id: mine.sessionId },
+      body: { decision: 'DENY', moves: [{ handoffId: of.handoffId, crossingKey: 'a'.repeat(64) }] },
+    }),
   },
   'POST /wiki/changesets/:id/decide body decisions[].opId': {
     request: (of, mine) => ({

@@ -953,3 +953,29 @@ export class DecideProjectHandoffDto {
   })
   acknowledgedCrossingKey?: string;
 }
+
+/** One crossing of a batch answer: the row, and the crossing key the client read from it. */
+export class TaskMoveAnswerDto {
+  @IsPublicId() handoffId!: string;
+
+  @IsString() @Matches(/^[0-9a-f]{64}$/, {
+    message: 'crossingKey must be the crossingKey you read from the crossing',
+  })
+  crossingKey!: string;
+}
+
+/**
+ * The answer to a batch of task moves, given from the move card in a session: every crossing of
+ * the batch, each with the crossing key the card was drawn from. Every key is checked against its
+ * row, and if any one names another crossing or is no longer waiting, nothing is written.
+ */
+export class DecideTaskMoveBatchDto {
+  @IsIn(['APPROVE', 'DENY']) decision!: 'APPROVE' | 'DENY';
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => TaskMoveAnswerDto)
+  moves!: TaskMoveAnswerDto[];
+}

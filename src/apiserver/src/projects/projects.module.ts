@@ -5,6 +5,7 @@ import { ProjectsController } from './projects.controller';
 import { ProjectDoneNotYetController } from './project-done-not-yet.controller';
 import { ProjectPromotionController } from './project-promotion.controller';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
+import { SessionTaskMovesController } from './session-task-moves.controller';
 import { ProjectPromotionService } from './project-promotion.service';
 import { AttemptBudgetMeterService } from './attempt-budget-meter.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
@@ -39,6 +40,7 @@ import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
     ProjectPromotionController,
     ProjectDoneNotYetController,
     ProjectIntegrationRetryController,
+    SessionTaskMovesController,
   ],
   providers: [
     ProjectsService,

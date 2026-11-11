@@ -24,6 +24,7 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:projectId/promotions/:promotionId/decline',
   'POST /projects/:projectId/promotions/:promotionId/cancel',
   'POST /projects/:id/handoffs/:handoffId/decision',
+  'POST /sessions/:id/task-moves/decision',
   // The same rule where the design names no door: the owner's own decisions the code already keeps
   // from agents. These refuse a request that carries an agent session — starting a project seals its
   // criteria, the standard-set confirmation by another door.

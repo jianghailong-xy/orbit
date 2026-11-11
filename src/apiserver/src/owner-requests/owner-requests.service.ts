@@ -14,6 +14,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { returnSessionsToOpen } from '../sessions/return-to-open';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
@@ -192,6 +193,15 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       select: VIEW,
     });
     if (created) {
+      // The request's card is drawn in the session that asked, and only an Open row lights: one the
+      // owner had filed in Completed comes back (a Trash one cannot file, above). After the commit,
+      // and never a reason for the filing to fail.
+      const reopened = await returnSessionsToOpen(this.prisma, ownerId, [askingSessionId], this.logger)
+        .catch((error: unknown) => {
+          this.logger.warn(`could not bring session ${askingSessionId} back to Open: ${(error as Error).message}`);
+          return [] as string[];
+        });
+      for (const sessionId of reopened) this.realtime?.publishSessionCreated(sessionId);
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
       this.realtime?.publishOwnerSignalChanged(ownerId, [askingSessionId]);
