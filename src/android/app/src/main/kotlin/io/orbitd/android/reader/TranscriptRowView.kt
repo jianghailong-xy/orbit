@@ -59,6 +59,11 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         return
     }
     val event = row.event
+    // Orbit's own SubAgent is one folded block of its own (board docs/mocks/subagent/03.png).
+    if (!detailOnly && event.type == "tool_use" && (event.fields.string("name") ?: event.fields.string("toolName")) == SubagentBlock.TOOL_NAME) {
+        SubagentBlockView(row, highlighted) { child -> TranscriptRowView(child, model, live, open) }
+        return
+    }
     val clipboard = LocalClipboardManager.current
     var expanded by rememberSaveable(row.key) { mutableStateOf(false) }
     var childrenOpen by rememberSaveable(row.key) { mutableStateOf(false) }
