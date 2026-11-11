@@ -342,7 +342,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 64,
+  assert.equal(core.length, 65,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -368,7 +368,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_wiki_chat_space_guard` to `session`, which refuses a write that would change the '
     + 'wiki space a session is a chat of, and 64 once 0484 made the Open list\'s data version '
     + 'cheap: three `open_list_epoch_*` triggers on `task`, three on `session`, and three plus '
-    + '`conversation_turn_evidence_review_deadline` on `conversation_turn`');
+    + '`conversation_turn_evidence_review_deadline` on `conversation_turn`, and 65 once 0540 added '
+    + '`task_fork_guard` to `task`, which refuses a write that would change where a forked task starts');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -395,6 +396,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
       'session_open_list_epoch_delete', 'session_open_list_epoch_insert', 'session_open_list_epoch_update',
       'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
       'session_wiki_chat_space_guard',
+      'task_fork_guard',
       'task_list_task_count_delete', 'task_list_task_count_insert', 'task_list_task_count_relist',
       'task_open_list_epoch_delete', 'task_open_list_epoch_insert', 'task_open_list_epoch_update',
       'task_owner_confirmation_review_reviewer_ended', 'task_progress_epoch_advance'],
@@ -408,7 +410,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_engine_from_task_pin` and `session_engine_immutable` and 0426\'s '
     + '`session_cursor_runner_acquisition_guard` and 0441\'s two `project_rollup_candidate_task_*` '
     + 'and 0476\'s `session_wiki_chat_space_guard`. '
-    + '0484\'s nine `open_list_epoch_*` triggers and `conversation_turn_evidence_review_deadline`. '
+    + '0484\'s nine `open_list_epoch_*` triggers and `conversation_turn_evidence_review_deadline`, '
+    + 'and 0540\'s `task_fork_guard`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(
