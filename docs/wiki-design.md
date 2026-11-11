@@ -279,9 +279,9 @@ agent（MCP / CLI）、owner（web / iOS / CLI）、维护作业、导入，全�
 
 | type | 形态 | 复验方法 | 状态 |
 |---|---|---|---|
-| `path` | repo 相对路径 | `git cat-file -e origin/main:<path>` | verified / missing |
+| `path` | repo 相对路径 | `git cat-file -e <ref>:<path>`（`<ref>` 是 fetch 后的默认分支） | verified / missing |
 | `symbol` | path + 符号名 + 区域哈希 | `git grep -n` 定位符号，对其后 N 行做哈希比对 | verified / changed / missing |
-| `commit` | sha | `git merge-base --is-ancestor <sha> origin/main` | verified / missing（用非祖先 sha 会毒化下游，所以必须验） |
+| `commit` | sha | `git merge-base --is-ancestor <sha> <ref>` | verified / missing（用非祖先 sha 会毒化下游，所以必须验） |
 | `criterion` | 判据 id + semanticHash | 服务端比对 | verified / changed |
 | `merge_evidence` | contentHash | 服务端比对是否仍被观察到 | verified / missing |
 | `command` | 命令 + 期望退出码 | 维护作业重跑（配方） | verified / changed |
@@ -514,7 +514,7 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
      origin=maintenance，提议者是这次运行的作业。
   3. **推进游标**（判据 3 第 4 版）：op 记下后立刻越过这些 op 所属的会话。之后的步骤失败，运行照样记失败、计入连续失败，但游标不回退，
      下一次运行不再重读这些会话；提交失败发生在记下之前，游标不动。
-  4. 锚点复验：作业把锚点交给 space 的 workspace 所在的 runner，作为 `anchors` 仓库操作在 fetch 后的 `origin/main` 上跑 git 检查，结果由服务端记下。
+  4. 锚点复验：作业把锚点交给 space 的 workspace 所在的 runner，作为 `anchors` 仓库操作在 fetch 后的仓库默认分支上跑 git 检查，结果由服务端记下。
   5. 按已确认的 plan 只重写受影响的节；落不进任何一节的新知识产出 plan 修改建议（判据 3 第 3 版）。
 - **成本护栏**（照 Wikova 的实测）
   - Wikova ingest 的计费输入 p50 1.1M、最高 9.5M token，由轮数驱动。

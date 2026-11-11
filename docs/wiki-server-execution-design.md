@@ -16,7 +16,7 @@
 2. **对模型的请求全部进队列。** 队列是持久化的 `wiki_model_request`。调度器按全局并发上限 `ORBIT_WIKI_MODEL_CONCURRENCY` 取请求执行，起多个 worker 进程也不会超过这个数。
    - 请求按优先级先来先得：owner 主动发起的排在后台维护前面。
    - 模型不可达或 key 被拒时，整个队列暂停，状态在界面上可见。
-3. **runner 只做仓库操作。** 包括 fetch `origin/main`、建索引、读指定片段、diff、锚点检查。
+3. **runner 只做仓库操作。** 包括 fetch 仓库的默认分支（`origin/<name>`，由远端 HEAD 决定）、建索引、读指定片段、diff、锚点检查。
    - 通道照集成作业（`integration-job/v1`）的做法：runner 在心跳里领取，在会话池之外执行。
    - 不起 agent 会话，不占并发槽位，也不接触任何模型 key。
 4. **作业和请求都落库，带租约。** 每个请求同时就是一个断点：
@@ -173,11 +173,11 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 
 ### 4.3 仓库内容：runner 交快照，服务端查快照
 
-- runner 在 `origin/main` 上建一份快照：
+- runner 在仓库的默认分支上建一份快照：
   - 路径列表（含大小）
   - 文档标题
   - 符号索引
-  - `origin/main` 可达的提交集合
+  - 该分支可达的提交集合
   - README 首段
 
   快照按 sha 缓存，同一个 sha 只传一次。
