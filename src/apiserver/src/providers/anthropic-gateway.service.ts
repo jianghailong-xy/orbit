@@ -207,6 +207,7 @@ export class AnthropicGatewayService {
       sessionModel,
       smallModel: gatewaySmallModel(caller.key),
       promptCacheKey: caller.sessionId,
+      webSearchSources: true,
     };
     if (path === COUNT_TOKENS) {
       await this.countTokens(res, caller, message, ctx, upstream);

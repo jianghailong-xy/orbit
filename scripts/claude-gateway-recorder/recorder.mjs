@@ -25,9 +25,11 @@ function streamMessage(res, model, blocks, stopReason = 'end_turn', usage = { in
       sse(res, 'content_block_start', { index, content_block: { type: 'thinking', thinking: '', signature: '' } });
       sse(res, 'content_block_delta', { index, delta: { type: 'thinking_delta', thinking: b.thinking } });
       sse(res, 'content_block_delta', { index, delta: { type: 'signature_delta', signature: b.signature } });
-    } else if (b.type === 'tool_use') {
-      sse(res, 'content_block_start', { index, content_block: { type: 'tool_use', id: b.id, name: b.name, input: {} } });
+    } else if (b.type === 'tool_use' || b.type === 'server_tool_use') {
+      sse(res, 'content_block_start', { index, content_block: { type: b.type, id: b.id, name: b.name, input: {} } });
       sse(res, 'content_block_delta', { index, delta: { type: 'input_json_delta', partial_json: JSON.stringify(b.input) } });
+    } else {
+      sse(res, 'content_block_start', { index, content_block: b }); // web_search_tool_result: sent whole, as Anthropic does
     }
     sse(res, 'content_block_stop', { index });
   });
@@ -91,6 +93,11 @@ const scripts = {
     if (!hasToolResult(b, 'toolu_wf1')) return { blocks: [{ type: 'tool_use', id: 'toolu_wf1', name: 'WebFetch', input: { url: 'https://example.com/', prompt: 'What is the title?' } }], stop: 'tool_use' };
     return { blocks: [{ type: 'text', text: 'fetched' }] };
   },
+  websearch(b, st) {
+    if (!hasToolResult(b, 'toolu_ts1')) return { blocks: [{ type: 'tool_use', id: 'toolu_ts1', name: 'ToolSearch', input: { query: 'select:WebSearch', max_results: 1 } }], stop: 'tool_use' };
+    if (!hasToolResult(b, 'toolu_ws1')) return { blocks: [{ type: 'tool_use', id: 'toolu_ws1', name: 'WebSearch', input: { query: 'orbit recorder test' } }], stop: 'tool_use' };
+    return { blocks: [{ type: 'text', text: 'searched' }] };
+  },
   toolong(b, st) {
     st.n = (st.n || 0) + 1;
     if (st.n === 2) return { error: [400, 'invalid_request_error', (st.name === 'toolong-openai' ? 'Your input exceeds the context window of this model. Please adjust your input and try again.' : 'prompt is too long: 250000 tokens > 200000 maximum')] };
@@ -123,6 +130,17 @@ http.createServer((req, res) => {
       else if (isMain(body)) role = 'main';
       else role = 'background';
       if (role === 'main' && scripts[scriptName]) answer = scripts[scriptName](body, st);
+      else if ((body.tools || []).some((t) => String(t.type || '').startsWith('web_search_'))) {
+        role = 'websearch';
+        answer = { blocks: [
+          { type: 'server_tool_use', id: 'srvtoolu_rec1', name: 'web_search', input: { query: 'orbit recorder test' } },
+          { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_rec1', content: [
+            { type: 'web_search_result', title: 'Recorder result one', url: 'https://example.com/one', encrypted_content: 'enc-one', page_age: null },
+            { type: 'web_search_result', title: 'Recorder result two', url: 'https://example.org/two', encrypted_content: 'enc-two', page_age: 'April 1, 2026' },
+          ] },
+          { type: 'text', text: 'Result one says the recorder works.' },
+        ] };
+      }
       else if (role === 'subagent') answer = { blocks: [{ type: 'text', text: 'subagent-hi' }] };
       else if (role === 'compaction') answer = { blocks: [{ type: 'text', text: '<summary>The user asked for a test. Nothing else happened.</summary>' }] };
       else answer = { blocks: [{ type: 'text', text: '{"title":"Recorder test","isNewTopic":true}' }] };

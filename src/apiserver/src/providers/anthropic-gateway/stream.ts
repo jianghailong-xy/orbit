@@ -40,6 +40,14 @@ export class MessagesStreamConverter {
   private started = false;
   private finished = false;
   private sawFunctionCall = false;
+  /** Web searches answered so far, for `usage.server_tool_use.web_search_requests`. */
+  private searches = 0;
+  /** Searches whose result block waits for the answer's citations: their call listed no sources. */
+  private readonly unlisted: string[] = [];
+  private lastSearch: string | undefined;
+  /** Every URL a result block has listed, and the answer's citations not yet listed, by URL. */
+  private readonly listed = new Set<string>();
+  private readonly cited = new Map<string, string>();
   /**
    * The upstream's own failure, when the response ended in one (`response.failed`, a stream `error`): its
    * code and message as OpenAI gave them, for the gateway's key side effects (design §5.4).
@@ -129,6 +137,9 @@ export class MessagesStreamConverter {
         out.push({ type: 'content_block_delta', index: block.index, delta: { type: 'input_json_delta', partial_json: String(event.delta ?? '') } });
         return;
       }
+      case 'response.output_text.annotation.added':
+        this.cite(event.annotation);
+        return;
       case 'response.output_item.done':
         this.itemDone(Number(event.output_index), (event.item as Json | undefined) ?? {}, out);
         return;
@@ -184,7 +195,7 @@ export class MessagesStreamConverter {
       block = { index: this.nextIndex++, kind: 'tool_use' };
       contentBlock = { type: 'tool_use', id: String(item.call_id ?? ''), name: String(item.name ?? ''), input: {} };
     } else {
-      return; // web_search_call and other items have no Messages block (D5).
+      return; // A web_search_call becomes blocks once it is done and names its query (webSearchDone).
     }
     this.open.set(outputIndex, block);
     out.push({ type: 'content_block_start', index: block.index, content_block: contentBlock });
@@ -197,6 +208,12 @@ export class MessagesStreamConverter {
   }
 
   private itemDone(outputIndex: number, item: Json, out: MessagesEvent[]): void {
+    if (item.type === 'web_search_call') this.webSearchDone(item, out);
+    if (item.type === 'message' && Array.isArray(item.content)) {
+      for (const part of item.content as Json[]) {
+        if (Array.isArray(part.annotations)) for (const a of part.annotations as unknown[]) this.cite(a);
+      }
+    }
     const block = this.open.get(outputIndex);
     if (!block) return;
     this.open.delete(outputIndex);
@@ -213,6 +230,60 @@ export class MessagesStreamConverter {
     out.push({ type: 'content_block_stop', index: block.index });
   }
 
+  /**
+   * A finished `web_search_call` → the `server_tool_use` block Anthropic's server writes for a search, then its
+   * `web_search_tool_result` (design §4.7). The CLI's WebSearch tool reads the query from the first and the
+   * results' titles and URLs from the second (websearch.json). The results are the call's sources when it
+   * lists them; otherwise the answer's url_citations, in a result block written once the answer is done.
+   * `open_page` and `find_in_page` actions are not searches and write nothing.
+   */
+  private webSearchDone(item: Json, out: MessagesEvent[]): void {
+    const action = (item.action as Json | undefined) ?? {};
+    if (action.type !== undefined && action.type !== 'search') return;
+    const queries = Array.isArray(action.queries) ? (action.queries as unknown[]) : [];
+    const query = typeof action.query === 'string' ? action.query : typeof queries[0] === 'string' ? queries[0] : '';
+    const id = `srvtoolu_${typeof item.id === 'string' && item.id !== '' ? item.id : String(this.searches)}`;
+    this.searches += 1;
+    this.lastSearch = id;
+    const index = this.nextIndex++;
+    out.push({ type: 'content_block_start', index, content_block: { type: 'server_tool_use', id, name: 'web_search', input: {} } });
+    out.push({ type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: JSON.stringify({ query }) } });
+    out.push({ type: 'content_block_stop', index });
+    const sources = (Array.isArray(action.sources) ? (action.sources as Json[]) : [])
+      .map((source) => (typeof source?.url === 'string' ? source.url : ''))
+      .filter((url) => url !== '' && !this.listed.has(url));
+    if (sources.length === 0) {
+      this.unlisted.push(id);
+      return;
+    }
+    this.results(id, [...new Set(sources)].map((url) => ({ url, title: url })), out);
+  }
+
+  private cite(annotation: unknown): void {
+    const a = annotation as Json | undefined;
+    if (a?.type !== 'url_citation' || typeof a.url !== 'string' || this.cited.has(a.url)) return;
+    this.cited.set(a.url, typeof a.title === 'string' && a.title !== '' ? a.title : a.url);
+  }
+
+  private results(id: string, found: Array<{ url: string; title: string }>, out: MessagesEvent[]): void {
+    for (const r of found) this.listed.add(r.url);
+    const index = this.nextIndex++;
+    const content = found.map((r) => ({ type: 'web_search_result', title: r.title, url: r.url, encrypted_content: '', page_age: null }));
+    out.push({ type: 'content_block_start', index, content_block: { type: 'web_search_tool_result', tool_use_id: id, content } });
+    out.push({ type: 'content_block_stop', index });
+  }
+
+  /**
+   * Once the answer is done: the searches that listed no sources get their result block, and the answer's
+   * citations no result has listed go in the last search's — so a cited page is never missing from the links.
+   */
+  private resultsFromCitations(out: MessagesEvent[]): void {
+    const found = [...this.cited].filter(([url]) => !this.listed.has(url)).map(([url, title]) => ({ url, title }));
+    this.unlisted.forEach((id, i) => this.results(id, i < this.unlisted.length - 1 ? [] : found, out));
+    if (this.unlisted.length === 0 && found.length > 0 && this.lastSearch) this.results(this.lastSearch, found, out);
+    this.unlisted.length = 0;
+  }
+
   private closeOpen(out: MessagesEvent[]): void {
     for (const [outputIndex] of [...this.open.entries()].sort((a, b) => a[1].index - b[1].index)) {
       this.itemDone(outputIndex, {}, out);
@@ -222,10 +293,13 @@ export class MessagesStreamConverter {
   private complete(response: Json, out: MessagesEvent[]): void {
     this.start(response, out);
     this.closeOpen(out);
+    this.resultsFromCitations(out);
     this.finished = true;
     const output = Array.isArray(response.output) ? (response.output as Json[]) : [];
     if (output.some((o) => o.type === 'function_call')) this.sawFunctionCall = true;
-    out.push({ type: 'message_delta', delta: { stop_reason: stopReason(response, this.sawFunctionCall), stop_sequence: null }, usage: messagesUsage(response.usage) });
+    const usage = messagesUsage(response.usage);
+    if (this.searches > 0) usage.server_tool_use = { web_search_requests: this.searches };
+    out.push({ type: 'message_delta', delta: { stop_reason: stopReason(response, this.sawFunctionCall), stop_sequence: null }, usage });
     out.push({ type: 'message_stop' });
   }
 
@@ -315,7 +389,7 @@ export function assembleMessage(events: readonly MessagesEvent[]): { message: Js
       else if (d.type === 'input_json_delta') json[e.index as number] += String(d.partial_json);
     } else if (e.type === 'content_block_stop') {
       const b = blocks[e.index as number];
-      if (b.type === 'tool_use') {
+      if (b.type === 'tool_use' || b.type === 'server_tool_use') {
         const raw = json[e.index as number];
         try {
           b.input = raw ? JSON.parse(raw) : {};

@@ -246,7 +246,7 @@ test('§4.3 a deferred tool is declared once ToolSearch has loaded it; the tool_
   assert.equal(third.role, 'main');
 });
 
-test('§4.3 tool_choice, parallel switch, dropped sampling fields and server tools', () => {
+test('§4.3 tool_choice, parallel switch, dropped sampling fields and server tools other than web search', () => {
   const base = { messages: [{ role: 'user', content: 'hi' }], tools: [{ name: 'Bash', input_schema: { type: 'object' } }] };
   const choice = (tool_choice: Json) => toResponsesRequest({ ...base, tool_choice }, CTX).request;
   assert.equal(choice({ type: 'auto' }).tool_choice, 'auto');
@@ -255,13 +255,46 @@ test('§4.3 tool_choice, parallel switch, dropped sampling fields and server too
   assert.deepEqual(choice({ type: 'tool', name: 'Bash' }).tool_choice, { type: 'function', name: 'Bash' });
   assert.equal(choice({ type: 'auto', disable_parallel_tool_use: true }).parallel_tool_calls, false);
   const { request, droppedServerTools } = toResponsesRequest(
-    { ...base, temperature: 1, top_p: 0.9, top_k: 5, stop_sequences: ['x'], tools: [...base.tools, { type: 'web_search_20250305', name: 'web_search' }] },
+    { ...base, temperature: 1, top_p: 0.9, top_k: 5, stop_sequences: ['x'], tools: [...base.tools, { type: 'web_fetch_20250910', name: 'web_fetch' }] },
     CTX,
   );
   for (const field of ['temperature', 'top_p', 'top_k', 'stop_sequences', 'stop']) assert.equal(field in request, false, field);
   assert.deepEqual((request.tools as Json[]).map((t) => t.name), ['Bash']);
-  assert.deepEqual(droppedServerTools, ['web_search']);
+  assert.deepEqual(droppedServerTools, ['web_fetch']);
   assert.deepEqual(items(request), [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }]);
+});
+
+test('§4.7 the recorded WebSearch request: its web_search server tool becomes OpenAI\'s web_search', () => {
+  const recorded = posts('websearch', 'websearch')[0].body!;
+  assert.deepEqual(recorded.tools, [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }]);
+  const { request, droppedServerTools } = toResponsesRequest(recorded, CTX);
+  assert.deepEqual(droppedServerTools, []);
+  assert.deepEqual(request.tools, [{ type: 'web_search' }]);
+  assert.equal(request.tool_choice, 'auto');
+  assert.deepEqual(items(request), [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Perform a web search for the query: orbit recorder test' }] }]);
+  // A login pool (no webSearchSources) asks for nothing new; an API key asks for every source the search read.
+  assert.deepEqual(request.include, ['reasoning.encrypted_content']);
+  assert.deepEqual(toResponsesRequest(recorded, { ...CTX, webSearchSources: true }).request.include, ['reasoning.encrypted_content', 'web_search_call.action.sources']);
+  // Without a search, the sources are not asked for either way.
+  assert.deepEqual(toResponsesRequest(posts('basic')[0].body!, { ...CTX, webSearchSources: true }).request.include, ['reasoning.encrypted_content']);
+  // The main loop declares WebSearch as an ordinary (deferred) tool: it stays a function.
+  const loaded = toResponsesRequest(posts('websearch', 'main')[1].body!, CTX).request;
+  assert.ok((loaded.tools as Json[]).some((t) => t.type === 'function' && t.name === 'WebSearch'));
+});
+
+test('§4.7 web search options: allowed domains become the filter, user_location carries over, blocked domains and max_uses do not', () => {
+  const { request } = toResponsesRequest({
+    messages: [{ role: 'user', content: 'q' }],
+    tools: [{
+      type: 'web_search_20250305', name: 'web_search', max_uses: 3, allowed_domains: ['example.com'], blocked_domains: ['bad.example'],
+      user_location: { type: 'approximate', city: 'Berlin', country: 'DE', timezone: 'Europe/Berlin' },
+    }],
+  }, CTX);
+  assert.deepEqual(request.tools, [{
+    type: 'web_search',
+    filters: { allowed_domains: ['example.com'] },
+    user_location: { type: 'approximate', city: 'Berlin', country: 'DE', timezone: 'Europe/Berlin' },
+  }]);
 });
 
 test('§4.3 a subagent request and a compaction request translate like any other', () => {
@@ -425,6 +458,65 @@ test('§4.4 parallel function calls: one tool_use block each, input_json_delta t
   assert.ok('message' in assembled);
   assert.deepEqual((assembled.message.content as Json[]).map((b) => b.input), [{ command: 'ls' }, { file_path: '/a' }]);
   assert.equal(assembled.message.stop_reason, 'tool_use');
+});
+
+/** A web search as OpenAI streams it: the call, its query and sources, then the answer citing one of them. */
+const SEARCH_STREAM = (sources?: Json[]) => sse([
+  { type: 'response.created', response: { id: 'resp_ws' } },
+  { type: 'response.output_item.added', output_index: 0, item: { type: 'web_search_call', id: 'ws_1', status: 'in_progress' } },
+  { type: 'response.web_search_call.searching', output_index: 0, item_id: 'ws_1' },
+  { type: 'response.output_item.done', output_index: 0, item: { type: 'web_search_call', id: 'ws_1', status: 'completed', action: { type: 'search', query: 'orbit test', ...(sources ? { sources } : {}) } } },
+  { type: 'response.output_item.added', output_index: 1, item: { type: 'web_search_call', id: 'ws_2', status: 'in_progress' } },
+  { type: 'response.output_item.done', output_index: 1, item: { type: 'web_search_call', id: 'ws_2', status: 'completed', action: { type: 'open_page', url: 'https://example.com/one' } } },
+  { type: 'response.output_item.added', output_index: 2, item: { type: 'message', role: 'assistant' } },
+  { type: 'response.output_text.delta', output_index: 2, delta: 'It works ([One](https://example.com/one)).' },
+  { type: 'response.output_text.annotation.added', output_index: 2, annotation: { type: 'url_citation', url: 'https://example.com/one', title: 'One', start_index: 9, end_index: 40 } },
+  { type: 'response.output_item.done', output_index: 2, item: { type: 'message', content: [{ type: 'output_text', annotations: [
+    { type: 'url_citation', url: 'https://example.com/one', title: 'One', start_index: 9, end_index: 40 },
+    { type: 'url_citation', url: 'https://example.net/three', title: 'Three', start_index: 0, end_index: 1 },
+  ] }] } },
+  { type: 'response.completed', response: { id: 'resp_ws', status: 'completed', usage: USAGE, output: [] } },
+]);
+
+test('§4.7 a web_search_call with sources: server_tool_use with its query, web_search_tool_result with the sources, then the text', () => {
+  const events = convert(SEARCH_STREAM([{ type: 'url', url: 'https://example.com/one' }, { type: 'url', url: 'https://example.org/two' }]));
+  assert.deepEqual(kinds(events), [
+    'message_start',
+    'start:server_tool_use', 'delta:input_json_delta', 'content_block_stop',
+    'start:web_search_tool_result', 'content_block_stop',
+    'start:text', 'delta:text_delta', 'content_block_stop',
+    'start:web_search_tool_result', 'content_block_stop',
+    'message_delta', 'message_stop',
+  ]);
+  const assembled = assembleMessage(events);
+  assert.ok('message' in assembled);
+  const [use, result, text, cited] = assembled.message.content as Json[];
+  assert.deepEqual(use, { type: 'server_tool_use', id: 'srvtoolu_ws_1', name: 'web_search', input: { query: 'orbit test' } });
+  assert.deepEqual(result, { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_ws_1', content: [
+    { type: 'web_search_result', title: 'https://example.com/one', url: 'https://example.com/one', encrypted_content: '', page_age: null },
+    { type: 'web_search_result', title: 'https://example.org/two', url: 'https://example.org/two', encrypted_content: '', page_age: null },
+  ] });
+  assert.equal(text.text, 'It works ([One](https://example.com/one)).');
+  // A cited page no search listed is not lost: it is added once the answer is done.
+  assert.deepEqual(cited, { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_ws_1', content: [
+    { type: 'web_search_result', title: 'Three', url: 'https://example.net/three', encrypted_content: '', page_age: null },
+  ] });
+  assert.equal(assembled.message.stop_reason, 'end_turn');
+  assert.deepEqual((assembled.message.usage as Json).server_tool_use, { web_search_requests: 1 });
+});
+
+test('§4.7 a web_search_call without sources (a login pool): its result lists the answer\'s citations, after the text', () => {
+  const assembled = assembleMessage(convert(SEARCH_STREAM()));
+  assert.ok('message' in assembled);
+  assert.deepEqual((assembled.message.content as Json[]).map((b) => b.type), ['server_tool_use', 'text', 'web_search_tool_result']);
+  assert.deepEqual((assembled.message.content as Json[])[2], { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_ws_1', content: [
+    { type: 'web_search_result', title: 'One', url: 'https://example.com/one', encrypted_content: '', page_age: null },
+    { type: 'web_search_result', title: 'Three', url: 'https://example.net/three', encrypted_content: '', page_age: null },
+  ] });
+  // No search, no server_tool_use count.
+  const plain = assembleMessage(convert(REASONING_STREAM));
+  assert.ok('message' in plain);
+  assert.equal('server_tool_use' in (plain.message.usage as Json), false);
 });
 
 test('§4.4 a function call whose arguments come only with output_item.done still carries them', () => {

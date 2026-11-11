@@ -9,6 +9,10 @@
  * address) and the gateway's agent opens the pinned connection — which here reaches the stand-in, in plain HTTP,
  * as gateway-upstream.spec.ts does.
  *
+ * Design §4.7: the CLI's WebSearch tool runs a search through the gateway on both upstreams — an OpenAI key, and
+ * the owner's own Codex login pool (AnthropicLoginGatewayService, its login gateway stood in for, the stand-in
+ * answering as ChatGPT's Codex backend on /backend-api/codex/responses).
+ *
  * Each §5.4 row is one test, and each asserts both ends of it:
  *  - what the CLI did: retried (its `api_retry` events), compacted (`compact_boundary`), finished the turn, or
  *    failed it with the stated words — read from its own stream-json output;
@@ -51,9 +55,10 @@ import type { QueueService } from '../queue/queue.service';
 import { RunnerApiController, type RetryPlanTransaction } from '../runner-api/runner-api.controller';
 import { transactionDouble } from '../test-support/prisma-transaction-double';
 import { AnthropicGatewayController } from './anthropic-gateway.controller';
-import type { AnthropicLoginGatewayService } from './anthropic-login-gateway.service';
+import { AnthropicLoginGatewayService } from './anthropic-login-gateway.service';
 import { AnthropicGatewayService, resetsPhrase } from './anthropic-gateway.service';
 import { ANTHROPIC_GATEWAY_FLAG } from './key-gateway';
+import type { PoolLoginGatewayService } from './pool-login-gateway.service';
 import { encryptSecret } from './provider-crypto';
 
 process.env.PROVIDER_SECRET_KEY ??= 'anthropic-gateway-cli-spec';
@@ -68,6 +73,10 @@ const SLUG = 'openai-work';
 const LABEL = 'Work OpenAI';
 const MODEL = 'gpt-5.1';
 const SECRET = encryptSecret('sk-proj-anthropic-gateway-cli-spec-0123456789');
+/** A Claude Code session's token on its owner's own Codex login pool (design §9). */
+const LOGIN_TOKEN = 'orbit-gwl-cli-spec-token';
+/** What the login pool's session booked on its cost line (AnthropicLoginGatewayService.book). */
+let booked: Array<Record<string, unknown>>;
 
 /** The key row as the stand-in database holds it, written by the gateway's updateMany. */
 let key: { keyCheckState: string | null; keyCheckedAt: Date | null; spentUntil: Date | null };
@@ -117,7 +126,7 @@ before(async () => {
       calls.push({ url: req.url!, body });
       const reply = req.url === '/v1/responses/input_tokens'
         ? countReply
-        : script(calls.filter((c) => c.url === '/v1/responses').length, body);
+        : script(calls.filter((c) => c.url.endsWith('/responses')).length, body);
       if ('sse' in reply) {
         res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' });
         res.end(reply.sse.map((e) => `event: ${(e as { type: string }).type}\ndata: ${JSON.stringify(e)}\n\n`).join(''));
@@ -169,7 +178,23 @@ before(async () => {
       return net.connect(upstreamPort, '127.0.0.1');
     }
   })();
-  const controller = new AnthropicGatewayController(service, {} as AnthropicLoginGatewayService);
+  // The login pool's own steps (account checks, refresh, ledger) are PoolLoginGatewayService's, tested on PostgreSQL
+  // in codex-login-claude.pg.spec.ts; here they hand over one account and its token, and record nothing.
+  const login = {
+    caller: async (token: string) => token !== LOGIN_TOKEN ? null : {
+      poolId: 'pool-1', poolLabel: 'Ann Codex', poolOwnerId: USER, userId: USER, sessionId: '0190f3c2-0000-7000-8000-0000000000ab',
+      sessionOwnerId: USER, accountId: 'acct-cli-spec', keyId: null, sessionModel: MODEL,
+    },
+    accountFor: async () => ({ accountId: 'acct-cli-spec', userId: USER, email: 'ann@chatgpt.invalid', state: 'ACTIVE' }),
+    exchange: async (_res: unknown, _caller: unknown, _login: unknown, _refuse: unknown, send: (credential: string) => Promise<unknown>) => send('access-cli-spec'),
+    readUsage: () => undefined,
+    answeredWhole: async () => ({}),
+    record: () => undefined,
+    streamEnded: () => undefined,
+  } as unknown as PoolLoginGatewayService;
+  const loginPrisma = { session: { update: async ({ data }: { data: Record<string, unknown> }) => (booked.push(data), {}) } } as unknown as PrismaService;
+  const loginGateway = new AnthropicLoginGatewayService(loginPrisma, login, `http://127.0.0.1:${upstreamPort}/backend-api/codex`);
+  const controller = new AnthropicGatewayController(service, loginGateway);
   const app = express();
   app.use((req, res, next) => {
     const json = res.json.bind(res);
@@ -201,6 +226,7 @@ beforeEach(() => {
   writes = [];
   calls = [];
   answers = [];
+  booked = [];
   countReply = { status: 200, json: { object: 'response.input_tokens', input_tokens: 4321 } };
 });
 
@@ -499,4 +525,129 @@ test('§4.6 count_tokens: /context is answered with OpenAI\'s input-token count,
   const estimated = answers.filter((a) => a.url.includes('/v1/messages/count_tokens'));
   assert.ok(estimated.length > 0);
   assert.ok(estimated.every((a) => a.status === 200 && Number.isInteger(a.body.input_tokens) && (a.body.input_tokens as number) > 0 && a.body.input_tokens !== 4321));
+});
+
+// ── §4.7 web search ────────────────────────────────────────────────────────────────────────────────
+
+const SEARCHED = 'orbit gateway web search';
+const SOURCES_INCLUDE = 'web_search_call.action.sources';
+
+/** A whole Responses stream that calls the function `name` with `args`. */
+function functionCall(callId: string, name: string, args: Record<string, unknown>): Reply {
+  const item = { type: 'function_call', id: `fc_${callId}`, call_id: callId, name, arguments: '' };
+  return {
+    sse: [
+      { type: 'response.created', response: { id: `resp_${callId}`, model: MODEL } },
+      { type: 'response.output_item.added', output_index: 0, item },
+      { type: 'response.output_item.done', output_index: 0, item: { ...item, arguments: JSON.stringify(args) } },
+      { type: 'response.completed', response: { id: `resp_${callId}`, model: MODEL, status: 'completed', usage: { input_tokens: 900, output_tokens: 9 }, output: [{ type: 'function_call' }] } },
+    ],
+  };
+}
+
+/**
+ * A search as OpenAI answers it: a web_search_call naming its query — with the pages it read only when the request
+ * asked for them (`include: web_search_call.action.sources`), as OpenAI does — then the answer, citing one page.
+ */
+function searchAnswer(withSources: boolean): Reply {
+  const call = { type: 'web_search_call', id: 'ws_cli1', status: 'in_progress' };
+  const text = 'The gateway searches ([Orbit result one](https://example.com/one)).';
+  const citation = { type: 'url_citation', url: 'https://example.com/one', title: 'Orbit result one', start_index: 21, end_index: text.length - 1 };
+  return {
+    sse: [
+      { type: 'response.created', response: { id: 'resp_ws', model: MODEL } },
+      { type: 'response.output_item.added', output_index: 0, item: call },
+      { type: 'response.web_search_call.in_progress', output_index: 0, item_id: 'ws_cli1' },
+      { type: 'response.web_search_call.searching', output_index: 0, item_id: 'ws_cli1' },
+      { type: 'response.web_search_call.completed', output_index: 0, item_id: 'ws_cli1' },
+      { type: 'response.output_item.done', output_index: 0, item: { ...call, status: 'completed', action: {
+        type: 'search', query: SEARCHED,
+        ...(withSources ? { sources: [{ type: 'url', url: 'https://example.com/one' }, { type: 'url', url: 'https://example.org/two' }] } : {}),
+      } } },
+      { type: 'response.output_item.added', output_index: 1, item: { type: 'message', id: 'msg_ws', role: 'assistant', content: [] } },
+      { type: 'response.output_text.delta', output_index: 1, delta: text },
+      { type: 'response.output_text.annotation.added', output_index: 1, annotation_index: 0, annotation: citation },
+      { type: 'response.output_item.done', output_index: 1, item: { type: 'message', id: 'msg_ws', role: 'assistant', content: [{ type: 'output_text', text, annotations: [citation] }] } },
+      { type: 'response.completed', response: { id: 'resp_ws', model: MODEL, status: 'completed', usage: { input_tokens: 2000, output_tokens: 40 }, output: [] } },
+    ],
+  };
+}
+
+type Body = { tools?: Array<{ type?: string; name?: string }>; input?: Array<{ type?: string; call_id?: string }>; include?: string[] };
+
+/**
+ * The main loop loads WebSearch with ToolSearch (it is a deferred tool, websearch.json) and calls it; the WebSearch
+ * tool's own request — the one declaring only the web_search server tool — is answered with a search; the main loop
+ * then answers. Requests of any other kind (the session title) get plain text.
+ */
+function searchScript(_n: number, raw: string): Reply {
+  const body = JSON.parse(raw) as Body;
+  const tools = body.tools ?? [];
+  if (tools.some((t) => t.type === 'web_search')) return searchAnswer(body.include?.includes(SOURCES_INCLUDE) ?? false);
+  if (!tools.some((t) => t.name === 'Bash')) return ok('ok');
+  const answered = (body.input ?? []).filter((i) => i.type === 'function_call_output').map((i) => i.call_id);
+  if (!answered.includes('call_ts')) return functionCall('call_ts', 'ToolSearch', { query: 'select:WebSearch', max_results: 1 });
+  if (!answered.includes('call_ws')) return functionCall('call_ws', 'WebSearch', { query: SEARCHED });
+  return ok('Searched: see Orbit result one.');
+}
+
+/** What the CLI's WebSearch tool made of the search: its tool_use_result, and the tool_result the model was sent. */
+function searchOutcome(events: CliEvent[]) {
+  const user = events.find((e) => e.type === 'user' && (e.tool_use_result as { searchCount?: number } | undefined)?.searchCount !== undefined);
+  assert.ok(user, 'the CLI ran its WebSearch tool');
+  const content = ((user.message as { content: Array<{ type: string; content: unknown }> }).content).find((c) => c.type === 'tool_result')!.content;
+  return { result: user.tool_use_result as { query: string; searchCount: number; results: unknown[] }, shown: String(content) };
+}
+
+test('§4.7 WebSearch on an OpenAI key: OpenAI\'s web_search runs, the CLI gets server_tool_use and web_search_tool_result, and shows the links', CASE, async () => {
+  script = searchScript;
+  const { events, results } = await cli(['Search the web for the orbit gateway.']);
+
+  assert.equal(results[0].is_error, false);
+  assert.equal(results[0].result, 'Searched: see Orbit result one.');
+  // The search went out as OpenAI's web_search, asking for every page it read.
+  const search = calls.map((c) => ({ url: c.url, body: JSON.parse(c.body) as Body })).filter((c) => c.body.tools?.some((t) => t.type === 'web_search'));
+  assert.equal(search.length, 1);
+  assert.equal(search[0].url, '/v1/responses');
+  assert.deepEqual(search[0].body.tools, [{ type: 'web_search' }]);
+  assert.deepEqual(search[0].body.include, ['reasoning.encrypted_content', SOURCES_INCLUDE]);
+  // The CLI read one search, its query, and both pages it read — then the answer.
+  const { result, shown } = searchOutcome(events);
+  assert.equal(result.searchCount, 1);
+  assert.equal(result.query, SEARCHED);
+  assert.deepEqual(result.results[0], { tool_use_id: 'srvtoolu_ws_cli1', content: [
+    { title: 'https://example.com/one', url: 'https://example.com/one' },
+    { title: 'https://example.org/two', url: 'https://example.org/two' },
+  ] });
+  assert.equal(result.results[1], 'The gateway searches ([Orbit result one](https://example.com/one)).');
+  assert.match(shown, /^Web search results for query: "orbit gateway web search"\n\nLinks: \[\{"title":"https:\/\/example\.com\/one","url":"https:\/\/example\.com\/one"\},\{"title":"https:\/\/example\.org\/two"/);
+  assert.match(shown, /The gateway searches \(\[Orbit result one\]\(https:\/\/example\.com\/one\)\)\./);
+  // …and the main loop's next request carried that to the model.
+  const last = JSON.parse(calls.filter((c) => c.url === '/v1/responses').at(-1)!.body) as { input: Array<{ type: string; call_id?: string; output?: unknown }> };
+  const output = last.input.find((i) => i.type === 'function_call_output' && i.call_id === 'call_ws')!.output;
+  assert.match(String(output), /Links: .*https:\/\/example\.com\/one/);
+});
+
+test('§4.7 WebSearch on the owner\'s own Codex login pool: the same search on the Codex backend, the links from the answer\'s citations', CASE, async () => {
+  script = searchScript;
+  const { events, results } = await cli(['Search the web for the orbit gateway.'], { ANTHROPIC_AUTH_TOKEN: LOGIN_TOKEN });
+
+  assert.equal(results[0].is_error, false);
+  assert.equal(results[0].result, 'Searched: see Orbit result one.');
+  assert.ok(calls.every((c) => c.url === '/backend-api/codex/responses'), 'every request went to the Codex backend');
+  const search = calls.map((c) => JSON.parse(c.body) as Body).filter((b) => b.tools?.some((t) => t.type === 'web_search'));
+  assert.equal(search.length, 1);
+  assert.deepEqual(search[0].tools, [{ type: 'web_search' }]);
+  // Nothing the Codex backend was never seen to take: the include it got is the one every pool request has.
+  assert.deepEqual(search[0].include, ['reasoning.encrypted_content']);
+  const { result, shown } = searchOutcome(events);
+  assert.equal(result.searchCount, 1);
+  assert.equal(result.query, SEARCHED);
+  // The result block came after the text (it waited for the citations); the CLI lists the links first all the same.
+  assert.deepEqual(result.results, [
+    { tool_use_id: 'srvtoolu_ws_cli1', content: [{ title: 'Orbit result one', url: 'https://example.com/one' }] },
+    'The gateway searches ([Orbit result one](https://example.com/one)).',
+  ]);
+  assert.match(shown, /Links: \[\{"title":"Orbit result one","url":"https:\/\/example\.com\/one"\}\]/);
+  assert.ok(booked.length > 0, 'the pool session booked its usage');
 });

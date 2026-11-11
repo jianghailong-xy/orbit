@@ -162,7 +162,8 @@ the server keeps nothing. Reasoning comes back encrypted and travels inside the 
 | `thinking` / `redacted_thinking` without an envelope (from an earlier Anthropic or DeepSeek turn) | dropped |
 | `tools[]` (custom) | `{type: function, name, description, parameters: input_schema, strict: false}` |
 | `tools[]` with `defer_loading: true` | left out until a `tool_reference` names it; `DeferredToolPlaceholder` is never sent |
-| `tools[]` server tool `web_search_*` | dropped and reported to the caller: decision D5 |
+| `tools[]` server tool `web_search_*` | `{type: web_search}` (§4.7) |
+| `tools[]` any other server tool (`web_fetch_*`, …) | dropped and reported to the caller |
 | `tool_choice` auto / any / tool / none | `auto` / `required` / `{type: function, name}` / `none`; `disable_parallel_tool_use` → `parallel_tool_calls: false` |
 | `max_tokens` | `max_output_tokens` |
 | effort (`output_config.effort`, or a `thinking` budget when no effort is sent) | `reasoning: {effort, summary: "auto"}`: low, medium, high, xhigh; `max` → `xhigh`; held to the model's highest declared level; no effort and no thinking → no `reasoning` |
@@ -197,7 +198,8 @@ requests claude 2.1.322 really sent (`providers/fixtures/claude-cli-2.1.322/`, r
 | `response.function_call_arguments.delta` | `content_block_delta {input_json_delta}` |
 | `response.output_item.done` function_call that had no argument deltas | one `input_json_delta` with its `arguments`, then `content_block_stop` |
 | `response.output_item.done` (others) | `content_block_stop` |
-| `response.output_item.added` of any other item (`web_search_call`, …) | nothing |
+| `response.output_item.done` web_search_call with a `search` action | `server_tool_use` and `web_search_tool_result` blocks (§4.7) |
+| `response.output_item.added` of any other item | nothing |
 | `response.completed` / `.incomplete` | blocks still open are stopped, then `message_delta {stop_reason, usage}`, then `message_stop` |
 | `response.failed`, stream `error` | an Anthropic `error` event (§5.4) |
 | the upstream ends without any of the above | an `error` event `api_error`, never a silent end |
@@ -237,6 +239,30 @@ requests claude 2.1.322 really sent (`providers/fixtures/claude-cli-2.1.322/`, r
   "prompt is too long: N tokens > M maximum", the wording Claude Code reacts to by compacting
   (`anthropicError`; M is the declared window, N the estimate, at least M + 1). P0 confirmed the wording on 2.1.322
   (§8).
+
+### 4.7 Web search (P3, decision D5)
+
+Claude Code's WebSearch is a client tool that runs its own request. Recorded from claude 2.1.322
+(`fixtures/claude-cli-2.1.322/websearch.json`): WebSearch is a deferred tool, loaded by ToolSearch. When the model
+calls it, the CLI sends a separate `/v1/messages` request. That request has a short system prompt of its own, the user
+text `Perform a web search for the query: <query>`, `tool_choice: auto` and exactly one tool:
+`{type: "web_search_20250305", name: "web_search", max_uses: 8}`. The CLI reads two blocks from the answer: the query
+from a `server_tool_use` block, and `{title, url}` of each result from a `web_search_tool_result` block. It counts each
+search, and sends its model a `tool_result` of `Web search results for query: "<q>"`, then `Links: [{title, url}, …]`,
+then the answer text. The CLI lists the links before the text, whatever order the blocks came in.
+
+| Anthropic | OpenAI Responses |
+|---|---|
+| `web_search_*` server tool | `{type: "web_search"}`; `allowed_domains` → `filters.allowed_domains`; `user_location` as is; `blocked_domains` and `max_uses` have no equivalent and are not sent |
+| — | on an OpenAI key, `include` adds `web_search_call.action.sources`, so the call lists every page it read. A login pool does not ask: nobody has recorded the Codex backend's answer to that include. |
+| `server_tool_use {id: srvtoolu_<call id>, name: web_search, input: {query}}` | `web_search_call` done with `action.type: search`; the query is `action.query` |
+| `web_search_tool_result {tool_use_id, content: [web_search_result {title, url, encrypted_content: "", page_age: null}]}` | the call's `action.sources` (title = URL; OpenAI gives none). A call without sources gets its result block once the answer is done: the answer's `url_citation`s, with their titles. A cited page that no result listed is added the same way. |
+| `usage.server_tool_use.web_search_requests` | the number of searches |
+
+The `open_page` and `find_in_page` actions are not searches, so they write no block. Both upstreams use the same
+translator, so a Claude Code session on an OpenAI key and one on the owner's own Codex login pool search the same
+way. The real CLI runs a search on each of the two upstreams in `anthropic-gateway-cli.e2e.ts`. OpenAI's
+per-search fee is not priced (openai-prices prices tokens only), so the cost line leaves it out.
 
 ## 5. Security, quota and failure
 
@@ -339,7 +365,7 @@ memory and connection counts with 20 concurrent sessions.
 | D2 | Upstream API | **A** Responses · B Chat Completions | **A**: OpenAI's current API, encrypted reasoning that survives turns, and the same API the Codex gateway already reads. |
 | D3 | Which keys may use the gateway | **A** host `api.openai.com`, plus hosts an admin lists · B any OpenAI-dialect row, with private addresses blocked | **A** first (§5.3); B later if people ask for Azure or other Responses-compatible hosts. |
 | D4 | ChatGPT logins (Codex pools) on Claude Code | **A** not offered · B offered later as an opt-in | **A**: ChatGPT's Codex backend is not a public API, and on a hosted multi-user service an account ban is the owner's risk. **Amended 2026-11-11:** offered on the account owner's own Codex login pool only, behind its own flag, with no disguise (§9). |
-| D5 | Claude Code's web search (an Anthropic server tool) | **A** first release: the tool reports "not available on this model"; mapped to OpenAI's `web_search` in P3 · B mapped from P1 | **A**: the mapping is the largest single piece and the rest does not depend on it. |
+| D5 | Claude Code's web search (an Anthropic server tool) | **A** first release: the tool reports "not available on this model"; mapped to OpenAI's `web_search` in P3 · B mapped from P1 | **A**: the mapping is the largest single piece and the rest does not depend on it. P3 mapped it (§4.7). |
 | D6 | Rollout | **A** deployment flag, default off, until the P3 quality gate passes · B on from P1 | **A**: the engine only shows up once it is known to work. |
 | D7 | Default engine for an OpenAI key | **A** stays `codex` · B `claude` | **A**: nothing changes for anyone who doesn't pick Claude Code. |
 | D8 | Cost line for these sessions | **A** the gateway's priced usage · B the CLI's own figure | **A**: the CLI does not know GPT prices. |

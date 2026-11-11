@@ -17,11 +17,16 @@ export interface TranslateContext extends ModelContext {
   promptCacheKey?: string;
   /** The effort levels the model takes, lowest first; a request above the top one is held to it. */
   efforts?: readonly Effort[];
+  /**
+   * Ask for every source a web search read (`include: web_search_call.action.sources`), not only those the answer
+   * cites. OpenAI's API documents it; the Codex backend's answer to it was never recorded, so a login pool omits it.
+   */
+  webSearchSources?: boolean;
 }
 
 export interface TranslatedRequest {
   request: Json;
-  /** Anthropic server tools (`web_search_*`, …) that were dropped: decision D5. */
+  /** Anthropic server tools other than `web_search_*` (which maps to OpenAI's `web_search`) that were dropped. */
   droppedServerTools: string[];
 }
 
@@ -33,12 +38,13 @@ const DEFERRED_PLACEHOLDER = 'DeferredToolPlaceholder';
 export function toResponsesRequest(body: Json, ctx: TranslateContext): TranslatedRequest {
   const messages = Array.isArray(body.messages) ? (body.messages as Json[]) : [];
   const { tools, droppedServerTools } = translateTools(body.tools, referencedTools(messages));
+  const searches = tools.some((t) => t.type === 'web_search');
   const request: Json = {
     model: upstreamModel(body.model, ctx),
     input: translateMessages(messages),
     stream: true,
     store: false,
-    include: ['reasoning.encrypted_content'],
+    include: searches && ctx.webSearchSources ? ['reasoning.encrypted_content', 'web_search_call.action.sources'] : ['reasoning.encrypted_content'],
   };
   const instructions = translateSystem(body.system);
   if (instructions !== '') request.instructions = instructions;
@@ -258,8 +264,9 @@ function referencedTools(messages: Json[]): Set<string> {
 
 /**
  * Custom tools → functions. A `defer_loading` tool is declared only once a ToolSearch result has named it,
- * which is what Anthropic's server does with the same request; the placeholder never is. Server tools
- * (they carry a `type` such as `web_search_20250305`) are dropped and reported (D5).
+ * which is what Anthropic's server does with the same request; the placeholder never is. Anthropic's web search
+ * server tool → OpenAI's `web_search` (design §4.7); every other server tool (it carries a `type` such as
+ * `web_fetch_20250910`) is dropped and reported.
  */
 function translateTools(tools: unknown, loaded: Set<string>): { tools: Json[]; droppedServerTools: string[] } {
   const out: Json[] = [];
@@ -267,6 +274,10 @@ function translateTools(tools: unknown, loaded: Set<string>): { tools: Json[]; d
   if (!Array.isArray(tools)) return { tools: out, droppedServerTools };
   for (const tool of tools as Json[]) {
     const name = String(tool.name ?? '');
+    if (typeof tool.type === 'string' && tool.type.startsWith('web_search_')) {
+      out.push(webSearchTool(tool));
+      continue;
+    }
     if (typeof tool.type === 'string' && tool.type !== 'custom') {
       droppedServerTools.push(name || tool.type);
       continue;
@@ -278,6 +289,26 @@ function translateTools(tools: unknown, loaded: Set<string>): { tools: Json[]; d
     out.push(fn);
   }
   return { tools: out, droppedServerTools };
+}
+
+/**
+ * `{type: "web_search_20250305", name: "web_search", max_uses: 8}` (websearch.json, the CLI's WebSearch tool) →
+ * `{type: "web_search"}`. `allowed_domains` becomes OpenAI's domain filter and `user_location` has the same shape
+ * on both sides. OpenAI has no `blocked_domains` and no `max_uses`: those are not sent.
+ */
+function webSearchTool(tool: Json): Json {
+  const out: Json = { type: 'web_search' };
+  const allowed = Array.isArray(tool.allowed_domains) ? tool.allowed_domains.filter((d): d is string => typeof d === 'string') : [];
+  if (allowed.length > 0) out.filters = { allowed_domains: allowed };
+  const location = tool.user_location as Json | undefined;
+  if (location && typeof location === 'object' && location.type === 'approximate') {
+    const where: Json = { type: 'approximate' };
+    for (const field of ['city', 'region', 'country', 'timezone']) {
+      if (typeof location[field] === 'string') where[field] = location[field];
+    }
+    out.user_location = where;
+  }
+  return out;
 }
 
 function translateToolChoice(choice: unknown): unknown {

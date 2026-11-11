@@ -79,6 +79,7 @@ SC = {
  'toolong-openai': 'Turn 2 answered 400 with OpenAI\'s context_length_exceeded wording: the CLI re-sends once, no compaction.',
  'toolong': 'Turn 1 answered 400 "prompt is too long…": a single-exchange conversation cannot be compacted.',
  'context-x': '/context: count_tokens requests.',
+ 'websearch': 'ToolSearch select:WebSearch then WebSearch: the tool\'s own request (web_search_20250305 only) is answered server_tool_use + web_search_tool_result + text, as Anthropic\'s server does.',
 }
 for sc, what in SC.items():
     files = sorted(glob.glob(f'{REC}/{sc}/*.json'))
@@ -104,6 +105,9 @@ for sc, what in SC.items():
             except Exception: continue
             if j.get('type') == 'result':
                 outcome.append({k: j.get(k) for k in ('is_error','terminal_reason','api_error_status','result','num_turns')})
+            twr = j.get('tool_use_result') if j.get('type') == 'user' else None
+            if isinstance(twr, dict) and 'searchCount' in twr:  # what WebSearch made of the server tool's blocks
+                outcome.append({'webSearch': {k: v for k, v in twr.items() if k != 'durationSeconds'}})
             if j.get('type') == 'system' and j.get('subtype') == 'compact_boundary':
                 outcome.append({'compact_boundary': (j.get('compact_metadata') or {}).get('trigger')})
     out = {'cli': 'claude 2.1.322',
