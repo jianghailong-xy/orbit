@@ -6,19 +6,15 @@ public struct SessionMoveTargetRow: Identifiable, Equatable, Sendable {
     public let target: SessionMoveTarget
     /// The row opens the workspace's page: the session can leave its workspace, and go to this one.
     public let isEnabled: Bool
-    /// A project's coordinator whose conversation can't go here, to a workspace a new coordinator
-    /// could open in: the row offers Start new here… instead (web `moveTargetRows`' `startsNew`).
-    public let startsNew: Bool
     /// The grey line under the name: `<Provider> · <runner>`, `Runner offline`, or why the session
     /// can't go there, in the server's words.
     public let detail: String
 
     public var id: String { target.workspaceId }
 
-    public init(target: SessionMoveTarget, isEnabled: Bool, detail: String, startsNew: Bool = false) {
+    public init(target: SessionMoveTarget, isEnabled: Bool, detail: String) {
         self.target = target
         self.isEnabled = isEnabled
-        self.startsNew = startsNew
         self.detail = detail
     }
 }
@@ -47,9 +43,7 @@ public enum SessionWorkspaceMoveLogic {
             }
             return SessionMoveTargetRow(target: target,
                                         isEnabled: answer.reason == nil && target.reason == nil,
-                                        detail: detail,
-                                        startsNew: answer.reason == nil && target.reason != nil
-                                            && answer.coordinates != nil && target.startsCoordinator)
+                                        detail: detail)
         }
     }
 
@@ -219,17 +213,7 @@ public extension SessionMoveCopy {
             paragraphs.append("\(coordinates.title) is coordinated from \(target.name) from now on, and its row "
                               + "moves to \(target.name)’s list. Its tasks keep running where they are.")
         }
-        if let branch = answer.branch, answer.changedFiles > 0 {
-            let unmerged = answer.unmergedFiles
-            if unmerged > 0 {
-                let files = unmerged == 1 ? "1 changed file isn’t" : "\(unmerged) changed files aren’t"
-                let they = unmerged == 1 ? "It stays" : "They stay"
-                paragraphs.append("\(files) merged into \(answer.mergeTarget ?? "main") yet. "
-                                  + "\(they) on branch \(branch) in \(workspace).")
-            } else {
-                paragraphs.append("Changes made so far stay on branch \(branch) in \(workspace).")
-            }
-        }
+        if let files = filesSentence(answer, from: workspace) { paragraphs.append(files) }
         if answer.needsEnd {
             // An ended coordinator is not handed Orbit's updates: they wait on the project page.
             paragraphs.append(answer.coordinates == nil ? "The session ends first."
@@ -237,6 +221,17 @@ public extension SessionMoveCopy {
                                 + "the project wait on the project page.")
         }
         return paragraphs.joined(separator: "\n\n")
+    }
+
+    /// What becomes of the changes the session made: how many aren't merged yet, on which branch, in
+    /// which workspace (web `moveFilesSentence`). Nil when the session changed nothing on a branch.
+    static func filesSentence(_ answer: SessionMoveTargets, from workspace: String) -> String? {
+        guard let branch = answer.branch, answer.changedFiles > 0 else { return nil }
+        let unmerged = answer.unmergedFiles
+        guard unmerged > 0 else { return "Changes made so far stay on branch \(branch) in \(workspace)." }
+        let files = unmerged == 1 ? "1 changed file isn’t" : "\(unmerged) changed files aren’t"
+        let they = unmerged == 1 ? "It stays" : "They stay"
+        return "\(files) merged into \(answer.mergeTarget ?? "main") yet. \(they) on branch \(branch) in \(workspace)."
     }
 
     /// The confirmation's button: End and Move for a session that has to be ended first.

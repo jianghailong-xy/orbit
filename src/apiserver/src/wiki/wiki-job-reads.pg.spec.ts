@@ -380,8 +380,10 @@ test('the runs read: the newest runs newest first, their calls counted and the n
   for (const words of Object.values(SECRET)) assert.equal(answer.text.includes(words), false, `the read names ${words}`);
   assert.deepEqual(Object.keys(run).sort(), [
     'ahead', 'attempts', 'calls', 'createdAt', 'endedAt', 'error', 'failureKind', 'id', 'kind', 'nextAttemptAt', 'nextCall', 'priority',
-    'progress', 'publicId', 'requests', 'startedAt', 'state', 'updatedAt', 'waitingFor',
+    'progress', 'publicId', 'repo', 'requests', 'startedAt', 'state', 'updatedAt', 'waitingFor',
   ]);
+  // A run with no maintenance run row behind it (repo tiers, contract jobs.read job.repo) reads no repository tier.
+  assert.equal(run.repo, null);
   for (const field of ['input', 'report', 'request', 'answer', 'partial', 'leaseOwner', 'leaseGeneration', 'leaseDeadlineAt', 'requestSha256']) {
     assert.equal(answer.text.includes(`"${field}"`), false, `the read carries ${field}`);
   }

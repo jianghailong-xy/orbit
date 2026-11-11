@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   AimOutlined,
   AuditOutlined,
@@ -15,7 +16,9 @@ import type {
   SessionOpeningCard,
 } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
+import { sessionRequestQuery } from '../lib/queries';
 import { AppLink } from './AppLink';
+import { ExportCtx } from './Transcript';
 import { Button } from './ui/Button';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import { OPEN_TASK_SESSION } from './ConfirmationReviewTurnCards';
@@ -249,7 +252,17 @@ export function EvidenceSentBackCard({ card, seq, ts, undelivered, told, attache
   );
 }
 
-export function RunQuestionTurnCard({ card, seq, ts, undelivered, told, attached, queued }: CardProps & { card: RunQuestionCard }) {
+export function RunQuestionTurnCard({ card: stored, seq, ts, undelivered, told, attached, queued }: CardProps & { card: RunQuestionCard }) {
+  // The card the echo carries was read when the turn was handed out, before anyone answered. Its
+  // request carries the card as it stands now (`SessionRequestView.runQuestion`), so that one is
+  // drawn over it: answered, by whom, or passed to the owner. Not read on paper, and not once the
+  // stored card already says who answered — that never changes.
+  const exporting = useContext(ExportCtx) != null;
+  const live = useQuery({
+    ...sessionRequestQuery(stored.requestId),
+    enabled: !exporting && stored.answeredBy === null,
+  }).data?.runQuestion;
+  const card = live ?? stored;
   const answered = card.answeredBy !== null;
   return (
     <div className="crc-wrap">

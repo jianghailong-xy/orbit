@@ -119,7 +119,7 @@ class ProjectDataTest {
             """POST /tasks/t1/execute {"triggerId":"press-1"}""",
             """PATCH /task-lists/l1 {"paused":false,"note":"Resumed from the project Run queue"}""",
             "POST /projects/p1/coordinator/replace",
-            // Start a new coordinator in…: the workspace it opens in rides in the body.
+            // Change workspace…: the workspace it opens in rides in the body.
             """POST /projects/p1/coordinator/replace {"workspaceId":"w2"}""",
             "GET /workspaces", "GET /runners",
             "GET /projects/p1/handoffs", """POST /projects/p1/handoffs/34bH1/decision {"decision":"APPROVE","acknowledgedCrossingKey":"k1"}""",

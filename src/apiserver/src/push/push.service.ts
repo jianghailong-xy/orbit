@@ -10,7 +10,7 @@ import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus, type DeviceToken } from '@prisma/client';
-import { AgentProvider, ENGINE_CLI_NAMES, uuidToBase62, type LoginEngine } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
@@ -596,7 +596,7 @@ export class PushService {
                   await recordRunNotify(tx, {
                     id: requestId, kind: 'RUN_NOTIFY', ownerId: input.ownerId, fromSessionId: input.sessionId!,
                     toSessionId: hold.coordinatorSessionId, turnId: turn.id, clientTurnId,
-                    requestPreview: input.message.trim().slice(0, 200), replyBy: dueAt,
+                    requestPreview: input.message.trim().slice(0, RUN_NOTICE_MESSAGE_MAX), replyBy: dueAt,
                   });
                 } },
               );
