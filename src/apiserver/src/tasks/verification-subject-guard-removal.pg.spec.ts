@@ -213,7 +213,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 64,
+  assert.equal(installed.rowCount, 65,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -242,7 +242,8 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + '`session_wiki_chat_space_guard` to `session`, which refuses a write that would change the '
     + 'wiki space a session is a chat of, and 64 once 0484 gave `conversation_turn`, `session` and '
     + '`task` the Open list\'s version counters (`<table>_open_list_epoch_insert`/`_update`/`_delete`, '
-    + 'plus `conversation_turn_evidence_review_deadline`), which write only `open_list_epoch`');
+    + 'plus `conversation_turn_evidence_review_deadline`), which write only `open_list_epoch`, and 65 '
+    + 'once 0540 added `task_fork_guard` to `task`, which refuses a rewrite of a forked task\'s start');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }
