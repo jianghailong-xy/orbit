@@ -20,7 +20,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer, request as httpRequest, type IncomingHttpHeaders, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { Agent as HttpsAgent } from 'node:https';
+import net, { type AddressInfo, type Socket } from 'node:net';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -150,11 +151,24 @@ suite('key_gateway_token, end to end on real PostgreSQL', { timeout: 600_000 }, 
     });
   });
   await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
-  const endpoint = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`;
+  const upstreamPort = (upstream.address() as AddressInfo).port;
+  // The keys stand on OpenAI's own endpoint, the one the upstream guard allows; the gateway resolves it to a
+  // public address and its agent opens that connection to the recorder, in plain HTTP.
+  const endpoint = 'https://api.openai.com/v1';
+  const gateway = new AnthropicGatewayService(prisma, disabledAccounts);
+  gateway.resolveHost = async (host) => {
+    if (host !== 'api.openai.com') throw new Error(`getaddrinfo ENOTFOUND ${host}`);
+    return [{ address: '162.159.140.245', family: 4 }];
+  };
+  gateway.agent = new (class extends HttpsAgent {
+    override createConnection(): Socket {
+      return net.connect(upstreamPort, '127.0.0.1');
+    }
+  })();
 
   @Module({
     controllers: [AnthropicGatewayController],
-    providers: [{ provide: AnthropicGatewayService, useValue: new AnthropicGatewayService(prisma, disabledAccounts) }],
+    providers: [{ provide: AnthropicGatewayService, useValue: gateway }],
   })
   class GatewayDoors {}
   const app = await NestFactory.create(GatewayDoors, { bodyParser: false, logger: false, abortOnError: false });
