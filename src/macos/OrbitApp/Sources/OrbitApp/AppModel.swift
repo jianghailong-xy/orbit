@@ -3213,12 +3213,21 @@ final class AppModel {
         nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
     }
 
-    /// The count the project sessions button draws beside its glyph (`SessionProjectSheet`).
-    func projectSessionCount(_ projectID: String) -> Int {
+    /// The project's session count, read by both the project sessions button and the page's
+    /// "Project · N sessions" (`SessionProjectSheet.sessionCount`). Nil until the page's read has
+    /// answered for this project.
+    func projectSessionCount(_ projectID: String) -> Int? {
         SessionProjectSheet.sessionCount(
             projectID: projectID,
             page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
-            known: sessions + (agents?.allSessions ?? []))
+            answered: projectSessionsReadAt != nil)
+    }
+
+    /// The sessions page a conversation's project sessions button reads and opens
+    /// (`SessionProjectSheet.address`).
+    func projectSheetAddress(_ projectID: String, session: Session?) -> SessionProjectAddress {
+        SessionProjectSheet.address(projectID: projectID, shown: projectSessionsAddress,
+                                    agentID: session?.agent?.id ?? session?.agentId ?? selectedAgentID ?? "")
     }
 
     /// Load the owner's folder library: when a workspace's session list appears, and again when

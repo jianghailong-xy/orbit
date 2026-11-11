@@ -85,18 +85,63 @@ final class SessionProjectSheetTests: XCTestCase {
         XCTAssertEqual(SessionProjectSheet.glyph, "square.grid.2x2")
     }
 
-    func testTheCountIsThePagesOwnReadWithoutLandings() {
-        let page = [session("C1", role: .coordinator), session("T1"), session("T2"), session("L1", kind: "LANDING")]
-        XCTAssertEqual(SessionProjectSheet.sessionCount(projectID: "p1", page: ("p1", page), known: []), 3)
+    private func completed(_ id: String) -> Session {
+        Session(id: id, title: id, status: .awaitingInput, lifecycleState: .completed,
+                agentId: "w1", assignedRunnerId: nil, pendingApprovals: 0, branch: nil, updatedAt: nil,
+                createdAt: "2026-11-10T08:00:00Z",
+                projectMembership: SessionProjectMembership(projectId: "p1", projectTitle: "Search index",
+                                                            projectStatus: .open, role: .task))
     }
 
-    func testBeforeThePageReadTheCountIsTheMembersTheAppHolds() {
-        let known = [session("C1", role: .coordinator), session("T1"), session("other", project: "p2"),
-                     session("loose", project: nil)]
-        XCTAssertEqual(SessionProjectSheet.sessionCount(projectID: "p1", page: nil, known: known), 2)
-        XCTAssertEqual(SessionProjectSheet.sessionCount(projectID: "p1", page: ("p2", [session("x", project: "p2")]),
-                                                        known: known), 2,
-                       "another project's page is not this one's count")
+    /// The page's read: Open and Completed members, landings left out.
+    func testTheCountIsThePagesOwnReadOfOpenAndCompletedMembersWithoutLandings() {
+        let page = [session("C1", role: .coordinator), session("T1"), completed("T6"), session("L1", kind: "LANDING")]
+        XCTAssertEqual(SessionProjectSheet.sessionCount(projectID: "p1", page: ("p1", page), answered: true), 3)
+    }
+
+    /// Before the read answers there is no count. The app's lists hold only the Open members, and a
+    /// count taken from them would change when the sheet opened (5 → 6 on the simulator, sent back
+    /// on revision 1).
+    func testNoCountBeforeThePagesReadHasAnswered() {
+        let page = [session("C1", role: .coordinator), session("T1")]
+        XCTAssertNil(SessionProjectSheet.sessionCount(projectID: "p1", page: ("p1", page), answered: false))
+        XCTAssertNil(SessionProjectSheet.sessionCount(projectID: "p1", page: nil, answered: true))
+        XCTAssertNil(SessionProjectSheet.sessionCount(projectID: "p1", page: ("p2", [session("x", project: "p2")]),
+                                                      answered: true),
+                     "another project's page is not this one's count")
+    }
+
+    /// The button's count and the page header's ("Project · N sessions") are one read, taken before the
+    /// sheet is ever presented: the conversation reads the very address the sheet will open
+    /// (`SessionProjectSheet.address`), so opening it changes neither number.
+    func testTheButtonsCountEqualsThePageHeadersBeforeTheSheetIsPresented() {
+        let coordinator = session("C1", role: .coordinator)
+        // The conversation appears: no page is held yet, so it reads a new address from its workspace.
+        let address = SessionProjectSheet.address(projectID: "p1", shown: nil, agentID: "w1")
+        XCTAssertEqual(address, SessionProjectAddress(projectID: "p1", agentID: "w1", view: .open))
+        // The read answers with the Open and the Completed members (and a landing row).
+        let read: (projectID: String, sessions: [Session]) =
+            (address.projectID, [coordinator, session("T7"), session("T8"), completed("T6"), session("L1", kind: "LANDING")])
+        let button = SessionProjectSheet.sessionCount(projectID: SessionProjectSheet.projectID(of: coordinator)!,
+                                                      page: read, answered: true)
+        XCTAssertEqual(button, 4)
+        // The sheet opens on the same address, so its header reads the same state.
+        let sheetAddress = SessionProjectSheet.address(projectID: "p1", shown: address, agentID: "w9")
+        XCTAssertEqual(sheetAddress, address, "the sheet opens the page the conversation already read")
+        let header = SessionProjectSheet.sessionCount(projectID: sheetAddress.projectID, page: read, answered: true)
+        XCTAssertEqual(header, button)
+        XCTAssertEqual(header.map { SessionProjectCopy.pageSubtitle(sessions: $0) }, "Project · 4 sessions")
+    }
+
+    /// A page already held for the project (one a phone pushed, with its Completed view) is the one
+    /// the button reads and opens: a second address would drop that page's read.
+    func testTheButtonReadsThePageAlreadyHeldForItsProject() {
+        let held = SessionProjectAddress(projectID: "P1", agentID: "w2", view: .completed)
+        XCTAssertEqual(SessionProjectSheet.address(projectID: "p1", shown: held, agentID: "w1"), held,
+                       "either spelling of the id is the same project")
+        let other = SessionProjectAddress(projectID: "p2", agentID: "w2", view: .open)
+        XCTAssertEqual(SessionProjectSheet.address(projectID: "p1", shown: other, agentID: "w1"),
+                       SessionProjectAddress(projectID: "p1", agentID: "w1", view: .open))
     }
 
     // MARK: picking a member in the sheet

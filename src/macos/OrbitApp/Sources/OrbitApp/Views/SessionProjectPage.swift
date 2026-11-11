@@ -551,11 +551,10 @@ struct SessionProjectPage: View {
     private var title: some View {
         VStack(spacing: 1) {
             Text(titleText).font(.headline).lineLimit(1)
-            // No count while no member is known yet, from the app's lists or the read: "0 sessions"
-            // would be a claim nobody checked.
-            Text(loading && sessions.isEmpty
-                 ? SessionProjectCopy.pageSubtitleLoading
-                 : SessionProjectCopy.pageSubtitle(sessions: sessions.count))
+            // The count the conversation's project sessions button draws, from the same read: no
+            // count until it has answered, since the app's lists alone hold only the Open members.
+            Text(app.projectSessionCount(address.projectID).map { SessionProjectCopy.pageSubtitle(sessions: $0) }
+                 ?? SessionProjectCopy.pageSubtitleLoading)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

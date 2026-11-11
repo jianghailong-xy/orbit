@@ -251,9 +251,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         let title = try slice(page, from: "private var title: some View {", to: "\n    }")
         XCTAssertTrue(title.contains("Text(titleText)"))
-        XCTAssertTrue(title.contains("SessionProjectCopy.pageSubtitle(sessions: sessions.count)"))
-        XCTAssertTrue(title.contains("loading && sessions.isEmpty"),
-                      "no member count while no member is known")
+        // The count is the project sessions button's own (`AppModel.projectSessionCount`): none
+        // until the page's read has answered, so neither number changes when the sheet opens.
+        XCTAssertTrue(title.contains("app.projectSessionCount(address.projectID).map { SessionProjectCopy.pageSubtitle(sessions: $0) }"))
+        XCTAssertFalse(title.contains("sessions.count"), "no count of its own beside the button's")
         XCTAssertTrue(page.contains("private var loading: Bool { app.projectSessionsLoading || app.projectSessionsAddress != address }"),
                       "nothing is known for the page before its own load has begun")
         XCTAssertTrue(title.contains("SessionProjectCopy.pageSubtitleLoading"))
@@ -1008,11 +1009,18 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertEqual(try branches(of: "private func projectSessionsButton(", in: console), ["os(iOS)"])
         for part in ["let count = appModel.projectSessionCount(projectID)",
                      "Image(systemName: SessionProjectSheet.glyph)",
-                     "if count > 0 { Text(\"\\(count)\").monospacedDigit() }",
+                     "if let count { Text(\"\\(count)\").monospacedDigit() }",
                      ".accessibilityLabel(SessionProjectSheet.buttonLabel)",
-                     "projectSheet = ProjectSheetTarget(address: SessionProjectAddress(", "projectID: projectID,"] {
+                     "address: appModel.projectSheetAddress(projectID, session: appModel.session(id: sessionID)))"] {
             XCTAssertTrue(draw.contains(part), "the button carries `\(part)`")
         }
+        // The conversation reads the project's page as it appears, at the address the sheet will
+        // open, so the count is the sheet's before the sheet is ever presented.
+        let read = try slice(console, from: ".task(id: projectSheetAddress) {", to: ".sheet(item: $projectSheet")
+        XCTAssertTrue(read.contains("if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }"))
+        let address = try slice(console, from: "private var projectSheetAddress: SessionProjectAddress? {", to: "\n    }")
+        XCTAssertTrue(address.contains("guard opensPagesOverConsole else { return nil }"), "a phone's stack only")
+        XCTAssertTrue(address.contains("SessionProjectSheet.projectID(of: session).map { appModel.projectSheetAddress($0, session: session) }"))
     }
 
     /// The sheet: the project's sessions page itself, in a stack of its own, medium and large.
@@ -1064,9 +1072,11 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let open = try slice(app, from: "func openProjectMemberFromSheet(_ session: Session) {", to: "\n    }")
         XCTAssertTrue(open.contains("sessionDetails.store(session)"), "a member of another workspace opens from its record")
         XCTAssertTrue(open.contains("nav.switchConsole(to: .console(sessionID: session.id, origin: .list))"))
-        let count = try slice(app, from: "func projectSessionCount(_ projectID: String) -> Int {", to: "\n    }")
+        let count = try slice(app, from: "func projectSessionCount(_ projectID: String) -> Int? {", to: "\n    }")
         XCTAssertTrue(count.contains("page: projectSessionsAddress.map { ($0.projectID, projectSessions) }"))
-        XCTAssertTrue(count.contains("known: sessions + (agents?.allSessions ?? [])"))
+        XCTAssertTrue(count.contains("answered: projectSessionsReadAt != nil"))
+        let sheetAddress = try slice(app, from: "func projectSheetAddress(_ projectID: String, session: Session?) -> SessionProjectAddress {", to: "\n    }")
+        XCTAssertTrue(sheetAddress.contains("SessionProjectSheet.address(projectID: projectID, shown: projectSessionsAddress,"))
         XCTAssertEqual(try branches(of: "func openProjectMemberFromSheet(", in: app), ["os(iOS)"])
     }
 }

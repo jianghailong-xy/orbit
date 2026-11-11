@@ -29,15 +29,25 @@ public enum SessionProjectSheet {
         return session.projectMembership?.projectId
     }
 
-    /// The count beside the glyph: the project's sessions as its page counts them ("11 sessions"),
-    /// landings left out. The page's own read when it is for this project; until then, the members
-    /// the app's lists already hold.
+    /// The project's session count, one number for the button beside the glyph and for the sessions
+    /// page's "Project · N sessions": the page's own read of the project's Open and Completed members,
+    /// landings left out. Nil until that read has answered for this project, because the app's lists
+    /// alone hold only the Open members. A count shown before the read would change when the sheet
+    /// opened, so the button draws its glyph alone until the read answers.
     public static func sessionCount(projectID: String, page: (projectID: String, sessions: [Session])?,
-                                    known: [Session]) -> Int {
-        let key = PublicID.storageKey(projectID)
-        if let page, PublicID.storageKey(page.projectID) == key {
-            return page.sessions.filter { !$0.isLanding }.count
-        }
-        return SessionProjectMembers.members(of: projectID, in: known).filter { !$0.isLanding }.count
+                                    answered: Bool) -> Int? {
+        guard answered, let page, PublicID.storageKey(page.projectID) == PublicID.storageKey(projectID)
+        else { return nil }
+        return page.sessions.filter { !$0.isLanding }.count
+    }
+
+    /// The page a conversation's button reads and opens. It is the one the app already holds for this
+    /// project, if any: a new address would drop that page's read, and the page under a phone's
+    /// conversation would lose its members. Otherwise it is a new one, from the conversation's
+    /// workspace.
+    public static func address(projectID: String, shown: SessionProjectAddress?,
+                               agentID: String) -> SessionProjectAddress {
+        if let shown, PublicID.storageKey(shown.projectID) == PublicID.storageKey(projectID) { return shown }
+        return SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open)
     }
 }

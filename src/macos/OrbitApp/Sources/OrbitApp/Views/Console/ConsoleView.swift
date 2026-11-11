@@ -488,6 +488,11 @@ struct ConsoleView: View {
             }
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
+        // The project's sessions page read as the conversation opens, so the button's count is the
+        // one the sheet will show before the sheet is ever opened (`projectSessionCount`).
+        .task(id: projectSheetAddress) {
+            if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }
+        }
         .sheet(item: $projectSheet, onDismiss: {
             let action = afterProjectSheet
             afterProjectSheet = nil
@@ -559,6 +564,14 @@ struct ConsoleView: View {
     }
 
     #if os(iOS)
+    /// The sessions page this conversation's button reads and opens, on a phone's stack, for a
+    /// session with a project; nil anywhere else.
+    private var projectSheetAddress: SessionProjectAddress? {
+        guard opensPagesOverConsole else { return nil }
+        let session = appModel.session(id: sessionID)
+        return SessionProjectSheet.projectID(of: session).map { appModel.projectSheetAddress($0, session: session) }
+    }
+
     /// The project sessions sheet's subject, as `.sheet(item:)` needs it.
     private struct ProjectSheetTarget: Identifiable {
         let address: SessionProjectAddress
@@ -570,19 +583,16 @@ struct ConsoleView: View {
     private func projectSessionsButton(_ projectID: String) -> some View {
         let count = appModel.projectSessionCount(projectID)
         return Button {
-            let session = appModel.session(id: sessionID)
-            projectSheet = ProjectSheetTarget(address: SessionProjectAddress(
-                projectID: projectID,
-                agentID: session?.agent?.id ?? session?.agentId ?? appModel.selectedAgentID ?? "",
-                view: .open))
+            projectSheet = ProjectSheetTarget(
+                address: appModel.projectSheetAddress(projectID, session: appModel.session(id: sessionID)))
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: SessionProjectSheet.glyph)
-                if count > 0 { Text("\(count)").monospacedDigit() }
+                if let count { Text("\(count)").monospacedDigit() }
             }
         }
         .accessibilityLabel(SessionProjectSheet.buttonLabel)
-        .accessibilityValue(count > 0 ? "\(count) sessions" : "")
+        .accessibilityValue(count.map { "\($0) sessions" } ?? "")
         .accessibilityIdentifier("project-sessions-button")
     }
 
