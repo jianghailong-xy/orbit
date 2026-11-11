@@ -5,6 +5,54 @@ os.makedirs(OUT, exist_ok=True)
 KEEP_H = ['accept','content-type','user-agent','anthropic-beta','anthropic-version','x-app','x-stainless-retry-count','x-stainless-timeout','x-stainless-package-version','anthropic-dangerous-direct-browser-access']
 SESSION = '00000000-0000-4000-8000-000000000000'
 basic_tools = json.load(open(f'{REC}/basic/003-main.json'))['body']['tools']
+LIMIT = 80    # longer prose is Claude Code's own prompt text, which the translator never reads
+KEEP = 60     # a message keeps this much of its start, so a reader can tell which prompt it was
+
+def omitted(text, keep=0):
+    head = text[:keep] if keep else ''
+    return head + f'<omitted: {len(text) - len(head)} chars of CLI prompt text>'
+
+def schema_trim(node):
+    if isinstance(node, dict):
+        return {k: (omitted(v) if k == 'description' and isinstance(v, str) and len(v) > LIMIT else schema_trim(v)) for k, v in node.items()}
+    if isinstance(node, list):
+        return [schema_trim(v) for v in node]
+    return node
+
+def text_trim(block):
+    if isinstance(block, dict) and block.get('type') == 'text' and isinstance(block.get('text'), str) and len(block['text']) > LIMIT:
+        return {**block, 'text': omitted(block['text'], KEEP)}
+    if isinstance(block, dict) and block.get('type') == 'tool_result' and isinstance(block.get('content'), list):
+        return {**block, 'content': [text_trim(b) for b in block['content']]}
+    if isinstance(block, dict) and block.get('type') == 'tool_result' and isinstance(block.get('content'), str) and len(block['content']) > LIMIT:
+        return {**block, 'content': omitted(block['content'], KEEP)}
+    return block
+
+def trim(body):
+    """Drops the CLI's prompt prose and keeps every structural field: types, roles, ids, cache_control,
+    defer_loading, tool names, schema shapes, signatures, inputs, and short strings."""
+    if not isinstance(body, dict):
+        return body
+    b = dict(body)
+    if isinstance(b.get('system'), str) and len(b['system']) > LIMIT:
+        b['system'] = omitted(b['system'])
+    elif isinstance(b.get('system'), list):
+        b['system'] = [({**x, 'text': omitted(x['text'])} if isinstance(x.get('text'), str) and len(x['text']) > LIMIT and not x['text'].startswith('x-anthropic-billing-header:') else x) for x in b['system']]
+    if isinstance(b.get('tools'), list):
+        b['tools'] = [({**t, 'description': omitted(t['description'])} if isinstance(t.get('description'), str) and len(t['description']) > LIMIT else t) for t in b['tools']]
+        b['tools'] = [({**t, 'input_schema': schema_trim(t['input_schema'])} if 'input_schema' in t else t) for t in b['tools']]
+    if isinstance(b.get('messages'), list):
+        msgs = []
+        for m in b['messages']:
+            c = m.get('content')
+            if isinstance(c, str) and len(c) > LIMIT:
+                c = omitted(c, KEEP)
+            elif isinstance(c, list):
+                c = [text_trim(x) for x in c]
+            msgs.append({**m, 'content': c})
+        b['messages'] = msgs
+    return b
+
 def scrub(o):
     s = json.dumps(o, ensure_ascii=False)
     s = s.replace(ROOT + '/work', '/work')
@@ -43,6 +91,7 @@ for sc, what in SC.items():
         b = d['body']
         if b and b.get('tools') == basic_tools and not (sc == 'basic'):
             b = dict(b); b['tools'] = '$basic.tools'
+        b = trim(scrub(b))
         h = {k: d['headers'][k] for k in KEEP_H if k in d['headers']}
         h['authorization'] = 'Bearer orbit-gwk-<redacted>'
         h['x-claude-code-session-id'] = SESSION

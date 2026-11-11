@@ -209,7 +209,7 @@ test('§4.3 a subagent request and a compaction request translate like any other
   const req = toResponsesRequest(compaction, CTX).request;
   const last = items(req)[items(req).length - 1];
   assert.equal(last.role, 'user');
-  assert.match(JSON.stringify(last.content), /create a detailed summary of the conversation/);
+  assert.match(JSON.stringify(last.content), /"text":"CRITICAL: Respond with TEXT ONLY\. Do NOT call any tools\./);
 });
 
 test('§4.6 count_tokens: each recorded /context count as an input-token request, each deferred tool alone, and the ÷4 estimate', () => {

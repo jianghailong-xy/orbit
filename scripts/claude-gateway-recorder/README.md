@@ -13,6 +13,11 @@ design `docs/claude-engine-openai-gateway-design.md` §8).
   `PROMPT2` and `PROMPT3` add later turns. `HAIKU` sets `ANTHROPIC_DEFAULT_HAIKU_MODEL`.
 - `sanitize.py <rec dir> <fixtures dir>` keeps the headers that matter and replaces device ids, session ids, agent ids
   and scratch paths. Requests whose tools equal the first request's tools store `"$basic.tools"` in their place.
+  It also drops Claude Code's own prompt prose, which the translator never reads and this public repository should
+  not carry. Every system text, tool description and schema description longer than 80 characters becomes
+  `<omitted: N chars of CLI prompt text>`. Message text keeps its first 60 characters before that marker.
+  Structure is kept: types, roles, ids, `cache_control`, `defer_loading`, tool names, schema shapes, signatures,
+  tool inputs, short strings and the billing-header block.
 
 Re-record whenever the CLI version the runners install changes:
 
