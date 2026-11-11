@@ -95,16 +95,17 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
       },
     },
   })) as Runner;
-  // Two metered keys on Claude Code, each with models of its own in tier M.
+  // Two metered keys on Claude Code, each with a model of its own the owner put in tier M (model_tiers, migration 0526:
+  // a custom endpoint's tier is the owner's, kept apart from the model list).
   const tag = runnerId.slice(-8);
   const first = `metered-a-${tag}`;
   const second = `metered-b-${tag}`;
   await prisma.modelProvider.createMany({
     data: [
       { slug: first, label: 'Metered A', runtime: 'claude', baseUrl: 'https://a.invalid/anthropic', apiKeyEnc: encryptSecret('sk-a'),
-        models: [{ value: 'a-coder', label: 'A Coder', tier: 'M', outputPricePerMTok: 1 }], ownerId, position: 1 },
+        models: [{ value: 'a-coder', label: 'A Coder', outputPricePerMTok: 1 }], modelTiers: { 'a-coder': 'M' }, ownerId, position: 1 },
       { slug: second, label: 'Metered B', runtime: 'claude', baseUrl: 'https://b.invalid/anthropic', apiKeyEnc: encryptSecret('sk-b'),
-        models: [{ value: 'b-coder', label: 'B Coder', tier: 'M', outputPricePerMTok: 2 }], ownerId, position: 2 },
+        models: [{ value: 'b-coder', label: 'B Coder', outputPricePerMTok: 2 }], modelTiers: { 'b-coder': 'M' }, ownerId, position: 2 },
     ],
   });
   t.after(async () => {
