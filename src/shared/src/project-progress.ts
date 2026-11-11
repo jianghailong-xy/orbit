@@ -513,8 +513,9 @@ export interface IntegrationTimelineTrigger<Instant = string> {
   at: Instant;
   /** The branch handed over (`refs/heads/…`). */
   sourceRef: string;
-  /** The commit handed over, where it is known: the attempt's own pushed source, a merge
-   *  candidate's tip, or — for a task's newest attempt — the task's delivered commit. */
+  /** The commit handed over, where it is known: the source commit the attempt's runner reported,
+   *  a merge candidate's tip, or — for a task's newest attempt not reported yet — the task's
+   *  delivered commit. */
   sourceSha: string | null;
   /** The conversation it came from: the task's work session, or the coordinator that asked. */
   sessionId: string | null;

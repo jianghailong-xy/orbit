@@ -679,8 +679,8 @@ test('a failure, the coordinator rerun and the owner rerun each sign their own l
       assert.equal(thirdRetry.actor?.userId, w.ownerId);
       assert.match(thirdRetry.text, /Rerun by the owner · run it once more by hand/);
       // Each generation's trigger says who queued it: the done task, the coordinator's rerun with
-      // its session and reason, the owner's rerun with its reason. A red generation never pushed,
-      // so only the newest names a commit (the task's delivered one, where it has one).
+      // its session and reason, the owner's rerun with its reason. A red generation names the
+      // source commit its runner reported with the result.
       const triggers = timeline.sections.map((section) => section.trigger!);
       assert.deepEqual(triggers.map((each) => [each.cause, each.by]),
         [['DONE', 'TASK'], ['RETRY', 'COORDINATOR'], ['RETRY', 'OWNER']]);
@@ -689,8 +689,8 @@ test('a failure, the coordinator rerun and the owner rerun each sign their own l
       assert.equal(triggers[1].reason, 'the baseline was repaired');
       assert.equal(triggers[2].sessionId, null);
       assert.equal(triggers[2].reason, 'run it once more by hand');
-      assert.equal(triggers[0].sourceSha, null);
-      assert.equal(triggers[1].sourceSha, null);
+      assert.equal(triggers[0].sourceSha, RED.sourceSha);
+      assert.equal(triggers[1].sourceSha, RED.sourceSha);
       // 0368's handling line sits beside the generation that took over the item — its claim, not
       // claim 0 — so it is drawn with that attempt and after the generation whose failure it answers.
       const handledEntry = timeline.sections[1].entries.find((entry) => entry.kind === 'HANDLING')!;
@@ -935,9 +935,10 @@ test('a stolen push records the moved commits: Automatic re-checks, the owner co
       const ownerConfirmation = timeline.sections[4].entries.find((entry) => entry.kind === 'CONFIRMATION')!;
       assert.equal(ownerConfirmation.actor?.type, 'OWNER');
       assert.equal(ownerConfirmation.actor?.userId, w.ownerId);
-      // The round's triggers: Orbit queues each check; Automatic, then the owner, confirms the merges.
+      // The round's triggers: Orbit queues each check; Automatic confirms the first merge, the owner
+      // the second, and the next generation after its refused push runs under that same confirmation.
       assert.deepEqual(timeline.sections.map((section) => [section.trigger!.cause, section.trigger!.by]), [
-        ['CHECK', 'ORBIT'], ['CONFIRMED', 'AUTOMATIC'], ['CHECK', 'ORBIT'], ['CONFIRMED', 'AUTOMATIC'], ['CONFIRMED', 'OWNER'],
+        ['CHECK', 'ORBIT'], ['CONFIRMED', 'AUTOMATIC'], ['CHECK', 'ORBIT'], ['CONFIRMED', 'OWNER'], ['CONFIRMED', 'OWNER'],
       ]);
       // That next generation runs and its merge check goes red: the candidate is blocked, and a
       // blocked candidate is what leaves its round open for the later one below (a candidate still

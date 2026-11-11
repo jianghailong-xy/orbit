@@ -384,8 +384,8 @@ export async function readLandingTimeline(
     entries.sort(compareEntries);
     const ordinal = (sectionOrdinals.get(job.kind) ?? 0) + 1;
     sectionOrdinals.set(job.kind, ordinal);
-    // What queued it — the turn's opening message in a client. A task's newest attempt that has
-    // not pushed yet names the commit the task delivered; an older one names only what it pushed.
+    // What queued it — the turn's opening message in a client. The commit is the source its runner
+    // reported; a task's newest attempt not reported yet names the commit the task delivered.
     const newestTaskAttempt = job.kind === 'LAND_TASK' && job.id === jobs.at(-1)?.id;
     const sourceSha = job.sourceSha
       ?? (job.kind === 'LAND_TASK' ? (newestTaskAttempt ? task?.deliveredSha ?? null : null) : promotion?.sourceSha ?? null);
