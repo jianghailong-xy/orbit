@@ -3154,8 +3154,23 @@ export function WorkspaceView({
   const projectSearch = openProjectId
     ? `?project=${encodeId(openProjectId)}${listProjectId && effectiveView === 'completed' ? '&view=completed' : ''}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : '';
   const listSearch = listProjectId ? projectSearch : folderSearch;
-  const sessionPath = useCallback((id: string, search = listSearch) => `/sessions/${encodeId(id)}${search}`, [listSearch]);
-  const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }, search = listSearch) => {
+  // The project each project row of the list stands for, by its coordinator.
+  const listedCoordinatorProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
+    entry.kind === 'project' && entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : [])), [folderListing]);
+  // Wider than a phone the column follows the selection (owner 2026-11-11, board 3): a member of the
+  // column's project keeps it, a project row's coordinator brings its own project's column, and any
+  // other session closes it.
+  const searchFor = useCallback((id: string): string => {
+    if (isMobile) return listSearch;
+    if (openProjectId && allProjectMembers.some((s) => s.id === id)) return projectSearch;
+    const rowProjectId = listedCoordinatorProjects.get(id);
+    return rowProjectId
+      ? `?project=${encodeId(rowProjectId)}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`
+      : listSearch;
+  }, [isMobile, listSearch, openProjectId, allProjectMembers, projectSearch, listedCoordinatorProjects, folderParam]);
+  const sessionPath = useCallback((id: string, search?: string) => `/sessions/${encodeId(id)}${search ?? searchFor(id)}`,
+    [searchFor]);
+  const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }, search = searchFor(session.id)) => {
     const item = [...(session.ownerItems ?? [])]
       .filter((candidate) => candidate.itemId)
       .sort((a, b) => {
@@ -3168,7 +3183,7 @@ export function WorkspaceView({
     return item?.itemId
       ? `${sessionItemHref(session.id, item.itemId)}${search.replace(/^\?/, '&')}`
       : sessionPath(session.id, search);
-  }, [sessionPath, listSearch]);
+  }, [sessionPath, searchFor]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
@@ -3255,22 +3270,45 @@ export function WorkspaceView({
   const sections = listProjectId ? projectSections : workspaceSections;
   // Beside a conversation of the project, or its Landings window; never over a new session's draft.
   const showProjectColumn = !!columnProjectId && (!!selectedId || !!landingsProjectId);
-  // The column stands beside a conversation of its project: an address naming the project over no
-  // session or another one's (a member's progress mark, a project row with no coordinator, a link)
-  // opens the coordinator, else the project's latest member.
+  // Whether the address named the column's project together with, or after, the conversation now open
+  // (a project row, a member's mark, a link), rather than the selection having moved on under a column
+  // already open. Read by the effect below, so it is written first.
+  const columnPrev = useRef<{ projectId: string | null; selectedId: string | null }>({ projectId: null, selectedId: null });
+  const columnEntered = useRef(false);
+  useEffect(() => {
+    const prev = columnPrev.current;
+    columnPrev.current = { projectId: columnProjectId, selectedId };
+    if (columnProjectId !== prev.projectId) columnEntered.current = !!columnProjectId;
+    else if (selectedId !== prev.selectedId) columnEntered.current = false;
+  }, [columnProjectId, selectedId]);
+  // The column stands beside a conversation of its project. An address naming the project over no
+  // session or another one's (a project row with no coordinator, a link) opens the coordinator, else the
+  // project's latest member. A selection that moves to a session outside the project closes the column,
+  // or, onto a project's coordinator, switches it to that project (owner 2026-11-11, board 3).
   useEffect(() => {
     if (!columnProjectId || landingsProjectId || composingRoute) return;
     if (!projectSessionsQ.isSuccess || !completedProjectSessionsQ.isSuccess) return;
     if (selectedId) {
       if (allProjectMembers.some((s) => s.id === selectedId)) return;
       if (!selectedSession && !selectedMissing) return;
-      if (selectedSession?.projectMembership?.projectId === columnProjectId) return;
+      const membership = selectedSession?.projectMembership;
+      if (membership?.projectId === columnProjectId) return;
+      if (!columnEntered.current) {
+        setSearchParams((current) => {
+          const next = new URLSearchParams(current);
+          if (membership?.role === 'COORDINATOR') next.set('project', encodeId(membership.projectId));
+          else next.delete('project');
+          next.delete('view');
+          return next;
+        }, { replace: true });
+        return;
+      }
     }
     const target = pageCoordinator ?? projectMembers[0];
     if (target) navigate(sessionPath(target.id, projectSearch), { replace: true });
   }, [columnProjectId, landingsProjectId, composingRoute, projectSessionsQ.isSuccess, completedProjectSessionsQ.isSuccess,
     selectedId, allProjectMembers, selectedSession, selectedMissing, pageCoordinator, projectMembers, navigate, sessionPath,
-    projectSearch]);
+    projectSearch, setSearchParams]);
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
   // server sort — Completed arrives ordered by completion time but buckets by last activity,
@@ -8979,7 +9017,7 @@ export function WorkspaceView({
               setMenuOpenId(null);
               if (openable)
                 navigateWithPaneSlide('push', () =>
-                  navigate(sessionItemPath(actionSession, pageProjectId ? projectSearch : listSearch), { state: stampFromList() }),
+                  navigate(sessionItemPath(actionSession, pageProjectId ? projectSearch : undefined), { state: stampFromList() }),
                 );
             }}
             onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe, undefined, movable); }}

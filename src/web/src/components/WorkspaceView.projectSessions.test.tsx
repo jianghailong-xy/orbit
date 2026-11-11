@@ -651,6 +651,107 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     expect(projectRow().classList.contains('active')).toBe(true);
   });
 
+  // Board 3: the column follows the selection. A member of its project keeps it; another project's row
+  // switches it; a session in no project closes it.
+  const listColumn = (): HTMLElement => mounted().querySelector<HTMLElement>('aside.session-col:not(.session-project-column)')!;
+  const listSnapshot = (): string => [...listColumn().querySelectorAll('.session-row .session-title')]
+    .map((el) => el.textContent).join('|');
+  const press = async (key: 'ArrowDown' | 'ArrowUp'): Promise<void> => {
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })));
+    await settle();
+  };
+
+  it('opens a member clicked in the column beside the same column, with the list as it was', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    const listBefore = listSnapshot();
+    const columnBefore = column()!.innerHTML.replace(/ active/g, '');
+    await click([...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title),
+      'the member row in the column');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await until(() => expect(mounted().querySelector('.workspace-view .session-title, .workspace-view h1, .workspace-view')?.textContent).toContain(TASK.title));
+    await settle();
+    expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    // The list: same rows, the project's row still the selected one.
+    expect(listSnapshot()).toBe(listBefore);
+    expect(projectRows()).toHaveLength(1);
+    expect(projectRow().classList.contains('active')).toBe(true);
+    // The column: the same rows, with only the selection moved to the member.
+    expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]);
+    expect([...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent)).toEqual([TASK.title]);
+    expect(column()!.innerHTML.replace(/ active/g, '')).toBe(columnBefore);
+  });
+
+  it('switches the column to another project and opens its coordinator when that project’s row is clicked', async () => {
+    const OTHER_PROJECT_ID = pid(830);
+    const otherMembership = (role: string) => ({ projectId: OTHER_PROJECT_ID, projectTitle: 'Project Beta', projectStatus: 'OPEN', role });
+    const otherCoordinator = row(831, 'Coordinate the migration', { projectMembership: otherMembership('COORDINATOR'),
+      projectId: OTHER_PROJECT_ID, projectTitle: 'Project Beta', lastTurnAt: '2026-10-02T08:00:00Z' });
+    const otherTask = row(832, 'Copy the index', { projectMembership: otherMembership('TASK'), lastTurnAt: '2026-10-02T07:00:00Z' });
+    rows = [LOOSE, COORDINATOR, TASK, otherCoordinator, otherTask];
+    projects = [project(), project({ id: OTHER_PROJECT_ID, title: 'Project Beta', lastActivityAt: '2026-10-02T08:00:00Z',
+      coordinatorActivity: { working: false, lastTurnAt: otherCoordinator.lastTurnAt } })];
+    await mount(() => expect(projectRows()).toHaveLength(2));
+    const rowOf = (title: string) => projectRows().find((el) => el.textContent?.includes(title));
+    await click(rowOf('Project Alpha'), 'Project Alpha’s row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // Open a member first, so the switch is from a member's conversation too.
+    await click([...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title),
+      'the member row in the column');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await click(rowOf('Project Beta'), 'Project Beta’s row');
+    await until(() => expect(location).toBe(`/sessions/${otherCoordinator.id}?project=${OTHER_PROJECT_ID}`));
+    await until(() => expect(columnTitles()).toEqual([otherCoordinator.title, otherTask.title]));
+    expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project Beta');
+    expect([...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent)).toEqual([otherCoordinator.title]);
+    expect(rowOf('Project Beta')!.classList.contains('active')).toBe(true);
+    expect(rowOf('Project Alpha')!.classList.contains('active')).toBe(false);
+    expect(projectRows()).toHaveLength(2);
+    expect(titles()).toContain(LOOSE.title);
+  });
+
+  it('closes the column when a session in no project is clicked in the list', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await click(await (async () => { await until(() => expect(columnTitles()).toContain(TASK.title)); return [...column()!.querySelectorAll('.session-row')]
+      .find((el) => el.querySelector('.session-title')?.textContent === TASK.title); })(), 'the member row in the column');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await click([...listColumn().querySelectorAll('.session-row:not(.session-project-row)')]
+      .find((el) => el.querySelector('.session-title')?.textContent === LOOSE.title), 'the loose session in the list');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(column()).toBeNull();
+    expect(projectRow().classList.contains('active')).toBe(false);
+  });
+
+  it('closes the column when the arrow keys step to a session in no project, and brings it back on the project’s row', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // The list is the project's row (newest) then the loose session.
+    await press('ArrowDown');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(column()).toBeNull();
+    await press('ArrowUp');
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+  });
+
+  it('closes the column on any other navigation to a session in no project, and keeps it for a member', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // A member reached some other way than the column keeps it.
+    await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await settle();
+    expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    expect(column()).not.toBeNull();
+    // A session in no project under the same address closes it, rather than being sent to the coordinator.
+    await act(async () => routerNavigate(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(column()).toBeNull());
+  });
+
   it('keeps the phone’s page in the list’s place, with no column', async () => {
     mobile = true;
     await mount();
