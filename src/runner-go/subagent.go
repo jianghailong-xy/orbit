@@ -299,8 +299,9 @@ type subagentRun struct {
 	model       string
 	engine      string
 	kind        string
-	// The child engine's own conversation id, which resume continues.
+	// The child engine's own conversation id, which resume continues, and the dir whose engine state holds it.
 	engineSession string
+	stateDir      string
 	done          chan struct{}
 
 	// Written under subagentRegistry.mu.
@@ -493,6 +494,9 @@ type subagentRecord struct {
 	EngineSession string `json:"engineSession"`
 	// Type is the definition the run ran as, which a resume without a type runs as again.
 	Type string `json:"type,omitempty"`
+	// StateDir is the directory whose engine state holds the conversation: the scratch dir of the run that opened
+	// it, which every resume of it runs its engine state from again ("" for an engine that keeps none there).
+	StateDir string `json:"stateDir,omitempty"`
 }
 
 func subagentDir(sessionID, runID string) string {
@@ -608,9 +612,12 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	if resumeFrom != nil && resumeFrom.Engine != "" {
 		engine = resumeFrom.Engine
 	}
-	engineSession := ""
+	engineSession, stateDir := "", subagentDir(s.sessionID, created.RunID)
 	if resumeFrom != nil {
 		engineSession = resumeFrom.EngineSession
+		if resumeFrom.StateDir != "" {
+			stateDir = resumeFrom.StateDir
+		}
 	} else if engine == providerClaude {
 		// Claude Code is told its conversation's id; every other engine names the one it opens.
 		if engineSession, err = randomUUID(); err != nil {
@@ -619,7 +626,7 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	}
 	run := &subagentRun{
 		id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"),
-		background: background, model: created.Exec.Model, engine: engine, engineSession: engineSession, kind: def.Name,
+		background: background, model: created.Exec.Model, engine: engine, engineSession: engineSession, stateDir: stateDir, kind: def.Name,
 		done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning,
 	}
 	s.subagents.add(run)
@@ -637,7 +644,7 @@ func (s *bgJobService) subagentRecord(runID string) (*subagentRecord, error) {
 		if status == subagentStatusRunning {
 			return nil, fmt.Errorf("SubAgent %s is still running; resume it once it has ended", runID)
 		}
-		return &subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession, Type: run.kind}, nil
+		return &subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession, Type: run.kind, StateDir: run.stateDir}, nil
 	}
 	raw, err := os.ReadFile(filepath.Join(subagentDir(s.sessionID, runID), "run.json"))
 	if err != nil {
@@ -655,7 +662,7 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, def s
 	ctx := s.bg.ctx
 	dir := subagentDir(s.sessionID, run.id)
 	_ = os.MkdirAll(dir, 0o700)
-	_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession, Type: run.kind})
+	_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession, Type: run.kind, StateDir: run.stateDir})
 	files := newSubagentFileCollector(s.execDir)
 	emit := func(eventType string, payload map[string]interface{}) {
 		files.note(eventType, payload)
@@ -671,14 +678,14 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, def s
 		var conversation string
 		res, conversation, err = runChild(withSubagentApprovals(ctx, run.id), subagentChild{
 			t: s.t, parent: s.job, exec: exec, def: def, runID: run.id, engineSession: run.engineSession, resume: resume,
-			cwd: s.execDir, scratch: dir, prompt: prompt, emit: emit,
+			cwd: s.execDir, scratch: dir, stateDir: run.stateDir, prompt: prompt, emit: emit,
 		})
 		if conversation != "" && conversation != run.engineSession {
 			// The conversation the engine opened, which a resume continues.
 			s.subagents.mu.Lock()
 			run.engineSession = conversation
 			s.subagents.mu.Unlock()
-			_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: conversation, Type: run.kind})
+			_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: conversation, Type: run.kind, StateDir: run.stateDir})
 		}
 	}
 	status, result := subagentStatusDone, strings.TrimSpace(res.Result)
@@ -902,6 +909,9 @@ type subagentChild struct {
 	engineSession string
 	resume        bool
 	cwd, scratch  string
+	// stateDir is where engine state that holds the conversation lives: scratch for a new conversation, the
+	// opening run's scratch for a resume of it.
+	stateDir string
 	prompt        string
 	emit          emitFn
 }

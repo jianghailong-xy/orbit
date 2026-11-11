@@ -62,7 +62,7 @@ func assertCodexOrbitMCPContextForwarded(t *testing.T, args []string) {
 	// of its own environment — a variable the spawn sets but this list omits simply
 	// never arrives (ORBIT_BG_SOCKET/ORBIT_BG_TOKEN are on it for that reason, and a managed runner's
 	// instance identity, without which its control plane refuses the credential `orbit mcp` uses).
-	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID"]`
+	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID"]`
 	for i, arg := range args {
 		if arg == want {
 			if i == 0 || args[i-1] != "-c" {
