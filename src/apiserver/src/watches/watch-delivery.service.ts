@@ -375,20 +375,23 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
    */
   async claimDue(): Promise<ClaimedWatchDelivery[]> {
     return this.prisma.$queryRaw<ClaimedWatchDelivery[]>`
+      -- A WITH and not a subquery of the UPDATE's FROM: a plan with d outside would run a subquery once for each row
+      -- of d, each run locking past the rows this statement has already written, and LIMIT would bound nothing.
+      WITH "due" AS MATERIALIZED (
+        SELECT "id" FROM "watch_delivery"
+        WHERE "state" = 'PENDING' AND "next_attempt_at" <= now()
+        ORDER BY "next_attempt_at", "id"
+        LIMIT ${this.claimBatch}
+        FOR UPDATE SKIP LOCKED
+      )
       UPDATE "watch_delivery" AS d
       SET "state" = 'IN_FLIGHT',
           "lease_owner" = ${this.workerId}::uuid,
           "lease_generation" = gen_random_uuid(),
           "lease_deadline_at" = now() + ${this.leaseMs}::int * interval '1 millisecond',
           "updated_at" = now()
-      FROM (
-        SELECT "id" FROM "watch_delivery"
-        WHERE "state" = 'PENDING' AND "next_attempt_at" <= now()
-        ORDER BY "next_attempt_at", "id"
-        LIMIT ${this.claimBatch}
-        FOR UPDATE SKIP LOCKED
-      ) AS due
-      WHERE d."id" = due."id"
+      FROM "due"
+      WHERE d."id" = "due"."id"
       RETURNING d."id", d."lease_generation" AS "leaseGeneration"`;
   }
 
@@ -399,17 +402,20 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
    */
   async reclaimExpired(): Promise<number> {
     const reclaimed = await this.prisma.$queryRaw<Array<{ id: string; state: string }>>`
-      UPDATE "watch_delivery" AS d
-      SET ${afterFailedAttempt(false, this.retryBaseMs, this.retryMaxMs)},
-          "last_error" = 'LEASE_EXPIRED: the worker holding this delivery stopped before settling it'
-      FROM (
+      -- Read once, as in claimDue: a subquery read again per row of d would take every expired lease in one pass,
+      -- dead-lettering each one on its last attempt.
+      WITH "expired" AS MATERIALIZED (
         SELECT "id" FROM "watch_delivery"
         WHERE "state" = 'IN_FLIGHT' AND "lease_deadline_at" <= now()
         ORDER BY "lease_deadline_at", "id"
         LIMIT ${this.claimBatch}
         FOR UPDATE SKIP LOCKED
-      ) AS expired
-      WHERE d."id" = expired."id"
+      )
+      UPDATE "watch_delivery" AS d
+      SET ${afterFailedAttempt(false, this.retryBaseMs, this.retryMaxMs)},
+          "last_error" = 'LEASE_EXPIRED: the worker holding this delivery stopped before settling it'
+      FROM "expired"
+      WHERE d."id" = "expired"."id"
       RETURNING d."id", d."state"`;
     // Reconciliation, not an event, noticed these: their workers stopped without a word.
     countWatchReconcileRepair('delivery_lease_expired', reclaimed.length);
