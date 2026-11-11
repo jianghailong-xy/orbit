@@ -3,6 +3,7 @@ import { HttpException, Inject, Injectable, Logger, forwardRef } from '@nestjs/c
 import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { taskMovesRowWord } from '@orbit/shared';
 import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import { orbitUrl } from '../push/feishu-transport';
 import { PushService } from '../push/push.service';
@@ -300,7 +301,11 @@ export class FeishuDirectService {
     ]);
     const entries = sessions.map((s) => ({
       title: s.title,
-      ownerItems: (decisions.get(s.id)?.ownerItems ?? []).map((item) => item.title),
+      ownerItems: [
+        ...(decisions.get(s.id)?.ownerItems ?? []).map((item) => item.title),
+        ...(decisions.get(s.id)?.ownerRequests ?? []).map((request) => request.title),
+        ...(decisions.get(s.id)?.taskMoves ?? []).map((group) => `${taskMovesRowWord(group.count)}: ${group.title}`),
+      ],
       url: orbitUrl({ sessionId: s.id }),
     }));
     await this.replyCard(app, message.messageId, 'status', renderStatusCard(entries));

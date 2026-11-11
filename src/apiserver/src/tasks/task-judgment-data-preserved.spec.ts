@@ -2917,7 +2917,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0521 adds a defaulted wiki_repo_snapshot column and its CHECK only; no preserved rows, triggers or DONE fence change.
       '0521_wiki_repo_snapshot_source',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
-      '0530_wiki_repo_probe'],
+      '0530_wiki_repo_probe',
+      // 0531 adds statement triggers on owner_request and project_handoff_approval that call 0511's
+      // `open_list_bump_owner`, so the Open list's version moves when an owner request or a task move
+      // changes; they write `open_list_epoch` alone. No preserved rows, preserved triggers or DONE fence change.
+      '0531_open_list_owner_requests_and_moves'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

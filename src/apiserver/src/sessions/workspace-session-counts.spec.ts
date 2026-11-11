@@ -140,6 +140,9 @@ test('workspace counts separate queued activity from Session-list spinner work',
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);

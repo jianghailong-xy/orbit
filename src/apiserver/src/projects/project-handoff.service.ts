@@ -232,16 +232,56 @@ export interface HandoffMoveApplier {
   ): Promise<void>;
 }
 
+/**
+ * What tells the session rows that a task move started or stopped waiting on the owner — the
+ * realtime service, handed over by the same `TasksService` for the reason the applier is: this
+ * module imports nothing it does not have to.
+ */
+export interface HandoffSignalAnnouncer {
+  ownerSignalChanged(ownerId: string, sessionIds: string[]): void;
+}
+
 @Injectable()
 export class ProjectHandoffService {
   private readonly log = new Logger(ProjectHandoffService.name);
   private moveApplier?: HandoffMoveApplier;
+  private announcer?: HandoffSignalAnnouncer;
 
   constructor(private readonly prisma: PrismaService) {}
 
   /** Called by the `TasksService` that shares this instance; see `HandoffMoveApplier`. */
   bindMoveApplier(applier: HandoffMoveApplier): void {
     this.moveApplier = applier;
+  }
+
+  /** Called by the same `TasksService`; see `HandoffSignalAnnouncer`. */
+  bindSignalAnnouncer(announcer: HandoffSignalAnnouncer): void {
+    this.announcer = announcer;
+  }
+
+  /**
+   * A MOVE_TASK question was filed or answered: the two rows that count it — the session that asked
+   * and the target project's coordinator (`owner-decision-signal.ts`, `MOVE_REQUEST`) — re-read
+   * what waits on the owner. After the commit, and never a reason for the write to fail.
+   */
+  private async announceMove(
+    ownerId: string,
+    row: Pick<HandoffRow, 'kind' | 'requestedBySessionId' | 'toProjectId'>,
+  ): Promise<void> {
+    const announcer = this.announcer;
+    if (!announcer || row.kind !== 'MOVE_TASK') return;
+    try {
+      const target = await this.prisma.project.findFirst({
+        where: { id: row.toProjectId, ownerId },
+        select: { coordinatorSessionId: true },
+      });
+      announcer.ownerSignalChanged(ownerId, [
+        row.requestedBySessionId,
+        ...(target?.coordinatorSessionId ? [target.coordinatorSessionId] : []),
+      ]);
+    } catch (error) {
+      this.log.warn(`could not announce a task move's change: ${(error as Error).message}`);
+    }
   }
 
   /** The canonical authority tuple of a declaration, as everything below spells it. */
@@ -495,7 +535,7 @@ export class ProjectHandoffService {
     now: Date,
   ): Promise<HandoffAnswer> {
     const authority = this.authorityOf(ownerId, declaration);
-    return withTransactionRetry(this.prisma, async (tx) => {
+    const answer = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "user" WHERE "id" = ${ownerId}::uuid FOR KEY SHARE`;
       // FOR SHARE, not FOR KEY SHARE. What is derived from this row is `task_id` — which project
       // a worker session is acting for — and that is not a key column, so an ordinary
@@ -612,6 +652,8 @@ export class ProjectHandoffService {
       }
       return { ...filed, filed: inserted === 1 };
     }, loggedRetry(this.log, 'projectHandoff.declare'));
+    if (answer.filed && answer.row.state === 'PENDING') await this.announceMove(ownerId, answer.row);
+    return answer;
   }
 
   /**
@@ -998,6 +1040,7 @@ export class ProjectHandoffService {
         );
       }
       await this.moveApplier.applyMoveApproval(ownerId, userId, row.id, now, credential);
+      await this.announceMove(ownerId, row);
       return this.get(ownerId, id, now);
     }
     if (next === state) return this.get(ownerId, id, now);
@@ -1019,6 +1062,7 @@ export class ProjectHandoffService {
         + 'deciding; re-read it before answering again',
       );
     }
+    await this.announceMove(ownerId, row);
     return this.get(ownerId, id, now);
   }
 

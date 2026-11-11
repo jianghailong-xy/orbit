@@ -1,5 +1,11 @@
 import { Prisma } from '@prisma/client';
-import type { SessionOwnerItem, SessionWaitingKind } from '@orbit/shared';
+import type {
+  SessionOwnerItem,
+  SessionOwnerRequest,
+  SessionOwnerRequestKind,
+  SessionTaskMoveGroup,
+  SessionWaitingKind,
+} from '@orbit/shared';
 
 import {
   countEvidenceCardsOutsideProjects,
@@ -112,6 +118,15 @@ import {
  * says "Ready to close". Apart from the others for the same two reasons. `RECORD_AS_DONE` is the same
  * question when nobody asked it: a project that looks finished, past its escalation window with no
  * request, and a row that says "Record as done…".
+ *
+ * `OWNER_REQUEST` is an open `request_owner_action` request (PENDING and not past its deadline),
+ * counted on the session that asked it, because that is where its card is drawn: one per request,
+ * and the row says the request's kind in words of its own ("Decision for you", "Key needed", …).
+ *
+ * `MOVE_REQUEST` is a PENDING MOVE_TASK crossing, counted on the session that asked for it AND on
+ * the target project's coordinator conversation — the move card is drawn in both, from the same
+ * rows. One session's moves out of one project into another are one group: the count is the number
+ * of groups (one card each), and the row says the number of moves ("Approve 8 task moves").
  */
 export type OwnerDecisionKind =
   | 'PROJECT_DECISION'
@@ -120,7 +135,9 @@ export type OwnerDecisionKind =
   | 'OWNER_ITEM'
   | 'START_REQUEST'
   | 'DONE_REQUEST'
-  | 'RECORD_AS_DONE';
+  | 'RECORD_AS_DONE'
+  | 'OWNER_REQUEST'
+  | 'MOVE_REQUEST';
 
 export interface OwnerDecisionSignal {
   /** The conversation to open: the project's bound coordinator, or the waiting task's own session.
@@ -135,6 +152,10 @@ export interface OwnerDecisionSignal {
    *  that something is waiting; the Needs-you banner has to say WHICH of the four it is and open
    *  the card, and a client cannot re-derive either from a number (§7.6 V13). */
   items?: Array<SessionOwnerItem<Date>>;
+  /** The open owner requests, oldest first — only for `OWNER_REQUEST`. */
+  requests?: Array<SessionOwnerRequest<Date>>;
+  /** The waiting move groups, oldest first — only for `MOVE_REQUEST`. */
+  moves?: Array<SessionTaskMoveGroup<Date>>;
 }
 
 /**
@@ -159,6 +180,8 @@ export async function readOwnerDecisionSignals(
     ...(await readDispatchedEvidenceSignals(tx, ownerId, sessionIds)),
     ...(await readOwnerItemSignals(tx, ownerId, sessionIds)),
     ...(await readRecordAsDoneSignals(tx, ownerId, sessionIds)),
+    ...(await readOwnerRequestSignals(tx, ownerId, sessionIds)),
+    ...(await readMoveRequestSignals(tx, ownerId, sessionIds)),
     ...confirmations.map((waiting) => ({
       sessionId: waiting.sessionId,
       projectId: waiting.projectId,
@@ -413,12 +436,169 @@ export async function readOwnerItemSessionIds(
   return signals.map((signal) => signal.sessionId);
 }
 
+/**
+ * The conversations an open owner request or a waiting task move is counted on, for
+ * `PushService.needsYouSessions`: like the four owner items, a question only the owner can answer,
+ * drawn as a card in that conversation, and the same reads the rows are given.
+ */
+export async function readOwnerRequestSessionIds(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+): Promise<string[]> {
+  const signals = [
+    ...(await readOwnerRequestSignals(tx, ownerId, undefined)),
+    ...(await readMoveRequestSignals(tx, ownerId, undefined)),
+  ];
+  return [...new Set(signals.map((signal) => signal.sessionId))];
+}
+
+/** The asking sessions among `candidates` in the Open scope: a badge points somewhere, and here
+ *  cannot be a conversation the owner filed away or threw out. */
+async function openSessionsAmong(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  candidates: Iterable<string>,
+  sessionIds: readonly string[] | undefined,
+): Promise<Set<string>> {
+  const wanted = [...new Set(candidates)].filter((id) => !sessionIds || sessionIds.includes(id));
+  if (wanted.length === 0) return new Set();
+  const open = await tx.session.findMany({
+    where: { ownerId, id: { in: wanted }, completedAt: null, archivedAt: null, deletedAt: null },
+    select: { id: true },
+  });
+  return new Set(open.map((session) => session.id));
+}
+
+/**
+ * The open owner requests (`request_owner_action`) on each session that asked one: PENDING and not
+ * past its deadline — the sweep that writes EXPIRED may not have run yet, and a request past its
+ * deadline can no longer be answered. A withdrawn, declined or answered one is no longer PENDING.
+ */
+async function readOwnerRequestSignals(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: readonly string[] | undefined,
+): Promise<OwnerDecisionSignal[]> {
+  const now = new Date();
+  const rows = await tx.ownerRequest.findMany({
+    where: {
+      ownerId,
+      state: 'PENDING',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      ...(sessionIds ? { askedBySessionId: { in: [...sessionIds] } } : {}),
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, kind: true, title: true, createdAt: true, askedBySessionId: true, projectId: true },
+  });
+  if (rows.length === 0) return [];
+  const open = await openSessionsAmong(tx, ownerId, rows.map((row) => row.askedBySessionId), sessionIds);
+
+  const bySession = new Map<string, OwnerDecisionSignal>();
+  for (const row of rows) {
+    if (!open.has(row.askedBySessionId)) continue;
+    const signal = bySession.get(row.askedBySessionId) ?? {
+      sessionId: row.askedBySessionId,
+      projectId: row.projectId,
+      count: 0,
+      kind: 'OWNER_REQUEST' as const,
+      requests: [],
+    };
+    signal.count += 1;
+    signal.requests?.push({
+      ownerRequestId: row.id,
+      kind: row.kind as SessionOwnerRequestKind,
+      title: row.title,
+      since: row.createdAt,
+    });
+    bySession.set(row.askedBySessionId, signal);
+  }
+  return [...bySession.values()];
+}
+
+/**
+ * The PENDING MOVE_TASK crossings on the session that asked for each and on the target project's
+ * coordinator conversation (one signal per session, never two when they are the same one). Grouped
+ * per session by (asker, from, to): one card per group, counted once, its moves said on the row.
+ */
+async function readMoveRequestSignals(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: readonly string[] | undefined,
+): Promise<OwnerDecisionSignal[]> {
+  const rows = await tx.projectHandoffApproval.findMany({
+    where: {
+      ownerId,
+      kind: 'MOVE_TASK',
+      state: 'PENDING',
+      ...(sessionIds
+        ? {
+          OR: [
+            { requestedBySessionId: { in: [...sessionIds] } },
+            { toProject: { coordinatorSessionId: { in: [...sessionIds] } } },
+          ],
+        }
+        : {}),
+    },
+    orderBy: [{ requestedAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      title: true,
+      requestedAt: true,
+      requestedBySessionId: true,
+      fromProjectId: true,
+      toProjectId: true,
+      toProject: { select: { coordinatorSessionId: true } },
+    },
+  });
+  if (rows.length === 0) return [];
+  const open = await openSessionsAmong(
+    tx,
+    ownerId,
+    rows.flatMap((row) => [row.requestedBySessionId, ...(row.toProject.coordinatorSessionId ? [row.toProject.coordinatorSessionId] : [])]),
+    sessionIds,
+  );
+
+  const bySession = new Map<string, { signal: OwnerDecisionSignal; groups: Map<string, SessionTaskMoveGroup<Date>> }>();
+  for (const row of rows) {
+    const on = new Set([row.requestedBySessionId, row.toProject.coordinatorSessionId]);
+    for (const sessionId of on) {
+      if (sessionId == null || !open.has(sessionId)) continue;
+      const entry = bySession.get(sessionId) ?? {
+        signal: { sessionId, projectId: row.toProjectId, count: 0, kind: 'MOVE_REQUEST' as const, moves: [] },
+        groups: new Map<string, SessionTaskMoveGroup<Date>>(),
+      };
+      const key = `${row.requestedBySessionId}|${row.fromProjectId}|${row.toProjectId}`;
+      let group = entry.groups.get(key);
+      if (!group) {
+        group = {
+          requestedBySessionId: row.requestedBySessionId,
+          fromProjectId: row.fromProjectId,
+          toProjectId: row.toProjectId,
+          count: 0,
+          since: row.requestedAt,
+          title: row.title,
+          handoffIds: [],
+        };
+        entry.groups.set(key, group);
+        entry.signal.moves?.push(group);
+        entry.signal.count += 1;
+      }
+      group.count += 1;
+      group.handoffIds.push(row.id);
+      bySession.set(sessionId, entry);
+    }
+  }
+  return [...bySession.values()].map((entry) => entry.signal);
+}
+
 /** What is waiting on the owner on one conversation: how many, of which kinds, and — for the four
  *  owner items — which ones, so the banner above a session list can name and open them. */
 export interface OwnerDecisionsOnSession {
   count: number;
   kinds: ReadonlySet<OwnerDecisionKind>;
   ownerItems: Array<SessionOwnerItem<Date>>;
+  ownerRequests: Array<SessionOwnerRequest<Date>>;
+  taskMoves: Array<SessionTaskMoveGroup<Date>>;
 }
 
 /** The same answer folded per conversation, which is what a session row wants. */
@@ -427,17 +607,15 @@ export async function readOwnerDecisionsBySession(
   ownerId: string,
   scope?: { sessionIds?: readonly string[] },
 ): Promise<Map<string, OwnerDecisionsOnSession>> {
-  const folded = new Map<string, {
-    count: number;
-    kinds: Set<OwnerDecisionKind>;
-    ownerItems: Array<SessionOwnerItem<Date>>;
-  }>();
+  const folded = new Map<string, OwnerDecisionsOnSession & { kinds: Set<OwnerDecisionKind> }>();
   for (const signal of await readOwnerDecisionSignals(tx, ownerId, scope)) {
     const entry = folded.get(signal.sessionId)
-      ?? { count: 0, kinds: new Set<OwnerDecisionKind>(), ownerItems: [] };
+      ?? { count: 0, kinds: new Set<OwnerDecisionKind>(), ownerItems: [], ownerRequests: [], taskMoves: [] };
     entry.count += signal.count;
     entry.kinds.add(signal.kind);
     entry.ownerItems.push(...(signal.items ?? []));
+    entry.ownerRequests.push(...(signal.requests ?? []));
+    entry.taskMoves.push(...(signal.moves ?? []));
     folded.set(signal.sessionId, entry);
   }
   return folded;
@@ -473,6 +651,25 @@ export function ownerItemsForRow(
   }));
 }
 
+/** The open owner requests on a row, with their instants in the wire's own format. Always an
+ *  array, for the reason `ownerItemsForRow` is: an answered request has to clear the row. */
+export function ownerRequestsForRow(
+  decisions: OwnerDecisionsOnSession | undefined,
+): Array<SessionOwnerRequest> {
+  return (decisions?.ownerRequests ?? []).map((request) => ({ ...request, since: request.since.toISOString() }));
+}
+
+/** The waiting task-move groups on a row, the same way. */
+export function taskMovesForRow(
+  decisions: OwnerDecisionsOnSession | undefined,
+): Array<SessionTaskMoveGroup> {
+  return (decisions?.taskMoves ?? []).map((group) => ({
+    ...group,
+    handoffIds: [...group.handoffIds],
+    since: group.since.toISOString(),
+  }));
+}
+
 /** The waiting kinds a session row names in words of its own. Declared in `@orbit/shared` beside
  *  the owner items it describes, because it rides on the wire and both clients read it; re-exported
  *  here, where the count that produces it lives. */
@@ -499,6 +696,10 @@ export type { SessionWaitingKind };
  *   * `RECORD_AS_DONE` — a project that looks finished, whose coordinator did not ask to have it
  *     recorded done within the project's escalation window: the row says "Record as done…", over the
  *     same "Is this project done?" card, filled in by Orbit rather than by a request.
+ *   * `OWNER_REQUEST` — everything counted is open owner requests of ONE kind, and the row says that
+ *     kind's word (`OWNER_REQUEST_ROW_WORDS`). Two kinds of request on one row are a mix: null.
+ *   * `MOVE_REQUEST` — everything counted is waiting task moves: "Approve task move" /
+ *     "Approve N task moves" (`taskMovesRowWord`).
  *
  * Null otherwise — a blocked tool call on the same row, which holds a turn open and is the more
  * urgent thing to say; a kind with no words of its own (`PROJECT_DECISION` really is a proposal
@@ -512,8 +713,11 @@ export function sessionWaitingKind(
   if (approvals > 0 || !decisions || decisions.count === 0) return null;
   if (decisions.kinds.size !== 1) return null;
   const [only] = decisions.kinds;
+  if (only === 'OWNER_REQUEST') {
+    return new Set(decisions.ownerRequests.map((request) => request.kind)).size === 1 ? only : null;
+  }
   return only === 'OWNER_CONFIRMATION' || only === 'OWNER_ITEM' || only === 'START_REQUEST'
-    || only === 'DONE_REQUEST' || only === 'RECORD_AS_DONE'
+    || only === 'DONE_REQUEST' || only === 'RECORD_AS_DONE' || only === 'MOVE_REQUEST'
     ? only
     : null;
 }

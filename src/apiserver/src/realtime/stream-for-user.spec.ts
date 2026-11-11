@@ -117,6 +117,9 @@ function fakePrisma(
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
   } as unknown as PrismaService;
 }

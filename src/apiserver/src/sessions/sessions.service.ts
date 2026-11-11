@@ -167,6 +167,8 @@ import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
   ownerItemsForRow,
+  ownerRequestsForRow,
+  taskMovesForRow,
   readOwnerDecisionSignals,
   readOwnerDecisionsBySession,
   sessionWaitingKind,
@@ -4238,6 +4240,10 @@ export class SessionsService {
         // Which of the four owner items are waiting here, for the banner that has to name one and
         // open its card rather than only say that a number is not zero (§7.6 V13).
         ownerItems: ownerItemsForRow(waiting),
+        // The open owner requests this session asked and the task moves waiting on it, which the
+        // row's `OWNER_REQUEST` / `MOVE_REQUEST` words name; sent as [] to clear.
+        ownerRequests: ownerRequestsForRow(waiting),
+        taskMoves: taskMovesForRow(waiting),
         awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
         owesReplyTo: peers?.owesReplyTo ?? [],
       };

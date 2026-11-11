@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
@@ -118,6 +119,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
      * finds it without this. Optional for the same reason as `push`.
      */
     @Optional() private readonly delivery?: WatchDeliveryService,
+    /** Tells the asking session's row that what waits on the owner there changed (its
+     *  `pendingApprovals`, `waitingKind` and `ownerRequests`). Optional for the same reason as `push`. */
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   onModuleInit(): void {
@@ -190,6 +194,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (created) {
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
+      this.realtime?.publishOwnerSignalChanged(ownerId, [askingSessionId]);
       return created;
     }
     // Only a duplicate key reaches here: this session already filed under this clientRequestId.
@@ -314,15 +319,18 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       const rows = await tx.ownerRequest.updateManyAndReturn({
         where: { state: 'PENDING', expiresAt: { lte: now } },
         data: { state: 'EXPIRED', resolvedAt: now },
-        select: { id: true },
+        select: { id: true, ownerId: true, askedBySessionId: true },
       });
       const ids = rows.map((row) => row.id);
       await enqueueResolutions(tx, ids);
       await endUndeliveredGrants(tx, ids, 'EXPIRED');
-      return ids;
+      return rows;
     }, loggedRetry(this.logger, 'ownerRequests.expireDue'));
     if (expired.length > 0) this.delivery?.kick();
-    return expired;
+    const byOwner = new Map<string, string[]>();
+    for (const row of expired) byOwner.set(row.ownerId, [...(byOwner.get(row.ownerId) ?? []), row.askedBySessionId]);
+    for (const [owner, sessions] of byOwner) this.realtime?.publishOwnerSignalChanged(owner, sessions);
+    return expired.map((row) => row.id);
   }
 
   /**
@@ -350,7 +358,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     }, loggedRetry(this.logger, 'ownerRequests.settle'));
     if (settled.count === 1) this.delivery?.kick();
     const request = await this.get(ownerId, id);
-    if (settled.count === 1) return request;
+    if (settled.count === 1) {
+      this.realtime?.publishOwnerSignalChanged(ownerId, [request.askedBySessionId]);
+      return request;
+    }
     if (request.state === 'PENDING') {
       throw new ConflictException({
         code: OWNER_REQUEST_EXPIRED,

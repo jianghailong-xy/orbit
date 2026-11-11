@@ -566,10 +566,20 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
         data: { state: 'DONE', resolvedAt: now, resolvedByUserId: runner.ownerId },
       });
       if (done.count === 1) await enqueueResolutions(tx, [grant.request_id]);
-      return { state: 'ACTIVE', resolved: done.count === 1 };
+      return { state: 'ACTIVE', resolved: done.count === 1, requestId: grant.request_id as string };
     }, loggedRetry(this.logger, 'ownerSecrets.ack'));
     if (!result) throw new NotFoundException('secret grant not found');
-    if (result.resolved) this.delivery?.kick();
+    if (result.resolved) {
+      this.delivery?.kick();
+      // The asking session's row stops counting the request the moment its key is delivered.
+      if ('requestId' in result) {
+        const request = await this.prisma.ownerRequest.findUnique({
+          where: { id: result.requestId },
+          select: { askedBySessionId: true },
+        });
+        if (request) this.realtime?.publishOwnerSignalChanged(runner.ownerId, [request.askedBySessionId]);
+      }
+    }
     if ('ended' in result && result.ended) this.realtime?.markRunnerChanged(runner.id);
     return { state: result.state };
   }

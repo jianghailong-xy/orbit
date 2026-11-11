@@ -9,7 +9,7 @@ import {
 } from './enums';
 import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
-import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
+import type { SessionOwnerItem, SessionOwnerRequest, SessionTaskMoveGroup, SessionWaitingKind } from './project-progress';
 import type { ExternalMessageFrom, OrbitMessageFrom, SessionMessageFrom } from './session-message';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
@@ -244,6 +244,13 @@ export interface ControlSessionSummary {
    *  item that was answered clears the banner by arriving as an empty list. An absent key is an
    *  older control plane, and leaves whatever the row had. */
   ownerItems?: SessionOwnerItem[];
+  /** The open owner requests this session asked (`request_owner_action`), oldest first — what the
+   *  row's `OWNER_REQUEST` word names. Sent as `[]` when there are none, for the reason `ownerItems`
+   *  is; absent from an older control plane. */
+  ownerRequests?: SessionOwnerRequest[];
+  /** The PENDING task-move groups waiting on this session — as the asker, or as the target
+   *  project's coordinator — oldest first. Sent as `[]` when there are none, like `ownerRequests`. */
+  taskMoves?: SessionTaskMoveGroup[];
   /** The sessions this one asked for a reply and is still waiting on (`session_send` /
    *  `project_send` with `expectReply`, docs/session-request-reply-contract.md §6), oldest first.
    *  Sent as `[]` when there are none, for the reason `ownerItems` is; absent from an older

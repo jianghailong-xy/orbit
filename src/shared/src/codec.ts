@@ -318,6 +318,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The recorded answer itself, named in the refusal a declared crossing gets: the caller polls it
   // and a person opens it, so it is an address like every other id in an error body.
   'handoffId',
+  // The waiting crossings of one task-move group on a session row (`SessionTaskMoveGroup`).
+  'handoffIds',
   'parentTaskId',
   'batchId',
   'listId',

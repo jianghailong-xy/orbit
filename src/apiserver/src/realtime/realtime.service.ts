@@ -52,6 +52,8 @@ import { OpenListHints } from './open-list-hints';
 import { RunnerHints, type LinkLiveEvent, type LinkTurnPrefix } from './runner-hints';
 import {
   ownerItemsForRow,
+  ownerRequestsForRow,
+  taskMovesForRow,
   readOwnerDecisionsBySession,
   sessionWaitingKind,
   type OwnerDecisionsOnSession,
@@ -1134,6 +1136,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** What waits on the owner on these conversations changed with no turn behind it — an owner
+   *  request filed, answered or withdrawn, a task move asked or answered. Each row re-reads its
+   *  summary (`session.updated`, so `pendingApprovals`, `waitingKind`, `ownerRequests` and
+   *  `taskMoves` arrive at once), and the owner's badge and Feishu cards are reconciled. */
+  publishOwnerSignalChanged(ownerId: string, sessionIds: Iterable<string>): void {
+    for (const sessionId of new Set(sessionIds)) this.publishSessionUpdated(sessionId);
+    this.push.scheduleBadgeSync(ownerId);
+  }
+
   /** Drop the cached owner + workspace of a session that moved to another workspace
    *  (SessionsService.move). The cached workspaceId is otherwise only evicted when the session
    *  ends, and it is what every later control event names as the envelope's `agentId`. The runner
@@ -1595,6 +1606,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // The four owner items, sent with every summary — including as an empty list, which is how a
       // row learns that the one it was showing has been answered (§7.6 V13).
       ownerItems: ownerItemsForRow(decisions),
+      // The open owner requests and waiting task moves, sent as [] too: that is how an answered
+      // request or move clears the row.
+      ownerRequests: ownerRequestsForRow(decisions),
+      taskMoves: taskMovesForRow(decisions),
       awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
       owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,

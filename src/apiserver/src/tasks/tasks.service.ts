@@ -2144,6 +2144,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
     // instance that answers it has to be able to reach this one.
     this.handoffs.bindMoveApplier(this);
+    // And the rows a waiting move lights (`MOVE_REQUEST`) are told when it is filed or answered.
+    this.handoffs.bindSignalAnnouncer({
+      ownerSignalChanged: (ownerId, sessionIds) => this.realtime?.publishOwnerSignalChanged?.(ownerId, sessionIds),
+    });
     this.completionInputs = completionInputs;
     this.pauseProjector = pauseProjector;
     this.openItems = openItems;

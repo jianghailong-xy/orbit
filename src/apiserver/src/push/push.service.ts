@@ -13,7 +13,7 @@ import { RunStatus, type DeviceToken } from '@prisma/client';
 import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
+import { readOwnerItemSessionIds, readOwnerRequestSessionIds } from '../projects/owner-decision-signal';
 import { conversationIsOver, openItemsNoLongerOwed } from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
@@ -1252,9 +1252,13 @@ export class PushService {
    *  The owner-item half does not carry the RUNNING gate: a coordinator conversation sits at
    *  AWAITING_INPUT precisely while it is waiting for the answer, which is the state this exists to
    *  make visible. It does carry the same gate a card does — a project with no coordinator bound,
-   *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`). */
+   *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`).
+   *
+   *  The open owner requests (`request_owner_action`) and the waiting task moves are counted the
+   *  same way and for the same reason: a card only the owner can answer, on the conversation that
+   *  asked (and, for a move, the target project's coordinator) — `readOwnerRequestSessionIds`. */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const [rows, blockedOnOwner] = await Promise.all([
+    const [rows, blockedOnOwner, askedOfOwner] = await Promise.all([
       this.prisma.session.findMany({
         where: {
           ownerId,
@@ -1270,9 +1274,10 @@ export class PushService {
         select: { id: true, taskId: true, approvals: { where: { status: 'PENDING' }, select: { id: true, toolName: true } } },
       }),
       readOwnerItemSessionIds(this.prisma, ownerId),
+      readOwnerRequestSessionIds(this.prisma, ownerId),
     ]);
     const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
-    return [...new Set([...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id), ...blockedOnOwner])];
+    return [...new Set([...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id), ...blockedOnOwner, ...askedOfOwner])];
   }
 
   /** Debounced: something that could lower `ownerId`'s "needs you" count happened (an approval

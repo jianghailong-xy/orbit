@@ -115,6 +115,9 @@ test('UI list and detail payloads include the same derived capabilities', async 
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
@@ -187,6 +190,9 @@ test('the session list and detail carry the SOURCE snapshot the never-started ca
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     task: { findMany: async () => [] },
     sessionRequest: noSessionRequests(),
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
@@ -234,6 +240,9 @@ test('a session that resolves no SOURCE reports UNBOUND with null refusal keys',
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     task: { findMany: async () => [] },
     sessionRequest: noSessionRequests(),
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);

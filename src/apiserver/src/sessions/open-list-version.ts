@@ -123,6 +123,11 @@ export async function readOpenListVersion(
          WHERE i.owner_id = ${o} AND i.kind = 'DONE_REQUEST'
         UNION ALL
         SELECT v.due_at FROM task_owner_confirmation_review v WHERE v.owner_id = ${o}
+        UNION ALL
+        -- An owner request stops being counted on its row at its deadline, before the sweep that
+        -- writes it EXPIRED (owner-decision-signal.ts).
+        SELECT r.expires_at FROM owner_request r
+         WHERE r.owner_id = ${o} AND r.state = 'PENDING' AND r.expires_at IS NOT NULL
       ) d) AS deadlines
   `);
 

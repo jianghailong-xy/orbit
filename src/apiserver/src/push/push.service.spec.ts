@@ -27,6 +27,9 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
       },
     },
     // The owner-item half of the count reads its own rows (see the two tests below); none here.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
   };
   const service = new PushService(prisma as any, enabledConfig());
@@ -54,6 +57,9 @@ function approvalPrisma() {
   return {
     session: { findMany: async () => [{ id: 's-blocked', approvals: [{ id: 'approval-blocked', toolName: 'Bash' }] }] },
     // Overridden per test with the rows that half should or should not count.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async (): Promise<any[]> => [] },
     // Which of those rows nobody owes any more (`openItemsNoLongerOwed`): none, here.
     $queryRaw: async (): Promise<Array<{ id: string }>> => [],
@@ -611,6 +617,9 @@ function ownerItemHarness(
 ) {
   const sent: { body: string; collapseId?: string }[] = [];
   const prisma = {
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findUnique: async () => item },
     // Whether the item is one nobody owes any more (`openItemsNoLongerOwed`): it is still owed.
     $queryRaw: async (): Promise<Array<{ id: string }>> => [],
