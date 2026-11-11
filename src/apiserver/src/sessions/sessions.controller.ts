@@ -666,6 +666,21 @@ export class SessionsController {
     return this.sessions.sendTurnAsWritten(user.userId, id, turnId);
   }
 
+  // Settings › Translation (@orbit/shared translation.ts, reply-translation.ts): translate an agent reply
+  // (or a suggestion) again, one whose translation failed. Answers at once; the result is a live
+  // `translation` event and the event's own payload.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/events/:seq/translation/retry')
+  retryReplyTranslation(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('seq') seq: string,
+  ) {
+    const n = Number(seq);
+    if (!Number.isInteger(n) || n < 1) throw new BadRequestException('seq must be a positive integer');
+    return this.sessions.retryReplyTranslation(user.userId, id, n);
+  }
+
   // Send a message queued for the next turn into the one running now (the tray's Steer). The same
   // turnId as the DELETE beside it.
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })

@@ -2634,6 +2634,9 @@ model Approval {
   /// (approval_decided_via_chk).
   decidedFeishuOpenId    String? @map("decided_feishu_open_id")
   decidedFeishuMessageId String? @map("decided_feishu_message_id")
+  /// Settings › Translation (0550, @orbit/shared ApprovalTranslation): what the card shows the owner, in
+  /// their language. `input` stays the engine's English. NULL when translation was not involved.
+  translation  Json?
   createdAt    DateTime  @default(now()) @map("created_at")
   decidedAt    DateTime? @map("decided_at")
 

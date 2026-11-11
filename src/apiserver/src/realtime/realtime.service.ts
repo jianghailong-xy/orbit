@@ -34,6 +34,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
 import { enqueueRecap } from '../sessions/recap';
+import { translationEventOf } from '../sessions/reply-translation';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
@@ -287,7 +288,10 @@ function batchRowUpdate(): NormalizedRunEvent {
  * input is whatever the asker sent. Seq 0, like every live-only event: a card is never stored in run_event.
  */
 export function approvalRequestEvent(
-  approval: { id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null; coordinatorFallback?: string | null },
+  approval: {
+    id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null; coordinatorFallback?: string | null;
+    translation?: unknown;
+  },
   ts: string,
 ): NormalizedRunEvent {
   return {
@@ -304,6 +308,9 @@ export function approvalRequestEvent(
       // take the card down the moment the turn ended (`WorkspaceView`'s local predicate).
       backgroundJobId: approval.backgroundJobId ?? undefined,
       ...(approval.coordinatorFallback ? { coordinatorFallback: approval.coordinatorFallback } : {}),
+      // Settings › Translation (ApprovalTranslation, reply-translation.ts): what the card shows, in the
+      // owner's language. A card is published again with it once it is translated.
+      ...(approval.translation ? { translation: approval.translation } : {}),
     },
     ts,
   };
@@ -509,7 +516,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (!payload) return;
     let m: {
       i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number;
-      a?: string; ts?: string; u?: 1;
+      a?: string; ts?: string; u?: 1; x?: number;
     };
     try {
       m = JSON.parse(payload);
@@ -557,9 +564,23 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         this.readBackInOrder(m.r, `approval ${approvalId}`, async () => {
           const row = await this.prisma.approval.findFirst({
             where: { id: approvalId, sessionId: m.r },
-            select: { id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, createdAt: true, coordinatorFallback: true },
+            select: {
+              id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, createdAt: true, coordinatorFallback: true,
+              translation: true,
+            },
           });
           return row ? [approvalRequestEvent(row, ts ?? row.createdAt.toISOString())] : [];
+        });
+      } else if (typeof m.x === 'number') {
+        // A reply's translation too big to ride along: built again from the payload of the event it translates.
+        const seq = m.x;
+        this.readBackInOrder(m.r, `translation of ${seq}`, async () => {
+          const row = await this.prisma.runEvent.findUnique({
+            where: { sessionId_seq: { sessionId: m.r, seq } },
+            select: { seq: true, payload: true, turnId: true },
+          });
+          const event = row ? translationEventOf(row) : null;
+          return event ? [event] : [];
         });
       }
     }
@@ -790,6 +811,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // Read before this replica's streams are handed the card: a stream's public-id pass (addTwins) rewrites the ids of
     // what it sends in place, and the other replicas look the approval row up by the id it is stored under.
     const approvalId = event.type === RunEventType.APPROVAL_REQUEST ? approvalIdOf(event.payload) : null;
+    const translationOf = event.type === RunEventType.TRANSLATION ? (event.payload as { of?: unknown }).of : undefined;
     this.publishHere(runId, event);
     const payload = JSON.stringify({ i: this.instanceId, r: runId, e: event });
     // NOTE: NOTIFY's limit is 8000 BYTES — measure UTF-8 bytes, not string length
@@ -800,6 +822,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // A card is never stored: the other replicas build it again from its approval row (approvalRequestEvent), at
       // the `ts` it was published at here.
       this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, a: approvalId, ts: event.ts }));
+    } else if (typeof translationOf === 'number') {
+      // A reply's translation is never an event of its own: the other replicas read it back from the payload of
+      // the event it translates (reply-translation.ts), where it was written before this was published.
+      this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, x: translationOf }));
     } else {
       // Too big for a NOTIFY payload — signal by seq; other replicas fetch the
       // (already-persisted) RunEvent row.

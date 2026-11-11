@@ -625,6 +625,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/events/page': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/events/search': { request: (of) => ({ params: { id: of.sessionId }, query: { q: 'census' } }) },
   'GET /sessions/:id/events/:seq/full': { request: (of) => ({ params: { id: of.sessionId, seq: of.eventSeq } }) },
+  'POST /sessions/:id/events/:seq/translation/retry': { request: (of) => ({ params: { id: of.sessionId, seq: of.eventSeq } }) },
   'GET /sessions/:id/created-tasks': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/share': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/share': { request: (of) => ({ params: { id: of.sessionId } }) },

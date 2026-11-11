@@ -27,6 +27,7 @@ import {
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
+import type { ApprovalTranslation } from './translation';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 import type { ExternalMessageFrom } from './session-message';
 
@@ -2233,6 +2234,11 @@ export interface ApprovalInfo {
   message?: string;
   createdAt: string;
   decidedAt?: string;
+  /** Settings › Translation (3A, @orbit/shared translation.ts): what the card shows, in the owner's
+   *  language — an AskUserQuestion's questions and options, a tool card's description and plan.
+   *  Draw these instead of the same fields of `input`, which stays the English the engine sent.
+   *  Absent while the card is being translated and whenever translation is off. */
+  translation?: ApprovalTranslation;
 }
 
 /** Runner (orbit MCP permission tool) → control plane: register a pending tool
@@ -2288,8 +2294,15 @@ export interface WorkspacePermissionRuleInfo {
  *  remembers both `cd` and `git add`, not just the leading `cd`. */
 export interface ApprovalDecisionRequest {
   behavior: 'allow' | 'deny';
+  /** With Settings › Translation on, translated into English before the engine reads it (3A). */
   message?: string;
+  /** With Settings › Translation on, keyed by the question as shown and holding the labels as shown,
+   *  original or translated (ApprovalInfo.translation): the server maps them back to the original
+   *  English, and translates any other answer into English like a message (3A). */
   answers?: QuestionAnswers;
+  /** Send the owner's own words (`message`, typed answers) untranslated: the "Send as written" of a
+   *  decision refused 422 TRANSLATION_FAILED. Options are still mapped back to their originals. */
+  sendAsWritten?: boolean;
   rememberRules?: PermissionRule[];
   /** The single-task create card's "Create and start": the owner's yes also starts the new task's
    *  run, so they are not asked again to start it. Accepted only on an `allow` of an

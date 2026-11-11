@@ -50,6 +50,7 @@ var linkLiveOnlyTypes = map[string]bool{
 	"approval_request":     true,
 	"approval_resolved":    true,
 	"queued_turns_changed": true,
+	"translation":          true,
 	evBackgroundOutput:     true,
 	evTaskProgress:         true,
 	"resync":               true,

@@ -1,5 +1,5 @@
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
-import { turnTranslationOf } from '../sessions/turn-translation';
+import { ownerTranslationLanguage, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { readMergeRecovery, mergeRecoveryReady, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
@@ -212,6 +212,13 @@ import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
 import { recapAfterSettle } from '../sessions/recap';
 import { enqueueTurnSuggestion } from '../sessions/turn-suggestion';
+import {
+  cardHasText,
+  translatableText,
+  translateApprovalCard,
+  translateStoredEvents,
+  type TranslationDeps,
+} from '../sessions/reply-translation';
 import { normalizeStoredRememberRules, reachesPastOneMcpTool } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
@@ -5714,6 +5721,12 @@ export class RunnerApiController {
       // slow APNs round-trip can't delay the runner's approval-create response.
       if (fallback) void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName, true);
       else void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
+      // Settings › Translation (3A, reply-translation.ts): the card goes out in English at once, and again in
+      // the owner's language once it is translated.
+      if (cardHasText(approval.input)) {
+        const lang = await ownerTranslationLanguage(this.prisma, session.ownerId).catch(() => null);
+        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, lang);
+      }
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
   }
@@ -7592,6 +7605,15 @@ export class RunnerApiController {
    * rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has already
    * answered the runner by the time this runs.
    */
+  /** What reply-translation.ts writes with and publishes on. */
+  private translationDeps(): TranslationDeps {
+    return {
+      db: this.prisma as unknown as TranslationDeps['db'],
+      publish: (sessionId, event) => this.realtime.publish(sessionId, event),
+      approvalEvent: (approval) => approvalRequestEvent(approval, new Date().toISOString()),
+    };
+  }
+
   private async recapAfterTurn(sessionId: string): Promise<void> {
     await recapAfterSettle({
       db: this.prisma,
@@ -8789,6 +8811,13 @@ export class RunnerApiController {
       const published = events.filter((e) => !isNoiseSystemEvent(e));
       if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted);
       else this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted);
+    }
+    // Settings › Translation (reply-translation.ts): a reply or suggestion this batch stored whole is translated
+    // for an owner with translation on, in the background. The owner's switch is read only for a batch that holds
+    // something to translate — most hold none.
+    if (durable.some((e) => translatableText(e.type, e.payload) !== null)) {
+      const lang = await ownerTranslationLanguage(this.prisma, eventOutcome.session.ownerId).catch(() => null);
+      translateStoredEvents(this.translationDeps(), sessionId, lang, durable);
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in

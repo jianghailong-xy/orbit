@@ -127,6 +127,9 @@ import {
   type WikiChatContext,
   type TranslationActionResponse,
   type TranslationLanguage,
+  type ApprovalTranslation,
+  type QuestionAnswers,
+  type ReplyTranslationRetryResponse,
   type TurnTranslation,
   AGENT_LANGUAGE,
 } from '@orbit/shared';
@@ -190,7 +193,7 @@ import {
   mergeReceiptRow,
   mergeStatusForResult,
 } from './merge-receipt';
-import { RealtimeService } from '../realtime/realtime.service';
+import { approvalRequestEvent, RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { trashHoldOf } from '../files/file-retention';
 import { FilesService } from '../files/files.service';
@@ -224,6 +227,7 @@ import {
 } from './naming';
 import { enqueueRecap, type RecapOutcome } from './recap';
 import { translate, TranslationFailed } from './translation';
+import { englishDecision, retranslateEvent, translatableText, type TranslationDeps } from './reply-translation';
 import {
   HELD_TURN_STATUS,
   heldTurnColumns,
@@ -6992,6 +6996,40 @@ export class SessionsService {
   }
 
   /**
+   * Retry a reply's translation (POST /sessions/:id/events/:seq/translation/retry, reply-translation.ts): an
+   * `assistant` text block or prompt suggestion translated again into the owner's language. Answers at once;
+   * the result comes as a TRANSLATION on the session's stream, and is written into the event's payload.
+   */
+  async retryReplyTranslation(ownerId: string, sessionId: string, seq: number): Promise<ReplyTranslationRetryResponse> {
+    const session = await this.prisma.session.findFirst({ where: { id: sessionId, ownerId }, select: { id: true, sessionKind: true } });
+    if (!session) throw new NotFoundException('session not found');
+    // A landing has no replies to translate: an engine door (§2.9 LS6).
+    assertEngineSessionRow(session);
+    const event = await this.prisma.runEvent.findUnique({
+      where: { sessionId_seq: { sessionId, seq } },
+      select: { type: true, payload: true },
+    });
+    if (!event || translatableText(event.type, event.payload) === null) {
+      throw new NotFoundException('no reply to translate at this seq');
+    }
+    const lang = await ownerTranslationLanguage(this.prisma, ownerId);
+    if (!lang) {
+      throw new ConflictException({ code: 'TRANSLATION_OFF', message: 'Translation is off for this account.' });
+    }
+    retranslateEvent(this.translationDeps(), sessionId, seq, lang);
+    return { of: seq, lang };
+  }
+
+  /** What reply-translation.ts writes with and publishes on. */
+  private translationDeps(): TranslationDeps {
+    return {
+      db: this.prisma as unknown as TranslationDeps['db'],
+      publish: (id, event) => this.realtime.publish(id, event),
+      approvalEvent: (approval) => approvalRequestEvent(approval, new Date().toISOString()),
+    };
+  }
+
+  /**
    * Send as written (POST /sessions/:id/turns/:turnId/translation/send-as-written): deliver a held
    * message as the owner wrote it, untranslated (SENT_AS_WRITTEN).
    */
@@ -9039,8 +9077,21 @@ export class SessionsService {
     // A workspace write's card holds its variables' values only while it asks (workspace-write-card-values.ts).
     const answering = await this.prisma.approval.findFirst({
       where: { id: approvalId, sessionId: id },
-      select: { toolName: true, input: true },
+      select: { toolName: true, input: true, translation: true, status: true },
     });
+    // Settings › Translation (3A, reply-translation.ts): what the engine reads is English — options the owner
+    // picked in translation mapped back to the card's own, their own words translated. A failed translation
+    // records nothing (422 TRANSLATION_FAILED). Only for a card still asking: a late click is a no-op anyway.
+    let english: { message?: string; answers?: QuestionAnswers } = { message: dto.message, answers: dto.answers };
+    if (answering?.status === 'PENDING' && (dto.message !== undefined || dto.answers)) {
+      const lang = await ownerTranslationLanguage(this.prisma, ownerId);
+      english = await englishDecision(
+        answering.input,
+        answering.translation as unknown as ApprovalTranslation | null,
+        dto,
+        lang,
+      );
+    }
     // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's
     // decision is also an Activity row (docs/feishu-bot-design.md §7.2): written in the same
     // transaction, and only by the decision that lands, so a replayed event or a stale card's
@@ -9054,8 +9105,8 @@ export class SessionsService {
         ...(answering && holdsWorkspaceWriteValues(answering.toolName)
           ? { input: withoutEnvValues(answering.input) as Prisma.InputJsonValue }
           : {}),
-        message: dto.message ?? null,
-        answers: dto.answers ? (dto.answers as Prisma.InputJsonValue) : Prisma.DbNull,
+        message: english.message ?? null,
+        answers: english.answers ? (english.answers as Prisma.InputJsonValue) : Prisma.DbNull,
         // Only an allow can carry "remember same kind" rules; the runner reads them off
         // that read and adds them to claude's session permissions. Stored as a JSON
         // array (the schemaless `remember_rule` column holds either shape).
@@ -9142,6 +9193,7 @@ export class SessionsService {
     decidedAt: Date | null;
     decidedCredentialKind?: string | null;
     coordinatorFallback?: string | null;
+    translation?: Prisma.JsonValue | null;
   }): ApprovalInfo {
     return {
       id: a.id,
@@ -9156,6 +9208,7 @@ export class SessionsService {
       message: a.message ?? undefined,
       createdAt: a.createdAt.toISOString(),
       decidedAt: a.decidedAt?.toISOString(),
+      ...(a.translation ? { translation: a.translation as unknown as ApprovalTranslation } : {}),
     };
   }
 

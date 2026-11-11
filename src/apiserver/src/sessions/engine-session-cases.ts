@@ -188,6 +188,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// A landing has no messages, held or otherwise: an engine door (§2.9 LS6).\n    assertEngineSessionRow(session);',
     note: 'POST /turns/:turnId/translation/retry and /send-as-written both load through it',
   },
+  'SessionsService.retryReplyTranslation': {
+    file: 'sessions/sessions.service.ts',
+    snippet: '// A landing has no replies to translate: an engine door (§2.9 LS6).\n    assertEngineSessionRow(session);',
+    note: 'POST /events/:seq/translation/retry',
+  },
   'SessionsService.steerQueuedTurn': {
     file: 'sessions/sessions.service.ts',
     snippet: 'assertEngineSessionRow(session);\n      if (session.deletedAt) {',
@@ -297,6 +302,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/turns/:turnId/steer': 'SessionsService.steerQueuedTurn',
   'POST /sessions/:id/turns/:turnId/translation/retry': 'SessionsService.ownHeldTurn',
   'POST /sessions/:id/turns/:turnId/translation/send-as-written': 'SessionsService.ownHeldTurn',
+  'POST /sessions/:id/events/:seq/translation/retry': 'SessionsService.retryReplyTranslation',
   'POST /sessions/:id/resume': 'SessionsService.resume',
   'PATCH /sessions/:id/config': 'SessionsService.updateConfig',
   'PATCH /sessions/:id/account': 'SessionsService.switchAccount',

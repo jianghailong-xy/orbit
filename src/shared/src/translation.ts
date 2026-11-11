@@ -32,6 +32,45 @@
  *    Send as written: `POST /sessions/:id/turns/:turnId/translation/send-as-written` — delivers the
  *    original untranslated (state SENT_AS_WRITTEN). Both answer TranslationActionResponse. Withdrawing
  *    a held turn is the ordinary `DELETE /sessions/:id/turns/:turnId`.
+ *
+ * WHAT THE AGENT SAYS (task A2, decisions 2A and 3A)
+ * ==================================================
+ *  - Agent replies. Once the runner has stored an `assistant` text block whole (never its
+ *    `text_delta`s), an owner with translation on gets it translated into their language in the
+ *    background. Only the workspace's own prose is translated: an `assistant` event carrying
+ *    `parentToolUseId` (a sub-agent's report to its caller) is left alone, and `tool_use`,
+ *    `tool_result`, `thinking`, `tool_output` and every other type never are. The same goes for a
+ *    `prompt_suggestion` (Suggested replies, engine or Orbit source alike).
+ *  - Where it is kept. run_event seq is the runner's, so the server writes no event of its own:
+ *    the result is written into the translated event's OWN payload under the key `translation`
+ *    (ReplyTranslation) — `{ lang, text }`, or `{ lang, failed: true }`. Every replay carries it
+ *    with the event: `GET /sessions/:id/events/page` (tail, before, after, around), the SSE
+ *    catch-up after `sinceSeq`, and `GET /sessions/:id/events/:seq/full`. An event without the
+ *    key was never translated (translation off, or sent before it was on): draw it as it is.
+ *  - Live. When the key is written, the session's stream gets a live-only RunEventType.TRANSLATION
+ *    at seq 0 (handle it before the seq dedup, as approval_request): payload
+ *    TranslationEventPayload, `of` the seq of the event it belongs to. Fold it into that event's
+ *    payload as `translation`, exactly as a replay would have delivered it.
+ *  - The streaming reply (2A): between the first `text_delta` and the TRANSLATION for its block,
+ *    the English is what there is; the client greys it with "Translates when the reply is done".
+ *  - Failure (2A): `{ failed: true }` draws "Couldn't translate this reply · Retry". Retry is
+ *    `POST /sessions/:id/events/:seq/translation/retry` (no body), answered at once with
+ *    ReplyTranslationRetryResponse; the result arrives as another TRANSLATION. A 409 means
+ *    translation is off for this account (or the server has no key); a 404, no translatable event.
+ *  - Question cards and approvals (3A). An approval card (`GET /sessions/:id/approvals`, ApprovalInfo,
+ *    and the live `approval_request`) gains `translation` (ApprovalTranslation) once the server has
+ *    translated what it shows the owner: the questions of an AskUserQuestion — question, header,
+ *    each option's label and description, index for index with `input.questions` — and a tool
+ *    card's `input.description` and `input.plan`. It is written after the card is first published,
+ *    so a SECOND `approval_request` with the same id follows, carrying it: replace the card's
+ *    display text, nothing else about it. `input` itself is never changed.
+ *  - Answering (3A). `POST /sessions/:id/approvals/:approvalId/decision` takes `answers` keyed by the
+ *    question as shown and the option labels as shown — the original or the translated, either one;
+ *    the server maps a translated question and a translated label back to the original before the
+ *    engine reads it. Any other answer (the owner's own words) and the decision's `message` are
+ *    translated into English like a message. If that translation fails the decision is NOT
+ *    recorded (1A): 422 with `code: 'TRANSLATION_FAILED'`; the client offers Retry (send it again)
+ *    and Send as written (send it again with `sendAsWritten: true`).
  */
 
 /** "Your language": the seven the owner may write and read in (board decision 5A). "Agents work in"
@@ -107,3 +146,55 @@ export interface TranslationActionResponse {
 
 /** How long one translation may take before it counts as failed (decision 4A). */
 export const TRANSLATION_TIMEOUT_MS = 20_000;
+
+/**
+ * The `translation` key of a translated `assistant` or `prompt_suggestion` run event's payload,
+ * written by the server once the event is translated. Exactly one of `text` and `failed`.
+ */
+export interface ReplyTranslation {
+  /** The owner's language it was (or was to be) translated into. */
+  lang: TranslationLanguage;
+  /** The translation. Draw it by default; "Show original" flips to the event's own `text`. */
+  text?: string;
+  /** The translation failed or took longer than 20 s: "Couldn't translate this reply · Retry". */
+  failed?: true;
+}
+
+/** RunEventType.TRANSLATION's payload (live-only, seq 0). */
+export interface TranslationEventPayload extends ReplyTranslation {
+  /** The seq of the event this translates. */
+  of: number;
+}
+
+/** The answer to `POST /sessions/:id/events/:seq/translation/retry`: the translation is under way,
+ *  and its result comes as a RunEventType.TRANSLATION for `of`. */
+export interface ReplyTranslationRetryResponse {
+  of: number;
+  lang: TranslationLanguage;
+}
+
+/** One AskUserQuestion question as shown in the owner's language, index for index with
+ *  `input.questions[i]`; a field the original lacks is absent here too. */
+export interface TranslatedQuestion {
+  question: string;
+  header?: string;
+  /** Index for index with `input.questions[i].options`. */
+  options: Array<{ label: string; description?: string }>;
+}
+
+/** ApprovalInfo.translation (and the `approval_request` payload's): what the card shows, in the
+ *  owner's language. Absent until it is translated, and on every card translation is off for. */
+export interface ApprovalTranslation {
+  lang: TranslationLanguage;
+  /** The card could not be translated: draw it in English. Nothing else is set. */
+  failed?: true;
+  /** `input.description` translated (a tool card's one-line "what this does"). */
+  description?: string;
+  /** `input.plan` translated (ExitPlanMode). */
+  plan?: string;
+  /** `input.questions` translated (AskUserQuestion). */
+  questions?: TranslatedQuestion[];
+}
+
+/** The 422 a decision whose words could not be translated is refused with: nothing was recorded. */
+export const TRANSLATION_FAILED_CODE = 'TRANSLATION_FAILED' as const;
