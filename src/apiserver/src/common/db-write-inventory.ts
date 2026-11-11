@@ -1629,6 +1629,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary; a stale answer is a 409 (APPROVAL_TARGET_MISMATCH or HANDOFF_ALREADY_ANSWERED) naming each move.',
   },
   {
+    at: 'sessions/return-to-open.ts#returnWaitingSessionsToOpen',
+    shape: 'TX_RETRIED',
+    locks: 'Filed (Completed or Trash) non-landing session rows that still have a PENDING owner request they asked, a PENDING MOVE_TASK they asked, or a PENDING MOVE_TASK into a project they coordinate — FOR UPDATE OF session SKIP LOCKED (rank 30), in id order, at most 500; then one UPDATE clearing completed_at, archived_at and deleted_at on them. The owner_request, project_handoff_approval and project rows are only read.',
+    identity: 'None needed: the rows are chosen by what is true of them now, and a session already in Open matches nothing. Called after commit by sessions.complete, sessions.remove, sessions.completeProjectSessions and reaper.endParked (scoped to the sessions they filed), and by the reaper tick over every account, whose first run after boot is the backfill for sessions filed away before this existed.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The selection is re-run under the lock on each attempt; a row another transaction holds is skipped and taken by the next sweep.',
+    effects: 'None inside. After commit the caller announces each session it moved (publishSessionCreated).',
+    answer: 'Logged by the caller and never a reason for the filing or the sweep to fail; the next sweep tries again.',
+  },
+  {
     at: 'sessions/return-to-open.ts#returnSessionsToOpen',
     shape: 'TX_RETRIED',
     locks: 'The filed (Completed or Trash) non-landing session rows named, FOR UPDATE (rank 30), sorted in one statement, then one UPDATE clearing completed_at, archived_at and deleted_at on them. Its own transaction, after the filing that called it committed.',

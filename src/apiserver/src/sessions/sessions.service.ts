@@ -335,6 +335,7 @@ import {
   SESSION_KIND_LANDING,
   assertEngineSession as assertEngineSessionRow,
 } from './engine-session';
+import { returnWaitingSessionsToOpen } from './return-to-open';
 import { readLandingView } from '../projects/landing-view';
 import {
   deriveSessionCapabilities,
@@ -9742,7 +9743,24 @@ export class SessionsService {
       ended.endReason,
       ended.lifecycleState,
     );
+    await this.returnIfStillWaiting(ownerId, [id]);
     return { ok: true };
+  }
+
+  /**
+   * After sessions were filed in Completed or Trash: one with a question still waiting on the owner
+   * (an owner request it asked, or a task move it asked or coordinates the target of) comes straight
+   * back to Open (`returnWaitingSessionsToOpen`), told as a restore is. Never a reason for the
+   * filing to fail: the periodic sweep brings back anything this misses.
+   */
+  private async returnIfStillWaiting(ownerId: string, ids: readonly string[]): Promise<void> {
+    if (ids.length === 0) return;
+    try {
+      const back = await returnWaitingSessionsToOpen(this.prisma, this.logger, { ownerId, sessionIds: ids });
+      for (const { id } of back) this.realtime.publishSessionCreated(id);
+    } catch (error) {
+      this.logger.warn(`could not bring waiting sessions back to Open: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -9793,6 +9811,7 @@ export class SessionsService {
       this.publishEndIntent(id, end);
       this.realtime.publishSessionLifecycleChanged(id, end.status, end.endReason, end.lifecycleState);
     }
+    await this.returnIfStillWaiting(ownerId, moved.map(({ id }) => id));
     return { completed: moved.length };
   }
 
@@ -10509,6 +10528,7 @@ export class SessionsService {
       ended.endReason,
       ended.lifecycleState,
     );
+    await this.returnIfStillWaiting(ownerId, [id]);
     return { ok: true };
   }
 

@@ -22,7 +22,12 @@
  *   (g) a session the moves are not drawn on, and moves of two batches, are refused with nothing
  *       written;
  *   (h) a move filed while B's coordinator is Completed and the asker is in Trash brings both back
- *       to Open; an owner request filed from a Completed session brings it back to Open.
+ *       to Open; an owner request filed from a Completed session brings it back to Open;
+ *   (i) Complete and Trash of a session with a waiting owner request, a waiting move it asked, or a
+ *       waiting move into the project it coordinates, each leave it in Open; a session with nothing
+ *       waiting, or whose moves are answered, stays where it was put;
+ *   (j) the backfill: sessions filed away by any other writer (here, written directly) with something
+ *       waiting are brought back by the reaper's sweep, and one with nothing waiting is not.
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to its own account.
  */
@@ -43,8 +48,11 @@ import { OwnerRequestsService } from '../owner-requests/owner-requests.service';
 import { OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
+import type { QueueService } from '../queue/queue.service';
+import { ReaperService } from '../realtime/reaper.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { TasksService } from '../tasks/tasks.service';
+import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -89,6 +97,9 @@ test('a batch of task moves is answered at once; a waiting question brings its s
   const requests = new OwnerRequestsService(db, new OwnerSecretsService(db), pushFake, undefined, realtime);
   const handoffs = new ProjectHandoffService(db);
   const tasks = new TasksService(prisma as never, {} as never, realtime as never, handoffs);
+  const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
+  const sessions = new SessionsService(db, queue, realtime);
+  const reaper = new ReaperService(db, realtime);
 
   async function insertSession(ownerId: string, workspaceId: string, title: string): Promise<string> {
     const id = randomUUID();
@@ -398,5 +409,77 @@ test('a batch of task moves is answered at once; a waiting question brings its s
       why: 'the deploy waits for it',
     } as never);
     assert.deepEqual(reopened, []);
+  });
+  const OPEN = { completed_at: null, archived_at: null, deleted_at: null };
+
+  await t.test('(i) Complete and Trash of a session with something waiting leave it in Open', async () => {
+    const v = await seed('stay-open');
+    // A waiting owner request on `asker`; a waiting move asked by coordA into B (coordinated by coordB).
+    const asker = v.other;
+    await requests.file(v.ownerId, asker, {
+      kind: 'DECISION', title: 'Pick the region', why: 'the deploy waits for it',
+      options: [{ label: 'eu' }, { label: 'us' }],
+    } as never);
+    const [move] = await askMoves(v, v.coordA, 1, 'stay-open: a task that belongs to B');
+    const quiet = await insertSession(v.ownerId, v.workspaceId, 'stay-open: nothing waits here');
+
+    for (const [label, file] of [
+      ['Complete', (id: string) => sessions.complete(v.ownerId, id)],
+      ['Trash', (id: string) => sessions.remove(v.ownerId, id)],
+    ] as const) {
+      for (const [who, sessionId] of [
+        ['the session that asked an owner request', asker],
+        ['the session that asked a move', v.coordA],
+        ['the coordinator of the move\'s target', v.coordB],
+      ] as const) {
+        reopened.length = 0;
+        await file(sessionId);
+        assert.deepEqual(await lifecycle(sessionId), OPEN, `${label}: ${who} is back in Open`);
+        assert.deepEqual(reopened, [sessionId], `${label}: ${who} is announced as back in Open`);
+      }
+      await file(quiet);
+      const filed = await lifecycle(quiet);
+      assert.ok(label === 'Complete' ? filed.completed_at : filed.deleted_at,
+        `${label}: a session with nothing waiting stays where it was put`);
+      await sessions.restore(v.ownerId, quiet);
+    }
+
+    // Answered, nothing waits: Complete files them for good.
+    await handoffs.decide(v.ownerId, v.ownerId, move.handoffId, 'DENY', new Date());
+    await sessions.complete(v.ownerId, v.coordB);
+    assert.ok((await lifecycle(v.coordB)).completed_at, 'a coordinator whose moves are answered stays Completed');
+    await sessions.complete(v.ownerId, v.coordA);
+    assert.ok((await lifecycle(v.coordA)).completed_at, 'an asker whose moves are answered stays Completed');
+  });
+
+  await t.test('(j) the backfill: the sweep brings back sessions filed away with something waiting', async () => {
+    const v = await seed('backfill');
+    const asker = v.other;
+    await requests.file(v.ownerId, asker, {
+      kind: 'CONFIRM', title: 'Confirm the rollout', why: 'the rollout waits for it',
+    } as never);
+    await askMoves(v, v.coordA, 1, 'backfill: a task that belongs to B');
+    const quiet = await insertSession(v.ownerId, v.workspaceId, 'backfill: nothing waits here');
+    // Filed away by a path that does not bring anything back, as sessions were before this existed.
+    await admin.query(
+      'UPDATE "session" SET "completed_at" = now(), "archived_at" = now() WHERE "id" = ANY($1::uuid[])',
+      [[asker, v.coordB, quiet]],
+    );
+    await admin.query('UPDATE "session" SET "deleted_at" = now() WHERE "id" = $1::uuid', [v.coordA]);
+
+    reopened.length = 0;
+    const moved = await reaper.returnWaitingSessions();
+    assert.ok(moved >= 3);
+    for (const sessionId of [asker, v.coordA, v.coordB]) {
+      assert.deepEqual(await lifecycle(sessionId), OPEN, 'back in Open');
+      assert.ok(reopened.includes(sessionId), 'and announced');
+    }
+    assert.ok((await lifecycle(quiet)).completed_at, 'a session with nothing waiting is left in Completed');
+    assert.ok(!reopened.includes(quiet));
+    reopened.length = 0;
+    await reaper.returnWaitingSessions();
+    for (const sessionId of [asker, v.coordA, v.coordB, quiet]) {
+      assert.ok(!reopened.includes(sessionId), 'a second sweep finds nothing more of these to move');
+    }
   });
 });
