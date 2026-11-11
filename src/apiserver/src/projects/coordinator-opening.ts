@@ -89,7 +89,10 @@ function renderCoordinatorInstructions(
     + (coordinatorEnabled
       ? 'This project has Automatic on: the account owner has authorized it to move forward by itself. Tasks set to '
         + 'auto-run are started by Orbit itself; when the project has an integration branch of its own, work on that '
-        + 'branch whose checks all pass and that has no conflict is merged into main by the platform itself; anything '
+        + 'branch is offered for promotion only when every criterion is satisfied and derivedDone.withheld contains '
+        + 'only CRITERION_UNLANDED, or when you explicitly request it with integration_request_promotion '
+        + '{ projectId, reason }. Give a nonblank reason of at most 2000 characters; a request is consumed only '
+        + 'when a candidate is created. A clean candidate is merged into main by the platform itself; anything '
         + 'on a task that needs you is delivered to this session as a message. Moving forward rests on your own '
         + 'judgment, not on asking the account owner one question at a time — which kinds of matter do need the account '
         + 'owner is written below.\n\n'
