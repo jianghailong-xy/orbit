@@ -2362,10 +2362,10 @@ describe('tool run folding', () => {
 });
 
 // A screenshot too big to ship inline reaches the transcript as an image block with no `data`
-// (see the apiserver's MAX_IMAGE_PAYLOAD). It folds into the steps line like any read; what must
-// survive the clip is the *card opening* once the reader opens the line: the untrimmed payload is
-// fetched only for an open card, so a card that stays folded because it can't see an image is a
-// card that never asks for the image — the picture would be gone, not deferred.
+// (see the apiserver's MAX_IMAGE_PAYLOAD). It folds into the steps line like any read, and its card
+// stays folded until clicked (owner, 11-11); what must survive the clip is the card opening on the
+// image block once clicked: the untrimmed payload is fetched only for an open card, so a card with
+// nothing to open on is a card that never asks for the image — the picture would be gone.
 describe('clipped screenshot results', () => {
   const imageResult = (source: Record<string, unknown>): RunEvent[] => [
     { seq: 1, type: 'tool_use', payload: { id: 'ti', name: 'Read', input: { file_path: '/tmp/shot.png' } } },
@@ -2377,9 +2377,9 @@ describe('clipped screenshot results', () => {
     },
   ];
 
-  // Mounts the transcript, opens its steps line, and hands back the page; `fetchFull` answers the
-  // card's refetch of the untrimmed result.
-  const openLine = async (events: RunEvent[], fetchFull: (seq: number) => Promise<unknown>) => {
+  // Mounts the transcript, opens its steps line and then the card, and hands back the page;
+  // `fetchFull` answers the card's refetch of the untrimmed result.
+  const openLine = async (events: RunEvent[], fetchFull: ReturnType<typeof vi.fn>) => {
     const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' });
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
@@ -2395,6 +2395,11 @@ describe('clipped screenshot results', () => {
     const line = dom.window.document.querySelector<HTMLElement>('.chat-steps-line');
     expect(line, 'the screenshot did not fold into a steps line').not.toBeNull();
     await act(async () => line!.click());
+    const card = dom.window.document.querySelector<HTMLElement>('.chat-steps-detail .chat-tool-card');
+    // Opening the line draws the card folded: the picture waits for the reader, not the agent.
+    expect(card?.classList.contains('is-open')).toBe(false);
+    expect(fetchFull).not.toHaveBeenCalled();
+    await act(async () => card!.querySelector<HTMLElement>('.chat-tool-row')!.click());
     return {
       document: dom.window.document,
       close: async () => {
@@ -2405,7 +2410,7 @@ describe('clipped screenshot results', () => {
     };
   };
 
-  it('opens the card on a dropped image, holds its place, and fetches the picture back', async () => {
+  it('opens the card on a dropped image when clicked, holds its place, and fetches the picture back', async () => {
     const data = 'iVBORw0KGgo=';
     let answer: (v: unknown) => void = () => {};
     const fetchFull = vi.fn(() => new Promise((resolve) => (answer = resolve)));
@@ -2431,11 +2436,11 @@ describe('clipped screenshot results', () => {
     }
   });
 
-  it('shows a small image that arrived whole as soon as the line opens', async () => {
+  it('shows a small image that arrived whole as soon as its card opens', async () => {
     const data = 'iVBORw0KGgo=';
     const { document, close } = await openLine(
       imageResult({ type: 'base64', media_type: 'image/png', data }),
-      () => new Promise(() => {}),
+      vi.fn(() => new Promise(() => {})),
     );
     try {
       expect(document.body.innerHTML).toContain(`data:image/png;base64,${data}`);
