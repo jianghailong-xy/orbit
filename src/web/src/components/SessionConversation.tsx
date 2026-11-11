@@ -1,6 +1,7 @@
 import type { ComponentProps, ContextType } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
+import { useSubagentRuns } from '../lib/subagentRuns';
 import type { SessionStream } from '../lib/useSessionStream';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
@@ -13,6 +14,7 @@ import {
   SessionNavCtx,
   SteerWithdrawCtx,
   StreamingDraftsCtx,
+  SubagentRunsCtx,
   TaskActivityCtx,
   Transcript,
   type TranscriptInsert,
@@ -67,6 +69,7 @@ export function SessionConversation({
   wikiChat?: WikiDraftCardHost | null;
 }) {
   const navigate = useNavigate();
+  const subagentRuns = useSubagentRuns(sessionId, stream.transcriptEvents);
   return (
     <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
       <EventFullCtx.Provider value={stream.fetchEventFull}>
@@ -76,6 +79,7 @@ export function SessionConversation({
               <SteerWithdrawCtx.Provider value={steerWithdrawal}>
                 <LiveToolOutputsCtx.Provider value={stream.liveToolOutputs}>
                   <TaskActivityCtx.Provider value={stream.taskActivity}>
+                    <SubagentRunsCtx.Provider value={subagentRuns}>
                     <StreamingDraftsCtx.Provider value={stream.streamingDrafts}>
                       {/* The links in this conversation, drawn as cards. The provider is what makes a
                           card possible at all — the shared page and the export mount none — and it
@@ -96,6 +100,7 @@ export function SessionConversation({
                         </AnsweredQuestionsCtx.Provider>
                       </OrbitLinkCardsProvider>
                     </StreamingDraftsCtx.Provider>
+                    </SubagentRunsCtx.Provider>
                   </TaskActivityCtx.Provider>
                 </LiveToolOutputsCtx.Provider>
               </SteerWithdrawCtx.Provider>

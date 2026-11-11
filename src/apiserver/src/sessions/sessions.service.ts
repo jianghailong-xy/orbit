@@ -1,3 +1,5 @@
+import type { SubagentRunView } from '@orbit/shared';
+import { subagentRunView } from '../runner-api/subagent-run';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
@@ -5245,6 +5247,18 @@ export class SessionsService {
    * on every client regardless of how much transcript is loaded. Reuses the exact derivation the
    * web client overlays live (@orbit/shared deriveBackgroundShells), so the two never drift.
    */
+  /** A session's SubAgent runs, oldest first (`GET /sessions/:id/subagents`). */
+  async listSubagentRuns(userId: string, id: string): Promise<SubagentRunView[]> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { assignedRunner: { select: { modelCatalog: true } } },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const rows = await this.prisma.subagentRun.findMany({ where: { sessionId: id }, orderBy: { createdAt: 'asc' } });
+    const catalog = session.assignedRunner?.modelCatalog as RunnerModelCatalog | null | undefined;
+    return rows.map((row) => subagentRunView(row, catalog));
+  }
+
   async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId: userId },

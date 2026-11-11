@@ -1,4 +1,4 @@
-import type { MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
+import type { MergeRecovery, MergeRecoveryAction, SubagentRunView } from '@orbit/shared';
 import type {
   BgShell,
   ConfirmationAnswersCard,
@@ -446,6 +446,10 @@ export const readDirProbe = (runnerId: string, path: string, signal?: AbortSigna
  *  its live-derived overlay — see mergeBackgroundShells. */
 export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
   api<BgShell[]>(`/sessions/${id}/background`);
+
+/** The session's SubAgent runs, oldest first: what each `delegate` block shows beside its call. */
+export const getSessionSubagents = (id: string): Promise<SubagentRunView[]> =>
+  api<SubagentRunView[]>(`/sessions/${id}/subagents`);
 
 // ── Interactive sessions (Route B) ──
 

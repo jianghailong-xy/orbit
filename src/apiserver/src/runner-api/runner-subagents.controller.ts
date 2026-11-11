@@ -178,7 +178,7 @@ export class RunnerSubagentsController {
             definitionSource: dto.definitionSource,
             background: dto.background ?? false,
             status: 'RUNNING',
-            decision: shadowDecision(route!, resolvedExec.model) as unknown as Prisma.InputJsonValue,
+            decision: shadowDecision(route!, resolvedExec.model, effort ?? null) as unknown as Prisma.InputJsonValue,
           },
         }));
       return {

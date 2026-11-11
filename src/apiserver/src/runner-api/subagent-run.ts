@@ -1,6 +1,9 @@
 import {
   SUBAGENT_RUN_STATUSES,
+  type RunnerModelCatalog,
   type SubagentDecision,
+  type SubagentRunStatus,
+  type SubagentRunView,
   type SubagentRunCreateRequest,
   type SubagentRunUpdateRequest,
   type SubagentSize,
@@ -107,11 +110,65 @@ export const SUBAGENT_RESULT_SUMMARY_MAX = 20_000;
  * The router's decision as `subagent_run.decision` stores it while routing is in shadow (§8 P2): what it
  * would pick, `applied: false`, and a last reason naming the parent's model, which the SubAgent runs on.
  */
-export function shadowDecision(route: SubagentRoutingDecision, parentModel: string): SubagentDecision {
+export function shadowDecision(
+  route: SubagentRoutingDecision,
+  parentModel: string,
+  parentEffort: string | null = null,
+): SubagentDecision {
   return {
     ...route,
     reasons: [...route.reasons, `Shadow decision: this SubAgent runs on the parent's model, ${parentModel}`],
     applied: false,
+    runModel: parentModel,
+    runEffort: parentEffort,
+  };
+}
+
+/** A model id as a runner's catalogue names it (`claude-opus-5-5` reads "Opus 5.5"), else the id. */
+function catalogLabel(model: string, catalog: RunnerModelCatalog | null | undefined): string {
+  for (const rows of Object.values(catalog ?? {})) {
+    const label = rows?.find((row) => row.value === model)?.label;
+    if (label) return label;
+  }
+  return model;
+}
+
+/**
+ * A `subagent_run` row as `GET /sessions/:id/subagents` answers it. The model is the one the SubAgent runs
+ * on: the router's pick once applied, the parent's while the decision is a shadow.
+ */
+export function subagentRunView(
+  row: {
+    toolUseId: string;
+    type: string;
+    background: boolean;
+    status: string;
+    decision: unknown;
+    costUsd: number;
+    resultSummary: string | null;
+    createdAt: Date;
+    endedAt: Date | null;
+  },
+  catalog?: RunnerModelCatalog | null,
+): SubagentRunView {
+  const decision = (row.decision ?? {}) as Partial<SubagentDecision>;
+  const shadow = decision.applied === false && decision.runModel !== undefined;
+  const model = (shadow ? decision.runModel : decision.model) ?? null;
+  const effort = (shadow ? decision.runEffort : decision.effort) ?? null;
+  return {
+    toolUseId: row.toolUseId,
+    type: row.type,
+    background: row.background,
+    status: row.status as SubagentRunStatus,
+    level: decision.level ?? null,
+    model,
+    modelLabel: model ? catalogLabel(model, catalog) : null,
+    effort,
+    reasons: Array.isArray(decision.reasons) ? decision.reasons.filter((r) => typeof r === 'string') : [],
+    costUsd: row.costUsd,
+    resultSummary: row.resultSummary,
+    createdAt: row.createdAt.toISOString(),
+    endedAt: row.endedAt ? row.endedAt.toISOString() : null,
   };
 }
 

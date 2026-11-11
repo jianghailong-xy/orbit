@@ -10504,6 +10504,31 @@ button.chat-jump-start:hover {
   border-radius: 5px;
   padding: 0 6px;
 }
+/* A SubAgent's `Background`, after its summary: the card's own purple, as a pill. */
+.chat-tool-tag {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tone);
+  background: var(--tone-bg);
+  border-radius: 5px;
+  padding: 0 6px;
+}
+/* An opened SubAgent's first line: why it runs where it runs, in grey. */
+.chat-subagent-why {
+  padding: 8px 10px 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.chat-subagent-why b {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.chat-subagent-icon {
+  font-size: 13px;
+  line-height: 1;
+}
 .chat-tool-status {
   flex: none;
   font-size: 13px;
