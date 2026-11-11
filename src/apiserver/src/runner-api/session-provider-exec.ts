@@ -1,0 +1,127 @@
+import { BadRequestException } from '@nestjs/common';
+import { AgentProvider, openCodeKeyOf } from '@orbit/shared';
+import type { Prisma } from '@prisma/client';
+import {
+  accountPoolRuntime,
+  adminOnlyProviderRefusal,
+  isBuiltinProvider,
+  openCodeKeyRows,
+  resolveProviderExec,
+  type ModelProviderRow,
+} from '../providers/custom-provider';
+import { dispatchKeyRow } from '../providers/engine-provider';
+import { sessionEngine } from '../providers/session-engine';
+import type { QueueService } from '../queue/queue.service';
+import { ADMIN_ONLY_PROVIDER_ERROR, PROVIDER_UNAVAILABLE_ERROR } from './runner-provider-support';
+
+/**
+ * The session's credential as dispatch would resolve it now (resolveProviderExec): the key its slug names,
+ * or the member of its account pool the claim would choose, recorded as the claim records it. Read by a
+ * provider-switch reload (RunnerApiController.reloadProviderEnv) and by a SubAgent run on the parent's own
+ * engine and credential (RunnerSubagentsController). Empty when the session is gone; `refusal` when nothing
+ * can run its credential, in the claim's words.
+ */
+export async function sessionProviderExec(
+  tx: Prisma.TransactionClient,
+  queue: Pick<QueueService, 'resolveLoginPool' | 'resolvePoolMember' | 'resolveSharedPool'>,
+  sessionId: string,
+): Promise<{ exec?: ReturnType<typeof resolveProviderExec>; customRow?: ModelProviderRow | null; refusal?: string }> {
+  const session = await tx.session.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      ownerId: true,
+      model: true,
+      provider: true,
+      providerBuiltin: true,
+      engine: true,
+      poolMemberProviderId: true,
+      poolKeyId: true,
+      poolCodexAccountId: true,
+      usesRuntimeDefaultModel: true,
+      codexAccount: true,
+      claudeAccount: true,
+      antigravityAccount: true,
+      kimiAccount: true,
+      cursorAccount: true,
+      workspace: {
+        select: {
+          model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
+          cursorAccount: true,
+        },
+      },
+      assignedRunner: {
+        select: {
+          runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true,
+          planUsage: true,
+        },
+      },
+    },
+  });
+  if (!session) return {};
+  // The claim's words for a credential nothing holds: a member's session on a shared provider is told
+  // only an admin can run it, any other to check the configuration — asked of the slug the credential
+  // names, which on OpenCode is the key its model names.
+  const unavailable = async (customRow: unknown): Promise<string> => {
+    const slug = !isBuiltinProvider(session.provider, session.providerBuiltin)
+      ? session.provider
+      : session.provider === AgentProvider.OPENCODE ? openCodeKeyOf(session.model)?.slug : undefined;
+    return !customRow && slug && (await adminOnlyProviderRefusal(tx, session.ownerId, slug))
+      ? ADMIN_ONLY_PROVIDER_ERROR
+      : PROVIDER_UNAVAILABLE_ERROR;
+  };
+  // The environment is built for the engine the session runs on — the one it was spawned with and
+  // is re-spawned with now — from wherever its credential now comes from: a switch moves the
+  // credential, never the engine.
+  const engine = await sessionEngine(tx, session);
+  if (!engine) return { refusal: await unavailable(null) };
+  // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
+  // session's default DeepSeek key when its workspace holds no key itself.
+  const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
+  const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
+    ? keyRow
+    : (keyRow ??
+      (await queue.resolveLoginPool(tx, session, session.provider!)) ??
+      (await queue.resolvePoolMember(tx, session, session.provider!)) ??
+      (await queue.resolveSharedPool(tx, session, session.provider!)));
+  // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
+  // the Claude default, as the line resolvePoolMember owed says; any other slug nothing holds is refused.
+  const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
+    && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
+  let exec: ReturnType<typeof resolveProviderExec>;
+  try {
+    exec = resolveProviderExec({
+      engine,
+      declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
+      declaredProviderBuiltin: poolFallback || session.providerBuiltin,
+      customRow,
+      openCodeKeys:
+        session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
+          ? await openCodeKeyRows(tx, session.ownerId)
+          : undefined,
+      sessionModel: session.model,
+      usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
+      runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
+      workspaceModel: session.workspace?.model,
+      modelCatalog: session.assignedRunner?.modelCatalog,
+      workspaceEnv: session.workspace?.env as Record<string, string> | null,
+      codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
+      claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
+      antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
+      kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
+      cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
+      runner: session.assignedRunner,
+    });
+  } catch (error) {
+    // Every refusal it makes is of the credential: gone, disabled, on a runtime no engine speaks, or
+    // one this session's engine cannot run — which last the claim and the reclaim say in its own words.
+    if (!(error instanceof BadRequestException)) throw error;
+    const refusal = error.getResponse() as { code?: string; message?: string };
+    return {
+      refusal: refusal.code === 'PROVIDER_ENGINE_INCOMPATIBLE' && refusal.message
+        ? refusal.message
+        : await unavailable(customRow),
+    };
+  }
+  return { exec, customRow };
+}

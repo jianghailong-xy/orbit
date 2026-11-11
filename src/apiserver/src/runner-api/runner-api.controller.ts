@@ -97,6 +97,7 @@ import {
   parseQuotaResetAt,
   usageLimitResetsAt,
   workflowLaunchReceipt,
+  delegateLaunchReceipt,
   type PlanUsage,
   PermissionMode,
   QuestionAnswers,
@@ -492,6 +493,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { sessionProviderExec } from './session-provider-exec';
 import { cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import { CursorKeyCheckDto, CursorKeyCheckResultDto } from '../providers/dto';
 import { ProvidersService } from '../providers/providers.service';
@@ -982,8 +984,9 @@ const APPROVAL_POLL_INTERVAL_MS = 1_500;
 // Spread over which quota retries are scattered past their reset. See retryPlanFor.
 const QUOTA_RETRY_JITTER_MS = 60_000;
 // The runtime tools whose call starts work that outlives it — see subStarted in the events ingest.
-// Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them.
-const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow']);
+// Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them; and
+// Orbit's own SubAgent (docs/subagent-design.md §6.2), whatever engine the parent runs.
+const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow', 'mcp__orbit__delegate']);
 const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // Session primary keys are UUIDv7, while older rows may still be UUIDv4. Keep
 // entity-ID validation separate from the stricter runner-generated lease UUID
@@ -5483,106 +5486,11 @@ export class RunnerApiController {
       return {};
     }
     if (typeof declared !== 'string' || !declared) return {};
-    const session = await tx.session.findUnique({
-      where: { id: sessionId },
-      select: {
-        id: true,
-        ownerId: true,
-        model: true,
-        provider: true,
-        providerBuiltin: true,
-        engine: true,
-        poolMemberProviderId: true,
-        poolKeyId: true,
-        poolCodexAccountId: true,
-        usesRuntimeDefaultModel: true,
-        codexAccount: true,
-        claudeAccount: true,
-        antigravityAccount: true,
-        kimiAccount: true,
-        cursorAccount: true,
-        workspace: {
-          select: {
-            model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
-            cursorAccount: true,
-          },
-        },
-        assignedRunner: {
-          select: {
-            runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true,
-            planUsage: true,
-          },
-        },
-      },
-    });
-    if (!session) return {};
-    // The claim's words for a credential nothing holds: a member's session on a shared provider is told
-    // only an admin can run it, any other to check the configuration — asked of the slug the credential
-    // names, which on OpenCode is the key its model names.
-    const unavailable = async (customRow: unknown): Promise<string> => {
-      const slug = !isBuiltinProvider(session.provider, session.providerBuiltin)
-        ? session.provider
-        : session.provider === AgentProvider.OPENCODE ? openCodeKeyOf(session.model)?.slug : undefined;
-      return !customRow && slug && (await adminOnlyProviderRefusal(tx, session.ownerId, slug))
-        ? ADMIN_ONLY_PROVIDER_ERROR
-        : PROVIDER_UNAVAILABLE_ERROR;
-    };
-    // The environment is built for the engine the session runs on — the one it was spawned with and
-    // is re-spawned with now — from wherever its credential now comes from: a switch moves the
-    // credential, never the engine.
-    const engine = await sessionEngine(tx, session);
-    if (!engine) return { refusal: await unavailable(null) };
-    // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
-    // session's default DeepSeek key when its workspace holds no key itself.
-    const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
-    const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
-      ? keyRow
-      : (keyRow ??
-        (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
-        (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
-        (await this.queue.resolveSharedPool(tx, session, session.provider!)));
-    // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
-    // the Claude default, as the line resolvePoolMember owed says; any other slug nothing holds is refused.
-    const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
-      && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
-    let exec: ReturnType<typeof resolveProviderExec>;
-    try {
-      exec = resolveProviderExec({
-        engine,
-        declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
-        declaredProviderBuiltin: poolFallback || session.providerBuiltin,
-        customRow,
-        openCodeKeys:
-          session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
-            ? await openCodeKeyRows(tx, session.ownerId)
-            : undefined,
-        sessionModel: session.model,
-        usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
-        runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
-        workspaceModel: session.workspace?.model,
-        modelCatalog: session.assignedRunner?.modelCatalog,
-        workspaceEnv: session.workspace?.env as Record<string, string> | null,
-        codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-        claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
-        antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
-        kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
-        cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
-        runner: session.assignedRunner,
-      });
-    } catch (error) {
-      // Every refusal it makes is of the credential: gone, disabled, on a runtime no engine speaks, or
-      // one this session's engine cannot run — which last the claim and the reclaim say in its own words.
-      if (!(error instanceof BadRequestException)) throw error;
-      const refusal = error.getResponse() as { code?: string; message?: string };
-      return {
-        refusal: refusal.code === 'PROVIDER_ENGINE_INCOMPATIBLE' && refusal.message
-          ? refusal.message
-          : await unavailable(customRow),
-      };
-    }
+    const resolved = await sessionProviderExec(tx, this.queue, sessionId);
+    if (!resolved.exec) return resolved.refusal ? { refusal: resolved.refusal } : {};
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
     // previous provider's variables must still go, which an empty map is how the runner is told.
-    return { env: exec.env ?? {} };
+    return { env: resolved.exec.env ?? {} };
   }
 
   /**
@@ -8549,7 +8457,10 @@ export class RunnerApiController {
             e.type === RunEventType.TOOL_RESULT &&
             !(e.payload as { parentToolUseId?: string }).parentToolUseId &&
             !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content) &&
-            !workflowLaunchReceipt((e.payload as { content?: unknown }).content),
+            !workflowLaunchReceipt((e.payload as { content?: unknown }).content) &&
+            // A background SubAgent's `{ runId, status: "running" }`: it runs on, and its terminal
+            // background_task clears it.
+            !delegateLaunchReceipt((e.payload as { content?: unknown }).content),
         )
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);

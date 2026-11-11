@@ -397,6 +397,13 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       },
     }),
   },
+  'POST /runner/sessions/:id/subagents': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.machineSessionId },
+      body: { toolUseId: 'toolu_census_delegate', type: 'general', definitionSource: 'builtin' },
+    }),
+  },
   // The machine's own alert about a job of the session's (its agents' is POST /runner/notify, below): another account's
   // runner is refused it as for an id that names nothing, while the owner's is answered by the push channel.
   'POST /runner/sessions/:id/notify': {
@@ -721,6 +728,10 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'read by (id, the runner\'s owner) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /runner/owner-requests/:id/withdraw':
     'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:66), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
+  'PATCH /runner/sessions/:id/subagents/:runId':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:67), and the run is matched by (id, that session) only '
+    + '(runner-api/runner-subagents.controller.ts:208); subagent-run.pg.spec.ts sends another account\'s session and run',
   'POST /runner/tasks/:taskId/owner-confirmation':
     'refused 403 to every caller — the owner\'s own machine included — before the task or anything else is read: only '
     + 'the account owner confirms, through the app (task-owner-confirmation.service.ts:205 → '
@@ -1406,6 +1417,9 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/approvals body backgroundJobId':
     'the id the machine gave one of its own processes, stored on the approval of the session the path names '
     + '(runner-api.controller.ts:3900)',
+  'POST /runner/sessions/:id/subagents body toolUseId':
+    'the engine\'s id for the delegate call, a key only within the session the path names '
+    + '(runner-api/runner-subagents.controller.ts:110)',
   'POST /runner/sessions/:id/background-wake body wakeId':
     'the machine\'s key for one wake of one of its jobs, made into a turn key of the session the path names '
     + '(runner-api.controller.ts:4094)',

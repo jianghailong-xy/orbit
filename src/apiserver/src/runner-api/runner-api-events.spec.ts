@@ -496,6 +496,40 @@ test('a Workflow leaves the running sub-agents when its notification arrives', a
   assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_agent']);
 });
 
+// Orbit's own SubAgent (docs/subagent-design.md §6.2): a background delegate's receipt leaves it running,
+// a foreground delegate's result is its completion.
+test('a background delegate counts as a running sub-agent until its notification; a foreground one ends with its result', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 90, type: RunEventType.TOOL_USE, ts: '2026-11-11T07:00:00.000Z',
+        payload: { id: 'toolu_bg', name: 'mcp__orbit__delegate', input: { description: 'Sweep', prompt: 'Read', background: true } } },
+      { seq: 91, type: RunEventType.TOOL_RESULT, ts: '2026-11-11T07:00:00.200Z',
+        payload: { toolUseId: 'toolu_bg', content: [{ type: 'text', text: '{\n  "runId": "r1",\n  "status": "running"\n}' }] } },
+      { seq: 92, type: RunEventType.TOOL_USE, ts: '2026-11-11T07:00:01.000Z',
+        payload: { id: 'toolu_fg', name: 'mcp__orbit__delegate', input: { description: 'Fix', prompt: 'Fix it' } } },
+      { seq: 93, type: RunEventType.TOOL_RESULT, ts: '2026-11-11T07:02:00.000Z',
+        payload: { toolUseId: 'toolu_fg', content: [{ type: 'text', text: '{"runId":"r2","status":"DONE","result":"fixed"}' }] } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_bg']);
+});
+
+test('a background delegate leaves the running sub-agents when its terminal background_task arrives', async () => {
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', {
+    runningSubagents: ['toolu_agent', 'toolu_bg'],
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 95, type: RunEventType.BACKGROUND_TASK, ts: '2026-11-11T07:10:00.000Z',
+        payload: { status: 'completed', toolUseId: 'toolu_bg', summary: 'SubAgent finished' } },
+    ],
+  });
+  assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_agent']);
+});
+
 /** The paired negative: a sub-agent run inline answers in its own tool_result, so the same batch
  *  that started it ends it — and a Workflow the tool refused never started at all. */
 test('an inline Agent and a refused Workflow leave no running sub-agent behind', async () => {

@@ -1196,6 +1196,10 @@ model Workspace {
   canDelegate         Boolean   @default(false) @map("can_delegate")
   // Optional admission cap for this Agent's Project tasks. NULL preserves legacy behaviour.
   maxConcurrentTasks  Int?      @map("max_concurrent_tasks")
+  // SubAgents (docs/subagent-design.md §6.2): whether this Agent's sessions may delegate, and how
+  // many of one session's SubAgents may run at once. On by default (§9 B).
+  subagentsEnabled    Boolean   @default(true) @map("subagents_enabled")
+  subagentsMaxRunning Int       @default(4) @map("subagents_max_running")
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")
@@ -2184,6 +2188,7 @@ model Session {
   events                RunEvent[]
   turns                 ConversationTurn[]
   backgroundJobWakes    BackgroundJobWake[]
+  subagentRuns          SubagentRun[]
   scheduledWakeups      SessionScheduledWakeup[]
   wakeupLoops           SessionWakeupLoop[]
   /// The requests other sessions have asked of this one (session_request.to_session_id).
@@ -2773,6 +2778,41 @@ model BackgroundJobWake {
 
   @@unique([sessionId, clientTurnId, jobId])
   @@map("background_job_wake")
+}
+
+/// One SubAgent run (docs/subagent-design.md §6.1): a parent session's `mcp__orbit__delegate` call, run by
+/// the runner in the parent's cwd. Not a Session: its events go into the parent's stream, and this row keeps
+/// the routing decision, status and spend. Its cost is added to the parent's `cost_usd` when it ends
+/// (runner-api PATCH sessions/:id/subagents/:runId). One row per (session, tool_use_id), so a retried POST
+/// answers with the row it already wrote.
+model SubagentRun {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  ownerId          String    @map("owner_id") @db.Uuid
+  sessionId        String    @map("session_id") @db.Uuid
+  session          Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// The `delegate` call's tool_use id: not a public id.
+  toolUseId        String    @map("tool_use_id")
+  /// explore | general | a definition file's name
+  type             String
+  /// Where the definition came from: `builtin`, or the definition file's path.
+  definitionSource String    @map("definition_source")
+  background       Boolean   @default(false)
+  /// RUNNING | DONE | FAILED | INTERRUPTED | STOPPED
+  status           String    @default("RUNNING")
+  /// level, tierSource, optimizeFor, engine, provider, model, effort, reasons[], candidates, policyVersion
+  decision         Json
+  /// Candidates tried after a quota failure, in order.
+  attempts         Json      @default("[]")
+  resultSummary    String?   @map("result_summary")
+  changedFiles     String[]  @default([]) @map("changed_files")
+  costUsd          Float     @default(0) @map("cost_usd")
+  usage            Json?
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  endedAt          DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  @@unique([sessionId, toolUseId])
+  @@index([sessionId, status])
+  @@map("subagent_run")
 }
 
 /// A wakeup a session asked the control plane to hold (runner-api/scheduled-wakeup.ts), because Claude

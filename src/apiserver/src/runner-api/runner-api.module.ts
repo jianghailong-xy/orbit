@@ -12,6 +12,7 @@ import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from './runner-task-completion-evidence.controller';
 import { RunnerTaskOwnerConfirmationController } from './runner-task-owner-confirmation.controller';
 import { RunnerTaskProgressController } from './runner-task-progress.controller';
+import { RunnerSubagentsController } from './runner-subagents.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
 import { RunnerRunnersController } from './runner-runners.controller';
@@ -95,6 +96,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerTaskCompletionEvidenceController,
     RunnerTaskOwnerConfirmationController,
     RunnerTaskProgressController,
+    // SubAgent runs a session's `delegate` opens and ends (runner-subagents.controller.ts).
+    RunnerSubagentsController,
     RunnerServiceTokensController,
     RunnerSessionsController,
     RunnerAgentsController,

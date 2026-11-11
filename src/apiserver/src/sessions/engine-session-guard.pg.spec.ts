@@ -27,6 +27,7 @@ import { ReaperService } from '../realtime/reaper.service';
 import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnerFilesController } from '../runner-api/runner-files.controller';
+import { RunnerSubagentsController } from '../runner-api/runner-subagents.controller';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { FilesService } from '../files/files.service';
@@ -102,6 +103,7 @@ interface Stack {
   api: RunnerApiController;
   runnerSessions: RunnerSessionsController;
   runnerFiles: RunnerFilesController;
+  runnerSubagents: RunnerSubagentsController;
   queue: QueueService;
   reaper: ReaperService;
   providers: ProvidersService;
@@ -153,6 +155,7 @@ async function connect(): Promise<Stack> {
     api,
     runnerSessions: new RunnerSessionsController(sessions, orchestration, receipts, attempts),
     runnerFiles: new RunnerFilesController(prisma, new FilesService(prisma)),
+    runnerSubagents: new RunnerSubagentsController(prisma, queue),
     queue,
     reaper: new ReaperService(prisma, realtime),
     providers: new ProvidersService(prisma, realtime, undefined as never),
@@ -346,6 +349,10 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.api.scheduledWakeup({ id: w.runnerId, ownerId: w.ownerId } as never, id, { delaySeconds: 120, reason: 'x' } as never),
   'POST /runner/sessions/:id/naming': (s, w, id) =>
     s.api.sessionNaming({ id: w.runnerId, ownerId: w.ownerId } as never, id, { replaces: 'x', title: 'y' } as never),
+  'POST /runner/sessions/:id/subagents': (s, w, id) =>
+    s.runnerSubagents.createSubagentRun({ id: w.runnerId, ownerId: w.ownerId } as never, id, {
+      toolUseId: 'toolu_guard', type: 'general', definitionSource: 'builtin',
+    } as never),
   'POST /runner/sessions/:id/cursor-key-check': (s, w, id) =>
     s.providers.recordCursorKeyCheck(w.runnerId, id, { state: 'INVALID', keyFingerprint: '0123456789abcdef' }, w.ownerId),
   'POST /runner/sessions/:id/turns/:turnId/suggestion': (s, w, id) =>

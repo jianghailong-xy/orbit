@@ -2085,6 +2085,81 @@ export interface ArtifactCommand {
   source?: 'worktree';
 }
 
+// ─────────────────────────────── SubAgents ───────────────────────────────
+// docs/subagent-design.md §5.1, §6.1: a parent session's `mcp__orbit__delegate` call, run by the runner
+// in the parent's cwd. POST /runner/sessions/:id/subagents opens one, PATCH …/subagents/:runId ends it.
+
+export const SUBAGENT_RUN_STATUSES = ['RUNNING', 'DONE', 'FAILED', 'INTERRUPTED', 'STOPPED'] as const;
+export type SubagentRunStatus = (typeof SUBAGENT_RUN_STATUSES)[number];
+
+export type SubagentSize = 'S' | 'M' | 'L' | 'XL';
+
+/** Where a SubAgent run's level came from; `not-routed` until routing is on (§8 P1). */
+export type SubagentTierSource = 'not-routed' | 'size' | 'definition' | 'type-default' | 'named-model';
+
+/** The router's record of one choice (`subagent_run.decision`). Reasons are English. */
+export interface SubagentDecision {
+  level: SubagentSize | null;
+  tierSource: SubagentTierSource;
+  optimizeFor: string | null;
+  engine: AgentProvider;
+  provider: string | null;
+  model: string;
+  effort: string | null;
+  reasons: string[];
+  /** Candidates that were dropped, each with why. */
+  candidates: Array<{ provider: string; model: string; reason: string }>;
+  policyVersion: string;
+}
+
+/** What the runner sends when the parent model calls `delegate` (§5.1 step 2). */
+export interface SubagentRunCreateRequest {
+  /** The `delegate` call's tool_use id. A retry with the same id answers with the run it opened. */
+  toolUseId: string;
+  /** `explore` | `general` | a definition file's name. */
+  type: string;
+  /** `builtin`, or the path of the definition file `type` was read from. */
+  definitionSource: string;
+  background?: boolean;
+  /** The parent's judgement of the work's size. */
+  size?: SubagentSize;
+  sizeReason?: string;
+  /** A model the parent named. */
+  model?: string;
+  /** The definition's own `model` and size, when it has them. */
+  definitionModel?: string;
+  definitionSize?: SubagentSize;
+  /** The definition is read-only: the child runs in plan mode. */
+  readonly?: boolean;
+}
+
+export interface SubagentRunCreateResponse {
+  runId: string;
+  status: SubagentRunStatus;
+  decision: SubagentDecision;
+  /** How to run the child: the same shape a session claim hands the runner. */
+  exec: AgentExecConfig;
+}
+
+/** The runner's report when a SubAgent run ends (§5.1 step 5). */
+export interface SubagentRunUpdateRequest {
+  status: Exclude<SubagentRunStatus, 'RUNNING'>;
+  /** What was handed back to the parent, truncated by the server. */
+  resultSummary?: string;
+  /** Paths the child's edit tools wrote, as the runner collected them. */
+  changedFiles?: string[];
+  /** The child's own spend; added once to the parent session's cost. */
+  costUsd?: number;
+  usage?: Record<string, unknown>;
+}
+
+export interface SubagentRunUpdateResponse {
+  runId: string;
+  status: SubagentRunStatus;
+  /** False when the run had already ended: nothing was written and no cost was added again. */
+  applied: boolean;
+}
+
 // ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
 
 /** An interactive session atomically claimed by its assigned runner via long-poll. */

@@ -340,6 +340,25 @@ export function workflowLaunchReceipt(content: unknown): { taskId: string; summa
 }
 
 /**
+ * The receipt `mcp__orbit__delegate` returns the instant a background SubAgent starts:
+ * `{ "runId": "…", "status": "running" }` (docs/subagent-design.md §2). Like a workflow's receipt it is
+ * the call's only top-level tool_result, and the run's end is reported later by a terminal
+ * background_task carrying the delegate call's tool_use id. A foreground delegate's result carries a
+ * terminal status and is the completion itself. Null for anything else.
+ */
+export function delegateLaunchReceipt(content: unknown): { runId: string } | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(toolResultText(content).trim());
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const { runId, status } = parsed as { runId?: unknown; status?: unknown };
+  return typeof runId === 'string' && runId && status === 'running' ? { runId } : null;
+}
+
+/**
  * What a failed run's error text says was actually wrong.
  *
  * The point is routing, not labelling. Each cause has a different lever, and the expensive

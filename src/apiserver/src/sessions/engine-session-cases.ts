@@ -261,6 +261,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: 'if (session) assertEngineSession(session);',
     note: 'a folder bundle is written into a session the way an upload is, and a pin acts for the session that asks',
   },
+  'RunnerSubagentsController.assertParentOfRunner': {
+    file: 'runner-api/runner-subagents.controller.ts',
+    snippet: 'if (session && session.ownerId === runner.ownerId) assertEngineSession(session);',
+    note: 'a delegate call opens a SubAgent run in the parent session, which is never a landing',
+  },
   'RunnerApiController.assertSessionOwnership': {
     file: 'runner-api/runner-api.controller.ts',
     snippet: 'if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSessionRow(session);',
@@ -333,6 +338,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/notify': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/scheduled-wakeup': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/naming': 'RunnerApiController.assertSessionOwnership',
+  'POST /runner/sessions/:id/subagents': 'RunnerSubagentsController.assertParentOfRunner',
   'POST /runner/sessions/:id/cursor-key-check': 'ProvidersService.recordCursorKeyCheck',
   'POST /runner/sessions/:id/turns/:turnId/suggestion': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/turn-complete': 'RunnerApiController.assertEngineSessionById',
