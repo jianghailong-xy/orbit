@@ -688,6 +688,7 @@ type IntegrationCheckSpec struct {
 // IntegrationCheckResult is what one check came to. ExitCode is nil when the command never
 // produced one — it could not start, or its budget killed it.
 type IntegrationCheckResult struct {
+	Scope            string   `json:"scope,omitempty"`
 	Skipped          string   `json:"skipped,omitempty"`
 	Files            []string `json:"files,omitempty"`
 	Name             string   `json:"name"`
@@ -801,6 +802,7 @@ type IntegrationJobReleaseResponse struct {
 // IntegrationJobResultRequest is what the job came to, with everything a reader needs to check
 // that what landed is what was tested.
 type IntegrationJobResultRequest struct {
+	BaselineRed     bool   `json:"baselineRed,omitempty"`
 	ClaimGeneration string `json:"claimGeneration"`
 	LeaseOwner      string `json:"leaseOwner"`
 	State           string `json:"state"`

@@ -27,6 +27,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { landingFailureClass } from './project-integration-job';
 import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
@@ -1735,3 +1736,43 @@ test('timed out: the owner\'s promotion retry ends the silent check without an i
 test('the integration-retry PostgreSQL target is explicitly disposable', { skip }, () => {
   assert.doesNotThrow(() => assertCoordinatorPgUrlIsIsolated(URL));
 });
+
+
+test('baseline attribution is stored, constrained, classified and explicitly retryable',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'baseline-red');
+      const failed = await failedLanding(stack, w, 'baseline-red', {
+        ...RED_MERGE_CHECK,
+        baselineRed: true,
+        checks: [
+          { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK' },
+          { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK', scope: 'BASELINE' },
+        ],
+      });
+      const row = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: failed.job.jobId } });
+      assert.equal(row.baselineRed, true);
+      assert.equal((row.checks as unknown as { scope?: string }[])[1]?.scope, 'BASELINE');
+      assert.equal(landingFailureClass(row), 'BASELINE_RED');
+      assert.equal((await itemsOf(stack.db, failed.task.taskId))[0]?.payload.failureClass, 'BASELINE_RED');
+      const rerun = await retry(stack, w, failed.task.taskId, 'the upstream baseline has been repaired');
+      assert.equal(rerun.failureClass, 'BASELINE_RED');
+      const newest = (await landings(stack.db, failed.task.taskId))[1]!;
+      assert.equal(newest.retryFailureClass, 'BASELINE_RED');
+      const queued = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: newest.id } });
+      assert.equal(queued.baselineRed, false, 'a new generation starts without attribution');
+      for (const state of ['QUEUED', 'RUNNING', 'LANDED', 'ERROR', 'READY', 'CONFLICT', 'CANCELLED']) {
+        await assert.rejects(stack.db.$executeRaw`
+          UPDATE project_integration_job SET baseline_red = true, state = ${state}
+          WHERE id = ${queued.id}::uuid`, /project_integration_job_baseline_red_chk/);
+      }
+      for (const kind of ['CHECK_PROMOTION', 'LAND_PROMOTION', 'OBSERVE_LANDING']) {
+        await assert.rejects(stack.db.$executeRaw`
+          UPDATE project_integration_job SET baseline_red = true, state = 'CHECK_FAILED', kind = ${kind}
+          WHERE id = ${queued.id}::uuid`, /project_integration_job_baseline_red_chk/);
+      }
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });

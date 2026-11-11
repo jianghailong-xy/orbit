@@ -2256,7 +2256,11 @@ func TestIntegrationLandingPathsExempt(t *testing.T) {
 				cmd.Checks = []IntegrationCheckSpec{acceptance, landing}
 			}
 			result := runIntegrationJob(cmd, silent)
-			if len(result.Checks) != 2 || !strings.Contains(result.Checks[0].OutputTail, "acceptance-ran") {
+			expectedChecks := 2
+			if scenario == "upstream-absorbed" {
+				expectedChecks = 3 // K3 attributes the red landing check on M.
+			}
+			if len(result.Checks) != expectedChecks || !strings.Contains(result.Checks[0].OutputTail, "acceptance-ran") {
 				t.Fatalf("acceptance did not run: %+v", result)
 			}
 			check := result.Checks[1]
@@ -2270,6 +2274,72 @@ func TestIntegrationLandingPathsExempt(t *testing.T) {
 				}
 			} else if result.State != "CHECK_FAILED" || check.Skipped != "" || check.ExitCode == nil || *check.ExitCode != 7 {
 				t.Fatalf("check must run: %+v", result)
+			}
+		})
+	}
+}
+
+func TestIntegrationBaselineAttribution(t *testing.T) {
+	for _, scenario := range []string{"baseline-red", "task-red", "no-absorb", "timed-out", "baseline-timed-out", "source-absorb"} {
+		t.Run(scenario, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			r.writeIn("scripts/worktree-overlay.sh", "#!/bin/sh\nmkdir -p node_modules\ntouch node_modules/ready\n")
+			r.commit("environment recipe")
+			r.push("main")
+			r.checkoutNew("project/line", "main")
+			r.push("project/line")
+			r.checkoutNew("task/red", "project/line")
+			r.write("task.txt", "task\n")
+			r.commit("task")
+			r.push("task/red")
+			r.checkout("main")
+			if scenario != "no-absorb" {
+				r.write("upstream.txt", "upstream\n")
+				r.commit("upstream")
+				r.push("main")
+			}
+			if scenario == "source-absorb" {
+				r.checkout("task/red")
+				mustRun(t, r.work, "git", "merge", "--no-ff", "main", "-m", "earlier upstream absorb")
+				r.push("task/red")
+				r.checkout("main")
+				r.write("later.txt", "later upstream\n")
+				r.commit("later upstream")
+				r.push("main")
+			}
+			command := "test -f node_modules/ready || exit 9; test ! -f task.txt"
+			if scenario == "baseline-red" {
+				command = "test -f node_modules/ready || exit 9; exit 7"
+			}
+			if scenario == "timed-out" {
+				command = "sleep 5"
+			}
+			if scenario == "baseline-timed-out" {
+				command = "if test -f task.txt; then exit 1; fi; sleep 5"
+			}
+			spec := IntegrationCheckSpec{Name: "LANDING_CHECK", Command: command, ExpectedExitCode: 0, TimeoutSeconds: 1}
+			result := runIntegrationJob(r.command("task/red", "project/line", spec), silent)
+			if result.State != "CHECK_FAILED" || result.BaselineRed != (scenario == "baseline-red") {
+				t.Fatalf("result: %+v", result)
+			}
+			expected := 2
+			if scenario == "no-absorb" || scenario == "timed-out" {
+				expected = 1
+			}
+			if len(result.Checks) != expected {
+				t.Fatalf("checks: %+v", result.Checks)
+			}
+			if expected == 2 {
+				baseline := result.Checks[1]
+				if baseline.Scope != "BASELINE" {
+					t.Fatalf("scope: %+v", baseline)
+				}
+				if scenario == "baseline-red" && (baseline.ExitCode == nil || *baseline.ExitCode != 7) {
+					t.Fatalf("baseline was not prepared: %+v", baseline)
+				}
+				if (scenario == "task-red" || scenario == "source-absorb") && (baseline.ExitCode == nil || *baseline.ExitCode != 0) {
+					t.Fatalf("task leaked into baseline or recipe did not run: %+v", baseline)
+				}
 			}
 		})
 	}

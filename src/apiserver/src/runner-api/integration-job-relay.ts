@@ -2583,6 +2583,7 @@ export async function applyIntegrationJobResult(
       sourceOnUpstream: typeof body.sourceOnUpstream === 'boolean' ? body.sourceOnUpstream : undefined,
       // The same for the other measurement a NOTHING_TO_LAND carries (0410).
       sourceFullyApplied: typeof body.sourceFullyApplied === 'boolean' ? body.sourceFullyApplied : undefined,
+      baselineRed: body.baselineRed === true,
       checks: checks as unknown as Prisma.InputJsonValue,
       conflicts: (body.conflicts ?? []).slice(0, 200),
       errorCode: body.errorCode ?? undefined,
@@ -2788,6 +2789,7 @@ export async function applyIntegrationJobResult(
           targetSha: body.targetShaBefore ?? null,
           conflicts: body.conflicts ?? [],
           checks,
+          baselineRed: body.baselineRed === true,
           errorCode: body.errorCode ?? null,
           errorDetail,
           // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
@@ -3503,6 +3505,7 @@ function fullyAppliedComment(input: {
   state: string,
   detail: {
     kind: string;
+    baselineRed?: boolean;
     phase: string | null;
     targetRef: string;
     targetSha: string | null;
@@ -3545,7 +3548,7 @@ function fullyAppliedComment(input: {
   // (J-T1b), and, for a rerun, the generation it was and what it was asked to answer — so a second
   // red is read as a second red, not as a first one.
   const classified = {
-    failureClass: landingFailureClass({ state, checks: detail.checks }),
+    failureClass: landingFailureClass({ state, checks: detail.checks, baselineRed: detail.baselineRed }),
     generation: detail.generation,
     // §4.2's payload: the landing this failure belongs to and the round it failed in, at the top
     // level of every INTEGRATION_* kind. `errorDetail` is quoted verbatim by the delivery text (G6),
