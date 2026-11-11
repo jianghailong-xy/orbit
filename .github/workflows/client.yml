@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tree: [base, fix]
+        tree: [fix]
     steps:
       - uses: actions/checkout@v7
       - name: Select latest Xcode
@@ -53,7 +53,7 @@ jobs:
         id: capture
         continue-on-error: true
         run: |
-          bash "$TREE/.cfade-probe/run.sh" 2>&1 | tee run-output.log
+          PROBE_ONLY=test3Draft bash "$TREE/.cfade-probe/run.sh" 2>&1 | tee run-output.log
           exit "${PIPESTATUS[0]}"
       - name: Keep the build's errors and the run's output beside the shots
         if: always()

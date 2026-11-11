@@ -55,8 +55,12 @@ final class PillShotTests: ProbeCase {
         let app = launch("console", session: "S1", dark: true, until: tail, "draft-dark")
         opened(app, "draft-dark")
         settle(1.5)
-        let fields = (app.textViews.allElementsBoundByIndex + app.textFields.allElementsBoundByIndex)
-            .filter { $0.exists && $0.isHittable && $0.frame.minY > app.windows.firstMatch.frame.height * 0.6 }
+        // The composer's own field: its placeholder, not a transcript row (rows are text views too).
+        let byPlaceholder = NSPredicate(format: "placeholderValue BEGINSWITH 'Message'")
+        let fields = (app.textViews.matching(byPlaceholder).allElementsBoundByIndex
+                      + app.textFields.matching(byPlaceholder).allElementsBoundByIndex)
+            .filter { $0.exists && $0.isHittable }
+        note("draft-dark: \(fields.count) composer field(s)")
         guard let field = fields.last else {
             write(app.debugDescription, "no-field-draft-dark.txt")
             XCTFail("draft-dark: no composer field")

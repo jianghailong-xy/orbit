@@ -30,7 +30,7 @@ STATUS=0
 run_pass() {  # $1 label, $2 scheme, $3 destination, $4 shots dir
   echo "==> $1"
   SHOTS_DIR="$4" TEST_RUNNER_SHOTS_DIR="$4" xcodebuild test -project CfadeProbe.xcodeproj -scheme "$2" \
-    -destination "$3" -derivedDataPath ".dd-$1" -resultBundlePath "results/$1.xcresult" \
+    -destination "$3" -derivedDataPath ".dd-$1" -resultBundlePath "results/$1.xcresult" ${PROBE_ONLY:+-only-testing:CfadeProbeUITests/PillShotTests/$PROBE_ONLY} \
     CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > "build-$1.log" 2>&1 || STATUS=1
   grep -E "Test Case|Executed|error:|\*\* TEST" "build-$1.log" | tail -80 || true
   cp "build-$1.log" "$4/xcodebuild-$1.log"
