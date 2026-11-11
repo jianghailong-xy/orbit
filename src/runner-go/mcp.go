@@ -270,6 +270,13 @@ const orchestrationOffMsg = "session orchestration is turned off for this accoun
 // TASK_BATCH_CREATE_MAX so the tool rejects an oversized batch before the round-trip.
 const maxTaskBatchCreate = 50
 
+// forkFromSessionNotYet is what the create doors answer to forkFromSession until this runner takes the
+// snapshot itself (design §2.2, phase P2). The server already accepts the fork it would post; refusing
+// here, before the card, is what keeps the flag from quietly creating a task that starts from the
+// workspace's checkout instead of this session's.
+const forkFromSessionNotYet = "forkFromSession is not available on this runner yet: it cannot snapshot this session's checkout. " +
+	"Create the task without it, or commit and merge this session's work first so the task starts from it."
+
 // How many labels one task may carry. Mirrors the server's TASK_LABEL_MAX_COUNT so the schema
 // states the bound the write would be rejected against anyway.
 const maxTaskLabels = 16
@@ -1124,6 +1131,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if title == "" {
 			return toolResult("title is required", true)
 		}
+		if getBool(args, "forkFromSession") {
+			return toolResult(forkFromSessionNotYet, true)
+		}
 		body := map[string]interface{}{"title": title}
 		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
 		// Before the card, so the card's forecast says what the yes will do (task_start_now.go).
@@ -1185,6 +1195,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			title := getString(item, "title")
 			if title == "" {
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
+			}
+			if getBool(item, "forkFromSession") {
+				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, forkFromSessionNotYet), true)
 			}
 			body := map[string]interface{}{"title": title}
 			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
@@ -3286,6 +3299,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"an assigneeId if it should be able to run, since a check with no assignee waits for somebody " +
 		"to hand it one."
 
+	// SR55 (docs/task-fork-from-session-design.md §2.1): start the task from a snapshot of THIS
+	// session's checkout. It takes no id: the only checkout this process can read is its own session's.
+	forkFromSessionProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "Start this task from what this session has now: its branch tip, plus the edits it has not " +
+			"committed yet. The task still gets its own checkout and branch — it never shares this session's " +
+			"directory — and it runs on this machine only, so its assignee must be a workspace on this machine. " +
+			"Not allowed for a task in a project with a code binding. Always this session; there is no id to pass.",
+	}
 	// The fields of one new task, shared by task_create and every task_create_batch item.
 	// A fresh map per call so a caller can extend its copy without touching the other's.
 	taskCreateProps := func() map[string]interface{} {
@@ -3370,7 +3392,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"project, or has already been replaced (two racing replacements give one winner " +
 					"and one error, never a pointer that depends on timing).",
 			},
-			"labels": labelsProp,
+			"labels":          labelsProp,
+			"forkFromSession": forkFromSessionProp,
 		}
 	}
 	taskBatchItemProps := func() map[string]interface{} {
