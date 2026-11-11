@@ -111,17 +111,35 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
 /** The conversation bar's button for its project's sessions (owner 2026-11-11, docs/mocks/project-sessions-column board 5): the
  * project glyph and how many sessions the project has, left of the ⋮, on the coordinator's conversation and on every member's alike. */
 @Composable
-internal fun ProjectSessionsButton(count: Int, onClick: () -> Unit) {
+internal fun ProjectSessionsButton(count: Int?, onClick: () -> Unit) {
     TextButton(onClick, Modifier.heightIn(min = 48.dp).testTag("project-sessions-button")
         .semantics(mergeDescendants = true) { contentDescription = SessionProjectCopy.sessionsButton },
         contentPadding = PaddingValues(horizontal = 8.dp),
         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
         Icon(painterResource(R.drawable.ic_grid), null, Modifier.size(18.dp))
-        if (count > 0) {
+        if (count != null) {
             Spacer(Modifier.width(4.dp))
             Text("$count", style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("project-sessions-button-count"))
         }
     }
+}
+
+/** How many sessions [projectId] has as its sessions page counts them — Open and Completed, read across workspaces, never a landing nor
+ * one on its way to Trash — read once as the conversation carrying the button opens, so the button says from its first number what
+ * the sheet's head will. Null until that read answers, and kept as it was when a read fails. */
+@Composable
+internal fun rememberProjectSessionCount(app: OrbitApplication, api: DirectoryApi, projectId: String?): State<Int?> {
+    val count = remember(projectId) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(projectId) {
+        val id = projectId ?: return@LaunchedEffect
+        suspend fun read(view: String): List<DirectorySession> =
+            api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view, "projectId" to id, "includeLanding" to "1"))
+        try {
+            val rows = coroutineScope { val open = async { read("open") }; val completed = async { read("completed") }; open.await() + completed.await() }
+            count.value = SessionProjectMembers.members(id, app.trashing.without(rows) { it.id }).size
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
+    }
+    return count
 }
 
 /** The project's sessions over a phone's conversation (board 5): today's sessions page in a bottom sheet that opens at half height and
@@ -443,7 +461,8 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     val pageTitle = project?.text("title") ?: members.firstOrNull()?.projectMembership?.projectTitle ?: "Project"
     // No count while no member is known yet: "0 sessions" would be a claim nobody checked.
     val pageSubtitle = if (state.loading && members.isEmpty()) SessionProjectCopy.pageSubtitleLoading else SessionProjectCopy.pageSubtitle(members.size)
-    if (!(state.loading && members.isEmpty())) SideEffect { onCount(members.size) }
+    // Only a count the page's own read stands behind: before it, the members are the Open list's alone.
+    if (state.readAt != null) SideEffect { onCount(members.size) }
     // A page binds the shell's bar; in a conversation's sheet (owner 2026-11-11, docs/mocks/project-sessions-column board 5) the
     // bar is the conversation's, so the sheet draws the same title, line and button in a head of its own, with ✕ to close.
     if (close == null) PageBar.Bind(route, pageTitle, pageSubtitle) {

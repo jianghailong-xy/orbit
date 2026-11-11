@@ -175,8 +175,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val projectId = listed?.projectMembership?.projectId ?: remember(data.sessions, route.id) {
         data.sessions.values.firstNotNullOfOrNull { rows -> rows.firstOrNull { ObjectId.same(it.id, route.id) }?.projectMembership?.projectId }
     }
-    val listCount = remember(projectId, data.sessions) { projectId?.let { SessionProjectMembers.members(it, data.sessions.values.flatten()).size } ?: 0 }
-    // What the sheet last counted — Open and Completed, read across workspaces — once it has been open; the lists' count before that.
+    // The button's number is the sheet's head's: the project's Open and Completed sessions as the page reads them, read as the
+    // conversation opens, then what the sheet itself last counted. No number until the first read answers.
+    val readCount by rememberProjectSessionCount(app, api, projectId)
     var sheetCount by remember(projectId) { mutableStateOf<Int?>(null) }
     var projectSheet by remember(handle, route.id) { mutableStateOf(false) }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
@@ -436,7 +437,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
             if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
         }, actions = {
-            if (projectId != null) ProjectSessionsButton(sheetCount ?: listCount) { projectSheet = true }
+            if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
                 actions, open, { action = it }, { details = true }, leave)
         })

@@ -69,19 +69,25 @@ class ProjectSessionsShellTest {
         await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.COORD}" } && exists(hasContentDescription("Project sessions")) }
         compose.onAllNodesWithTag("project-sessions").assertCountEquals(0)
         compose.onAllNodesWithTag("project-row:${ProjectShell.LAUNCH}").assertCountEquals(0)
-        // Before the sheet has read anything, the count is the Open list's: the coordinator and its two Open members.
-        compose.onNode(hasTestTag("project-sessions-button-count") and hasText("3"), useUnmergedTree = true).assertExists()
+        // Before the sheet is ever opened, the button counts what its head will: Open and Completed, read as the conversation opened —
+        // never the Open list's 3 first.
+        compose.onAllNodesWithTag("project-sessions-sheet").assertCountEquals(0)
+        await { exists(hasTestTag("project-sessions-button-count"), unmerged = true) }
+        val counted = buttonCount()
+        assertEquals(4, counted)
+        assertTrue(ProjectShell.calls.any { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}&includeLanding=1" })
         compose.onNodeWithContentDescription("Project sessions").performClick()
         await { exists(hasTestTag("project-sessions-sheet")) && exists(hasText("Shipped docs")) }
-        await { exists(hasText("Launch") and hasText("Project · 4 sessions")) }
+        await { exists(hasText("Launch") and hasText("Project · $counted sessions")) }
+        assertEquals(counted, buttonCount())
         compose.onNodeWithContentDescription("Open Project").assertExists()
         assertTrue(ProjectShell.calls.any { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}&includeLanding=1" })
         assertEquals(listOf("Coordinator", "Coordinate launch", "Today", "Wire tests", "Quota retry", "2–7 days ago", "Shipped docs"), pageLines())
         compose.onNode(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")).assertExists()
-        // ✕ closes it; the conversation stays, and the button now counts what the sheet read, Completed too.
+        // ✕ closes it; the conversation stays, its button still saying what the sheet's head said.
         compose.onNodeWithTag("project-sessions-sheet-close").performClick()
         await { !exists(hasTestTag("project-sessions-sheet")) }
-        await { exists(hasTestTag("project-sessions-button-count") and hasText("4"), unmerged = true) }
+        assertEquals(counted, buttonCount())
         compose.onNodeWithContentDescription("Back").performClick()
         await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
         compose.onAllNodesWithContentDescription("Project sessions").assertCountEquals(0)
@@ -475,6 +481,8 @@ class ProjectSessionsShellTest {
         compose.onNodeWithTag("drawer-project-needs-you:${ProjectShell.QUIET}", useUnmergedTree = true).assertExists()
     }
 
+    private fun buttonCount(): Int = compose.onNodeWithTag("project-sessions-button-count", useUnmergedTree = true).fetchSemanticsNode()
+        .config.getOrNull(SemanticsProperties.Text)!!.first().text.toInt()
     private fun openSheetFromTheRow() {
         compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
         await { exists(hasContentDescription("Project sessions")) }

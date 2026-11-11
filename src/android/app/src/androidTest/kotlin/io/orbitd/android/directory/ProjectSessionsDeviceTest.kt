@@ -89,10 +89,13 @@ class ProjectSessionsDeviceTest {
                 compose.onNodeWithTag("project-row:$launch").performClick(); settle()
                 await { calls.any { it == "GET /api/sessions/$coord" } && exists(hasContentDescription("Project sessions")) }
                 assertFalse(exists(hasTestTag("project-sessions")))
+                // Before the sheet is ever opened, the button already says the sheet's head's count: Open and Completed.
+                await { exists(hasTestTag("project-sessions-button-count") and hasText("4"), unmerged = true) }
                 capture("03-coordinator-with-button")
                 compose.onNodeWithContentDescription("Project sessions").performClick(); settle()
                 await { exists(hasTestTag("project-sessions-sheet")) && exists(hasTestTag("landing-card")) }
                 await { exists(hasText("Launch") and hasText("Project · 4 sessions")) }
+                assertTrue(exists(hasTestTag("project-sessions-button-count") and hasText("4"), unmerged = true))
                 compose.onNodeWithContentDescription("Open Project").assertExists()
                 capture("04-project-sessions-sheet")
                 compose.awaitListed(hasText("Shipped docs"))
