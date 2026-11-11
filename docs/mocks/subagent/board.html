@@ -353,6 +353,47 @@
 </section>
 
 
+<!-- ───────────────────────── part 7 ───────────────────────── -->
+<section id="part-7" class="sa-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">⑧ 跨 workspace</span>owner 11-11 追加：点名或按能力选；在对方自己的 HEAD 上跑；只回文字</div>
+    <div class="sa-two">
+      <div class="sa-pane">
+        <div class="chat-assistant">The iOS side needs a build on a Mac. Handing that to orbit-macos.</div>
+        <div class="m-mark" style="margin-top:14px"><span class="m-n">1</span><div class="chat-tool-card chat-tone-agent chat-tool-task is-open">
+          <div class="chat-tool-row">
+            <span class="chat-tool-caret">⌄</span><span class="chat-tool-icon">✦</span>
+            <span class="chat-tool-name">SubAgent</span>
+            <span class="chat-tool-summary">general · Build and test OrbitKit</span>
+            <span class="chat-tool-meta">M · Claude Sonnet 5.5 · on orbit-macos · 6m 40s · $0.38</span><span class="sa-ok">✓</span>
+          </div>
+          <div class="sa-why m-mark" style="margin:4px 10px 6px 30px"><span class="m-n">2</span><b>Why</b> · Needs os:darwin: orbit-macos is the only workspace of this repository whose runner reports it · Tier M, set by the caller · Runs on orbit-macos's own HEAD, text only</div>
+          <div class="chat-tool-detail"><div class="chat-subagent">
+            <div class="sa-step">Run <span class="sa-mono">swift build --package-path src/ios/OrbitKit</span></div>
+            <div class="sa-step">Run <span class="sa-mono">swift test --package-path src/ios/OrbitKit</span> · 412 passed</div>
+            <div class="sa-result">OrbitKit builds and all 412 tests pass on main at 806831c. <span class="m-mark" style="display:inline-block"><span class="m-n">3</span><span style="color:var(--text-3)">Discarded changes: 1 file (src/ios/OrbitKit/Package.resolved)</span></span></div>
+          </div></div>
+        </div></div>
+      </div>
+      <div class="sa-col">
+        <table class="sa-tbl">
+          <tr><th>#</th><th>delegate 写了</th><th>跑在</th></tr>
+          <tr><td>1</td><td><span class="a-mono">workspace: "orbit-macos"</span></td><td class="sa-em">点名的那个</td></tr>
+          <tr><td>2</td><td><span class="a-mono">needs: ["os:darwin"]</span>（参数或定义文件）</td><td class="sa-em">同一仓库（repoUrl 相同）、runner 报告了这些能力的 workspace</td></tr>
+          <tr><td>3</td><td>都没写</td><td class="sa-em">父会话本机，同一 cwd</td></tr>
+        </table>
+        <div class="sa-box" style="margin-top:6px"><h4>临时 detached worktree，结束即删</h4><p>在目标 workspace 自己的 HEAD 上；看不到父会话未提交的改动；改过的文件不带回、也不留下，只在结果末尾列出</p></div>
+        <div class="sa-box sa-bad"><h4>拒绝</h4><p>不同仓库 → <span class="a-mono">SUBAGENT_WORKSPACE_REPO_MISMATCH</span> · 不是 git 仓库 → <span class="a-mono">SUBAGENT_WORKSPACE_NOT_GIT</span> · 目标关掉了 SubAgents</p></div>
+      </div>
+    </div>
+    <ul class="m-notes">
+      <li><span class="m-n">1</span><span>块头多一项 <span class="a-mono">on &lt;workspace&gt;</span>；同机的 SubAgent 不显示这一项。</span></li>
+      <li><span class="m-n">2</span><span>Why 先说 workspace 是怎么选出来的，再说档位，最后提醒「只回文字」。</span></li>
+      <li><span class="m-n">3</span><span>runner 在结果末尾附一行被丢弃的改动，父 Agent 能看到，但文件不会进任何一边的工作区。</span></li>
+    </ul>
+  </div>
+</section>
+
 </div>
 </body>
 </html>
