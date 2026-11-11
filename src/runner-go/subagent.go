@@ -58,12 +58,87 @@ const subagentPreamble = "You are a SubAgent: another agent handed you the task 
 // subagentWaitSlice is how long one subagent_wait exchange holds the socket: well inside bgSocketTimeout.
 var subagentWaitSlice = 20 * time.Second
 
-// subagentEditTools are the child tools whose input names a file they write, and the input field that names it.
-var subagentEditTools = map[string]string{
-	"Edit":         "file_path",
-	"MultiEdit":    "file_path",
-	"Write":        "file_path",
-	"NotebookEdit": "notebook_path",
+// subagentEditTool is how a child tool's input names the files it writes.
+type subagentEditTool struct {
+	// fields are the input fields that may name the file, tried in order: a string names one, a list of strings
+	// several (Codex's apply_patch card lists every file of its patch).
+	fields []string
+	// patchField is an input field holding an apply_patch text, whose "*** Add File:" style headers name the files.
+	patchField string
+	// writes, when set, says whether this call writes at all (DSH's str_replace_editor also views).
+	writes func(input map[string]interface{}) bool
+}
+
+// subagentEditTools are the child tools that write files, by the name each engine's event parser gives them:
+//   - Claude Code, Cursor (cursorEditCall) and Antigravity (canonicalAgyTool): Edit, MultiEdit, Write, NotebookEdit
+//     with file_path / notebook_path;
+//   - Kimi: Edit and Write, whose input names the file `path`;
+//   - Codex: apply_patch, the card of a fileChange item, with the paths in `files`;
+//   - DSH: write and edit (file_path), and str_replace_editor (path) unless it only views;
+//   - OpenCode: Write, Edit and MultiEdit (canonicalOpenCodeToolName, file_path), and ApplyPatch with the patch text.
+var subagentEditTools = map[string]subagentEditTool{
+	"Edit":         {fields: []string{"file_path", "path"}},
+	"MultiEdit":    {fields: []string{"file_path", "path"}},
+	"Write":        {fields: []string{"file_path", "path"}},
+	"NotebookEdit": {fields: []string{"notebook_path"}},
+	"apply_patch":  {fields: []string{"files"}},
+	"ApplyPatch":   {patchField: "patch_text"},
+	"write":        {fields: []string{"file_path", "path"}},
+	"edit":         {fields: []string{"file_path", "path"}},
+	"str_replace_editor": {fields: []string{"path"}, writes: func(input map[string]interface{}) bool {
+		return asString(input["command"]) != "view"
+	}},
+}
+
+// paths is what one call of the tool writes, as its input names them.
+func (t subagentEditTool) paths(input map[string]interface{}) []string {
+	if input == nil || (t.writes != nil && !t.writes(input)) {
+		return nil
+	}
+	var out []string
+	for _, field := range t.fields {
+		switch v := input[field].(type) {
+		case string:
+			if strings.TrimSpace(v) != "" {
+				out = append(out, v)
+			}
+		case []interface{}:
+			for _, item := range v {
+				if s := asString(item); strings.TrimSpace(s) != "" {
+					out = append(out, s)
+				}
+			}
+		case []string:
+			for _, s := range v {
+				if strings.TrimSpace(s) != "" {
+					out = append(out, s)
+				}
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	if t.patchField != "" {
+		return applyPatchPaths(asString(input[t.patchField]))
+	}
+	return nil
+}
+
+// applyPatchPaths are the files an apply_patch text adds, updates, deletes or moves to.
+func applyPatchPaths(patch string) []string {
+	var out []string
+	for _, line := range strings.Split(patch, "\n") {
+		line = strings.TrimSpace(line)
+		for _, header := range []string{"*** Add File:", "*** Update File:", "*** Delete File:", "*** Move to:"} {
+			if rest, ok := strings.CutPrefix(line, header); ok {
+				if p := strings.TrimSpace(rest); p != "" {
+					out = append(out, p)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // ── The MCP half ─────────────────────────────────────────────────────────────────────────────────────────
@@ -122,15 +197,8 @@ func (s *mcpServer) callDelegate(args map[string]interface{}, toolUseID string) 
 	if socket == "" || token == "" {
 		return toolResult(bgTransportUnavailable+": this session has no runner-hosted job service, so delegate is unavailable. Do the work yourself.", true)
 	}
-	if strings.TrimSpace(toolUseID) == "" {
-		// An engine that does not say which call this is (Claude Code sends it as _meta "claudecode/toolUseId").
-		// The run still works; its events nest under an id no call carries.
-		id, err := newBgJobID()
-		if err != nil {
-			return toolResult("delegate failed: "+err.Error(), true)
-		}
-		toolUseID = "delegate_" + strings.TrimPrefix(id, "bgj_")
-	}
+	// Claude Code says which call this is (_meta "claudecode/toolUseId"); for an engine that does not, the runner
+	// reads the call from the session's own stream (delegateCallLog).
 	forward := map[string]interface{}{"toolUseId": toolUseID}
 	for _, key := range []string{"description", "prompt", "type", "size", "sizeReason", "model", "background", "resume"} {
 		if v, ok := args[key]; ok {
@@ -355,30 +423,34 @@ func rewriteSubagentEvent(runID, parentToolUseID, eventType string, payload map[
 // result came back without an error.
 type subagentFileCollector struct {
 	cwd     string
-	pending map[string]string // child tool id → path
+	pending map[string][]string // child tool id → the paths it writes
 	changed []string
 	seen    map[string]bool
 }
 
 func newSubagentFileCollector(cwd string) *subagentFileCollector {
-	return &subagentFileCollector{cwd: cwd, pending: map[string]string{}, seen: map[string]bool{}}
+	return &subagentFileCollector{cwd: cwd, pending: map[string][]string{}, seen: map[string]bool{}}
 }
 
 // note reads one child event, before it is rewritten.
 func (c *subagentFileCollector) note(eventType string, payload map[string]interface{}) {
 	switch eventType {
 	case evToolUse:
-		field, ok := subagentEditTools[asString(payload["name"])]
+		tool, ok := subagentEditTools[asString(payload["name"])]
 		if !ok {
 			return
 		}
 		input, _ := payload["input"].(map[string]interface{})
-		if path := asString(input[field]); path != "" {
-			c.pending[asString(payload["id"])] = c.relative(path)
+		var paths []string
+		for _, p := range tool.paths(input) {
+			paths = append(paths, c.relative(p))
+		}
+		if len(paths) > 0 {
+			c.pending[asString(payload["id"])] = paths
 		}
 	case evToolResult:
 		id := asString(payload["toolUseId"])
-		path, ok := c.pending[id]
+		paths, ok := c.pending[id]
 		if !ok {
 			return
 		}
@@ -386,9 +458,11 @@ func (c *subagentFileCollector) note(eventType string, payload map[string]interf
 		if failed, _ := payload["isError"].(bool); failed {
 			return
 		}
-		if !c.seen[path] {
-			c.seen[path] = true
-			c.changed = append(c.changed, path)
+		for _, path := range paths {
+			if !c.seen[path] {
+				c.seen[path] = true
+				c.changed = append(c.changed, path)
+			}
 		}
 	}
 }
@@ -496,9 +570,25 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	if err != nil {
 		return subagentReport{}, err
 	}
-	// Child mode exists for Claude Code so far; P1 runs every SubAgent on the parent's own engine.
-	if engine := runtimeProvider(s.job); engine != providerClaude {
-		return subagentReport{}, fmt.Errorf("SubAgents cannot run on the %s engine on this runner yet. Do the work yourself", engine)
+	// A resume continues the run's own conversation, which only its engine holds and not every engine reopens.
+	if resumeFrom != nil {
+		if err := subagentResumeRefusal(resumeFrom); err != nil {
+			return subagentReport{}, err
+		}
+	}
+	if strings.TrimSpace(toolUseID) == "" {
+		// An engine that does not say which call this is: the call its engine announced in the session's stream.
+		toolUseID = delegateCalls.take(s.sessionID, getString(args, "prompt"), getString(args, "description"), delegateCallWait)
+	} else {
+		delegateCalls.claim(s.sessionID, toolUseID)
+	}
+	if strings.TrimSpace(toolUseID) == "" {
+		// Nothing announced it either; the run still works, its events nest under an id no call carries.
+		id, err := newBgJobID()
+		if err != nil {
+			return subagentReport{}, err
+		}
+		toolUseID = "delegate_" + strings.TrimPrefix(id, "bgj_")
 	}
 	body := subagentStartBody(args, def, toolUseID, background)
 	var created subagentCreateResponse
@@ -514,15 +604,22 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		defer s.subagents.mu.Unlock()
 		return existing.reportLocked(), nil
 	}
+	engine := subagentEngine(created.Exec, s.job)
+	if resumeFrom != nil && resumeFrom.Engine != "" {
+		engine = resumeFrom.Engine
+	}
 	engineSession := ""
 	if resumeFrom != nil {
 		engineSession = resumeFrom.EngineSession
-	} else if engineSession, err = randomUUID(); err != nil {
-		return subagentReport{}, err
+	} else if engine == providerClaude {
+		// Claude Code is told its conversation's id; every other engine names the one it opens.
+		if engineSession, err = randomUUID(); err != nil {
+			return subagentReport{}, err
+		}
 	}
 	run := &subagentRun{
 		id: created.RunID, toolUseID: toolUseID, description: getString(args, "description"),
-		background: background, model: created.Exec.Model, engine: providerClaude, engineSession: engineSession, kind: def.Name,
+		background: background, model: created.Exec.Model, engine: engine, engineSession: engineSession, kind: def.Name,
 		done: make(chan struct{}), startedAt: time.Now(), status: subagentStatusRunning,
 	}
 	s.subagents.add(run)
@@ -566,7 +663,24 @@ func (s *bgJobService) runSubagent(run *subagentRun, exec AgentExecConfig, def s
 			s.bg.emit(eventType, out)
 		}
 	}
-	res, err := runClaudeChild(ctx, s.job, exec, def, run.id, run.engineSession, resume, s.execDir, dir, prompt, emit)
+	var res ExecResult
+	var err error
+	if runChild, ok := subagentChildRunners[run.engine]; !ok {
+		err = fmt.Errorf("SubAgents cannot run on the %s engine on this runner", run.engine)
+	} else {
+		var conversation string
+		res, conversation, err = runChild(withSubagentApprovals(ctx, run.id), subagentChild{
+			t: s.t, parent: s.job, exec: exec, def: def, runID: run.id, engineSession: run.engineSession, resume: resume,
+			cwd: s.execDir, scratch: dir, prompt: prompt, emit: emit,
+		})
+		if conversation != "" && conversation != run.engineSession {
+			// The conversation the engine opened, which a resume continues.
+			s.subagents.mu.Lock()
+			run.engineSession = conversation
+			s.subagents.mu.Unlock()
+			_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: conversation, Type: run.kind})
+		}
+	}
 	status, result := subagentStatusDone, strings.TrimSpace(res.Result)
 	switch {
 	case ctx.Err() != nil:
@@ -686,39 +800,24 @@ func subagentBackground(args map[string]interface{}, def subagentDefinition) (bo
 // and no edit tools when it is read-only, and its tools (--tools) and disallowedTools.
 func claudeChildSession(parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID, engineSession string,
 	resume bool, scratch string) (*ClaimedSession, []string) {
-	child := *parent
-	child.Provider = providerClaude
-	child.Agent = exec
-	child.Agent.Provider = providerClaude
-	child.Agent.McpConfig = parent.Agent.McpConfig
-	child.Agent.PromptSuggestions = false
-	child.Agent.FastMode = false
-	child.Agent.Env = map[string]string{}
-	for k, v := range exec.Env {
-		child.Agent.Env[k] = v
-	}
-	child.Agent.Env[envSubagentRunID] = runID
-	child.Agent.AppendSystemPrompt = subagentSystemPrompt(def)
-	// No delegate: a SubAgent cannot hand work on (§5.1 step 3). Its `orbit mcp` offers none either; this keeps
-	// the engine's own tool list without it too.
-	child.Agent.DisallowedTools = appendUnique(exec.DisallowedTools, append([]string{delegateEngineToolName}, def.DisallowedTools...)...)
-	if def.Readonly {
-		// The server already narrows a read-only run to plan mode (§5.3); kept here so the child never reads wider.
-		child.Agent.PermissionMode = "plan"
-		child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
-	}
+	child := subagentChildJob(parent, exec, def, runID, providerClaude, "")
 	child.SessionUUID = engineSession
-	args := claudeCommandArgs(&child, scratch, !resume)
+	args := claudeCommandArgs(child, scratch, !resume)
 	if len(def.Tools) > 0 {
 		args = append(args, "--tools", strings.Join(def.Tools, ","))
 	}
-	return &child, args
+	return child, args
 }
 
 // runClaudeChild runs Claude Code as a SubAgent: launched by the session's own argv and spawn code in the parent's
 // cwd, in child mode — its own scratch dir, its own conversation, one prompt, no checkout of its own, nothing
 // finalized and nothing committed. Every stream message is parsed by the session's own handleMessage.
-func runClaudeChild(ctx context.Context, parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID,
+func runClaudeChild(ctx context.Context, c subagentChild) (ExecResult, string, error) {
+	res, err := runClaudeChildProcess(ctx, c.parent, c.exec, c.def, c.runID, c.engineSession, c.resume, c.cwd, c.scratch, c.prompt, c.emit)
+	return res, c.engineSession, err
+}
+
+func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID,
 	engineSession string, resume bool, cwd, scratch, prompt string, emit emitFn) (ExecResult, error) {
 	child, args := claudeChildSession(parent, exec, def, runID, engineSession, resume, scratch)
 	sp, err := spawnClaude(ctx, child, cwd, args)
@@ -786,4 +885,265 @@ func writeJSONFile(path string, v interface{}) error {
 		return err
 	}
 	return os.WriteFile(path, b, 0o600)
+}
+
+// ── Child mode, by engine ────────────────────────────────────────────────────────────────────────────────
+
+// subagentChild is one SubAgent's child engine as its runner gets it: the parent's claim, the execution target the
+// server answered, and where it runs — the parent's own cwd, with a scratch dir of its own.
+type subagentChild struct {
+	t      *Transport
+	parent *ClaimedSession
+	exec   AgentExecConfig
+	def    subagentDefinition
+	runID  string
+	// engineSession is the conversation to continue (resume) or, for Claude Code, the id to open one under; ""
+	// lets the engine name the one it opens.
+	engineSession string
+	resume        bool
+	cwd, scratch  string
+	prompt        string
+	emit          emitFn
+}
+
+// subagentChildRunner runs one SubAgent to its end in child mode: the engine's own launch and event parsing, under
+// ctx (the session's lifetime), one prompt, no checkout of its own, nothing finalized and nothing committed. It
+// returns the engine's final result, cost and usage, and the id of the conversation it ran in, which a resume
+// continues.
+type subagentChildRunner func(ctx context.Context, c subagentChild) (ExecResult, string, error)
+
+// subagentChildRunners are the engines a SubAgent can run on. Each engine's runner sits beside its session code
+// (subagent_<engine>.go) and registers itself here.
+var subagentChildRunners = map[string]subagentChildRunner{
+	providerClaude: runClaudeChild,
+}
+
+// subagentResumeless are the engines whose child mode cannot reopen a finished conversation, with why.
+var subagentResumeless = map[string]string{}
+
+// subagentResumeRefusal refuses a resume the run's engine cannot do, before any run is opened for it.
+func subagentResumeRefusal(rec *subagentRecord) error {
+	if why, ok := subagentResumeless[rec.Engine]; ok {
+		return fmt.Errorf("SubAgent %s ran on %s, which cannot resume a SubAgent's conversation (%s). Start a new SubAgent with the full brief instead", rec.RunID, rec.Engine, why)
+	}
+	if rec.Engine != providerClaude && rec.EngineSession == "" {
+		return fmt.Errorf("SubAgent run %s left no conversation to resume", rec.RunID)
+	}
+	return nil
+}
+
+// subagentEngine is the engine the server's execution target names, else the parent's own.
+func subagentEngine(exec AgentExecConfig, parent *ClaimedSession) string {
+	return runtimeProvider(&ClaimedSession{Provider: exec.Provider, Agent: AgentExecConfig{Provider: parent.Provider}})
+}
+
+// subagentChildJob is the claim a child engine is launched from: the parent's, in child mode, on the server's
+// execution target, with the definition applied — the preamble and the definition's body as its appended system
+// prompt, no delegate, plan mode and no edit tools when it is read-only. engineSession is the conversation a
+// resume continues (RuntimeSessionID, which every engine's open-or-resume reads), "" for a new one.
+func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID, provider, engineSession string) *ClaimedSession {
+	child := *parent
+	child.Provider = provider
+	child.Agent = exec
+	child.Agent.Provider = provider
+	child.Agent.McpConfig = parent.Agent.McpConfig
+	child.Agent.PromptSuggestions = false
+	child.Agent.FastMode = false
+	child.Agent.Env = map[string]string{}
+	for k, v := range exec.Env {
+		child.Agent.Env[k] = v
+	}
+	// Every engine's `orbit mcp` reads it: a SubAgent is neither offered nor served delegate (§0).
+	child.Agent.Env[envSubagentRunID] = runID
+	child.Agent.AppendSystemPrompt = subagentSystemPrompt(def)
+	// No delegate: a SubAgent cannot hand work on (§5.1 step 3). Its `orbit mcp` offers none either; this keeps
+	// the engine's own tool list without it too.
+	child.Agent.DisallowedTools = appendUnique(exec.DisallowedTools, append([]string{delegateEngineToolName}, def.DisallowedTools...)...)
+	if def.Readonly {
+		// The server already narrows a read-only run to plan mode (§5.3); kept here so the child never reads wider.
+		child.Agent.PermissionMode = "plan"
+		child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
+	}
+	child.RuntimeSessionID = engineSession
+	// The session's own business, which a child has no part in: naming it, and its live mode (the server's
+	// answer is the child's mode).
+	child.Naming = nil
+	child.liveMode = nil
+	return &child
+}
+
+// subagentChildResult is a child turn's end as an ExecResult.
+func subagentChildResult(status, result, errText string, costUsd float64, usage *TokenUsage) ExecResult {
+	if status == "" {
+		status = stSucceeded
+	}
+	res := ExecResult{Status: status, Result: strings.TrimSpace(result), CostUsd: costUsd, Usage: usage, NumTurns: 1}
+	if status != stSucceeded {
+		res.ErrorMsg = strings.TrimSpace(errText)
+		res.Subtype = status
+		if res.Result == "" {
+			res.Result = res.ErrorMsg
+		}
+	}
+	return res
+}
+
+// ── Approvals of a child engine ──────────────────────────────────────────────────────────────────────────
+
+type subagentApprovalKey struct{}
+
+// withSubagentApprovals marks ctx as a SubAgent's: an approval card a runner-side bridge files under it (Codex, Kimi,
+// Cursor, DSH, Antigravity ask through Transport.createApproval with the child's context) names the run, and its
+// call's id carries the run id as a prefix, as the parent's transcript writes it (rewriteSubagentEvent) — the same
+// card approvalBodyOfPrompt files for a Claude child.
+func withSubagentApprovals(ctx context.Context, runID string) context.Context {
+	return context.WithValue(ctx, subagentApprovalKey{}, runID)
+}
+
+// subagentApprovalBody is body as a SubAgent files it, when ctx is one's; body otherwise.
+func subagentApprovalBody(ctx context.Context, body interface{}) interface{} {
+	if ctx == nil {
+		return body
+	}
+	runID, _ := ctx.Value(subagentApprovalKey{}).(string)
+	m, ok := body.(map[string]interface{})
+	if runID == "" || !ok {
+		return body
+	}
+	out := make(map[string]interface{}, len(m)+1)
+	for k, v := range m {
+		out[k] = v
+	}
+	if id := asString(m["toolUseId"]); id != "" && !strings.HasPrefix(id, runID+":") {
+		out["toolUseId"] = subagentToolID(runID, id)
+	}
+	out["subagentRunId"] = runID
+	return out
+}
+
+// ── The delegate call's id, for engines that do not send it ─────────────────────────────────────────────
+
+// delegateCallWait is how long a delegate call with no id waits for its engine's tool_use to reach the stream: an
+// engine announces the call as it makes it, so the two cross on their way to the runner.
+var delegateCallWait = 3 * time.Second
+
+// delegateCall is a delegate tool call one session's engine announced.
+type delegateCall struct {
+	id, prompt, description string
+	taken                   bool
+}
+
+// delegateCallLog is each session's delegate calls as its engine announced them in the session's event stream.
+// Claude Code tells `orbit mcp` which call a tools/call is (_meta "claudecode/toolUseId"); Codex and the ACP
+// engines do not, so the runner, which sees every event the session emits, takes the id from the call's tool_use:
+// the one whose prompt is the call's, else the oldest one not yet taken.
+type delegateCallLog struct {
+	mu       sync.Mutex
+	changed  chan struct{}
+	sessions map[string][]*delegateCall
+}
+
+var delegateCalls = &delegateCallLog{changed: make(chan struct{}), sessions: map[string][]*delegateCall{}}
+
+// delegateCallLogCap bounds what one session keeps: the most recent calls.
+const delegateCallLogCap = 32
+
+// isDelegateToolName reports whether an engine's name for a tool is Orbit's delegate: mcp__orbit__delegate
+// (Claude Code, Cursor, DSH, Antigravity, OpenCode), orbit__delegate (Codex), or a bare one.
+func isDelegateToolName(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	return n == delegateToolName || n == delegateEngineToolName || n == "orbit__delegate" || n == "orbit_delegate" ||
+		strings.HasSuffix(n, "orbit__delegate") || strings.HasSuffix(n, "orbit.delegate") || strings.HasSuffix(n, "orbit/delegate")
+}
+
+// note reads one event the session emitted.
+func (l *delegateCallLog) note(sessionID, eventType string, payload map[string]interface{}) {
+	if eventType != evToolUse || !isDelegateToolName(asString(payload["name"])) || asString(payload["subagentRunId"]) != "" {
+		return
+	}
+	id := asString(payload["id"])
+	if id == "" {
+		return
+	}
+	input, _ := payload["input"].(map[string]interface{})
+	if input == nil {
+		// An input as JSON text (an MCP call's arguments, as some engines carry them).
+		if raw := asString(payload["input"]); raw != "" {
+			_ = json.Unmarshal([]byte(raw), &input)
+		}
+	}
+	key := decodeSessionID(sessionID)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, c := range l.sessions[key] {
+		if c.id == id {
+			return
+		}
+	}
+	calls := append(l.sessions[key], &delegateCall{id: id, prompt: asString(input["prompt"]), description: asString(input["description"])})
+	if len(calls) > delegateCallLogCap {
+		calls = calls[len(calls)-delegateCallLogCap:]
+	}
+	l.sessions[key] = calls
+	close(l.changed)
+	l.changed = make(chan struct{})
+}
+
+// claim marks a call as taken by the id its engine sent.
+func (l *delegateCallLog) claim(sessionID, id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, c := range l.sessions[decodeSessionID(sessionID)] {
+		if c.id == id {
+			c.taken = true
+		}
+	}
+}
+
+// take is the id of the call a delegate with this prompt is, waiting up to wait for it to be announced; "" when
+// none was.
+func (l *delegateCallLog) take(sessionID, prompt, description string, wait time.Duration) string {
+	key := decodeSessionID(sessionID)
+	deadline := time.Now().Add(wait)
+	for {
+		l.mu.Lock()
+		var match, oldest *delegateCall
+		for _, c := range l.sessions[key] {
+			if c.taken {
+				continue
+			}
+			if oldest == nil {
+				oldest = c
+			}
+			if match == nil && c.prompt != "" && c.prompt == prompt && (description == "" || c.description == "" || c.description == description) {
+				match = c
+			}
+		}
+		if match == nil && oldest != nil && oldest.prompt == "" {
+			// A call announced without its input: the oldest open one.
+			match = oldest
+		}
+		if match != nil {
+			match.taken = true
+			l.mu.Unlock()
+			return match.id
+		}
+		changed := l.changed
+		l.mu.Unlock()
+		left := time.Until(deadline)
+		if left <= 0 {
+			return ""
+		}
+		select {
+		case <-changed:
+		case <-time.After(left):
+		}
+	}
+}
+
+// forget drops a session's calls when it ends.
+func (l *delegateCallLog) forget(sessionID string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.sessions, decodeSessionID(sessionID))
 }
