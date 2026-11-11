@@ -23637,13 +23637,22 @@ div.landing-jobs-open {
 .smc-body {
   margin-top: 6px;
 }
+/* A long message shows its first 8 lines, fading out, until "Show more" (SessionMessageCard). */
+.smc-body.is-clamped {
+  max-height: 12.4em;
+  max-height: 8lh;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
 .smc-more {
+  margin: 4px 0 2px;
   padding: 0;
   border: 0;
   background: none;
   color: var(--brand);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .smc-meta {
