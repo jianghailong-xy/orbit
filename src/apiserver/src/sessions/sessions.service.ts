@@ -1601,11 +1601,7 @@ export class SessionsService {
       : wikiChat
         ? this.writeChat(dto.workspaceId!, dto.prompt, wikiChat, attachmentIds, insertSession)
         : heldFrom
-          ? withTransactionRetry(this.prisma, async (tx) => {
-              const created = await insertSession(tx);
-              await this.insertHeldOpeningLocked(tx, created, heldFrom);
-              return created;
-            }, loggedRetry(this.logger, 'sessions.createHeldOpening'))
+          ? this.createWithHeldOpening(insertSession, heldFrom)
           : this.writeFenced(opts?.fence, (client) => insertSession(client))
     ).catch(async (e: unknown) => {
       // The folder checked above was deleted before this INSERT reached it: the same 400 as naming
@@ -5833,6 +5829,18 @@ export class SessionsService {
     });
   }
 
+  /** `create`'s INSERT with its held opening, in one transaction, so no claim ever sees the session without it. */
+  private async createWithHeldOpening<S extends { id: string; prompt: string }>(
+    insertSession: (tx: Prisma.TransactionClient) => PromiseLike<S>,
+    from: TranslationLanguage,
+  ): Promise<S> {
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const created = await insertSession(tx);
+      await this.insertHeldOpeningLocked(tx, created, from);
+      return created;
+    }, loggedRetry(this.logger, 'sessions.createWithHeldOpening'));
+  }
+
   /** The session's compose-page uploads, joined to its held opening as the claim's seed would join them. */
   private async linkHeldOpeningAttachments(client: PrismaService | Prisma.TransactionClient, sessionId: string): Promise<void> {
     const opening = await client.conversationTurn.findUnique({
@@ -6949,8 +6957,10 @@ export class SessionsService {
 
   /** The owner's held message, or 404. */
   private async ownHeldTurn(ownerId: string, sessionId: string, turnId: string) {
-    const session = await this.prisma.session.findFirst({ where: { id: sessionId, ownerId }, select: { id: true } });
+    const session = await this.prisma.session.findFirst({ where: { id: sessionId, ownerId }, select: { id: true, sessionKind: true } });
     if (!session) throw new NotFoundException('session not found');
+    // A landing has no messages, held or otherwise: an engine door (§2.9 LS6).
+    assertEngineSessionRow(session);
     const turn = await this.prisma.conversationTurn.findFirst({
       where: { id: turnId, sessionId },
       select: { id: true, status: true, displayPrompt: true, translationState: true, translationLang: true },
@@ -7565,17 +7575,6 @@ export class SessionsService {
       // And a request another session asked of this one, withdrawn unread: UNDELIVERED. A reply turn
       // withdrawn here leaves its outcomes held for this session's next turn (session-request.ts).
       await settleUnrunSessionRequests(tx, id, { code: 'TURN_WITHDRAWN', turnId });
-      // A held message (Settings › Translation) is nobody's yet: withdrawn like a pending steer, with no
-      // queue-slot bookkeeping, since it holds none. Never a held opening, which is the session's prompt.
-      const held = await tx.conversationTurn.deleteMany({
-        where: {
-          id: turnId,
-          sessionId: id,
-          status: HELD_TURN_STATUS,
-          clientTurnId: { not: SessionsService.initialTurnClientId(id) },
-        },
-      });
-      if (held.count > 0) return null;
       const res = await tx.conversationTurn.deleteMany({
         // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
         where: {
@@ -7589,6 +7588,16 @@ export class SessionsService {
         },
       });
       if (res.count === 0) {
+        // A held message (Settings › Translation) is nobody's yet: withdrawn like a pending steer, with no
+        // queue-slot bookkeeping, since it holds none. Never a held opening, which is the session's prompt.
+        const held = await tx.conversationTurn.findFirst({
+          where: { id: turnId, sessionId: id, status: HELD_TURN_STATUS },
+          select: { status: true, clientTurnId: true },
+        });
+        if (held?.status === HELD_TURN_STATUS && held.clientTurnId !== SessionsService.initialTurnClientId(id)) {
+          await tx.conversationTurn.deleteMany({ where: { id: turnId, sessionId: id, status: HELD_TURN_STATUS } });
+          return null;
+        }
         // A steer whose delivery already settled undelivered is the exception to that refusal.
         // It is not on its way anywhere: the boundary that failed it is durable, no engine read
         // it, and the row exists only to say so. Left un-withdrawable it is a bubble with no

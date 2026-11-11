@@ -279,6 +279,10 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.sessions.cancelQueuedTurn(w.ownerId, id, randomUUID()),
   'POST /sessions/:id/turns/:turnId/steer': (s, w, id) =>
     s.sessions.steerQueuedTurn(w.ownerId, id, randomUUID()),
+  'POST /sessions/:id/turns/:turnId/translation/retry': (s, w, id) =>
+    s.sessions.retryTurnTranslation(w.ownerId, id, randomUUID()),
+  'POST /sessions/:id/turns/:turnId/translation/send-as-written': (s, w, id) =>
+    s.sessions.sendTurnAsWritten(w.ownerId, id, randomUUID()),
   'POST /sessions/:id/resume': (s, w, id) =>
     s.sessions.resume(w.ownerId, id, { clientTurnId: randomUUID(), content: 'hi' }),
   'PATCH /sessions/:id/config': (s, w, id) => s.sessions.updateConfig(w.ownerId, id, { effort: 'low' }),

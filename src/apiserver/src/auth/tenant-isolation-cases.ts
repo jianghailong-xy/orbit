@@ -575,6 +575,14 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
     nested: ['turnId'],
   },
+  'POST /sessions/:id/turns/:turnId/translation/retry': {
+    request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
+    nested: ['turnId'],
+  },
+  'POST /sessions/:id/turns/:turnId/translation/send-as-written': {
+    request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
+    nested: ['turnId'],
+  },
   'POST /sessions/:id/resume': { request: (of) => ({ params: { id: of.sessionId }, body: turn('resume') }) },
   'PATCH /sessions/:id/config': { request: (of) => ({ params: { id: of.sessionId }, body: { effort: 'low' } }) },
   'PATCH /sessions/:id/account': { request: (of) => ({ params: { id: of.sessionId }, body: { account: 'automatic' } }) },

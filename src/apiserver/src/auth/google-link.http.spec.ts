@@ -782,7 +782,7 @@ test('GET /users/me and GET /admin/users answer signInMethods with only §6\'s f
     assert.equal(me.status, 200, me.text);
     assert.deepEqual(
       Object.keys(me.json).sort(),
-      ['avatarUpdatedAt', 'createdAt', 'email', 'id', 'name', 'preferences', 'publicId', 'role', 'signInMethods'],
+      ['avatarUpdatedAt', 'createdAt', 'email', 'id', 'name', 'preferences', 'publicId', 'role', 'signInMethods', 'translationAvailable'],
       'me as it was, and signInMethods',
     );
     assert.deepEqual(me.json.signInMethods, expected.get(user.id), user.email);
