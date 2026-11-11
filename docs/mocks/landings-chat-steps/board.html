@@ -1,0 +1,60 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>Landings · 点开的样子照会话的折叠步骤（2026-11-11）</title>
+<style>
+:root{--mark:#FF7A00}*{box-sizing:border-box}body{margin:0;background:#F3F3F6;font-family:-apple-system,"PingFang SC",sans-serif;color:#1c1c1e;-webkit-font-smoothing:antialiased}
+.board{padding:30px 44px 36px;width:1500px;background:#F3F3F6}h1{font-size:25px;margin:0 0 8px}
+h2{font-size:19px;margin:24px 0 12px;display:flex;gap:10px;align-items:center}h2 .no{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#1c1c1e;color:#fff;font-size:15px}h2 .sub{font-size:14px;font-weight:500;color:#6b6b72}
+.lede{font-size:15px;line-height:1.7;color:#3a3a40;margin:0 0 12px}.row{display:flex;gap:30px;align-items:flex-start}.col{flex:1;min-width:0}
+.tag{display:inline-block;font-size:13px;font-weight:700;border-radius:7px;padding:3px 10px;margin-bottom:10px}.tag.today{background:#FFE3E0;color:#B42318}.tag.after{background:#DDE7FF;color:#2447B8}.tag.ref{background:#E7E7EC;color:#45454c}
+.shot{position:relative;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(0,0,0,.1);overflow:hidden}.shot img{display:block;width:100%}
+.notes{font-size:14.5px;line-height:1.68;color:#2c2c31;margin-top:12px}.notes ol{margin:0;padding:0;list-style:none}.notes li{margin:7px 0;position:relative;padding-left:30px}.notes li .n{position:absolute;left:0;top:1px}
+.n{display:inline-grid;place-items:center;width:21px;height:21px;border-radius:50%;background:var(--mark);color:#fff;font:700 12.5px/1 -apple-system,sans-serif}.pin{position:absolute;box-shadow:0 0 0 2px #fff;z-index:5}.ring{position:absolute;border:2px dashed var(--mark);border-radius:8px;z-index:4}
+.bad{color:#B42318;font-weight:650}i.en{font-style:italic}code{font:12.5px "JetBrains Mono",monospace;background:rgba(0,0,0,.06);border-radius:4px;padding:0 4px}
+.ask{background:#FFFBEA;box-shadow:0 0 0 1.5px #F2CF63;border-radius:12px;padding:6px 18px 12px;margin-top:18px;font-size:14.5px;line-height:1.75}.rec{color:#1E7B34;font-weight:650}
+</style><body>
+<div class="board" data-png="01-compare">
+<h1>Landings · 点开一次落地照会话的「折叠步骤」（web，2026-11-11 · 按 main 4eb2edfae）</h1>
+<p class="lede"><b>owner 11-11</b>：「你再核对下图 1 和图 2 普通 session 聊天的样式」→「按推荐的来，先出设计图」。<br>
+会话里一串工具调用默认折成<b>一行灰字</b>（<i class="en">Ran 1 shell command</i> / <i class="en">Thought for 1s, ran 8 shell commands</i>），点开才是工具行；工具行上<b>没有时刻</b>；失败只在那行灰字末尾写红色 <i class="en">· 1 failed</i>。今天的 Landings 点开后每一代都把工具行全摊开，还有大写的 <i class="en">GENERATION 1</i> 标题和每行的时刻胶囊，跟会话不是一个样子。另有三处内容不对（下面红字）。改后两帧是真实 web 截图：会话页本身，用的就是会话的 <code>chat-steps</code> / <code>chat-tool-card</code>。</p>
+<div class="row">
+ <div class="col"><span class="tag today">a · 现在（你的图 1）</span><div class="shot"><img src="frames/today.png"></div>
+  <div class="notes"><ol>
+   <li><span class="n" style="background:#B42318">!</span><span class="bad">Task acceptance 这一行写的是「Asked the coordinator to fix it」</span>：把后面「交给协调会话」那句当成了这一步的结果。应该写检查自己的结果。</li>
+   <li><span class="n" style="background:#B42318">!</span><span class="bad">第 1 代的 Merge check「Preparing the combined tree ✓」</span>：Task acceptance 已经失败、合并检查根本没跑，却画了一个绿勾。是「准备合并树」那句被归进了合并检查。</li>
+   <li><span class="n" style="background:#B42318">!</span><span class="bad"><code>check 0m 00s</code></span>：不到一秒的检查写成 0m 00s，没信息量。</li>
+  </ol></div></div>
+ <div class="col"><span class="tag ref">参照 · 会话（你的图 2）</span><div class="shot"><img src="frames/chat-ref.png"></div>
+  <div class="notes">一串工具调用 = 一行灰字，点开才见工具行；工具行：图标块 · 粗体名 · 一句说明 · ✓，没有时刻。</div></div>
+</div>
+</div>
+<div class="board" data-png="02-after">
+<h2><span class="no">1</span>改后<span class="sub">每一代 = 会话的一行折叠步骤；最后一代默认展开</span></h2>
+<div class="row">
+ <div class="col"><span class="tag after">b · 改后 · 点开 07:47 那条（同一屏）</span><div class="shot" id="s-open"><img src="frames/q-open.png"></div>
+  <div class="notes"><ol>
+   <li><span class="n">4</span><b>第 1 代折成一行</b>：<i class="en">Generation 1 · 4 steps · 1 failed</i>（红），跟会话的 <i class="en">ran 8 shell commands · 1 failed</i> 一样；点它才展开。</li>
+   <li><span class="n">5</span><b>最后一代默认展开</b>：<i class="en">Generation 2 · 5 steps</i>，下面是工具行，<b>没有时刻胶囊</b>、<b>没有大写标题</b>；时刻在点开某一步后的那几行里。</li>
+   <li><span class="n">3</span><b>「Preparing the combined tree」归到 Sync</b>：检查还没开始前的准备都算同步；没跑的检查不再出一行。</li>
+   <li><span class="n">2</span><b>检查那一步写检查自己的结果</b>：<i class="en">Task acceptance passed · 0m 00s</i>（服务端原句）。</li>
+   <li><span class="n">6</span><b>不到一秒的检查不写胶囊</b>。</li>
+  </ol></div></div>
+ <div class="col"><span class="tag after">c · 改后 · 再点开第 1 代</span><div class="shot" id="s-failed"><img src="frames/q-failed.png"></div>
+  <div class="notes"><ol>
+   <li><span class="n">4</span>第 1 代展开：4 步，失败的 <i class="en">Task acceptance</i> 自动打开，写 <i class="en">Task acceptance failed · exit 1</i>，下面是原来的两行和失败输出；<i class="en">Asked the coordinator to fix it</i> 还在那几行里，只是不再当这一步的结论。</li>
+   <li>只有一代的落地：没有 <i class="en">Generation 1</i> 字样，那行写 <i class="en">5 steps</i>，默认展开。</li>
+  </ol></div></div>
+</div>
+<div class="ask"><b>待你定</b><ol style="margin:4px 0 0;padding-left:20px">
+ <li>点开一次落地时：<span class="rec">最后一代默认展开、更早的折起（推荐）</span>；还是全部折起、只露那几行灰字。</li>
+ <li>失败那一代里，失败的那一步自动打开（<span class="rec">推荐</span>，照今天）；还是照会话，一律不自动打开。</li>
+ <li>只有一代时那行灰字：<span class="rec"><i class="en">5 steps</i>（推荐）</span>；还是也写 <i class="en">Generation 1 · 5 steps</i>。</li>
+ <li>三处内容修正同时改 iPhone / Android（<span class="rec">推荐</span>，三端共用一套分步规则）；折叠这件事 iPhone / Android 等 web 定了再出图。</li>
+</ol></div>
+<p class="notes" style="color:#6b6b72">要动的：<code>src/web/src/lib/landingSteps.ts</code>（归组、结论、HANDED_TO）、<code>ProjectLandingsWindow.tsx</code>（每代一行 <code>chat-steps</code>、去掉行上时刻和大写标题、胶囊 &lt;1 s 不写），iOS <code>LandingSteps.swift</code> / Android <code>LandingSteps.kt</code> 同步规则；各自的测试。</p>
+</div>
+<script>
+const MARKS={"q-open": {"clip": {"x": 601, "y": 0, "width": 1099, "height": 680}, "boxes": {"2": {"x": 58, "y": 362, "w": 1021, "h": 34}, "3": {"x": 58, "y": 325, "w": 1021, "h": 34}, "4": {"x": 42, "y": 191, "w": 1037, "h": 24}, "5": {"x": 42, "y": 221, "w": 1037, "h": 212}, "6": {"x": 20, "y": 136, "w": 1059, "h": 26}}}, "q-failed": {"clip": {"x": 601, "y": 0, "width": 1099, "height": 820}, "boxes": {"2": {"x": 58, "y": 629, "w": 1021, "h": 34}, "3": {"x": 58, "y": 592, "w": 1021, "h": 34}, "4": {"x": 42, "y": 163, "w": 1037, "h": 319}, "5": {"x": 42, "y": 488, "w": 1037, "h": 212}}}};
+const place=(id,scene)=>{const box=document.getElementById(id);if(!box)return;const m=MARKS[scene];const k=box.clientWidth/m.clip.width;
+for(const [n,b] of Object.entries(m.boxes)){const r=document.createElement('div');r.className='ring';Object.assign(r.style,{left:(b.x*k-3)+'px',top:(b.y*k-3)+'px',width:(b.w*k+6)+'px',height:(b.h*k+6)+'px'});
+const p=document.createElement('span');p.className='n pin';p.textContent=n;Object.assign(p.style,{left:((b.x+b.w)*k-10)+'px',top:(b.y*k-10)+'px'});box.append(r,p);}};
+window.drawMarks=()=>{place('s-open','q-open');place('s-failed','q-failed');};
+</script></body></html>

@@ -14,6 +14,10 @@ import OrbitKit
 /// session can go to opens its page (`SessionMoveTargetPage`), where a folder there is picked and the
 /// move confirmed; one it can't is greyed with the server's reason, and when the session itself can't
 /// leave, the whole group is greyed with why under it. A server without move-targets shows no group.
+///
+/// A project's coordinator (docs/mocks/coordinator-move-workspace 03-final): the title's line names
+/// the project, and the group says the project's coordinator moves with it. Starting a new one
+/// elsewhere is the project page's Change workspace (04-change), not this panel's.
 struct SessionMoveSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -104,10 +108,12 @@ struct SessionMoveSheet: View {
         VStack(spacing: 1) {
             Text(SessionMoveCopy.title)
                 .font(.headline)
-            Text(SessionHeader.title(for: session, fallbackAgent: workspace.name))
+            Text(SessionMoveCopy.sessionLine(SessionHeader.title(for: session, fallbackAgent: workspace.name),
+                                             targets))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(targets?.coordinates == nil ? 1 : 2)
+                .multilineTextAlignment(.center)
                 .truncationMode(.tail)
         }
         .frame(maxWidth: 240)
@@ -158,7 +164,7 @@ struct SessionMoveSheet: View {
                 } header: {
                     Text(SessionMoveCopy.anotherWorkspaceGroup)
                 } footer: {
-                    if let reason = SessionWorkspaceMoveLogic.groupReason(targets) { Text(reason) }
+                    if let footer = SessionWorkspaceMoveLogic.groupFooter(targets) { Text(footer) }
                 }
             }
         } else if let targetsFailure {

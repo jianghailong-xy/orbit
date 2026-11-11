@@ -48,7 +48,7 @@ import {
   RETRY_CLAIM_WINDOW_MS,
   SESSION_REPLY_TURN_PREFIX,
 } from './session-request';
-import { AUTO_RETRY_ORBIT_TURN_KEY_PREFIX, AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
+import { AUTO_RETRY_ORBIT_TURN_KEY_PREFIX, AUTO_RETRY_TURN_KEY_PREFIX, orbitResendTurnKey } from './watch-turn-key';
 import { isOrbitAuthoredTurnOf, openingTurnKey } from './orbit-authored-turn';
 import { readTaskStartCard } from '../tasks/task-start-card';
 import {
@@ -857,7 +857,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                 ? `${SESSION_REPLY_TURN_PREFIX}retry:${randomUUID()}`
                 : resendsNotice ?? resendsReview
                   // Orbit's words are re-sent as Orbit's (`ResendMessage.orbit`); the owner's as theirs.
-                  ?? `${message.orbit ? AUTO_RETRY_ORBIT_TURN_KEY_PREFIX : AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
+                  ?? (message.orbit ? orbitResendTurnKey(message.turnId, randomUUID()) : `${AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`),
             },
             {
               ...this.resendCarrying(session.id, message, resendsReplies),

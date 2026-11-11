@@ -1220,6 +1220,18 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     }
     public let confirmationReturn: JSONValue?
     public var reviewReturnCard: ConfirmationReturnCard? { ConfirmationReturnCard.parseCard(confirmationReturn) }
+    /// The owner's answers handed to the reviewer (`confirmationAnswers`, §7 Q5), held raw the same way.
+    public let confirmationAnswers: JSONValue?
+    public var reviewAnswersCard: ConfirmationAnswersCard? { ConfirmationAnswersCard.parseCard(confirmationAnswers) }
+    /// Five more of Orbit's own turns (`OrbitTurnCards.swift`), held raw for the readers the echo's
+    /// payload is read by: a revision handed to the session that dispatched its task, a send-back's
+    /// note handed to the run, a task run's question and its notify handed to the coordinator, and the
+    /// opening of a session Orbit opened. Nil on every other turn, and from an older server.
+    public let evidenceReview: JSONValue?
+    public let evidenceSendBack: JSONValue?
+    public let runQuestion: JSONValue?
+    public let runNotice: JSONValue?
+    public let sessionOpening: JSONValue?
     /// Every card this turn is drawn as while it waits, each read as above — the one place the queue's
     /// cards are gathered, so the row reconciled in place and the row first seen in a listing carry
     /// the same ones (`TranscriptReducer.reconcileQueuedTurns`).
@@ -1227,7 +1239,13 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswerCard, coordinatorDelivery: coordinatorDeliveryCard,
                   taskStart: taskStartCard, startedCard: startedCard,
                   sessionMessage: senderCard, externalSender: externalSenderFrom, sessionReplies: replyCards,
-                  reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
+                  reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard,
+                  reviewAnswers: reviewAnswersCard,
+                  evidenceReview: EvidenceReviewCard.parseCard(evidenceReview),
+                  evidenceSendBack: EvidenceSendBackCard.parseCard(evidenceSendBack),
+                  runQuestion: RunQuestionCard.parseCard(runQuestion),
+                  runNotice: RunNoticeCard.parseCard(runNotice),
+                  sessionOpening: SessionOpeningCard.parseCard(sessionOpening))
     }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
@@ -1240,7 +1258,10 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 externalSender: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
-                confirmationReturn: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
+                confirmationReturn: JSONValue? = nil, confirmationAnswers: JSONValue? = nil,
+                evidenceReview: JSONValue? = nil, evidenceSendBack: JSONValue? = nil,
+                runQuestion: JSONValue? = nil, runNotice: JSONValue? = nil, sessionOpening: JSONValue? = nil,
+                placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
                 deliveryReason: String? = nil) {
         self.turnId = turnId
@@ -1264,6 +1285,12 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.authoredByOrbit = authoredByOrbit
         self.confirmationReviewRequest = confirmationReviewRequest
         self.confirmationReturn = confirmationReturn
+        self.confirmationAnswers = confirmationAnswers
+        self.evidenceReview = evidenceReview
+        self.evidenceSendBack = evidenceSendBack
+        self.runQuestion = runQuestion
+        self.runNotice = runNotice
+        self.sessionOpening = sessionOpening
     }
 }
 
@@ -1350,6 +1377,7 @@ public struct MergeRepairRequest: Codable, Sendable {
 /// The durable approval record (GET /sessions/:id/approvals). Distinct from the live
 /// `approval_request` SSE nudge; this is the source of truth on (re)connect.
 public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
+    public let coordinatorFallback: String?
     public let id: String
     public let toolName: String?
     public let status: String?

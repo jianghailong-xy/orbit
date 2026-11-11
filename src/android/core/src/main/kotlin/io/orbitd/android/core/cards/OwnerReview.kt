@@ -4,6 +4,9 @@ import kotlinx.serialization.json.*
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 /**
  * The review on an owner-confirmation card (A08-1; OrbitKit `OwnerConfirmationReview`, contract
@@ -50,6 +53,10 @@ object OwnerReview {
     const val answerNotShown = "Not shown to you — the recommended answer was recorded."
     const val beforeReview = "Before the review came in"
     const val reviewRequested = "Review requested"
+    /** The card the reviewer's conversation draws for the owner's answers handed to it (contract §7 Q5; web `YouConfirmedCard`). */
+    const val youConfirmed = "You confirmed"
+    const val answersSentToReviewer = "Your answers, sent to this reviewer"
+    const val reviewerWasTold = "What the reviewer was told"
     const val openTaskSession = "Open task session"
     const val confirmedHeading = "Confirmed done"
     const val sentBackHeading = "Asked for more"
@@ -144,7 +151,7 @@ object OwnerReview {
                 Line("STATUS", review.text("since")?.let(clock)?.let { "$reviewingSincePrefix $it" } ?: underReview, icon = "CLOCK", warn = false),
                 Line("NOTE", if (place == Place.CARD) reviewWillAsk else reviewWillShowHere)))
             "NOT_REVIEWED" -> bar(null, null, listOf(
-                Line("STATUS", notReviewed, icon = "DASH", warn = false),
+                Line("STATUS", if (review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR") "Not reviewed by the coordinator" else notReviewed, icon = "DASH", warn = false),
                 Line("NOTE", notReviewedNote(review.text("notReviewedReason"), review.number("windowSeconds") ?: 0))))
             "RETURNED" -> {
                 val returned = review.obj("returned")
@@ -177,7 +184,11 @@ object OwnerReview {
     private fun recordLines(review: JsonObject, answers: Boolean): List<Line> {
         val record = review.obj("review") ?: return emptyList()
         return buildList {
-            headline(review, record)?.let { add(it) }
+            val raised = answers && review.text("state") == "REVIEWED" && review.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR"
+            if (raised) {
+                add(Line("QUOTE", record.text("judgment").orEmpty()))
+                if (record.objects("needsYou").isEmpty()) add(Line("NOTE", "Nothing else needs your decision."))
+            } else headline(review, record)?.let { add(it) }
             if (answers && record.objects("needsYou").isNotEmpty()) add(Line("ANSWERS", ""))
             listOf(Triple("CHECKED", reviewChecked, "checked"), Triple("NOT_CHECKED", reviewNotChecked, "notChecked"),
                 Triple("LEFT_OPEN", reviewLeftOpen, "leftOpen")).forEach { (row, label, key) ->
@@ -185,7 +196,7 @@ object OwnerReview {
                 if (items.isNotEmpty()) add(Line("ROW", items.joinToString(" · ") { it.text("text").orEmpty() }, row = row, label = label,
                     keys = items.map { it.text("key").orEmpty() }))
             }
-            record.text("judgment")?.takeIf { it.isNotBlank() }?.let { add(Line("QUOTE", it)) }
+            if (!raised) record.text("judgment")?.takeIf { it.isNotBlank() }?.let { add(Line("QUOTE", it)) }
         }
     }
 
@@ -280,9 +291,21 @@ object OwnerReview {
 
     /** The moment as every review surface writes it: "16:00", or "9/10 16:00" on another day — a fixed 24-hour clock in the
      * device's zone (OrbitKit `receiptTime`); null for an instant it cannot read. */
-    fun receiptTime(iso: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String? {
+/** One answer on a `confirmationAnswers` card: the question, what the owner gave — the option's label, or their own words in
+     * quotes — and whether their app never showed the question. */
+    data class ConfirmationAnswer(val question: String, val answer: String, val notShown: Boolean)
+
+    /** The answers a `confirmationAnswers` payload carries; an entry with no question or no answer is left out. */
+    fun confirmationAnswers(card: JsonObject): List<ConfirmationAnswer> = card.objects("answers").mapNotNull { row ->
+        val question = row.text("question") ?: return@mapNotNull null
+        val answer = row.text("choice") ?: row.text("text")?.let { "“$it”" } ?: return@mapNotNull null
+        ConfirmationAnswer(question, answer, row["notShown"] == JsonPrimitive(true))
+    }
+
+        /** The reader's own short clock — the one the transcript's own times use (`ExchangeFold`, web `decisionReceiptTime`) — and the day before it when it was another day. */
+        fun receiptTime(iso: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
         val at = parse(iso)?.atZone(zone) ?: return null
-        val clock = "%02d:%02d".format(at.hour, at.minute)
+        val clock = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).format(at)
         return if (at.toLocalDate() == ZonedDateTime.ofInstant(now, zone).toLocalDate()) clock else "${at.monthValue}/${at.dayOfMonth} $clock"
     }
 

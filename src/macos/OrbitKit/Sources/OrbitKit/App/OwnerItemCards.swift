@@ -803,6 +803,21 @@ public enum PromotionCards {
         }
     }
 
+    /// Why a merge into main asks although Automatic is on (owner decision 2026-11-10): the project
+    /// lands directly on main, Orbit lands its work, and Automatic never merges there by itself. Nil
+    /// unless the candidate is asking (READY) and all three facts are read and say so — a fact not
+    /// loaded draws no line. The press under it opens How it runs (`letAgentPushInstead`).
+    public static func askReason(_ view: ProjectPromotionView?, line: IntegrationLine?,
+                                 deliveryMode: DeliveryMode?, automatic: Bool?) -> String? {
+        guard let view, view.state == .ready, line == .main, deliveryMode == .platform, automatic == true
+        else { return nil }
+        return askReason(RunSettings.mainBranchName(view.upstreamRef))
+    }
+    public static func askReason(_ main: String) -> String {
+        "Asks you because this project lands directly on \(main), where Automatic never merges by itself."
+    }
+    public static let letAgentPushInstead = "Let the agent push instead…"
+
     /// How the conversation's line is drawn: orange only while it waits on the reader, which is
     /// the one state the needs-you bar counts.
     public enum EventTone: Equatable, Sendable { case needsYou, working, blocked, quiet }

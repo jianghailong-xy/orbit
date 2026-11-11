@@ -74,6 +74,9 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
                 }, reopen = if (CardVerb.REOPEN_TASK in card.actions && enabled) ({ confirming = CardVerb.REOPEN_TASK }) else null,
                 recorded = recorded != null)
         }
+        if (card.family == CardFamily.QUESTION && card.source.text("coordinatorFallback") != null) {
+            Text("Not reviewed by the coordinator", style = MaterialTheme.typography.labelMedium)
+        }
         if (card.family == CardFamily.QUESTION && recorded != null) QuestionAnswered(card, recorded)
         if (recorded == null) CardDiscussion.context(card)?.let { context ->
             if (discuss == null) Text("Conversation discussion is not connected yet.", style = MaterialTheme.typography.bodySmall)

@@ -445,11 +445,74 @@ public enum WikiChatLogic {
 
     // MARK: the chats of a space (src/web/src/lib/wikiChat.ts)
 
-    /// Which chat the button opens (`wikiChatToOpen`, contract `chat.list.chats`): the newest holding something that
-    /// needs the owner, else the newest still open, else a new one (`newChat`).
+    /// Which chat the button opens (`wikiChatToOpen`, contract `chat.list.chats`): the first holding something that
+    /// needs the owner, else the open one last spoken in, else a new one (`newChat`).
     public static func toOpen(_ chats: [WikiChatRow]?) -> String {
         let rows = chats ?? []
         return rows.first { $0.needsYou > 0 }?.sessionId ?? rows.first { $0.open }?.sessionId ?? newChat
+    }
+
+    // MARK: open by default and the history (board 45, owner 11-11)
+
+    /// Whether a Wiki page opens with the panel shown (contract `chat.panel.openByDefault`, board 45 ①②): where it is
+    /// the third column (an iPad at a regular width, a Mac) — never a phone's sheet, which would cover the page — on
+    /// every page but Settings, unless the owner hid it with ✕ in this space.
+    public static func opensByDefault(sheet: Bool, settingsOnTop: Bool, hiddenByOwner: Bool) -> Bool {
+        !sheet && !settingsOnTop && !hiddenByOwner
+    }
+
+    /// The third column's width (the web's `wikiChatPanelWidth`, owner 11-11): a third of the width the Wiki has,
+    /// between 400 and 720, as its ideal; dragged between 320 and half of it.
+    public enum Column {
+        public static let min: Double = 320
+        public static let floor: Double = 400
+        public static let cap: Double = 720
+
+        public static func ideal(_ available: Double) -> Double {
+            Swift.min(cap, Swift.max(floor, (available / 3).rounded()))
+        }
+
+        public static func max(_ available: Double) -> Double {
+            Swift.max(min, (available / 2).rounded(.down))
+        }
+    }
+
+    /// The history's two groups (the web's `wikiChatHistoryGroups`, Q4 A): Open — what needs the owner, then what a
+    /// turn runs in, then the rest as served, the one last spoken in first — and Completed, as served.
+    public static func historyGroups(_ rows: [WikiChatRow]) -> (open: [WikiChatRow], completed: [WikiChatRow]) {
+        func rank(_ row: WikiChatRow) -> Int { row.needsYou > 0 ? 0 : row.working ? 1 : 2 }
+        let open = rows.enumerated().filter { !$0.element.completed }
+            .sorted { rank($0.element) != rank($1.element) ? rank($0.element) < rank($1.element) : $0.offset < $1.offset }
+            .map(\.element)
+        return (open, rows.filter(\.completed))
+    }
+
+    /// A history row's second line (the web's `wikiChatHistoryLine`): what it needs from the owner, else that it is
+    /// working, else how long ago it was spoken in.
+    public enum HistoryTone: Equatable, Sendable { case needsYou, working, quiet }
+
+    public static func historyLine(_ row: WikiChatRow, now: Date) -> (tone: HistoryTone, text: String) {
+        if row.needsYou > 0 {
+            return (.needsYou, row.needsYou == 1 ? WikiChatCopy.fabNeedsYouOne
+                        : fill(WikiChatCopy.fabNeedsYouMany, ["n": "\(row.needsYou)"]))
+        }
+        if row.working { return (.working, WikiChatCopy.fabWorking) }
+        return (.quiet, ago(row.lastActiveAt ?? row.updatedAt ?? "", now: now))
+    }
+
+    /// "Just now", "5m ago", "2h ago", "Yesterday", "3d ago", "2w ago" (the web's `wikiChatAgo`).
+    public static func ago(_ iso: String, now: Date) -> String {
+        let parse = ISO8601DateFormatter()
+        parse.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        guard let at = parse.date(from: iso) ?? plain.date(from: iso) else { return "Just now" }
+        let minutes = Int(now.timeIntervalSince(at) / 60)
+        if minutes < 1 { return "Just now" }
+        if minutes < 60 { return "\(minutes)m ago" }
+        if minutes < 24 * 60 { return "\(minutes / 60)h ago" }
+        if minutes < 2 * 24 * 60 { return "Yesterday" }
+        if minutes < 7 * 24 * 60 { return "\(minutes / (24 * 60))d ago" }
+        return "\(minutes / (7 * 24 * 60))w ago"
     }
 
     /// Where the panel says a new chat will run (`wikiChatRunsIn`, design §5.1).

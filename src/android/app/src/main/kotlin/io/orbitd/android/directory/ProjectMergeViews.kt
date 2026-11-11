@@ -47,7 +47,7 @@ import kotlinx.serialization.json.JsonObject
 internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeCard.Shape, landing: LandingLine?, blockedBy: String?, now: Instant,
     onLanding: (() -> Unit)?, roundLanding: String?, mergeJob: JsonObject?, mergeJobDetail: String?, jobCount: Int,
     openLanding: (String) -> Unit, abandon: suspend (String) -> String?, rerunCheck: suspend (String) -> String?,
-    onDetails: (String) -> Unit, onCoordinator: (() -> Unit)?) {
+    onDetails: (String) -> Unit, onCoordinator: (() -> Unit)?, asksReason: String? = null, onLetAgentPush: (() -> Unit)? = null) {
     val view = merge.current
     // A merge job the server judged timed out turns the WHOLE card amber, as the landing card does (owner 2026-10-19),
     // whichever moment it is in.
@@ -121,7 +121,7 @@ internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeC
                     queuedFoot()
                 }
             }
-            ProjectMergeCard.Shape.ASKING -> view?.let { Asking(it, merge.criteriaMet, tint, now, acting, ::act, merge, onDetails) }
+            ProjectMergeCard.Shape.ASKING -> view?.let { Asking(it, merge.criteriaMet, tint, now, acting, ::act, merge, onDetails, asksReason, onLetAgentPush) }
             // A timed-out merge has no Cancel: the attempt is already over as far as the server is concerned, and its doors are the
             // two the checking card draws (J-T9's re-check, J-T10's end).
             ProjectMergeCard.Shape.MERGING -> view?.let { Merging(it, tint, landing, onLanding, roundLanding, openLanding, timedOut, mergeJobDetail,
@@ -174,7 +174,8 @@ private fun Head(title: String, icon: Int, tint: Color, titleInk: Color, badge: 
 /** A: what would land, the proof it was checked, and the two presses — the full review is Details away. */
 @Composable
 private fun Asking(view: JsonObject, criteriaMet: Pair<Int, Int>?, tint: Color, now: Instant, acting: Boolean,
-    act: (suspend (JsonObject) -> String?) -> Unit, merge: ProjectMergeModel, onDetails: (String) -> Unit) {
+    act: (suspend (JsonObject) -> String?) -> Unit, merge: ProjectMergeModel, onDetails: (String) -> Unit, reason: String?,
+    onLetAgentPush: (() -> Unit)?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Head(PromotionCards.pageTitle(view), R.drawable.ic_merge, tint, MaterialTheme.colorScheme.onSurface, PromotionCards.needsYouBadge)
     Text(PromotionCards.branchLine(view), style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
@@ -193,6 +194,17 @@ private fun Asking(view: JsonObject, criteriaMet: Pair<Int, Int>?, tint: Color, 
         color = if (PromotionCards.checksClean(view)) LocalOrbitColors.current.success else MaterialTheme.colorScheme.onSurface)
     criteriaMet?.let { (met, total) -> PromotionCards.criteriaLine(met, total) }?.let {
         Text(it, Modifier.testTag("project-merge-card:criteria"), style = MaterialTheme.typography.labelMedium, color = muted)
+    }
+    // Why it asks although Automatic is on, and the way to a project that asks nothing (PromotionCards.askReason).
+    reason?.let {
+        Column(Modifier.fillMaxWidth().background(muted.copy(alpha = 0.1f), RoundedCornerShape(8.dp)).padding(start = 10.dp, end = 10.dp, top = 8.dp)
+            .testTag("project-merge-card:reason")) {
+            Text(it, style = MaterialTheme.typography.labelMedium, color = muted)
+            onLetAgentPush?.let { press ->
+                TextButton(onClick = press, contentPadding = PaddingValues(0.dp), modifier = Modifier.testTag("project-merge-card:let-agent-push")) {
+                    Text(PromotionCards.letAgentPushInstead, fontWeight = FontWeight.SemiBold) }
+            }
+        }
     }
     Row(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = { act(merge::confirm) }, enabled = !acting && PromotionCards.confirmable(view),

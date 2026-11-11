@@ -279,7 +279,8 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// The thirteenth is `integration`, the read of the queue itself: the generations, why each job
 	// waits or stopped, and each candidate's newest check and merge. It is what replaces a
 	// coordinator querying the production database, and it writes nothing.
-	if len(specs) != 13 {
+	// K7 adds request-promotion: one durable request, consumed by one candidate.
+	if len(specs) != 14 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]

@@ -929,6 +929,7 @@ final class AppModel {
         linkCards?.removeAll()
         linkCards = nil
         managedRunner?.reset()
+        newAccount = nil
         #if os(iOS)
         disablePush()   // reads the access token, so before the store is cleared below
         #endif
@@ -2027,6 +2028,27 @@ final class AppModel {
         case .machines?:        selectedSection = .runners
         case .workspace?, nil:  break
         }
+    }
+
+    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
+
+    /// Whether this account has never had a session: its Open and Completed lists, one row each, both
+    /// answered empty (board 03, rule 1; the web's `useNewAccount`). Nil until read, and false after a
+    /// read that failed. Kept for this run of the app only: nothing is stored to remember it.
+    private(set) var newAccount: Bool?
+
+    /// Read it again: the pages that can wear the welcome card ask as they appear, as the web's query
+    /// does on mount, so the card goes once a first session exists anywhere.
+    func readNewAccount() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        let open = try? await api.sessionRowCount(view: .open)
+        // A row in Open already says it: Completed is asked only when Open is empty.
+        var completed: Int?
+        if open == 0 { completed = try? await api.sessionRowCount(view: .completed) }
+        let answer = Welcome.isNewAccount(openRows: open, completedRows: completed)
+        guard generation == apiGeneration, self.api === api else { return }
+        newAccount = answer
     }
 
     // MARK: a machine with no workspace (board rules 1–12)
@@ -3332,7 +3354,12 @@ final class AppModel {
         agents?.applyMovedSession(id, folderID: folderID)
     }
 
-    // MARK: moving a session to another workspace (iOS — docs/session-folders-move-design.md §4, §5)
+    #endif
+
+    // MARK: moving a session to another workspace (docs/session-folders-move-design.md §4, §5)
+    //
+    // The Move panel is iOS's; reading the targets and moving are both platforms', for the project
+    // page's Change (docs/mocks/coordinator-move-workspace/04-change).
 
     /// What the Move panel's second group lists and its confirmation says (`GET /sessions/:id/
     /// move-targets`): each other workspace with whether the session can go there and why not, and
@@ -3342,6 +3369,7 @@ final class AppModel {
         return try await api.sessionMoveTargets(id)
     }
 
+    #if os(iOS)
     /// New Folder… on a workspace's page in the Move panel: a folder in the workspace the session is
     /// about to move to, which the confirmation then files it in. Throws the server's refusal — a name
     /// that workspace already has is a 409 — for the page to put into words.
@@ -3351,6 +3379,8 @@ final class AppModel {
         if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
         return folder
     }
+
+    #endif
 
     /// Move a session to another workspace, filed in one of its folders or in none — the
     /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
@@ -3375,7 +3405,9 @@ final class AppModel {
         defer { Task { await reloadSessionLists() } }
         switch outcome {
         case .moved:
+            #if os(iOS)
             patchSessionWorkspace(id, to: target, folder: folderID)
+            #endif
             showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
                       tone: .info, icon: "folder")
             return nil
@@ -3384,6 +3416,7 @@ final class AppModel {
         }
     }
 
+    #if os(iOS)
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`
     /// writes a folder: the Open snapshot — whose agent filter is what takes the row out of the
     /// workspace's Open list — the pane's own Completed rows, and the detail cache.

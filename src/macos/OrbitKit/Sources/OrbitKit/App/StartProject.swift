@@ -897,6 +897,12 @@ public struct StartSettingsDraft: Equatable, Sendable {
                                                 hasMergeCheck: hasMergeCheck, main: main)
     }
 
+    /// The merge check's hint for the delivery chosen: while the agent pushes, it runs the check
+    /// before it pushes, and Orbit runs none.
+    public var mergeCheckHint: String {
+        agentPushes ? RunSettings.mergeCheckHintAgentPush(main) : RunSettings.mergeCheckHint(main)
+    }
+
     /// The line under Delivery: why the agent may not push here, or what the chosen way means.
     public var deliveryHint: String {
         RunSettings.deliveryHint(line: line, mode: deliveryMode, main: main)
@@ -993,8 +999,20 @@ public enum RunSettings {
         "The agent doesn’t push to \(main): Orbit lands its branch once the work is accepted."
     }
     public static func deliveryAgentPushHint(_ main: String = defaultMainBranch) -> String {
-        "The agent pushes to \(main) itself, and Orbit checks the commits are there."
+        "No merge card. The agent pushes to \(main) itself, and Orbit records each commit once it sees it there."
     }
+    /// What How it runs asks before the agent takes over a project with a merge into main still live
+    /// (owner decision 2026-11-10): the switch changes what later tasks do, and the waiting card
+    /// stays. Web's `runAgentPushConfirm*` / `RUN_AGENT_PUSH_*`.
+    public static func agentPushConfirmTitle(_ main: String = defaultMainBranch) -> String {
+        "Let the agent push to \(main)?"
+    }
+    public static func agentPushConfirmBody(_ main: String = defaultMainBranch) -> String {
+        "Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing into "
+            + "\(main). Merges already waiting for you stay until you answer them."
+    }
+    public static let agentPushConfirm = "Let the agent push"
+    public static let agentPushCancel = "Cancel"
     /// Why the agent may not push here: the project lands on a project branch, or no line is decided.
     public static func deliveryNeedsMainLine(_ main: String = defaultMainBranch) -> String {
         "The agent can push only on a project that lands directly into \(main). On a project branch, "
@@ -1061,11 +1079,12 @@ public enum RunSettings {
         "The coordinator runs it for you: it decides when each task is done, handles conflicts and "
         + "failed checks, and merges the branch into main once the merge check passes — with a "
         + "receipt you can revert. The criteria and anything irreversible stay yours."
-    /// …and directly into main, where the merging half is the one thing it never does by itself.
+    /// …and directly into main, where the merging half is the one thing it never does by itself —
+    /// and the way to skip that card is Delivery (owner decision 2026-11-10).
     public static let automaticHintMain =
         "The coordinator runs it for you: it decides when each task is done and handles conflicts "
-        + "and failed checks. Merging into main always asks you — a project that lands directly on "
-        + "main never merges by itself. The criteria and anything irreversible stay yours."
+        + "and failed checks. Merging into main always asks you — to skip that card, choose “The agent "
+        + "pushes it” under Delivery. The criteria and anything irreversible stay yours."
     public static let switchOn = "On"
     public static let switchOff = "Off"
     public static let atMost = "At most"
@@ -1076,6 +1095,11 @@ public enum RunSettings {
     public static func mergeCheckHint(_ main: String) -> String {
         "Runs on the combined tree before anything lands — on the project branch and again before "
             + "\(main)."
+    }
+    /// The merge check while the agent pushes its own work: Orbit runs nothing, the agent runs it
+    /// before it pushes (owner decision 2026-11-10).
+    public static func mergeCheckHintAgentPush(_ main: String = defaultMainBranch) -> String {
+        "Run by the agent before it pushes, on its work rebased onto \(main). Orbit doesn’t run it."
     }
     public static let mergeCheckPlaceholder = "No check — work lands once it rebases cleanly"
     /// Said under an empty merge check while Automatic would merge the branch into main unchecked.
@@ -1097,12 +1121,20 @@ public enum RunSettings {
     public static func automaticHint(_ line: IntegrationLine, main: String = defaultMainBranch) -> String {
         if line == .main {
             return "The coordinator runs it for you: it decides when each task is done and handles conflicts "
-                + "and failed checks. Merging into \(main) always asks you — a project that lands directly on "
-                + "\(main) never merges by itself. The criteria and anything irreversible stay yours."
+                + "and failed checks. Merging into \(main) always asks you — to skip that card, choose “The "
+                + "agent pushes it” under Delivery. The criteria and anything irreversible stay yours."
         }
         return "The coordinator runs it for you: it decides when each task is done, handles conflicts and "
             + "failed checks, and merges the branch into \(main) once the merge check passes — with a "
             + "receipt you can revert. The criteria and anything irreversible stay yours."
+    }
+
+    /// The main-line sentence as it read before Delivery, for a server that reports no delivery mode:
+    /// there is no Delivery row to point to.
+    public static func automaticHintMainNoDelivery(_ main: String = defaultMainBranch) -> String {
+        "The coordinator runs it for you: it decides when each task is done and handles conflicts "
+            + "and failed checks. Merging into \(main) always asks you — a project that lands directly on "
+            + "\(main) never merges by itself. The criteria and anything irreversible stay yours."
     }
 
     /// The start card's one sentence under the switch: who decides what, for the line and merge

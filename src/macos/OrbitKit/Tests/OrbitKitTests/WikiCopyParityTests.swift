@@ -111,6 +111,7 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_SECTION_USED", WikiCopy.whereUsed),
             ("WIKI_SECTION_HISTORY", WikiCopy.history),
             ("WIKI_ANCHORS_NOTE", WikiCopy.anchorsNote),
+            ("WIKI_ANCHOR_DEFERRED", WikiCopy.anchorDeferred),
             ("WIKI_NO_USE_YET", WikiCopy.noUseYet),
             ("WIKI_ACTION_EDIT", WikiCopy.edit),
             ("WIKI_ACTION_SUPERSEDE", WikiCopy.supersede),
@@ -356,12 +357,12 @@ final class WikiCopyParityTests: XCTestCase {
                        "the Wiki follows the work: Projects, Tasks, then Wiki")
     }
 
-    /// The head's buttons, in the web's order: Contents, Activity, Settings (then New entry, which the native
-    /// bar has none of) — the bar's own order (design §12.3.1).
+    /// The head's buttons, in the web's order: Contents, Activity, Settings — the bar's own order (design §12.3.1).
+    /// The web's New entry left with board 45 (owner 11-11); the native bar never had one.
     func testTheHeadsButtonsAreTheWebsInItsOrder() throws {
         let page = try source(Self.page)
         let actions = try slice(page, from: "<div className=\"wk-actions\">", to: "</div>")
-        assertOrder(actions, ["<WikiContentsButton />", "<WikiActivityButton", "<WikiSettingsButton", "<WikiNewEntryButton"],
+        assertOrder(actions, ["<WikiContentsButton />", "<WikiActivityButton", "<WikiSettingsButton"],
                     "the head's buttons")
         let activity = try source(Self.activity)
         assertSays(activity, "icon={<HistoryOutlined />}", in: Self.activity)

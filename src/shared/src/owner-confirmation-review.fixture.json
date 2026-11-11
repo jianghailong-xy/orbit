@@ -425,7 +425,7 @@
         "sha": null,
         "shaStruck": false,
         "lines": [
-          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed by the coordinator", "warn": false },
           { "kind": "NOTE", "text": "No answer within 2 h. Only the agent that did the work has checked this." }
         ],
         "folded": [],
@@ -515,7 +515,7 @@
         "sha": null,
         "shaStruck": false,
         "lines": [
-          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed by the coordinator", "warn": false },
           { "kind": "NOTE", "text": "This project’s coordinator is paused. Only the agent that did the work has checked this." }
         ],
         "folded": [],
@@ -545,7 +545,7 @@
         "sha": null,
         "shaStruck": false,
         "lines": [
-          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed by the coordinator", "warn": false },
           { "kind": "NOTE", "text": "Automatic was switched off for this project. Only the agent that did the work has checked this." }
         ],
         "folded": [],
@@ -575,7 +575,7 @@
         "sha": null,
         "shaStruck": false,
         "lines": [
-          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed by the coordinator", "warn": false },
           { "kind": "NOTE", "text": "This project has no coordinator conversation. Only the agent that did the work has checked this." }
         ],
         "folded": [],
@@ -832,6 +832,122 @@
         ],
         "folded": [],
         "reopen": true
+      }
+    },
+    {
+      "case": "coordinator raised conclusion before points and evidence",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": {
+          "kind": "PROJECT_COORDINATOR",
+          "sessionId": "coordinator",
+          "title": "Coordinator"
+        },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": {
+          "kind": "NOTHING_NEEDS_YOU",
+          "notChecked": 1
+        },
+        "review": {
+          "recordId": "rec1",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": "59d98153ef85c565646fede291f66f61940573c7",
+          "judgment": "OK to confirm. Merge after JS runs on CI.",
+          "checked": [
+            {
+              "key": "c1",
+              "text": "Criteria 1–6",
+              "evidenceRefs": [
+                "git show 59d9815 --stat"
+              ]
+            },
+            {
+              "key": "c2",
+              "text": "PG 2298/2298",
+              "evidenceRefs": [
+                "https://github.com/o/r/actions/runs/36973057413"
+              ]
+            }
+          ],
+          "notChecked": [
+            {
+              "key": "x1",
+              "text": "JS tests never ran on CI",
+              "whyNotProven": "The CI run predates the web change.",
+              "coordinatorChecked": "Ran the card's own test file locally."
+            }
+          ],
+          "needsYou": [],
+          "leftOpen": [
+            {
+              "key": "o1",
+              "text": "4 optional review items"
+            }
+          ]
+        },
+        "returned": null,
+        "problems": null,
+        "lead": {
+          "conclusion": "OK to confirm. Merge after JS runs on CI.",
+          "points": [],
+          "checks": {
+            "checked": 2,
+            "notChecked": 1,
+            "leftOpen": 1
+          }
+        }
+      },
+      "bar": {
+        "reviewer": "Coordinator",
+        "time": "15:12",
+        "sha": "59d9815",
+        "shaStruck": false,
+        "lines": [
+          {
+            "kind": "QUOTE",
+            "text": "OK to confirm. Merge after JS runs on CI."
+          },
+          {
+            "kind": "NOTE",
+            "text": "Nothing else needs your decision."
+          },
+          {
+            "kind": "ROW",
+            "row": "CHECKED",
+            "label": "Checked",
+            "text": "Criteria 1–6 · PG 2298/2298",
+            "keys": [
+              "c1",
+              "c2"
+            ]
+          },
+          {
+            "kind": "ROW",
+            "row": "NOT_CHECKED",
+            "label": "Not checked",
+            "text": "JS tests never ran on CI",
+            "keys": [
+              "x1"
+            ]
+          },
+          {
+            "kind": "ROW",
+            "row": "LEFT_OPEN",
+            "label": "Left open",
+            "text": "4 optional review items",
+            "keys": [
+              "o1"
+            ]
+          }
+        ],
+        "folded": [],
+        "reopen": false
       }
     }
   ],

@@ -72,6 +72,9 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// started itself included) clears it. The composer decides whether to offer it
     /// (`ComposerLogic.offeredPromptSuggestion`).
     public var promptSuggestion: String?
+    /// Every `turn_end` in the window: where the turns the window's messages opened stopped working
+    /// (`TurnHead.lines`).
+    public var turnEnds: [TurnEndMark] = []
     public init() {}
 
     /// Every server turn the tail draws — accepted, queued or steering — which is what a listing of
@@ -81,7 +84,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion, turnEnds }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -99,6 +102,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         subagentItems = (try? c.decodeIfPresent([String: [TranscriptItem]].self, forKey: .subagentItems)) ?? [:]
         taskProgress = (try? c.decodeIfPresent([String: TaskProgress].self, forKey: .taskProgress)) ?? [:]
         promptSuggestion = (try? c.decodeIfPresent(String.self, forKey: .promptSuggestion)) ?? nil
+        turnEnds = (try? c.decodeIfPresent([TurnEndMark].self, forKey: .turnEnds)) ?? []
     }
 }
 
@@ -428,6 +432,7 @@ public struct TranscriptReducer: Sendable, Codable {
         lastStderr = nil
         lastToolFailure = nil
         state.subagentItems = [:]
+        state.turnEnds = []
     }
 
     /// Fold the tail-first initial page (the newest N persisted events) and record whether older
@@ -519,6 +524,7 @@ public struct TranscriptReducer: Sendable, Codable {
         for (id, progress) in sub.state.taskProgress where state.taskProgress[id] == nil {
             state.taskProgress[id] = progress
         }
+        state.turnEnds = sub.state.turnEnds + state.turnEnds
         seen.formUnion(sub.seen)
         // The open-bubble cursors are item INDICES — shift them past the prepended rows, or the
         // next live delta would stream into an old bubble. (`maxSeq` keeps the parent's — the
@@ -584,6 +590,8 @@ public struct TranscriptReducer: Sendable, Codable {
         state.hasMoreOlder = true
         seen = seen.filter { $0 >= newOldest }
         trimSubagentItems(below: newOldest)
+        // A paged-back cut brings its ends back with its messages.
+        state.turnEnds.removeAll { $0.seq < newOldest }
         return true
     }
 
@@ -1226,6 +1234,12 @@ public struct TranscriptReducer: Sendable, Codable {
     /// subtype (`session.go`'s `resultFrom` maps it to interrupted), and the session really is
     /// still alive — so the composer stays on Send, which is the action the marker asks for.
     private mutating func endTurn(_ ev: RunEvent) {
+        // However the turn went, it was working until now: its head row states that span. A live
+        // broadcast with no stored row of its own ends the turn where the window is.
+        let endSeq = ev.seq > 0 && ev.seq != RunEvent.sentinelSeq ? ev.seq : state.maxSeq
+        if !state.turnEnds.contains(where: { $0.seq == endSeq }) {
+            state.turnEnds.append(TurnEndMark(seq: endSeq, ts: ev.ts))
+        }
         flushStreaming()
         clearLiveToolOutputsAtBoundary()
         defer { turnAccountedFor = false }
@@ -1404,6 +1418,14 @@ public struct TranscriptReducer: Sendable, Codable {
         // `ConfirmationReviewTurns.swift`), by the same rule.
         let reviewRequest = ConfirmationReviewRequestCard.parse(ev.payload)
         let reviewReturn = ConfirmationReturnCard.parse(ev.payload)
+        // And the owner's answers handed to the reviewer (`confirmationAnswers`, §7 Q5).
+        let reviewAnswers = ConfirmationAnswersCard.parse(ev.payload)
+        // And five more of Orbit's own turns (`OrbitTurnCards.swift`), by the same rule.
+        let evidenceReview = EvidenceReviewCard.parse(ev.payload)
+        let evidenceSendBack = EvidenceSendBackCard.parse(ev.payload)
+        let runQuestion = RunQuestionCard.parse(ev.payload)
+        let runNotice = RunNoticeCard.parse(ev.payload)
+        let sessionOpening = SessionOpeningCard.parse(ev.payload)
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -1428,6 +1450,12 @@ public struct TranscriptReducer: Sendable, Codable {
         // A steer waiting in the tray that this turn's echo now speaks for: a re-steer replaces it
         // below, and the message it was handed back as is drawn as a turn of its own.
         if let tid = ev.turnId { state.unreadSteers.removeAll { $0.turnId == tid } }
+        // Every message but a steer opens a turn, whose head row is drawn under it (`TurnHead`). A
+        // steer joins the turn already running, and a sub-agent's message is that sub-agent's, which
+        // never gets a `turn_end` of its own.
+        let topLevel = (str(ev, "parentToolUseId") ?? "").isEmpty
+        let opening = topLevel && ev.seq > 0 && ev.seq != RunEvent.sentinelSeq
+            ? TurnOpening(seq: ev.seq, ts: ev.ts) : nil
         // One message, one row. A steer the engine provably never read is handed back and delivered
         // again as the ordinary turn it would have been — the same row, the same turn id — so its
         // second `user` event is that message arriving, not another one: it amends the row already
@@ -1442,6 +1470,7 @@ public struct TranscriptReducer: Sendable, Codable {
         }), case .user(var b) = state.items[i] {
             b.steer = false
             b.withdrawable = false
+            b.opensTurn = opening
             b.delivery = delivery
             b.undelivered = delivery == "failed"
             if str(ev, "text") != nil {
@@ -1473,9 +1502,16 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.sessionReplies = sessionReplies
                 b.reviewRequest = reviewRequest
                 b.reviewReturn = reviewReturn
+                b.reviewAnswers = reviewAnswers
+                b.evidenceReview = evidenceReview
+                b.evidenceSendBack = evidenceSendBack
+                b.runQuestion = runQuestion
+                b.runNotice = runNotice
+                b.sessionOpening = sessionOpening
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
+                b.opensTurn = b.steer ? nil : opening
                 b.withdrawable = withdrawable
                 // Only a runner that reports delivery at all gets to settle this: an older one
                 // says nothing, and reading its silence as "arrived" would clear a bubble the
@@ -1514,7 +1550,10 @@ public struct TranscriptReducer: Sendable, Codable {
                                 externalSender: externalSender,
                                 sessionReplies: sessionReplies,
                                 reviewRequest: reviewRequest,
-                                reviewReturn: reviewReturn)
+                                reviewReturn: reviewReturn,
+                                reviewAnswers: reviewAnswers,
+                                evidenceReview: evidenceReview, evidenceSendBack: evidenceSendBack, runQuestion: runQuestion, runNotice: runNotice, sessionOpening: sessionOpening,
+                                opensTurn: steer ? nil : opening)
         // A steer of the reader's that nothing has read yet is not part of the conversation: it
         // waits in the tray — the row it was drawn as while queued, under the same id — until its
         // delivery settles (`applyUserDelivery`).
@@ -1741,8 +1780,12 @@ public struct TranscriptReducer: Sendable, Codable {
     public mutating func reconcileApprovals(_ approvals: [PendingApproval], knownBefore: Set<String>) {
         let listed = Set(approvals.map(\.id))
         state.pendingApprovals.removeAll { knownBefore.contains($0.id) && !listed.contains($0.id) }
-        for appr in approvals where !state.pendingApprovals.contains(where: { $0.id == appr.id }) {
-            state.pendingApprovals.append(appr)
+        for appr in approvals {
+            if let index = state.pendingApprovals.firstIndex(where: { $0.id == appr.id }) {
+                state.pendingApprovals[index] = appr
+            } else {
+                state.pendingApprovals.append(appr)
+            }
         }
     }
 

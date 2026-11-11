@@ -82,7 +82,19 @@ function statusRow(html: string): string {
 function phoneText(row: string): string {
   return row
     .replace(/<span class="wk-status-review">[\s\S]*?to review<\/span><\/span>/u, '')
+    // The wide line's copy of the maintenance part, which a phone does not show (`.wk-maint-wide`).
+    .replace(/<span class="wk-maint-wide">[\s\S]*?(?=<span class="wk-maint-narrow">)/u, '')
     .replace(/<[^>]+>/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+/** A row's words on a wide screen: the review count kept, the phone's copy of the maintenance part left out. */
+function wideText(row: string): string {
+  return row
+    .replace(/<span class="wk-maint-narrow">[\s\S]*$/u, '')
+    .replace(/<[^>]+>/gu, ' ')
+    .replaceAll('&#x27;', "'")
     .replace(/\s+/gu, ' ')
     .trim();
 }
@@ -94,8 +106,9 @@ describe('Activity’s status line', () => {
       // The dot is drawn, not written: each `● ` of the line is the coloured dot before the look's words, or before
       // the server's reason (P9).
       expect(phoneText(row)).toBe(one.line.replaceAll('● ', ''));
-      // The desktop's line: the review count after the entries, then the same.
+      // The desktop's line: the review count after the entries, then the whole sentences.
       expect(row).toContain(`<b>${shared.space.pendingOps}</b> to review`);
+      expect(wideText(row).endsWith(one.text.replaceAll('● ', ''))).toBe(true);
     });
   }
 
@@ -137,6 +150,17 @@ describe('Activity’s status line', () => {
     const row = statusRow(paint(failing.health));
     expect(row).toMatch(new RegExp(`<a class="wk-maint-link" href="/wiki/${shared.space.slug}/activity\\?run=${failing.health.maintenance.lastRun!.jobId}"[^>]*>View run</a>`, 'u'));
     expect(row).not.toContain('/sessions/');
+  });
+
+  it('draws the repository’s part: the folder grey with its hint, a reason with its dot, Fix in Settings to Settings', () => {
+    const folder = statusRow(paint(shared.cases.find((one) => one.health.repo?.tier === 'folder')!.health));
+    expect(folder).toMatch(new RegExp(`<a class="wk-maint-link wk-maint-link--muted" title="Commit anchors are not checked: ~/work/app is not a git checkout\\." href="/wiki/${shared.space.slug}/settings"[^>]*>Reading the folder, not git</a>`, 'u'));
+    const wrong = statusRow(paint(shared.cases.find((one) => one.health.repo?.tier === 'wrong_repository')!.health));
+    expect(wrong).toContain('<span class="wk-maint wk-maint--error"><span class="wk-maint-dot" aria-hidden="true"></span><b>~/work/app is a clone of github.com/x/y, not this wiki&#x27;s repository</b></span>');
+    expect(wrong).toMatch(new RegExp(`<a class="wk-maint-link" href="/wiki/${shared.space.slug}/settings"[^>]*>Fix in Settings</a>`, 'u'));
+    expect(wrong).toContain('<span class="wk-maint-narrow">');
+    const git = statusRow(paint(shared.cases.find((one) => one.health.repo?.tier === 'git')!.health));
+    expect(git).not.toContain('wk-maint-narrow');
   });
 
   it('counts every active entry the health read says, and says nothing of maintenance before it is in', () => {

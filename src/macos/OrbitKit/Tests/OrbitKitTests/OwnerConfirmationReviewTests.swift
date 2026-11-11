@@ -12,6 +12,28 @@ import XCTest
 /// reports green on exactly the day the thing it watches went away.
 final class OwnerConfirmationReviewTests: XCTestCase {
 
+    func testCoordinatorRaisedConclusionPrecedesDecisionPoints() throws {
+        let raised = try XCTUnwrap(try fixture().bars.first { $0.case.hasPrefix("coordinator raised") })
+        XCTAssertTrue(raised.review.isCoordinatorRaised)
+        let bar = OwnerConfirmations.reviewBar(raised.review, place: .card, clock: Self.utcClock)
+        XCTAssertEqual(bar.lines.first?.kind, .quote)
+        XCTAssertEqual(bar.lines.first?.text, raised.review.review?.judgment)
+        let fallback = try XCTUnwrap(try fixture().bars.first { $0.review.state == .notReviewed && $0.review.reviewer.kind == "PROJECT_COORDINATOR" })
+        XCTAssertEqual(OwnerConfirmations.reviewBar(fallback.review, place: .card, clock: Self.utcClock).lines.first?.text,
+                       "Not reviewed by the coordinator")
+    }
+
+    func testQuestionFallbackSurvivesTheApprovalRead() throws {
+        let info = try JSONDecoder().decode(ApprovalInfo.self, from: Data(
+            #"{"id":"question","toolName":"AskUserQuestion","status":"PENDING","input":{},"coordinatorFallback":"TIMED_OUT"}"#.utf8))
+        let pending = PendingApproval(id: info.id, kind: .question, toolName: info.toolName,
+                                      input: info.input, coordinatorFallback: info.coordinatorFallback)
+        XCTAssertEqual(pending.coordinatorFallback, "TIMED_OUT")
+        let older = try JSONDecoder().decode(ApprovalInfo.self, from: Data(
+            #"{"id":"permission","toolName":"Bash","status":"PENDING","input":{}}"#.utf8))
+        XCTAssertNil(older.coordinatorFallback)
+    }
+
     private static let fixturePath = "src/shared/src/owner-confirmation-review.fixture.json"
 
     private struct Missing: Error, CustomStringConvertible {
@@ -255,5 +277,47 @@ final class OwnerConfirmationReviewTests: XCTestCase {
         XCTAssertEqual(returned?.problems.map(\.text), ["P1-3 twice"])
         XCTAssertEqual(returned?.reviewerTitle, "R")
         XCTAssertNil(ConfirmationReturnCard.parse(.object(["confirmationReturn": .object(["requestId": .string("r1")])])))
+    }
+
+    // MARK: the owner's answers handed to the reviewer (§7 Q5)
+
+    private static let answersPayload: JSONValue = .object([
+        "text": .string("<orbit-confirmation-answers task=\"t1\">…</orbit-confirmation-answers>"),
+        "confirmationAnswers": .object([
+            "decisionId": .string("d1"), "taskId": .string("t1"), "title": .string("Welcome email"),
+            "decidedAt": .string("2026-11-11T05:13:08.000Z"),
+            "answers": .array([
+                .object(["key": .string("n1"), "question": .string("How should it reach main?"),
+                         "choice": .string("Merge to main now"), "text": .null, "notShown": .bool(false)]),
+                .object(["key": .string("n2"), "question": .string("Where should the 429 page link?"),
+                         "choice": .null, "text": .string("The status page"), "notShown": .bool(false)]),
+                .object(["key": .string("n3"), "question": .string("Ship behind a flag?"),
+                         "choice": .string("No"), "text": .null, "notShown": .bool(true)]),
+                .object(["key": .string("n4"), "question": .string("Neither said"), "choice": .null, "text": .null]),
+            ]),
+        ]),
+    ])
+
+    func testTheAnswersTurnParsesAsYouConfirmed() {
+        let card = ConfirmationAnswersCard.parse(Self.answersPayload)
+        XCTAssertEqual(card?.decisionId, "d1")
+        XCTAssertEqual(card?.title, "Welcome email")
+        XCTAssertEqual(card?.decidedAt, "2026-11-11T05:13:08.000Z")
+        // An answer with neither a choice nor words is no answer, and is dropped rather than drawn empty.
+        XCTAssertEqual(card?.answers.map(\.shown), ["Merge to main now", "\u{201C}The status page\u{201D}", "No"])
+        XCTAssertEqual(card?.answers.map(\.notShown), [false, false, true])
+        XCTAssertNil(ConfirmationAnswersCard.parse(.object(["text": .string("hi")])))
+        XCTAssertNil(ConfirmationAnswersCard.parse(.object(["confirmationAnswers": .object([
+            "taskId": .string("t1"), "title": .string("T"), "decidedAt": .string("2026-11-11T05:13:08Z"),
+        ])])), "a card with no answers list is not a card")
+        XCTAssertNil(ConfirmationAnswersCard.parse(.object(["confirmationAnswers": .string("nope")])))
+    }
+
+    func testTheReducerDrawsTheAnswersTurnAsItsCardNotTheReadersWords() {
+        var reducer = TranscriptReducer()
+        reducer.apply(RunEvent(seq: 1, type: .user, turnId: "turn-1", payload: Self.answersPayload))
+        guard case .user(let bubble)? = reducer.state.items.last else { return XCTFail("no user row") }
+        XCTAssertEqual(bubble.reviewAnswers?.answers.count, 3)
+        XCTAssertFalse(SteerDelivery.isReadersOwn(bubble))
     }
 }

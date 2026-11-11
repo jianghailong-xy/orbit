@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -24,8 +25,8 @@ import (
 //
 // The four questions, and what each answers with:
 //
-//   snapshot   every path of origin/main with its size, every document's title and headings, every source
-//              file's symbols, the contracts' shapes, the commits reachable from origin/main, and the
+//   snapshot   every path of origin's default branch with its size, every document's title and headings, every source
+//              file's symbols, the contracts' shapes, the commits reachable from that branch, and the
 //              README's first paragraph. Above `wikiRepoOpInlineBytes` it travels in fragments.
 //   read       the whole text of given paths at a given commit (owner 2026-10-08), one file up to
 //              `wikiRepoOpWholeFileBytes` — a larger one is missing, with `too_large` as the reason — and
@@ -83,6 +84,9 @@ type wikiRepoOpInput struct {
 	To   string `json:"to,omitempty"`
 	// anchors: what to check, at the commit the snapshot was taken at.
 	Anchors []wikiDueAnchor `json:"anchors,omitempty"`
+	// Any kind: a working directory that is not a git checkout may be read as a folder (wiki_repo_folder.go). The server
+	// writes it only for a runner that declares wikiRepoOpFolderCapabilityV1.
+	AllowFolder bool `json:"allowFolder,omitempty"`
 }
 
 // wikiRepoOpReadItem is one thing to read: the whole file at the commit, or — when a limit is named, as an
@@ -107,6 +111,44 @@ type wikiRepoOpOutcome struct {
 	payloadKey string
 	sha        string
 	err        string
+	// Why a failure failed, in the contract's words (`repoOps.reasons`): what the server classifies it by.
+	// Empty for a failure that is none of them, which the server reads as one to try again.
+	reason string
+}
+
+// The reasons a failure names (contract `repoOps.reasons`, docs/wiki-repo-tiers-design.md §6). Their apiserver
+// twins are WIKI_REPO_PREMISE_REASONS and WIKI_REPO_TRANSIENT_REASONS in src/shared/src/wikiRepoOps.ts.
+const (
+	wikiRepoReasonNoWorkDir       = "no_work_dir"
+	wikiRepoReasonNotFound        = "not_found"
+	wikiRepoReasonNotGit          = "not_git"
+	wikiRepoReasonWrongRepository = "wrong_repository"
+	wikiRepoReasonRootMismatch    = "root_mismatch"
+	wikiRepoReasonFetchRefused    = "fetch_refused"
+	wikiRepoReasonFetchFailed     = "fetch_failed"
+)
+
+// wikiRepoOpReasonError is a checkout's failure with the reason it is: errors.As reads it back.
+type wikiRepoOpReasonError struct {
+	reason string
+	err    error
+}
+
+func (e *wikiRepoOpReasonError) Error() string { return e.err.Error() }
+func (e *wikiRepoOpReasonError) Unwrap() error { return e.err }
+
+func wikiRepoOpReasonf(reason, format string, args ...interface{}) error {
+	return &wikiRepoOpReasonError{reason: reason, err: fmt.Errorf(format, args...)}
+}
+
+// wikiRepoOpFailedWith is a failed outcome that says why in words and, when the error names one, by its reason.
+func wikiRepoOpFailedWith(err error) wikiRepoOpOutcome {
+	outcome := wikiRepoOpFailed(err.Error())
+	var reasoned *wikiRepoOpReasonError
+	if errors.As(err, &reasoned) {
+		outcome.reason = reasoned.reason
+	}
+	return outcome
 }
 
 type wikiRepoOpReadAnswer struct {
@@ -154,12 +196,18 @@ type wikiRepoOpAnchorsAnswer struct {
 // ── the snapshot index ──────────────────────────────────────────────────────────────────────────
 
 // wikiRepoOpIndex is what a snapshot is: everything the server's gates ask of a commit, built from one
-// `ls-tree` and one `cat-file --batch` over origin/main (wiki_plan_repo.go), the reachable commits, and
-// the README's first paragraph. The pipelines read it instead of the repository, so that a gate check is
-// a lookup rather than a round trip per reference.
+// `ls-tree` and one `cat-file --batch` over origin's default branch (wiki_plan_repo.go), the reachable
+// commits, and the README's first paragraph. The pipelines read it instead of the repository, so that a
+// gate check is a lookup rather than a round trip per reference.
 type wikiRepoOpIndex struct {
 	Sha  string `json:"sha"`
 	Date string `json:"date"`
+	// "folder" for a directory that is not a git checkout, whose sha is its tree hash. Absent on git's snapshot, which
+	// is byte for byte what it was before the folder tier (wiki_plan_fixture_test.go): the server reads absent as "git".
+	Source string `json:"source,omitempty"`
+	// On a folder's snapshot of a git checkout that has no origin remote (design §2.1): it is git, but nothing can say
+	// which repository it is, so it is read as a folder. The server words the tier by it.
+	NoOrigin bool `json:"noOrigin,omitempty"`
 	// Every blob of the tree, with its size: `hasPath` answers from this, directories included.
 	Files []wikiRepoOpIndexFile `json:"files"`
 	// Every document: its path, its title and its headings, which `hasDocSection` answers from.
@@ -168,7 +216,7 @@ type wikiRepoOpIndex struct {
 	Symbols map[string][]string `json:"symbols"`
 	// The contracts/ inventory: each file's size and its top-level keys.
 	Contracts []wikiRepoOpIndexContract `json:"contracts"`
-	// Every commit reachable from origin/main, which a commit anchor's reachability answers from.
+	// Every commit reachable from the default branch, which a commit anchor's reachability answers from.
 	Commits []string `json:"commits"`
 	// The README's first paragraph of prose, for a prompt that has to say what the repository is.
 	Readme string `json:"readme"`
@@ -177,6 +225,8 @@ type wikiRepoOpIndex struct {
 type wikiRepoOpIndexFile struct {
 	Path string `json:"path"`
 	Size int64  `json:"size"`
+	// The content's sha256, on a folder's snapshot only.
+	Hash string `json:"hash,omitempty"`
 }
 
 type wikiRepoOpIndexDoc struct {
@@ -209,9 +259,19 @@ func runWikiRepoOp(cmd WikiRepoOpCommand, progress func()) wikiRepoOpOutcome {
 			return wikiRepoOpFailed(fmt.Sprintf("the operation's input could not be read: %v", unmarshalErr))
 		}
 	}
+	if cmd.Kind == "probe" {
+		// The probe only looks (wiki_repo_probe.go): it fetches nothing, so it never goes through the checkout's fetch.
+		return wikiRepoOpProbe(cmd)
+	}
 	root, ref, err := wikiRepoOpCheckout(cmd, input)
 	if err != nil {
-		return wikiRepoOpFailed(err.Error())
+		// A directory that is there but is not a git checkout is read as a folder, when the server allows it.
+		var reasoned *wikiRepoOpReasonError
+		// So is a git checkout with no origin remote, for a space with no repository address: there is nothing to fetch.
+		if input.AllowFolder && (errors.Is(err, errWikiRepoNoOrigin) || errors.As(err, &reasoned) && reasoned.reason == wikiRepoReasonNotGit) {
+			return runWikiRepoOpFolder(cmd, expandTilde(strings.TrimSpace(cmd.WorkDir)), input)
+		}
+		return wikiRepoOpFailedWith(err)
 	}
 	switch cmd.Kind {
 	case "snapshot":
@@ -237,28 +297,44 @@ func wikiRepoOpSucceeded(result map[string]interface{}) wikiRepoOpOutcome {
 
 // wikiRepoOpCheckout is the checkout an operation reads, held to the space's repository before anything
 // is read of it (design §7): the work directory is a git checkout, its origin is the space's repository,
-// and it starts from the space's first commit. The fetch is part of it: a read of a stale origin/main
-// would be an answer about a commit nobody asked about.
+// and it starts from the space's first commit. The fetch is part of it: a read of a stale
+// remote-tracking ref would be an answer about a commit nobody asked about.
 //
 // Except where the operation names its commits. A read or a diff answers about the commits it was given,
 // and a commit is the same text whichever fetch brought it: when the checkout already has every one of
 // them, no fetch could change the answer and none is run — so the reads a job keeps in flight neither
-// queue for the fetch lock nor race another fetch (fetchWikiOriginMain). The first commit is then asked
-// of those commits themselves rather than of origin/main: each must start from it, or it is another
-// repository's and nothing is read. The ref answered is "" — neither kind reads origin/main.
+// queue for the fetch lock nor race another fetch (fetchWikiOriginRef). The first commit is then asked
+// of those commits themselves rather than of the default branch: each must start from it, or it is another
+// repository's and nothing is read. The ref answered is "" — neither kind reads the default branch.
 func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, string, error) {
 	workDir := expandTilde(strings.TrimSpace(cmd.WorkDir))
 	if workDir == "" {
-		return "", "", fmt.Errorf("the operation names no working directory to read the repository in")
+		return "", "", wikiRepoOpReasonf(wikiRepoReasonNoWorkDir, "the operation names no working directory to read the repository in")
+	}
+	if info, statErr := os.Stat(workDir); statErr != nil || !info.IsDir() {
+		if statErr == nil {
+			statErr = errors.New("not a directory")
+		}
+		return "", "", wikiRepoOpReasonf(wikiRepoReasonNotFound, "%s was not found on this machine: %v", workDir, statErr)
 	}
 	root, err := wikiImportGit(workDir, "rev-parse", "--show-toplevel")
 	if err != nil || root == "" {
-		return "", "", fmt.Errorf("%s is not a git checkout: %v", workDir, err)
+		return "", "", wikiRepoOpReasonf(wikiRepoReasonNotGit, "%s is not a git checkout: %v", workDir, err)
+	}
+	origin, _ := wikiImportGit(root, "remote", "get-url", "origin")
+	if strings.TrimSpace(origin) == "" {
+		// No origin remote (design §2.1): no fetch could succeed, so none is tried. A space with an address cannot hold
+		// the checkout to it; one without is read as a folder, when the server allows folders, and as before otherwise.
+		if want := strings.TrimSpace(cmd.RepoURLNorm); want != "" {
+			return "", "", wikiRepoNoOriginError(root, want)
+		}
+		if input.AllowFolder {
+			return "", "", errWikiRepoNoOrigin
+		}
 	}
 	if want := strings.TrimSpace(cmd.RepoURLNorm); want != "" {
-		origin, _ := wikiImportGit(root, "remote", "get-url", "origin")
 		if got := normalizeWikiRepoURL(origin); got != want {
-			return "", "", fmt.Errorf("the checkout %s is a clone of %s, not of the space's repository %s: "+
+			return "", "", wikiRepoOpReasonf(wikiRepoReasonWrongRepository, "the checkout %s is a clone of %s, not of the space's repository %s: "+
 				"nothing was read", root, firstNonEmpty(got, "no origin"), want)
 		}
 	}
@@ -266,32 +342,48 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, s
 	if local := wikiRepoOpLocalCommits(root, cmd.Kind, input); len(local) > 0 {
 		for _, sha := range local {
 			if first != "" && !wikiRepoOpStartsFrom(root, sha, first) {
-				return "", "", fmt.Errorf("the commit %s in the checkout %s does not start from the space's first commit %s: "+
+				return "", "", wikiRepoOpReasonf(wikiRepoReasonRootMismatch, "the commit %s in the checkout %s does not start from the space's first commit %s: "+
 					"it is another repository's, so nothing was read", sha, root, first)
 			}
 		}
 		return root, "", nil
 	}
 	// A failure here is read in the job's error: it says which operation, in which checkout, and what git said.
-	if err := fetchWikiOriginMain(root); err != nil {
-		return "", "", fmt.Errorf("the %s operation could not fetch origin main into the checkout %s, so nothing was read: %v",
+	trackingRef, err := fetchWikiOriginRef(root)
+	if err != nil {
+		// The credential refused is the owner's to fix; anything else of the fetch's is the network's, worth another try.
+		reason := wikiRepoReasonFetchFailed
+		if errors.Is(err, errGitAuthFailed) {
+			reason = wikiRepoReasonFetchRefused
+		}
+		return "", "", wikiRepoOpReasonf(reason, "the %s operation could not fetch origin's default branch into the checkout %s, so nothing was read: %v",
 			cmd.Kind, root, err)
 	}
-	out, code, stderr, err := wikiAnchorGit(root, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
+	out, code, stderr, err := wikiAnchorGit(root, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", trackingRef+"^{commit}")
 	ref := strings.TrimSpace(string(out))
 	if err != nil || code != 0 || !wikiCommitSha.MatchString(ref) {
-		return "", "", fmt.Errorf("the %s operation found no commit at origin/main in the checkout %s after the fetch, so "+
-			"nothing was read: %s", cmd.Kind, root, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
+		return "", "", fmt.Errorf("the %s operation found no commit at %s in the checkout %s after the fetch, so "+
+			"nothing was read: %s", cmd.Kind, trackingRef, root, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
 	}
 	if first != "" && !wikiRepoOpStartsFrom(root, ref, first) {
-		return "", "", fmt.Errorf("the checkout %s does not start from the space's first commit %s: "+
+		return "", "", wikiRepoOpReasonf(wikiRepoReasonRootMismatch, "the checkout %s does not start from the space's first commit %s: "+
 			"it is another repository behind the same URL, so nothing was read", root, first)
 	}
 	return root, ref, nil
 }
 
+// errWikiRepoNoOrigin is a checkout with no origin remote, for a space with no repository address, where the server allows
+// folders: runWikiRepoOp reads it as one. It never leaves this runner.
+var errWikiRepoNoOrigin = errors.New("the checkout has no origin remote")
+
+// wikiRepoNoOriginError is a checkout with no origin remote, for a space whose repository is want: wrong_repository, since
+// nothing proves it is that repository. The probe says the same.
+func wikiRepoNoOriginError(root, want string) error {
+	return wikiRepoOpReasonf(wikiRepoReasonWrongRepository, "%s has no origin remote, so it cannot be checked against %s", root, want)
+}
+
 // wikiRepoOpLocalCommits is the commits a read or a diff names, when the checkout already has every one of
-// them; nil otherwise, and always for a snapshot or anchors, which ask about origin/main as it is now.
+// them; nil otherwise, and always for a snapshot or anchors, which ask about the default branch as it is now.
 func wikiRepoOpLocalCommits(root, kind string, input wikiRepoOpInput) []string {
 	var named []string
 	switch kind {
@@ -362,7 +454,12 @@ func wikiRepoOpSnapshot(cmd WikiRepoOpCommand, root, ref string, input wikiRepoO
 	if err != nil {
 		return wikiRepoOpFailed(err.Error())
 	}
-	index := wikiRepoOpIndex{Sha: ref, Date: repo.date, Commits: commits, Readme: wikiMaintainAbout(root, ref)}
+	return wikiRepoOpIndexOutcome(wikiRepoOpSnapshotIndex(repo, commits, wikiMaintainAbout(root, ref)))
+}
+
+// wikiRepoOpSnapshotIndex is the index of one tree as a snapshot carries it, git's or a folder's.
+func wikiRepoOpSnapshotIndex(repo *wikiPlanRepo, commits []string, readme string) wikiRepoOpIndex {
+	index := wikiRepoOpIndex{Sha: repo.sha, Date: repo.date, Commits: commits, Readme: readme}
 	for _, file := range repo.files {
 		index.Files = append(index.Files, wikiRepoOpIndexFile{Path: file, Size: repo.sizes[file]})
 	}
@@ -397,6 +494,12 @@ func wikiRepoOpSnapshot(cmd WikiRepoOpCommand, root, ref string, input wikiRepoO
 		}
 		index.Contracts = append(index.Contracts, entry)
 	}
+	return index
+}
+
+// wikiRepoOpIndexOutcome is a snapshot's answer: the index inside the result, or as a payload to upload in fragments.
+func wikiRepoOpIndexOutcome(index wikiRepoOpIndex) wikiRepoOpOutcome {
+	ref := index.Sha
 	payload, err := json.Marshal(index)
 	if err != nil {
 		return wikiRepoOpFailed(fmt.Sprintf("the snapshot could not be written: %v", err))
@@ -418,7 +521,7 @@ func wikiRepoOpSnapshot(cmd WikiRepoOpCommand, root, ref string, input wikiRepoO
 	return outcome
 }
 
-// wikiRepoOpReachable is every commit origin/main reaches, newest first: what a commit anchor's
+// wikiRepoOpReachable is every commit the default branch reaches, newest first: what a commit anchor's
 // reachability is a membership test in, without asking git again per anchor.
 func wikiRepoOpReachable(root, ref string) ([]string, error) {
 	out, code, stderr, err := wikiAnchorGit(root, wikiRepoOpGitTimeout, "rev-list", ref)
@@ -445,13 +548,18 @@ var (
 	wikiMaintainEmphasis = regexp.MustCompile("[*_`]{1,3}")
 )
 
-// wikiMaintainAbout is a sentence or two of what the repository is: the first paragraph of its README on
-// origin/main that says something, markup taken out. Empty when there is none.
+// wikiMaintainAbout is a sentence or two of what the repository is: the first paragraph of its README at
+// the ref the snapshot read that says something, markup taken out. Empty when there is none.
 func wikiMaintainAbout(root, ref string) string {
 	readme, err := wikiImportGit(root, "show", ref+":README.md")
 	if err != nil {
 		return ""
 	}
+	return wikiMaintainAboutText(readme)
+}
+
+// wikiMaintainAboutText is wikiMaintainAbout of a README's text.
+func wikiMaintainAboutText(readme string) string {
 	for _, paragraph := range strings.Split(readme, "\n\n") {
 		text := wikiMaintainTag.ReplaceAllString(paragraph, " ")
 		text = wikiMaintainMdLink.ReplaceAllString(text, "$1")
@@ -500,12 +608,17 @@ func wikiRepoOpRead(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	if _, err := wikiImportGit(root, "cat-file", "-e", sha+"^{commit}"); err != nil {
 		return wikiRepoOpFailed(fmt.Sprintf("the checkout has no commit %s to read from", sha))
 	}
+	return wikiRepoOpReadAt(sha, input, func(path string) (string, bool, error) { return wikiRepoOpBlob(root, sha, path) })
+}
+
+// wikiRepoOpReadAt answers a read at sha from blob: a path's text, and whether the tree has it at all.
+func wikiRepoOpReadAt(sha string, input wikiRepoOpInput, blob func(path string) (string, bool, error)) wikiRepoOpOutcome {
 	if len(input.Items) == 0 {
 		return wikiRepoOpFailed("a read names what to read")
 	}
 	answer := wikiRepoOpReadAnswer{Sha: sha, Items: []wikiRepoOpReadPiece{}}
 	for _, item := range input.Items {
-		piece, err := wikiRepoOpReadOne(root, sha, item)
+		piece, err := wikiRepoOpReadOne(blob, item)
 		if err != nil {
 			return wikiRepoOpFailed(err.Error())
 		}
@@ -528,13 +641,13 @@ func wikiRepoOpRead(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	return outcome
 }
 
-func wikiRepoOpReadOne(root, sha string, item wikiRepoOpReadItem) (wikiRepoOpReadPiece, error) {
+func wikiRepoOpReadOne(blob func(path string) (string, bool, error), item wikiRepoOpReadItem) (wikiRepoOpReadPiece, error) {
 	path := wikiAnchorPath(item.Path)
 	piece := wikiRepoOpReadPiece{Path: item.Path, Section: item.Section}
 	if path == "" {
 		return piece, fmt.Errorf("a read item names no path")
 	}
-	text, exists, err := wikiRepoOpBlob(root, sha, path)
+	text, exists, err := blob(path)
 	if err != nil {
 		return piece, err
 	}
@@ -723,7 +836,7 @@ func wikiRepoOpAnchors(root, ref string, input wikiRepoOpInput) wikiRepoOpOutcom
 	sha := strings.ToLower(strings.TrimSpace(input.Sha))
 	if sha != "" && wikiCommitSha.MatchString(sha) {
 		// A named commit is the one to check against, when this checkout has it: the snapshot's commit is
-		// what the entry's anchors were written against, and origin/main may have moved since.
+		// what the entry's anchors were written against, and the default branch may have moved since.
 		if _, err := wikiImportGit(root, "cat-file", "-e", sha+"^{commit}"); err == nil {
 			ref = sha
 		}
@@ -802,6 +915,7 @@ func runWikiRepoOpAndReport(ctx context.Context, t *Transport, cmd WikiRepoOpCom
 		State:           outcome.state,
 		Result:          outcome.result,
 		Error:           outcome.err,
+		Reason:          outcome.reason,
 	}
 	if outcome.state == "succeeded" && outcome.payload != "" {
 		fragments := wikiRepoOpFragments(outcome.payload)

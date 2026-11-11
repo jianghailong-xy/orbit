@@ -1,14 +1,17 @@
 import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DeliveryMode, IntegrationLine, ProjectIntegrationView, ProjectPauseState } from '@orbit/shared';
+import type { DeliveryMode, IntegrationLine, ProjectIntegrationView, ProjectPauseState, PromotionState } from '@orbit/shared';
 import { api } from '../api';
 import {
   DEFAULT_MAIN_BRANCH,
+  RUN_AGENT_PUSH_CANCEL,
+  RUN_AGENT_PUSH_CONFIRM,
   RUN_APPLIES_FROM_NEXT_TASK,
   RUN_AT_MOST,
   RUN_AUTOMATIC,
   RUN_DELIVERY,
   RUN_DELIVERY_AGENT_PUSH,
+  RUN_DELIVERY_ANCHOR,
   RUN_DELIVERY_PLATFORM,
   RUN_EXECUTION,
   RUN_ESCALATE_AFTER,
@@ -32,8 +35,11 @@ import {
   START_HOW_IT_RUNS,
   mainBranchName,
   mainBranchRef,
+  runAgentPushConfirmBody,
+  runAgentPushConfirmTitle,
   runAutomaticHint,
   runAutomaticHintAgentPush,
+  runAutomaticHintMainNoDelivery,
   runDeliveryAgentPushHint,
   runDeliveryNeedsMainLine,
   runDeliveryPlatformHint,
@@ -44,19 +50,22 @@ import {
   runMainBranchLocked,
   runMainBranchRemembers,
   runMergeCheckHint,
+  runMergeCheckHintAgentPush,
   runMergeCheckMissing,
   runNoMergeCheckWarning,
   runPauseHint,
   runPausedSince,
+  revealRunDelivery,
   runTasksAtATime,
   shortBranch,
 } from '../lib/projectStart';
-import { projectIntegrationQuery } from '../lib/queries';
+import { projectIntegrationQuery, projectPromotionQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 import { MainBranchSelect } from './MainBranchSelect';
 import { START_MAX_CONCURRENT_TASKS } from './StartProjectCard';
 import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
+import { useConfirm } from './ui/ConfirmDialog';
 import { Input } from './ui/Input';
 import { NumberInput } from './ui/NumberInput';
 import { Radio, RadioGroup } from './ui/Radio';
@@ -105,6 +114,10 @@ const ESCALATION_CHOICES: ReadonlyArray<{ seconds: number; label: string }> = [
   { seconds: 28800, label: '8 hours' },
   { seconds: 86400, label: '24 hours' },
 ];
+
+/** A merge into main the owner may still be asked, or has answered and is under way: what switching
+ *  to the agent's way leaves standing, and so the one case the switch asks first. */
+const LIVE_PROMOTION_STATES: readonly PromotionState[] = ['CHECKING', 'READY', 'CONFIRMED', 'RECHECKING'];
 
 /** The window in words, including a window nobody offered. */
 function escalationLabel(seconds: number): string {
@@ -264,6 +277,13 @@ export function ProjectRunSettings({
   // The same read the integration row above makes, by the same key: one request for both.
   const integration = useQuery({ ...projectIntegrationQuery(projectId), enabled: Boolean(projectId) });
   const view = integration.data ?? null;
+  // The merge on offer, read only where the Delivery row is drawn: switching to the agent's way while
+  // one is live asks first (owner decision 2026-11-10). Same key as the card's own read.
+  const promotion = useQuery({
+    ...projectPromotionQuery(projectId),
+    enabled: Boolean(projectId) && view?.deliveryMode !== undefined,
+  });
+  const [confirm, confirmation] = useConfirm();
 
   // The reader's changes, over what is stored. A background refetch that lands mid-edit must not
   // fight the typing, but must not leave the reader editing settings from before somebody else
@@ -272,6 +292,12 @@ export function ProjectRunSettings({
   const [edits, setEdits] = useState<Partial<RunSettingsDraft>>({});
   const storedKey = view ? JSON.stringify(storedDraft(view, project)) : null;
   useEffect(() => setEdits((current) => (Object.keys(current).length > 0 ? {} : current)), [storedKey]);
+  // Arrived from the merge card's "Let the agent push instead…" on another page: once the block is
+  // drawn, the Delivery row is brought into view.
+  const drawn = view !== null;
+  useEffect(() => {
+    if (drawn && window.location.hash === `#${RUN_DELIVERY_ANCHOR}`) revealRunDelivery();
+  }, [drawn]);
 
   const reread = () => qc.invalidateQueries({ queryKey: ['project', projectId] });
   const save = useMutation({
@@ -329,6 +355,22 @@ export function ProjectRunSettings({
   const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;
   const repository = view.repository || null;
   const delivery = draftDelivery(draft);
+  // Moving a project Orbit lands for to the agent's way, while a merge into main is live, asks first:
+  // the waiting card stays, and the reader is told so. Cancel leaves the choice where it was.
+  const chooseDelivery = async (deliveryMode: DeliveryMode) => {
+    const live = promotion.data != null && LIVE_PROMOTION_STATES.includes(promotion.data.state);
+    if (deliveryMode === 'AGENT_PUSH' && view.deliveryMode === 'PLATFORM' && live) {
+      const confirmed = await confirm({
+        title: runAgentPushConfirmTitle(main),
+        description: runAgentPushConfirmBody(main),
+        confirmText: RUN_AGENT_PUSH_CONFIRM,
+        cancelText: RUN_AGENT_PUSH_CANCEL,
+        onConfirm: () => undefined,
+      });
+      if (!confirmed) return;
+    }
+    set({ deliveryMode });
+  };
 
   return (
     <section className="project-open-items project-run-settings" aria-label={START_HOW_IT_RUNS}>
@@ -393,6 +435,33 @@ export function ProjectRunSettings({
             </div>
           </div>
 
+          {/* How the work reaches main (§10.5 O-L1): a choice only a main line has, and one that does not
+              lock. A server that predates it reports no mode, and draws no row. */}
+          {view.deliveryMode !== undefined ? (
+            <div className="project-integration-setting" id={RUN_DELIVERY_ANCHOR} tabIndex={-1}>
+              <div className="project-integration-setting-label">{RUN_DELIVERY}</div>
+              <div>
+                <RadioGroup<DeliveryMode>
+                  className="project-run-lines project-run-delivery"
+                  aria-label={RUN_DELIVERY}
+                  value={delivery}
+                  onValueChange={(deliveryMode) => void chooseDelivery(deliveryMode)}
+                >
+                  <Radio value="PLATFORM">
+                    <b>{RUN_DELIVERY_PLATFORM}</b>
+                    <div className="project-integration-setting-hint">{runDeliveryPlatformHint(main)}</div>
+                  </Radio>
+                  <Radio value="AGENT_PUSH" disabled={draft.line !== 'MAIN'}>
+                    <b>{RUN_DELIVERY_AGENT_PUSH}</b>
+                    <div className="project-integration-setting-hint">
+                      {draft.line === 'MAIN' ? runDeliveryAgentPushHint(main) : runDeliveryNeedsMainLine(main)}
+                    </div>
+                  </Radio>
+                </RadioGroup>
+              </div>
+            </div>
+          ) : null}
+
           {/* Which branch "main" is for this project: where its tasks start and its work ends up. It
               locks with the line — both are what landed work stands on — so once they lock, the
               sentence saying why sits under the second of the two. A project with no repository has
@@ -417,33 +486,6 @@ export function ProjectRunSettings({
             </div>
           ) : null}
 
-          {/* How the work reaches main (§10.5 O-L1): a choice only a main line has, and one that does not
-              lock. A server that predates it reports no mode, and draws no row. */}
-          {view.deliveryMode !== undefined ? (
-            <div className="project-integration-setting">
-              <div className="project-integration-setting-label">{RUN_DELIVERY}</div>
-              <div>
-                <RadioGroup<DeliveryMode>
-                  className="project-run-lines project-run-delivery"
-                  aria-label={RUN_DELIVERY}
-                  value={delivery}
-                  onValueChange={(deliveryMode) => set({ deliveryMode })}
-                >
-                  <Radio value="PLATFORM">
-                    <b>{RUN_DELIVERY_PLATFORM}</b>
-                    <div className="project-integration-setting-hint">{runDeliveryPlatformHint(main)}</div>
-                  </Radio>
-                  <Radio value="AGENT_PUSH" disabled={draft.line !== 'MAIN'}>
-                    <b>{RUN_DELIVERY_AGENT_PUSH}</b>
-                    <div className="project-integration-setting-hint">
-                      {draft.line === 'MAIN' ? runDeliveryAgentPushHint(main) : runDeliveryNeedsMainLine(main)}
-                    </div>
-                  </Radio>
-                </RadioGroup>
-              </div>
-            </div>
-          ) : null}
-
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
             <div>
@@ -459,6 +501,10 @@ export function ProjectRunSettings({
                   what Automatic does with a merge into main depends on it, and on who delivers the work. */}
               {delivery === 'AGENT_PUSH' ? (
                 <div className="project-integration-setting-hint">{runAutomaticHintAgentPush(main)}</div>
+              ) : view.deliveryMode === undefined && draft.line === 'MAIN' ? (
+                // A server with no Delivery row: there is nowhere to point the reader, so the older
+                // sentence stands.
+                <div className="project-integration-setting-hint">{runAutomaticHintMainNoDelivery(main)}</div>
               ) : (
                 <div className="project-integration-setting-hint">{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH', main)}</div>
               )}
@@ -496,7 +542,12 @@ export function ProjectRunSettings({
                 warning={missingCheck}
                 onChange={(event) => set({ mergeCheckCommand: event.target.value })}
               />
-              <div className="project-integration-setting-hint">{runMergeCheckHint(main)}</div>
+              {/* While the agent pushes, Orbit runs no check: the agent runs it before it pushes. */}
+              {delivery === 'AGENT_PUSH' ? (
+                <div className="project-integration-setting-hint">{runMergeCheckHintAgentPush(main)}</div>
+              ) : (
+                <div className="project-integration-setting-hint">{runMergeCheckHint(main)}</div>
+              )}
               {missingCheck ? <div className="start-card-warn">{runNoMergeCheckWarning(main)}</div> : null}
             </div>
           </div>
@@ -563,6 +614,7 @@ export function ProjectRunSettings({
           description={move.error.message}
         />
       ) : null}
+      {confirmation}
     </section>
   );
 }

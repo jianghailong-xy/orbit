@@ -186,6 +186,9 @@ function read(db: PrismaClient, f: Fixture) {
     source: 'EXPLICIT',
     locked: true,
     startedAt: new Date('2026-09-25T13:00:00.000Z'),
+    landingCheckCommand: null,
+    landingCheckTimeoutSeconds: null,
+    landingCheckCommandAbsentReason: 'FALLS_BACK_TO_MERGE_CHECK',
     mergeCheckCommand: 'npm test',
     mergeCheckCommandAbsentReason: null,
     mergeCheckTimeoutSeconds: 900,
@@ -599,7 +602,7 @@ test('the landing line describes running work before the queue, on real PostgreS
         });
 
       await t.test('(h) while checking, the limit is the check budgets plus the lease', async () => {
-        for (const [label, silent, timedOut] of [['checking', 24, false], ['overdue', 26, true]] as const) {
+        for (const [label, silent, timedOut] of [['checking', 39, false], ['overdue', 41, true]] as const) {
           const f = await fixture(db, `check-${label}`);
           await db.projectCodebase.update({
             where: { id: f.codebaseId },
@@ -609,7 +612,8 @@ test('the landing line describes running work before the queue, on real PostgreS
           await job(db, f, { at: minutesAgo(silent + 2), claimedAt: minutesAgo(silent + 1), state: 'RUNNING',
             taskId, phase: 'CHECK', heartbeatAt: minutesAgo(silent), idempotency: label });
           const only = await onlyJob(db, f);
-          assert.equal(only.limitSeconds, 900 + 600, label);
+          // Combined landing check plus possible K3 baseline attribution, then the lease.
+          assert.equal(only.limitSeconds, 2 * 900 + 600, label);
           assert.equal(only.timedOut, timedOut, label);
         }
       });

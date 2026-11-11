@@ -1005,6 +1005,9 @@ export class ProjectOpenItemService {
       ...(body.upstreamRef != null ? { upstreamRef: body.upstreamRef } : {}),
       automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
+      ...(body.landingCheckCommand !== undefined ? { landingCheckCommand: body.landingCheckCommand } : {}),
+      ...(body.landingCheckTimeoutSeconds !== undefined
+        ? { landingCheckTimeoutSeconds: body.landingCheckTimeoutSeconds } : {}),
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
       // Named or not named, never defaulted: a suggestion of the one-hour default and no suggestion
       // at all read the same on the card — an empty box says "one hour unless set" — so inventing
@@ -2090,7 +2093,7 @@ export class ProjectOpenItemService {
       const newestLanding = await tx.projectIntegrationJob.findFirst({
         where: { taskId, kind: 'LAND_TASK' },
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-        select: { id: true, generation: true, state: true, checks: true, phase: true },
+        select: { id: true, generation: true, state: true, checks: true, baselineRed: true, phase: true },
       });
       if (expectJobId && newestLanding?.id !== expectJobId) {
         throw new ConflictException({

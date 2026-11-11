@@ -743,6 +743,9 @@ struct QuestionCard: View {
     var body: some View {
         ApprovalReviewLayout(title: "A question for you", symbol: "questionmark.circle.fill", tone: .blue,
                              summary: "\(questions.count) question\(questions.count == 1 ? "" : "s")\n\(questions.first?.question ?? "")") {
+            if approval.coordinatorFallback != nil {
+                Text("Not reviewed by the coordinator").font(.orbitLabel).foregroundStyle(.secondary)
+            }
             ForEach(questions) { q in questionBlock(q) }
         } actions: {
             ApprovalActions {
@@ -1384,11 +1387,21 @@ private struct OwnerConfirmationCardView: View {
 
             if let view = console.ownerConfirmation {
                 lead(view)
-                OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
-                                       report: standing.waiting?.report, foldsCriteria: true)
-                // The reviewer's box, between what the agent said and what confirming sets off
-                // (contract §6 H1): where the review stands, and its questions for the owner.
-                if let review = standing.waiting?.review {
+                if let review = standing.waiting?.review,
+                   review.isCoordinatorRaised || (review.state == .notReviewed && review.reviewer.kind == "PROJECT_COORDINATOR") {
+                    OwnerConfirmationReviewBarView(review: review, place: .card, choices: answers(review))
+                }
+                if standing.waiting?.review?.isCoordinatorRaised == true {
+                    DisclosureGroup("Run evidence") {
+                        OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
+                                               report: standing.waiting?.report, foldsCriteria: true)
+                    }
+                } else {
+                    OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
+                                           report: standing.waiting?.report, foldsCriteria: true)
+                }
+                if let review = standing.waiting?.review,
+                   !review.isCoordinatorRaised && !(review.state == .notReviewed && review.reviewer.kind == "PROJECT_COORDINATOR") {
                     OwnerConfirmationReviewBarView(review: review, place: .card, choices: answers(review))
                 }
                 // Right above the buttons: the card is taller than a phone's screen, and this is
@@ -1795,6 +1808,10 @@ private struct OwnerConfirmationReviewBarView: View {
     /// Reopen task, when the task has settled; the bar draws it only where it offers it.
     var reopen: (() -> Void)? = nil
 
+    private var coordinatorFallback: Bool {
+        review.state == .notReviewed && review.reviewer.kind == "PROJECT_COORDINATOR"
+    }
+
     @State private var oldOpen = false
 
     var body: some View {
@@ -1802,8 +1819,19 @@ private struct OwnerConfirmationReviewBarView: View {
         let items = OwnerConfirmations.reviewItemsByKey(review)
         VStack(alignment: .leading, spacing: 6) {
             head(bar)
+            if review.isCoordinatorRaised && place == .card, let record = review.review {
+                ForEach(Array(bar.lines.filter { $0.kind != .row }.enumerated()), id: \.offset) { _, line in
+                    lineView(line, items: items)
+                }
+                DisclosureGroup("\(record.checked.count) checked · \(record.notChecked.count) not checked · \(record.leftOpen.count) left open") {
+                    ForEach(Array(bar.lines.filter { $0.kind == .row }.enumerated()), id: \.offset) { _, line in
+                        lineView(line, items: items)
+                    }
+                }
+            } else {
             ForEach(Array(bar.lines.enumerated()), id: \.offset) { _, line in
                 lineView(line, items: items)
+            }
             }
             if !bar.folded.isEmpty {
                 DisclosureToggle(open: oldOpen, label: OwnerConfirmations.showOldReview) {
@@ -1827,20 +1855,27 @@ private struct OwnerConfirmationReviewBarView: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.05),
+        .background(coordinatorFallback ? Color.orange.opacity(0.12) : Color.primary.opacity(0.05),
                     in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+        .overlay {
+            if coordinatorFallback {
+                RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius).stroke(Color.orange.opacity(0.4))
+            }
+        }
     }
 
     /// `REVIEW · <reviewer> · <time>`, the reviewer's name giving way before the label or the time,
     /// and the commit the record was written for at the right — struck through once out of date.
     private func head(_ bar: ReviewBar) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text("\(OwnerConfirmations.reviewHeading) · ")
+            Text(review.isCoordinatorRaised && place == .card ? "Coordinator" : "\(OwnerConfirmations.reviewHeading) · ")
                 .font(.orbitMonoFine).foregroundStyle(.secondary)
                 .fixedSize()
+            if !(review.isCoordinatorRaised && place == .card) {
             Text(bar.reviewer)
                 .font(.orbitMonoFine).foregroundStyle(.secondary)
                 .lineLimit(1).truncationMode(.tail)
+            }
             if let time = bar.time {
                 Text(" · \(time)")
                     .font(.orbitMonoFine).foregroundStyle(.secondary)
@@ -1867,7 +1902,7 @@ private struct OwnerConfirmationReviewBarView: View {
                 }
                 Text(line.text)
                     .font(.orbitProse.weight(.semibold))
-                    .foregroundStyle(line.warn == true ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.primary))
+                    .foregroundStyle((line.warn == true || coordinatorFallback) ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.primary))
                 Spacer(minLength: 0)
             }
         case .note, .footer:
@@ -1884,7 +1919,7 @@ private struct OwnerConfirmationReviewBarView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .answers:
             if let choices {
-                ReviewAnswerBlocks(questions: OwnerConfirmations.reviewQuestions(review), choices: choices)
+                ReviewAnswerBlocks(questions: OwnerConfirmations.reviewQuestions(review), choices: choices, showFirst: review.isCoordinatorRaised)
             }
         case .row:
             ReviewRowView(line: line, items: (line.keys ?? []).compactMap { items[$0] })
@@ -1961,12 +1996,13 @@ private struct ReviewRowView: View {
 private struct ReviewAnswerBlocks: View {
     let questions: [ConfirmationNeedsYouItem]
     @Binding var choices: [String: ReviewChoice]
+    var showFirst = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(questions.enumerated()), id: \.element.key) { index, item in
                 VStack(alignment: .leading, spacing: 6) {
-                    if index > 0 {
+                    if showFirst || index > 0 {
                         Text(item.text)
                             .font(.orbitProse.bold())
                             .fixedSize(horizontal: false, vertical: true)
@@ -3166,16 +3202,17 @@ struct StartProjectCard: View {
             automaticRow(editable: editable)
             Divider()
             lineRow(editable: editable)
+            // How the work reaches main (§10.5 O-L1, A-Q21), directly under the line it depends on
+            // (owner decision 2026-11-10). A read that does not say — a server that predates it —
+            // offers no choice, and no row.
+            if draft.deliveryMode != nil {
+                Divider()
+                deliveryRow(editable: editable)
+            }
             // A project with no repository has no branch to name, and no row.
             if let upstream = draft.upstream {
                 Divider()
                 mainBranchRow(upstream, editable: editable)
-            }
-            // How the work reaches main (§10.5 O-L1, A-Q21). A read that does not say — a server
-            // that predates it — offers no choice, and no row.
-            if draft.deliveryMode != nil {
-                Divider()
-                deliveryRow(editable: editable)
             }
             Divider()
             mergeCheckRow(editable: editable)
@@ -3422,7 +3459,7 @@ struct StartProjectCard: View {
                     .textInputAutocapitalization(.never)
                     #endif
                     .disabled(!editable)
-                Text(RunSettings.mergeCheckHint(draft.main))
+                Text(draft.mergeCheckHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if !draft.hasMergeCheck {

@@ -1,21 +1,33 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeftOutlined,
+  BranchesOutlined,
+  CheckCircleFilled,
+  ClockCircleOutlined,
+  CloseCircleFilled,
   CloseOutlined,
+  CloudUploadOutlined,
+  CodeOutlined,
+  DownOutlined,
+  DownloadOutlined,
   FileTextOutlined,
+  LoadingOutlined,
   LockOutlined,
   MoreOutlined,
   MessageOutlined,
   ProjectOutlined,
   ReloadOutlined,
+  RightOutlined,
   SafetyCertificateOutlined,
+  UnorderedListOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import type {
   IntegrationJobKind,
   IntegrationTimelineEntry,
+  IntegrationTimelineTrigger,
   ProjectIntegrationLogPage,
   ProjectIntegrationView,
   ProjectPromotionView,
@@ -37,7 +49,6 @@ import {
   landingOutcomeCard,
   landingPushSentence,
   landingRefetchMs,
-  landingSectionState,
   landingTimeoutLine,
   type LandingGates,
   type LandingMenuAction,
@@ -64,11 +75,21 @@ import {
   sessionQuery,
   type LandingLogSelectors,
 } from '../lib/queries';
+import { landingSteps, type LandingStep } from '../lib/landingSteps';
+import { triggerMessage, type TriggerMessage } from '../lib/landingTrigger';
+import {
+  LANDING_SENTENCE_COPY,
+  landingSentence,
+  sentenceFacts,
+  settledSentenceKind,
+  stepsLabel,
+  type SentencePart,
+} from '../lib/landingSentence';
 import { encodeId } from '../lib/idCodec';
 import { projectTaskPath } from '../lib/projectTaskRoute';
 import { RERUN_LANDING_CHECK_REASON, promotionOnPassLine } from '../lib/projectMerge';
 import { mainBranchName } from '../lib/projectStart';
-import { LandingHead, landingClock } from './ProjectPanoramaHeader';
+import { landingClock, landingClockTime } from './ProjectPanoramaHeader';
 import {
   ProjectPromotion,
   ProjectPromotionReceipt,
@@ -597,11 +618,11 @@ function LandingReceiptBlock({ receipt }: { receipt: LandingMergeReceipt }): JSX
 }
 
 /**
- * One settled landing: a message bubble from Orbit (board 01 b) — its words whole (the task's name, or
- * `Merged into main`), and under them the mark that says how it ended, one line and the moment it
- * settled — that opens to its record on a quiet panel under it (board 03 e). A merge into main opens to
- * its receipt first. The record is read when the bubble is opened (or its menu is), once: a settled
- * landing does not move, so it never polls.
+ * One settled landing as a chat turn (owner 2026-11-11, docs/mocks/landings-chat-turns): its attempts on the chat's
+ * steps lines, folded; one plain sentence that says how it ended — the reply; and the turn foot, its ⋯ and the moment it
+ * settled. Pressing the sentence (or the newest steps line) opens the newest attempt's steps, with a merge's receipt first
+ * and a task's two ways out under them. The record is read once — when the turn comes into view, or is opened, or its menu
+ * is — and never again: a settled landing does not move, so it never polls.
  */
 function LandingWindowRow({
   row,
@@ -622,9 +643,10 @@ function LandingWindowRow({
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const [log, setLog] = useState<LandingLogSelectors | null>(null);
+  const [lineRef, seen] = useSeen<HTMLDivElement>();
   const session = useQuery({
     ...sessionQuery(row.sessionId),
-    enabled: row.sessionId != null && (expanded || menuOpen),
+    enabled: row.sessionId != null && (expanded || menuOpen || seen),
     staleTime: Number.POSITIVE_INFINITY,
   });
   const detail = session.data?.id === row.sessionId ? session.data : null;
@@ -633,7 +655,6 @@ function LandingWindowRow({
   const { run, reviewOpen, closeReview } = useLandingActions({
     projectId, landing, promotion: row.promotion, coordinatorId: facts.coordinatorId, onOpenSession, pressPath,
   });
-  const main = mainBranchName(row.promotion?.upstreamRef ?? facts.integration?.upstreamRef);
   const menuRows: LandingMenuItem[] = landing
     ? landingMenuItemList(landing, NO_LANDING_GATES, {
       hasCoordinator: facts.coordinatorId != null,
@@ -655,55 +676,47 @@ function LandingWindowRow({
   const items: MenuItem[] = menuRows.length > 0
     ? landingMenu(menuRows, run)
     : [{ key: 'loading', label: LANDING_PAGE_COPY.LOADING_LANDING, disabled: true }];
-  const mark = row.tone === 'ok' ? '✓' : row.tone === 'merge' ? '⇢' : '◌';
   const key = row.sessionId ?? row.key;
+  const merge = row.tone === 'merge';
+  // The reply: from the landing's own facts once its record is read (or the round's merged record); until then the row's
+  // own words — how it ended, and the task.
+  const sentence: SentencePart[] = merge
+    ? landingSentence(sentenceFacts({ kind: 'MERGED', task: row.title, landing, promotion: row.promotion }))
+    : landing
+      ? landingSentence(sentenceFacts({ kind: settledSentenceKind(landing.settledAs), task: row.title, landing }))
+      : [{ text: `${row.detail} ` }, { text: row.title, strong: true }, { text: '.' }];
   return (
     <div
-      className={`landings-window-entry${expanded ? ' is-open' : ''}${outlined ? ' is-outlined' : ''}`}
+      ref={lineRef}
+      className={`landings-window-entry landings-window-turn${expanded ? ' is-open' : ''}${outlined ? ' is-outlined' : ''}`}
       data-landing-entry={key}
+      data-tone={row.tone}
       onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}
     >
-      {row.tone === 'merge' ? (
-        // A merge into main is an event, not a message: one centred line, as a chat draws what
-        // happened in it (docs/mocks/landings-ui-polish ②).
-        <div className="landings-window-row-line is-event">
-          <button type="button" className="landings-window-event" aria-expanded={expanded} onClick={onToggle}>
-            <span className="landings-window-row-mark is-merge" aria-hidden="true">{mark}</span>
-            <span className="landings-window-event-title">{row.title}</span>
-            <span className="landings-window-row-detail">{` · ${row.detail}`}</span>
-            {row.time ? <span className="landings-window-row-time">{` · ${row.time}`}</span> : null}
-          </button>
-          <LandingMore items={items} open={menuOpen} onOpenChange={setMenuOpen} />
-        </div>
-      ) : (
-      <div className="landings-window-row-line">
-        <button type="button" className="landings-window-row" aria-expanded={expanded} onClick={onToggle}>
-          <span className="landings-window-row-text">{row.title}</span>
-          <span className="landings-window-row-foot">
-            <span className={`landings-window-row-mark is-${row.tone}`} aria-hidden="true">{mark}</span>
-            <span className="landings-window-row-detail">{row.detail}</span>
-            {row.time ? <span className="landings-window-row-time">{row.time}</span> : null}
-          </span>
-        </button>
-        <LandingMore items={items} open={menuOpen} onOpenChange={setMenuOpen} />
-      </div>
-      )}
+      {/* As the chat's turn (owner 2026-11-11, docs/mocks/landings-chat-trigger): what queued it, its steps, then how it
+          ended. */}
+      {landing ? (
+        <LandingSteps
+          landing={landing}
+          now={Date.now()}
+          openLog={log}
+          onOpenLog={setLog}
+          sessionId={landing.sessionId}
+          openLast={expanded}
+          onToggleLast={onToggle}
+          task={row.title}
+          tasks={row.promotion?.taskIds.length ?? null}
+          main={row.promotion ? mainBranchName(row.promotion.upstreamRef) : null}
+          onOpenSession={onOpenSession}
+        />
+      ) : null}
+      <LandingReply parts={sentence} open={expanded} onToggle={onToggle} />
       {expanded ? (
         <div className="landings-window-record">
-          {row.tone === 'merge' ? <LandingReceiptBlock receipt={landingMergeReceipt(row.promotion, landing)} /> : null}
+          {merge ? <LandingReceiptBlock receipt={landingMergeReceipt(row.promotion, landing)} /> : null}
           {refusal ? <div className="landing-page-error" role="alert">{refusal}</div> : null}
           {row.sessionId == null ? null : landing ? (
-            <>
-              <LandingTimeline
-                landing={landing}
-                main={main}
-                now={Date.now()}
-                openLog={log}
-                onOpenLog={setLog}
-                sessionId={row.sessionId}
-              />
-              <LandingEntryLinks landing={landing} run={run} />
-            </>
+            <LandingEntryLinks landing={landing} run={run} />
           ) : (
             <div className="landing-page-note">
               {session.isError ? LANDING_PAGE_COPY.UPDATE_UNAVAILABLE : LANDING_PAGE_COPY.LOADING_LANDING}
@@ -711,9 +724,76 @@ function LandingWindowRow({
           )}
         </div>
       ) : null}
+      <LandingTurnFoot time={row.time} more={<LandingMore items={items} open={menuOpen} onOpenChange={setMenuOpen} />} />
       {reviewOpen && row.promotion ? (
         <LandingReview projectId={projectId} promotion={row.promotion} settled onClose={closeReview} />
       ) : null}
+    </div>
+  );
+}
+
+/** A landing's reply, as the chat draws an assistant's text: the sentence, the task in bold and the line and commit as code.
+ *  Pressing it opens the landing's newest attempt, as its steps line does. */
+function LandingReply({ parts, open, onToggle }: { parts: readonly SentencePart[]; open: boolean; onToggle: () => void }): JSX.Element {
+  return (
+    <div className="chat-msg chat-assistant landings-window-reply" role="button" tabIndex={0} aria-expanded={open}
+      onClick={onToggle}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>
+      <div className="md">
+        <p><SentenceRuns parts={parts} /></p>
+      </div>
+    </div>
+  );
+}
+
+/** What queued an attempt, as the chat draws a message sent into a session: who it came from on the muted line over the
+ *  bubble, what was handed over in it, and when under it. Pressing it opens the conversation it came from. */
+function LandingTrigger({ trigger, message, onOpenSession }: {
+  trigger: IntegrationTimelineTrigger;
+  message: TriggerMessage;
+  onOpenSession: (sessionId: string) => void;
+}): JSX.Element {
+  const open = trigger.sessionId ? () => onOpenSession(trigger.sessionId!) : null;
+  return (
+    <div className="chat-user-wrap landings-window-trigger" data-trigger={trigger.cause}>
+      <div className="chat-user-from">{message.from}</div>
+      <div
+        className={`chat-msg chat-user${open ? ' is-link' : ''}`}
+        {...(open ? {
+          role: 'button', tabIndex: 0, onClick: open,
+          onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+          },
+        } : {})}
+      >
+        <div className="md">
+          <p><SentenceRuns parts={message.parts} /></p>
+        </div>
+      </div>
+      <div className="chat-user-meta landings-window-trigger-meta">
+        <span className="chat-time">{landingClockTime(trigger.at)}</span>
+      </div>
+    </div>
+  );
+}
+
+/** A sentence's runs: plain, the task in bold, a line or a commit as code. */
+function SentenceRuns({ parts }: { parts: readonly SentencePart[] }): JSX.Element {
+  return (
+    <>
+      {parts.map((part, index) => part.strong ? <strong key={index}>{part.text}</strong>
+        : part.code ? <code key={index}>{part.text}</code>
+          : <span key={index}>{part.text}</span>)}
+    </>
+  );
+}
+
+/** A landing turn's foot, as the chat's turn foot: its ⋯ (the landing's menu) and the time. */
+function LandingTurnFoot({ time, more }: { time: string; more: ReactNode }): JSX.Element {
+  return (
+    <div className="chat-turn-divider chat-turn-foot landings-window-foot">
+      {more}
+      {time ? <span className="chat-time">{time}</span> : null}
     </div>
   );
 }
@@ -824,100 +904,142 @@ function LandingWindowCard({
     ? LANDING_PAGE_COPY.OPEN_COORDINATOR
     : action === 'OPEN_TASK' ? LANDING_PAGE_COPY.OPEN_TASK : LANDING_PAGE_COPY.REVIEW_CARD;
 
+  const running = card?.running === true && !settledAt;
+  // A round's word (Merge check, Merge to main) says which of its jobs this is.
+  const task = landing?.subject === 'PROMOTION' && card && !card.rightIsClock
+    ? [card.word, entry.title].filter(Boolean).join(' · ') : entry.title;
+  // The reply: how it ended once it settled; what stopped it while it waits; what it is doing while it runs or queues.
+  const sentence: SentencePart[] = landingSentence(sentenceFacts({
+    kind: outcome ? settledSentenceKind(settledAt ? landing?.settledAs : null)
+      : running || !card ? 'RUNNING'
+        : card.failure || card.stoppedOnFailure || timedOut || waiting ? 'NOT_LANDED' : 'RUNNING',
+    task,
+    landing,
+    reason: card?.failure ?? null,
+    nothingPushed: attempt != null && ['CHECK_FAILED', 'CONFLICT'].includes(attempt.state),
+  }));
+  const started = attempt?.startedAt ? Date.parse(attempt.startedAt) : Number.NaN;
+  // A landing that runs keeps its steps open, as the chat keeps the turn in hand; any other opens with the press.
+  const stepsOpen = expanded || running;
+  const statusHead = outcome ? outcome.title
+    : card ? [card.rightIsClock ? card.word : card.right, waiting ? SESSION_LANDINGS_COPY.WAITING : null].filter(Boolean).join(' · ')
+      : session.isError ? LANDING_PAGE_COPY.UPDATE_UNAVAILABLE
+        : landing ? LANDING_PAGE_COPY.QUEUED : LANDING_PAGE_COPY.LOADING_LANDING;
+  const failedHead = !outcome && card != null && (card.stoppedOnFailure || timedOut);
+
+  // A landing that runs is the chat's turn in hand: its Working for head.
+  const workingHead = running && Number.isFinite(started)
+    ? <div className="chat-turn-head">{`${WINDOW_COPY.WORKING_FOR} ${landingClock(Math.max(0, now - started))}`}</div>
+    : null;
   return (
     <div
-      className={`landings-window-entry is-card${expanded ? ' is-open' : ''}${outlined ? ' is-outlined' : ''}`}
+      className={`landings-window-entry landings-window-turn is-card${stepsOpen ? ' is-open' : ''}${outlined ? ' is-outlined' : ''}`}
       data-landing-entry={sessionId}
       onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}
     >
-      <section
-        className={`landing-status-card landings-window-card${timedOut ? ' is-timed-out' : ''}${settledAt ? ' is-settled' : ''}`}
-        data-state={card?.state ?? outcome?.title ?? ''}
-      >
-        <div className="landings-window-card-top">
-          <button type="button" className="landings-window-card-press" aria-expanded={expanded} onClick={onToggle}>
-            {outcome ? (
-              <LandingHead
-                title={outcome.title}
-                head={{ right: outcome.right, isClock: false, detail: outcome.detail ?? '' }}
-                running={false}
-                timedOut={false}
-                done={outcome.ok}
-              />
-            ) : card ? (
-              <LandingHead
-                title={card.word}
-                head={{ right: card.right, isClock: card.rightIsClock, detail: card.detail }}
-                running={card.running}
-                timedOut={card.timedOut}
-                failed={card.stoppedOnFailure}
-              />
-            ) : (
-              <span className="landing-page-note">
-                {session.isError ? LANDING_PAGE_COPY.UPDATE_UNAVAILABLE
-                  : landing ? LANDING_PAGE_COPY.QUEUED : LANDING_PAGE_COPY.LOADING_LANDING}
-              </span>
-            )}
-            {entry.title ? <span className="landings-window-card-task">{entry.title}</span> : null}
-          </button>
-          <LandingMore items={items} open={menuOpen} onOpenChange={setMenuOpen} />
-        </div>
-        {outcome ? (
-          <>
-            {outcome.tasksHeading ? (
-              <div className="landing-card-block">
-                <div className="landing-card-heading">{outcome.tasksHeading}</div>
-                {outcome.tasks.length > 0 ? (
-                  <ul className="landing-card-tasks">
-                    {outcome.tasks.map((title) => <li key={title}>{title}</li>)}
-                  </ul>
-                ) : null}
-              </div>
-            ) : null}
-            {outcome.checkLine ? <div className="landing-card-ok">{outcome.checkLine}</div> : null}
-            {outcome.treeLine ? <div className="landing-card-line">{outcome.treeLine}</div> : null}
-          </>
-        ) : card ? (
-          <>
-            {card.budget ? (
-              <div className="landing-card-block">
-                <div className="landing-card-budget">
-                  <span>{card.budget}</span>
+      {/* As the chat's turn (docs/mocks/landings-chat-trigger): what queued it, a running one's Working for, its steps,
+          then the sentence. Without steps to sit over, the head stands alone. */}
+      {landing ? (
+        <LandingSteps
+          landing={landing}
+          now={now}
+          openLog={log}
+          onOpenLog={setLog}
+          sessionId={sessionId}
+          openLast={stepsOpen}
+          onToggleLast={onToggle}
+          task={entry.title}
+          tasks={currentPromotion?.taskIds.length ?? null}
+          main={landing.subject === 'PROMOTION' ? main : null}
+          onOpenSession={onOpenSession}
+          head={workingHead}
+        />
+      ) : null}
+      {(landing?.timeline?.sections.length ?? 0) === 0 ? workingHead : null}
+      {running && card ? (
+        <div className="landings-window-live">
+          {card.detail ? <div className="landings-window-card-detail">{card.detail}</div> : null}
+          {card.budget ? (
+            <div className="landing-card-block">
+              <div className="landing-card-budget"><span>{card.budget}</span></div>
+              {card.progress != null ? (
+                <div className="landing-card-meter" aria-hidden="true">
+                  <i style={{ width: `${Math.round(card.progress * 100)}%` }} />
+                  {card.usualProgress != null ? (
+                    <b className="landing-card-meter-tick" style={{ left: `${Math.round(card.usualProgress * 100)}%` }} />
+                  ) : null}
                 </div>
-                {card.progress != null ? (
-                  <div className="landing-card-meter" aria-hidden="true">
-                    <i style={{ width: `${Math.round(card.progress * 100)}%` }} />
-                    {card.usualProgress != null ? (
-                      <b className="landing-card-meter-tick"
-                        style={{ left: `${Math.round(card.usualProgress * 100)}%` }} />
+              ) : null}
+            </div>
+          ) : null}
+          {card.live ? (
+            <div className="landing-card-live">
+              {card.fresh ? <span className="landing-live-dot" aria-hidden="true" /> : null}
+              {card.live}
+            </div>
+          ) : null}
+          {landing?.subject === 'PROMOTION' && !settledAt && attempt?.kind === 'CHECK_PROMOTION'
+            && promotionOnPassLine(currentPromotion) ? (
+            <div className="landing-card-on-pass">{promotionOnPassLine(currentPromotion)}</div>
+          ) : null}
+        </div>
+      ) : null}
+      <LandingReply parts={sentence} open={stepsOpen} onToggle={onToggle} />
+      {/* What a landing in hand still carries — what stopped it, its clock, who decides and the doors — on the chat's own
+          status card, under its steps. */}
+      {running ? null : (
+        <section
+          className={`chat-status-card landings-window-card${failedHead ? ' is-failed' : ''}${timedOut ? ' is-timed-out' : ''}${settledAt ? ' is-settled' : ''}`}
+          data-state={card?.state ?? outcome?.title ?? ''}
+          role="status"
+        >
+          <div className="chat-status-head">
+            <span className={`chat-status-icon landings-window-status-icon${failedHead ? ' is-failed' : ''}`} aria-hidden="true">
+              {failedHead ? <CloseOutlined /> : outcome?.ok ? <CheckCircleFilled /> : <ClockCircleOutlined />}
+            </span>
+            <span className="landings-window-status-title">{statusHead}</span>
+            {card?.rightIsClock ? <span className="landings-window-status-clock">{card.right}</span> : null}
+          </div>
+          <div className="landings-window-card-body">
+            {outcome ? (
+              <>
+                {outcome.detail ? <div className="landing-card-line">{outcome.detail}</div> : null}
+                {outcome.tasksHeading ? (
+                  <div className="landing-card-block">
+                    <div className="landing-card-heading">{outcome.tasksHeading}</div>
+                    {outcome.tasks.length > 0 ? (
+                      <ul className="landing-card-tasks">
+                        {outcome.tasks.map((title) => <li key={title}>{title}</li>)}
+                      </ul>
                     ) : null}
                   </div>
                 ) : null}
-              </div>
+                {outcome.checkLine ? <div className="landing-card-ok">{outcome.checkLine}</div> : null}
+                {outcome.treeLine ? <div className="landing-card-line">{outcome.treeLine}</div> : null}
+              </>
+            ) : card ? (
+              <>
+                {card.detail ? <div className="landings-window-card-detail">{card.detail}</div> : null}
+                {card.budget ? (
+                  <div className="landing-card-block">
+                    <div className="landing-card-budget"><span>{card.budget}</span></div>
+                  </div>
+                ) : null}
+                {timeoutLine ? <div className="landing-card-line">{timeoutLine}</div> : null}
+                {/* A timed-out check writes no push sentence at all (owner 2026-10-19): the line
+                    above already says where the runner stopped. */}
+                {pushSentence ? (
+                  <div className="landing-card-line">
+                    <b>{pushSentence.startsWith(LANDING_PAGE_COPY.NOTHING_WAS_PUSHED)
+                      ? LANDING_PAGE_COPY.NOTHING_WAS_PUSHED
+                      : LANDING_PAGE_COPY.MAY_HAVE_BEEN_PUSHED}</b>
+                    {pushSentence.slice(pushSentence.indexOf(' —'))}
+                  </div>
+                ) : null}
+                {/* The failure is the sentence's to say, above the card. */}
+              </>
             ) : null}
-            {card.live ? (
-              <div className="landing-card-live">
-                {card.fresh ? <span className="landing-live-dot" aria-hidden="true" /> : null}
-                {card.live}
-              </div>
-            ) : null}
-            {timeoutLine ? <div className="landing-card-line">{timeoutLine}</div> : null}
-            {/* A timed-out check writes no push sentence at all (owner 2026-10-19): the line
-                above already says where the runner stopped. */}
-            {pushSentence ? (
-              <div className="landing-card-line">
-                <b>{pushSentence.startsWith(LANDING_PAGE_COPY.NOTHING_WAS_PUSHED)
-                  ? LANDING_PAGE_COPY.NOTHING_WAS_PUSHED
-                  : LANDING_PAGE_COPY.MAY_HAVE_BEEN_PUSHED}</b>
-                {pushSentence.slice(pushSentence.indexOf(' —'))}
-              </div>
-            ) : null}
-            {landing?.subject === 'PROMOTION' && !settledAt && card.running
-              && attempt?.kind === 'CHECK_PROMOTION' && promotionOnPassLine(currentPromotion) ? (
-              <div className="landing-card-on-pass">{promotionOnPassLine(currentPromotion)}</div>
-            ) : null}
-            {card.failure ? <div className="landing-card-line">{card.failure}</div> : null}
-            {timedOut ? (
+            {card && timedOut ? (
               <div className="landing-card-actions">
                 {gates.retry ? (
                   <Button variant="primary" loading={pending} onClick={() => run('RETRY')}>
@@ -936,35 +1058,33 @@ function LandingWindowCard({
                 ) : null}
               </div>
             ) : null}
-            {card.timedOut && hintText(gates, pushSentence, attempt) ? (
+            {card?.timedOut && hintText(gates, pushSentence, attempt) ? (
               <div className="landing-card-hint">{hintText(gates, pushSentence, attempt)}</div>
             ) : null}
-          </>
-        ) : null}
-        {waitDoors.length > 0 ? (
-          <div className="landing-card-actions">
-            {waitDoors.map((action, index) => (
-              <Button key={action} variant={index === 0 ? 'primary' : undefined} onClick={() => run(action)}>
-                {doorLabel(action)}
-              </Button>
-            ))}
+            {/* Who decides, and the doors to them, under what stopped it. */}
+            {waitDoors.length > 0 ? (
+              <div className="landings-window-wait">
+                {facts.coordinatorId ? (
+                  <div className="landings-window-wait-line">
+                    <UserOutlined aria-hidden="true" />
+                    <span>{LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR}</span>
+                  </div>
+                ) : null}
+                <div className="landing-card-actions">
+                  {waitDoors.map((action, index) => (
+                    <Button key={action} variant={index === 0 ? 'primary' : undefined} onClick={() => run(action)}>
+                      {doorLabel(action)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-      </section>
+        </section>
+      )}
       {refusal ? <div className="landing-page-error" role="alert">{refusal}</div> : null}
-      {expanded && landing ? (
-        <div className="landings-window-record">
-          <LandingTimeline
-            landing={landing}
-            main={main}
-            now={now}
-            openLog={log}
-            onOpenLog={setLog}
-            sessionId={sessionId}
-          />
-          <LandingEntryLinks landing={landing} run={run} />
-        </div>
-      ) : null}
+      {stepsOpen && landing ? <div className="landings-window-record"><LandingEntryLinks landing={landing} run={run} /></div> : null}
+      <LandingTurnFoot time="" more={<LandingMore items={items} open={menuOpen} onOpenChange={setMenuOpen} />} />
       {reviewOpen && currentPromotion && landing ? (
         <LandingReview projectId={projectId} promotion={currentPromotion} settled={settledAt != null}
           onClose={closeReview} />
@@ -1018,26 +1138,43 @@ function menuLabel(label: string, sub: string): ReactNode {
 }
 
 /**
- * The server's timeline, laid out: one section per attempt (a task segment's generation, or a
- * merge round's check and merge), each section's facts in the ledger's own order. The words are
- * the server's `text` — this draws them and never composes one — and the check a finished line
- * names opens its output.
+ * A landing's attempts as the session chat draws a turn's tool calls (owner 2026-11-11,
+ * docs/mocks/landings-chat-turns): each attempt folds to the chat's steps line — `5 steps`, or
+ * `Generation 2 · 5 steps` when there were several, with `· 1 failed` in red — that opens into its
+ * steps (`landingSteps`), each one of the chat's tool rows. The newest attempt opens with the landing
+ * ([openLast], pressed through [onToggleLast]); an older one opens on its own press. A step that
+ * failed, or runs now, starts open.
  */
-function LandingTimeline({
+function LandingSteps({
   landing,
-  main,
   sessionId,
   now,
   openLog,
   onOpenLog,
+  openLast,
+  onToggleLast,
+  task,
+  tasks = null,
+  main = null,
+  onOpenSession,
+  head = null,
 }: {
   landing: SessionLandingView;
-  main: string;
   sessionId: string;
   now: number;
   openLog: LandingLogSelectors | null;
   onOpenLog: (log: LandingLogSelectors | null) => void;
+  openLast: boolean;
+  onToggleLast: () => void;
+  /** The trigger's words: the task's name, a merge round's task count and the line it merges into. */
+  task: string;
+  tasks?: number | null;
+  main?: string | null;
+  onOpenSession: (sessionId: string) => void;
+  /** Drawn between the newest attempt's trigger and its steps: a running turn's `Working for`. */
+  head?: ReactNode;
 }): JSX.Element | null {
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
   const timeline = landing.timeline;
   if (!timeline || (timeline.sections.length === 0 && timeline.facts.length === 0)) {
     return null;
@@ -1045,99 +1182,92 @@ function LandingTimeline({
   const attempt = landing.currentAttempt;
   const currentJobId = attempt?.jobId ?? null;
   const noReport = landingNoReportBand(landing);
-  // The current round's state is the status card's to say; the board's timeline does not repeat it
-  // as a fact above the sections (05 c).
+  // The current round's state is the sentence's and the status card's to say; the steps do not repeat it (05 c).
   const facts = timeline.facts.filter((fact) => fact.kind !== 'PROMOTION_STATE');
+  const several = timeline.sections.length > 1;
+  const lastIndex = timeline.sections.length - 1;
   return (
-    <div className="landing-timeline">
+    <div className="landing-timeline landings-window-steps">
       {facts.map((fact, index) => (
         <div className="landing-timeline-fact" key={`fact-${fact.kind}-${index}`}>{fact.text}</div>
       ))}
-      {timeline.sections.map((section) => {
+      {timeline.sections.map((section, sectionIndex) => {
         const current = section.jobId === currentJobId;
+        const steps = landingSteps(section.entries, section.kind, section.trigger != null);
+        const live = current && attempt?.state === 'RUNNING' && !attempt.timedOut;
+        const statuses = steps.map((step, index): StepStatus => {
+          const last = index === steps.length - 1;
+          const failed = step.entries.some(({ entry, index: at }) =>
+            entryGlyph(entry, section.kind, section.entries, at).tone === 'failed');
+          return failed ? 'failed' : last && live ? 'running' : last && current && attempt?.state === 'QUEUED' ? 'pending' : 'ok';
+        });
+        const failedCount = statuses.filter((status) => status === 'failed').length;
+        const isLast = sectionIndex === lastIndex;
+        const open = isLast ? openLast : opened.has(section.jobId);
+        const toggle = isLast ? onToggleLast : () => setOpened((was) => {
+          const next = new Set(was);
+          if (next.has(section.jobId)) next.delete(section.jobId); else next.add(section.jobId);
+          return next;
+        });
+        const automatic = section.entries.find((entry) => entry.kind === 'AUTOMATIC_ATTEMPT')?.data;
         return (
+          <Fragment key={section.jobId}>
+          {/* What queued this attempt: the turn's opening message (docs/mocks/landings-chat-trigger). */}
+          {section.trigger ? (
+            <LandingTrigger
+              trigger={section.trigger}
+              message={triggerMessage(section.trigger, {
+                task, tasks, main,
+                attempt: typeof automatic?.attempt === 'number' && typeof automatic.limit === 'number'
+                  ? { attempt: automatic.attempt, limit: automatic.limit } : null,
+              })}
+              onOpenSession={onOpenSession}
+            />
+          ) : null}
+          {isLast ? head : null}
           <section
-            key={section.jobId}
-            className={`landing-timeline-section${current ? ' is-current' : ''}`}
+            className={`landing-timeline-section chat-steps${open ? ' is-open' : ''}${current ? ' is-current' : ''}`}
             data-job={section.jobId}
           >
-            <div className="landing-timeline-heading">
-              <span>{section.title}</span>
-              {landingSectionState(section.state) ? (
-                <span className="landing-timeline-state">{landingSectionState(section.state)}</span>
+            <button type="button" className="chat-steps-line landings-window-steps-line" aria-expanded={open} onClick={toggle}>
+              {stepsLabel(steps, section, several)}
+              {failedCount > 0 ? (
+                <span className="chat-steps-failed">{` · ${failedCount} ${LANDING_SENTENCE_COPY.FAILED}`}</span>
               ) : null}
-            </div>
-            {section.entries.map((entry, index) => {
-              const mark = entryGlyph(entry, section.kind, section.entries, index);
-              return (
-                <div className="landing-timeline-entry" key={entry.id ?? `${entry.kind}-${index}`}>
-                  <span className="landing-timeline-time">{clockTime(entry.at)}</span>
-                  <span className={`landing-timeline-glyph is-${mark.tone}`} aria-hidden="true">
-                    {mark.glyph}
-                  </span>
-                  <span className="landing-timeline-body">
-                    <span className="landing-timeline-text">{entry.text}</span>
-                    {entry.reason && !entry.text.includes(entry.reason)
-                      ? <span className="landing-timeline-sub">{entry.reason}</span>
+              <span className="chat-steps-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
+            </button>
+            {open ? (
+              <div className="chat-steps-detail">
+                {steps.map((step, index) => (
+                  <LandingStepRow
+                    key={step.key}
+                    step={step}
+                    status={statuses[index]}
+                    kind={section.kind}
+                    entries={section.entries}
+                    jobId={section.jobId}
+                    sessionId={sessionId}
+                    openLog={openLog}
+                    onOpenLog={onOpenLog}
+                    // The check in hand, as the runner streams it (05 a, b), under the step it runs
+                    // in — whichever step the timeline has reached when the stream starts.
+                    live={statuses[index] === 'running' && attempt?.check
+                      ? <LandingLiveCheck sessionId={sessionId} attempt={attempt} now={now} />
                       : null}
-                    {entry.kind === 'CHECK_FINISHED' && entry.check && section.jobId ? (
-                      <button
-                        type="button"
-                        className="landing-timeline-log"
-                        onClick={() => onOpenLog(openLog?.jobId === section.jobId
-                          && openLog.claim === entry.claim
-                          && openLog.round === (entry.round ?? undefined)
-                          && openLog.check === entry.check!.index
-                          ? null
-                          : {
-                            jobId: section.jobId,
-                            claim: entry.claim,
-                            round: entry.round ?? undefined,
-                            check: entry.check!.index,
-                          })}
-                      >
-                        {`${LANDING_PAGE_COPY.LOG} ›`}
-                      </button>
-                    ) : null}
-                    {openLog && openLog.jobId === section.jobId
-                      && entry.kind === 'CHECK_FINISHED' && entry.check
-                      && openLog.check === entry.check.index
-                      && openLog.claim === entry.claim
-                      && openLog.round === (entry.round ?? undefined) ? (
-                        <LandingCheckLog
-                          key={`${openLog.jobId}-${openLog.claim ?? 0}-${openLog.round ?? 0}-${openLog.check ?? 0}`}
-                          sessionId={sessionId}
-                          selectors={openLog}
-                        />
-                      ) : null}
-                    {/* A check that failed shows the tail it died on, inline (05 g); a passed one
-                        keeps its Log › and stays one line. */}
-                    {entry.kind === 'CHECK_FINISHED' && entry.check && section.jobId
-                      && !landingCheckPassed(entry) ? (
-                        <LandingInlineOutput
-                          key={`inline-${section.jobId}-${entry.claim}-${entry.round ?? 0}-${entry.check.index}`}
-                          sessionId={sessionId}
-                          selectors={{
-                            jobId: section.jobId,
-                            claim: entry.claim,
-                            round: entry.round ?? undefined,
-                            check: entry.check.index,
-                          }}
-                        />
-                      ) : null}
-                  </span>
-                </div>
-              );
-            })}
-            {/* The check in hand, as the runner streams it: the live row and its tail (05 a, b). */}
-            {current && attempt?.state === 'RUNNING' && !attempt.timedOut && attempt.check ? (
-              <LandingLiveCheck sessionId={sessionId} attempt={attempt} now={now} />
-            ) : null}
-            {/* The last word that never came, where the attempt stopped (05 e, f, i). */}
-            {current && noReport ? (
-              <div className="landing-timeline-noreport">{noReport.text}</div>
+                  />
+                ))}
+                {/* A check streaming before its attempt wrote any line has no step to sit in. */}
+                {steps.length === 0 && live && attempt?.check ? (
+                  <LandingLiveCheck sessionId={sessionId} attempt={attempt} now={now} />
+                ) : null}
+                {/* The last word that never came, where the attempt stopped (05 e, f, i). */}
+                {current && noReport ? (
+                  <div className="landing-timeline-noreport">{noReport.text}</div>
+                ) : null}
+              </div>
             ) : null}
           </section>
+          </Fragment>
         );
       })}
       {timeline.truncated ? (
@@ -1145,6 +1275,166 @@ function LandingTimeline({
       ) : null}
     </div>
   );
+}
+
+type StepStatus = 'ok' | 'failed' | 'running' | 'pending';
+
+const STEP_ICON: Record<string, ReactNode> = {
+  queue: <UnorderedListOutlined />,
+  claim: <DownloadOutlined />,
+  sync: <BranchesOutlined />,
+  'check:TASK_ACCEPTANCE': <CodeOutlined />,
+  'check:MERGE_CHECK': <CodeOutlined />,
+  push: <CloudUploadOutlined />,
+};
+const STEP_TONE: Record<string, string> = {
+  queue: 'default', claim: 'read', sync: 'read', 'check:TASK_ACCEPTANCE': 'exec', 'check:MERGE_CHECK': 'exec', push: 'write',
+};
+
+/** One step as the chat's tool row: caret, icon, its name, its summary line and its mark — no time on the row, as the chat
+ *  draws none; the lines it opens to carry theirs. */
+function LandingStepRow({
+  step,
+  status,
+  kind,
+  entries,
+  jobId,
+  sessionId,
+  openLog,
+  onOpenLog,
+  live,
+}: {
+  step: LandingStep;
+  status: StepStatus;
+  kind: IntegrationJobKind;
+  entries: readonly IntegrationTimelineEntry[];
+  jobId: string;
+  sessionId: string;
+  openLog: LandingLogSelectors | null;
+  onOpenLog: (log: LandingLogSelectors | null) => void;
+  live: ReactNode;
+}): JSX.Element {
+  const [manual, setManual] = useState<boolean | null>(null);
+  const open = manual ?? (status === 'failed' || status === 'running');
+  return (
+    <div
+      className={`chat-tool-card chat-tone-${STEP_TONE[step.key]}${open ? ' is-open' : ''} landing-step`}
+      data-step={step.key}
+    >
+      <button type="button" className="chat-tool-row landing-step-row" aria-expanded={open}
+        onClick={() => setManual(!open)}>
+        <span className="chat-tool-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
+        <span className="chat-tool-icon">{STEP_ICON[step.key]}</span>
+        <span className="chat-tool-name">{step.name}</span>
+        <span className="chat-tool-summary">{step.summary.text}</span>
+        {status === 'failed' ? <CloseCircleFilled className="chat-tool-status err" />
+          : status === 'running' ? <LoadingOutlined className="chat-tool-status running" spin />
+            : status === 'pending' ? <ClockCircleOutlined className="chat-tool-status pending" />
+              : <CheckCircleFilled className="chat-tool-status ok" />}
+      </button>
+      {open ? (
+        <div className="chat-tool-detail landing-step-detail">
+          {step.entries.map(({ entry, index }) => (
+            <TimelineLine
+              key={entry.id ?? `${entry.kind}-${index}`}
+              entry={entry}
+              mark={entryGlyph(entry, kind, entries, index)}
+              jobId={jobId}
+              sessionId={sessionId}
+              openLog={openLog}
+              onOpenLog={onOpenLog}
+            />
+          ))}
+          {live}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** One of the server's lines, as it was: its time, its mark and its sentence; a finished check's
+ *  `Log ›` and, when it failed, the tail it died on (05 g). */
+function TimelineLine({
+  entry,
+  mark,
+  jobId,
+  sessionId,
+  openLog,
+  onOpenLog,
+}: {
+  entry: IntegrationTimelineEntry;
+  mark: { glyph: string; tone: TimelineTone };
+  jobId: string;
+  sessionId: string;
+  openLog: LandingLogSelectors | null;
+  onOpenLog: (log: LandingLogSelectors | null) => void;
+}): JSX.Element {
+  const selectors = entry.kind === 'CHECK_FINISHED' && entry.check ? {
+    jobId,
+    claim: entry.claim,
+    round: entry.round ?? undefined,
+    check: entry.check.index,
+  } : null;
+  const logOpen = selectors != null && openLog != null && openLog.jobId === selectors.jobId
+    && openLog.check === selectors.check && openLog.claim === selectors.claim && openLog.round === selectors.round;
+  return (
+    <div className="landing-timeline-entry">
+      <span className="landing-timeline-time">{clockTime(entry.at)}</span>
+      <span className={`landing-timeline-glyph is-${mark.tone}`} aria-hidden="true">{mark.glyph}</span>
+      <span className="landing-timeline-body">
+        <span className="landing-timeline-text">{entry.text}</span>
+        {entry.reason && !entry.text.includes(entry.reason)
+          ? <span className="landing-timeline-sub">{entry.reason}</span>
+          : null}
+        {selectors ? (
+          <button type="button" className="landing-timeline-log" onClick={() => onOpenLog(logOpen ? null : selectors)}>
+            {`${LANDING_PAGE_COPY.LOG} ›`}
+          </button>
+        ) : null}
+        {logOpen && selectors ? (
+          <LandingCheckLog
+            key={`${selectors.jobId}-${selectors.claim ?? 0}-${selectors.round ?? 0}-${selectors.check ?? 0}`}
+            sessionId={sessionId}
+            selectors={selectors}
+          />
+        ) : null}
+        {selectors && !landingCheckPassed(entry) ? (
+          <LandingInlineOutput
+            key={`inline-${selectors.jobId}-${selectors.claim}-${selectors.round ?? 0}-${selectors.check}`}
+            sessionId={sessionId}
+            selectors={selectors}
+          />
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+/** The window's own words, beyond the landing page's. CHECK and DETAILS are the native windows' (their settled line's chip and
+ *  its way in), read from here by their parity tests until they draw turns too. */
+const WINDOW_COPY = {
+  CHECK: 'check',
+  DETAILS: 'Details',
+  WORKING_FOR: 'Working for',
+} as const;
+
+/**
+ * Whether an element has come into view yet — once true it stays true. A settled line reads its
+ * record when first seen, as the native windows do. Where there is no IntersectionObserver (a test
+ * page) nothing is seen, and a record is read only when opened.
+ */
+function useSeen<T extends Element>(): [(node: T | null) => void, boolean] {
+  const [seen, setSeen] = useState(false);
+  const [node, setNode] = useState<T | null>(null);
+  useEffect(() => {
+    if (seen || !node || typeof IntersectionObserver === 'undefined') return undefined;
+    const observer = new IntersectionObserver((records) => {
+      if (records.some((record) => record.isIntersecting)) setSeen(true);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [node, seen]);
+  return [setNode, seen];
 }
 
 /** What a timeline mark says, and the ink it says it in (mockups 05 a/e/i). */

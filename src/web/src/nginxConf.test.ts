@@ -105,10 +105,9 @@ describe('nginx: the pages\' Content-Security-Policy', () => {
       }),
     );
   const loads = directivesOf(pages[0]);
-  const scriptFiles = directivesOf(pages[1]);
 
   it('is on every answer of both blocks that serve the shell, and says the same in each', () => {
-    expect(pages).toHaveLength(2);
+    expect(pages).toHaveLength(1);
     expect(policyOf(locationDirectives('/s/'))).toEqual(pages);
   });
 
@@ -119,9 +118,8 @@ describe('nginx: the pages\' Content-Security-Policy', () => {
     expect([...loads.keys()].filter((name) => name.startsWith('script-src-'))).toEqual([]);
   });
 
-  it('of those, only the build\'s: nothing a route under /api/ answers', () => {
-    expect([...scriptFiles.keys()]).toEqual(['script-src']);
-    expect(scriptFiles.get('script-src')).toEqual(['*:*/assets/', '*:*/theme-boot.js']);
+  it('is one policy: a second one naming script paths stopped every script on iOS Safari 27.2', () => {
+    expect(conf.replace(/#[^\n]*/g, '')).not.toContain('*:*/');
   });
 
   it('closes what default-src leaves open to a script or a form', () => {

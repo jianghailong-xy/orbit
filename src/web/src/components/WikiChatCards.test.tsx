@@ -244,7 +244,9 @@ beforeEach(() => {
   stream.events = DRAFTING;
   stream.approvals = [];
   stream.idle = true;
-  storage = { local: new Map(), session: new Map() };
+  // The panel as these cases knew it: hidden until the button opens it. Board 45 opens it by default where it docks
+  // unless the owner hid it with ✕, which is what this says; the cases of board 45 below take it out.
+  storage = { local: new Map([['orbit.wikiChat.closed', JSON.stringify({ orbit: true })]]), session: new Map() };
   scrolled = [];
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1500 });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} });

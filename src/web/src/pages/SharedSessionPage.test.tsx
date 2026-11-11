@@ -195,6 +195,10 @@ const transcriptReads = () => requests.filter((url) => url === SHARE || url.star
 
 /** Open every fold that draws links when open: the notes delivery appends to a message. */
 async function openFolds() {
+  // A turn Orbit opened is folded with its answer (OrbitExchangeFold): open each, the group first.
+  for (const sel of ['.orbit-exchanges:not(.is-open) > .orbit-exchanges-line', '.orbit-branch:not(.is-open) > .orbit-branch-line', '.orbit-exchange:not(.is-open) > .orbit-exchange-line']) {
+    for (let fold = container.querySelector<HTMLElement>(sel); fold; fold = container.querySelector<HTMLElement>(sel)) await click(fold);
+  }
   for (const fold of [...container.querySelectorAll('button.chat-injected-head')]) await click(fold);
 }
 

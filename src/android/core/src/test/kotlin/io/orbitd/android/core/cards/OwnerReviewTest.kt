@@ -7,6 +7,7 @@ import org.junit.Test
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.Locale
 
 /**
  * A08-1 (iOS b573f499b): the owner-confirmation card's review — held, case for case, to the fixture the web and the Apple
@@ -18,6 +19,16 @@ class OwnerReviewTest {
     /** The fixture's clock: the instant's UTC hours and minutes. */
     private val utc: (String) -> String? = { iso ->
         runCatching { Instant.parse(iso).atOffset(ZoneOffset.UTC).let { "%02d:%02d".format(it.hour, it.minute) } }.getOrNull()
+    }
+
+    @Test fun coordinatorRaisedConclusionLeadsAndFallbackIsLabelled() {
+        val raised = corpus.objects("bars").first { it.text("case")!!.startsWith("coordinator raised") }.obj("review")!!
+        val bar = OwnerReview.bar(raised, OwnerReview.Place.CARD, utc)
+        assertEquals("QUOTE", bar.lines.first().kind)
+        assertEquals(raised.obj("review")!!.text("judgment"), bar.lines.first().text)
+        val fallback = corpus.objects("bars").first { it.obj("review")?.text("state") == "NOT_REVIEWED" &&
+            it.obj("review")?.obj("reviewer")?.text("kind") == "PROJECT_COORDINATOR" }.obj("review")!!
+        assertEquals("Not reviewed by the coordinator", OwnerReview.bar(fallback, OwnerReview.Place.CARD, utc).lines.first().text)
     }
 
     @Test fun theBarDrawsWhatTheFixtureDraws() {
@@ -94,11 +105,13 @@ class OwnerReviewTest {
         assertEquals("Only the agent that did the work has checked this.", OwnerReview.notReviewedNote(null, 1800))
     }
 
-    @Test fun receiptTimesAreAFixedClockAndADayWhenItIsAnotherDay() {
+    @Test fun receiptTimesAreTheReadersClockAndADayWhenItIsAnotherDay() {
         val zone = ZoneId.of("Asia/Shanghai")
         val now = Instant.parse("2026-10-09T02:00:00Z")
-        assertEquals("08:05", OwnerReview.receiptTime("2026-10-09T00:05:00Z", now, zone))
-        assertEquals("9/15 08:05", OwnerReview.receiptTime("2026-09-15T00:05:00.000Z", now, zone))
+        // The JDK writes a narrow no-break space before AM/PM; read it as a space.
+        fun plain(text: String?) = text?.replace('\u202F', ' ')
+        assertEquals("8:05 AM", plain(OwnerReview.receiptTime("2026-10-09T00:05:00Z", now, zone, Locale.US)))
+        assertEquals("9/15 8:05 AM", plain(OwnerReview.receiptTime("2026-09-15T00:05:00.000Z", now, zone, Locale.US)))
         assertNull(OwnerReview.receiptTime("not a time", now, zone))
     }
 

@@ -136,4 +136,20 @@ final class SessionMessageCopyParityTests: XCTestCase {
                                               now: Date(timeIntervalSince1970: 1_790_000_000))
             .hasPrefix("\(SessionMessageCard.notYou) · "))
     }
+
+    /// A long message folds at the same height, to the same lines, behind the same words at both ends.
+    func testALongMessageFoldsTheSameWay() throws {
+        let card = try flat(Self.webCard)
+        XCTAssertTrue(card.contains("SESSION_MESSAGE_CLAMP_LINES = \(SessionMessageCard.clampLines);"),
+                      "the folded line count drifted from \(Self.webCard)")
+        XCTAssertTrue(card.contains("SESSION_MESSAGE_CLAMP_FROM = \(SessionMessageCard.clampFrom);"),
+                      "the line count a message folds past drifted from \(Self.webCard)")
+        XCTAssertTrue(card.contains("SESSION_MESSAGE_SHOW_MORE = '\(SessionMessageCard.showMore)'"))
+        XCTAssertTrue(card.contains("SESSION_MESSAGE_SHOW_LESS = '\(SessionMessageCard.showLess)'"))
+        XCTAssertTrue(card.contains("el.scrollHeight > line * SESSION_MESSAGE_CLAMP_FROM"),
+                      "the web no longer folds by measured height")
+        XCTAssertFalse(SessionMessageCard.folds(height: 240, lineHeight: 20), "twelve lines show whole")
+        XCTAssertTrue(SessionMessageCard.folds(height: 241, lineHeight: 20))
+        XCTAssertFalse(SessionMessageCard.folds(height: 900, lineHeight: 0), "nothing measured folds nothing")
+    }
 }
