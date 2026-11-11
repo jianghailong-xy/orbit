@@ -97,6 +97,7 @@ import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.se
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectOpenItemService } from './project-open-item.service';
+import { PushService } from '../push/push.service';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -231,6 +232,8 @@ test('a decided criteria proposal is answered back to the session that proposed 
       [ProjectOpenItemService, new ProjectOpenItemService(prisma, sessions)],
       [CoordinatorConvergenceService, new CoordinatorConvergenceService(prisma)],
       [CoordinatorEvidenceQueueService, evidenceQueueOver(prisma, sessions)],
+      // @Optional on ProjectsService (9afb7d156): no push transport here, as in a module without one.
+      [PushService, undefined],
     ])),
   };
 
@@ -662,6 +665,8 @@ test('the coordinator asks the owner, and the answer reaches the coordinator of 
       [ProjectOpenItemService, items],
       [CoordinatorConvergenceService, new CoordinatorConvergenceService(prisma)],
       [CoordinatorEvidenceQueueService, evidenceQueueOver(prisma, sessions)],
+      // @Optional on ProjectsService (9afb7d156): no push transport here, as in a module without one.
+      [PushService, undefined],
     ])),
   };
   const owner = await accountOwner(stack);
