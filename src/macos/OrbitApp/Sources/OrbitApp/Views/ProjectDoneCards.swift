@@ -21,7 +21,8 @@ import OrbitKit
 /// whole-card path: nobody hands it a review target).
 struct ProjectDoneCard: View {
     let subject: ProjectDoneSubject
-    /// The coordinator's request, or nil for a card nobody asked for — Orbit then fills in the gaps.
+    /// The coordinator's request, or nil for a card nobody asked for — the server's done check then
+    /// stands in for gaps.
     let request: DoneRequest?
     /// When the coordinator asked; nil when nobody did.
     let askedAt: String?

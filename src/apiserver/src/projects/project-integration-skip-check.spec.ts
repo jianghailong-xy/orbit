@@ -217,7 +217,7 @@ test('the generation the owner approved is handed no merge check at all — and 
 
   // ONE generation: the next landing of the same task is queued with the flag false — which is every
   // other row ever written — and is handed the check exactly as before.
-  assert.deepEqual(named(checksFor(claimed() as never)), ['TASK_ACCEPTANCE', 'MERGE_CHECK']);
+  assert.deepEqual(named(checksFor(claimed() as never)), ['TASK_ACCEPTANCE', 'LANDING_CHECK']);
   const mergeCheck = checksFor(claimed() as never)[1]!;
   assert.equal(mergeCheck.command, 'npm test && go test ./...');
   assert.equal(mergeCheck.timeoutSeconds, 3_600);

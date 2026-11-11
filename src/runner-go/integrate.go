@@ -581,7 +581,18 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 			return result
 		}
 	}
+	var exemptFiles []string
+	if base == targetSha {
+		exemptFiles = landingCheckExemptFiles(scratch, upstreamSha, base, tested)
+	}
 	for index, spec := range cmd.Checks {
+		if spec.Name == "LANDING_CHECK" && len(exemptFiles) > 0 {
+			result.Checks = append(result.Checks, IntegrationCheckResult{
+				Name: spec.Name, Command: spec.Command, ExpectedExitCode: spec.ExpectedExitCode,
+				Skipped: "PATHS_EXEMPT", Files: exemptFiles,
+			})
+			continue
+		}
 		outcome, stopErr := runIntegrationCheckTracked(stop, scratch, spec, index+1, len(cmd.Checks), progress)
 		if stopErr != nil {
 			return integrationStepEnded(stopErr, "CHECK")
@@ -2409,4 +2420,48 @@ func handBackIntegrationJob(ctx context.Context, t *Transport, job IntegrationJo
 			"trying again in", wait.Round(100*time.Millisecond))
 		integrationResultRetry.sleep(ctx, wait)
 	}
+}
+
+// Git's check-ignore implements gitignore syntax, including negation and directory patterns.
+// An empty repository isolates the upstream policy from C's .gitignore and local/global excludes.
+// Any inability to read or match the policy keeps the landing check enabled.
+func landingCheckExemptFiles(scratch, upstream, base, candidate string) []string {
+	const policy = ".orbit/landing-check-exempt"
+	show := exec.Command("git", "show", upstream+":"+policy)
+	show.Dir = scratch
+	patterns, err := show.Output()
+	if err != nil || len(patterns) == 0 {
+		return nil
+	}
+	diff := exec.Command("git", "diff", "--name-only", "-z", base, candidate)
+	diff.Dir = scratch
+	raw, err := diff.Output()
+	if err != nil || len(raw) == 0 {
+		return nil
+	}
+	files := strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00")
+	for _, file := range files {
+		if file == policy {
+			return nil
+		}
+	}
+	dir, err := os.MkdirTemp("", "exempt-")
+	if err != nil {
+		return nil
+	}
+	defer os.RemoveAll(dir)
+	if _, err := git(dir, "init", "--quiet"); err != nil {
+		return nil
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".git", "info", "exclude"), patterns, 0600); err != nil {
+		return nil
+	}
+	match := exec.Command("git", "-c", "core.excludesFile=/dev/null", "check-ignore", "--no-index", "-z", "--stdin")
+	match.Dir = dir
+	match.Stdin = bytes.NewReader(raw)
+	matched, err := match.Output()
+	if err != nil || !bytes.Equal(matched, raw) {
+		return nil
+	}
+	return files
 }

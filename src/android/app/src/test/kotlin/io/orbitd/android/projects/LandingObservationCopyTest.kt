@@ -2,6 +2,7 @@ package io.orbitd.android.projects
 
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.core.cards.ExceptionCards
+import io.orbitd.android.core.cards.PromotionCards
 import io.orbitd.android.directory.SessionProjectCopy
 import io.orbitd.android.push.PushPayload
 import kotlinx.serialization.json.Json
@@ -52,6 +53,16 @@ class LandingObservationCopyTest {
         assertTemplate(start, RunSettings.deliveryNeedsMainLine(b), b to main)
         assertTemplate(start, RunSettings.lineMainHintAgentPush(b), b to main)
         assertTemplate(start, RunSettings.automaticHintAgentPush(b), b to main)
+        // docs/mocks/agent-push-delivery: the merge check the agent runs, the question asked before it takes over while a merge is
+        // live, the Automatic sentence with no Delivery row to point at, and why the merge card asks.
+        assertTemplate(start, RunSettings.mergeCheckHintAgentPush(b), b to main)
+        assertTemplate(start, RunSettings.agentPushConfirmTitle(b), b to main)
+        assertTemplate(start, RunSettings.agentPushConfirmBody(b), b to main)
+        assertDeclares(start, "RUN_AGENT_PUSH_CONFIRM", RunSettings.agentPushConfirm)
+        assertTemplate(start, RunSettings.automaticHint("MAIN", b, hasDelivery = false), b to main)
+        val card = web("components/ProjectPromotionCard.tsx")
+        assertTemplate(card, PromotionCards.askReason(b), b to main)
+        assertDeclares(card, "LET_THE_AGENT_PUSH_INSTEAD", PromotionCards.letAgentPushInstead)
         val who = "\${automatic ? 'The coordinator decides' : 'You decide'}"
         assertTemplate(start, RunSettings.automaticSaysAgentPush(true, b), "The coordinator decides" to who, b to main)
         assertTemplate(start, RunSettings.automaticSaysAgentPush(false, b), "You decide" to who, b to main)

@@ -40,7 +40,8 @@ import java.time.Instant
 /** Each control writes as it is changed; a write the door refuses says so over its own words (`runSettingsSection`). */
 @Composable
 internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, editMergeCheck: () -> Unit,
-    integration: (JsonObject?) -> Unit, automatic: (Boolean) -> Unit, stepConcurrency: (Int) -> Unit, pause: (Boolean) -> Unit) {
+    integration: (JsonObject?) -> Unit, automatic: (Boolean) -> Unit, stepConcurrency: (Int) -> Unit, pause: (Boolean) -> Unit,
+    mergeLive: suspend () -> Boolean = { false }) {
     Column(Modifier.testTag("project-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHead(StartProjectCopy.howItRuns, RunSettings.appliesFromNextTask)
         val view = state.integration
@@ -51,9 +52,10 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
                 val stored = ProjectMainBranch.stored(view)
                 val main = stored ?: RunSettings.defaultMainBranch
                 LineSetting(view, doc, now, enabled, stored != null, main, integration)
+                // A server that predates the delivery mode reports none, and draws no row. Under the line: it only means something
+                // for a project that lands directly on main.
+                if (view.text("deliveryMode") != null) { HorizontalDivider(); DeliverySetting(view, enabled, main, integration, mergeLive) }
                 stored?.let { HorizontalDivider(); MainBranchSetting(view, it, now, enabled, integration) }
-                // A server that predates the delivery mode reports none, and draws no row.
-                if (view.text("deliveryMode") != null) { HorizontalDivider(); DeliverySetting(view, enabled, main, integration) }
                 HorizontalDivider()
                 AutomaticSetting(view, doc, enabled, main, automatic)
                 HorizontalDivider()
@@ -144,18 +146,30 @@ private fun LineOption(view: JsonObject, line: String, title: String, branch: St
 
 /** Delivery: how a finished task's work reaches main (§10.5 O-L1) — Orbit lands it, or the agent pushes it there itself. Picking one
  * writes it, as the line does, and it does not lock with the line; but only a main line takes the agent's way, so on a project branch,
- * or a line nobody decided, that way is drawn and not offered, with why (the door's 409 `DELIVERY_MODE_NEEDS_MAIN_LINE`). */
+ * or a line nobody decided, that way is drawn and not offered, with why (the door's 409 `DELIVERY_MODE_NEEDS_MAIN_LINE`). Handing it to
+ * the agent while a merge into main is still live ([mergeLive]) asks first; Cancel writes nothing, and the choice stays Orbit's. */
 @Composable
-private fun DeliverySetting(view: JsonObject, enabled: Boolean, main: String, write: (JsonObject?) -> Unit) {
+private fun DeliverySetting(view: JsonObject, enabled: Boolean, main: String, write: (JsonObject?) -> Unit, mergeLive: suspend () -> Boolean) {
     val mainLine = view.text("line") == "MAIN"
     val chosen = RunSettings.delivery(view.text("line"), view.text("deliveryMode"))
+    val scope = rememberCoroutineScope()
+    var asking by remember { mutableStateOf<JsonObject?>(null) }
     Column(Modifier.testTag("project-delivery"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(RunSettings.delivery)
         DeliveryOption(chosen == "PLATFORM", RunSettings.deliveryPlatform, RunSettings.deliveryPlatformHint(main), enabled, offered = true,
             "project-delivery:PLATFORM") { write(RunSettings.deliveryWrite(view, "PLATFORM")) }
         DeliveryOption(chosen == "AGENT_PUSH", RunSettings.deliveryAgentPush,
             if (mainLine) RunSettings.deliveryAgentPushHint(main) else RunSettings.deliveryNeedsMainLine(main), enabled, offered = mainLine,
-            "project-delivery:AGENT_PUSH") { write(RunSettings.deliveryWrite(view, "AGENT_PUSH")) }
+            "project-delivery:AGENT_PUSH") {
+            RunSettings.deliveryWrite(view, "AGENT_PUSH")?.let { body -> scope.launch { if (mergeLive()) asking = body else write(body) } }
+        }
+    }
+    asking?.let { body ->
+        AlertDialog(onDismissRequest = { asking = null }, modifier = Modifier.testTag("project-delivery-confirm"),
+            title = { Text(RunSettings.agentPushConfirmTitle(main)) }, text = { Text(RunSettings.agentPushConfirmBody(main)) },
+            confirmButton = { TextButton(onClick = { asking = null; write(body) }, modifier = Modifier.testTag("project-delivery-confirm:yes")) {
+                Text(RunSettings.agentPushConfirm) } },
+            dismissButton = { TextButton(onClick = { asking = null }, modifier = Modifier.testTag("project-delivery-confirm:cancel")) { Text("Cancel") } })
     }
 }
 
@@ -184,7 +198,7 @@ private fun AutomaticSetting(view: JsonObject, doc: JsonObject, enabled: Boolean
         }
         // What Automatic does with a merge into main depends on the line, and on who delivers the work.
         Note(if (RunSettings.delivery(view.text("line"), view.text("deliveryMode")) == "AGENT_PUSH") RunSettings.automaticHintAgentPush(main)
-            else RunSettings.automaticHint(if (view.text("line") == "MAIN") "MAIN" else "PROJECT_BRANCH", main))
+            else RunSettings.automaticHint(if (view.text("line") == "MAIN") "MAIN" else "PROJECT_BRANCH", main, view.text("deliveryMode") != null))
     }
 }
 
@@ -224,7 +238,9 @@ private fun MergeCheckSetting(view: JsonObject, doc: JsonObject, enabled: Boolea
         }
         view.text("mergeCheckCommand")?.let { Text(it, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
             overflow = TextOverflow.Ellipsis) } ?: Note(RunSettings.mergeCheckPlaceholder)
-        Note(RunSettings.mergeCheckHint(main))
+        // While the agent pushes, the check is the agent's to run.
+        Note(if (RunSettings.delivery(view.text("line"), view.text("deliveryMode")) == "AGENT_PUSH") RunSettings.mergeCheckHintAgentPush(main)
+            else RunSettings.mergeCheckHint(main))
         if (missing) Note("⚠ ${RunSettings.noMergeCheckWarning(main)}", warning)
     }
 }
@@ -263,7 +279,8 @@ internal fun MergeCheckEditor(view: JsonObject, automatic: Boolean, enabled: Boo
         text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(command, { command = it }, Modifier.fillMaxWidth().testTag("merge-check-command"), placeholder = { Text(RunSettings.mergeCheckPlaceholder) },
                 textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace), enabled = !saving)
-            Note(RunSettings.mergeCheckHint(main))
+            Note(if (RunSettings.delivery(view.text("line"), view.text("deliveryMode")) == "AGENT_PUSH") RunSettings.mergeCheckHintAgentPush(main)
+                else RunSettings.mergeCheckHint(main))
             if (missing) Note("⚠ ${RunSettings.noMergeCheckWarning(main)}", LocalOrbitColors.current.needsYou)
             refused?.let { Note(it, MaterialTheme.colorScheme.error) }
         } },

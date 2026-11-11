@@ -142,15 +142,16 @@ internal fun StartProjectCard(
             }
             HorizontalDivider()
             LineRow(draft, request, projectId, editable, tag, onDraft)
+            // How the work reaches main, under the line it only means something for: a card whose read does not say offers no
+            // choice, and no row.
+            if (draft.deliveryMode != null) {
+                HorizontalDivider()
+                DeliveryRow(draft, editable, tag, onDraft)
+            }
             // A project with no repository has no branch to name, and no row.
             if (draft.upstream != null) {
                 HorizontalDivider()
                 MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
-            }
-            // How the work reaches main: a card whose read does not say offers no choice, and no row.
-            if (draft.deliveryMode != null) {
-                HorizontalDivider()
-                DeliveryRow(draft, editable, tag, onDraft)
             }
             HorizontalDivider()
             MergeCheckRow(draft, editable, tag, onDraft)
@@ -450,7 +451,8 @@ private fun MergeCheckRow(draft: StartProjectCopy.Draft, editable: Boolean, tag:
                 enabled = editable, placeholder = { Text(RunSettings.mergeCheckPlaceholder) },
                 textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false))
-            Text(RunSettings.mergeCheckHint(draft.main), style = MaterialTheme.typography.labelMedium, color = muted)
+            Text(if (draft.agentPushes) RunSettings.mergeCheckHintAgentPush(draft.main) else RunSettings.mergeCheckHint(draft.main),
+                style = MaterialTheme.typography.labelMedium, color = muted)
         } else if (!draft.hasMergeCheck) Text(RunSettings.mergeCheckNoneSays, style = MaterialTheme.typography.labelMedium, color = muted)
     }
 }

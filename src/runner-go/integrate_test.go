@@ -2202,3 +2202,75 @@ func TestPromotionPreparesTheTreeBeforeTheChecks(t *testing.T) {
 		t.Fatalf("a check pushed: main is %s, want %s", got, mainTip)
 	}
 }
+
+func TestIntegrationLandingPathsExempt(t *testing.T) {
+	for _, scenario := range []string{"exempt", "bare-directory", "missing", "empty", "partial", "policy-edit", "candidate-policy", "upstream-absorbed", "promotion"} {
+		t.Run(scenario, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			if scenario != "missing" {
+				r.writeIn(".orbit/landing-check-exempt", "# upstream policy\n\ndocs/**\n!docs/private.txt\n")
+				if scenario == "bare-directory" {
+					r.writeIn(".orbit/landing-check-exempt", "docs/\n")
+				}
+				r.commit("upstream policy")
+				r.push("main")
+			}
+			r.checkoutNew("project/line", "main")
+			if scenario == "candidate-policy" {
+				// T0 and C have a broader policy, but U still only exempts docs/.
+				r.writeIn(".orbit/landing-check-exempt", "*\n")
+				r.commit("unlanded policy")
+			}
+			r.push("project/line")
+			r.checkoutNew("task/exempt", "project/line")
+			r.writeIn("docs/guide.md", "guide\n")
+			if scenario == "partial" {
+				r.writeIn("docs/private.txt", "private\n")
+			}
+			if scenario == "candidate-policy" {
+				r.write("code.go", "code\n")
+			}
+			if scenario == "policy-edit" {
+				r.writeIn(".orbit/landing-check-exempt", "*\n")
+			}
+			if scenario == "empty" {
+				mustRun(t, r.work, "git", "restore", "--staged", ".")
+				mustRun(t, r.work, "git", "clean", "-fd")
+				mustRun(t, r.work, "git", "commit", "--allow-empty", "-m", "empty")
+			} else {
+				r.commit("task docs")
+			}
+			r.push("task/exempt")
+			r.checkout("main")
+			if scenario == "upstream-absorbed" {
+				r.write("upstream.txt", "upstream\n")
+				r.commit("new upstream")
+				r.push("main")
+			}
+			acceptance := IntegrationCheckSpec{Name: "TASK_ACCEPTANCE", Command: "echo acceptance-ran", ExpectedExitCode: 0, TimeoutSeconds: 10}
+			landing := IntegrationCheckSpec{Name: "LANDING_CHECK", Command: "exit 7", ExpectedExitCode: 0, TimeoutSeconds: 10}
+			cmd := r.command("task/exempt", "project/line", acceptance, landing)
+			if scenario == "promotion" {
+				cmd = r.promotionCommand("CHECK_PROMOTION", "task/exempt", "TASK_BRANCH")
+				landing.Name = "MERGE_CHECK"
+				cmd.Checks = []IntegrationCheckSpec{acceptance, landing}
+			}
+			result := runIntegrationJob(cmd, silent)
+			if len(result.Checks) != 2 || !strings.Contains(result.Checks[0].OutputTail, "acceptance-ran") {
+				t.Fatalf("acceptance did not run: %+v", result)
+			}
+			check := result.Checks[1]
+			if scenario == "exempt" || scenario == "bare-directory" {
+				if result.State != "LANDED" || check.Skipped != "PATHS_EXEMPT" || !slices.Equal(check.Files, []string{"docs/guide.md"}) || check.ExitCode != nil {
+					t.Fatalf("skip result: %+v", result)
+				}
+				encoded, _ := json.Marshal(check)
+				if !strings.Contains(string(encoded), `"skipped":"PATHS_EXEMPT"`) || !strings.Contains(string(encoded), `"files":["docs/guide.md"]`) {
+					t.Fatalf("wire result: %s", encoded)
+				}
+			} else if result.State != "CHECK_FAILED" || check.Skipped != "" || check.ExitCode == nil || *check.ExitCode != 7 {
+				t.Fatalf("check must run: %+v", result)
+			}
+		})
+	}
+}

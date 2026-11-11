@@ -76,6 +76,7 @@ import {
   runLineMain,
   runLineMainHint,
   runMergeCheckHint,
+  runMergeCheckHintAgentPush,
   runTasksAtATime,
   startAskedLine,
   startBarCaption,
@@ -547,27 +548,6 @@ export function StartProjectCard({
               />
             </div>
           </div>
-          {/* Which branch "main" is for this project: where its tasks start and its work ends up.
-              Under the line, because the two are one decision and lock together. A project with no
-              repository has no branch to name, and no row. */}
-          {draft.upstream !== null ? (
-            <div className="start-card-row">
-              <div className="start-card-row-head">
-                <span>{RUN_MAIN_BRANCH}</span>
-                <MainBranchSelect
-                  className="start-card-line"
-                  value={draft.upstream}
-                  branches={branches}
-                  remembered={lastMainBranch?.branch ?? null}
-                  disabled={!editable}
-                  onChange={(upstream) => set({ upstream })}
-                />
-              </div>
-              {lastMainBranch && draft.upstream === lastMainBranch.branch ? (
-                <div className="start-card-hint">{runLastChoiceFor(lastMainBranch.repository)}</div>
-              ) : null}
-            </div>
-          ) : null}
           {/* How the work reaches main (§10.5 O-L1, A-Q21): Orbit lands it, or the agent pushes it
               there itself — a choice only a project landing directly into main has. On a project
               branch the menu stays on Orbit's and the line under it says why. */}
@@ -602,6 +582,27 @@ export function StartProjectCard({
               </div>
             </div>
           ) : null}
+          {/* Which branch "main" is for this project: where its tasks start and its work ends up.
+              Right after the line and its Delivery, because the line and this branch are one decision
+              and lock together. A project with no repository has no branch to name, and no row. */}
+          {draft.upstream !== null ? (
+            <div className="start-card-row">
+              <div className="start-card-row-head">
+                <span>{RUN_MAIN_BRANCH}</span>
+                <MainBranchSelect
+                  className="start-card-line"
+                  value={draft.upstream}
+                  branches={branches}
+                  remembered={lastMainBranch?.branch ?? null}
+                  disabled={!editable}
+                  onChange={(upstream) => set({ upstream })}
+                />
+              </div>
+              {lastMainBranch && draft.upstream === lastMainBranch.branch ? (
+                <div className="start-card-hint">{runLastChoiceFor(lastMainBranch.repository)}</div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="start-card-row">
             <button
               type="button"
@@ -626,7 +627,11 @@ export function StartProjectCard({
                   autoSize={{ minRows: 1, maxRows: 6 }}
                   onChange={(event) => set({ mergeCheckCommand: event.target.value })}
                 />
-                <div className="start-card-hint">{runMergeCheckHint(main)}</div>
+                {agentPushes ? (
+                  <div className="start-card-hint">{runMergeCheckHintAgentPush(main)}</div>
+                ) : (
+                  <div className="start-card-hint">{runMergeCheckHint(main)}</div>
+                )}
                 <div className="start-card-row-head start-card-budget">
                   <span>{RUN_MERGE_CHECK_TIMEOUT}</span>
                   <span className="start-card-inline">

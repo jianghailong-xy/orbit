@@ -217,6 +217,9 @@ export class UpdateProjectIntegrationDto implements IntegrationSettings {
   @IsOptional() @IsString() mergeCheckCommand?: string | null;
   /** That check's budget in seconds; null returns it to the one-hour default. */
   @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
+  /** Landing check overrides; null falls back to the merge check setting. */
+  @IsOptional() @IsString() landingCheckCommand?: string | null;
+  @IsOptional() @IsInt() @Min(1) landingCheckTimeoutSeconds?: number | null;
   /**
    * How long one of this project's exception items may wait on its coordinator before it becomes
    * yours (§4.6). Five minutes to a week, the same range the column's CHECK holds; two hours unless
@@ -537,6 +540,9 @@ export class StartProjectDto implements StartProjectRequestBody {
   /** That check's budget in seconds; null runs it on the one-hour default. Left out, the setting is
    *  not named and the binding keeps the budget it has. */
   @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
+  /** Landing check overrides; null falls back to the merge check setting. */
+  @IsOptional() @IsString() landingCheckCommand?: string | null;
+  @IsOptional() @IsInt() @Min(1) landingCheckTimeoutSeconds?: number | null;
   /** The coordinator's start request this start answers, when the card was drawn from one. */
   @IsOptional() @IsPublicId() requestId?: string | null;
   /** How finished work reaches the upstream (§10.5 O-L1), the owner's choice; left out, the
@@ -572,6 +578,9 @@ export class RequestProjectStartDto implements ProjectStartRequestBody {
   /** That check's budget in seconds, suggested; null suggests the one-hour default. Left out it is
    *  not named, and the owner's card opens on an empty box — which is that same default. */
   @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
+  /** Landing check overrides; null falls back to the merge check setting. */
+  @IsOptional() @IsString() landingCheckCommand?: string | null;
+  @IsOptional() @IsInt() @Min(1) landingCheckTimeoutSeconds?: number | null;
   /** Shown to the owner on the card, as written. */
   @IsString() @MinLength(1) @MaxLength(MAX_START_REQUEST_WHY) why!: string;
 }
@@ -793,6 +802,12 @@ export class AbandonIntegrationJobDto {
 export class ObserveIntegrationDto {
   @Allow()
   reason?: unknown;
+}
+
+/** K7 reason validation belongs to the service so refusals carry the door's stable code. */
+export class RequestPromotionDto {
+  @Allow()
+  reason?: string;
 }
 
 export class SkipMergeCheckDto {

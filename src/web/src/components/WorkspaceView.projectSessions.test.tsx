@@ -896,13 +896,15 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(suggestion()).toBe('Directly into develop · Automatic off · 1 at a time'));
   });
 
-  it('reads no open items for a project already started, and draws no start', async () => {
+  it('draws no start for a project already started, though it reads the open items for the Not yet note', async () => {
     projects = [project({ startedAt: '2026-10-02T00:00:00Z' })];
     await mount();
     await openSessions();
     await settle();
     expect(page()!.querySelector('.session-project-start')).toBeNull();
-    expect(openItemsCalls).toBe(0);
+    // Read since 6455363cf for the owner's latest Not yet answer, which a started project shows too;
+    // the start row is still decided by `startedAt` alone.
+    expect(openItemsCalls).toBeGreaterThan(0);
     expect(page()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
   });
 

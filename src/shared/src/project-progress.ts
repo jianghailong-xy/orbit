@@ -64,6 +64,9 @@ export interface ProjectIntegrationSettings<Instant = string> {
   /** Integration started, so the line can no longer change (§1.2 L4). */
   locked: boolean;
   startedAt: Instant | null;
+  landingCheckCommand: string | null;
+  landingCheckTimeoutSeconds: number | null;
+  landingCheckCommandAbsentReason: 'FALLS_BACK_TO_MERGE_CHECK' | null;
   mergeCheckCommand: string | null;
   mergeCheckCommandAbsentReason: 'NOT_CONFIGURED' | null;
   mergeCheckTimeoutSeconds: number | null;
@@ -236,7 +239,7 @@ export type IntegrationJobLiveness = 'LIVE' | 'QUIET' | 'SILENT' | 'LEASE_EXPIRE
 /** The check a v2 claim is running, as its progress reports name it (§2.2 J-T4). The job row's
  *  `checks` holds finished results in a different shape. */
 export interface ProjectIntegrationCheck<Instant = string> {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   /** Position of this check in the run, from 1, and how many the run has in all. */
   index: number;
   count: number;
@@ -459,7 +462,7 @@ export interface IntegrationTimelineEntry<Instant = string> {
   /** The claim the fact happened under; 0 before the first claim. */
   claim: number;
   round: number | null;
-  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'; index: number } | null;
+  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK'; index: number } | null;
   phase: IntegrationJobPhase | null;
   step: string | null;
   actor: IntegrationTimelineActor | null;

@@ -12,18 +12,17 @@ machine may do it. What bounds it is unchanged — the conclusion names the immu
 version it judged, every stated criterion must be answered in the same call, and the project-level
 verdict is derived from that conjunction rather than supplied.
 
-Project `DONE` is not a `HUMAN_ONLY` write, and since 2026-09-08 it is not, in the ordinary case,
-anybody's write at all: `projects/project-done-derived.ts` PROJECTS the column from a standing
-confirmation of today's standard set and criteria that are every one satisfied and landed,
-recomputing it on four edges that have no requester: the owner's confirmation, the post-commit
-edge of any task write in the project, a merge receipt being recorded, and a write that restates the
-criteria themselves.
-A projection is not a gate — it refuses nothing, and none of what migration
-`0229_project_acceptance_judgment_removal` took away on
-2026-09-03 comes back with it: no trigger on `project`, no acceptance run, and no 409 that turns a
-direct `status=DONE` request into a refusal. Who may still write the column BY HAND is the last
-column of the matrix below, and it turns on one condition — whether the request carries an acting
-session. `docs/project-done-gate.md` is the live page for what decides the value.
+Project `DONE` has two paths: the projection records `done_by=DERIVED` from a standing
+confirmation and criteria that are satisfied and landed; the account owner can record
+`done_by=OWNER`, accepting gaps, with or without a coordinator's `DONE_REQUEST`. The projection
+moves in both directions but preserves the owner's record until its criteria change or serving
+work is reopened. A derived OPEN-to-DONE write tells the owner by push. The owner's Reopen press
+also holds against unchanged facts (migration 0469).
+
+[Project DONE: derived facts and the owner's record](project-done-gate.md) is the live description
+of both paths, their request checks and reopen rules. The matrix below describes credential and
+session restrictions on caller-supplied writes; the historical review sections do not replace
+that live description.
 
 It is deliberately limited to those actions. It does not redesign authentication.
 
@@ -166,7 +165,7 @@ two `HUMAN_ONLY` rows, which restrict only the `JUDGMENT` role. A request with n
 reaches the column exactly as 0229 left it: the owner REST door passes no session at all, and the
 headless and internal paths write it directly. So this is a boundary on the tool an agent holds,
 not a claim about who is on the other end of a credential — and it is not what makes the column
-say `DONE`: no request does that, the projection does.
+say `DONE`: the projection does that without a request; an owner record is a separate decision.
 
 There is currently no production cron job that writes these three facts. The no-Session service
 default remains available for trusted internal/cron composition; adding such a writer must still
@@ -372,7 +371,7 @@ The `Project DONE` column above was reconciled on 2026-09-08 and now states what
 a request with no acting session writes the column directly, a request carrying one is refused
 whole, and the value itself is projected. What migration `0229_project_acceptance_judgment_removal`
 deleted on 2026-09-03 stays deleted. §"What is true today" below is the reasoning the DONE answer
-came out of, and `docs/project-done-gate.md` is the live page.
+came out of. [The live DONE page](project-done-gate.md) now describes both the projection and the owner record.
 
 ### The premise being tested is false, and that is the finding
 
@@ -509,7 +508,7 @@ The coordinator card's role under (B) is a prompt with a link, not an answer sur
 > so that the project page is not a second confirmation surface. The paragraphs above record where
 > (B) first put the entry rather than the product. The door and its digest rule are unchanged.
 
-### What is true today about project DONE, and what derives it
+### Historical review of project DONE and its derivation
 
 > **Answered, 2026-09-08.** The last paragraph of this section said the deriver must not be built
 > on this review's authority and that it needed the owner to say the 2026-09-03 decision was being
