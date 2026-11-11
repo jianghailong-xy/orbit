@@ -42,7 +42,8 @@ export type AnthropicLoginCaller = GatewayCaller & { sessionModel: string | null
  *
  * What it sends is Claude Code's own: the translated request with Claude Code's system prompt as its
  * `instructions`, Claude Code's User-Agent as it came, and the account's credential pair (`Authorization` and
- * `ChatGPT-Account-ID`). None of what the login gateway adds for codex's own turn (loginProviderRequest: the
+ * `ChatGPT-Account-ID`), plus the Orbit session's id as `session-id` so the backend keeps the session's prompt
+ * cache (upstreamHeaders). None of what the login gateway adds for codex's own turn (loginProviderRequest: the
  * `version` and `x-codex-routing-hint` headers, the guardian metadata, the zstd body) and no Codex prompt or
  * Codex User-Agent: decision D4 forbids any disguise. The Codex backend accepted exactly this on 2026-11-11
  * (the P2b probe, design §9.1).
@@ -114,7 +115,7 @@ export class AnthropicLoginGatewayService {
     const now = new Date();
     const answer = await this.login.exchange(res, caller, login, refuseLogin, (credential) =>
       sendUpstream(this.agent, 'POST', `${this.upstream}/responses`,
-        upstreamHeaders(credential, login.accountId, payload.length, req.headers['user-agent']), payload, res));
+        upstreamHeaders(credential, login.accountId, caller.sessionId, payload.length, req.headers['user-agent']), payload, res));
     if (!answer) {
       line('refused by the login gateway');
       return;
@@ -231,16 +232,31 @@ function count(value: unknown): number {
 }
 
 /**
- * What goes to the Codex backend: the body's type, what is accepted back, the account's credential pair, and
- * Claude Code's own User-Agent as it came. Nothing else the CLI sent, and nothing that claims to be Codex.
+ * What goes to the Codex backend: the body's type, what is accepted back, the account's credential pair,
+ * Claude Code's own User-Agent as it came, and `session-id` = the Orbit session's id. Nothing else the CLI
+ * sent, and nothing that claims to be Codex.
+ *
+ * `session-id` keeps the session's prompt cache. The backend routes a request to a cache by that header, not
+ * by the body's `prompt_cache_key` alone. Without it, consecutive requests of one session, each only extending
+ * the one before, landed on machines that did not hold its prefix. They got the cache shared by every session
+ * (tools and instructions) and missed the rest: 58% and 67% of input tokens cached in two real sessions,
+ * against 94% with the header (design §9.3). It names the session, the same value `prompt_cache_key`
+ * carries; it does not name a client.
  */
-export function upstreamHeaders(accessToken: string, accountId: string, length: number, userAgent: string | string[] | undefined): OutgoingHttpHeaders {
+export function upstreamHeaders(
+  accessToken: string,
+  accountId: string,
+  sessionId: string,
+  length: number,
+  userAgent: string | string[] | undefined,
+): OutgoingHttpHeaders {
   const agent = Array.isArray(userAgent) ? userAgent[0] : userAgent;
   return {
     'content-type': 'application/json',
     accept: 'text/event-stream',
     authorization: `Bearer ${accessToken}`,
     'chatgpt-account-id': accountId,
+    'session-id': sessionId,
     'content-length': String(length),
     ...(agent ? { 'user-agent': agent } : {}),
   };

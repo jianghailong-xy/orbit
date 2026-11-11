@@ -16,6 +16,7 @@ import {
   PING_SSE,
   type MessagesEvent,
 } from './anthropic-gateway';
+import { upstreamHeaders } from './anthropic-login-gateway.service';
 
 /**
  * The Anthropic ⇄ Responses translator of the Claude-on-OpenAI gateway (docs/claude-engine-openai-gateway-design.md
@@ -587,6 +588,38 @@ test('§4.4 a stream that ends without a final event answers an error, never a s
 test('SSE out: event and data lines the CLI reads, and a ping for keep-alive', () => {
   assert.equal(toSse([{ type: 'message_stop' }]), 'event: message_stop\ndata: {"type":"message_stop"}\n\n');
   assert.equal(PING_SSE, 'event: ping\ndata: {"type":"ping"}\n\n');
+});
+
+// ── prompt cache ──────────────────────────────────────────────────────────────────────────────────
+
+/** The upstream reads its cache by prefix: tools, then instructions, then the input items in order. */
+const cachePrefix = (req: Json) => [JSON.stringify(req.tools ?? []), String(req.instructions ?? ''), ...items(req).map((i) => JSON.stringify(i))];
+
+test('prompt cache: each recorded follow-up request only extends the one before it, upstream as well', () => {
+  // Reasoning carried across turns (thinkturns), parallel results put back in call order (parallel), a subagent
+  // (subagent-r2), an image result (image-r2): what came before stays byte for byte, so the cached prefix holds.
+  for (const name of ['thinkturns', 'parallel', 'subagent-r2', 'image-r2']) {
+    const main = posts(name, 'main').map((r) => toResponsesRequest(r.body!, CTX).request);
+    for (let n = 1; n < main.length; n++) {
+      const before = cachePrefix(main[n - 1]);
+      const after = cachePrefix(main[n]);
+      assert.ok(after.length > before.length, `${name} #${n} grew`);
+      assert.deepEqual(after.slice(0, before.length), before, `${name} #${n} keeps #${n - 1} as its prefix`);
+      assert.equal(main[n].prompt_cache_key, main[n - 1].prompt_cache_key);
+    }
+  }
+});
+
+test('prompt cache: the Codex backend is told the session as session-id, the same id prompt_cache_key carries', () => {
+  const { request } = toResponsesRequest(posts('basic', 'main')[0].body!, { ...CTX, promptCacheKey: 'session-7' });
+  const headers = upstreamHeaders('access-token', 'account-1', 'session-7', 123, 'claude-cli/2.1.322 (external, sdk-cli)');
+  assert.equal(headers['session-id'], request.prompt_cache_key);
+  // Nothing else beside it: the credential pair, Claude Code's own User-Agent, and no header naming a client.
+  assert.deepEqual(Object.keys(headers).sort(), ['accept', 'authorization', 'chatgpt-account-id', 'content-length', 'content-type', 'session-id', 'user-agent']);
+  assert.equal(headers['user-agent'], 'claude-cli/2.1.322 (external, sdk-cli)');
+  assert.equal(headers.authorization, 'Bearer access-token');
+  assert.equal(headers['content-length'], '123');
+  assert.equal(upstreamHeaders('t', 'a', 's', 1, undefined)['user-agent'], undefined);
 });
 
 test('the translator is pure: its modules import nothing that does I/O', () => {

@@ -172,7 +172,7 @@ the server keeps nothing. Reasoning comes back encrypted and travels inside the 
 | effort (`output_config.effort`, or a `thinking` budget when no effort is sent) | `reasoning: {effort, summary: "auto"}`: low, medium, high, xhigh; `max` → `xhigh`; held to the model's highest declared level; no effort and no thinking → no `reasoning` |
 | `thinking: {type: "adaptive", display: "updates"}`, `context_management` | dropped |
 | `temperature`, `top_p`, `top_k`, `stop_sequences` | dropped (reasoning models reject them) |
-| `metadata.user_id` | not sent; `prompt_cache_key` = the session id, so OpenAI's own caching keeps one prefix per session |
+| `metadata.user_id` | not sent; `prompt_cache_key` = the session id, so OpenAI's own caching keeps one prefix per session (a login pool also sends the id as the `session-id` header, §9.3) |
 | `model` | §4.5 |
 
 **The reasoning envelope.** Claude Code keeps `thinking` blocks in its transcript and sends them back with their
@@ -500,9 +500,19 @@ open session on engine `claude` on its owner's own unshared Codex pool, with the
 `/api/gw/anthropic` refuses a codex session's.
 
 - The request is translated as an OpenAI key's is (§4.3) and sent to `CHATGPT_CODEX_BASE/responses` with
-  `content-type`, `accept`, `Authorization: Bearer <access token>`, `ChatGPT-Account-ID`, and Claude Code's own
-  `User-Agent` as it came. Nothing else is sent: no `version`, `x-codex-routing-hint`, zstd body or guardian
-  metadata (those stay codex-only in `loginProviderRequest`), and no Codex prompt.
+  `content-type`, `accept`, `Authorization: Bearer <access token>`, `ChatGPT-Account-ID`, Claude Code's own
+  `User-Agent` as it came, and `session-id` = the Orbit session's id. Nothing else is sent: no `version`,
+  `x-codex-routing-hint`, zstd body or guardian metadata (those stay codex-only in `loginProviderRequest`), and no
+  Codex prompt.
+- **Prompt cache (added 2026-11-12, task 34vo71QVar9g6lKUCHxAd).** The backend keeps a session's cached prefix
+  by the `session-id` header; `prompt_cache_key` alone does not do it. Without the header, the CLI's requests were
+  each an exact extension of the one before, yet often missed: they hit only the prefix every session shares
+  (tools and instructions, 8,832 tokens) or the first request's (11,136). Even an identical request sent twice in a
+  row missed once. P3 measured 76.7% of input tokens cached; two real sessions of one P3 task measured 58.0% and
+  66.7%. With the header, a third session of the same task measured 93.6%. Replays of one recorded session
+  measured 78.0% and 82.2% without the header and 96.3% and 94.0% with it. The header carries the same session id
+  as `prompt_cache_key`. It names the session, not a client: the User-Agent stays Claude Code's, and nothing
+  Codex-only is sent. This is not a disguise under D4, since the backend accepted the requests without it.
 - The account checks, the refresh (ahead of expiry, and once on a 401), the rate-limit wait, the `spent_until` and
   `throttled_until` marks, the transcript notices and the usage ledger are the login gateway's own code, split
   out of `PoolLoginGatewayService.forward` (`accountFor`, `exchange`, `readUsage`, `answeredWhole`,
