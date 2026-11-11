@@ -36,8 +36,8 @@ describe('landingSteps', () => {
     expect(steps.map((step) => [step.name, step.summary.text, step.entries.length])).toEqual([
       ['Queue', 'Task marked done · queued to land on project/p1', 1],
       ['Claim', 'Claimed by runner workstation-gpu · claim 1', 2],
-      ['Sync', 'Preparing the combined tree', 5],
-      ['Merge check', 'Merge check passed · 0m 16s', 4],
+      ['Sync', 'Preparing the combined tree', 6],
+      ['Merge check', 'Merge check passed · 0m 16s', 3],
       ['Push', 'Landed on project/p1 · 9afb7d1', 3],
     ]);
     // Every line is kept, each once.
@@ -45,6 +45,31 @@ describe('landingSteps', () => {
       .toEqual(entries.map((_, index) => index));
     // A step's time is its newest line's.
     expect(steps[4].at).toBe(entries[14].at);
+  });
+
+  it('leaves what queued an attempt to its trigger: the steps start at Claim, and a stop while queued stays a step', () => {
+    const queued = [
+      line('RETRY', 'Rerun by the coordinator · the baseline was repaired', { claim: 0 }),
+      line('ENQUEUED', 'Queued again to land on project/p1', { claim: 0 }),
+      line('CLAIMED', 'Claimed by runner workstation-gpu · claim 1'),
+      line('RESULT', 'Landed on project/p1 · 9afb7d1', { data: { state: 'LANDED' } }),
+    ];
+    expect(landingSteps(queued, 'LAND_TASK', true).map((step) => step.name)).toEqual(['Claim', 'Push']);
+    // Without a trigger (an older server) the Queue step still says it.
+    expect(landingSteps(queued, 'LAND_TASK').map((step) => step.name)).toEqual(['Queue', 'Claim', 'Push']);
+    const merged = [
+      line('CONFIRMATION', 'Confirmed by Automatic', { claim: 0 }),
+      line('AUTOMATIC_ATTEMPT', 'Automatic merge 1 of 3 · if main moves again, it asks the owner', { claim: 0 }),
+      line('ENQUEUED', 'Merging into main on its own — Automatic is on', { claim: 0 }),
+      line('CLAIMED', 'Claimed by runner workstation-gpu · claim 1'),
+    ];
+    expect(landingSteps(merged, 'LAND_PROMOTION', true).map((step) => step.name)).toEqual(['Claim']);
+    const stopped = [
+      line('ENQUEUED', 'Task marked done · queued to land on project/p1', { claim: 0 }),
+      line('STOP_REQUESTED', 'Stopped by the owner before it ran', { claim: 0 }),
+    ];
+    expect(landingSteps(stopped, 'LAND_TASK', true).map((step) => [step.name, step.summary.text]))
+      .toEqual([['Queue', 'Stopped by the owner before it ran']]);
   });
 
   it('keeps a failed check’s result in its check, so no Push row says a push failed', () => {
@@ -57,6 +82,27 @@ describe('landingSteps', () => {
     ], 'LAND_TASK');
     expect(steps.map((step) => step.name)).toEqual(['Queue', 'Claim', 'Merge check']);
     expect(steps[2].summary.text).toBe('Check failed · nothing was pushed');
+  });
+
+  it('says how a failed check ended, not the hand-off after it, and draws no step for a check that never ran', () => {
+    // The owner's 2026-11-11 screenshot: task acceptance failed, the coordinator was asked, and the merge check never started.
+    const acceptance = { name: 'TASK_ACCEPTANCE' as const, index: 1 };
+    const steps = landingSteps([
+      line('ENQUEUED', 'Task marked done'),
+      line('CLAIMED', 'Claimed by runner workstation-gpu · claim 1'),
+      line('STEP', 'Rebasing onto project/p1', { phase: 'REBASE' }),
+      line('STEP', 'Running the checks', { phase: 'CHECK' }),
+      line('STEP', 'Preparing the combined tree', { phase: 'CHECK' }),
+      line('CHECK_STARTED', 'Task acceptance started', { check: acceptance }),
+      line('CHECK_FINISHED', 'Task acceptance failed · exit 1', { check: acceptance, data: { exitCode: 1, expectedExitCode: 0 } }),
+      line('HANDED_TO', 'Asked the coordinator to fix it'),
+    ], 'LAND_TASK');
+    expect(steps.map((step) => [step.name, step.summary.text])).toEqual([
+      ['Queue', 'Task marked done'],
+      ['Claim', 'Claimed by runner workstation-gpu · claim 1'],
+      ['Sync', 'Preparing the combined tree'],
+      ['Task acceptance', 'Task acceptance failed · exit 1'],
+    ]);
   });
 
   it('names a merge round’s last step Merge, and a check round’s Result', () => {

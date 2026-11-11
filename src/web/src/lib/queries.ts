@@ -1477,6 +1477,19 @@ export const wikiDocQuery = (spaceId: string | null, slug: string | null) =>
  * A wiki write re-reads it (`wiki.changed`); while something is working it is read again besides, because a
  * chat's turn ending is a session's event, which says nothing to this key.
  */
+/**
+ * The panel's history (board 45 ④): the chats whose title holds `q`, one page of rules.chatsListed at a time
+ * (contract `chat.list.page`). Under the chats read's key, so whatever re-reads that reads this again.
+ */
+export const wikiChatHistoryQuery = (spaceId: string, q: string) =>
+  infiniteQueryOptions({
+    queryKey: ['wiki', 'chats', spaceId, 'history', q] as const,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => getWikiChats(spaceId, { q, offset: pageParam }),
+    getNextPageParam: (page, pages) => (page?.more ? pages.reduce((n, one) => n + (one?.chats.length ?? 0), 0) : undefined),
+    staleTime: 15_000,
+  });
+
 export const wikiChatsQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'chats', spaceId] as const,

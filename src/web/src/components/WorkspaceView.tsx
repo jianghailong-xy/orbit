@@ -134,6 +134,7 @@ import {
   projectPromotionQuery,
   sessionCreatedTasksQuery,
   watchesQuery,
+  projectDependencyGraphQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
 import { SessionMoveModal, type MoveDialogSession } from './SessionMoveModal';
@@ -252,6 +253,8 @@ import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeNamesCtx } from './WatchWakeCard';
+import { ExchangeTreeCtx, type ExchangeTree } from './OrbitExchangeFold';
+import { idKey as exchangeIdKey, upstreamFromGraph } from '../lib/orbitExchangeFold';
 import {
   ago,
   sameResourceId,
@@ -5037,6 +5040,34 @@ export function WorkspaceView({
     [watchesForHeaderQ.data, createdTasks.data],
   );
 
+  // What places a folded Orbit turn under its task in the transcript (OrbitExchangeFold): which
+  // task a session runs, from the rows this page already holds, and which tasks a task waits on,
+  // from the project's dependency graph — read only once a group of folded turns is opened in a
+  // conversation that belongs to a project, and shared with the project page's read.
+  const [exchangeTreeWanted, setExchangeTreeWanted] = useState(false);
+  const exchangeGraph = useQuery({
+    ...projectDependencyGraphQuery(coordinatedProjectId ?? ''),
+    enabled: exchangeTreeWanted && Boolean(coordinatedProjectId) && !selectedTrashed,
+  });
+  const wantExchangeTree = useCallback(() => setExchangeTreeWanted(true), []);
+  const exchangeTree = useMemo<ExchangeTree>(() => {
+    const graph = upstreamFromGraph(exchangeGraph.data);
+    const taskBySession = new Map<string, { id: string; title?: string }>();
+    for (const row of sessionsQ.data ?? []) {
+      if (typeof row.taskId === 'string' && row.taskId) {
+        taskBySession.set(exchangeIdKey(row.id), { id: row.taskId, title: graph.taskTitle(row.taskId) });
+      }
+    }
+    return {
+      lookup: {
+        taskOfSession: (sessionId) => taskBySession.get(exchangeIdKey(sessionId)) ?? null,
+        upstreamOf: graph.upstreamOf,
+        taskTitle: graph.taskTitle,
+      },
+      want: wantExchangeTree,
+    };
+  }, [exchangeGraph.data, sessionsQ.data, wantExchangeTree]);
+
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
   const decide = async (
@@ -9622,6 +9653,7 @@ export function WorkspaceView({
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
               <WatchWakeNamesCtx.Provider value={wakeTargetName}>
+              <ExchangeTreeCtx.Provider value={exchangeTree}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
                   says so, and otherwise it is the way to the first message, which scrolling alone
                   never reaches (see jumpToStart). Pinned to the top of the viewport rather than
@@ -9985,6 +10017,7 @@ export function WorkspaceView({
                   )}
                 </div>
               )}
+              </ExchangeTreeCtx.Provider>
               </WatchWakeNamesCtx.Provider>
             </div>
           ) : bareMachine ? (

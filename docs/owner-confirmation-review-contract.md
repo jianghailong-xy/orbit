@@ -719,6 +719,7 @@ answers?: Array<{ key: string; option?: number | null; text?: string | null }>;
 **Q5（送到会用它的地方）**：答案记下来的同时做两件事，回执上再显示一件：
 1. **任务评论，写在决定的同一个事务里**（不是提交之后）：主键由决定 id 派生，加 `skipDuplicates`。署名与写法照 `session-request.service.ts#commentOnAskerTask`：署名按 `postRunFailureComment` 的规矩，正文用英文，说明这是 owner 对审查问题的回答，逐条列出「问题 — 答案」；`source = 'NOT_SHOWN'` 的条目注明「the owner's app did not show this question; what is recorded is the option the reviewer recommended」。之后任何读这个任务的 agent（`task_get` 会带上评论）都看得到——2026-09-29 那次缺的正是这一环。评论和决定同生同灭，不需要补偿点。
 2. **给审查方的平台轮次，在提交之后**：审查方会话还没结束时投一条，`clientTurnId = 'owner-confirmation-answers:v1:<decisionId>'`，`NEXT_TURN`。正文由记录和决定这两行渲染出来，两者都不可变。内容包括：任务、`The owner confirmed it at <time>`、逐条「问题 → 选中的选项或 owner 的原话」（`NOT_SHOWN` 的条目照实标出）。审查方已结束就不投，也不复活它（ILC G6）。这一轮只是提醒：进程死在提交和投递之间，它就丢了，不补。答案仍在决定行和第 1 条的评论上，审查方读任务时就能看到。
+   这一轮的回显和排队行带 `confirmationAnswers`（`ConfirmationAnswersCard`：`decisionId`、`taskId`、`title`、`decidedAt`、逐条 `{ key, question, choice, text, notShown }`），按轮次的键从决定行和审查记录现读，与正文同源。客户端画成 `You confirmed` 卡片，不画成 owner 的气泡：任务标题（链到任务）、`Your answers, sent to this reviewer`、逐条问题与答案（选项只写 label，不写序号；原话加弯引号；`notShown` 的条目注明 `Not shown to you — the recommended answer was recorded.`），给 agent 的原文收在 `What the reviewer was told` 折叠里。效果图见 `docs/mocks/confirmation-answers-turn/`（owner 2026-11-11 认可）。
 3. **回执**：显示 `Your answers`，逐条写「问题 — 答案」（§9 L3）。`NOT_SHOWN` 的条目旁边写 `Not shown to you — the recommended answer was recorded.`
 
 ---
@@ -972,6 +973,7 @@ owner 确认卡的署名提示改为 `Orbit composed this card and authorised it
 | `It will show here when it comes in.` | 回执下仍在审查中的审查栏 | 新 |
 | `1 problem found after you confirmed` / `<N> problems found after you confirmed` | 回执首行、推送正文 | 新 |
 | `Review requested`、`Due <HH:MM>` | 审查方会话里的卡片 | 新 |
+| `You confirmed`、`Your answers, sent to this reviewer`、`What the reviewer was told` | 审查方会话里 owner 答案那一轮的卡片（Q5 第 2 条） | 新 |
 | `Orbit composed this card and authorised its buttons. Anything an agent wrote is shown in a box that names who wrote it.` | 确认卡的署名提示 | 新 |
 | `Coordinator` | 呈上卡片开头块的署名；`PROJECT_COORDINATOR` 的 `Reviewer` 位置 | 新（修订 3） |
 | `Nothing else needs your decision.`、`<N> checked · <N> not checked · <N> left open` | 开头块 | 新（修订 3） |
@@ -1145,6 +1147,8 @@ questionWithCoordinator?: { count: number; since: string; dueAt: string } | null
 
 协调会话这一侧的 `NO_REPLY`（§4.1）和 `RECIPIENT_ENDED` 判定照旧，只是结局的去处换成 §16。
 
+**R 的卡片（2026-11-11，owner 认可 `docs/mocks/orbit-turn-cards/`）**：`run-question:v1:` 轮次的回显和排队行带 `runQuestion`（`RunQuestionCard`：问题与选项、`replyBy`、请求与审批状态，以及答过之后的 `answers`（按问题原文）和 `answeredBy`：`SESSION` 是协调会话经 `session_reply` 答的，`OWNER` 是 owner 答的）。客户端画成 `Question from a task run` 卡片：任务标题、问题与选项（只读，卡片上不放作答按钮）、一句状态（`The run is waiting. This session answers it; if it hasn't by <时间>, you're asked.` / `Passed to you at <时间>.` / `Answered by this session.` / `Answered by you.` / `Closed without an answer.`）、`Open task session`，给 agent 的原文收在 `What the coordinator was told` 折叠里。
+
 ---
 
 ## 15. 执行会话的 notify（M）
@@ -1177,6 +1181,8 @@ Nothing is waiting for your reply. If the owner should know or decide, use ask_o
 { "delivered": true, "recipient": "owner", "fallback": "NO_COORDINATOR", "devices": 2 }               // 兜底
 { "delivered": false, "reason": "rate limited — try again in 41s" }                                   // 与今天相同
 ```
+
+**M 的卡片（2026-11-11，同上效果图）**：`run-notify:v1:` 轮次的回显和排队行带 `runNotice`（`RunNoticeCard`：任务、`request_preview` 原话、请求状态；交出时状态由 OPEN 变 READ）。客户端画成灰色 `Notice from a task run` 卡片：任务标题、加引号的原话、`Nothing to reply to. It did not reach you.`，原文收在 `What the coordinator was told` 折叠里。
 
 **M6（兜底）**：§16 列出的情况发生时：
 - 调用那一刻就不可达（没有协调会话、已结束、暂停、熔断、`createTurn` 拒绝）：走今天的 `notifyAgentMessage` 的发送部分（M3 已经 claim 过），正文前面加 `Not reviewed by the coordinator · `，结果带 `fallback`。

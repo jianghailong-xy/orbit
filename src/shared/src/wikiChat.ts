@@ -17,7 +17,7 @@ export const WIKI_CHAT_RULES = {
   selectionSentencesMax: 20,
   /** The most sections one card rewrites (design §8.2, the card's Rewrites). */
   rewritesMax: 5,
-  /** The most chats one read of a space lists, newest first; the counts it carries are over all of them. */
+  /** The most chats one read of a space lists, the one last spoken in first; the counts it carries are over all of them. */
   chatsListed: 50,
 } as const;
 
@@ -1214,8 +1214,14 @@ export interface WikiChatRow {
   status: string;
   /** One of OPEN_SESSION_STATUSES and not in Trash. */
   open: boolean;
+  /** In the session list's Completed (its completedAt is set): the panel's history files it there (board 45 ④). */
+  completed: boolean;
+  /** A turn of it is queued or running, as fab.counts reads `working`. */
+  working: boolean;
   createdAt: string;
   updatedAt: string;
+  /** When it was last spoken in (its last turn), else when it was made: what the list is ordered by. */
+  lastActiveAt: string;
   /** How many cards it holds. */
   drafts: number;
   /** How many of the button's `needsYou` are this chat's. */
@@ -1230,6 +1236,33 @@ export interface WikiChatList {
   choices: WikiChatWorkspace[];
   fab: WikiChatFabCounts;
   chats: WikiChatRow[];
+  /** More chats match past this page: the next page starts at `offset` + rules.chatsListed. */
+  more: boolean;
+}
+
+/** Which page of a space's chats a read asks for (contract `chat.list.page`): `?q=` and `?offset=`. */
+export interface WikiChatListPage {
+  /** Words a chat's title holds, matched without case; blank matches every chat. */
+  q?: string;
+  /** How many matching chats to pass over, a whole number from 0. */
+  offset?: number;
+}
+
+/** The longest `q` a read takes (contract `chat.list.page`). */
+export const WIKI_CHAT_LIST_QUERY_MAX = 200;
+
+/**
+ * One page of a space's chats (contract `chat.list.page`, board 45 ④): the chats whose title holds `q`, the one last
+ * spoken in first (ties by the newer id), `offset` passed over, at most rules.chatsListed, and whether more match.
+ */
+export function wikiChatListPage(rows: readonly WikiChatRow[], page: WikiChatListPage = {}): { chats: WikiChatRow[]; more: boolean } {
+  const q = (page.q ?? '').trim().toLocaleLowerCase();
+  const offset = page.offset ?? 0;
+  const matched = rows
+    .filter((row) => q === '' || row.title.toLocaleLowerCase().includes(q))
+    .sort((a, b) => (a.lastActiveAt === b.lastActiveAt ? (a.sessionId < b.sessionId ? 1 : a.sessionId > b.sessionId ? -1 : 0) : a.lastActiveAt < b.lastActiveAt ? 1 : -1));
+  const end = offset + WIKI_CHAT_RULES.chatsListed;
+  return { chats: matched.slice(offset, end), more: matched.length > end };
 }
 
 /** `POST /api/wiki/spaces/:id/chats` (contract `chat.create.body`). */

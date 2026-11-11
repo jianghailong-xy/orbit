@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ConfirmationAnswersCard,
+  EvidenceReviewCard,
+  EvidenceSendBackCard,
+  RunNoticeCard,
+  RunQuestionCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
@@ -138,6 +143,61 @@ const RETURNED: ConfirmationReturnCard = {
   problems: [{ key: 'p1', text: 'P1-3 still sends the reply twice' }],
 };
 const RETURN_BLOCK = '<orbit-confirmation-return request-id="r1">\nSent back: two findings remain.\n</orbit-confirmation-return>';
+const EVIDENCE_REVIEW: EvidenceReviewCard = {
+  evidenceId: '01a0cca7-0000-7000-8000-0000000000d1',
+  taskId: '01a0cca7-0000-7000-8000-0000000000d2',
+  title: 'iOS/macOS: new account welcome card',
+  revision: '1',
+  runSessionId: '01a0cca7-0000-7000-8000-0000000000d3',
+  dueAt: null,
+  claim: 'iOS and macOS now show the welcome card.',
+  state: 'OPEN',
+  latestRevision: '1',
+  decision: null,
+};
+const EVIDENCE_REVIEW_BLOCK = '<orbit-evidence-review task="t" revision="1">\nA run submitted evidence.\n</orbit-evidence-review>';
+const SEND_BACK: EvidenceSendBackCard = {
+  decisionId: '01a0cca7-0000-7000-8000-0000000000e1',
+  taskId: '01a0cca7-0000-7000-8000-0000000000d2',
+  title: 'iOS/macOS: new account welcome card',
+  revision: '1',
+  note: 'The macOS screenshot is missing.',
+  by: 'OWNER',
+  bySessionId: null,
+  byTitle: null,
+};
+const SEND_BACK_TOLD = '<orbit-evidence-send-back task="t" revision="1">\nSent back.\n</orbit-evidence-send-back>';
+const RUN_QUESTION: RunQuestionCard = {
+  requestId: '01a0cca7-0000-7000-8000-0000000000f1',
+  approvalId: '01a0cca7-0000-7000-8000-0000000000f2',
+  taskId: '01a0cca7-0000-7000-8000-0000000000f3',
+  taskTitle: 'K4, K5 baseline red',
+  runSessionId: '01a0cca7-0000-7000-8000-0000000000f4',
+  replyBy: '2026-10-06T06:10:00.000Z',
+  state: 'OPEN',
+  approvalStatus: 'PENDING',
+  questions: [{ question: 'Keep its place?', options: [{ label: 'Keep' }, { label: 'Back' }] }],
+  answers: null,
+  answeredBy: null,
+};
+const RUN_QUESTION_BLOCK = '<orbit-run-question task="t">\nA run asked.\n</orbit-run-question>';
+const RUN_NOTICE: RunNoticeCard = {
+  requestId: '01a0cca7-0000-7000-8000-0000000000a9',
+  taskId: '01a0cca7-0000-7000-8000-0000000000f3',
+  taskTitle: 'K4, K5 baseline red',
+  runSessionId: '01a0cca7-0000-7000-8000-0000000000f4',
+  message: 'The emulator is down.',
+  state: 'OPEN',
+};
+const RUN_NOTICE_BLOCK = '<orbit-run-notice task="t">\nA run used notify.\n</orbit-run-notice>';
+const ANSWERS: ConfirmationAnswersCard = {
+  decisionId: '01a0cca7-0000-7000-8000-0000000000c1',
+  taskId: '01a0cca7-0000-7000-8000-0000000000c2',
+  title: 'Welcome email for new accounts',
+  decidedAt: '2026-11-11T05:13:08.000Z',
+  answers: [{ key: 'n1', question: 'How should it reach main?', choice: 'Merge to main now', text: null, notShown: false }],
+};
+const ANSWERS_TOLD = '<orbit-confirmation-answers task="t">\nThe owner confirmed it.\n</orbit-confirmation-answers>';
 
 const FROM: SessionMessageCard = {
   fromSessionId: '01a0cca7-8609-70ed-a0e2-d4b55b832b61',
@@ -275,7 +335,7 @@ const CASES: Case[] = [
     row: { turnId: 'turn-review', content: REVIEW_BLOCK, createdAt: TS, confirmationReviewRequest: REVIEW_REQUEST, authoredByOrbit: true },
     echo: { text: REVIEW_BLOCK, controlPlaneNote: REVIEW_BLOCK, confirmationReviewRequest: REVIEW_REQUEST },
     root: '.crc-wrap',
-    queuedMark: '.crc.is-queued:not(.is-returned)',
+    queuedMark: '.crc.is-queued:not(.is-returned):not(.is-confirmed):not(.is-neutral):not(.crc-evidence-review):not(.crc-run-question)',
     slot: '.crc-queued',
     actions: ['Cancel'],
     acceptable: false,
@@ -286,7 +346,62 @@ const CASES: Case[] = [
     row: { turnId: 'turn-return', content: RETURN_BLOCK, createdAt: TS, confirmationReturn: RETURNED, authoredByOrbit: true },
     echo: { text: RETURN_BLOCK, controlPlaneNote: RETURN_BLOCK, confirmationReturn: RETURNED },
     root: '.crc-wrap',
-    queuedMark: '.crc.is-returned.is-queued',
+    queuedMark: '.crc.is-returned.is-queued:not(.crc-evidence-send-back)',
+    slot: '.crc-queued',
+    actions: ['Cancel'],
+    acceptable: false,
+  },
+  {
+    name: 'the owner’s answers handed to the reviewer',
+    field: 'confirmationAnswers',
+    row: { turnId: 'turn-answers', content: ANSWERS_TOLD, createdAt: TS, confirmationAnswers: ANSWERS, authoredByOrbit: true },
+    echo: { text: ANSWERS_TOLD, confirmationAnswers: ANSWERS },
+    root: '.crc-wrap',
+    queuedMark: '.crc.is-confirmed.is-queued',
+    slot: '.crc-queued',
+    actions: ['Cancel'],
+    acceptable: true,
+  },
+  {
+    name: 'a revision handed to the session that dispatched its task',
+    field: 'evidenceReview',
+    row: { turnId: 'turn-evidence', content: EVIDENCE_REVIEW_BLOCK, createdAt: TS, evidenceReview: EVIDENCE_REVIEW, authoredByOrbit: true },
+    echo: { text: EVIDENCE_REVIEW_BLOCK, controlPlaneNote: EVIDENCE_REVIEW_BLOCK, evidenceReview: EVIDENCE_REVIEW },
+    root: '.crc-wrap',
+    queuedMark: '.crc-evidence-review.is-queued',
+    slot: '.crc-queued',
+    actions: ['Cancel'],
+    acceptable: false,
+  },
+  {
+    name: 'a send-back handed to the run',
+    field: 'evidenceSendBack',
+    row: { turnId: 'turn-send-back', content: SEND_BACK_TOLD, createdAt: TS, evidenceSendBack: SEND_BACK, authoredByOrbit: true },
+    echo: { text: SEND_BACK_TOLD, evidenceSendBack: SEND_BACK },
+    root: '.crc-wrap',
+    queuedMark: '.crc-evidence-send-back.is-queued',
+    slot: '.crc-queued',
+    actions: ['Cancel'],
+    acceptable: true,
+  },
+  {
+    name: 'a task run’s question handed to the coordinator',
+    field: 'runQuestion',
+    row: { turnId: 'turn-question', content: RUN_QUESTION_BLOCK, createdAt: TS, runQuestion: RUN_QUESTION, authoredByOrbit: true },
+    echo: { text: RUN_QUESTION_BLOCK, controlPlaneNote: RUN_QUESTION_BLOCK, runQuestion: RUN_QUESTION },
+    root: '.crc-wrap',
+    queuedMark: '.crc-run-question.is-queued',
+    slot: '.crc-queued',
+    actions: ['Cancel'],
+    acceptable: false,
+  },
+  {
+    name: 'a task run’s notice handed to the coordinator',
+    field: 'runNotice',
+    row: { turnId: 'turn-notice', content: RUN_NOTICE_BLOCK, createdAt: TS, runNotice: RUN_NOTICE, authoredByOrbit: true },
+    echo: { text: RUN_NOTICE_BLOCK, controlPlaneNote: RUN_NOTICE_BLOCK, runNotice: RUN_NOTICE },
+    root: '.crc-wrap',
+    queuedMark: '.crc-run-notice.is-queued',
     slot: '.crc-queued',
     actions: ['Cancel'],
     acceptable: false,
@@ -553,6 +668,11 @@ describe('a turn on the queue is drawn as the card its echo is', () => {
       projectStarted: STARTED,
       confirmationReviewRequest: REVIEW_REQUEST,
       confirmationReturn: RETURNED,
+      confirmationAnswers: ANSWERS,
+      evidenceReview: EVIDENCE_REVIEW,
+      evidenceSendBack: SEND_BACK,
+      runQuestion: RUN_QUESTION,
+      runNotice: RUN_NOTICE,
       sessionMessage: FROM,
       sessionReplies: [REPLY],
     };

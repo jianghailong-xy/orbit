@@ -34,6 +34,69 @@ final class WikiChatLogicTests: XCTestCase {
         XCTAssertFalse(WikiChatLogic.fabShown(settingsOnTop: false, hasSpace: false))
     }
 
+    // MARK: open by default and the history (board 45, owner 11-11)
+
+    /// Shown where the panel is the third column, on every page but Settings, unless the owner hid it with ✕.
+    func testThePanelOpensWithTheWikiWhereItIsAColumn() {
+        XCTAssertTrue(WikiChatLogic.opensByDefault(sheet: false, settingsOnTop: false, hiddenByOwner: false))
+        XCTAssertFalse(WikiChatLogic.opensByDefault(sheet: true, settingsOnTop: false, hiddenByOwner: false), "a phone's sheet")
+        XCTAssertFalse(WikiChatLogic.opensByDefault(sheet: false, settingsOnTop: true, hiddenByOwner: false), "Settings")
+        XCTAssertFalse(WikiChatLogic.opensByDefault(sheet: false, settingsOnTop: false, hiddenByOwner: true), "✕")
+    }
+
+    /// The column is a third of the Wiki's width between 400 and 720, and drags up to half of it (the web's widths).
+    func testTheColumnIsAThirdOfTheWikisWidth() {
+        XCTAssertEqual(WikiChatLogic.Column.ideal(1000), 400)
+        XCTAssertEqual(WikiChatLogic.Column.ideal(1440), 480)
+        XCTAssertEqual(WikiChatLogic.Column.ideal(2055), 685)
+        XCTAssertEqual(WikiChatLogic.Column.ideal(3008), 720)
+        XCTAssertEqual(WikiChatLogic.Column.max(2055), 1027)
+        XCTAssertEqual(WikiChatLogic.Column.max(500), 320)
+    }
+
+    /// Open: needs you, then working, then as served; Completed as served (the web's `wikiChatHistoryGroups`).
+    func testTheHistoryFilesOpenAndCompleted() {
+        func row(_ id: String, completed: Bool = false, working: Bool = false, needsYou: Int = 0) -> WikiChatRow {
+            WikiChatRow(sessionId: id, title: id, completed: completed, working: working, needsYou: needsYou)
+        }
+        let groups = WikiChatLogic.historyGroups([row("a"), row("b", working: true), row("c", completed: true), row("d", needsYou: 2), row("e")])
+        XCTAssertEqual(groups.open.map(\.sessionId), ["d", "b", "a", "e"])
+        XCTAssertEqual(groups.completed.map(\.sessionId), ["c"])
+    }
+
+    /// A row's second line in the button's own words, else how long ago (the web's `wikiChatHistoryLine`, `wikiChatAgo`).
+    func testAHistoryRowSaysWhatItNeedsElseHowLongAgo() {
+        let now = ISO8601DateFormatter().date(from: "2026-11-11T12:00:00Z")!
+        func line(_ row: WikiChatRow) -> String { WikiChatLogic.historyLine(row, now: now).text }
+        XCTAssertEqual(WikiChatLogic.historyLine(WikiChatRow(sessionId: "a", needsYou: 1), now: now).tone, .needsYou)
+        XCTAssertEqual(line(WikiChatRow(sessionId: "a", needsYou: 1)), "1 needs you")
+        XCTAssertEqual(line(WikiChatRow(sessionId: "a", needsYou: 3)), "3 need you")
+        XCTAssertEqual(line(WikiChatRow(sessionId: "a", working: true)), "Working…")
+        let ago = { (iso: String) in WikiChatLogic.ago(iso, now: now) }
+        XCTAssertEqual([ago("2026-11-11T11:59:30.000Z"), ago("2026-11-11T11:55:00.000Z"), ago("2026-11-11T09:00:00Z"),
+                        ago("2026-11-10T09:00:00.000Z"), ago("2026-11-07T12:00:00.000Z"), ago("2026-10-21T12:00:00.000Z"),
+                        ago("not a time")],
+                       ["Just now", "5m ago", "3h ago", "Yesterday", "4d ago", "3w ago", "Just now"])
+        XCTAssertEqual(line(WikiChatRow(sessionId: "a", updatedAt: "2026-11-11T11:00:00.000Z")), "1h ago", "an older server: updatedAt")
+    }
+
+    /// The new fields read when served, and default when an older server leaves them out (contract `chat.list.page`).
+    func testTheChatsReadTakesThePagesFields() throws {
+        let read = try JSONDecoder().decode(WikiChatList.self, from: Data(#"""
+        {"spaceId":"s","fab":{"needsYou":0,"working":false,"updated":0},"more":true,
+         "chats":[{"sessionId":"a","title":"A","status":"SUCCEEDED","open":false,"completed":true,"working":false,
+                   "createdAt":"2026-11-01T00:00:00.000Z","updatedAt":"2026-11-02T00:00:00.000Z",
+                   "lastActiveAt":"2026-11-02T00:00:00.000Z","drafts":1,"needsYou":0}]}
+        """#.utf8))
+        XCTAssertTrue(read.more)
+        XCTAssertEqual(read.chats.first?.completed, true)
+        XCTAssertEqual(read.chats.first?.lastActiveAt, "2026-11-02T00:00:00.000Z")
+        let older = try JSONDecoder().decode(WikiChatList.self, from: Data(#"{"spaceId":"s","chats":[{"sessionId":"a"}]}"#.utf8))
+        XCTAssertFalse(older.more)
+        XCTAssertEqual([older.chats.first?.completed, older.chats.first?.working], [false, false])
+        XCTAssertNil(older.chats.first?.lastActiveAt)
+    }
+
     /// The newest chat that needs the owner, else the newest open one, else a new chat.
     func testTheButtonOpensTheChatThatNeedsYou() {
         func row(_ id: String, open: Bool = true, needsYou: Int = 0) -> WikiChatRow {

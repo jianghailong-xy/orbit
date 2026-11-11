@@ -6,6 +6,7 @@ import {
   SessionLifecycleState,
   SessionRunState,
 } from '@orbit/shared';
+import { START_COORDINATOR_COPY } from '../lib/coordinatorWorkspace';
 import { CoordinatorProgressRows } from './ProjectProgressStatus';
 import { Button } from './ui/Button';
 import { Menu } from './ui/Menu';
@@ -129,7 +130,12 @@ export type CoordinatorAction =
   | 'enable-workspace'
   | 'restore-workspace'
   | 'bind-workspace'
-  | 'rebind-workspace';
+  /** Start the next coordinator in a workspace the reader picks (`replace` with a workspace). Also
+   *  the way out of a workspace that broke: no separate rebind. */
+  | 'start-elsewhere'
+  /** Move this conversation to another workspace — the session's own Move panel; the project's
+   *  coordination goes with it. */
+  | 'move';
 
 /** The command-centre parent owns width. The layout marker remains part of the presentational
  *  contract so responsive variants can be introduced without making this card read the viewport. */
@@ -300,17 +306,20 @@ function IdentityRow({
   label,
   name,
   tone,
+  action,
 }: {
   label: 'Workspace' | 'Agent';
   name: string;
   tone: 'neutral' | 'brand';
+  /** A link at the row's end, such as the Workspace row's Move…. */
+  action?: ReactNode;
 }) {
   return (
     <div
       aria-label={`${label}: ${name}`}
       style={{
         display: 'grid',
-        gridTemplateColumns: '72px minmax(0, 1fr)',
+        gridTemplateColumns: action ? '72px minmax(0, 1fr) auto' : '72px minmax(0, 1fr)',
         alignItems: 'center',
         gap: 8,
         minWidth: 0,
@@ -318,6 +327,7 @@ function IdentityRow({
     >
       <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{label}</span>
       <NameChip name={name} tone={tone} />
+      {action}
     </div>
   );
 }
@@ -500,7 +510,7 @@ function NeverOpened({
               </Button>
             </div>
             <p style={{ ...MUTED, margin: '5px 0 0' }}>
-              Permanent — a coordinator cannot be moved to another workspace later.
+              You can move it to another workspace later.
             </p>
           </>
         )}
@@ -588,7 +598,16 @@ function Live({
 
       <div style={{ display: 'grid', gap: 7 }}>
         {coordination.workspaceName ? (
-          <IdentityRow label="Workspace" name={coordination.workspaceName} tone="neutral" />
+          <IdentityRow
+            label="Workspace"
+            name={coordination.workspaceName}
+            tone="neutral"
+            action={
+              <Button variant="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('move')}>
+                Move…
+              </Button>
+            }
+          />
         ) : null}
       </div>
 
@@ -657,6 +676,17 @@ function Live({
                 ),
                 onSelect: () => onAction?.('replace'),
               },
+              {
+                key: 'start-elsewhere',
+                textValue: START_COORDINATOR_COPY.menuTitle,
+                label: (
+                  <div style={{ padding: '3px 0', maxWidth: 300 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{START_COORDINATOR_COPY.menuTitle}</div>
+                    <div style={{ ...MUTED, whiteSpace: 'normal' }}>{START_COORDINATOR_COPY.menuDetail}</div>
+                  </div>
+                ),
+                onSelect: () => onAction?.('start-elsewhere'),
+              },
             ]}
             trigger={<Button variant="primary" className="project-coordinator-caret" aria-label="More coordinator actions" icon={<DownOutlined />} />}
           />
@@ -694,8 +724,10 @@ function Trashed({
 
       {openability.landing.workspaceName ? (
         <p style={{ ...MUTED, margin: '8px 0 0' }}>
-          The replacement opens in {openability.landing.workspaceName}
-          {openability.landing.fixed ? ', which is fixed for this project and cannot be redirected' : ''}.
+          The replacement opens in {openability.landing.workspaceName}.{' '}
+          <Button variant="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('start-elsewhere')}>
+            Change
+          </Button>
         </p>
       ) : null}
 
@@ -713,8 +745,8 @@ function Trashed({
  * The landing is unusable, so no press can succeed.
  *
  * No *Retry*: the refusal is a property of committed rows, and pressing again returns the same 409
- * forever. Two ways out instead — repair the workspace this project is bound to, or rebind to a
- * different one.
+ * forever. Two ways out instead — repair the workspace this project is bound to, or start the
+ * next coordinator in a different one.
  */
 function Unavailable({
   status,
@@ -740,8 +772,8 @@ function Unavailable({
             {fix.label}
           </Button>
         ) : null}
-        <Button size="small" onClick={() => onAction?.('rebind-workspace')}>
-          Rebind workspace…
+        <Button size="small" onClick={() => onAction?.('start-elsewhere')}>
+          {START_COORDINATOR_COPY.menuTitle}
         </Button>
       </div>
     </>

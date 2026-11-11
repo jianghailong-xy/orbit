@@ -28,7 +28,8 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
+import { landingFailureClass } from './project-integration-job';
+import { IntegrationJobRefused, IntegrationJobRelay } from '../runner-api/integration-job-relay';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
@@ -1737,3 +1738,77 @@ test('timed out: the owner\'s promotion retry ends the silent check without an i
 test('the integration-retry PostgreSQL target is explicitly disposable', { skip }, () => {
   assert.doesNotThrow(() => assertCoordinatorPgUrlIsIsolated(URL));
 });
+
+
+test('baseline attribution is stored, constrained, classified and explicitly retryable',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'baseline-red');
+      const failed = await failedLanding(stack, w, 'baseline-red', {
+        ...RED_MERGE_CHECK,
+        baselineRed: true,
+        checks: [
+          { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK' },
+          { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK', scope: 'BASELINE' },
+        ],
+      });
+      const row = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: failed.job.jobId } });
+      assert.equal(row.baselineRed, true);
+      assert.equal((row.checks as unknown as { scope?: string }[])[1]?.scope, 'BASELINE');
+      assert.equal(landingFailureClass(row), 'BASELINE_RED');
+      assert.equal((await itemsOf(stack.db, failed.task.taskId))[0]?.payload.failureClass, 'BASELINE_RED');
+      const rerun = await retry(stack, w, failed.task.taskId, 'the upstream baseline has been repaired');
+      assert.equal(rerun.failureClass, 'BASELINE_RED');
+      const newest = (await landings(stack.db, failed.task.taskId))[1]!;
+      assert.equal(newest.retryFailureClass, 'BASELINE_RED');
+      const queued = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: newest.id } });
+      assert.equal(queued.baselineRed, false, 'a new generation starts without attribution');
+      for (const state of ['QUEUED', 'RUNNING', 'LANDED', 'ERROR', 'READY', 'CONFLICT', 'CANCELLED']) {
+        await assert.rejects(stack.db.$executeRaw`
+          UPDATE project_integration_job SET baseline_red = true, state = ${state}
+          WHERE id = ${queued.id}::uuid`, /project_integration_job_baseline_red_chk/);
+      }
+      for (const kind of ['CHECK_PROMOTION', 'LAND_PROMOTION', 'OBSERVE_LANDING']) {
+        await assert.rejects(stack.db.$executeRaw`
+          UPDATE project_integration_job SET baseline_red = true, state = 'CHECK_FAILED', kind = ${kind}
+          WHERE id = ${queued.id}::uuid`, /project_integration_job_baseline_red_chk/);
+      }
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+
+test('baselineRed results are refused at the relay for wrong state, missing scope and wrong kind',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'baseline-invalid');
+      await doneTask(stack, w, 'baseline-invalid');
+      const [landing] = await claim(stack, w, 'baseline-invalid-landing');
+      assert.ok(landing);
+      const baseline = { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK' as const, scope: 'BASELINE' as const };
+      const refuse = async (job: IntegrationJobCommand, result: Failure, message: RegExp) => {
+        await assert.rejects(stack.jobs.applyResult(job.jobId, w.runnerId, {
+          claimGeneration: job.claimGeneration, leaseOwner: job.leaseOwner, ...result,
+        }, w.ownerId), (error: unknown) => {
+          assert.ok(error instanceof IntegrationJobRefused);
+          assert.equal(error.refusal, 'INVALID_RESULT');
+          assert.match(error.message, message);
+          return true;
+        });
+        const row = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: job.jobId } });
+        assert.equal(row.state, 'RUNNING');
+        assert.equal(row.baselineRed, false);
+      };
+      await refuse(landing, { ...RED_MERGE_CHECK, state: 'ERROR', baselineRed: true, checks: [baseline] }, /CHECK_FAILED/);
+      await refuse(landing, { ...RED_MERGE_CHECK, baselineRed: true }, /BASELINE check/);
+      await report(stack, w, landing, LANDED);
+      const [promotion] = await claim(stack, w, 'baseline-invalid-promotion');
+      assert.equal(promotion?.kind, 'CHECK_PROMOTION');
+      await refuse(promotion!, { ...RED_MERGE_CHECK, baselineRed: true, checks: [baseline] }, /only LAND_TASK/);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });

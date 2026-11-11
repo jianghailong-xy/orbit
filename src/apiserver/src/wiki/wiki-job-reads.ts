@@ -12,6 +12,8 @@ import {
   type WikiJobWaitingFor,
   type WikiJobsRead,
   type WikiModelRequestState,
+  type WikiRepoTier,
+  type WikiRepoTierReason,
   type WikiSystemModelErrorKind,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -126,6 +128,13 @@ export class WikiJobReads {
       WHERE t."newest" <= ${WIKI_JOBS_READ.callsPerJob}
       ORDER BY t."jobId", t."enqueuedAt", t."id"`;
 
+    // What each maintenance run read of the repository (design §7.4): the run row its job made (0514, 0519).
+    const tiers = await this.prisma.wikiMaintenanceRun.findMany({
+      where: { ownerId, spaceId, jobId: { in: ids }, repoTier: { not: null } },
+      select: { jobId: true, repoTier: true, repoReason: true, repoDetail: true },
+    });
+    const tierOf = new Map(tiers.map((row) => [row.jobId, row]));
+
     const countsOf = new Map(counted.map((row) => [row.jobId, row]));
     const nextOf = new Map(next.map((row) => [row.jobId, row]));
     const callsOf = new Map<string, WikiJobCallView[]>();
@@ -139,6 +148,7 @@ export class WikiJobReads {
       jobs: jobs.map((job): WikiJobView => {
         const count = countsOf.get(job.id);
         const first = nextOf.get(job.id);
+        const tier = tierOf.get(job.id);
         return {
           id: job.id,
           kind: job.kind as WikiJobKind,
@@ -158,6 +168,9 @@ export class WikiJobReads {
           calls: count ? countsView(count) : NO_CALLS,
           nextCall: first ? { ahead: first.ahead, enqueuedAt: first.enqueuedAt.toISOString() } : null,
           requests: callsOf.get(job.id) ?? [],
+          repo: tier?.repoTier
+            ? { tier: tier.repoTier as WikiRepoTier, reason: (tier.repoReason as WikiRepoTierReason | null) ?? null, detail: tier.repoDetail ?? null }
+            : null,
         };
       }),
     };

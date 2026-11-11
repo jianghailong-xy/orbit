@@ -929,6 +929,7 @@ final class AppModel {
         linkCards?.removeAll()
         linkCards = nil
         managedRunner?.reset()
+        newAccount = nil
         #if os(iOS)
         disablePush()   // reads the access token, so before the store is cleared below
         #endif
@@ -2027,6 +2028,27 @@ final class AppModel {
         case .machines?:        selectedSection = .runners
         case .workspace?, nil:  break
         }
+    }
+
+    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
+
+    /// Whether this account has never had a session: its Open and Completed lists, one row each, both
+    /// answered empty (board 03, rule 1; the web's `useNewAccount`). Nil until read, and false after a
+    /// read that failed. Kept for this run of the app only: nothing is stored to remember it.
+    private(set) var newAccount: Bool?
+
+    /// Read it again: the pages that can wear the welcome card ask as they appear, as the web's query
+    /// does on mount, so the card goes once a first session exists anywhere.
+    func readNewAccount() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        let open = try? await api.sessionRowCount(view: .open)
+        // A row in Open already says it: Completed is asked only when Open is empty.
+        var completed: Int?
+        if open == 0 { completed = try? await api.sessionRowCount(view: .completed) }
+        let answer = Welcome.isNewAccount(openRows: open, completedRows: completed)
+        guard generation == apiGeneration, self.api === api else { return }
+        newAccount = answer
     }
 
     // MARK: a machine with no workspace (board rules 1–12)
@@ -3382,6 +3404,34 @@ final class AppModel {
         case .failed(let reason):
             return reason
         }
+    }
+
+    /// The Move panel's Start new here… (docs/mocks/coordinator-move-workspace 03-final): the project's
+    /// next coordinator opened in `target`, the conversation being moved completed where it is, and
+    /// the new one put on screen as the project page's Start a new coordinator does. Nil once it is;
+    /// otherwise why not, for the panel to say.
+    func startCoordinator(ofProject projectID: String, in target: SessionMoveTarget) async -> String? {
+        guard let api else { return APIClient.failureReason(APIError.notConfigured) }
+        do {
+            let opened = try await api.replaceProjectCoordinator(projectID, workspaceID: target.workspaceId)
+            Task { await reloadSessionLists() }
+            if let projects {
+                Task { await projects.detail(projectID).load() }
+            }
+            openProjectCoordinator(sessionID: opened.sessionId, agentID: opened.workspaceId ?? target.workspaceId)
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
+    /// The coordinator conversation the project page's Move… opens the Move panel on: the copy the app
+    /// holds, else the server's. Nil when neither can be had.
+    func sessionForMove(_ id: String) async -> Session? {
+        if let held = session(id: id) { return held }
+        guard let api, let fetched = try? await api.session(id) else { return nil }
+        sessionDetails.store(fetched)
+        return fetched
     }
 
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`

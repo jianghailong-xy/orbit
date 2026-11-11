@@ -289,12 +289,13 @@ describe('ProjectCoordinatorCard — NEVER_OPENED', () => {
     expect(body).not.toMatch(/never start/);
   });
 
-  it('names the workspace it will open in AND says the binding cannot be changed later', () => {
-    // The old control decided this silently on the first press and froze it forever.
+  it('names the workspace it will open in, and says it can be moved later', () => {
+    // The old control decided this silently on the first press. A coordinator can now be moved
+    // (its session's Move) or started again elsewhere, so the card no longer calls it permanent.
     const body = text(paint(neverOpenedStatus()));
     expect(body).toContain('orbit-main');
-    expect(body).toMatch(/Permanent/);
-    expect(body).toMatch(/cannot be moved to another workspace later/);
+    expect(body).not.toMatch(/Permanent/);
+    expect(body).toMatch(/You can move it to another workspace later/);
   });
 
   it('offers a way to pick a different workspace before that press', () => {
@@ -551,10 +552,11 @@ describe('ProjectCoordinatorCard — UNAVAILABLE', () => {
     expect(text(html)).not.toMatch(/Retry/i);
   });
 
-  it('gives both ways out — repair the workspace, or bind the project elsewhere', () => {
+  it('gives both ways out — repair the workspace, or start the next coordinator elsewhere', () => {
     const labels = buttonLabels(paint(unavailableStatus()));
     expect(labels).toContain('Enable orbit-main');
-    expect(labels.some((l) => /Rebind/i.test(l))).toBe(true);
+    expect(labels).toContain('Start a new coordinator in…');
+    expect(labels.some((l) => /Rebind/i.test(l))).toBe(false);
   });
 
   it('picks its sentence and its fix from refusalDetail', () => {
@@ -564,7 +566,7 @@ describe('ProjectCoordinatorCard — UNAVAILABLE', () => {
     expect(buttonLabels(paint(unbound))).toContain('Bind orbit-main to a runner');
   });
 
-  it('offers only a rebind when the workspace itself was forgotten', () => {
+  it('offers only starting elsewhere when the workspace itself was forgotten', () => {
     // WORKSPACE_FORGOTTEN is the case with no workspace left to name, which is exactly why it has
     // no repair to offer.
     const forgotten = unavailableStatus();
@@ -577,7 +579,7 @@ describe('ProjectCoordinatorCard — UNAVAILABLE', () => {
       workspaceNameAbsentReason: 'COORDINATION_WORKSPACE_PURGED',
     };
     const labels = buttonLabels(paint(forgotten));
-    expect(labels.some((l) => /Rebind/i.test(l))).toBe(true);
+    expect(labels).toContain('Start a new coordinator in…');
     expect(labels.some((l) => /Enable|Restore|Bind .* to a runner/i.test(l))).toBe(false);
     expect(text(paint(forgotten))).toContain('no longer records the workspace');
   });

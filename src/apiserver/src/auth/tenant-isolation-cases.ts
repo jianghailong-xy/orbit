@@ -247,6 +247,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   // The subject has no Feishu app connected: the administrator is answered that there was none to remove.
   'DELETE /admin/users/:id/feishu': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // Outgoing email is not configured in the fixture: the administrator is answered 409 EMAIL_NOT_CONFIGURED, nothing written.
+  'POST /admin/users/:id/welcome-email': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   // A Feishu group the account connected (§8.1): changed, and the spare one removed.
   'PATCH /integrations/feishu/chats/:id': { request: (of) => ({ params: { id: of.feishuChatRouteId }, body: { maxConcurrentSessions: 3 } }) },
   'DELETE /integrations/feishu/chats/:id': { request: (of) => ({ params: { id: of.spare.feishuChatRouteId } }) },
@@ -729,6 +731,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /wiki/spaces/:id/workspaces/:workspaceId': {
     request: (of, mine) => ({ params: { id: of.wikiSpaceId, workspaceId: mine.workspaceId } }),
   },
+  // The maintenance settings' probe and run now (contract `maintenance.probe`, `maintenance.run`): another account's space
+  // is the plain 404 before any runner is asked or any run made.
+  'POST /wiki/spaces/:id/maintenance/probe': {
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId }, body: { workspaceId: mine.workspaceId } }),
+  },
+  'POST /wiki/spaces/:id/maintenance/run': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
   'DELETE /wiki/spaces/:id': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   // The Trash (contract `space.trash`): a restore of a wiki in use answers it as it is, and the permanent delete takes the
   // owner's spare wiki in Trash.
@@ -993,6 +1001,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'POST /projects/:id/coordinator body workspaceId': {
     request: (of, mine) => ({ params: { id: mine.projectId }, body: { workspaceId: of.workspaceId } }),
   },
+  'POST /projects/:id/coordinator/replace body workspaceId': {
+    request: (of, mine) => ({ params: { id: mine.projectId }, body: { workspaceId: of.workspaceId } }),
+  },
   'POST /projects/:id/coordinator/rebind body workspaceId': {
     request: (of, mine) => ({ params: { id: mine.projectId }, body: { workspaceId: of.workspaceId } }),
   },
@@ -1252,6 +1263,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     }),
   },
   'POST /wiki/spaces/:id/workspaces body workspaceId': {
+    request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { workspaceId: of.workspaceId } }),
+  },
+  // The probe of another account's workspace: no such workspace for this one, and no runner is asked.
+  'POST /wiki/spaces/:id/maintenance/probe body workspaceId': {
     request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { workspaceId: of.workspaceId } }),
   },
   // A chat named into another account's workspace: no such workspace for this one (WikiChat.chosenWorkspace).

@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Coordinator 换 Workspace · 定稿</title>
+<link rel="stylesheet" href="../session-move-web/board.css">
+<link rel="stylesheet" href="kit.css">
+<style>
+.b-menu { width: 330px; background: #fff; border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.18); padding: 5px; }
+.b-mi { padding: 7px 10px; border-radius: 7px; }
+.b-mi .h { font-size: 13.5px; font-weight: 600; }
+.b-mi .d { color: #86868b; font-size: 12.5px; line-height: 1.45; }
+.b-split { display: flex; gap: 2px; margin-top: 12px; }
+.b-split .l { flex: 1; background: #1677ff; color: #fff; text-align: center; border-radius: 6px 0 0 6px; padding: 6px; font-size: 14px; }
+.b-split .r { width: 34px; background: #1677ff; color: #fff; text-align: center; border-radius: 0 6px 6px 0; padding: 6px 0; font-size: 12px; }
+.b-cur { font-size: 11px; color: #1d6b31; background: #d7f2dd; border-radius: 999px; padding: 0 8px; margin-left: auto; }
+.b-alt { margin-left: auto; color: #1677ff; font-size: 12.5px; opacity: 1; white-space: nowrap; }
+.b-opt.offrow { color: rgba(22,22,26,.42); }
+.b-opt.offrow .b-tile { opacity: .42; }
+.b-ph { width: 300px; height: 620px; border-radius: 40px; border: 8px solid #1b1b1d; background: #f2f2f7; position: relative; overflow: hidden; font-size: 13px; flex: none; }
+.b-ph.and { border-radius: 26px; background: #f7f2fa; }
+.b-ph .nav { padding: 40px 16px 8px; font-weight: 600; font-size: 15px; text-align: center; }
+.b-ph .grp { margin: 8px 14px; background: #fff; border-radius: 10px; }
+.b-ph .it { padding: 10px 12px; border-bottom: 1px solid #ececf0; display: flex; align-items: center; gap: 8px; }
+.b-ph .it:last-child { border-bottom: 0; }
+.b-ph .it small { display: block; color: #8a8a8d; font-size: 11.5px; }
+.b-ph .it.off > span:not(.b-alt) { opacity: .4; }
+.b-ph .hdr { color: #85858a; font-size: 11.5px; margin: 14px 26px 4px; text-transform: uppercase; }
+.b-ph .ft { color: #85858a; font-size: 11.5px; margin: 4px 26px; line-height: 1.4; }
+.b-ph .dim { position: absolute; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; }
+.b-ph .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 22px 22px 0 0; padding: 10px 0 18px; }
+.b-ph .sheet .grab { width: 36px; height: 4px; background: #c9c4d0; border-radius: 2px; margin: 0 auto 10px; }
+.b-ph .sheet .t { font-weight: 600; font-size: 15px; margin: 0 18px 8px; }
+.b-ph .sheet .it { border-bottom: 0; padding: 10px 18px; }
+.b-and-dlg { width: 260px; background: #f3edf7; border-radius: 26px; padding: 22px 22px 14px; font-size: 13px; }
+.b-and-dlg h4 { margin: 0 0 10px; font-size: 17px; font-weight: 500; }
+.b-and-dlg p { margin: 0 0 8px; color: #49454f; line-height: 1.45; }
+.b-and-dlg .acts { display: flex; justify-content: flex-end; gap: 16px; color: #6750a4; font-weight: 600; margin-top: 12px; }
+.b-done td:first-child { width: 230px; }
+</style></head>
+<body>
+<h1>Coordinator 换 Workspace · 定稿（全部按推荐）</h1>
+<p class="lede" style="width:1640px">两条路，入口都在项目页的 coordinator 卡片上：<b>Move…</b> 带着对话搬过去（板 01），<b>Start a new coordinator in…</b> 在别处开一个空白的新 coordinator（板 02）。不管走哪条，项目的协调 Workspace、会话列表里项目那一行都跟着过去；任务、项目分支、成员不动。Move 因为引擎搬不动时，就近给出“在那边新开”的出路。Rebind 不再有入口。</p>
+
+<!-- ============ PART 1: the card, both doors ============ -->
+<section class="b-part" id="part-1">
+<div class="row">
+  <div class="col" style="width:470px">
+    <div class="cap"><span class="tag new">Web ①</span>项目页 coordinator 卡片：两个入口</div>
+    <div class="b-stage light" style="padding:24px 26px 30px">
+      <div class="b-card">
+        <div class="hd">COORDINATOR <span class="pill">Open</span></div>
+        <div class="tt">Coordinate the session list redesign</div>
+        <div class="mu">12m ago · 2nd coordinator of this project</div>
+        <hr>
+        <div class="b-idrow"><span class="lb">Workspace</span><span class="b-chip">orbit</span><span style="margin-left:auto;position:relative" class="b-btn link b-mark">Move…<span class="b-num" style="right:-16px;top:-14px">1</span></span></div>
+        <div class="b-inset"><div class="mu">Manual dispatch</div>6 open tasks are coordinated from this conversation.</div>
+        <div class="b-split"><span class="l">Open coordinator</span><span class="r">⌄</span></div>
+      </div>
+      <div class="b-menu" style="margin:6px 0 0 50px">
+        <div class="b-mi"><div class="h">Start a new coordinator</div><div class="d">Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable.</div></div>
+        <div class="b-mi b-mark" style="position:relative;background:#f0f5ff"><div class="h">Start a new coordinator in…</div><div class="d">The same, in a workspace you pick. This project is coordinated from there afterwards.</div><span class="b-num" style="right:-12px;top:-12px">2</span></div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li class="n" data-n="1"><b>Move…</b>：打开会话的 Move 对话框（② ③）。会话列表行上、会话页 ⋯ 里的 Move… 也是同一个对话框。</li>
+      <li class="n" data-n="2">⌄ 菜单原来那项不动（一步开在原处），下面加 <b>Start a new coordinator in…</b>（④ ⑤）。</li>
+      <li>启动卡那句 “Permanent — a coordinator cannot be moved to another workspace later.” 删掉，换成 “You can move it to another workspace later.”</li>
+    </ul>
+  </div>
+
+  <div class="col" style="width:540px">
+    <div class="cap"><span class="tag new">Web ②</span>Move（Claude coordinator）</div>
+    <div class="b-stage">
+      <div class="b-dlg">
+        <h3>Move</h3><span class="x">✕</span>
+        <div class="b-sub">Coordinate the session list redesign · Coordinator of <b style="color:#555">Session list redesign</b></div>
+        <div class="b-grp">Folder in orbit</div>
+        <div class="b-opt"><span class="ic">▭</span>No Folder<span class="chk">✓</span></div>
+        <div class="b-opt"><span class="ic">▱</span>Release<span class="cnt">4</span></div>
+        <div class="b-opt new"><span class="ic">＋</span>New Folder…</div>
+        <div class="b-grp">Move to Another Workspace</div>
+        <div class="b-opt"><span class="b-tile">✳</span><span class="b-nm">orbit-prod<small>Claude · workstation-gpu</small></span><span class="chev">›</span></div>
+        <div class="b-opt"><span class="b-tile">✳</span><span class="b-nm">wikova-develop<small>Claude · wikova</small></span><span class="chev">›</span></div>
+        <div class="b-opt off"><span class="b-tile">✳</span><span class="b-nm">mac-tools<small>This workspace is disabled.</small></span></div>
+        <div class="b-note">The project's coordinator moves with it.</div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li>副标题后灰字 <i>Coordinator of &lt;项目名&gt;</i>，组下灰字说明项目跟着走。其他和普通会话一样：先选 Workspace，再选文件夹，再确认。</li>
+    </ul>
+  </div>
+
+  <div class="col" style="width:560px">
+    <div class="cap"><span class="tag new">Web ③</span>Move 的确认</div>
+    <div class="b-stage">
+      <div class="b-cf" style="width:480px">
+        <span class="warn">!</span>
+        <div>
+          <h4>Move the coordinator to orbit-prod?</h4>
+          <p>The conversation moves with it. Your next message continues it in orbit-prod.</p>
+          <p>Session list redesign is coordinated from orbit-prod from now on, and its row moves to orbit-prod's list. Its tasks keep running where they are.</p>
+          <p>3 changed files aren't merged into main yet. They stay on branch orbit/coordinator-workspace-11bbd6 in orbit.</p>
+          <p>The session ends first. Until you message it again, Orbit's updates for the project wait on the project page.</p>
+          <div class="b-btns"><span class="b-btn">Cancel</span><span class="b-btn p">End and Move</span></div>
+        </div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li>已经结束的 coordinator 按钮是 <b>Move</b>，最后一段不出现。</li>
+      <li>最后一段如实说：结束了的 coordinator 收不到 Orbit 的投递，任务可开工、证据待判这些落在项目页上，你在新地方给它发一条消息就接着干。</li>
+    </ul>
+  </div>
+</div>
+</section>
+
+<!-- ============ PART 2: new elsewhere + D2 link + broken cards ============ -->
+<section class="b-part" id="part-2">
+<div class="row">
+  <div class="col" style="width:540px">
+    <div class="cap"><span class="tag new">Web ④</span>Move 搬不动 → 就近“在那边新开”</div>
+    <div class="b-stage">
+      <div class="b-dlg">
+        <h3>Move</h3><span class="x">✕</span>
+        <div class="b-sub">Coordinate the docs cleanup · Coordinator of <b style="color:#555">Docs cleanup</b></div>
+        <div class="b-grp">Move to Another Workspace</div>
+        <div class="b-opt"><span class="b-tile cx">◎</span><span class="b-nm">wikova-data<small>Codex · wikova</small></span><span class="chev">›</span></div>
+        <div class="b-opt offrow b-mark" style="margin:4px 0"><span class="b-tile cx">◎</span><span class="b-nm">orbit-prod<small>Codex keeps this conversation on wikova</small></span><span class="b-alt">Start new here…</span><span class="b-num" style="right:-12px;top:-12px">1</span></div>
+        <div class="b-opt offrow"><span class="b-tile">✳</span><span class="b-nm">HPC<small>HPC can't run Codex</small></span><span class="b-alt">Start new here…</span></div>
+        <div class="b-opt off b-mark" style="margin:4px 0"><span class="b-tile">✳</span><span class="b-nm">mac-tools<small>This workspace is disabled.</small></span><span class="b-num" style="right:-12px;top:-12px">2</span></div>
+        <div class="b-note">The project's coordinator moves with it.</div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li class="n" data-n="1">对话带不过去（引擎、换机器、runner 不支持搬）的行，名字照旧置灰写原因，右侧多一个蓝字 <b>Start new here…</b>，点了直接弹 ⑤ 的确认（Workspace 已选好）。只有 coordinator 有这个链接。</li>
+      <li class="n" data-n="2">Workspace 本身用不了（停用、没 runner）的行不给链接：新开也去不了。</li>
+      <li>会话本身不能搬（正在跑、有后台任务）时整组置灰，不给链接，和今天一样。</li>
+    </ul>
+  </div>
+
+  <div class="col" style="width:540px">
+    <div class="cap"><span class="tag new">Web ⑤</span>Start a new coordinator in…：选、确认</div>
+    <div class="b-stage" style="padding:26px 40px">
+      <div class="b-dlg">
+        <h3>Start a new coordinator in…</h3><span class="x">✕</span>
+        <div class="b-sub">Session list redesign</div>
+        <div class="b-opt"><span class="b-tile">✳</span><span class="b-nm">orbit<small>Claude · workstation-gpu</small></span><span class="b-cur">Current</span></div>
+        <div class="b-opt"><span class="b-tile">✳</span><span class="b-nm">orbit-prod<small>Claude · workstation-gpu</small></span><span class="chev">›</span></div>
+        <div class="b-opt"><span class="b-tile cx">◎</span><span class="b-nm">wikova-develop<small>Codex · wikova</small></span><span class="b-pill">Runner offline</span><span class="chev" style="margin-left:6px">›</span></div>
+        <div class="b-opt off"><span class="b-tile">✳</span><span class="b-nm">HPC<small>This workspace has no runner.</small></span></div>
+        <div class="b-note">The new coordinator starts empty, on the workspace's own engine and account.</div>
+      </div>
+      <div class="b-cf" style="width:460px;margin-top:18px">
+        <span class="warn">!</span>
+        <div>
+          <h4>Start a new coordinator in orbit-prod?</h4>
+          <p>The current conversation is completed — a turn in flight finishes first — and stays readable in orbit.</p>
+          <p>Session list redesign is coordinated from a new, empty conversation in orbit-prod, and its row moves to orbit-prod's list. Its tasks keep running where they are.</p>
+          <div class="b-btns"><span class="b-btn">Keep this coordinator</span><span class="b-btn p" style="background:#ff4d4f;border-color:#ff4d4f">Complete and start in orbit-prod</span></div>
+        </div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li>选 Current 那一行等于原来那项（今天的确认框，开在原处）。</li>
+      <li>开好后页面直接进新对话；卡片显示第 3 个 coordinator、Workspace 是 orbit-prod。旧对话在 orbit 的 Completed 里。</li>
+    </ul>
+  </div>
+
+  <div class="col" style="width:440px">
+    <div class="cap"><span class="tag new">Web ⑥</span>对话在 Trash / Workspace 坏了</div>
+    <div class="b-stage light" style="padding:24px 26px">
+      <div class="b-card">
+        <div class="hd">COORDINATOR <span class="pill" style="background:#f0f0f2;color:#666">In Trash</span></div>
+        <p style="font-size:13px;margin:10px 0 0">「Coordinate the session list redesign」 is in Trash. Starting a new one <b>does not carry that conversation over</b> — the replacement opens empty.</p>
+        <p class="mu" style="margin:8px 0 0">The replacement opens in orbit. <span class="b-btn link b-mark" style="position:relative">Change<span class="b-num" style="right:-16px;top:-14px">1</span></span></p>
+        <div style="display:flex;gap:8px;margin-top:12px"><span class="b-btn p" style="flex:1;text-align:center">Start a 3rd coordinator</span><span class="b-btn">Restore</span></div>
+      </div>
+      <div class="b-card" style="margin-top:14px">
+        <div class="hd">COORDINATOR <span class="pill" style="background:#fff2e8;color:#ad4e00">Unavailable</span></div>
+        <p style="font-size:13px;margin:10px 0 0"><b>orbit</b> is disabled, so the coordinator can't run there.</p>
+        <div style="display:flex;gap:8px;margin-top:12px"><span class="b-btn p">Enable orbit</span><span class="b-btn b-mark" style="position:relative">Start a new coordinator in…<span class="b-num" style="right:-12px;top:-12px">2</span></span></div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li class="n" data-n="1">Trash：“opens in orbit” 后加 <b>Change</b>，打开 ⑤ 的选择框；删掉 “which is fixed for this project and cannot be redirected”。</li>
+      <li class="n" data-n="2">坏了：<b>Rebind workspace…</b> 换成 <b>Start a new coordinator in…</b>。Rebind 对话框从前端删掉，接口保留给旧客户端。</li>
+    </ul>
+  </div>
+</div>
+</section>
+
+<!-- ============ PART 3: phones ============ -->
+<section class="b-part" id="part-3">
+<div class="cap"><span class="tag new">iOS / macOS · Android</span>同样的入口和文案；Android 跟 iOS 走，只换成系统自己的控件</div>
+<div class="row" style="gap:26px">
+  <div class="col">
+    <div class="b-ph">
+      <div class="nav">Session list redesign</div>
+      <div class="dim"><div class="b-ios" style="width:250px;text-align:left">
+        <div class="bt" style="border-top:0;text-align:left;font-size:14px;color:#111">Move…</div>
+        <div class="bt" style="text-align:left;font-size:14px;color:#111">Start a new coordinator</div>
+        <div class="bt" style="text-align:left;font-size:14px;color:#111">Start a new coordinator in…</div>
+      </div></div>
+    </div>
+    <ul class="notes" style="width:300px"><li><b>iOS</b> 项目页 coordinator 那一块的菜单：三项。</li></ul>
+  </div>
+  <div class="col">
+    <div class="b-ph">
+      <div class="nav">Move</div>
+      <div class="ft" style="margin-top:0">Coordinate the session list redesign · Coordinator of Session list redesign</div>
+      <div class="hdr">Move to another workspace</div>
+      <div class="grp">
+        <div class="it"><span class="b-tile">✳</span><span>orbit-prod<small>Claude · workstation-gpu</small></span></div>
+        <div class="it off"><span class="b-tile cx">◎</span><span>HPC<small>HPC can't run Codex</small></span><span class="b-alt" style="font-size:12px">Start new…</span></div>
+      </div>
+      <div class="ft">The project's coordinator moves with it.</div>
+      <div class="dim" style="top:auto;height:300px;background:none;place-items:end center;padding-bottom:20px">
+        <div class="b-ios" style="width:260px;box-shadow:0 8px 30px rgba(0,0,0,.25)">
+          <h4>Move the coordinator to orbit-prod?</h4>
+          <p>The conversation moves with it. Session list redesign is coordinated from orbit-prod from now on.</p>
+          <div class="bt b">End and Move</div><div class="bt">Cancel</div>
+        </div>
+      </div>
+    </div>
+    <ul class="notes" style="width:300px"><li><b>iOS</b> Move 面板（左滑 / 长按 / 菜单进入都是它）+ 系统确认框。</li></ul>
+  </div>
+  <div class="col">
+    <div class="b-ph">
+      <div class="nav" style="display:flex;justify-content:space-between"><span style="color:#007aff;font-weight:400">Cancel</span><span>Start in…</span><span style="width:40px"></span></div>
+      <div class="hdr">Workspace</div>
+      <div class="grp">
+        <div class="it"><span class="b-tile">✳</span><span>orbit<small>Claude · workstation-gpu</small></span><span style="margin-left:auto;color:#8a8a8d;font-size:12px">Current</span></div>
+        <div class="it"><span class="b-tile">✳</span><span>orbit-prod<small>Claude · workstation-gpu</small></span></div>
+        <div class="it"><span class="b-tile cx">◎</span><span>wikova-develop<small>Codex · wikova · offline</small></span></div>
+        <div class="it off"><span class="b-tile">✳</span><span>HPC<small>This workspace has no runner.</small></span></div>
+      </div>
+      <div class="ft">The new coordinator starts empty, on the workspace's own engine and account.</div>
+    </div>
+    <ul class="notes" style="width:300px"><li><b>iOS</b> Start in… 是 sheet 列表，点一行弹今天那种系统确认框（文案同 Web ⑤）。macOS 同一套 SwiftUI。</li></ul>
+  </div>
+  <div class="col">
+    <div class="b-ph and">
+      <div class="nav" style="text-align:left">← Session list redesign</div>
+      <div class="dim" style="background:rgba(0,0,0,.32)"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="t">Start a new coordinator in…</div>
+        <div class="it"><span class="b-tile">✳</span><span>orbit<small>Claude · workstation-gpu</small></span><span style="margin-left:auto;color:#8a8a8d;font-size:12px">Current</span></div>
+        <div class="it"><span class="b-tile">✳</span><span>orbit-prod<small>Claude · workstation-gpu</small></span></div>
+        <div class="it"><span class="b-tile cx">◎</span><span>wikova-develop<small>Codex · wikova · offline</small></span></div>
+        <div class="it off"><span class="b-tile">✳</span><span>HPC<small>This workspace has no runner.</small></span></div>
+      </div>
+    </div>
+    <ul class="notes" style="width:300px"><li><b>Android</b> 项目页菜单多一项，选择用 bottom sheet，列表和 iOS 一行一行对得上。</li></ul>
+  </div>
+  <div class="col">
+    <div class="b-ph and">
+      <div class="nav" style="text-align:left">← Session list redesign</div>
+      <div class="dim" style="background:rgba(0,0,0,.32)"><div class="b-and-dlg">
+        <h4>Start a new coordinator in orbit-prod?</h4>
+        <p>The current conversation is completed — a turn in flight finishes first — and stays readable in orbit.</p>
+        <p>Session list redesign is coordinated from a new, empty conversation in orbit-prod. Its tasks keep running where they are.</p>
+        <div class="acts"><span>Keep</span><span style="color:#b3261e">Complete and start</span></div>
+      </div></div>
+    </div>
+    <ul class="notes" style="width:300px"><li><b>Android</b> 确认用系统对话框，文案同 iOS。Android 没有 Move 面板，这次只做“新开”这一条；Move 等 Android 有了 Move 面板再接。</li></ul>
+  </div>
+</div>
+</section>
+
+<!-- ============ PART 4: settled + landing ============ -->
+<section class="b-part" id="part-4">
+<div class="box b-dec b-done">
+  <h2>已定（11-11，全部按推荐）</h2>
+  <table>
+    <tr><th>问题</th><th>定了什么</th></tr>
+    <tr><td>Move 的项目页入口</td><td>coordinator 卡片 Workspace 行加 Move…，和会话的 Move 是同一个对话框</td></tr>
+    <tr><td>旧的、已换下的 coordinator</td><td>就是普通会话，今天已经能搬，不用改</td></tr>
+    <tr><td>目标是另一个仓库</td><td>不拦，确认框照常说改动留在原 Workspace 的分支上</td></tr>
+    <tr><td>新开的入口</td><td>⌄ 菜单两项：原来那项不动 + Start a new coordinator in…</td></tr>
+    <tr><td>Move 搬不动时</td><td>那一行给 Start new here…，直接到新开的确认</td></tr>
+    <tr><td>Rebind</td><td>前端入口去掉，坏掉的卡片换成 Start a new coordinator in…；接口保留</td></tr>
+    <tr><td>项目的一次性判断会话</td><td>照旧不能搬（它们是平台为一件事开的）</td></tr>
+  </table>
+</div>
+<div class="box b-dec" style="margin-top:24px">
+  <h2>落地顺序</h2>
+  <table>
+    <tr><th>#</th><th>改什么</th><th>验证</th></tr>
+    <tr><td>1 服务端 · Move</td><td><code>session-move.ts</code> 放行当前 coordinator；<code>move</code> 同一事务里改会话行后改 <code>project.coordinator_workspace_id</code>；<code>move-targets</code> 带 <code>coordinates</code>，以及每行能不能“在那边新开”。</td><td>pg spec：两列一致、守卫不报错、判断会话仍被拒。</td></tr>
+    <tr><td>2 服务端 · 新开</td><td><code>coordinator/replace</code> 收可选 <code>{ workspaceId }</code>，一条 UPDATE 同时写两列；不传就是今天的行为。项目状态接口带可选 Workspace 和原因。</td><td>pg spec：换到别处后两列一致、旧对话 Completed 留在原处、代次 +1；不传时逐字段同今天。</td></tr>
+    <tr><td>3 Web</td><td>① ~ ⑥ 全部。</td><td>Vitest + 真页截图对照本板。</td></tr>
+    <tr><td>4 iOS / macOS</td><td>菜单三项、Move 面板两处文案和 Start new…、Start in… sheet、确认文案。</td><td>OrbitKit 单测。</td></tr>
+    <tr><td>5 Android</td><td>菜单项、bottom sheet、确认框。</td><td>JVM 单测 + 模拟器截图。</td></tr>
+  </table>
+</div>
+</section>
+</body></html>

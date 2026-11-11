@@ -47,6 +47,7 @@ import { WikiController } from '../wiki/wiki.controller';
 import { WikiArticlesController } from '../wiki/wiki-articles.controller';
 import { WikiRunsController } from '../wiki/wiki-runs.controller';
 import { WikiHealthController } from '../wiki/wiki-health.controller';
+import { WikiMaintenanceController } from '../wiki/wiki-maintenance.controller';
 import { WikiJobsController } from '../wiki/wiki-jobs.controller';
 import { WikiPlanController } from '../wiki/wiki-plan.controller';
 import { WikiDocsController } from '../wiki/wiki-docs.controller';
@@ -136,6 +137,7 @@ const CONTROLLERS = [
   WikiRunsController,
   // A space's health (contract `maintenance.health`): what the Wiki home's status line reads.
   WikiHealthController,
+  WikiMaintenanceController,
   // A space's server runs and their calls (contract `jobs.read`, P9): what Activity's Runs card reads.
   WikiJobsController,
   // The plan (migration 0325, contract `plan`): the owner's reads, edit, confirmation and decisions.
