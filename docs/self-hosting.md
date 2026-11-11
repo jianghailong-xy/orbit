@@ -1016,7 +1016,10 @@ apiservers (below):
   release.
 
 It sends everything else a person does to the first apiserver. A Codex "Sign in with ChatGPT" runs its sign-in in the
-process that started it, so all of one person's other requests must reach that same process.
+process that started it, so all of one person's other requests must reach that same process. While the first apiserver
+is stopping or stopped, as an upgrade recreates it, those requests go to the others
+(`gateway/several-apiservers/first/`), and back to the first once it answers again. A sign-in that was under way when it
+stopped has to be started again.
 
 **Runners on the link.** Several apiservers need every runner to work over the [runner link](#runner-link), as every
 runner of this release does.
@@ -1090,6 +1093,31 @@ a 502, and the link gateway sends the call again or tells the runner to.
 - If you set `keepalive_timeout` in the web gateway's upstreams, or put another proxy or load balancer in front of the
   apiservers, keep its idle timeout under 120 seconds.
 
+One hop out the rule holds the same way. The web gateway keeps a client's idle connection for 120 seconds
+(`keepalive_timeout` in `gateway/nginx.conf`), and runners close theirs after 90 seconds, Go's default. A test in the
+runner (`src/runner-go/idle_connections_test.go`) fails if a runner's client would keep one as long as the gateway does.
+
+**How an apiserver stops.** On `docker stop`, so also when an upgrade or `docker compose up` recreates it, an apiserver
+stops by itself and loses nothing that is in flight (`src/apiserver/src/common/graceful-stop.ts`):
+
+1. It stops accepting connections, on port 3000 and on `RUNNER_LINK_INTERNAL_PORT`. The web gateway and the link
+   gateway find the connection refused at once, and send the request to another apiserver. They do this for a POST too,
+   since none of it was sent.
+2. Its session streams and control-plane streams end. The clients open them again on another apiserver: each session
+   stream picks up after the last stored event it had.
+3. It finishes the requests in flight, for up to 6 seconds. Each answer tells the caller to close the connection, and
+   the apiserver closes it once the answer is sent. It closes idle connections at once.
+4. It then stops its background work and closes NATS, its coordination connection and the database. The leader's lock
+   goes with that connection, so another apiserver takes over the reaper and the sweeps at its next poll.
+5. It exits, but no sooner than 4 seconds after the stop began. Until then its address refuses connections, so a
+   session stream that opens again a moment later is sent to another apiserver at once. An address that no longer
+   answers at all would make the web gateway wait out its 2-second connect timeout first.
+
+It exits 0 within 9 seconds, inside Docker's default grace period of 10 seconds. A request still unanswered after the
+6 seconds is cut, and its caller asks again. Only the slow ones wait that long, such as a merge called with
+`waitSeconds`. If the migration that runs before it starts is still running when the stop comes, Docker waits out the
+grace period and kills the container.
+
 **How the session streams are spread:**
 
 - **By session.** The web gateway hashes the session's id in the stream's address, so all of one session's streams,
@@ -1098,9 +1126,9 @@ a 502, and the link gateway sends the call again or tells the runner to.
   a stream addressed by its UUID can reach another apiserver, which costs that apiserver a subscription of its own.
 - **When the set changes.** When an apiserver is added or stops, some sessions move to another apiserver, each when its
   stream next connects. A stream already open stays where it is.
-- **When an apiserver stops.** Its streams end, and the clients open them again on the others: the web gateway gives up
-  on the stopped one after 2 seconds, then leaves it out. Each stream picks up from the last stored event it had, and
-  the deltas go on.
+- **When an apiserver stops.** Its streams end, and the clients open them again on the others. A stopping apiserver
+  refuses connections, so the web gateway moves on at once. It gives up on one that went away without stopping after
+  2 seconds, then leaves it out. Each stream picks up from the last stored event it had, and the deltas go on.
 - **When the web gateway starts.** It looks the name up as it starts, which Compose does once the first apiserver is
   healthy. Had no apiserver been running then, the two routes would answer 502 until its next look-up, 10 seconds
   later.

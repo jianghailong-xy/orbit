@@ -60,7 +60,13 @@ test('every deployment\'s gateway/nginx.conf loads on an nginx older than 1.27.3
 
 test('gateway/nginx.conf includes the routes for several apiservers by globs, which match nothing where nothing is mounted', () => {
   const includes = uncommented(main).match(/^\s*include\s+[^;]+;/gm).map((line) => line.trim());
-  assert.deepEqual(includes, [`include ${MOUNT}/http/*.conf;`, `include ${MOUNT}/server/*.conf;`]);
+  assert.deepEqual(includes, [
+    `include ${MOUNT}/http/*.conf;`,
+    `include ${MOUNT}/server/*.conf;`,
+    // Inside the /api/events and /api/ locations: the first apiserver with the others behind it.
+    `include ${MOUNT}/first/*.conf;`,
+    `include ${MOUNT}/first/*.conf;`,
+  ]);
   // The http one before the server block, the server one inside it.
   const server = block(main, /^server\s*\{/m);
   assert.ok(server.includes(`include ${MOUNT}/server/*.conf;`));
@@ -84,6 +90,24 @@ test('the upstreams reach every apiserver by the alias docker-compose.yml gives 
   assert.ok(directives(block(upstreams, /^upstream orbit_link_tokens\s*\{/m)).includes('least_conn'));
 });
 
+test('the first apiserver\'s requests go to the others only while it cannot be reached: a backup behind it, given up on within 2 s', () => {
+  const d = directives(block(upstreams, /^upstream orbit_first_apiserver\s*\{/m));
+  assert.deepEqual(d.filter((x) => x.startsWith('server ')), ['server apiserver:3000 resolve', 'server orbit-apiservers:3000 resolve backup']);
+  assert.ok(d.includes('zone orbit_first_apiserver 64k'));
+  assert.ok(d.includes('resolver 127.0.0.11 valid=10s ipv6=off'));
+  assert.ok(!d.some((x) => /^(hash|ip_hash|random|least_conn)\b/.test(x)), 'round robin: backup is its alone');
+  const fallback = directives(uncommented(read('gateway/several-apiservers/first/fallback.conf')));
+  assert.deepEqual(fallback, ['set $apiserver orbit_first_apiserver', 'proxy_connect_timeout 2s']);
+  for (const header of [/^\s*location \/api\/ \{/m, /^\s*location = \/api\/events \{/m]) {
+    const loc = directives(block(main, header));
+    const at = (x) => loc.indexOf(x);
+    // The first apiserver by name, then the include that replaces it where the directory is mounted, then the pass.
+    assert.ok(at('set $apiserver apiserver:3000') >= 0, `${header}: names the first apiserver`);
+    assert.ok(at('set $apiserver apiserver:3000') < at(`include ${MOUNT}/first/*.conf`), `${header}: the include comes after it`);
+    assert.ok(at(`include ${MOUNT}/first/*.conf`) < at('proxy_pass http://$apiserver$request_uri'), `${header}: and before the pass`);
+  }
+});
+
 test('the session stream route takes /api/sessions/:id/events alone, and hashes by the id', () => {
   const header = uncommented(routes).match(/^location ~ (\S+) \{/m);
   assert.ok(header, 'routes.conf has a regex location');
@@ -101,7 +125,7 @@ test('the session stream route takes /api/sessions/:id/events alone, and hashes 
 test('both routes proxy exactly as the /api/ location does, to their upstream, and give up on a gone apiserver within 2 s', () => {
   // The /api/ location's settings, less what picks the upstream and the upload limit, which no stream or token needs.
   const api = directives(block(main, /^\s*location \/api\/ \{/m))
-    .filter((d) => !/^(set |proxy_pass |client_max_body_size )/.test(d)).sort();
+    .filter((d) => !/^(set |proxy_pass |client_max_body_size |include )/.test(d)).sort();
   const cases = [
     [/^location ~ \S+ \{/m, 'proxy_pass http://orbit_session_streams$request_uri'],
     [/^location = \/api\/runner\/link-token \{/m, 'proxy_pass http://orbit_link_tokens$request_uri'],
