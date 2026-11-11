@@ -89,7 +89,7 @@ import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
-import { replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
+import { parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { WikiContextNote } from './WikiContextNote';
@@ -1833,8 +1833,12 @@ type WakeName = ContextType<typeof WatchWakeNamesCtx>;
 type FoldedExchange = { summary: OrbitExchangeSummary; items: NodeListItem[] };
 type FoldBlock = { kind: 'item'; item: NodeListItem } | { kind: 'exchanges'; exchanges: FoldedExchange[] };
 
-/** Facts a coordinator is told that are bad news: they stay in view, as they always were drawn. */
-const LOUD_DELIVERIES: ReadonlySet<string> = new Set(['TASK_DISPATCH_REFUSED', 'PROJECT_BLOCKER_RAISED', 'TASK_RUN_STOPPED']);
+/**
+ * Facts a coordinator is told that are bad news: they stay in view, as they always were drawn. A
+ * stopped run is not one of them: in real coordinators every such notice was a run waiting on
+ * purpose, and what needs the owner reaches them as a card of its own.
+ */
+const LOUD_DELIVERIES: ReadonlySet<string> = new Set(['TASK_DISPATCH_REFUSED', 'PROJECT_BLOCKER_RAISED']);
 
 /**
  * What a turn's opening node says happened, when Orbit opened the turn and it is one the reader
@@ -1848,9 +1852,35 @@ function orbitTurnOf(
 ): Omit<OrbitExchangeSummary, 'seq' | 'lastSeq' | 'reply'> | null {
   if (node.kind !== 'user' || !node.turnHead || node.steer) return null;
   if (node.delivery === 'failed' || node.delivery === 'unconfirmed') return null;
-  if (node.sessionMessage || node.itemCard || node.ownerAnswer || node.taskStart || node.startedCard) return null;
+  if (node.itemCard || node.ownerAnswer || node.taskStart || node.startedCard) return null;
   if (node.reviewRequest || node.reviewReturn) return null;
   const ts = node.ts;
+  // Another session's message: a task's run reporting to its coordinator, folded under that task.
+  // The agent's answer under it says what it did; anything the owner must decide comes as a card.
+  if (node.sessionMessage) {
+    const card = node.sessionMessage;
+    const task = card.fromTaskId ? card.fromTitle.replace(/^Task: /, '') : null;
+    return {
+      ts,
+      what: `Message from ${task ?? card.fromTitle}`,
+      whatInTask: 'Message',
+      category: 'message',
+      target: card.fromTaskId
+        ? { kind: 'TASK', id: card.fromTaskId, title: task ?? undefined }
+        : { kind: 'SESSION', id: card.fromSessionId, title: card.fromTitle },
+    };
+  }
+  // A task run's notify that could not reach the owner, handed to the coordinator (lib/orbitExchangeFold).
+  const notice = parseRunNotice(node.note ?? node.text);
+  if (notice) {
+    return {
+      ts,
+      what: notice.taskTitle ? `Run notice: ${notice.taskTitle}` : 'Run notice',
+      whatInTask: 'Run notice',
+      category: 'notice',
+      target: notice.taskId ? { kind: 'TASK', id: notice.taskId, title: notice.taskTitle ?? undefined } : null,
+    };
+  }
   if (node.sessionReplies) {
     if (node.text.trim() !== '' || node.sessionReplies.length !== 1) return null;
     const reply = node.sessionReplies[0];
