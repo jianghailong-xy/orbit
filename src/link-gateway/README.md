@@ -74,7 +74,8 @@ These values are fixed by the design: ping every 20s, disconnect after 60s witho
 two connections per runner, frames of at most 256 KiB. Forwarding's bounds are fixed too: 64 calls in flight and 8
 sessions' events being stored at once per connection; a credit of 10,000 events or 64 MiB per connection, a tenth of
 it, or the connection's share of the high-water mark when that is less, while the ingest queue holds more than half its
-bound (100,000 events or 64 MiB at the defaults), back once it holds less than a quarter; room the queue frees held
+bound (100,000 events or 64 MiB at the defaults), back once it holds less than a quarter and 30s after it last held
+more than half, told 1,000 connections every 10ms; room the queue frees held
 15s for a session in line; retries on other backends for up to 5s; a watcher count lapses after 60s; a turn prefix
 request waits 10s for the runner.
 
@@ -416,7 +417,12 @@ and holds its events in its own buffer, in memory and then on disk (design §5.8
   not send again within 15s loses its turn, and one whose connection closes leaves the line.
 - **Credit.** Credit is granted by the depth of the queue (§5.8). While it holds more than half its bound (100,000
   events or 64 MiB), every connection's credit drops from 10,000 events or 64 MiB to a tenth of that, in a `Credit`
-  frame, and it comes back once the queue holds less than a quarter of its bound. The reduced credit is also at most
+  frame, and it comes back once the queue holds less than a quarter of its bound and has not held more than half for
+  30s. That hold keeps a queue that crosses the mark again and again, as it did at each GC mark of a gateway with
+  400,000 connections every 11-13s, from changing every connection's credit twice each time. A change is not written
+  to every connection at once: a walk tells 1,000 connections every 10ms (400,000 in 4s), and a connection that sends
+  a batch before the walk reaches it is told with that batch, ahead of its `EventAck`. That batch is held to the
+  credit the runner had been told when it sent it. The reduced credit is also at most
   the connection's share of the high-water mark in events, among the connections with events in the queue: 20 events
   each when 5,000 connections send. So what they may have in flight together stays about the high-water mark, however
   many connections there are and however many of them are idle, and runners slow down rather than send what the queue

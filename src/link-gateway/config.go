@@ -120,6 +120,11 @@ type linkTuning struct {
 	MaxQueued creditLevel
 	// HoldFor is how long room freed for a session in line is held for its runner to send again.
 	HoldFor time.Duration
+	// CreditHold is how long after the queue was last past HighWater the credit stays reduced, below LowWater too.
+	CreditHold time.Duration
+	// A credit change is told to CreditSpreadBatch connections every CreditSpreadEvery (creditBook.spread).
+	CreditSpreadBatch int
+	CreditSpreadEvery time.Duration
 	// RetryBudget is how long a call keeps being retried on other backends, and BackendDownFor how long a backend
 	// that could not be dialed is passed over.
 	RetryBudget, BackendDownFor time.Duration
@@ -172,12 +177,17 @@ func defaultLinkTuning() linkTuning {
 		LowWater:         defaultMaxQueued.half().half(),
 		MaxQueued:        defaultMaxQueued,
 		HoldFor:          15 * time.Second,
-		RetryBudget:      5 * time.Second,
-		BackendDownFor:   5 * time.Second,
-		WatchersTTL:      60 * time.Second,
-		PrefixTimeout:    10 * time.Second,
-		WelcomeTimeout:   3 * time.Second,
-		Merge:            defaultMergeTuning(),
+		// Longer than the 11-13 s between a large gateway's GC marks, each of which can push the queue past HighWater.
+		CreditHold: 30 * time.Second,
+		// 100,000 connections a second: 400,000 are told in 4 s.
+		CreditSpreadBatch: 1_000,
+		CreditSpreadEvery: 10 * time.Millisecond,
+		RetryBudget:       5 * time.Second,
+		BackendDownFor:    5 * time.Second,
+		WatchersTTL:       60 * time.Second,
+		PrefixTimeout:     10 * time.Second,
+		WelcomeTimeout:    3 * time.Second,
+		Merge:             defaultMergeTuning(),
 	}
 }
 
