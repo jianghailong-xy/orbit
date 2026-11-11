@@ -190,7 +190,7 @@ const SCENES = {
   // Decisions of 11-11: column at the right, a project button in the coordinator's title bar.
   'n-wide': { path: at(D.c1, pq(P.search)), closeGlyph: true, button: 'on', boxes: { ...PAGE, pbtn: { k: 'css', css: '#b-pbtn' } } },
   'n-narrow': { path: at(D.c1), button: 'off', boxes: { project: proj(P.search), pbtn: { k: 'css', css: '#b-pbtn' } } },
-  'n-member': { path: at(D.t7, pq(P.search)), closeGlyph: true, boxes: PAGE },
+  'n-member': { path: at(D.t7, pq(P.search)), closeGlyph: true, button: 'on', boxes: { ...PAGE, pbtn: { k: 'css', css: '#b-pbtn' } } },
   'p-coord': { phone: true, path: at(D.c1), button: 'off', boxes: { pbtn: { k: 'css', css: '#b-pbtn' }, head: { k: 'css', css: '.workspace-header' } } },
   'p-page': { phone: true, path: `/workspaces/${W.dev.id}${pq(P.search)}`, closeGlyph: true, boxes: PAGE },
 };
