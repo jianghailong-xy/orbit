@@ -911,7 +911,16 @@ const SESSION_LOAD_MORE_PX = 240;
 const LONG_PRESS_MS = 500;
 
 // Drag-resizable width of the left session column, persisted across reloads.
+type ListSection = {
+  key: string;
+  title: string;
+  tag: SessionTagRef | null;
+  sessions: Array<SessionProjectEntry<SessionListItem>>;
+};
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
+// The project's sessions column at the conversation's right edge: the list's widths, its own width.
+const PROJECT_COL_KEY = 'orbit.projectColWidth';
+const PROJECT_COLUMN_COPY = { label: 'Project sessions', close: 'Close project sessions' } as const;
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 320;
@@ -2086,7 +2095,6 @@ export function WorkspaceView({
   // on that landing.
   const landingsProjectId = routeId(useMatch('/projects/:id/landings')?.params.id);
   const openProjectId = routeId(searchParams.get('project'));
-  const projectView = openProjectId ? (searchParams.get('view') === 'completed' ? 'completed' : 'open') : null;
   // Latest selectedId, readable from async callbacks (loadOlder) to bail if the user has
   // switched sessions since the request was issued — so a late page never lands in the wrong
   // transcript. Assigning during render is safe for a "current value" ref.
@@ -2141,6 +2149,12 @@ export function WorkspaceView({
   // Below the mobile breakpoint the two panes stack one-at-a-time; a couple of layout
   // choices (the auto-open redirect, the in-pane back button) key off this.
   const isMobile = useIsMobile();
+  // Where `?project=` draws the project's sessions page (owner 2026-11-11,
+  // docs/mocks/project-sessions-column): at phone width it still takes the list's place; wider, the
+  // list stays the workspace's and the page is a column at the conversation's right edge.
+  const listProjectId = isMobile ? openProjectId : null;
+  const columnProjectId = isMobile ? null : openProjectId;
+  const projectView = listProjectId ? (searchParams.get('view') === 'completed' ? 'completed' : 'open') : null;
   // Installed-PWA / standalone is the only mode where ⌘N actually reaches the page
   // (a normal tab hands it to the browser). Gate the on-button shortcut hint on it.
   const isStandalone = useMediaQuery('(display-mode: standalone)');
@@ -2373,8 +2387,8 @@ export function WorkspaceView({
 
   // Project pages mix Open and Completed; their rows use each session's lifecycle.
   const rowView = projectView ?? view;
-  const sessionRowView = useCallback((session: SessionListItem): SessionView => openProjectId
-    ? sessionLifecycleStateOf(session).toLowerCase() as SessionView : rowView, [openProjectId, rowView]);
+  const sessionRowView = useCallback((session: SessionListItem, onPage = !!listProjectId): SessionView => onPage
+    ? sessionLifecycleStateOf(session).toLowerCase() as SessionView : rowView, [listProjectId, rowView]);
   const onRowTouchStart = (
     e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string, movable = sessionMovable(session),
   ): void => {
@@ -2515,7 +2529,11 @@ export function WorkspaceView({
     const saved = Number(localStorage.getItem(SESSION_COL_KEY));
     return saved >= SESSION_COL_MIN && saved <= SESSION_COL_MAX ? saved : SESSION_COL_DEFAULT;
   });
-  const [resizing, setResizing] = useState(false);
+  const [projectColWidth, setProjectColWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem(PROJECT_COL_KEY));
+    return saved >= SESSION_COL_MIN && saved <= SESSION_COL_MAX ? saved : SESSION_COL_DEFAULT;
+  });
+  const [resizing, setResizing] = useState<'list' | 'project' | null>(null);
 
   // The list is scoped by `view`. Keep Completed loaded while one of its transcripts is
   // open; every other open session resolves from Open, where live sessions live.
@@ -2570,8 +2588,8 @@ export function WorkspaceView({
   const refreshSessionLists = useRefreshSessionLists();
   const sessionsQ = useQuery({
     ...sessionsOpts,
-    enabled: !openProjectId,
-    refetchInterval: openProjectId ? false : (query) => listPollMs(controlLive, query),
+    enabled: !listProjectId,
+    refetchInterval: listProjectId ? false : (query) => listPollMs(controlLive, query),
     // Widening the window re-keys the query, so hold the rows already on screen while the
     // larger page loads instead of blanking the list. Only within one scope (every key part
     // but the page size): another scope's rows must never stand in for this one's, even for
@@ -2980,7 +2998,7 @@ export function WorkspaceView({
   // keeping this view's activity and folder count scoped to its own members. From the list's first
   // frame, not a render later when `projectsShown` catches up: the landing waits on these reads.
   const projectData = useSessionProjectData({
-    sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !openProjectId,
+    sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !listProjectId,
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
@@ -3075,14 +3093,14 @@ export function WorkspaceView({
   const folderParam = searchParams.get('folder');
   const openFolder = useMemo(() => {
     const id = routeId(folderParam);
-    return !openProjectId && foldersShown && id ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
-  }, [folderParam, foldersShown, workspaceFolders, openProjectId]);
+    return !listProjectId && foldersShown && id ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
+  }, [folderParam, foldersShown, workspaceFolders, listProjectId]);
   // A folder page whose folder is gone — deleted here or on another client, or a link into another
   // workspace's — goes back to the list. Only once both the folders and the list's workspace are
   // known: before that a missing folder is one not loaded yet. Arriving from another workspace, the
   // list is that one's until the scope catches up with the route, and its folders are not these.
   useEffect(() => {
-    if (openProjectId || !folderParam || openFolder || !foldersQ.isSuccess || !scopeWorkspaceId) return;
+    if (listProjectId || !folderParam || openFolder || !foldersQ.isSuccess || !scopeWorkspaceId) return;
     if (scopeWorkspaceId !== resolvedWorkspaceId) return;
     if (!listShowsFolders(effectiveView, listByTag)) return;
     setSearchParams(
@@ -3094,13 +3112,13 @@ export function WorkspaceView({
       { replace: true },
     );
   }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, resolvedWorkspaceId, effectiveView, listByTag,
-    setSearchParams, openProjectId]);
+    setSearchParams, listProjectId]);
   // The folder page is kept for the workspace whose list it is, so the sidebar opens the workspace on
   // it again after a trip to another one (lib/workspaceListFolder). A project's sessions page over
   // the list leaves it as it was.
   useEffect(() => {
-    if (resolvedWorkspaceId && !openProjectId) rememberListFolder(resolvedWorkspaceId, folderParam);
-  }, [resolvedWorkspaceId, openProjectId, folderParam]);
+    if (resolvedWorkspaceId && !listProjectId) rememberListFolder(resolvedWorkspaceId, folderParam);
+  }, [resolvedWorkspaceId, listProjectId, folderParam]);
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
   const folderListing = useMemo(
@@ -3124,17 +3142,20 @@ export function WorkspaceView({
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
   // for the coordinator; one with no coordinator is passed over, as a folder row is.
   const listedSessions = useMemo(
-    () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
+    () => listProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
       ? entry.coordinator ? [entry.coordinator] : [] : [entry]),
-    [folderListing, openProjectId, projectMembers],
+    [folderListing, listProjectId, projectMembers],
   );
   // Where a session opened from this list lives. On a folder's page the page goes along, so the
   // list stays on it while the conversations it lists are opened one after another.
   const folderSearch = openFolder ? `?folder=${encodeId(openFolder.id)}` : '';
-  const listSearch = openProjectId
-    ? `?project=${encodeId(openProjectId)}${effectiveView === 'completed' ? '&view=completed' : ''}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : folderSearch;
-  const sessionPath = useCallback((id: string) => `/sessions/${encodeId(id)}${listSearch}`, [listSearch]);
-  const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }) => {
+  // Where a session opened from the project's page lives: the page goes along, in the list on a
+  // phone and in the column beside the conversation wider.
+  const projectSearch = openProjectId
+    ? `?project=${encodeId(openProjectId)}${listProjectId && effectiveView === 'completed' ? '&view=completed' : ''}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : '';
+  const listSearch = listProjectId ? projectSearch : folderSearch;
+  const sessionPath = useCallback((id: string, search = listSearch) => `/sessions/${encodeId(id)}${search}`, [listSearch]);
+  const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }, search = listSearch) => {
     const item = [...(session.ownerItems ?? [])]
       .filter((candidate) => candidate.itemId)
       .sort((a, b) => {
@@ -3145,18 +3166,19 @@ export function WorkspaceView({
       })[0];
     // A session waiting on the owner opens at that item's card, and the list's page goes along too.
     return item?.itemId
-      ? `${sessionItemHref(session.id, item.itemId)}${listSearch.replace(/^\?/, '&')}`
-      : sessionPath(session.id);
+      ? `${sessionItemHref(session.id, item.itemId)}${search.replace(/^\?/, '&')}`
+      : sessionPath(session.id, search);
   }, [sessionPath, listSearch]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
-  const hasMoreSessions = !openProjectId && !foldersShown && !projectsShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  const hasMoreSessions = !listProjectId && !foldersShown && !projectsShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
   // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
   // flash anything over rows that are already correct.
-  const loadingSessions = openProjectId ? projectSessionsQ.isPending || completedProjectSessionsQ.isPending : sessionsQ.isPending || sessionsQ.isPlaceholderData;
+  const loadingProjectSessions = projectSessionsQ.isPending || completedProjectSessionsQ.isPending;
+  const loadingSessions = listProjectId ? loadingProjectSessions : sessionsQ.isPending || sessionsQ.isPlaceholderData;
   const loadMoreSessions = useCallback(() => {
     if (!hasMoreSessions || sessionsQ.isFetching) return;
     setSessionLimit((n) => n + SESSION_PAGE_SIZE);
@@ -3191,26 +3213,30 @@ export function WorkspaceView({
   // so its rows are grouped by when they last ran, not by when they moved — same as iOS.
   // On a project's page the timeline is its sessions alone: the merges into main it has made are rows
   // of its Landings window (owner 2026-10-27).
-  const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: Array<SessionProjectEntry<SessionListItem>> }>>(
+  const workspaceSections = useMemo<ListSection[]>(
+    () => groupByTag
+      ? sessionTagSections(folderListing.entries).map((s) => ({
+          key: s.tag?.id ?? '__untagged__',
+          tag: s.tag,
+          title: s.tag?.name ?? 'Untagged',
+          sessions: s.sessions,
+        }))
+      : sessionTimeSections(folderListing.entries, {
+          pinnedFirst: view === 'open' && !tagFilter,
+        }).map((s) => ({
+          key: s.title,
+          tag: null as SessionTagRef | null,
+          ...s,
+          // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
+          sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
+        })),
+    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed],
+  );
+  // The project's page, in the list on a phone or in the column beside the conversation: its
+  // coordinator, its Landings row and the timeline of its other members.
+  const projectSections = useMemo<ListSection[]>(
     () => {
-      if (!openProjectId) {
-        return groupByTag
-          ? sessionTagSections(folderListing.entries).map((s) => ({
-              key: s.tag?.id ?? '__untagged__',
-              tag: s.tag,
-              title: s.tag?.name ?? 'Untagged',
-              sessions: s.sessions,
-            }))
-          : sessionTimeSections(folderListing.entries, {
-              pinnedFirst: view === 'open' && !tagFilter,
-            }).map((s) => ({
-              key: s.title,
-              tag: null as SessionTagRef | null,
-              ...s,
-              // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
-              sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
-            }));
-      }
+      if (!openProjectId) return [];
       const coordinator = pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
         sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : [];
       const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false })
@@ -3224,8 +3250,27 @@ export function WorkspaceView({
         : [];
       return [...coordinator, ...landings, ...timeline];
     },
-    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, landingsSummary],
+    [openProjectId, pageCoordinator, projectMembers, landingsSummary],
   );
+  const sections = listProjectId ? projectSections : workspaceSections;
+  // Beside a conversation of the project, or its Landings window; never over a new session's draft.
+  const showProjectColumn = !!columnProjectId && (!!selectedId || !!landingsProjectId);
+  // The column stands beside a conversation of its project: an address naming the project over no
+  // session or another one's (a member's progress mark, a project row with no coordinator, a link)
+  // opens the coordinator, else the project's latest member.
+  useEffect(() => {
+    if (!columnProjectId || landingsProjectId || composingRoute) return;
+    if (!projectSessionsQ.isSuccess || !completedProjectSessionsQ.isSuccess) return;
+    if (selectedId) {
+      if (allProjectMembers.some((s) => s.id === selectedId)) return;
+      if (!selectedSession && !selectedMissing) return;
+      if (selectedSession?.projectMembership?.projectId === columnProjectId) return;
+    }
+    const target = pageCoordinator ?? projectMembers[0];
+    if (target) navigate(sessionPath(target.id, projectSearch), { replace: true });
+  }, [columnProjectId, landingsProjectId, composingRoute, projectSessionsQ.isSuccess, completedProjectSessionsQ.isSuccess,
+    selectedId, allProjectMembers, selectedSession, selectedMissing, pageCoordinator, projectMembers, navigate, sessionPath,
+    projectSearch]);
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
   // server sort — Completed arrives ordered by completion time but buckets by last activity,
@@ -5862,8 +5907,9 @@ export function WorkspaceView({
   }, [menuOpenId, orderedSessions, rowView, sessionRowView, selected, selectedSession, selectedLifecycleState, requestComplete]);
   useEffect(() => {
     if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId) &&
-      !folderListing.projects.some((p) => p.id === menuOpenId)) setMenuOpenId(null);
-  }, [menuOpenId, orderedSessions, folderListing.projects]);
+      !folderListing.projects.some((p) => p.id === menuOpenId) &&
+      !(showProjectColumn && projectMembers.some((s) => s.id === menuOpenId))) setMenuOpenId(null);
+  }, [menuOpenId, orderedSessions, folderListing.projects, showProjectColumn, projectMembers]);
   const deleteMut = useMutation({
     mutationFn: (session: SessionToastTarget) => deleteSession(session.id),
     onSuccess: (_d, session) => {
@@ -6390,25 +6436,28 @@ export function WorkspaceView({
   // Drag the divider between the session list and the conversation to resize the
   // left column. Listeners live on `document` so a fast drag that outruns the 1px
   // handle keeps tracking; body cursor/select are pinned for the drag's duration.
-  const startResize = (e: ReactMouseEvent): void => {
+  // The project's column sits at the right edge, so its divider widens it dragged leftwards.
+  const startResize = (e: ReactMouseEvent, which: 'list' | 'project' = 'list'): void => {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = colWidth;
+    const startW = which === 'list' ? colWidth : projectColWidth;
+    const setWidth = which === 'list' ? setColWidth : setProjectColWidth;
+    const sign = which === 'list' ? 1 : -1;
     let latest = startW;
-    setResizing(true);
+    setResizing(which);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     const onMove = (ev: MouseEvent): void => {
-      latest = Math.min(SESSION_COL_MAX, Math.max(SESSION_COL_MIN, startW + ev.clientX - startX));
-      setColWidth(latest);
+      latest = Math.min(SESSION_COL_MAX, Math.max(SESSION_COL_MIN, startW + sign * (ev.clientX - startX)));
+      setWidth(latest);
     };
     const onUp = (): void => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      setResizing(false);
-      localStorage.setItem(SESSION_COL_KEY, String(latest));
+      setResizing(null);
+      localStorage.setItem(which === 'list' ? SESSION_COL_KEY : PROJECT_COL_KEY, String(latest));
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -7593,9 +7642,26 @@ export function WorkspaceView({
     setFolderEdit(null);
     setFolderParam(null, replace);
   };
-  const enterProjectSessions = (projectId: string): void => {
+  // At phone width the project's sessions page takes the list's place. Wider, the list stays as it
+  // is: the project's coordinator opens, with the page in the column beside it (owner 2026-11-11);
+  // without a coordinator to name, the column opens one of the project's members itself.
+  const enterProjectSessions = (projectId: string, coordinatorId?: string | null): void => {
     setSwipeOpen(null);
     setMenuOpenId(null);
+    if (!isMobile) {
+      if (coordinatorId) {
+        navigate(`/sessions/${encodeId(coordinatorId)}?project=${encodeId(projectId)}${
+          folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`, { state: stampFromList() });
+        return;
+      }
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set('project', encodeId(projectId));
+        next.delete('view');
+        return next;
+      });
+      return;
+    }
     navigateWithPaneSlide('push', () => setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set('project', encodeId(projectId));
@@ -7613,6 +7679,12 @@ export function WorkspaceView({
       return next;
     }), { swapsPane: false });
   };
+  const closeProjectColumn = (): void => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    next.delete('project');
+    next.delete('view');
+    return next;
+  });
   const startNewFolder = (): void => setFolderEdit({ id: null, draft: '', error: null, saving: false });
   // New Folder… and Rename… save on Return (or when the field is left with a name in it); an empty
   // or unchanged name just closes the field. A name the workspace already has is said under it.
@@ -8626,32 +8698,435 @@ export function WorkspaceView({
     }, 0);
   };
 
+  // The project's sessions page: in the list's place at phone width, and wider in the column at the
+  // conversation's right edge (owner 2026-11-11), where its back chevron is a ✕ that closes the column.
+  const projectPageHead = (onClose: () => void, closeLabel: string, closeIcon: ReactNode): ReactNode => openProjectId && (
+    <div className="session-col-head session-folder-head session-project-page-header">
+      <button type="button" className="session-folder-back" aria-label={closeLabel} title={closeLabel} onClick={onClose}>
+        {closeIcon}
+      </button>
+      <span className="session-folder-titles">
+        <span className="session-folder-title">{pageProjectTitle}</span>
+        <span className="session-folder-workspace">
+          {loadingProjectSessions && projectMembers.length === 0
+            ? SESSION_PROJECT_COPY.pageSubtitleLoading
+            : SESSION_PROJECT_COPY.pageSubtitle(projectMembers.length)}
+        </span>
+      </span>
+      {/* The page's one action, as iOS's toolbar has it: the project's own page. The
+          coordinator is the first row below, so it needs no entry of its own up here. */}
+      <button type="button" className="session-kebab session-folder-head-more session-project-page-open"
+        aria-label={SESSION_PROJECT_COPY.openProject} title={SESSION_PROJECT_COPY.openProject}
+        onClick={() => navigate(`/projects/${encodeId(openProjectId)}`)}>
+        <AppstoreOutlined />
+      </button>
+    </div>
+  );
+  // The project's first card and its merge into main lead the list and scroll with it, as on iOS
+  // (docs/mocks/project-sessions-page-web); the coordinator's conversation keeps a line about the
+  // merge. A DONE project's first card is its ending, in the progress card's place
+  // (docs/mocks/project-done-sessions-page) — the progress card itself would say nothing but the
+  // word Done.
+  const projectPageTop = (projectId: string): ReactNode => (
+    <>
+      {pageSettledDoc && <ProjectSessionsDoneCard projectId={projectId} project={pageSettledDoc} />}
+      {!pageSettledDoc && (
+        <>
+          <div className="session-project-page-card">
+            <div className="session-project-page-progress">
+              {pageTaskCounts ? (
+                <>
+                  <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
+                  <span>
+                    {pageNotStarted
+                      ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
+                      : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
+                  </span>
+                </>
+              ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+            </div>
+            {pageStart ? <SessionProjectStartRow start={pageStart} projectId={projectId} /> : null}
+          </div>
+          {/* The landing left the progress card on 2026-10-11: it is a card of its own under it
+              (docs/mocks/project-landing-card), ahead of the merge card in the same list. */}
+          <SessionProjectLanding projectId={projectId}
+            onOpen={() => navigate(`/projects/${encodeId(projectId)}`)} />
+        </>
+      )}
+      <ProjectMergeStrip key={`merge:${projectId}`} projectId={projectId}
+        onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
+          navigate(sessionPath(pageCoordinator.id, projectSearch), { state: stampFromList() })) : null} />
+      <ProjectStaleDoneRow view={pageOpenItemsQ.data} />
+      <ProjectDoneDeclineRow items={pageOpenItemsQ.data} />
+    </>
+  );
+  const projectPageEmpty = (
+    projectMembers.length === 0 && !loadingProjectSessions && (
+      <div className="session-project-empty">
+        {pageSessionsError ? (
+          <>
+            <ExclamationCircleOutlined className="session-project-empty-icon" />
+            <b>{SESSION_PROJECT_COPY.pageUnread}</b>
+            <span>{pageSessionsError.message}</span>
+            <button type="button" className="session-project-empty-retry" onClick={() => {
+              void projectSessionsQ.refetch();
+              void completedProjectSessionsQ.refetch();
+            }}>
+              {SESSION_PROJECT_COPY.retry}
+            </button>
+          </>
+        ) : (
+          <>
+            <MessageOutlined className="session-project-empty-icon" />
+            <b>{SESSION_PROJECT_COPY.pageEmpty}</b>
+          </>
+        )}
+      </div>
+    )
+  );
+  // One section of the list, or of the project's page (`pageProjectId`), whose rows open with the page
+  // kept in the address.
+  const renderSection = (sec: ListSection, pageProjectId: string | null): ReactNode => (
+    sec.key === 'Landings' && landingsSummary && pageProjectId ? (
+      <SessionProjectLandings key={sec.key} summary={landingsSummary}
+        onOpen={() => navigateWithPaneSlide('push', () => navigate(
+          `/projects/${encodeId(pageProjectId)}/landings${projectSearch}`, { state: stampFromList() },
+        ))} />
+    ) : (
+    <section key={sec.key} className={pageProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
+      {sec.key === 'Pinned' ? (
+        <button
+          type="button"
+          className="session-section-head session-section-fold"
+          aria-expanded={!pinnedCollapsed}
+          onClick={togglePinned}
+        >
+          {sec.title}
+          <RightOutlined
+            className={`session-section-chev${pinnedCollapsed ? '' : ' open'}`}
+            aria-hidden
+          />
+        </button>
+      ) : (
+        <div className="session-section-head">
+          {sec.tag && (
+            <span className="session-section-dot" style={{ background: sec.tag.color }} />
+          )}
+          {sec.title}
+        </div>
+      )}
+      {sec.sessions.map((s) => {
+        if (s.kind === 'project') {
+          const coordinator = s.coordinator;
+          const openTarget = () => {
+            if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
+            if (swipeOpen) { setSwipeOpen(null); return; }
+            setMenuOpenId(null);
+            if (s.target.kind === 'project') enterProjectSessions(s.target.id);
+            else navigateWithPaneSlide('push', () =>
+              navigate(sessionItemPath(s.target), { state: stampFromList() }));
+          };
+          const drag = swipeDrag?.id === s.id ? swipeDrag : null;
+          const offset = drag?.dx ?? restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null,
+            { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH });
+          return (
+            <SessionProjectListRow
+              key={s.id}
+              project={s}
+              active={s.members.some((member) => member.id === selectedId) ||
+                selectedSession?.projectMembership?.projectId === s.projectId}
+              onOpen={() => {
+                if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
+                if (swipeOpen) { setSwipeOpen(null); return; }
+                setMenuOpenId(null);
+                enterProjectSessions(s.projectId, coordinator?.id);
+              }}
+              menuOpen={menuOpenId === s.id}
+              onMenuOpenChange={(open) => { setMenuOpenId(open ? s.id : null); if (open) setSwipeOpen(null); }}
+              swipe={isMobile && coordinator ? {
+                offset, dragging: !!drag,
+                onStart: (e) => onRowTouchStart(e, coordinator, false, s.id),
+                onMove: onRowTouchMove, onEnd: onRowTouchEnd, onCancel: onRowTouchCancel,
+                onAction: (action) => runSwipeAction(action, coordinator),
+              } : undefined}
+              // The menu stops its own clicks before they reach the row, which would open it.
+              menu={[
+                // A finished project's row can leave Open: Complete moves its coordinator and
+                // the members still open to Completed (§4.3; board 2026-11-07, part ④).
+                ...(effectiveView === 'open' && (s.status === 'DONE' || s.status === 'CANCELLED') ? [
+                  { key: 'complete', icon: <CheckOutlined />, label: SESSION_PROJECT_COPY.complete,
+                    onSelect: () => {
+                      setMenuOpenId(null);
+                      completeProjectMut.mutate({ projectId: s.projectId, memberIds: s.members.map((m: any) => m.id) });
+                    } },
+                  { key: 'divider-complete', type: 'separator' as const },
+                ] : []),
+                { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
+                  onSelect: () => { setMenuOpenId(null); openTarget(); } },
+                { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
+                  onSelect: () => { setMenuOpenId(null); enterProjectSessions(s.projectId, coordinator?.id); } },
+                { key: 'project', label: SESSION_PROJECT_COPY.openProject,
+                  onSelect: () => { setMenuOpenId(null); navigate(`/projects/${encodeId(s.projectId)}`); } },
+                { key: 'divider', type: 'separator' },
+                { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
+                  onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('pin', coordinator); } },
+                { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator,
+                  onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('move', coordinator); } },
+              ]}
+            />
+          );
+        }
+        const actionSession = selectedSession?.id === s.id ? selectedSession : s;
+        const memberView = sessionRowView(actionSession, !!pageProjectId);
+        // A member whose project has no row here is a row of its own, filed by its own folder
+        // (owner 2026-11-07).
+        const mark = s.projectMark;
+        const movable = sessionMovable(s) || !!mark;
+        const swipeActions = sessionSwipeActions(memberView, movable);
+        const swipeSizes = swipeWidths(memberView, movable);
+        const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
+        const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
+        // Open and Completed rows open their transcript; only
+        // Trash rows stay closed.
+        const openable = memberView !== 'trash';
+        // The selected row may have a fresher detail payload than the list poll. Use the
+        // merged row for both status surfaces so the banner and its list warning point at
+        // the same canonical obligation during that refresh gap.
+        const watching = sessionWatching(watchingBySession, s.id);
+        const line = sessionLine(actionSession, openable, watching, recapsEnabled, machineName(runner));
+        const drag = swipeDrag?.id === s.id ? swipeDrag : null;
+        const swipeTx = drag
+          ? drag.dx
+          : restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null, swipeSizes);
+        // As on iOS, a full swipe runs the leading edge's first action only when it can run.
+        const canFullSwipe = memberView === 'open' ? canCompleteRow : canRestoreRow;
+        const swipeButtons = {
+          complete: { label: 'Complete', icon: <CheckOutlined />, disabled: !canCompleteRow },
+          restore: { label: 'Move to Open', icon: <UndoOutlined />, disabled: !canRestoreRow },
+          pin: s.pinnedAt
+            ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
+            : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
+          share: { label: 'Share', icon: <ExportOutlined />, disabled: false },
+          move: { label: 'Move', icon: <FolderOutlined />, disabled: false },
+          delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
+          purge: { label: 'Delete Permanently', icon: <DeleteOutlined />, disabled: false },
+        };
+        // `close` closes the menu the item is in: the row's ⋯ menu or the one a held press opens;
+        // `kebab` reads that ⋯ when the item is picked.
+        const menuItem = (action: SwipeAction, close: () => void, kebab?: () => HTMLElement | null): MenuItem => ({
+          key: action,
+          icon: swipeButtons[action].icon,
+          disabled: swipeButtons[action].disabled,
+          danger: action === 'delete' || action === 'purge',
+          label: action === 'complete' ? (
+            <div className="session-menu-label">
+              <span>Complete</span>
+              <kbd>{COMPLETE_SESSION_HINT}</kbd>
+            </div>
+          ) : action === 'move' ? MOVE_COPY.action
+            : action === 'share' ? 'Share…'
+              : action === 'purge' ? 'Delete Permanently…'
+                : swipeButtons[action].label,
+          title: action === 'complete'
+            ? !canCompleteRow ? 'Complete unavailable right now'
+              : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
+            : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
+          // The menu stops its own clicks before they reach the row, which would open it.
+          onSelect: () => {
+            close();
+            runSwipeAction(action, s, kebab && { current: kebab() });
+          },
+        });
+        // Rename… opens a field rather than acting, so it is no swipe action (as on iOS) and
+        // sits with the other … items. A trashed session's title isn't edited (the header's
+        // isn't either).
+        const menuItems = (close: () => void, kebab?: () => HTMLElement | null): MenuItem[] =>
+          memberView === 'trash'
+            ? [menuItem('restore', close), { key: 'divider', type: 'separator' }, menuItem('purge', close, kebab)]
+            : [
+                ...swipeActions.leading.map((action) => menuItem(action, close, kebab)),
+                { key: 'divider', type: 'separator' },
+                { key: 'rename', icon: <EditOutlined />, label: 'Rename…', onSelect: () => {
+                  close();
+                  afterMenu(kebab?.(), () => setRenamingId(s.id));
+                } },
+                menuItem('share', close),
+                ...(movable ? [menuItem('move', close)] : []),
+                { key: 'divider-delete', type: 'separator' },
+                menuItem('delete', close, kebab),
+              ];
+        const renaming = renamingId === s.id;
+        return (
+          <div
+            className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${renaming ? ' renaming' : ''}`}
+            key={s.id}
+            // While it is renamed, a press anywhere else on the row keeps the field's focus
+            // (leaving the field saves), and a click there doesn't open the row.
+            onMouseDown={(e) => {
+              if (renaming && !(e.target instanceof HTMLInputElement)) e.preventDefault();
+            }}
+            onClick={() => {
+              if (renaming) return;
+              if (swipeClickGuard.current) {
+                swipeClickGuard.current = false;
+                return; // this click merely ends a swipe
+              }
+              if (swipeOpen) {
+                setSwipeOpen(null); // a tap anywhere on an open row just closes it
+                return;
+              }
+              setMenuOpenId(null);
+              if (openable)
+                navigateWithPaneSlide('push', () =>
+                  navigate(sessionItemPath(actionSession, pageProjectId ? projectSearch : listSearch), { state: stampFromList() }),
+                );
+            }}
+            onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe, undefined, movable); }}
+            onTouchMove={onRowTouchMove}
+            onTouchEnd={onRowTouchEnd}
+            onTouchCancel={onRowTouchCancel}
+          >
+            {isMobile && pressMenu?.id === s.id && (
+              <Menu
+                open
+                side="bottom"
+                align="start"
+                // Where the finger is held: an empty mark the menu is placed against, not a control.
+                nativeButton={false}
+                popupClassName="session-row-menu session-press-menu"
+                onOpenChange={(open) => { if (!open) setPressMenu(null); }}
+                items={menuItems(() => setPressMenu(null))}
+                trigger={<span className="session-press-anchor" style={{ left: pressMenu.x, top: pressMenu.y }} />}
+              />
+            )}
+            {isMobile &&
+              (['leading', 'trailing'] as const).map((side) => (
+                <div
+                  key={side}
+                  className={`session-swipe-actions ${side}${drag ? ' dragging' : ''}${side === 'leading' && drag?.armed ? ' armed' : ''}`}
+                  style={{ width: Math.max(0, side === 'leading' ? swipeTx : -swipeTx) }}
+                >
+                  {swipeActionsOnScreen(side, swipeActions[side]).map((action) => (
+                    <button
+                      key={action}
+                      type="button"
+                      className={`session-swipe-action ${action}`}
+                      aria-label={swipeButtons[action].label}
+                      aria-disabled={swipeButtons[action].disabled}
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        runSwipeAction(action, s);
+                      }}
+                    >
+                      <span className="session-swipe-glyph">{swipeButtons[action].icon}</span>
+                      <span className="session-swipe-title" aria-hidden="true">
+                        {swipeButtons[action].label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            <div
+              className={`session-swipe${drag ? ' dragging' : ''}`}
+              style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
+            >
+              <span className="session-icon">
+                <StatusIcon session={actionSession} watching={watching?.word} machine={machineName(runner)} />
+              </span>
+              <div className="session-main">
+                {renaming ? (
+                  <SessionRowRename
+                    title={s.title ?? ''}
+                    onDone={(title) => {
+                      setRenamingId(null);
+                      if (title) renameMut.mutate({ id: s.id, title });
+                    }}
+                  />
+                ) : (
+                  <>
+                    <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
+                    {/* One line under the title, and all of it is what the session is doing
+                        or waiting on, else its recap (sessionLine). Tags are filed and
+                        filtered by, not drawn on the row (the owner, 2026-10-22). */}
+                    <div className="session-sub">
+                      {/* A member whose project has no row in this workspace: the project's
+                          progress, which opens its sessions page (owner 2026-11-07). */}
+                      {mark && (
+                        <button
+                          type="button"
+                          className={`session-project-progress${mark.status === 'DONE' ? ' done' : ''}`}
+                          title={SESSION_PROJECT_COPY.markHint(mark.title)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (swipeClickGuard.current) {
+                              swipeClickGuard.current = false;
+                              return;
+                            }
+                            if (swipeOpen) {
+                              setSwipeOpen(null);
+                              return;
+                            }
+                            enterProjectSessions(mark.projectId);
+                          }}
+                        >
+                          {mark.taskCounts ? (
+                            <>
+                              <SessionProjectProgressBar counts={mark.taskCounts} runningCount={mark.runningCount} />
+                              {SESSION_PROJECT_COPY.progress(mark.taskCounts.done, mark.taskCounts.total)}
+                            </>
+                          ) : mark.status}
+                        </button>
+                      )}
+                      <div
+                        className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                      >
+                        {line.text}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="session-right">
+              <div className="session-actions" onClick={(e) => e.stopPropagation()}>
+                <Menu
+                  side="bottom"
+                  align="end"
+                  popupClassName="session-row-menu"
+                  open={menuOpenId === s.id}
+                  onOpenChange={(open) => {
+                    setMenuOpenId((current) => open ? s.id : current === s.id ? null : current);
+                    if (open) setSwipeOpen(null);
+                  }}
+                  items={menuItems(() => setMenuOpenId(null), () => rowKebabs.current.get(s.id) ?? null)}
+                  trigger={
+                    <button
+                      ref={(node) => {
+                        if (node) rowKebabs.current.set(s.id, node);
+                        else rowKebabs.current.delete(s.id);
+                      }}
+                      type="button"
+                      className="session-kebab"
+                      aria-label="More actions"
+                    >
+                      <EllipsisOutlined />
+                    </button>
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </section>
+    )
+  );
+
   return (
     <div className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
-      <aside className={`session-col${openProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
-        {openProjectId ? (
-          <div className="session-col-head session-folder-head session-project-page-header">
-            <button type="button" className="session-folder-back" aria-label={FOLDER_COPY.back(headWorkspaceName)}
-              title={FOLDER_COPY.back(headWorkspaceName)} onClick={leaveProjectSessions}>
-              <LeftOutlined />
-            </button>
-            <span className="session-folder-titles">
-              <span className="session-folder-title">{pageProjectTitle}</span>
-              <span className="session-folder-workspace">
-                {loadingSessions && projectMembers.length === 0
-                  ? SESSION_PROJECT_COPY.pageSubtitleLoading
-                  : SESSION_PROJECT_COPY.pageSubtitle(projectMembers.length)}
-              </span>
-            </span>
-            {/* The page's one action, as iOS's toolbar has it: the project's own page. The
-                coordinator is the first row below, so it needs no entry of its own up here. */}
-            <button type="button" className="session-kebab session-folder-head-more session-project-page-open"
-              aria-label={SESSION_PROJECT_COPY.openProject} title={SESSION_PROJECT_COPY.openProject}
-              onClick={() => navigate(`/projects/${encodeId(openProjectId)}`)}>
-              <AppstoreOutlined />
-            </button>
-          </div>
-        ) : openFolder ? (
+      <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
+        {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
           // and the folder's own two entries. It lists the view it was opened from.
           <div className="session-col-head session-folder-head">
@@ -8725,7 +9200,7 @@ export function WorkspaceView({
         {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
           <div className="session-folder-error">{folderEdit.error}</div>
         )}
-        {!openProjectId && <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
+        {!listProjectId && <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
           <span>New session</span>
           {isStandalone && !isMobile && <kbd className="session-new-kbd">{NEW_SESSION_HINT}</kbd>}
@@ -8734,7 +9209,7 @@ export function WorkspaceView({
             the header. ⌘K stays the primary way in; this is the only one on a touch device, where
             there's no keyboard to press it with and a `title` tooltip never shows — so the label
             and the target size have to carry it. */}
-        {!openProjectId && <div
+        {!listProjectId && <div
           className="session-search"
           role="button"
           tabIndex={0}
@@ -8754,69 +9229,9 @@ export function WorkspaceView({
           ref={listRef}
           onScroll={onSessionListScroll}
         >
-          {/* The project's first card and its merge into main lead the list and scroll with it, as
-              on iOS (docs/mocks/project-sessions-page-web); the coordinator's conversation keeps
-              a line about the merge. A DONE project's first card is its ending, in the progress
-              card's place (docs/mocks/project-done-sessions-page) — the progress card itself would
-              say nothing but the word Done. */}
-          {openProjectId && pageSettledDoc && (
-            <ProjectSessionsDoneCard projectId={openProjectId} project={pageSettledDoc} />
-          )}
-          {openProjectId && !pageSettledDoc && (
-            <>
-              <div className="session-project-page-card">
-                <div className="session-project-page-progress">
-                  {pageTaskCounts ? (
-                    <>
-                      <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
-                      <span>
-                        {pageNotStarted
-                          ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
-                          : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
-                      </span>
-                    </>
-                  ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
-                </div>
-                {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
-              </div>
-              {/* The landing left the progress card on 2026-10-11: it is a card of its own under it
-                  (docs/mocks/project-landing-card), ahead of the merge card in the same list. */}
-              <SessionProjectLanding projectId={openProjectId}
-                onOpen={() => navigate(`/projects/${encodeId(openProjectId)}`)} />
-            </>
-          )}
-          {openProjectId && (
-            <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}
-              onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
-                navigate(sessionPath(pageCoordinator.id), { state: stampFromList() })) : null} />
-          )}
-          {openProjectId && <>
-            <ProjectStaleDoneRow view={pageOpenItemsQ.data} />
-            <ProjectDoneDeclineRow items={pageOpenItemsQ.data} />
-          </>}
-          {openProjectId
-            ? projectMembers.length === 0 && !loadingSessions && (
-              <div className="session-project-empty">
-                {pageSessionsError ? (
-                  <>
-                    <ExclamationCircleOutlined className="session-project-empty-icon" />
-                    <b>{SESSION_PROJECT_COPY.pageUnread}</b>
-                    <span>{pageSessionsError.message}</span>
-                    <button type="button" className="session-project-empty-retry" onClick={() => {
-                      void projectSessionsQ.refetch();
-                      void completedProjectSessionsQ.refetch();
-                    }}>
-                      {SESSION_PROJECT_COPY.retry}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <MessageOutlined className="session-project-empty-icon" />
-                    <b>{SESSION_PROJECT_COPY.pageEmpty}</b>
-                  </>
-                )}
-              </div>
-            )
+          {listProjectId && projectPageTop(listProjectId)}
+          {listProjectId
+            ? projectPageEmpty
             : openFolder
             ? listedSessions.length === 0 &&
               !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
@@ -8835,346 +9250,11 @@ export function WorkspaceView({
           {/* The workspace's folders on top (§3.3), New Folder…'s field above them while it is
               open. A folder row reports for the sessions filed in it, which the time sections
               below leave out. */}
-          {!openProjectId && !openFolder && folderEdit?.id === null && folderEditRow(null)}
-          {!openProjectId && folderListing?.folders.map((row) =>
+          {!listProjectId && !openFolder && folderEdit?.id === null && folderEditRow(null)}
+          {!listProjectId && folderListing?.folders.map((row) =>
             folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
           )}
-          {sections.map((sec) => (
-            sec.key === 'Landings' && landingsSummary && openProjectId ? (
-              <SessionProjectLandings key={sec.key} summary={landingsSummary}
-                onOpen={() => navigateWithPaneSlide('push', () => navigate(
-                  `/projects/${encodeId(openProjectId)}/landings${listSearch}`, { state: stampFromList() },
-                ))} />
-            ) : (
-            <section key={sec.key} className={openProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
-              {sec.key === 'Pinned' ? (
-                <button
-                  type="button"
-                  className="session-section-head session-section-fold"
-                  aria-expanded={!pinnedCollapsed}
-                  onClick={togglePinned}
-                >
-                  {sec.title}
-                  <RightOutlined
-                    className={`session-section-chev${pinnedCollapsed ? '' : ' open'}`}
-                    aria-hidden
-                  />
-                </button>
-              ) : (
-                <div className="session-section-head">
-                  {sec.tag && (
-                    <span className="session-section-dot" style={{ background: sec.tag.color }} />
-                  )}
-                  {sec.title}
-                </div>
-              )}
-              {sec.sessions.map((s) => {
-                if (s.kind === 'project') {
-                  const coordinator = s.coordinator;
-                  const openTarget = () => {
-                    if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
-                    if (swipeOpen) { setSwipeOpen(null); return; }
-                    setMenuOpenId(null);
-                    if (s.target.kind === 'project') enterProjectSessions(s.target.id);
-                    else navigateWithPaneSlide('push', () =>
-                      navigate(sessionItemPath(s.target), { state: stampFromList() }));
-                  };
-                  const drag = swipeDrag?.id === s.id ? swipeDrag : null;
-                  const offset = drag?.dx ?? restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null,
-                    { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH });
-                  return (
-                    <SessionProjectListRow
-                      key={s.id}
-                      project={s}
-                      active={s.members.some((member) => member.id === selectedId) ||
-                        selectedSession?.projectMembership?.projectId === s.projectId}
-                      onOpen={() => {
-                        if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
-                        if (swipeOpen) { setSwipeOpen(null); return; }
-                        setMenuOpenId(null);
-                        enterProjectSessions(s.projectId);
-                      }}
-                      menuOpen={menuOpenId === s.id}
-                      onMenuOpenChange={(open) => { setMenuOpenId(open ? s.id : null); if (open) setSwipeOpen(null); }}
-                      swipe={isMobile && coordinator ? {
-                        offset, dragging: !!drag,
-                        onStart: (e) => onRowTouchStart(e, coordinator, false, s.id),
-                        onMove: onRowTouchMove, onEnd: onRowTouchEnd, onCancel: onRowTouchCancel,
-                        onAction: (action) => runSwipeAction(action, coordinator),
-                      } : undefined}
-                      // The menu stops its own clicks before they reach the row, which would open it.
-                      menu={[
-                        // A finished project's row can leave Open: Complete moves its coordinator and
-                        // the members still open to Completed (§4.3; board 2026-11-07, part ④).
-                        ...(effectiveView === 'open' && (s.status === 'DONE' || s.status === 'CANCELLED') ? [
-                          { key: 'complete', icon: <CheckOutlined />, label: SESSION_PROJECT_COPY.complete,
-                            onSelect: () => {
-                              setMenuOpenId(null);
-                              completeProjectMut.mutate({ projectId: s.projectId, memberIds: s.members.map((m: any) => m.id) });
-                            } },
-                          { key: 'divider-complete', type: 'separator' as const },
-                        ] : []),
-                        { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
-                          onSelect: () => { setMenuOpenId(null); openTarget(); } },
-                        { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
-                          onSelect: () => { setMenuOpenId(null); enterProjectSessions(s.projectId); } },
-                        { key: 'project', label: SESSION_PROJECT_COPY.openProject,
-                          onSelect: () => { setMenuOpenId(null); navigate(`/projects/${encodeId(s.projectId)}`); } },
-                        { key: 'divider', type: 'separator' },
-                        { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
-                          onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('pin', coordinator); } },
-                        { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator,
-                          onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('move', coordinator); } },
-                      ]}
-                    />
-                  );
-                }
-                const actionSession = selectedSession?.id === s.id ? selectedSession : s;
-                const memberView = sessionRowView(actionSession);
-                // A member whose project has no row here is a row of its own, filed by its own folder
-                // (owner 2026-11-07).
-                const mark = s.projectMark;
-                const movable = sessionMovable(s) || !!mark;
-                const swipeActions = sessionSwipeActions(memberView, movable);
-                const swipeSizes = swipeWidths(memberView, movable);
-                const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
-                const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
-                // Open and Completed rows open their transcript; only
-                // Trash rows stay closed.
-                const openable = memberView !== 'trash';
-                // The selected row may have a fresher detail payload than the list poll. Use the
-                // merged row for both status surfaces so the banner and its list warning point at
-                // the same canonical obligation during that refresh gap.
-                const watching = sessionWatching(watchingBySession, s.id);
-                const line = sessionLine(actionSession, openable, watching, recapsEnabled, machineName(runner));
-                const drag = swipeDrag?.id === s.id ? swipeDrag : null;
-                const swipeTx = drag
-                  ? drag.dx
-                  : restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null, swipeSizes);
-                // As on iOS, a full swipe runs the leading edge's first action only when it can run.
-                const canFullSwipe = memberView === 'open' ? canCompleteRow : canRestoreRow;
-                const swipeButtons = {
-                  complete: { label: 'Complete', icon: <CheckOutlined />, disabled: !canCompleteRow },
-                  restore: { label: 'Move to Open', icon: <UndoOutlined />, disabled: !canRestoreRow },
-                  pin: s.pinnedAt
-                    ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
-                    : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
-                  share: { label: 'Share', icon: <ExportOutlined />, disabled: false },
-                  move: { label: 'Move', icon: <FolderOutlined />, disabled: false },
-                  delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
-                  purge: { label: 'Delete Permanently', icon: <DeleteOutlined />, disabled: false },
-                };
-                // `close` closes the menu the item is in: the row's ⋯ menu or the one a held press opens;
-                // `kebab` reads that ⋯ when the item is picked.
-                const menuItem = (action: SwipeAction, close: () => void, kebab?: () => HTMLElement | null): MenuItem => ({
-                  key: action,
-                  icon: swipeButtons[action].icon,
-                  disabled: swipeButtons[action].disabled,
-                  danger: action === 'delete' || action === 'purge',
-                  label: action === 'complete' ? (
-                    <div className="session-menu-label">
-                      <span>Complete</span>
-                      <kbd>{COMPLETE_SESSION_HINT}</kbd>
-                    </div>
-                  ) : action === 'move' ? MOVE_COPY.action
-                    : action === 'share' ? 'Share…'
-                      : action === 'purge' ? 'Delete Permanently…'
-                        : swipeButtons[action].label,
-                  title: action === 'complete'
-                    ? !canCompleteRow ? 'Complete unavailable right now'
-                      : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
-                    : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
-                  // The menu stops its own clicks before they reach the row, which would open it.
-                  onSelect: () => {
-                    close();
-                    runSwipeAction(action, s, kebab && { current: kebab() });
-                  },
-                });
-                // Rename… opens a field rather than acting, so it is no swipe action (as on iOS) and
-                // sits with the other … items. A trashed session's title isn't edited (the header's
-                // isn't either).
-                const menuItems = (close: () => void, kebab?: () => HTMLElement | null): MenuItem[] =>
-                  memberView === 'trash'
-                    ? [menuItem('restore', close), { key: 'divider', type: 'separator' }, menuItem('purge', close, kebab)]
-                    : [
-                        ...swipeActions.leading.map((action) => menuItem(action, close, kebab)),
-                        { key: 'divider', type: 'separator' },
-                        { key: 'rename', icon: <EditOutlined />, label: 'Rename…', onSelect: () => {
-                          close();
-                          afterMenu(kebab?.(), () => setRenamingId(s.id));
-                        } },
-                        menuItem('share', close),
-                        ...(movable ? [menuItem('move', close)] : []),
-                        { key: 'divider-delete', type: 'separator' },
-                        menuItem('delete', close, kebab),
-                      ];
-                const renaming = renamingId === s.id;
-                return (
-                  <div
-                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${renaming ? ' renaming' : ''}`}
-                    key={s.id}
-                    // While it is renamed, a press anywhere else on the row keeps the field's focus
-                    // (leaving the field saves), and a click there doesn't open the row.
-                    onMouseDown={(e) => {
-                      if (renaming && !(e.target instanceof HTMLInputElement)) e.preventDefault();
-                    }}
-                    onClick={() => {
-                      if (renaming) return;
-                      if (swipeClickGuard.current) {
-                        swipeClickGuard.current = false;
-                        return; // this click merely ends a swipe
-                      }
-                      if (swipeOpen) {
-                        setSwipeOpen(null); // a tap anywhere on an open row just closes it
-                        return;
-                      }
-                      setMenuOpenId(null);
-                      if (openable)
-                        navigateWithPaneSlide('push', () =>
-                          navigate(sessionItemPath(actionSession), { state: stampFromList() }),
-                        );
-                    }}
-                    onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe, undefined, movable); }}
-                    onTouchMove={onRowTouchMove}
-                    onTouchEnd={onRowTouchEnd}
-                    onTouchCancel={onRowTouchCancel}
-                  >
-                    {isMobile && pressMenu?.id === s.id && (
-                      <Menu
-                        open
-                        side="bottom"
-                        align="start"
-                        // Where the finger is held: an empty mark the menu is placed against, not a control.
-                        nativeButton={false}
-                        popupClassName="session-row-menu session-press-menu"
-                        onOpenChange={(open) => { if (!open) setPressMenu(null); }}
-                        items={menuItems(() => setPressMenu(null))}
-                        trigger={<span className="session-press-anchor" style={{ left: pressMenu.x, top: pressMenu.y }} />}
-                      />
-                    )}
-                    {isMobile &&
-                      (['leading', 'trailing'] as const).map((side) => (
-                        <div
-                          key={side}
-                          className={`session-swipe-actions ${side}${drag ? ' dragging' : ''}${side === 'leading' && drag?.armed ? ' armed' : ''}`}
-                          style={{ width: Math.max(0, side === 'leading' ? swipeTx : -swipeTx) }}
-                        >
-                          {swipeActionsOnScreen(side, swipeActions[side]).map((action) => (
-                            <button
-                              key={action}
-                              type="button"
-                              className={`session-swipe-action ${action}`}
-                              aria-label={swipeButtons[action].label}
-                              aria-disabled={swipeButtons[action].disabled}
-                              tabIndex={-1}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                runSwipeAction(action, s);
-                              }}
-                            >
-                              <span className="session-swipe-glyph">{swipeButtons[action].icon}</span>
-                              <span className="session-swipe-title" aria-hidden="true">
-                                {swipeButtons[action].label}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      ))}
-                    <div
-                      className={`session-swipe${drag ? ' dragging' : ''}`}
-                      style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
-                    >
-                      <span className="session-icon">
-                        <StatusIcon session={actionSession} watching={watching?.word} machine={machineName(runner)} />
-                      </span>
-                      <div className="session-main">
-                        {renaming ? (
-                          <SessionRowRename
-                            title={s.title ?? ''}
-                            onDone={(title) => {
-                              setRenamingId(null);
-                              if (title) renameMut.mutate({ id: s.id, title });
-                            }}
-                          />
-                        ) : (
-                          <>
-                            <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
-                            {/* One line under the title, and all of it is what the session is doing
-                                or waiting on, else its recap (sessionLine). Tags are filed and
-                                filtered by, not drawn on the row (the owner, 2026-10-22). */}
-                            <div className="session-sub">
-                              {/* A member whose project has no row in this workspace: the project's
-                                  progress, which opens its sessions page (owner 2026-11-07). */}
-                              {mark && (
-                                <button
-                                  type="button"
-                                  className={`session-project-progress${mark.status === 'DONE' ? ' done' : ''}`}
-                                  title={SESSION_PROJECT_COPY.markHint(mark.title)}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (swipeClickGuard.current) {
-                                      swipeClickGuard.current = false;
-                                      return;
-                                    }
-                                    if (swipeOpen) {
-                                      setSwipeOpen(null);
-                                      return;
-                                    }
-                                    enterProjectSessions(mark.projectId);
-                                  }}
-                                >
-                                  {mark.taskCounts ? (
-                                    <>
-                                      <SessionProjectProgressBar counts={mark.taskCounts} runningCount={mark.runningCount} />
-                                      {SESSION_PROJECT_COPY.progress(mark.taskCounts.done, mark.taskCounts.total)}
-                                    </>
-                                  ) : mark.status}
-                                </button>
-                              )}
-                              <div
-                                className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
-                              >
-                                {line.text}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="session-right">
-                      <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-                        <Menu
-                          side="bottom"
-                          align="end"
-                          popupClassName="session-row-menu"
-                          open={menuOpenId === s.id}
-                          onOpenChange={(open) => {
-                            setMenuOpenId((current) => open ? s.id : current === s.id ? null : current);
-                            if (open) setSwipeOpen(null);
-                          }}
-                          items={menuItems(() => setMenuOpenId(null), () => rowKebabs.current.get(s.id) ?? null)}
-                          trigger={
-                            <button
-                              ref={(node) => {
-                                if (node) rowKebabs.current.set(s.id, node);
-                                else rowKebabs.current.delete(s.id);
-                              }}
-                              type="button"
-                              className="session-kebab"
-                              aria-label="More actions"
-                            >
-                              <EllipsisOutlined />
-                            </button>
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </section>
-            )
-          ))}
+          {sections.map((sec) => renderSection(sec, listProjectId))}
           {/* Foot of the loaded window while a page is in flight, so a scroll that outruns the
               fetch (or a switch to a workspace not yet cached) shows progress rather than an
               abrupt end of list. */}
@@ -9187,8 +9267,8 @@ export function WorkspaceView({
       </aside>
 
       <div
-        className={`session-resizer${resizing ? ' resizing' : ''}`}
-        onMouseDown={startResize}
+        className={`session-resizer${resizing === 'list' ? ' resizing' : ''}`}
+        onMouseDown={(e) => startResize(e)}
         role="separator"
         aria-orientation="vertical"
       />
@@ -10393,6 +10473,33 @@ export function WorkspaceView({
         </>
         )}
       </div>
+      {showProjectColumn && columnProjectId && (
+        <>
+          <div
+            className={`session-resizer${resizing === 'project' ? ' resizing' : ''}`}
+            onMouseDown={(e) => startResize(e, 'project')}
+            role="separator"
+            aria-orientation="vertical"
+          />
+          {/* The project's sessions page, moved beside the conversation as it is (owner 2026-11-11,
+              docs/mocks/project-sessions-column board 2): the row of the open conversation is the
+              selected one, and ✕ closes the column. */}
+          <aside className="session-col session-project-column" style={{ width: projectColWidth }}
+            aria-label={PROJECT_COLUMN_COPY.label}>
+            {projectPageHead(closeProjectColumn, PROJECT_COLUMN_COPY.close, <CloseOutlined />)}
+            <div className="workspace-sessions session-col-list autohide-scrollbar">
+              {projectPageTop(columnProjectId)}
+              {projectPageEmpty}
+              {projectSections.map((sec) => renderSection(sec, columnProjectId))}
+              {loadingProjectSessions && (
+                <div className="session-list-more">
+                  <Spinner size="small" />
+                </div>
+              )}
+            </div>
+          </aside>
+        </>
+      )}
       {confirmation}
     </div>
   );

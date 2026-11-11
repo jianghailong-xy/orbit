@@ -167,7 +167,9 @@ const mounted = (): HTMLDivElement => {
   return container;
 };
 const projectRows = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.session-project-row')];
-const titles = (): string[] => [...mounted().querySelectorAll('.session-row .session-title')].map((el) => el.textContent ?? '');
+/** What the session list shows: the workspace's list, or the project's page where it is in the list's place (a phone). */
+const list = (): HTMLElement => mounted().querySelector<HTMLElement>('.session-col:not(.session-project-column)') ?? mounted();
+const titles = (): string[] => [...list().querySelectorAll('.session-row .session-title')].map((el) => el.textContent ?? '');
 const projectRow = (): HTMLElement => {
   const found = projectRows()[0];
   if (!found) throw new Error('no project row');
@@ -304,6 +306,7 @@ beforeEach(() => {
       return reply({ needsYou: [], withCoordinator: withCoordinatorItems, startRequest });
     }
     if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
+    if (path === `/projects/${PROJECT_ID}/acceptance/confirmation`) return reply(null);
     if (path.startsWith('/sessions/search?')) return reply({
       q: '', contentSearched: false, total: rows.length,
       hits: rows.map((r) => ({ ...r, matchField: 'title', snippet: null })),
@@ -365,9 +368,13 @@ afterEach(async () => {
   }
 });
 
-const sessionRows = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.session-row:not(.session-project-row)')];
+/** The page's rows wherever it is drawn, else the list's. */
+const sessionRows = (): HTMLElement[] => [...(page() ?? list()).querySelectorAll<HTMLElement>('.session-row:not(.session-project-row)')];
+/** The page's row titles, in the column beside the conversation or in the list's place. */
+const pageTitles = (): string[] => [...(page()?.querySelectorAll('.session-row .session-title') ?? [])].map((el) => el.textContent ?? '');
 const memberRow = (title: string): HTMLElement | undefined => sessionRows().find((entry) => entry.querySelector('.session-title')?.textContent === title);
-const page = (): HTMLElement | null => mounted().querySelector('.session-project-page');
+// The project's sessions page: the list's place at phone width, the column beside the conversation wider.
+const page = (): HTMLElement | null => mounted().querySelector('.session-project-page, .session-project-column');
 const projectQueryCalls = (): URLSearchParams[] => listCalls.map((path) => new URLSearchParams(path.split('?')[1])).filter((params) => params.has('projectId'));
 const remote = (n: number, title: string, extra: Record<string, unknown> = {}) => row(n, title, {
   workspaceId: OTHER_WORKSPACE_ID,
@@ -451,8 +458,11 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await click(menuItem('Open Session'), 'the disabled Open Session');
     expect(location).toBe(`/sessions/${LOOSE.id}`);
     await click(projectRow(), 'the project entry without a coordinator');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
+    // No coordinator to open: the column opens the project's latest member beside itself.
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await until(() => expect(page()?.textContent).toContain('Build the package'));
+    expect(titles()).toContain(LOOSE.title);
+    expect(projectRows()).toHaveLength(1);
   });
 
   it('draws the progress tag as part of the entry, with the session-count hint', async () => {
@@ -461,7 +471,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
     expect(progress?.closest('button')).toBeNull();
     await click(progress, 'the project progress tag');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();
   });
 
@@ -575,6 +585,79 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     expect(entry.querySelector<HTMLElement>('.session-swipe')?.style.transform).toBe('');
     await click(progress, 'the progress tag after the swipe closes');
     await until(() => expect(page()).not.toBeNull());
+  });
+});
+
+// Owner decisions of 2026-11-11 (docs/mocks/project-sessions-column, board 2): wider than a phone, a
+// project's row keeps the workspace's list and opens the coordinator, with the project's sessions in a
+// column at the conversation's right edge.
+describe('the project sessions column beside the conversation', { timeout: 60_000 }, () => {
+  const column = (): HTMLElement | null => mounted().querySelector<HTMLElement>('aside.session-project-column');
+  const columnTitles = (): string[] => [...(column()?.querySelectorAll('.session-row .session-title') ?? [])].map((el) => el.textContent ?? '');
+
+  it.each(['click', 'Enter'] as const)('opens the coordinator from a project row (%s), keeps the list, and shows the column to the right', async (how) => {
+    await mount();
+    if (how === 'click') await click(projectRow(), 'the project row');
+    else {
+      await act(async () => projectRow().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+      await settle();
+    }
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // The list is the workspace's still: its head, New session, its rows and the project's row, selected.
+    const listCol = mounted().querySelector('aside.session-col:not(.session-project-column)')!;
+    expect(listCol.classList.contains('session-project-page')).toBe(false);
+    expect(listCol.querySelector('.session-scope-menu')).not.toBeNull();
+    expect(listCol.querySelector('.session-new')).not.toBeNull();
+    expect(titles()).toContain(LOOSE.title);
+    expect(projectRows()).toHaveLength(1);
+    expect(projectRow().classList.contains('active')).toBe(true);
+    // Order across the split: list | conversation | column.
+    const split = mounted().querySelector('.workspace-split')!;
+    const panes = [...split.children].filter((el) => !el.classList.contains('session-resizer'));
+    expect(panes.indexOf(listCol)).toBeLessThan(panes.indexOf(split.querySelector('.workspace-view')!));
+    expect(panes.indexOf(split.querySelector('.workspace-view')!)).toBeLessThan(panes.indexOf(column()!));
+    // Today's page, moved: its header, the progress card, the Coordinator section with its row selected.
+    expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project Alpha');
+    expect(column()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
+    const coordinatorRow = column()!.querySelector('.session-project-coordinator .session-row')!;
+    expect(coordinatorRow.querySelector('.session-title')?.textContent).toBe(COORDINATOR.title);
+    expect(coordinatorRow.classList.contains('active')).toBe(true);
+    expect(column()!.querySelectorAll('.session-row.active')).toHaveLength(1);
+  });
+
+  it('closes with its ✕, which takes ?project= off the address and leaves the conversation', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    const close = column()!.querySelector('.session-project-page-header .session-folder-back')!;
+    expect(close.getAttribute('aria-label')).toBe('Close project sessions');
+    await click(close, 'the column ✕');
+    await until(() => expect(column()).toBeNull());
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(projectRows()).toHaveLength(1);
+  });
+
+  it('opens a member from the column with the column kept, and its row selected there', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    const member = [...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title);
+    await click(member, 'the member row in the column');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    expect(column()).not.toBeNull();
+    const active = column()!.querySelector('.session-row.active .session-title');
+    expect(active?.textContent).toBe(TASK.title);
+    expect(projectRow().classList.contains('active')).toBe(true);
+  });
+
+  it('keeps the phone’s page in the list’s place, with no column', async () => {
+    mobile = true;
+    await mount();
+    await openSessions();
+    expect(column()).toBeNull();
+    expect(mounted().querySelector('aside.session-col.session-project-page')).not.toBeNull();
+    expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
   });
 });
 
@@ -695,13 +778,13 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(projectQueryCalls().some((params) => params.get('view') === 'trash')).toBe(false);
     await click(memberRow('Resolve remote issue'), 'the remote member');
     await until(() => expect(location).toBe(`/sessions/${pid(825)}?project=${PROJECT_ID}`));
-    expect(titles()).toEqual(['Plan the release', 'Resolve remote issue', 'Completed remote work', 'Build the package']);
+    expect(pageTitles()).toEqual(['Plan the release', 'Resolve remote issue', 'Completed remote work', 'Build the package']);
   });
 
   it.each(['open', 'completed'] as const)('gives mixed member rows their own lifecycle actions from the %s page', async (view) => {
     rows = [LOOSE, COORDINATOR, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
     const address = `/sessions/${LOOSE.id}?project=${PROJECT_ID}${view === 'completed' ? '&view=completed' : ''}`;
-    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), address);
+    await mount(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]), address);
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the Completed member menu');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
     expect(menuItem('Complete')).toBeUndefined();
@@ -717,7 +800,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await openSessions();
     await act(async () => client!.setQueryData(projectSessionsQuery({ projectId: PROJECT_ID, view: 'completed' }).queryKey,
       [{ ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }]));
-    expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
+    expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
   });
 
@@ -725,7 +808,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     mobile = true;
     rows = [LOOSE, COORDINATOR, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
     const address = `/sessions/${LOOSE.id}?project=${PROJECT_ID}${view === 'completed' ? '&view=completed' : ''}`;
-    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), address);
+    await mount(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]), address);
     const leadingLabels = (title: string) => [...memberRow(title)!.querySelectorAll('.session-swipe-actions.leading button')].map((button) => button.getAttribute('aria-label'));
     expect(leadingLabels(COORDINATOR.title)).toEqual(['Complete', 'Pin']);
     expect(leadingLabels(TASK.title)).toEqual(['Move to Open', 'Pin']);
@@ -736,14 +819,14 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await swipe(memberRow(TASK.title)!, 300);
     await until(() => expect(apiModule.completeSession).toHaveBeenCalledWith(TASK.id));
     await until(() => expect(leadingLabels(TASK.title)).toEqual(['Move to Open', 'Pin']));
-    expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
+    expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]);
   });
 
   it('uses the selected member’s fresher lifecycle for both phone buttons and the full swipe action', async () => {
     mobile = true;
     rows = [LOOSE, COORDINATOR, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
     vi.mocked(apiModule.getSession).mockResolvedValue({ ...TASK, lifecycleState: 'OPEN', status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT' } as never);
-    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`);
+    await mount(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`);
     await until(() => expect([...memberRow(TASK.title)!.querySelectorAll('.session-swipe-actions.leading button')].map((button) => button.getAttribute('aria-label'))).toEqual(['Complete', 'Pin']));
     await swipe(memberRow(TASK.title)!, 300);
     await until(() => expect(apiModule.completeSession).toHaveBeenCalledWith(TASK.id));
@@ -781,6 +864,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('lists all members from Completed, keeps its address in navigation and restores it on refresh', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     rows = [LOOSE, { ...COORDINATOR, lifecycleState: 'COMPLETED' }, { ...TASK, lifecycleState: 'COMPLETED' }];
     remoteRows = [remote(826, 'Completed remote work', { lifecycleState: 'COMPLETED' }), remote(827, 'Open remote work')];
     await mount(() => expect(titles()).toEqual(['Loose conversation']));
@@ -788,15 +872,15 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(projectRows()).toHaveLength(1));
     await openSessions();
     expect(location).toBe(`/workspaces/${WORKSPACE_ID}?project=${PROJECT_ID}&view=completed`);
-    expect(titles()).toEqual(expect.arrayContaining(['Plan the release', 'Build the package', 'Completed remote work']));
-    expect(titles()).toContain('Open remote work');
+    expect(pageTitles()).toEqual(expect.arrayContaining(['Plan the release', 'Build the package', 'Completed remote work']));
+    expect(pageTitles()).toContain('Open remote work');
     await click(memberRow(TASK.title), TASK.title);
     await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`));
     const address = location;
     await unmount();
     await mount(() => expect(page()).not.toBeNull(), address);
-    await until(() => expect(titles()).toHaveLength(4));
-    expect(titles()).toContain('Open remote work');
+    await until(() => expect(pageTitles()).toHaveLength(4));
+    expect(pageTitles()).toContain('Open remote work');
     expect(new Set(projectQueryCalls().map((params) => params.get('view')))).toEqual(new Set(['open', 'completed']));
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the completed member menu after refresh');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
@@ -805,6 +889,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
 
   // As iOS's toolbar has it (docs/mocks/project-sessions-page-web): one action, the project's page.
   it('has one action in its header, and its back button returns to the workspace list', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     await mount();
     await openSessions();
     const header = page()!.querySelector('.session-project-page-header')!;
@@ -1000,6 +1085,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('returns to the originating folder with the page back button', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     folders = [FOLDER];
     rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, TASK];
     const folderAddress = `/sessions/${LOOSE.id}?folder=${FOLDER.id}`;
@@ -1013,6 +1099,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('renders an empty scoped project without falling back to the workspace list', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     rows = [LOOSE];
     await mount(() => expect(page()?.querySelector('.session-project-empty')?.textContent).toBe('No sessions'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 0 sessions');
@@ -1021,6 +1108,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('renders project read failures on the same page, with the reason and a retry', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     projectReadError = true;
     const empty = (): HTMLElement | null => page()?.querySelector<HTMLElement>('.session-project-empty') ?? null;
     await mount(() => expect(empty()?.textContent).toContain('Couldn’t load sessions'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
@@ -1029,7 +1117,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(location).toContain(`?project=${PROJECT_ID}`);
     projectReadError = false;
     await click([...empty()!.querySelectorAll('button')].find((button) => button.textContent === 'Retry'), 'Retry');
-    await until(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]));
+    await until(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]));
   });
 
   it('keeps a completed member in the project page and changes its row actions immediately', async () => {
@@ -1039,7 +1127,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(menuItem('Complete')).toBeTruthy());
     await click(menuItem('Complete'), 'Complete');
     await until(() => expect(apiModule.completeSession).toHaveBeenCalledWith(TASK.id));
-    await until(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]));
+    await until(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]));
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the completed member menu');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
     expect(menuItem('Complete')).toBeUndefined();
@@ -1048,14 +1136,15 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('keeps a restored member and changes its actions while retaining the Completed page address', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     rows = [LOOSE, { ...COORDINATOR, lifecycleState: 'COMPLETED' }, { ...TASK, lifecycleState: 'COMPLETED' }];
     const address = `/sessions/${LOOSE.id}?project=${PROJECT_ID}&view=completed`;
-    await mount(() => expect(titles()).toHaveLength(2), address);
+    await mount(() => expect(pageTitles()).toHaveLength(2), address);
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the completed member menu');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
     await click(menuItem('Move to Open'), 'Move to Open');
     await until(() => expect(apiModule.restoreSession).toHaveBeenCalledWith(TASK.id));
-    await until(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]));
+    await until(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]));
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the restored member menu');
     await until(() => expect(menuItem('Complete')).toBeTruthy());
     expect(menuItem('Move to Open')).toBeUndefined();
@@ -1064,16 +1153,17 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it.each(['open', 'completed'] as const)('lists and opens the opposite-view coordinator from its row on the %s page', async (view) => {
+    mobile = true; // the page in the list's place, as a phone still has it
     const completed = view === 'completed';
     rows = [LOOSE, { ...TASK, lifecycleState: completed ? 'COMPLETED' : 'OPEN' }];
     remoteRows = [{ ...COORDINATOR, lifecycleState: completed ? 'OPEN' : 'COMPLETED', workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } }];
     const search = `?project=${PROJECT_ID}${completed ? '&view=completed' : ''}`;
-    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${LOOSE.id}${search}`);
+    await mount(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${LOOSE.id}${search}`);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     expect(page()?.querySelector('.session-project-coordinator .session-title')?.textContent).toBe(COORDINATOR.title);
     await click(page()?.querySelector('.session-project-coordinator .session-row'), 'the coordinator row');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}${search}`));
-    expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
+    expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]);
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
   });
 });
@@ -1145,7 +1235,8 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
       await new Promise((resolve) => setTimeout(resolve, 1_200));
     });
     await settle();
-    expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 2 : 1));
+    // The page's two reads, and with the list still the workspace's beside it, the entry's one.
+    expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 3 : 1));
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
   });
 });
@@ -1329,7 +1420,7 @@ describe('the project sessions page — the Landings row', () => {
     await mount();
     await openSessions();
 
-    const heads = [...mounted().querySelectorAll<HTMLElement>('.session-col-list .session-section-head')]
+    const heads = [...page()!.querySelectorAll<HTMLElement>('.session-col-list .session-section-head')]
       .map((head) => head.textContent);
     expect(heads[0]).toBe('Coordinator');
     expect(heads[1]).toBe('Landings');
