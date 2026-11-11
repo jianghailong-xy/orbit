@@ -3515,6 +3515,8 @@ export class SessionsService {
     const withSubagents = await this.prisma.session.findMany({
       where: {
         ...open,
+        // `open` says it already; said here too, where the session-kind census reads this scan.
+        sessionKind: SESSION_KIND_CONVERSATION,
         runningSubagents: { isEmpty: false },
         approvals: { some: { status: 'PENDING', subagentRunId: { not: null } } },
       },
