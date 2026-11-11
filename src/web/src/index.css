@@ -10244,12 +10244,40 @@ button.chat-jump-start:hover {
   border-left: 2px solid var(--border);
   padding-left: 10px;
 }
+/* Folded by default, so it reads as the row a settled block shows (.chat-think-head): what moves
+   is the clock, the count and a faint sweep over the word. */
 .chat-think-live-head {
   display: flex;
   align-items: center;
   gap: 6px;
+  font: inherit;
   font-size: 12.5px;
   color: var(--text-3);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.chat-think-live-word {
+  background: linear-gradient(90deg, var(--text-3) 35%, var(--text-4) 50%, var(--text-3) 65%) 0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: chat-think-sweep 2.4s linear infinite;
+}
+@keyframes chat-think-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-think-live-word {
+    animation: none;
+  }
 }
 .chat-think-port {
   max-height: 11em;
@@ -10266,6 +10294,11 @@ button.chat-jump-start:hover {
 }
 .chat-think-port::-webkit-scrollbar {
   display: none;
+}
+/* Following the newest line leaves the top line cut through its middle; fade that edge instead. */
+.chat-think-port.is-scrolled {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2.5em);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 2.5em);
 }
 .chat-think-meta {
   color: var(--text-4);
