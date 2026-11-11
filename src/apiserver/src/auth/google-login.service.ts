@@ -12,6 +12,7 @@ import {
 import { Prisma, type User } from '@prisma/client';
 import { timingSafeEqual } from 'node:crypto';
 import { generateToken, sha256 } from '../common/crypto.util';
+import { enqueueWelcome } from '../email/email-outbox';
 import { PrismaService } from '../prisma/prisma.service';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { USER_NAME_MAX_CHARS } from '../users/dto';
@@ -651,6 +652,8 @@ export class GoogleLoginService {
           credentialKind: 'LOGIN',
         },
       });
+      // A SIGNUP's welcome email, written with the account (docs/welcome-email-design.md §3.3).
+      if (!user) await enqueueWelcome(tx, account, null);
       return { id: account.id, email: account.email, name: account.name };
     });
   }

@@ -33,10 +33,11 @@ export interface LandingStep {
 
 const ORDER: readonly LandingStepKey[] = ['queue', 'claim', 'sync', 'check:TASK_ACCEPTANCE', 'check:MERGE_CHECK', 'push'];
 
-/** The kinds a step's folded row prefers to say: how it ended. */
+/** The kinds a step's folded row prefers to say: how it ended. A hand-off (`Asked the coordinator to fix it`) is what
+ *  happened after, not how the step ended, so it is never a step's summary. */
 const VERDICTS = new Set<string>([
   'CHECK_FINISHED', 'SKIPPED_CHECK', 'RESULT', 'RESULT_FALLBACK', 'PUSH_REFUSED',
-  'CANCELLED', 'TIMED_OUT', 'ABANDONED', 'STOP_REQUESTED', 'HANDED_TO',
+  'CANCELLED', 'TIMED_OUT', 'ABANDONED', 'STOP_REQUESTED',
 ]);
 
 /** Results that mean the push (or the merge into main) happened, or that nothing needed one. */
@@ -85,7 +86,9 @@ function stepOf(entry: IntegrationTimelineEntry, current: LandingStepKey | null)
         case 'MERGE':
           return 'sync';
         case 'CHECK':
-          return current?.startsWith('check:') ? current : 'check:MERGE_CHECK';
+          // The work before a check starts (`Running the checks`, `Preparing the combined tree`) is the sync's: a check
+          // that never ran gets no step, and so no ✓ it did not earn.
+          return current?.startsWith('check:') ? current : 'sync';
         case 'VERIFY':
         case 'PUSH':
         case 'OBSERVE':

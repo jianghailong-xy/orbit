@@ -212,15 +212,20 @@ class ReaderIncrementsDeviceTest : IncrementDeviceTest() {
         await("a second tap folds it") { !exists(hasText("second"), unmerged = true) }
     }
 
-    /** A06-10, while streaming: the reasoning being written is open, bounded at its newest line, and folds and opens on a tap. */
+    /** A06-10, while streaming: the reasoning being written starts folded (docs/mocks/thinking-fold-live), opens bounded at its
+     * newest line, and folds and opens on a tap. */
     @Test fun thinkingStillBeingWrittenFoldsOnATap() = journey {
         overlay = mapOf("status" to "\"RUNNING\"", "runState" to "\"RUNNING\"")
         events = listOf(event(1, "user", """{"text":"Plan the release"}"""))
         opening = (1..40).joinToString("") { frame("""{"type":"thinking_delta","seq":0,"payload":{"delta":"Step $it of weighing the options.\n\n"}}""") }
         openSession(live)
-        val fold = hasTestTag("thinking-fold") and hasText("Thinking…")
-        await("the reasoning being written") { exists(fold) && exists(hasTestTag("thinking-live"), unmerged = true) }
-        verify("it starts open", compose.onAllNodes(fold).fetchSemanticsNodes().first().config.getOrNull(SemanticsProperties.StateDescription) == "Expanded")
+        val fold = hasTestTag("thinking-fold") and hasText("Thinking…", substring = true)
+        await("the reasoning being written") { exists(fold) }
+        verify("it starts folded", compose.onAllNodes(fold).fetchSemanticsNodes().first().config.getOrNull(SemanticsProperties.StateDescription) == "Collapsed")
+        verify("its words are not drawn folded", !exists(hasTestTag("thinking-live"), unmerged = true))
+        capture("00-streaming-folded")
+        compose.onNode(fold).performClick()
+        await("a tap opens it") { exists(hasTestTag("thinking-live"), unmerged = true) }
         await("it shows its newest line") { exists(hasText("Step 40 of weighing the options.", substring = true), unmerged = true) }
         verify("its box is bounded at the newest line (Step 1 is scrolled away)", runCatching {
             compose.onNode(hasText("Step 1 of weighing the options.", substring = true) and hasAnyAncestor(hasTestTag("thinking-live")), useUnmergedTree = true).assertIsNotDisplayed()

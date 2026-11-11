@@ -91,16 +91,22 @@ export function sessionCardHref(href: string, url: string): string {
 }
 
 /**
- * The element a seq's card starts at: the last `data-seq` stamp at or before it. Document order is
- * seq order, so an event folded inside a card — a tool result under its call, a run of grouped
- * calls — resolves to the card that shows it. The same rule ⌘F lands on a hit with.
+ * The element a seq's card starts at: the `data-seq` stamp with the greatest seq at or before it (the
+ * last such stamp in the document when several share it). An event folded inside a card — a tool
+ * result under its call, a run of grouped calls, a turn Orbit opened under its fold's line —
+ * resolves to the card that shows it. Read by seq rather than by document order, because a fold's
+ * task tree draws its turns by task, not in the order they happened. The same rule ⌘F lands on a hit
+ * with.
  */
 export function elementForSeq(root: ParentNode, seq: number): HTMLElement | null {
   let best: HTMLElement | null = null;
+  let bestSeq = -Infinity;
   for (const el of root.querySelectorAll<HTMLElement>('[data-seq]')) {
     const s = Number(el.dataset.seq);
-    if (Number.isFinite(s) && s <= seq) best = el;
-    else if (s > seq) break;
+    if (Number.isFinite(s) && s <= seq && s >= bestSeq) {
+      best = el;
+      bestSeq = s;
+    }
   }
   return best;
 }

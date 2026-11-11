@@ -31,28 +31,25 @@ import (
 // the first line the symbol occurs on as a whole word, and the sha256 of that line and the ones after
 // it (wikiAnchorSymbolRegionLines in all) is compared with the hash the symbol is held to — the server
 // holds it there too, so a region that moved reads changed whatever this side thought. A commit: `git
-// merge-base --is-ancestor <sha> <ref>`, and a sha that is not an ancestor of origin/main — or one this
-// repository does not have — is missing, because a sha that is not on main poisons what depends on it.
+// merge-base --is-ancestor <sha> <ref>`, and a sha that is not an ancestor of origin's default branch — or
+// one this repository does not have — is missing, because a sha that is not on the default branch poisons
+// what depends on it.
 //
 // ONLY WHAT GIT SAID. An anchor git could not check — git failed, not the anchor — is an error rather
 // than a state, and the anchor keeps its last check until a run that can check it. A fetch that fails
-// checks nothing at all: a check against a stale origin/main would be a claim about a commit nobody asked
-// about.
+// checks nothing at all: a check against a stale remote-tracking ref would be a claim about a commit
+// nobody asked about.
 
 // The contract's numbers this side needs (`anchorRules.verify.rules`).
 const (
 	// A symbol's region: the line it is found on and the lines after it, this many in all.
 	wikiAnchorSymbolRegionLines = 20
-	// A fetch of origin's main may cross a slow network; one git command on the checkout may not.
+	// A fetch of the default branch may cross a slow network; one git command on the checkout may not.
 	wikiAnchorFetchTimeout = 5 * time.Minute
 	wikiAnchorGitTimeout   = 2 * time.Minute
 	// How long a git command's output may stay open after git exited, held by a process it started.
 	wikiAnchorGitWaitDelay = 2 * time.Second
 )
-
-// wikiAnchorsVerifyRefspec is what the fetch asks for: origin's main, into origin/main, whatever the
-// checkout's own configured refspecs are.
-const wikiAnchorsVerifyRefspec = "+refs/heads/main:refs/remotes/origin/main"
 
 var wikiCommitSha = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
@@ -75,7 +72,7 @@ type wikiAnchorCheck struct {
 	RegionSha256 string `json:"regionSha256,omitempty"`
 }
 
-// The wiki fetch lock (fetchWikiOriginMain): a file in the repository's git directory, and how often a
+// The wiki fetch lock (fetchWikiOriginRef): a file in the repository's git directory, and how often a
 // fetch waiting for it looks again.
 const (
 	wikiFetchLockName = "orbit-wiki-fetch.lock"
@@ -87,9 +84,10 @@ const (
 // (repoWaitSeconds). A variable only so a test can outwait a held lock in less than a minute.
 var wikiFetchLockWait = time.Minute
 
-// fetchWikiOriginMain fetches origin's main into refs/remotes/origin/main — the one fetch the wiki makes
-// of a checkout: the runner's repository operations (wikiRepoOpCheckout). An error is git's own words, or
-// errGitAuthFailed with them; the caller says what it means.
+// fetchWikiOriginRef fetches origin's default branch into its remote-tracking ref — the one fetch the
+// wiki makes of a checkout: the runner's repository operations (wikiRepoOpCheckout). It answers that
+// tracking ref. An error is git's own words, or errGitAuthFailed with them; the caller says what it
+// means.
 //
 // THE FAILURE THIS EXISTS FOR (2026-10-09, the canary's docs build 79620f23). A fetch updates
 // refs/remotes/origin/main only from the value it read when it began. Two fetches of one checkout that
@@ -113,25 +111,62 @@ var wikiFetchLockWait = time.Minute
 // --no-auto-maintenance: the fetch starts no maintenance in a checkout it only reads. Git's own after a
 // fetch is a detached process that holds the fetch's output for a moment after the fetch has exited —
 // a moment as long as a loaded machine makes it (wikiAnchorGit, whose WaitDelay networkGit keeps).
-func fetchWikiOriginMain(repo string) error {
+func fetchWikiOriginRef(repo string) (string, error) {
 	if common := gitCommonDir(repo); common != "" {
 		if release, held := acquireWikiFetchLock(filepath.Join(common, wikiFetchLockName), wikiFetchLockWait); held {
 			defer release()
 		}
 	}
+	branch, err := wikiOriginDefaultBranch(repo)
+	if err != nil {
+		return "", err
+	}
+	trackingRef := "refs/remotes/origin/" + branch
+	refspec := "+refs/heads/" + branch + ":" + trackingRef
 	for attempt := 1; ; attempt++ {
-		_, err := networkGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", wikiAnchorsVerifyRefspec)
+		_, err := networkGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", refspec)
 		if err == nil {
-			return nil
+			return trackingRef, nil
 		}
 		if !isRefLockConflict(err) || attempt == integrationFetchLockAttempts {
 			if errors.Is(err, errGitAuthFailed) {
-				return err
+				return "", err
 			}
-			return errors.New(firstNonEmpty(gitStderr(err), err.Error()))
+			return "", errors.New(firstNonEmpty(gitStderr(err), err.Error()))
 		}
 		integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
 	}
+}
+
+// wikiOriginDefaultBranch reads the remote's HEAD, not a branch name guessed by Orbit: a space's
+// repository decides which branch its wiki is about, and the wiki reads that one. The remote query
+// handles a checkout whose refs/remotes/origin/HEAD was never created; the local symref is the offline
+// fallback and is what a normal clone already has.
+func wikiOriginDefaultBranch(repo string) (string, error) {
+	out, remoteErr := networkGit(repo, wikiAnchorFetchTimeout, "ls-remote", "--symref", "origin", "HEAD")
+	if remoteErr == nil {
+		for _, line := range strings.Split(out, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 3 && fields[0] == "ref:" && fields[2] == "HEAD" && strings.HasPrefix(fields[1], "refs/heads/") {
+				if branch := strings.TrimPrefix(fields[1], "refs/heads/"); branch != "" {
+					return branch, nil
+				}
+			}
+		}
+	}
+	if out, code, _, err := wikiAnchorGit(repo, wikiAnchorGitTimeout, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"); err == nil && code == 0 {
+		if ref := strings.TrimSpace(string(out)); strings.HasPrefix(ref, "refs/remotes/origin/") {
+			if branch := strings.TrimPrefix(ref, "refs/remotes/origin/"); branch != "" {
+				return branch, nil
+			}
+		}
+	}
+	if remoteErr != nil {
+		// What the remote said about the branch is worth more than a guess would be, and an
+		// authentication failure stays one the caller can recognise.
+		return "", fmt.Errorf("origin's default branch could not be read: %w", remoteErr)
+	}
+	return "", errors.New("origin does not advertise a default branch and refs/remotes/origin/HEAD is not set")
 }
 
 // ── The three checks ────────────────────────────────────────────────────────────────────────────

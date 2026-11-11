@@ -288,15 +288,21 @@ public struct WikiChatWorkspace: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// One chat of a space (contract `chat.list.chats`), newest first.
+/// One chat of a space (contract `chat.list.chats`), the one last spoken in first.
 public struct WikiChatRow: Codable, Equatable, Sendable, Identifiable {
     public let sessionId: String
     public let title: String
     public let status: String
     /// One of the open session statuses and not in Trash.
     public let open: Bool
+    /// In the session list's Completed (board 45 ④); false from an older server.
+    public let completed: Bool
+    /// A turn of it is queued or running; false from an older server.
+    public let working: Bool
     public let createdAt: String?
     public let updatedAt: String?
+    /// Its last turn's time, else its creation's: what the list is ordered by. Nil from an older server.
+    public let lastActiveAt: String?
     /// How many cards it holds.
     public let drafts: Int
     /// How many of the button's `needsYou` are this chat's.
@@ -305,13 +311,18 @@ public struct WikiChatRow: Codable, Equatable, Sendable, Identifiable {
     public var id: String { sessionId }
 
     public init(sessionId: String, title: String = "", status: String = "", open: Bool = true,
-                createdAt: String? = nil, updatedAt: String? = nil, drafts: Int = 0, needsYou: Int = 0) {
+                completed: Bool = false, working: Bool = false,
+                createdAt: String? = nil, updatedAt: String? = nil, lastActiveAt: String? = nil,
+                drafts: Int = 0, needsYou: Int = 0) {
         self.sessionId = sessionId
         self.title = title
         self.status = status
         self.open = open
+        self.completed = completed
+        self.working = working
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.lastActiveAt = lastActiveAt
         self.drafts = drafts
         self.needsYou = needsYou
     }
@@ -322,8 +333,11 @@ public struct WikiChatRow: Codable, Equatable, Sendable, Identifiable {
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
         open = try c.decodeIfPresent(Bool.self, forKey: .open) ?? true
+        completed = try c.decodeIfPresent(Bool.self, forKey: .completed) ?? false
+        working = try c.decodeIfPresent(Bool.self, forKey: .working) ?? false
         createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
         updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
+        lastActiveAt = try c.decodeIfPresent(String.self, forKey: .lastActiveAt)
         drafts = try c.decodeIfPresent(Int.self, forKey: .drafts) ?? 0
         needsYou = try c.decodeIfPresent(Int.self, forKey: .needsYou) ?? 0
     }
@@ -337,14 +351,17 @@ public struct WikiChatList: Codable, Equatable, Sendable {
     public let choices: [WikiChatWorkspace]
     public let fab: WikiChatFabCounts
     public let chats: [WikiChatRow]
+    /// More chats match past this page (contract `chat.list.page`); false from an older server.
+    public let more: Bool
 
     public init(spaceId: String, workspace: WikiChatWorkspace? = nil, choices: [WikiChatWorkspace] = [],
-                fab: WikiChatFabCounts = WikiChatFabCounts(), chats: [WikiChatRow] = []) {
+                fab: WikiChatFabCounts = WikiChatFabCounts(), chats: [WikiChatRow] = [], more: Bool = false) {
         self.spaceId = spaceId
         self.workspace = workspace
         self.choices = choices
         self.fab = fab
         self.chats = chats
+        self.more = more
     }
 
     public init(from decoder: Decoder) throws {
@@ -354,6 +371,7 @@ public struct WikiChatList: Codable, Equatable, Sendable {
         choices = try c.decodeIfPresent([WikiChatWorkspace].self, forKey: .choices) ?? []
         fab = try c.decodeIfPresent(WikiChatFabCounts.self, forKey: .fab) ?? WikiChatFabCounts()
         chats = try c.decodeIfPresent([WikiChatRow].self, forKey: .chats) ?? []
+        more = try c.decodeIfPresent(Bool.self, forKey: .more) ?? false
     }
 }
 

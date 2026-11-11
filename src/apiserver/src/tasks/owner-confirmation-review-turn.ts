@@ -2,6 +2,7 @@ import { appendRunQuestionContext, questionApprovalId, RUN_QUESTION_PREFIX } fro
 import { CreatorType, Prisma } from '@prisma/client';
 import {
   uuidToBase62,
+  type ConfirmationAnswersCard,
   type ConfirmationReturnCard,
   type ConfirmationReviewItem,
   type ConfirmationReviewRequestCard,
@@ -96,6 +97,12 @@ export function isConfirmationReturnTurn(clientTurnId: string | null | undefined
 
 export function ownerConfirmationAnswersTurnId(decisionId: string): string {
   return `${OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX}${decisionId}`;
+}
+
+/** The decision an answers turn tells its reviewer about. */
+export function answersDecisionIdOfTurn(clientTurnId: string | null | undefined): string | null {
+  if (!clientTurnId?.startsWith(OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX)) return null;
+  return UUID_AT_START.exec(clientTurnId.slice(OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX.length))?.[1] ?? null;
 }
 
 /** The turns whose words are rendered at delivery rather than stored (see the header). */
@@ -431,6 +438,50 @@ export function ownerAnswersMessage(input: {
     ...lines,
     '</orbit-confirmation-answers>',
   ].join('\n');
+}
+
+/**
+ * Q5 2: the "You confirmed" card an answers turn's echo and its queued row carry — read from the same
+ * two rows its words were rendered from (`ownerAnswersMessage`), so the card and the words agree.
+ */
+export async function readConfirmationAnswersCard(
+  db: Db,
+  clientTurnId: string | null | undefined,
+): Promise<ConfirmationAnswersCard | null> {
+  const decisionId = answersDecisionIdOfTurn(clientTurnId);
+  if (!decisionId) return null;
+  const decision = await db.taskOwnerDecision.findUnique({
+    where: { id: decisionId },
+    select: {
+      taskId: true,
+      decidedAt: true,
+      answers: true,
+      task: { select: { title: true } },
+      reviewRecord: { select: { body: true } },
+    },
+  });
+  const answers = (decision?.answers ?? null) as OwnerConfirmationAnswer[] | null;
+  if (!decision || !answers?.length) return null;
+  const needsYou = ((decision.reviewRecord?.body ?? {}) as { needsYou?: ConfirmationNeedsYouItem[] }).needsYou ?? [];
+  const questions = new Map(needsYou.map((item) => [item.key, item]));
+  return {
+    decisionId,
+    taskId: decision.taskId,
+    title: decision.task.title,
+    decidedAt: decision.decidedAt.toISOString(),
+    answers: answers.map((answer) => {
+      const question = questions.get(answer.key);
+      return {
+        key: answer.key,
+        question: question?.text ?? answer.key,
+        choice: answer.option !== null
+          ? question?.options[answer.option]?.label ?? `option ${answer.option}`
+          : null,
+        text: answer.option === null ? answer.text ?? '' : null,
+        notShown: answer.source === 'NOT_SHOWN',
+      };
+    }),
+  };
 }
 
 /** Q5 1: the comment an owner's answers are recorded as on the task, keyed by the decision. */
