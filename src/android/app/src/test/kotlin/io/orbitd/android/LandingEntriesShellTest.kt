@@ -276,17 +276,18 @@ class LandingEntriesShellTest {
         await { text("page-bar-subtitle") == "Launch" }
         assertTrue(exists(hasTestTag("landings:day:Today")) && exists(hasTestTag("landings:day:Now")))
         // Today: the round that merged, one row with its record, and the task that landed, oldest first.
-        assertEquals(listOf("Payout retry budget", "Merged into main"), texts("landing-row:title"))
-        assertEquals(listOf("Landed", "8d5a868 · 1 task · automatically"), texts("landing-row:detail"))
-        assertEquals(listOf("✓", "⇢"), texts("landing-row:mark"))
+        // Each is the chat's job line: how it ended, then its name (docs/mocks/landings-chat-tools-native).
+        assertEquals(listOf("Landed", "Merged into main"), texts("landing-line:title"))
+        assertEquals(listOf("Payout retry budget", "8d5a868 · 1 task · automatically"), texts("landing-row:name"))
         // Now: the cards, in the order they started, each named by its task.
         assertEquals(listOf("Ledger migration order", "Wire the page"), texts("landing:task-name"))
         assertTrue(top("landings:day:Today") < top("landings:day:Now"))
         assertTrue(top("landing-entry:l-await") < top("landing-entry:l-flight"))
-        // Only the cards read their landing; the settled rows read nothing until they are opened.
+        // The cards read their landing; a settled line reads its record once, when it is drawn, for its chip — and never again.
         await { ProjectShell.calls.contains("GET sessions/l-await") && ProjectShell.calls.contains("GET sessions/l-flight") }
-        assertFalse(ProjectShell.calls.contains("GET sessions/l-settled"))
-        assertFalse(ProjectShell.calls.contains("GET sessions/l-round"))
+        await { ProjectShell.calls.contains("GET sessions/l-settled") }
+        compose.waitForIdle()
+        assertEquals(1, ProjectShell.calls.count { it == "GET sessions/l-settled" })
         assertEquals("Orbit runs these landings", text("landings:footer-line"))
         assertTrue(exists(hasTestTag("landings:open-coordinator")))
     }
@@ -366,7 +367,7 @@ class LandingEntriesShellTest {
         await { exists(hasTestTag("transcript-list")) }
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         openedWindow()
-        compose.onNode(hasTestTag("landing-status-card") and hasAnyAncestor(hasTestTag("landing-entry:l-flight")))
+        compose.onNode(hasTestTag("landing:card-line") and hasAnyAncestor(hasTestTag("landing-entry:l-flight")))
             .performSemanticsAction(SemanticsActions.OnLongClick)
         await { menuItems() == listOf("Open task", "Open source session", "Open coordinator", "Stop landing") }
         menuItem("Stop landing").performClick()
@@ -395,10 +396,11 @@ class LandingEntriesShellTest {
         assertFalse(exists(hasTestTag("landing-status-card") and hasAnyAncestor(hasTestTag("landing-entry:l-flight"))))
     }
 
-    /** F⁵′ · the window drawn as a chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles; polished 2026-11-10,
-     *  docs/mocks/landings-ui-polish): the day and `Now` are centred chips; no avatars; the merge into main that carried today's task is
-     *  one centred event line under its bubble; `Now`'s cards are the last group. A bubble's column leaves an end gutter, a card takes the
-     *  whole column; the footer is one line — a lock, the sentence's first half and the coordinator's door — with no field to type in. */
+    /** F⁵′ · the window drawn as the session chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles; 2026-11-10,
+     *  docs/mocks/landings-ui-polish; 2026-11-11, docs/mocks/landings-chat-tools-native): the day and `Now` are centred chips; no avatars;
+     *  each landing and the merge into main that carried it are the chat's job line, one under the other; what a line opens to hangs
+     *  under it; `Now`'s cards are the last group; the footer is one line — a lock, the sentence's first half and the coordinator's door —
+     *  with no field to type in. */
     @Test fun theWindowIsDrawnAsAChatOfOrbitsMessages() {
         project()
         openPage()
@@ -410,15 +412,15 @@ class LandingEntriesShellTest {
         val list = bounds("landings-window-list")
         // Bubbles start at the list's padding, with no avatar column beside them.
         assertEquals(list.left + 12 * dp, bounds("landing-row:l-settled").left, 0.5f)
-        // The merge into main sits under its task's bubble as one line centred across the whole column.
+        // The merge into main is the same line, under its task's, at the same start.
         assertTrue(bounds("landing-row:l-round").top > bounds("landing-row:l-settled").bottom)
-        val round = bounds("landing-row:l-round")
-        assertEquals("the merge line is centred", (list.left + list.right) / 2, (round.left + round.right) / 2, 1f)
+        assertEquals(bounds("landing-row:l-settled").left, bounds("landing-row:l-round").left, 0.5f)
         assertEquals("a card takes the column to the list's edge", list.right - 12 * dp, bounds("landing-entry:l-await").right, 0.5f)
         compose.onNodeWithTag("landing-row:l-settled").performClick()
         await { exists(hasTestTag("landing:record-panel")) }
-        assertEquals("a bubble's record stops at its column's end gutter", list.right - (12 + 44) * dp, bounds("landing:record-panel").right, 0.5f)
-        assertTrue(bounds("landing-row:l-settled").right <= bounds("landing:record-panel").right + 0.5f)
+        // What a line opens to hangs under it, off its mark, across the column.
+        assertEquals(list.right - 12 * dp, bounds("landing:record-panel").right, 0.5f)
+        assertEquals(bounds("landing-row:l-settled").left + 22 * dp, bounds("landing:record-panel").left, 0.5f)
         // The footer: what the window is, and the coordinator's door — no text field.
         assertEquals("Orbit runs these landings", text("landings:footer-line"))
         assertTrue(exists(hasTestTag("landings:footer-line") and hasContentDescription("Orbit runs these landings — nothing to type here."), unmerged = true))
@@ -427,7 +429,7 @@ class LandingEntriesShellTest {
         await { exists(hasTestTag("transcript-list")) }
     }
 
-    /** F⁵‴ · a card's task name is whole, as a bubble's is: a long name wraps under the card's head (board 02 d) rather than being cut. */
+    /** F⁵‴ · a card's task name wraps under its line on up to two lines (docs/mocks/landings-chat-tools-native), as every line's does. */
     @Test fun aCardsLongTaskNameWrapsWhole() {
         val name = "A task name long enough that no phone draws it on one line beside Orbit's avatar, whatever the window's width"
         project()
@@ -441,7 +443,7 @@ class LandingEntriesShellTest {
         node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
         // Robolectric measures no real glyphs, so any name fits one line here: the cap is what this holds. The emulator's frame `a` shows
         // the wrap itself.
-        assertEquals("no cap on its lines", Int.MAX_VALUE, layouts.single().layoutInput.maxLines)
+        assertEquals("two lines at most", 2, layouts.single().layoutInput.maxLines)
         assertTrue("it wraps", layouts.single().layoutInput.softWrap)
     }
 

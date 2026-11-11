@@ -96,7 +96,8 @@ class LandingSessionCopyParityTest {
             assertTrue("LandingSessionPage.swift no longer says $it", page.contains(it))
         }
         val view = File(root, "${views}LandingSessionPageView.swift").readText()
-        assertTrue(view.contains("running: card.running, timedOut: card.timedOut, failed: card.stoppedOnFailure)"))
+        // Both clients' card lines go red on the same fact: the attempt stopped on a failure, or timed out.
+        assertTrue(view.contains("line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,"))
     }
 
     /** The landing page's own header line and read-only footer went with the page (owner 2026-10-27): the window has its own
