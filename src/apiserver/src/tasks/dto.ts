@@ -388,6 +388,21 @@ export class TaskVerificationDto {
   @IsOptional() @IsPublicId() assigneeId?: string;
 }
 
+/**
+ * A task forked from the session making the call (SR55, docs/task-fork-from-session-design.md §2.2):
+ * the snapshot `orbit mcp` took of that session's checkout. The checks are `task-fork.ts`'s.
+ */
+export class TaskForkDto {
+  /** The session making this call — never another one (D6). */
+  @IsPublicId() sessionId!: string;
+  /** The snapshot commit S: the session's HEAD, or a commit over it carrying its uncommitted edits. */
+  @IsString() @Matches(/^[0-9a-fA-F]{40}$/) sha!: string;
+  /** The session's HEAD when the snapshot was taken. */
+  @IsString() @Matches(/^[0-9a-fA-F]{40}$/) baseHead!: string;
+  /** True exactly when `sha` is not `baseHead`. */
+  @IsBoolean() includesUncommitted!: boolean;
+}
+
 export class CreateTaskDto {
   @IsString()
   @MinLength(1)
@@ -447,6 +462,10 @@ export class CreateTaskDto {
   // Declaring it here is the first statement of what the task is and needs no reason; turning an
   // existing task codeless does (UpdateTaskDto.codelessReason, `task-codeless.ts`).
   @IsOptional() @IsBoolean() codeless?: boolean;
+  // SR55: start this task from a snapshot of the session making the call (the runner door posts it;
+  // the MCP tool calls it `forkFromSession`). Create-time only: the five columns it becomes are never
+  // written again (migration 0540).
+  @IsOptional() @ValidateNested() @Type(() => TaskForkDto) fork?: TaskForkDto;
   // EXECUTABLE is intentionally only this pair: one command, one expected exit code.
   @IsOptional() @IsString() acceptanceCommand?: string;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number;

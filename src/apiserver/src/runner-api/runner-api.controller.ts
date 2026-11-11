@@ -496,7 +496,7 @@ import {
 import { coordinatorCreateAllowedBy } from './unstarted-project-create';
 import {
   freezeSessionSourcePin,
-  sessionSourceSnapshot,
+  forkAuthorityBindings, sessionSourceSnapshot,
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
@@ -3893,6 +3893,8 @@ export class RunnerApiController {
         sourceBindings.set(binding.id, binding);
       }
     }
+    // A fork's authority is the machine its task's snapshot is on (SR55), not a binding's.
+    const forkBindings = await forkAuthorityBindings(this.prisma, sessions);
     // Reclaim never mutates lifecycle/lease ownership. The runner takes each row over with an
     // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed request
     // cannot retire a generation activated from a newer response. The only writes below are an
@@ -4122,7 +4124,8 @@ export class RunnerApiController {
         // that happens to have the same id.
         source: sessionSourceSnapshot(
           s,
-          s.sourceCodebaseId ? (sourceBindings.get(s.sourceCodebaseId) ?? null) : null,
+          forkBindings.get(s.id)
+            ?? (s.sourceCodebaseId ? (sourceBindings.get(s.sourceCodebaseId) ?? null) : null),
         ),
       });
     }

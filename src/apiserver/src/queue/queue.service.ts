@@ -101,7 +101,7 @@ import {
 } from '../common/transaction-retry';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerHints } from '../realtime/runner-hints';
-import { sessionSourceSnapshot } from '../projects/session-source';
+import { forkAuthorityBindings, sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { branchName } from '../projects/project-criterion-landing';
@@ -1085,7 +1085,13 @@ export class QueueService {
     // §6.3 step 1: hand the runner the frozen SOURCE snapshot. `undefined` for a Legacy session —
     // and that absence is the compatibility guarantee, not an omission: it is exactly the payload
     // every runner has always received, so nothing about their behaviour changes (SR46).
-    const source = sessionSourceSnapshot(session, await this.sourceBinding(session.sourceCodebaseId));
+    // A fork (SR55) has no binding; its authority is the machine its task's snapshot is on.
+    const source = sessionSourceSnapshot(
+      session,
+      session.sourceKind === 'SESSION_FORK'
+        ? ((await forkAuthorityBindings(this.prisma, [session])).get(session.id) ?? null)
+        : await this.sourceBinding(session.sourceCodebaseId),
+    );
     // A session nothing else will name is named by the engine about to run it (engineNamingJob).
     const naming = engineNamingJob(session, provider, configuredRow);
     return {

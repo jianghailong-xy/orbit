@@ -25,7 +25,12 @@ import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 // `recordDispatchRefusal` — and that module reads `hasResolvedSource` from this one.
 import type { RefusedRunSource } from '../tasks/task-dispatch-refusal';
 import { branchName, LANDED_RESULTS, receiptTargetBranches } from './project-criterion-landing';
-import { resolveSource, SourceReason, SourceResolution } from './source-selector';
+import {
+  resolveSource,
+  SourceReason,
+  SourceResolution,
+  SourceResolutionInput,
+} from './source-selector';
 
 /**
  * The SOURCE chain at the two moments it touches the database: the selector frozen when a Session
@@ -121,6 +126,11 @@ export function chatSourceColumns(repository: { repoUrl: string; rootCommitSha: 
 export interface SessionSourceDecision {
   columns: SessionSourceCreateColumns;
   reason: SourceReason;
+  /**
+   * Row PF only (SR55): the machine the snapshot is on — the forking session's runner, as the task
+   * recorded it. The run may only be placed there; `SessionsService.create` refuses any other.
+   */
+  forkRunnerId?: string;
 }
 
 /**
@@ -138,7 +148,27 @@ export interface SessionSourceTaskRow {
   codeless: boolean;
   attemptGeneration: bigint;
   knownGoodSha: string | null;
+  /** Row PF's facts (migration 0540): all null on a task that was not forked. */
+  forkSessionId: string | null;
+  forkRunnerId: string | null;
+  forkSha: string | null;
+  forkIncludesUncommitted: boolean | null;
 }
+
+/** The task columns `SessionSourceTaskRow` names, as a Prisma `select`. */
+export const SESSION_SOURCE_TASK_SELECT = {
+  id: true,
+  projectId: true,
+  verifiesTaskId: true,
+  pinnedRevision: true,
+  codeless: true,
+  attemptGeneration: true,
+  knownGoodSha: true,
+  forkSessionId: true,
+  forkRunnerId: true,
+  forkSha: true,
+  forkIncludesUncommitted: true,
+} as const;
 
 const LEGACY_DECISION: SessionSourceDecision = {
   columns: LEGACY_SOURCE_COLUMNS,
@@ -201,6 +231,7 @@ export async function decideSessionSource(
       attemptGeneration: task.attemptGeneration,
       inheritedKnownGoodSha: task.knownGoodSha,
       dependsOnTaskIds: closure.dependsOnTaskIds,
+      fork: await forkInput(prisma, task),
     },
     codebase: codebase
       ? {
@@ -219,7 +250,34 @@ export async function decideSessionSource(
     subjectCandidate: null,
     prerequisiteCheckpoints: closure.checkpoints,
   });
-  return { columns: sourceCreateColumns(resolution), reason: resolution.reason };
+  const forked = resolution.state === 'SELECTED' && resolution.selector.kind === 'SESSION_FORK';
+  return {
+    columns: sourceCreateColumns(resolution),
+    reason: resolution.reason,
+    ...(forked && task.forkRunnerId ? { forkRunnerId: task.forkRunnerId } : {}),
+  };
+}
+
+/**
+ * Row PF's input, or null for a task that was not forked. The forking session's title is read only
+ * for SR18's sentence, and a session deleted since leaves the fork intact and the title unknown:
+ * the task's own columns are the fact, and no foreign key ties them to that row.
+ */
+async function forkInput(
+  prisma: PrismaService,
+  task: SessionSourceTaskRow,
+): Promise<SourceResolutionInput['task']['fork']> {
+  if (task.forkSha == null || task.forkSessionId == null) return null;
+  const forking = await prisma.session.findUnique({
+    where: { id: task.forkSessionId },
+    select: { title: true },
+  });
+  return {
+    sessionId: task.forkSessionId,
+    sessionTitle: forking?.title ?? null,
+    sha: task.forkSha,
+    includesUncommitted: task.forkIncludesUncommitted === true,
+  };
 }
 
 /**
@@ -382,7 +440,8 @@ export function sessionSourceSnapshot(
     kind: session.sourceKind as SourceKind,
     // Absent for a wiki chat, the one kind with no binding behind it (SR54).
     codebaseId: session.sourceCodebaseId ?? undefined,
-    repoUrl: session.sourceRepoUrl!,
+    // Absent for a fork (SR55), which freezes no repository identity.
+    repoUrl: session.sourceRepoUrl ?? undefined,
     rootCommitSha: session.sourceRootCommitSha ?? undefined,
     ref: session.sourceRef ?? undefined,
     revisionSha: session.sourceRevisionSha ?? undefined,
@@ -420,6 +479,33 @@ export const SESSION_SOURCE_SELECT = {
   sourceResolvedByRunnerId: true,
   sourceRefusalCode: true,
 } as const;
+
+/** How to ask a run's authority — the half of a snapshot that is not frozen on the session (§3.2). */
+export type SourceAuthorityBinding = { remoteName: string; authorityRunnerId: string | null };
+
+/**
+ * The authority of each forked run among `sessions`, keyed by session id: the machine its task's
+ * snapshot is on (SR55), recorded on the task when it was forked. A binding answers this for every
+ * other kind; a fork has none, so its claim and reclaim projections read it here, in one query for
+ * the whole set.
+ */
+export async function forkAuthorityBindings(
+  prisma: PrismaService,
+  sessions: readonly { id: string; sourceKind: string | null; taskId: string | null }[],
+): Promise<Map<string, SourceAuthorityBinding>> {
+  const forked = sessions.filter((s) => s.sourceKind === 'SESSION_FORK' && s.taskId);
+  const out = new Map<string, SourceAuthorityBinding>();
+  if (forked.length === 0) return out;
+  const tasks = await prisma.task.findMany({
+    where: { id: { in: [...new Set(forked.map((s) => s.taskId!))] } },
+    select: { id: true, forkRunnerId: true },
+  });
+  const runnerOf = new Map(tasks.map((t) => [t.id, t.forkRunnerId]));
+  for (const s of forked) {
+    out.set(s.id, { remoteName: 'origin', authorityRunnerId: runnerOf.get(s.taskId!) ?? null });
+  }
+  return out;
+}
 
 /**
  * What §6.3 step 3 concluded: the wire answer, plus the one thing the door's caller owes AFTER it
@@ -510,6 +596,13 @@ export async function freezeSessionSourcePin(
   if (refusal?.code === 'SOURCE_PROTOCOL_UNSUPPORTED') {
     throw new BadRequestException(
       'SOURCE_PROTOCOL_UNSUPPORTED is decided at dispatch, not reported by a runner',
+    );
+  }
+  // SR55's two codes, likewise: both are decided before a session exists (at the task's create, or by
+  // the session's create), so no runner can have met one while resolving.
+  if (refusal?.code === 'FORK_SOURCE_NOT_REACHABLE' || refusal?.code === 'FORK_IN_BOUND_PROJECT') {
+    throw new BadRequestException(
+      `${refusal.code} is decided when the task or its run is created, not reported by a runner`,
     );
   }
   const before = await tx.session.findFirst({
