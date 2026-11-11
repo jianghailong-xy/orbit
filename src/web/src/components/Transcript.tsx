@@ -1784,20 +1784,15 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
 // top-level row. Excluded by name rather than by what has arrived, so the row doesn't hop out of
 // the group later, when the result lands (session_create) or the first child event does (Task).
 //
-// A picture is the one exclusion that can't be read off the name: `Read` on a .png and an MCP
-// screenshot tool answer alike with an image block, and only the result says so. It is excluded
-// anyway, because the group is the one fold ToolView can't open through — the card unfolds itself
-// on an image (see defaultOpen) and a closed group hides it whole, so a screenshot inside a run
-// reaches the reader as nothing at all. The hop this costs happens once and never reverses: an
-// image block that has arrived stays arrived, unlike the running/failed states the folded row
-// deliberately reports instead of opening on.
+// A picture folds like any other read (owner, 11-11: an agent reading its own screenshot is a
+// step, not something to show the reader). Opening the line draws the card, which unfolds itself
+// on the image (see defaultOpen) and fetches back bytes the server clipped.
 function isGroupableTool(node: Node, chat = false): node is ToolNode {
   return (
     node.kind === 'tool' &&
     // A wiki chat's drafting call is its card (`WikiDraftCard`), told by its name, as the others here are.
     !(chat && wikiChatDraftingCall(node.name, node.input)) &&
     node.children.length === 0 &&
-    !hasResultImage(node.result?.content) &&
     !node.id.startsWith('shell-') &&
     node.name !== 'AskUserQuestion' &&
     node.name !== 'ExitPlanMode' &&
