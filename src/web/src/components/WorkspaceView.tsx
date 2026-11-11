@@ -338,6 +338,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { useCrossingDecisionCards } from './CrossingDecisionCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
 import { answeredItemKey, answersHandedOver } from '../lib/ownerAnswer';
 import {
@@ -4882,11 +4883,16 @@ export function WorkspaceView({
   // What this session has asked the owner to do, where it asked.
   const ownerRequestCards = useSessionOwnerRequestInserts(selectedTrashed ? null : selectedId, transcriptEvents);
 
+  // Cross-project requests into the project this conversation coordinates, one decision card per
+  // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
+  // still waiting are counted by the pinned strip beside the criteria proposals.
+  const crossingCards = useCrossingDecisionCards(selectedTrashed ? null : coordinatedProjectId, transcriptEvents);
+
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, questionRecords, ownerRequestCards, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, questionRecords, ownerRequestCards, crossingCards.inserts, blockedPromotionCard, exceptionCards],
   );
 
   // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
@@ -9590,6 +9596,7 @@ export function WorkspaceView({
             // answered: the card the server delivered into this conversation. A second set of
             // buttons up here would be two faces racing for one answer.
             onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
+            crossings={crossingCards.pointers}
           />
         )}
 
