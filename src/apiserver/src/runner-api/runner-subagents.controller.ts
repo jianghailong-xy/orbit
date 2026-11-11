@@ -1,6 +1,7 @@
 import {
   Body,
   ConflictException,
+  HttpException,
   Controller,
   Logger,
   ForbiddenException,
@@ -14,7 +15,9 @@ import {
 import {
   type AgentExecConfig,
   PermissionMode,
+  type SubagentCandidateTarget,
   type SubagentDecision,
+  type SubagentFallbackResponse,
   type SubagentRunCreateResponse,
   type SubagentRunStatus,
   type SubagentRunUpdateResponse,
@@ -40,10 +43,43 @@ import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
 import { assertEngineSession } from '../sessions/engine-session';
 import { sessionProviderExec } from './session-provider-exec';
 import { stripNul } from './strip-nul';
-import { shadowDecision, SubagentRunCreateDto, SubagentRunUpdateDto, truncateResultSummary } from './subagent-run';
+import {
+  attemptsOf,
+  fallbackCandidates,
+  firstAttempt,
+  limitFailure,
+  noProviderMessage,
+  shadowDecision,
+  SUBAGENT_ATTEMPT_ERROR_MAX,
+  SUBAGENT_MAX_MOVES,
+  SubagentFallbackDto,
+  SubagentRunCreateDto,
+  SubagentRunUpdateDto,
+  truncateResultSummary,
+} from './subagent-run';
 import { planSubagentRoute } from './subagent-route';
 
 const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+
+/** What a SubAgent's run reads of its parent session. */
+const SUBAGENT_PARENT_SELECT = {
+  ownerId: true,
+  status: true,
+  workspaceId: true,
+  assignedRunnerId: true,
+  provider: true,
+  effort: true,
+  permissionMode: true,
+  workspace: {
+    select: {
+      subagentsEnabled: true, subagentsMaxRunning: true, effort: true, permissionRules: true,
+      disallowedTools: true,
+    },
+  },
+  assignedRunner: { select: { modelCatalog: true } },
+  owner: { select: { preferences: true } },
+} satisfies Prisma.SessionSelect;
+type SubagentParent = Prisma.SessionGetPayload<{ select: typeof SUBAGENT_PARENT_SELECT }>;
 
 /**
  * SubAgent runs (docs/subagent-design.md §5.1, §6.2), reached by `orbit mcp`'s `delegate` tool with the
@@ -93,26 +129,7 @@ export class RunnerSubagentsController {
     await this.assertParentOfRunner(sessionId, runner);
     return withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
-      const session = await tx.session.findUniqueOrThrow({
-        where: { id: sessionId },
-        select: {
-          ownerId: true,
-          status: true,
-          workspaceId: true,
-          assignedRunnerId: true,
-          provider: true,
-          effort: true,
-          permissionMode: true,
-          workspace: {
-            select: {
-              subagentsEnabled: true, subagentsMaxRunning: true, effort: true, permissionRules: true,
-              disallowedTools: true,
-            },
-          },
-          assignedRunner: { select: { modelCatalog: true } },
-          owner: { select: { preferences: true } },
-        },
-      });
+      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: SUBAGENT_PARENT_SELECT });
       if (TERMINAL.includes(session.status)) throw new ConflictException('the session has ended');
       const opened = await tx.subagentRun.findUnique({
         where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } },
@@ -133,59 +150,14 @@ export class RunnerSubagentsController {
           });
         }
       }
-      const resolved = await sessionProviderExec(tx, this.queue, sessionId);
-      if (!resolved.exec) {
-        throw new ConflictException(resolved.refusal ?? 'the session has no provider to run a SubAgent on');
-      }
-      const { exec: resolvedExec, customRow } = resolved;
-      const provider = resolvedExec.provider;
-      const runnerModel = resolvedExec.runnerModel ?? resolvedExec.model;
-      const workspace = session.workspace;
-      const effort = normalizeEffortForRuntimeModel(
-        provider,
-        session.effort ?? workspace?.effort,
-        runnerModel,
-        session.assignedRunner?.modelCatalog,
-        resolvedExec.reasoningLevels,
-      );
-      // A read-only definition runs in plan mode; anything else in the mode its definition names, or as the
-      // parent does when it names none — never wider than the parent (§5.3), by the rule a session starting
-      // another is held to (SessionsService.assertChildModeOrNarrow), but with no exemption: an Auto parent's
-      // SubAgent may not run Bypass either (isWiderThanParent).
-      const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
-      if (!dto.readonly && dto.permissionMode && isWiderThanParent({ mode: parentMode, engine: provider }, dto.permissionMode, provider)) {
-        throw widerModeRefusal(
-          parentMode,
-          dto.permissionMode,
-          provider,
-          `Remove permissionMode from the SubAgent's definition to run it in this session's mode, or name one it may ` +
-            `run in (${modesASubagentMayRunIn({ mode: parentMode, engine: provider }, provider).join(', ')}).`,
-        );
-      }
-      const childMode = (dto.readonly ? PermissionMode.PLAN : dto.permissionMode ?? parentMode) as PermissionMode;
-      const exec: AgentExecConfig = {
-        provider,
-        model: runnerModel,
-        allowedTools: dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
-        disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
-        permissionMode: normalizeBuiltinPermissionMode(
-          provider,
-          runnerModel,
-          childMode,
-          customRow?.enabled === true,
-          runner.runsAsRoot,
-          session.assignedRunner?.modelCatalog,
-        ),
-        effort,
-        env: resolvedExec.env,
-      };
+      const { exec, provider, resolvedModel, effort } = await this.childExec(tx, sessionId, runner, session, dto);
       const route = opened ? null : await planSubagentRoute(tx, {
         ownerId: session.ownerId,
         workspaceId: session.workspaceId,
         runnerId: session.assignedRunnerId,
         dto,
         planUsage: this.planUsage,
-        parent: { engine: provider, provider: session.provider ?? provider, model: resolvedExec.model, effort: effort ?? null },
+        parent: { engine: provider, provider: session.provider ?? provider, model: resolvedModel, effort: effort ?? null },
       });
       const row =
         opened ??
@@ -198,7 +170,11 @@ export class RunnerSubagentsController {
             definitionSource: dto.definitionSource,
             background: dto.background ?? false,
             status: 'RUNNING',
-            decision: shadowDecision(route!, resolvedExec.model, effort ?? null) as unknown as Prisma.InputJsonValue,
+            decision: shadowDecision(route!, resolvedModel, effort ?? null) as unknown as Prisma.InputJsonValue,
+            // The first attempt: the parent's own engine, credential and model while routing is in shadow (§8 P2).
+            attempts: [firstAttempt({
+              engine: provider, provider: session.provider ?? provider, model: resolvedModel, effort: effort ?? null,
+            })] as unknown as Prisma.InputJsonValue,
           },
         }));
       return {
@@ -208,6 +184,152 @@ export class RunnerSubagentsController {
         exec,
       };
     }, loggedRetry(this.logger, 'runnerSubagents.createSubagentRun'));
+  }
+
+  /**
+   * How the child runs: the session's credential (or, with `target`, another candidate's on the same runner) as
+   * dispatch resolves it, the child's permission mode — plan for a read-only definition, else the mode the
+   * definition names or the parent's, never wider than the parent (§5.3) — and the workspace's tool rules, in the
+   * shape a claim hands the runner. Throws the refusal when no credential can run it.
+   */
+  private async childExec(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    runner: Runner,
+    session: SubagentParent,
+    dto: { readonly?: boolean; permissionMode?: string },
+    target?: SubagentCandidateTarget,
+  ): Promise<{ exec: AgentExecConfig; provider: string; resolvedModel: string; effort: string | undefined }> {
+    const resolved = await sessionProviderExec(tx, this.queue, sessionId, target);
+    if (!resolved.exec) {
+      throw new ConflictException(resolved.refusal ?? 'the session has no provider to run a SubAgent on');
+    }
+    const { exec: resolvedExec, customRow } = resolved;
+    const provider = resolvedExec.provider;
+    const runnerModel = resolvedExec.runnerModel ?? resolvedExec.model;
+    const workspace = session.workspace;
+    const effort = normalizeEffortForRuntimeModel(
+      provider,
+      target ? target.effort ?? undefined : session.effort ?? workspace?.effort,
+      runnerModel,
+      session.assignedRunner?.modelCatalog,
+      resolvedExec.reasoningLevels,
+    );
+    // By the rule a session starting another is held to (SessionsService.assertChildModeOrNarrow), but with no
+    // exemption: an Auto parent's SubAgent may not run Bypass either (isWiderThanParent).
+    const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
+    if (!dto.readonly && dto.permissionMode && isWiderThanParent({ mode: parentMode, engine: provider }, dto.permissionMode, provider)) {
+      throw widerModeRefusal(
+        parentMode,
+        dto.permissionMode,
+        provider,
+        `Remove permissionMode from the SubAgent's definition to run it in this session's mode, or name one it may ` +
+          `run in (${modesASubagentMayRunIn({ mode: parentMode, engine: provider }, provider).join(', ')}).`,
+      );
+    }
+    const childMode = (dto.readonly ? PermissionMode.PLAN : dto.permissionMode ?? parentMode) as PermissionMode;
+    const exec: AgentExecConfig = {
+      provider,
+      model: runnerModel,
+      allowedTools: dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
+      disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
+      permissionMode: normalizeBuiltinPermissionMode(
+        provider,
+        runnerModel,
+        childMode,
+        customRow?.enabled === true,
+        runner.runsAsRoot,
+        session.assignedRunner?.modelCatalog,
+      ),
+      effort,
+      env: resolvedExec.env,
+    };
+    return { exec, provider, resolvedModel: resolvedExec.model, effort };
+  }
+
+  /**
+   * The runner's ask for where a SubAgent goes after its child failed on a usage limit or capacity
+   * (docs/subagent-design.md §4.3): the next candidate of the tier, from the decision the run opened with — so a
+   * shadow decision serves too — skipping every provider an attempt already hit a limit on. The failed attempt is
+   * closed with its error, the new one appended to `attempts`, and the Why gains a line naming both models.
+   * At most SUBAGENT_MAX_MOVES moves per run (409 SUBAGENT_FALLBACK_SPENT); any other failure is not moved
+   * (409 SUBAGENT_NOT_A_LIMIT_FAILURE); no candidate left is 409 NO_SUBAGENT_PROVIDER, listing why each provider
+   * is out. Each refusal still closes the failed attempt.
+   */
+  @Post('sessions/:id/subagents/:runId/fallback')
+  @HttpCode(200)
+  async nextSubagentCandidate(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('runId', PublicIdPipe) runId: string,
+    @Body() dto: SubagentFallbackDto,
+  ): Promise<SubagentFallbackResponse> {
+    await this.assertParentOfRunner(sessionId, runner);
+    const failure = limitFailure(dto.error);
+    // Refusals still close the failed attempt, so they are thrown after the transaction commits.
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
+      const row = await tx.subagentRun.findFirst({ where: { id: runId, sessionId } });
+      if (!row) throw new NotFoundException('SubAgent run not found');
+      if (row.status !== 'RUNNING') throw new ConflictException(`SubAgent run ${runId} has already ended`);
+      if (!failure) {
+        return { refusal: new ConflictException({
+          code: 'SUBAGENT_NOT_A_LIMIT_FAILURE',
+          message: 'The SubAgent failed on something other than a usage limit or capacity, so it is not moved: its failure is its result.',
+        }) };
+      }
+      const now = new Date().toISOString();
+      const attempts = attemptsOf(row.attempts);
+      const failed = attempts.at(-1);
+      if (failed) Object.assign(failed, { outcome: failure, error: dto.error.slice(0, SUBAGENT_ATTEMPT_ERROR_MAX), endedAt: now });
+      const decision = row.decision as unknown as SubagentDecision;
+      const save = (data: Prisma.SubagentRunUpdateInput = {}) =>
+        tx.subagentRun.update({ where: { id: row.id }, data: { attempts: attempts as unknown as Prisma.InputJsonValue, ...data } });
+      const moves = Math.max(attempts.length - 1, 0);
+      if (moves >= SUBAGENT_MAX_MOVES) {
+        await save();
+        return { refusal: new ConflictException({
+          code: 'SUBAGENT_FALLBACK_SPENT',
+          message: `The SubAgent hit a usage limit or capacity on ${attempts.length} candidates in a row; ` +
+            `it was moved ${SUBAGENT_MAX_MOVES} times, the most one delegate call is.`,
+        }) };
+      }
+      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: SUBAGENT_PARENT_SELECT });
+      const spent = new Set(attempts.map((a) => a.provider));
+      const skipped: string[] = [];
+      for (const next of fallbackCandidates(decision)) {
+        if (spent.has(next.provider)) continue;
+        let built: Awaited<ReturnType<RunnerSubagentsController['childExec']>>;
+        try {
+          built = await this.childExec(tx, sessionId, runner, session, dto, next);
+        } catch (error) {
+          if (!(error instanceof HttpException)) throw error;
+          const said = error.getResponse();
+          skipped.push(`${next.provider} (${next.engine}): ${typeof said === 'string' ? said : (said as { message?: string }).message ?? error.message}`);
+          spent.add(next.provider);
+          continue;
+        }
+        const reason = failure === 'AT_CAPACITY'
+          ? `Moved to ${next.model} after ${failed?.model ?? 'the first model'} was at capacity`
+          : `Moved to ${next.model} after ${failed?.model ?? 'the first model'}'s account hit its limit`;
+        const attempt = attempts.length + 1;
+        attempts.push({ ...next, attempt, outcome: 'RUNNING', startedAt: now });
+        const moved: SubagentDecision = {
+          ...decision,
+          reasons: [...decision.reasons, reason],
+          ...(decision.applied === false ? { runModel: next.model, runEffort: built.effort ?? null } : {}),
+        };
+        await save({ decision: moved as unknown as Prisma.InputJsonValue });
+        return { answer: { runId: row.id, attempt, reason, decision: moved, exec: built.exec } };
+      }
+      await save();
+      return { refusal: new ConflictException({
+        code: 'NO_SUBAGENT_PROVIDER',
+        message: noProviderMessage(decision, attempts, skipped),
+      }) };
+    }, loggedRetry(this.logger, 'runnerSubagents.nextSubagentCandidate'));
+    if (outcome.refusal) throw outcome.refusal;
+    return outcome.answer!;
   }
 
   /**
@@ -228,10 +350,15 @@ export class RunnerSubagentsController {
     return withTransactionRetry(this.prisma, async (tx) => {
       // The parent first, as every writer of a session and its children takes them (rank 30, then 60).
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
+      const open = await tx.subagentRun.findFirst({ where: { id: runId, sessionId, status: 'RUNNING' }, select: { attempts: true } });
+      const attempts = open ? attemptsOf(open.attempts) : [];
+      const last = attempts.at(-1);
+      if (last?.outcome === 'RUNNING') Object.assign(last, { outcome: dto.status, endedAt: new Date().toISOString() });
       const ended = await tx.subagentRun.updateMany({
         where: { id: runId, sessionId, status: 'RUNNING' },
         data: {
           status: dto.status,
+          ...(last ? { attempts: attempts as unknown as Prisma.InputJsonValue } : {}),
           resultSummary: truncateResultSummary(dto.resultSummary),
           ...(dto.changedFiles ? { changedFiles: stripNul(dto.changedFiles) } : {}),
           costUsd,
