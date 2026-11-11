@@ -1,6 +1,6 @@
 # SubAgent 设计
 
-**状态**：设计稿（2026-11-11），等 owner 审阅。效果图：[`mocks/subagent/board.html`](./mocks/subagent/board.html)
+**状态**：设计稿（2026-11-11）；§9 的三项 owner 已于 2026-11-11 拍板，均按推荐。效果图：[`mocks/subagent/board.html`](./mocks/subagent/board.html)
 （PNG 在同一目录）。界面文案以效果图里的英文为准。
 
 > **用词**：**SubAgent** 指父会话通过 `delegate` 工具交出去的一次运行，不是一个 Agent（Agent 是长期存在的身份，见
@@ -243,17 +243,12 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内嵌、生命周期）单独验证。
 
-## 9. 待定 · 要你拍板
+## 9. 已定（owner，2026-11-11）
 
-**A. Cost 模式怎么算订阅账号的「花费」。** Claude / Codex / Kimi 的登录账号按订阅付费，多用一次不多花钱，只消耗额度；
-API key 按 token 计费。
-- 方案 1（推荐）：**有余量的订阅先用，之后才用按量计费的 key**。订阅之间按额度余量排，key 之间按 models.dev 价格排。
-- 方案 2：订阅也按同档 API 价格折算，和 key 一起比价。更「公平」，但会把订阅的额度闲置，实际花更多钱。
+形态、写代码、定档参考 Cursor、候选为所有已启用 Provider、可并行不加锁、P1 含后台、P1 读定义文件并内置 `explore` /
+`general`，这些在设计讨论中已定；下面三项在审阅效果图后拍板，均按推荐：
 
-**B. 默认开还是关。**
-- 方案 1（推荐）：**默认开，Optimize For = Cost**。按 A-1，绝大多数 SubAgent 跑在已经付过费的订阅上，花费在块头和报告里都看得见。
-- 方案 2：默认关，按 Agent 打开（L3 编排的做法）。更保守，但多数人永远不会去打开。
-
-**C. 父会话一轮结束时还有后台 SubAgent。**
-- 方案 1（推荐）：**会话保持 Running，SubAgent 结束时唤醒父会话**，和 `bg_run` 一样；停放推迟到它们结束。
-- 方案 2：一轮结束就停掉所有后台 SubAgent。简单，但「后台」就只在一轮之内有效。
+- **A. Cost 模式的边际花费**：有余量的订阅（Claude / Codex / Kimi 等登录账号）先用，订阅之间按额度余量排；之后才用按量
+  计费的 key，key 之间按 models.dev 价格排。不把订阅折算成 API 价格。
+- **B. 默认开**，Optimize For = Cost。Agent 设置里可关。
+- **C. 一轮结束时还有后台 SubAgent**：会话保持 Running，SubAgent 结束时唤醒父会话，与 `bg_run` 一致；停放推迟到它们结束。
