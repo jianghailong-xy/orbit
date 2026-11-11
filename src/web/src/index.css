@@ -20335,79 +20335,59 @@ div.landing-jobs-open {
 .landings-window-entry.is-card.is-outlined {
   outline-color: var(--brand);
 }
-/* A landing as the chat's background-job line (docs/mocks/landings-chat-tools ①): `.bgwake`'s own
-   row, mark, title, name, chip and Details ›, pressed as a button; its ⋯ at the end of the line. */
-/* Lines stand as close as the chat's job lines in a run of them. */
-.landings-window-line.bgwake {
-  margin: 0;
+/* A landing as a chat turn (docs/mocks/landings-chat-turns): its attempts on the chat's steps lines,
+   its reply — one plain sentence — and the chat's turn foot. Turns stand closer than a conversation's:
+   a landing's foot sits under its sentence with only the room the next steps line needs. */
+.landings-window-turn {
+  margin: 0 0 4px;
 }
-.landings-window-line-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
+.landings-window-turn .chat-steps {
+  margin: 2px 0;
 }
-.landings-window-line-press {
-  flex: 0 1 auto;
-  min-width: 0;
+.landings-window-turn .chat-turn-foot {
+  margin: 2px 0 14px;
+}
+/* A steps line is the chat's `.chat-steps-line`, pressed as a button. */
+.landings-window-steps-line {
   border: 0;
   background: transparent;
-  color: inherit;
   font: inherit;
+  font-size: 13px;
   text-align: left;
 }
-.landings-window-line.is-open .bgwake-caret {
-  transform: rotate(90deg);
+.landings-window-reply {
+  margin: 2px 0 0;
+  cursor: pointer;
 }
-.landings-window-merge-mark {
-  color: var(--brand);
-  font-weight: 700;
+.landings-window-reply .md p {
+  margin: 0;
 }
-.landings-window-entry.is-outlined .landings-window-line-press {
-  box-shadow: 0 0 0 2px var(--brand);
+.landings-window-entry.is-outlined .landings-window-reply {
+  box-shadow: inset 2px 0 0 var(--brand);
 }
+/* The landing's ⋯ in its turn foot, where the chat's copy button stands. */
 .landings-window-more {
   flex: none;
-  width: 28px;
-  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 20px;
+  height: 18px;
+  margin-left: -4px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-3);
-  font-size: 15px;
+  font-size: 13px;
   cursor: pointer;
 }
 .landings-window-more:hover {
   background: var(--bg-hover);
   color: var(--text-1);
 }
-/* A line's ⋯ shows where the pointer or the keyboard is on it, or while its menu is open; every one
-   shows on a screen without hover. */
-.landings-window-line-row .landings-window-more {
-  opacity: 0;
-}
-.landings-window-entry:hover .landings-window-line-row .landings-window-more,
-.landings-window-line-row:focus-within .landings-window-more,
-.landings-window-line-row .landings-window-more[data-popup-open],
-.landings-window-line-row .landings-window-more[aria-expanded="true"] {
-  opacity: 1;
-}
-@media (hover: none) {
-  .landings-window-line-row .landings-window-more {
-    opacity: 1;
-  }
-}
-/* A landing's steps, each the chat's tool row (②), hung under its line as `.bgwake-body` is. */
 .landings-window-steps {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-.landings-window-steps .landing-timeline-section + .landing-timeline-section {
-  margin-top: 10px;
 }
 .landing-step-row {
   width: 100%;
@@ -20418,25 +20398,33 @@ div.landing-jobs-open {
   text-align: left;
   cursor: pointer;
 }
-.landing-step-time {
-  font-variant-numeric: tabular-nums;
-}
 .landing-step-detail {
   padding: 6px 12px 8px;
 }
-.landings-window-card.landing-status-card {
-  margin-bottom: 0;
-  padding: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
+/* What a landing in hand still carries, on the chat's own status card under its sentence. */
+.landings-window-card.chat-status-card {
+  margin: 8px 12px 0;
+  width: min(640px, calc(100% - 24px));
 }
-/* What a landing in hand carries, open under its line: its facts, its steps, and who decides. */
+.landings-window-card.is-failed {
+  border-left-color: var(--error);
+}
+.landings-window-status-icon.is-failed {
+  background: var(--error);
+  font-size: 10px;
+}
+.landings-window-status-clock {
+  margin-left: auto;
+  color: var(--text-3);
+  font-weight: 500;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
 .landings-window-card-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 2px 0 10px 22px;
+  padding: 2px 12px 12px;
 }
 .landings-window-card-body .landing-card-block,
 .landings-window-card-body .landing-card-actions {
@@ -20446,11 +20434,6 @@ div.landing-jobs-open {
   color: var(--text-3);
   font-size: 12.5px;
 }
-.landings-window-wait {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--bg-sunken);
-}
 .landings-window-wait-line {
   display: flex;
   align-items: center;
@@ -20459,10 +20442,13 @@ div.landing-jobs-open {
   color: var(--text-2);
   font-size: 13px;
 }
-/* A settled line's record hangs under it, off the line's mark, as `.bgwake-body` does: a merge's
-   receipt first, then its steps. */
+/* A landing that runs: its clock, budget and liveness under its sentence. */
+.landings-window-live {
+  margin: 6px 12px 2px;
+}
+/* What a turn opens to under its sentence: a merge's receipt, a task's two ways out — inset like the reply. */
 .landings-window-record {
-  margin: 2px 0 10px 22px;
+  margin: 6px 12px 0;
 }
 .landings-window-receipt {
   margin-bottom: 12px;
