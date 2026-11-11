@@ -267,6 +267,67 @@ export function wikiRepoReasonIsPremise(reason: WikiRepoTierReason): boolean {
   return (WIKI_REPO_PREMISE_REASONS as readonly string[]).includes(reason);
 }
 
+/**
+ * The reasons somebody has to set right (docs/wiki-repo-tiers-design.md §6, the red rows): another repository's folder,
+ * or a credential the remote refused. The health line draws them red, and a streak of them tells the owner once
+ * (contract `maintenance.health.notifyRepository`).
+ */
+export const WIKI_REPO_ATTENTION_REASONS = ['wrong_repository', 'root_mismatch', 'path_overlap', 'fetch_refused'] as const;
+
+/** A reason is one somebody has to set right (`WIKI_REPO_ATTENTION_REASONS`). */
+export function wikiRepoReasonNeedsAttention(reason: string | null | undefined): boolean {
+  return (WIKI_REPO_ATTENTION_REASONS as readonly string[]).includes(reason ?? '');
+}
+
+/**
+ * A working directory as a person reads it: a home directory as `~`, so the line says `~/work/app` and no account name.
+ */
+export function wikiRepoDirLabel(dir: string | null | undefined): string | null {
+  const trimmed = (dir ?? '').trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/^(?:\/Users|\/home)\/[^/]+(?=\/|$)/u, '~').replace(/^\/root(?=\/|$)/u, '~');
+}
+
+/**
+ * Why a repository could not be read, as one English sentence (contract `maintenance.health.repo.detail`): what the
+ * health line says after `Code checks paused:`, and the whole red part. `dir` is the workspace's working directory,
+ * `runner` the machine's name, `said` the runner's own words, which name the other repository's address.
+ */
+export function wikiRepoDetail(
+  reason: WikiRepoTierReason,
+  where: { dir?: string | null; runner?: string | null; said?: string | null } = {},
+): string {
+  const dir = wikiRepoDirLabel(where.dir) ?? 'The folder';
+  const runner = (where.runner ?? '').trim() || null;
+  const on = runner ? ` on ${runner}` : '';
+  switch (reason) {
+    case 'no_workspace': return 'No workspace is chosen for maintenance';
+    case 'no_work_dir': return 'The workspace has no working directory';
+    case 'not_found': return `${dir} was not found${on}`;
+    case 'not_git': return `${dir} is not a git checkout`;
+    case 'too_many_files': return `${dir} has too many files to read`;
+    case 'wrong_repository': {
+      const clone = /is a clone of (\S+?),? not of/u.exec(where.said ?? '')?.[1];
+      return clone
+        ? `${dir} is a clone of ${clone}, not this wiki's repository`
+        : `${dir} is not a clone of this wiki's repository`;
+    }
+    case 'root_mismatch': return `${dir} does not share this wiki's first commit`;
+    case 'path_overlap': return `${dir} shares few files with the last snapshot`;
+    case 'fetch_refused': return `The git remote refused the credentials${on}`;
+    case 'runner_offline': return 'Waiting for the runner to come online';
+    case 'runner_missing': return 'The workspace is not on a runner';
+    case 'runner_upgrade': return 'Upgrade the runner to read the repository';
+    case 'fetch_failed': return `Could not fetch from the git remote${on}`;
+    case 'op_timeout': return `${runner ?? 'The runner'} did not answer in time`;
+    case 'runner_lost': return `${runner ?? 'The runner'} stopped answering`;
+    case 'folder_moved': return `${dir} changed while it was read`;
+    case 'op_failed':
+    default:
+      return `Reading ${wikiRepoDirLabel(where.dir) ?? 'the folder'} failed`;
+  }
+}
+
 /** What one `read` item asks for (contract `repoOps.kinds.read`). */
 export interface WikiRepoOpReadItem {
   /** The path at the sha. */

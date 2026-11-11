@@ -741,6 +741,7 @@ export async function finishWikiMaintenanceJob(
       opsRefused: refused,
     }, now);
     await maintenance.noteNoNotes(ownerId, spaceId);
+    await maintenance.noteRepoAttention(ownerId, spaceId, jobId);
     const articles = await queueWikiArticlesAfterRun(prisma, {
       ownerId,
       spaceId,

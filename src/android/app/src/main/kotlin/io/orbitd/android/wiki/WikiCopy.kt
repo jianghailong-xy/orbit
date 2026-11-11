@@ -400,6 +400,20 @@ internal object WikiHealthCopy {
     const val reasonUnreachable = "System model unreachable"
     const val reasonRunnerOffline = "Waiting for the runner to come online"
     const val reasonRunnerUpgrade = "Upgrade the runner to read the repository"
+
+    // MARK: what the latest run read of the repository (docs/wiki-repo-tiers-design.md §7.2, mock 44 ⑤)
+
+    const val repoFolder = "Reading the folder, not git"
+    const val repoFolderShort = "Reading the folder"
+    const val repoPaused = "Code checks paused"
+    const val repoWrongShort = "Wrong folder"
+    const val repoFix = "Fix in Settings"
+    const val repoCommitAnchors = "Commit anchors are not checked"
+    fun repoPaused(detail: String) = "$repoPaused: $detail"
+    fun repoFolderHint(detail: String?) = if (detail.isNullOrEmpty()) "$repoCommitAnchors." else "$repoCommitAnchors: $detail."
+    /** The reasons somebody has to set right, drawn red (`WIKI_REPO_ATTENTION_REASONS`). */
+    val repoAttentionReasons = listOf("wrong_repository", "root_mismatch", "path_overlap", "fetch_refused")
+    fun repoNeedsAttention(reason: String?) = reason in repoAttentionReasons
 }
 
 internal object WikiArticleCopy {
