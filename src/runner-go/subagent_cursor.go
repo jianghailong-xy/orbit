@@ -22,23 +22,6 @@ func init() {
 // c.emit, which carries no turn of its own.
 const cursorChildTurnID = "subagent"
 
-// cursorChildMCPServers is cursorMCPServers for a SubAgent: Orbit's own server is also told the run it serves
-// (envSubagentRunID), which Cursor CLI hands it only as a declared variable (cursor_mcp.go), so the child's `orbit
-// mcp` offers no delegate.
-func cursorChildMCPServers(child *ClaimedSession, runID string) ([]interface{}, error) {
-	servers, err := cursorMCPServers(child)
-	if err != nil {
-		return nil, err
-	}
-	if len(servers) > 0 {
-		if orbit := mapValue(servers[0]); orbit != nil {
-			env, _ := orbit["env"].([]map[string]string)
-			orbit["env"] = append(env, map[string]string{"name": envSubagentRunID, "value": runID})
-		}
-	}
-	return servers, nil
-}
-
 // cursorChildCard files a SubAgent's approval card: under the run (withSubagentApprovals), as the bridge's own
 // context is not the child's. Its questions and plans ask nobody (§5.3).
 func cursorChildCard(card cursorApprovalCard, runID string) cursorApprovalCard {
@@ -65,10 +48,6 @@ func runCursorChild(ctx context.Context, c subagentChild) (ExecResult, string, e
 		conversation = c.engineSession
 	}
 	child := subagentChildJob(c.parent, c.exec, c.def, c.runID, providerCursor, conversation)
-	// Cursor CLI enforces no denylist and refuses one (cursorToolPolicyError). delegate is not offered to the child
-	// anyway (its `orbit mcp` knows the run), and a read-only run is held by plan mode, so only what the dispatch
-	// and the definition themselves deny is left for that check.
-	child.Agent.DisallowedTools = appendUnique(append([]string(nil), c.exec.DisallowedTools...), c.def.DisallowedTools...)
 	stateDir := firstNonEmpty(c.stateDir, c.scratch)
 	fail := func(err error) (ExecResult, string, error) { return ExecResult{Status: stFailed}, conversation, err }
 
@@ -90,7 +69,7 @@ func runCursorChild(ctx context.Context, c subagentChild) (ExecResult, string, e
 	}
 	var servers []interface{}
 	if err == nil {
-		servers, err = cursorChildMCPServers(child, c.runID)
+		servers, err = cursorMCPServers(child)
 	}
 	if err == nil && policy.Mode != "bypassPermissions" {
 		err = guardCursorUserConfig(launch)
