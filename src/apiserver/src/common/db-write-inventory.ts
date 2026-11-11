@@ -837,13 +837,37 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'auth/google-login.service.ts#link',
     shape: 'TX_BARE',
-    locks: "Inserts only, nothing read or locked first. For a SIGNUP one `user` row, under its unique email index; then one user_identity row, under its two unique indexes, (provider, subject) and (user_id, provider), taking FOR KEY SHARE through its foreign key on the `user` row it names — the account the email matched, or the one just inserted; then one `activity` row, which has no foreign key and no trigger. None of the three tables has a trigger. It waits only on a concurrent insert of one of those unique keys, until that transaction ends.",
+    locks: "Inserts only, nothing read or locked first. For a SIGNUP one `user` row, under its unique email index; then one user_identity row, under its two unique indexes, (provider, subject) and (user_id, provider), taking FOR KEY SHARE through its foreign key on the `user` row it names — the account the email matched, or the one just inserted; then one `activity` row, which has no foreign key and no trigger; then, for a SIGNUP only, a plain read of email_settings and one email_outbox row (email/email-outbox.ts enqueueWelcome), under its unique (kind, user_id), taking FOR KEY SHARE on the `user` row just inserted. None of these tables has a trigger. It waits only on a concurrent insert of one of those unique keys, until that transaction ends.",
     identity: "The Google account's (provider, subject); for a SIGNUP also the email the account is opened under, and for an AUTO link the (user_id, provider) of the account linked. Those are the keys a second first sign-in of the same Google account — or of another one with the same email — collides on.",
     isolation: '',
     attempts: 1,
     replay: "Not retried: a unique violation is the answer, not a conflict to absorb. The loser rolls back whole — no account without its identity, no link without its Activity row — and GoogleLoginService.exchange reads once more (§5.2's last line), where the linked account is found by case 1, or the account with that email is answered by case 3. No deadlock with another first sign-in: each waits only on the unique keys of rows the other is inserting, and holds nothing the other waits on but rows only it inserted. A transaction that locks the `user` row FOR UPDATE waits behind the FOR KEY SHARE, never the other way round.",
     effects: "None inside. After commit, the exchange issues the session through AuthService.completeLogin.",
     answer: "A unique violation (P2002) is read again once by the exchange. Anything else — a second violation included — reaches the global boundary, a typed 503 for a transient conflict and a 500 otherwise, with nothing written; the ticket was spent at its first presentation, so the person signs in again.",
+  },
+  // An administrator creating an account, or resetting its password (users.util.ts): the account and its welcome email row.
+  {
+    at: 'users/users.util.ts#createOrResetUser',
+    shape: 'TX_BARE',
+    locks: "A reset is one autocommit UPDATE of the `user` row by its email, outside any transaction (a FOR NO KEY UPDATE row lock; password_hash is in no key). A new account is one transaction: one INSERT into `user` under its unique email index; then a plain read of email_settings (no lock) and one INSERT into email_outbox under its unique (kind, user_id), taking FOR KEY SHARE on the `user` row just inserted through its foreign key. None of the three tables has a trigger.",
+    identity: "The email address: a second create of the same address collides on user_email_key, and the account's one WELCOME row on (kind, user_id).",
+    isolation: '',
+    attempts: 1,
+    replay: "Not retried: a unique violation on the email is the answer (the account exists; the administrator asks again with force to reset it). The loser rolls back whole, so there is never an account without its welcome row nor a row without its account. It waits only on a concurrent insert of the same email, and holds nothing anyone else waits on but rows only it inserted.",
+    effects: "None inside. The welcome email is sent later by EmailOutboxWorker, from the committed row.",
+    answer: "A unique violation reaches the global boundary as a 500, as before the transaction existed (the read before it answers an existing address with 409 first); a transient conflict is the typed 503, with nothing written.",
+  },
+  // The welcome email's send (docs/welcome-email-design.md §3.3, migration 0517): one due outbox row claimed, sent, settled.
+  {
+    at: 'email/email-outbox.ts#sendOne',
+    shape: 'TX_BARE',
+    locks: "One email_outbox row: SELECT … FOR UPDATE SKIP LOCKED of the earliest due PENDING row, so a row another worker holds is skipped, never waited on. Then plain reads of `user` (the account and the administrator who created it), the HTTP call to Resend with the row lock held (at most 10 seconds), one UPDATE of the row already held, and, when it is SENT or FAILED, one INSERT into `activity`, which has no foreign key and no trigger. email_outbox has no trigger, and the UPDATE changes no key column, so its foreign key re-checks nothing. Nothing locks an email_outbox row before another table's row.",
+    identity: "The outbox row, and the Idempotency-Key `welcome/<user id>/<generation>/<key_attempt>` read from it.",
+    isolation: '',
+    attempts: 1,
+    replay: "Not retried within the pass: a transaction that fails rolls back, the row stays PENDING with the same key_attempt, and the next pass claims it again and sends under the same Idempotency-Key, which Resend answers with the first result if the first request had been taken. SKIP LOCKED means two workers never hold, and so never send, the same row.",
+    effects: "Inside the transaction, with the row lock held: one POST to Resend (resend.client.ts). Nothing after commit.",
+    answer: "The worker's pass ends and logs the error; the next pass, 15 seconds later, tries again. No caller waits on it.",
   },
   // Linking Google from the profile page, and unlinking it (docs/google-sign-in-design.md §5.3).
   {
@@ -2423,6 +2447,9 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  // A new account's welcome email row (docs/welcome-email-design.md §3.3): a plain read of email_settings, then one
+  // INSERT into email_outbox under its unique (kind, user_id) and its foreign key to the account just inserted.
+  { at: 'email/email-outbox.ts#enqueueWelcome', under: 'auth/google-login.service.ts#link (a SIGNUP) and users/users.util.ts#createOrResetUser (a new account)' },
   { at: 'sessions/run-notify.ts#recordRunNotify', under: 'sessions.createTurn onTurnWritten, under the recipient Session lock (rank 30). One session_request INSERT (rank 60), whose recipient foreign key names that locked row. The request id and clientTurnId are minted before the retried transaction; a replay of a committed turn never reaches the hook. Turn and request roll back together, with no external effects. A refused or exhausted createTurn is caught by notifyAgentMessage and falls back to the owner after rollback.' },
   // An owner request's ending delivered to the session that asked (migration 0504): its watch_delivery row.
   { at: 'owner-requests/owner-request-endings.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle and #expireDue, and owner-requests/owner-secrets.service.ts#ack' },
@@ -3199,7 +3226,9 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "users/users.controller.ts#setAvatar", class: "ONE_ROW_BY_KEY", statements: 1, note: "Setting one's profile photo (migration 0335): one upsert keyed by user_avatar's primary key, the caller's own user id, so a second photo takes the row over rather than writing another. Its foreign key to user(id) takes FOR KEY SHARE on the caller's user row, which only an admin deleting that account would conflict with; nothing else is locked." },
   { at: "users/users.controller.ts#updatePreferences", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.controller.ts#updateProfile", class: "ONE_ROW_BY_KEY", statements: 1 },
-  { at: "users/users.util.ts#createOrResetUser", class: "INSERT", statements: 2, note: "Two spellings, one write per call — update when the user exists, insert when not." },
+  // Admin → Email (docs/welcome-email-design.md §3.1, migration 0516), and an administrator's Send welcome email (§3.5).
+  { at: "email/email-settings.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1, note: "An administrator's save of the email setting: one INSERT … ON CONFLICT (id) DO UPDATE of the one `email_settings` row (id 1), keyed by its primary key. The table has no foreign key and no trigger, so the statement takes that row and nothing else. Two saves racing both land, the later one whole." },
+  { at: "email/email-outbox.ts#resendWelcome", class: "ONE_ROW_CAS", statements: 1, note: "One UPDATE of the account's WELCOME row by its unique (kind, user_id), predicated on status FAILED or SKIPPED, back to PENDING with attempts cleared and generation + 1; the read after it is a plain SELECT. A worker holding the row FOR UPDATE makes it wait until that send commits, after which the row is SENT or PENDING and the predicate matches nothing. email_outbox's foreign key is to `user` and the UPDATE changes no key column, so no parent is re-checked; no trigger." },
   { at: "watches/watch-delivery.service.ts#claimDue", class: "MANY_ROWS", statements: 1, note: "The delivery lease: a batch of due PENDING deliveries moved to IN_FLIGHT, each under its own lease generation. `FOR UPDATE SKIP LOCKED` passes over a row another claim or settlement holds instead of waiting for it, so the statement has no wait edge; a delivery it skips is still due on the next pass." },
   { at: "watches/watch-delivery.service.ts#defer", class: "ONE_ROW_CAS", statements: 1, note: "A wake a continuous watch may not give yet, put back to PENDING until its window ends, only while the claim's lease generation is still the row's. No attempt is counted; a lost CAS means a takeover holds the row and settles it." },
   { at: "watches/watch-delivery.service.ts#fail", class: "ONE_ROW_CAS", statements: 1, note: "A failed attempt, recorded only while the claim's lease generation is still the row's: back to PENDING on the backoff, or a dead letter at the attempt cap or on a refusal. A lost CAS means a takeover holds the row and settles it. Its caller announces `watch.changed` for the attempt that made the row a dead letter, and for none that still has a retry to come." },

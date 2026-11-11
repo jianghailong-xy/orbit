@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { generateToken, hashPassword } from '../common/crypto.util';
+import { enqueueWelcome } from '../email/email-outbox';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto';
 
@@ -8,8 +9,10 @@ import { CreateUserDto } from './dto';
  * role-gated admin UI. A freshly generated password is returned once when none was supplied.
  * `passwordless` creates the account with no password at all — it signs in with Google
  * (docs/google-sign-in-design.md §5.4) — and never touches an account that exists.
+ * A new account gets its welcome email row in the transaction that creates it, naming `adminId` as
+ * who added it (docs/welcome-email-design.md §3.3, D3); a password reset gets none.
  */
-export async function createOrResetUser(prisma: PrismaService, dto: CreateUserDto) {
+export async function createOrResetUser(prisma: PrismaService, dto: CreateUserDto, adminId: string) {
   const email = dto.email.trim();
   const name = dto.name?.trim() || email.split('@')[0];
 
@@ -35,7 +38,11 @@ export async function createOrResetUser(prisma: PrismaService, dto: CreateUserDt
 
   const user = existing
     ? await prisma.user.update({ where: { email }, data: { passwordHash } })
-    : await prisma.user.create({ data: { email, name, passwordHash } });
+    : await prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({ data: { email, name, passwordHash } });
+        await enqueueWelcome(tx, created, adminId);
+        return created;
+      });
 
   return {
     id: user.id,

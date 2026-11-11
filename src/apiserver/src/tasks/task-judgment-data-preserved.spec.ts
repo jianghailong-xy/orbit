@@ -2903,6 +2903,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0512_project_done_task_epochs',
       // 0513 adds attribution and admits its explicit retry; no preserved row or fence changes.
       '0513_integration_baseline_red',
+      // 0516 adds the one-row email_settings table only (docs/welcome-email-design.md §3.1); no preserved rows,
+      // triggers or DONE fence change, and no row is written.
+      '0516_email_settings',
+      // 0517 adds the email_outbox table, its indexes and its foreign key to "user" only; no preserved rows,
+      // triggers or DONE fence change, and no row is written.
+      '0517_email_outbox',
       // 0519 creates `key_gateway_token` only; no existing table, trigger or DONE fence is touched.
       '0519_key_gateway_token',
       // 0520 adds a nullable `model_provider.spent_until` only; no preserved row, trigger or DONE fence changes.
