@@ -108,8 +108,8 @@ abstract class LandingSessionFrames {
 
     /** The landing's menu: a long-press on its card. */
     private fun longPress() {
-        await { exists(hasTestTag("landing-head")) }
-        compose.onNode(hasTestTag("landing-status-card")).performSemanticsAction(SemanticsActions.OnLongClick)
+        await { exists(hasTestTag("landing:card-line")) }
+        compose.onNode(hasTestTag("landing:card-line")).performSemanticsAction(SemanticsActions.OnLongClick)
     }
 
     private fun backOnce() {
@@ -137,9 +137,9 @@ abstract class LandingSessionFrames {
         assertTrue(text("landing-head:detail")!!.matches(Regex("checking · output \\d+s ago · claim 1 · round 1 of 3 · updated just now")))
         assertTrue(text("landing:budget")!!.matches(Regex("Task acceptance 1m 5\\ds of 60m")))
         assertTrue(text("landing:live")!!.matches(Regex("Output \\d+s ago · Updated just now")))
-        assertEquals("Generation 1", text("landing:section-title:j-1"))
-        assertTrue(exists(hasText("Claimed by runner wikova · claim 1")))
+        // The record as the chat's tool rows: the running check's step open with its live tail; the claim's line in its own step.
         assertTrue(exists(hasTestTag("landing:live-check")))
+        assertTrue(exists(hasText("Claimed by runner wikova · claim 1"), unmerged = true))
         shot("01-checking")
 
         // ② A timed-out LAND_TASK (05 i, 07): the whole card amber, the runner's last word, J12's sentence, Retry and Abandon.
@@ -164,7 +164,8 @@ abstract class LandingSessionFrames {
             liveness = "LEASE_EXPIRED", phase = "PUSH", step = 1380, heartbeat = 1380,
             timeline = timeline(arrayOf(Fact("STEP", "2026-10-20T15:42:00Z", "Reported starting the push to project/launch", phase = "PUSH")),
                 title = "Merge to main · 1", kind = "LAND_PROMOTION")))
-        await { text("landing-head:title") == "Merge to main" }
+        // The round's word leads its name: the line's title is how it stands (docs/mocks/landings-chat-tools-native).
+        await { text("landing:task-name")?.startsWith("Merge to main") == true }
         assertEquals("Timed out", text("landing-head:right"))
         assertTrue(text("landing:push-sentence")!!.startsWith("May have been pushed"))
         assertFalse(exists(hasTestTag("landing:retry")))
@@ -192,9 +193,9 @@ abstract class LandingSessionFrames {
         openLanding(view(subject = "PROMOTION", taskId = null, promotionId = "pr-1", kind = "LAND_PROMOTION", state = "MERGED",
             settledAt = ago(600), settledAs = "MERGED",
             checks = """[{"name":"MERGE_CHECK","expectedExitCode":0,"exitCode":0,"timedOut":false,"durationMs":1061000}]"""))
-        await { text("landing-row:title") == "Merged into main" }
-        assertEquals("8ed0ea7 · 2 tasks · automatically", text("landing-row:detail"))
-        assertEquals("⇢", text("landing-row:mark"))
+        await { text("landing-line:title") == "Merged into main" }
+        assertEquals("8ed0ea7 · 2 tasks · automatically", text("landing-row:name"))
+        assertEquals("check 17m 41s", text("landing-line:status"))
         assertTrue(exists(hasText("Now on main · 2 tasks"), unmerged = true))
         assertTrue(exists(hasText("✓ Passed on the combined tree · 17m 41s"), unmerged = true))
         assertTrue(exists(hasText("Landed exactly the tested tree 5e5bfca · as a merge commit"), unmerged = true))

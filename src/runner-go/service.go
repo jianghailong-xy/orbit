@@ -255,9 +255,9 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) (*runnerServ
 		return run(sudo, append([]string{"systemctl"}, args...)...)
 	}
 
-	// The unit runs the copy in the user's ~/.orbit/bin — moved there first if it still sits
+	// The unit runs the copy in the user's ~/.orbit/bin — copied there first if the binary sits
 	// in root's /usr/local/bin — so the runner can replace it when it updates itself.
-	exe = adoptUserBin(exe, u, systemdServicesRunning(serviceUnitDir, exe), root, sudo)
+	exe = adoptUserBin(exe, u, root, sudo)
 	unit := renderSystemdUnit(u.Username, grp, exe, u.HomeDir, orbitHome, pathEnv, proxyVars)
 
 	// Write the unit file (root writes it directly; non-root installs it via sudo).
@@ -545,14 +545,14 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) (*runnerSe
 	// run would make it unreadable/unwritable.
 	ensureOwnedByUser(orbitHome)
 
-	// The agent runs the copy in the user's ~/.orbit/bin — moved there first if it still sits
+	// The agent runs the copy in the user's ~/.orbit/bin — copied there first if the binary sits
 	// in root's /usr/local/bin — so the runner can replace it when it updates itself.
 	if u, err := registeringUser(); err == nil {
 		sudo := ""
 		if s, err := exec.LookPath("sudo"); err == nil && interactive() {
 			sudo = s
 		}
-		exe = adoptUserBin(exe, u, nil, processEUID() == 0, sudo)
+		exe = adoptUserBin(exe, u, processEUID() == 0, sudo)
 	}
 
 	// launchd starts agents with a minimal PATH and no HOME, so the `claude` CLI

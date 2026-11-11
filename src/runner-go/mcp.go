@@ -936,6 +936,18 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			"have happened; the next job on this repository and branch can be claimed now.\n"+
 			prettyJSON(raw), false)
 
+	case "integration_request_promotion":
+		id := getString(args, "projectId")
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if id == "" || reason == "" {
+			return toolResult("projectId and a nonblank reason are required", true)
+		}
+		raw, err := s.t.requestPromotion(s.sessionID, id, reason)
+		if err != nil {
+			return toolResult("integration request promotion failed: "+err.Error(), true)
+		}
+		return toolResult("Promotion request recorded. It remains pending until a candidate is created; normal checks and merge authorization still apply.\n"+prettyJSON(raw), false)
+
 	case "integration_observe":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -4295,6 +4307,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"characters, and kept on the job as the record of why the work was given up.",
 				},
 			}, "projectId", "jobId", "reason"),
+		},
+		{
+			"name":        "integration_request_promotion",
+			"description": "Request a promotion of this project's integration branch into main before all criteria are satisfied. Only the project's current coordinator conversation may ask. Give a nonblank reason of at most 2000 characters. The request remains pending until one candidate consumes it in the candidate's transaction. The landing queue must still be empty and the tip uncovered. Normal promotion checks and owner or Automatic authorization still apply; this request does not authorize a merge.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{"type": "string", "description": "project whose integration branch should be promoted"},
+				"reason":    map[string]interface{}{"type": "string", "description": "why this promotion is needed now; 1 to 2000 characters after trimming"},
+			}, "projectId", "reason"),
 		},
 		{
 			"name": "integration_observe",

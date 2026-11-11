@@ -1,3 +1,4 @@
+import { seedPromotionRequest } from '../test-support/promotion-request';
 /**
  * The sentences the server writes about a merge into the project's main branch, read through the
  * doors that serve them, on real PostgreSQL (project 34cjQN5ynG6eIH5A0neeu, criterion 4). Each names
@@ -253,6 +254,7 @@ test('the sentences about a merge into main name the project’s main branch, an
       state: 'LANDED', phase: 'VERIFY', sourceSha: sha('d'), targetShaBefore: UPSTREAM_TIP, upstreamSha: UPSTREAM_TIP,
       testedSha: LINE_TIP, testedTreeSha: sha('e'), landedSha: LINE_TIP, landedTreeSha: sha('e'), aheadOfUpstream: 1,
     });
+    await seedPromotionRequest(prisma, w.projectId);
     const made = await promotions.considerCandidate(w.projectId);
     assert.ok(made, 'the landing made a candidate');
     return { promotionId: made.promotionId, check: await claim(w, 'CHECK_PROMOTION') };

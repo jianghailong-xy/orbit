@@ -1926,6 +1926,13 @@ export async function applyIntegrationJobResult(
   if (!REPORTABLE_JOB_STATES.includes(state as never) || !isTerminalJobState(state)) {
     throw new IntegrationJobRefused('INVALID_RESULT', `${state} is not a result`);
   }
+  for (const check of body.checks ?? []) {
+    if (check.skipped !== undefined && (check.skipped !== 'PATHS_EXEMPT'
+      || check.name !== 'LANDING_CHECK' || !Array.isArray(check.files) || check.files.length === 0
+      || !check.files.every((file) => typeof file === 'string' && file.length > 0))) {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'a skipped landing check names PATHS_EXEMPT and its files');
+    }
+  }
   // J2, said before the database says it, so the runner gets the reason rather than a constraint.
   if (state === 'LANDED' && (!body.landedTreeSha || body.landedTreeSha !== body.testedTreeSha)) {
     throw new IntegrationJobRefused(
@@ -2059,6 +2066,9 @@ export async function applyIntegrationJobResult(
     }
     // §10.6: OBSERVED and OBSERVE are an observation's alone, and an observation ends only OBSERVED,
     // ERROR or CANCELLED — said by the kind of the row, now that it is read.
+    if (job.kind !== 'LAND_TASK' && body.checks?.some((check) => check.skipped !== undefined)) {
+      throw new IntegrationJobRefused('INVALID_RESULT', 'only LAND_TASK may skip a landing check');
+    }
     const misfit = observationRefusal(job.kind, { state, phase: body.phase ?? null });
     if (misfit) throw new IntegrationJobRefused('INVALID_RESULT', misfit);
     // O-J3: an observation that looked writes what it saw, task by task, with its terminal state.
@@ -2982,6 +2992,7 @@ async function appendResultEvents(
       data: {
         name: check.name,
         index,
+        ...(check.skipped ? { skipped: check.skipped, files: check.files } : {}),
         exitCode: check.exitCode,
         expectedExitCode: check.expectedExitCode,
         timedOut: check.timedOut,
@@ -3560,7 +3571,7 @@ function fullyAppliedComment(input: {
     };
   }
   if (state === 'CHECK_FAILED') {
-    const failed = detail.checks.find((check) => check.exitCode !== check.expectedExitCode)
+    const failed = detail.checks.find((check) => !check.skipped && check.exitCode !== check.expectedExitCode)
       ?? detail.checks[detail.checks.length - 1];
     return {
       jobKind: detail.kind,

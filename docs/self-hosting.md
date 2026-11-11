@@ -185,6 +185,23 @@ register`. Registration says the machine is online only once its service has rea
 does not happen within two minutes, `orbit register` says why, shows the end of the service's log and the
 commands to look further, and exits non-zero.
 
+The service runs the account's own copy at `~/.orbit/bin/orbit`, which the runner replaces when it updates itself.
+`/usr/local/bin/orbit`, which `sudo orbit` finds, stays root's own file. When the binary registering sits in
+`/usr/local/bin`, as an older install's does, register copies it into `~/.orbit/bin` and leaves
+`/usr/local/bin/orbit` as it is, so that `orbit` falls behind the runner's updates until root runs
+`sudo /usr/local/bin/orbit upgrade`. `orbit version` and `~/.orbit/bin/orbit version` show the two. Earlier
+releases of register and upgrade replaced `/usr/local/bin/orbit` with a link to the account's copy, which made
+every `sudo orbit …` run a file the account can change as root. The next register or `sudo orbit upgrade` puts a
+root-owned copy back in place of the link and says so:
+
+```text
+✓ /usr/local/bin/orbit is root's own copy again, not a link to a file this account can change; `sudo /usr/local/bin/orbit upgrade` keeps it current.
+```
+
+That command still runs the linked file as root once, before it can replace the link. Where an account may already
+have changed its copy, put a verified release at `/usr/local/bin/orbit` first
+([details](runner-machine-binary-design.md#what-the-repair-cannot-undo)).
+
 Scripts can also act as a person rather than a machine. A user logs the `orbit` CLI in with a personal
 access token, on a runner or on any other machine. `orbit login` opens the deployment's `/cli-login` page to
 approve one, and `--with-token` takes one issued under **Settings → Access tokens**:

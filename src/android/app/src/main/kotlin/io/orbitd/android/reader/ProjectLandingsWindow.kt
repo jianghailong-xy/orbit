@@ -41,7 +41,9 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.cards.PromotionReceiptSheet
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.number
 import io.orbitd.android.core.cards.obj
+import io.orbitd.android.core.cards.objects
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.directory.DirectoryApi
 import io.orbitd.android.directory.DirectorySession
@@ -60,6 +62,8 @@ import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
 import io.orbitd.android.projects.ProjectApi
+import io.orbitd.android.projects.ProjectPage
+import io.orbitd.android.projects.ProjectTime
 import io.orbitd.android.projects.failureReason
 import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.realtime.PagePolls
@@ -86,8 +90,6 @@ import kotlinx.serialization.json.JsonObject
 
 /** How long a landing the window was opened on stays outlined (board 03 f). */
 private const val FOCUS_OUTLINE_MS = 1_500L
-/** The room a settled bubble's column leaves at its end, like an incoming chat message's (board 01 b); `Now`'s cards take it. */
-private val BUBBLE_END_GUTTER = 44.dp
 /** How often the two lists are read again while the window shows a landing in hand (the web's 15 s), and the merges into main (its
  *  60 s); with none in hand, as the account stream says (PagePoll). */
 private const val LISTS_READ_MS = 15_000L
@@ -399,12 +401,13 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
                         else CircularProgressIndicator(Modifier.size(20.dp).testTag("landings:loading"), strokeWidth = 2.dp)
                     }
                     is WindowItem.Day -> DayChip(item.title, item.now)
-                    is WindowItem.Settled -> GroupMessage(item.first, item.last, gap = 6.dp,
-                        gutter = if (item.row.tone == LandingsWindowTone.MERGE) 0.dp else BUBBLE_END_GUTTER) {
+                    is WindowItem.Settled -> GroupMessage(item.first, item.last, gap = 2.dp, gutter = 0.dp) {
                         val row = item.row
                         val record = row.sessionId?.let(::recordOf)
                         val expanded = row.id in state.expanded
-                        LaunchedEffect(expanded, row.sessionId) { if (expanded) row.sessionId?.let(::readRecord) }
+                        // A settled line reads its record once, when it is first drawn, for its chip (iOS `readOnce`): the list draws
+                        // only what is on screen.
+                        LaunchedEffect(row.sessionId) { row.sessionId?.let(::readRecord) }
                         val coordinator = state.coordinatorId
                         // A settled landing has no doors, only the ways to look; a merge older than landing sessions has no view to
                         // read, and keeps its round's two ways in.
@@ -420,7 +423,6 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
                             onAction = { action -> act(row.id, record?.view, coordinator, row.promotion, action) },
                             onLog = onLog(row.sessionId ?: row.key))
                     }
-                    // `Now`'s cards are wider than a bubble: they take the whole column, no end gutter.
                     is WindowItem.InHand -> GroupMessage(item.first, last = false, gap = 8.dp, gutter = 0.dp) {
                         val card = item.card
                         val read = state.cards[card.sessionId] ?: LandingSessionRead()
@@ -468,10 +470,10 @@ private fun outline(outlined: Boolean, shape: Shape): Modifier {
 }
 
 /**
- * One settled landing, a message bubble from Orbit (board 01 b ①②): the task's name whole, then a foot with the mark that says how it
- * ended, the line under it and the moment it settled at the end. It hugs what it says, up to its column. A tap opens its record under
- * it, at the column's width on a quiet panel — the old landing page's timeline (board 03 e); a merge into main opens to its receipt
- * first — and folds it again. A long-press opens its menu.
+ * One settled landing as the session chat's background-job line (owner 2026-11-11, docs/mocks/landings-chat-tools-native): the mark,
+ * how it ended, how long its checks took, the moment it settled and `Details ›`, the task's name under them. A merge into main is the
+ * same line. A tap opens what it carries under it, off its mark — a merge's receipt first, then the steps — and folds it again; a
+ * long-press opens its menu.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -479,58 +481,34 @@ private fun LandingWindowRow(row: LandingsWindowRow, record: LandingSessionRead?
     menuItems: List<LandingMenuItem>?, now: Instant, zone: ZoneId, onToggle: () -> Unit, onMenu: () -> Unit, onMenuDismiss: () -> Unit,
     onAction: (LandingMenuAction) -> Unit, onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val ink = when (row.tone) {
-        LandingsWindowTone.OK -> LocalOrbitColors.current.success
-        LandingsWindowTone.MERGE -> MaterialTheme.colorScheme.primary
-        LandingsWindowTone.QUIET -> muted
-    }
     val view = record?.view
-    val bubble = RoundedCornerShape(16.dp)
-    val foot = MaterialTheme.typography.bodySmall
-    Column(Modifier.fillMaxWidth().testTag("landing-entry:${row.id}"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val merge = row.tone == LandingsWindowTone.MERGE
+    // How long the checks took: the round's merged record, else the landing's own read.
+    val checkMs = (if (merge) LandingSteps.checksDurationMs(row.promotion?.objects("checks").orEmpty().map { it.number("durationMs") }) else null)
+        ?: LandingSteps.checksDurationMs(view?.checks.orEmpty().map { it.durationMs })
+    val shape = RoundedCornerShape(8.dp)
+    Column(Modifier.fillMaxWidth().testTag("landing-entry:${row.id}"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (outlined) Box(Modifier.size(0.dp).testTag("landing:outlined"))
-        // A merge into main is an event, not a message: one centred line, as a chat draws what happened in it
-        // (docs/mocks/landings-ui-polish ②). It keeps the row's press, long-press and parts.
-        if (row.tone == LandingsWindowTone.MERGE) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val line = RoundedCornerShape(8.dp)
-            Row(Modifier.then(outline(outlined, line)).clip(line)
-                .combinedClickable(role = Role.Button, onLongClickLabel = "Landing actions", onClick = onToggle, onLongClick = onMenu)
-                .padding(horizontal = 10.dp, vertical = 4.dp).testTag("landing-row:${row.id}"),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("⇢", Modifier.testTag("landing-row:mark"), style = foot, fontWeight = FontWeight.SemiBold, color = ink)
-                Text(row.title, Modifier.testTag("landing-row:title"), style = foot, fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), maxLines = 1, softWrap = false)
-                Text("·", style = foot, color = muted)
-                Text(row.detail, Modifier.weight(1f, fill = false).testTag("landing-row:detail"), style = foot, color = muted, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
-                if (row.time.isNotEmpty()) {
-                    Text("·", style = foot, color = muted)
-                    Text(row.time, Modifier.testTag("landing-row:time"), style = foot.copy(fontFeatureSettings = "tnum"), color = muted,
-                        maxLines = 1, softWrap = false)
-                }
-            }
-            LandingEntryMenu(menuOpen && menuItems?.isEmpty() != true, menuItems, onMenuDismiss, onAction)
-        } else Box {
-            Column(Modifier.width(IntrinsicSize.Max).then(outline(outlined, bubble)).clip(bubble)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .combinedClickable(role = Role.Button, onLongClickLabel = "Landing actions", onClick = onToggle, onLongClick = onMenu)
-                .padding(start = 13.dp, end = 13.dp, top = 9.dp, bottom = 8.dp).testTag("landing-row:${row.id}"),
-                verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(row.title, Modifier.testTag("landing-row:title"), style = MaterialTheme.typography.bodyLarge)
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(when (row.tone) { LandingsWindowTone.OK -> "✓"; LandingsWindowTone.MERGE -> "⇢"; LandingsWindowTone.QUIET -> "◌" },
-                        Modifier.testTag("landing-row:mark"), style = foot, fontWeight = FontWeight.SemiBold, color = ink)
-                    Text(row.detail, Modifier.weight(1f).testTag("landing-row:detail"), style = foot, color = muted, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis)
-                    if (row.time.isNotEmpty()) Text(row.time, Modifier.padding(start = 8.dp).testTag("landing-row:time"),
-                        style = foot.copy(fontFeatureSettings = "tnum"), color = muted, maxLines = 1, softWrap = false)
-                }
-            }
+        Box {
+            LandingLine(
+                kind = when (row.tone) {
+                    LandingsWindowTone.OK -> LandingLineKind.OK
+                    LandingsWindowTone.MERGE -> LandingLineKind.MERGE
+                    LandingsWindowTone.QUIET -> LandingLineKind.QUIET
+                },
+                title = if (merge) row.title else row.detail,
+                name = if (merge) row.detail else row.title,
+                status = checkMs?.let { "${LandingStepCopy.CHECK} ${LandingSessionModel.duration(it)}" },
+                time = row.time, open = expanded,
+                modifier = Modifier.then(outline(outlined, shape)).clip(shape)
+                    .combinedClickable(role = Role.Button, onLongClickLabel = "Landing actions", onClick = onToggle, onLongClick = onMenu)
+                    .testTag("landing-row:${row.id}"),
+                nameTag = "landing-row:name")
             LandingEntryMenu(menuOpen && menuItems?.isEmpty() != true, menuItems, onMenuDismiss, onAction)
         }
-        if (expanded) Column(Modifier.fillMaxWidth().testTag("landing:record-panel").background(muted.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-            .padding(start = 12.dp, end = 12.dp, top = 11.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (row.tone == LandingsWindowTone.MERGE) LandingReceiptBlock(LandingSessionModel.mergeReceipt(row.promotion, view))
+        if (expanded) Column(Modifier.fillMaxWidth().padding(start = LANDING_LINE_INDENT, bottom = 6.dp).testTag("landing:record-panel"),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (merge) LandingReceiptBlock(LandingSessionModel.mergeReceipt(row.promotion, view))
             if (row.sessionId != null) {
                 if (view != null) {
                     LandingRecord(view, now, zone, onLog)
@@ -569,9 +547,20 @@ private fun LandingWindowCard(card: LandingsWindowCard, read: LandingSessionRead
             LandingMenuAction.REVIEW_CARD.takeIf { view.subject == "PROMOTION" && read.currentPromotion() != null })
     val toggle by rememberUpdatedState(onToggle)
     val menu by rememberUpdatedState(onMenu)
+    val settled = view?.settledAt != null
+    val running = !settled && attempt?.state == "RUNNING" && !attempt.timedOut
+    val timedOut = !settled && attempt?.timedOut == true
+    val waiting = !settled && card.state == "AWAITING_DECISION"
+    // What needs a look stays open: a landing that runs, waits for a decision or timed out (docs/mocks/landings-chat-tools-native g).
+    val open = expanded || running || waiting || timedOut
     Column(Modifier.fillMaxWidth().then(outline(outlined, RoundedCornerShape(14.dp))).testTag("landing-entry:${card.sessionId}"),
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (outlined) Box(Modifier.size(0.dp).testTag("landing:outlined"))
+        // A landing that runs is the chat's turn in hand: its Working for head over it.
+        if (running) ProjectTime.parse(attempt!!.startedAt)?.let { started ->
+            Text("${LandingStepCopy.WORKING_FOR} ${ProjectPage.landingClock(kotlin.math.max(0.0, ProjectTime.between(started, now)))}",
+                Modifier.testTag("landing:working-for"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Box {
             // The whole card is the press, and a long-press anywhere on it the menu; its own doors keep their presses.
             LandingStatusCard(read, view, attemptCard, outcome, now, onAction,
@@ -579,16 +568,16 @@ private fun LandingWindowCard(card: LandingsWindowCard, read: LandingSessionRead
                     .semantics {
                         onClick { toggle(); true }
                         onLongClick("Landing actions") { menu(); true }
-                    },
-                taskName = card.title, expanded = expanded, waitDoors = waitDoors)
+                    }.testTag("landing:card-line"),
+                taskName = card.title, expanded = open, waitDoors = waitDoors)
             LandingEntryMenu(menuOpen && menuItems?.isEmpty() != true, menuItems, onMenuDismiss, onAction)
         }
         read.refusal?.let { refusal ->
             Text(refusal, Modifier.padding(horizontal = 4.dp).testTag("landing:refusal"), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error)
         }
-        if (expanded && view != null) Column(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (open && view != null) Column(Modifier.fillMaxWidth().padding(start = LANDING_LINE_INDENT, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
             LandingRecord(view, now, zone, onLog)
             LandingEntryLinks(view, onAction)
         }

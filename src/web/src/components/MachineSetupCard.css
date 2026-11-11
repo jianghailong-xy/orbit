@@ -317,3 +317,61 @@
 .msc-created-name {
   width: 160px;
 }
+
+/* A new account's welcome card (docs/mocks/new-user-onboarding): the same card, greeting first, with
+   three first messages to try under its steps. */
+.welcome-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.welcome-example {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.welcome-example:hover {
+  border-color: var(--brand-border);
+}
+
+.welcome-example.on {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+
+.welcome-later {
+  margin-top: 6px;
+  color: var(--text-3);
+}
+
+.welcome-card .welcome-managed {
+  margin: 8px 0 0;
+}
+
+a.msc-change:hover {
+  color: var(--brand-strong);
+  text-decoration: underline;
+}
+
+.welcome-cmd {
+  margin: 8px 0 6px;
+}
+
+/* The registration guide's OS switch and command, inside the card's first step. */
+.welcome-card .runner-os.orbit-segmented {
+  margin: 8px 0 0;
+}
+
+.welcome-card .runner-cmd-text {
+  font-size: 12px;
+}
