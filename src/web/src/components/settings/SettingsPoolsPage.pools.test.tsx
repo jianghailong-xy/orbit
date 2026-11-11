@@ -4,21 +4,21 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../api';
-import { encodeId } from '../lib/idCodec';
-import type { ProviderRow } from '../lib/providerAdmin';
-import { formatResetTime, type PoolMember, type ProviderPool } from '../lib/providerPools';
-import { InfrastructurePage } from './InfrastructurePage';
-import { ProviderPoolPage } from './ProviderPoolPage';
+import { api } from '../../api';
+import { encodeId } from '../../lib/idCodec';
+import type { ProviderRow } from '../../lib/providerAdmin';
+import { formatResetTime, type PoolMember, type ProviderPool } from '../../lib/providerPools';
+import { SettingsPoolsPage } from './SettingsProviderPages';
+import { ProviderPoolPage } from '../../pages/ProviderPoolPage';
 
 /**
- * The Account pools section of /infrastructure and the pool's own page, mounted for real against a fake
+ * Settings' Account pools page (/settings/providers/pools) and the pool's own page, mounted for real against a fake
  * API: which of them renders for which keys, what a pool's head says, what each account's row says,
  * and what the Add account / Create a pool dialog lets through.
  */
 
-vi.mock('../api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api')>()),
+vi.mock('../../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../api')>()),
   api: vi.fn(),
 }));
 const apiMock = vi.mocked(api);
@@ -86,7 +86,7 @@ interface Posted {
   body?: unknown;
 }
 
-describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
+describe('Account pools in Settings', { timeout: 30_000 }, () => {
   let container: HTMLDivElement;
   let root: Root;
   let client: QueryClient;
@@ -123,9 +123,9 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
           <MemoryRouter initialEntries={[at]}>
             <Probe />
             <Routes>
-              <Route path="/infrastructure" element={<InfrastructurePage />} />
-              <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
-              <Route path="/providers/:id" element={<div>provider page</div>} />
+              <Route path="/settings/providers/pools" element={<SettingsPoolsPage />} />
+              <Route path="/settings/providers/pools/:id" element={<ProviderPoolPage />} />
+              <Route path="/settings/providers/keys/:id" element={<div>provider page</div>} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
@@ -139,8 +139,6 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
     Array.from(container.querySelectorAll<HTMLElement>('.re-sec')).find((el) =>
       el.querySelector('h3')?.textContent === 'Account pools',
     ) ?? null;
-  const heading = (words: string) =>
-    Array.from(container.querySelectorAll<HTMLElement>('h3')).find((el) => el.textContent === words) ?? null;
   /** Whether `a` comes before `b` in the document. */
   const before = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
   const rowOf = (label: string) =>
@@ -214,33 +212,32 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
   it('with no pool, the section is its head alone, and offers no Claude pool while fewer than two keys could join one', async () => {
     keys = [WORK, METERED, GATEWAY];
     pools = [];
-    await mount('/infrastructure');
-    expect(heading('API keys')).not.toBeNull();
-    // It stands before there is a pool, saying what one is; the page's Add makes one, a Codex one included.
-    expect(section()!.querySelector('button')).toBeNull();
+    await mount('/settings/providers/pools');
+    // It stands before there is a pool, saying what one is; its heading's New account pool makes one, a Codex
+    // one included, and is the only press on it.
+    expect([...section()!.querySelectorAll('button')].map((el) => el.textContent)).toEqual(['New account pool']);
     expect(section()!.querySelector('.pool-card')).toBeNull();
     expect(text()).not.toContain('Create a pool');
 
     keys = [METERED, GATEWAY];
     await act(async () => root.unmount());
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(section()!.querySelector('.pool-card')).toBeNull();
     expect(text()).not.toContain('Create a pool');
   });
 
-  it('offers a pool at the top of the API keys once two keys could join and there is none', async () => {
+  it('offers a pool above the pools once two keys could join and there is none', async () => {
     keys = [WORK, HOME, METERED];
     pools = [];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(section()!.querySelector('.pool-card')).toBeNull();
     const hint = container.querySelector<HTMLElement>('.pool-hint');
     expect(hint?.textContent).toContain('2 of your keys are Claude subscriptions.');
-    // At the top of the keys section: after its heading, before the keys' cards.
-    expect(before(heading('API keys')!, hint!)).toBe(true);
-    expect(before(hint!, container.querySelector('.vk-cards')!)).toBe(true);
+    // At the top of the page, above the pools section.
+    expect(before(hint!, section()!)).toBe(true);
   });
 
-  it("heads a pool with the next account's own gauge, not an average, after the machines and the keys", async () => {
+  it("heads a pool with the next account's own gauge, not an average", async () => {
     keys = [WORK, HOME, SPARE];
     pools = [
       pool([
@@ -249,11 +246,9 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
         member(SPARE, { state: 'SPENT', planUsage: fiveHour(100), resetsAt: at(HOUR) }),
       ]),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     const sec = section();
     expect(sec).not.toBeNull();
-    expect(before(heading('Machines')!, heading('API keys')!)).toBe(true);
-    expect(before(heading('API keys')!, sec!)).toBe(true);
 
     const head = sec!.querySelector<HTMLElement>('.re-head')!;
     expect(head.textContent).toContain('Claude accounts');
@@ -264,7 +259,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
     expect(gauge.textContent).toContain('20%');
     // (80 + 20 + 100) / 3 — what an average would have drawn.
     expect(gauge.textContent).not.toContain('67%');
-    expect(head.querySelector('a')?.getAttribute('href')).toBe(`/providers/pools/${POOL_ID}`);
+    expect(head.querySelector('a')?.getAttribute('href')).toBe(`/settings/providers/pools/${POOL_ID}`);
   });
 
   it('says in each row where that account stands', async () => {
@@ -283,7 +278,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
         member(setup, { state: 'USAGE_UNKNOWN' }),
       ]),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     const tag = (label: string) => rowOf(label)?.querySelector('.pool-status')?.textContent;
     expect(tag('Work')).toBe('Running now');
     expect(tag('Home')).toBe('Available');
@@ -306,7 +301,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
     // A refused key's way back is a new key, on that provider's own page.
     expect(button('Re-add key', rowOf('Work')!)).toBeNull();
     await click(button('Re-add key', rowOf('Old laptop')!));
-    expect(path).toBe(`/providers/${refused.id}`);
+    expect(path).toBe(`/settings/providers/keys/${refused.id}`);
   });
 
   it('counts out an account the pool would no longer admit, and says why on its row', async () => {
@@ -321,7 +316,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
         member(GATEWAY, { state: 'NO_QUOTA' }),
       ]),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(section()!.querySelector('.re-head')?.textContent).toContain('2 of 4 accounts available');
     const tag = (label: string) => rowOf(label)?.querySelector('.pool-status')?.textContent;
     const why = (label: string) => rowOf(label)?.querySelector('.pool-why')?.textContent ?? null;
@@ -345,7 +340,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
       },
       { ...pool([]), id: id(901), slug: 'claude-accounts-2', label: 'Empty', unavailable: 'No accounts' },
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     const [stuck, empty] = Array.from(section()!.querySelectorAll<HTMLElement>('.pool-card'));
     expect(stuck.querySelector('.re-head')?.textContent).toContain('0 of 2 accounts available');
     expect(stuck.querySelector('.pool-gauge')?.textContent).toBe('No account can run');
@@ -364,7 +359,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
   it('does not call a pool of one account it no longer admits the same as that account', async () => {
     keys = [WORK, METERED];
     pools = [{ ...pool([member(METERED, { state: 'NO_QUOTA' })]), unavailable: 'No account can run' }];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(section()?.textContent).toContain('0 of 1 account available');
     expect(section()?.textContent).not.toContain('the same as using');
   });
@@ -381,7 +376,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
         member(laptop, { state: 'USAGE_UNKNOWN' }),
       ]),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(section()!.querySelector('.re-head')?.textContent).toContain('2 of 2 accounts available');
     expect(section()!.querySelector('.pool-gauge')?.textContent).toContain('Next: Setup token');
     expect(section()!.textContent).not.toContain('No account can run');
@@ -401,7 +396,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
         early,
       ),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     const head = section()!.querySelector<HTMLElement>('.re-head')!;
     expect(head.textContent).toContain('0 of 2 accounts available');
     const gauge = head.querySelector<HTMLElement>('.pool-gauge')!.textContent;
@@ -412,7 +407,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
   it('keeps a pool of one account honest about being that account', async () => {
     keys = [WORK, HOME];
     pools = [pool([member(WORK, { state: 'AVAILABLE', planUsage: fiveHour(10), next: true })])];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(section()?.textContent).toContain('With one account this pool is the same as using Work on its own.');
     expect(section()?.textContent).toContain('1 of 1 account available');
   });
@@ -426,7 +421,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
         member(HOME, { state: 'AVAILABLE', planUsage: fiveHour(20), next: true }),
       ]),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     const card = section()!.querySelector<HTMLElement>('.pool-card')!;
     expect(card.classList.contains('collapsed')).toBe(true);
     expect(card.querySelectorAll('.pool-row')).toHaveLength(0);
@@ -441,7 +436,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
   it('is open on a wide screen until folded, and the fold sticks', async () => {
     keys = [WORK, HOME];
     pools = [pool([member(WORK, { state: 'AVAILABLE', next: true }), member(HOME, { state: 'AVAILABLE' })])];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(section()!.querySelectorAll('.pool-row')).toHaveLength(2);
     await click(section()!.querySelector('.re-toggle'));
     expect(section()!.querySelectorAll('.pool-row')).toHaveLength(0);
@@ -452,21 +447,21 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
   it('folds from anywhere on its head — the gauge, the space after the name — and Manage stays a link', async () => {
     keys = [WORK, HOME];
     pools = [pool([member(WORK, { state: 'AVAILABLE', next: true }), member(HOME, { state: 'AVAILABLE' })])];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(section()!.querySelectorAll('.pool-row')).toHaveLength(2);
     await click(section()!.querySelector('.pool-gauge'));
     expect(section()!.querySelectorAll('.pool-row')).toHaveLength(0);
     await click(section()!.querySelector('.re-head-sp'));
     expect(section()!.querySelectorAll('.pool-row')).toHaveLength(2);
     await click(section()!.querySelector('.re-manage'));
-    expect(path).toMatch(/^\/providers\/pools\//);
+    expect(path).toMatch(/^\/settings\/providers\/pools\//);
     expect(JSON.parse(storage.get('orbit:providers-pool-fold') ?? '{}')).toEqual({ [POOL_ID]: true });
   });
 
   it('creates a pool from the hint with every key that can join, and none that cannot', async () => {
     keys = [WORK, METERED, HOME, GATEWAY];
     pools = [];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     await click(button('Create a pool'));
     expect(pickRow(METERED)).toMatchObject({ why: 'Metered API key — no 5-hour window' });
     expect(pickRow(METERED).checkbox.disabled).toBe(true);
@@ -491,7 +486,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
       ]),
     ];
     // Deep-linked, in the spelling a pasted link could carry.
-    await mount(`/providers/pools/0195c0de-0000-7000-8000-000000000900`);
+    await mount(`/settings/providers/pools/0195c0de-0000-7000-8000-000000000900`);
     expect(container.querySelector('h1')?.textContent).toBe('Claude accounts');
     expect(text()).toContain('2 of 2 accounts available');
 
@@ -521,7 +516,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
   it("the pool's own page takes an account out without touching the key", async () => {
     keys = [WORK, HOME];
     pools = [pool([member(WORK, { state: 'AVAILABLE', next: true }), member(HOME, { state: 'AVAILABLE' })])];
-    await mount(`/providers/pools/${POOL_ID}`);
+    await mount(`/settings/providers/pools/${POOL_ID}`);
     await click(rowOf('Home')!.querySelector('button[aria-label="Remove Home from this pool"]'));
     expect(posted).toEqual([{ method: 'DELETE', path: `/providers/pools/${POOL_ID}/members/${HOME.id}`, body: undefined }]);
   });
@@ -535,7 +530,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
         member(METERED, { state: 'NO_QUOTA' }),
       ]),
     ];
-    await mount(`/providers/pools/${POOL_ID}`);
+    await mount(`/settings/providers/pools/${POOL_ID}`);
     expect(text()).toContain('Account pool · 2 of 3 accounts available');
     expect(rowOf('Team API key')?.querySelector('.pool-status')?.textContent).toBe('Unavailable');
     expect(rowOf('Team API key')?.querySelector('.pool-why')?.textContent).toBe('Metered API key — no 5-hour window');
@@ -548,7 +543,7 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
   it('a pool that is gone says so on its own page', async () => {
     keys = [];
     pools = [];
-    await mount(`/providers/pools/${POOL_ID}`);
+    await mount(`/settings/providers/pools/${POOL_ID}`);
     expect(text()).toContain('That pool no longer exists.');
   });
 });

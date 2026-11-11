@@ -49,9 +49,15 @@ vi.mock('../../pages/ProfilePage', () => ({ ProfilePage: () => <p data-page="pro
 vi.mock('../../pages/SharedLinksPage', () => ({ SharedLinksPage: () => <p data-page="shared-links">links</p> }));
 vi.mock('../../pages/AccessTokensPage', () => ({ AccessTokensPage: () => <p data-page="access-tokens">tokens</p> }));
 vi.mock('../../pages/FeishuIntegrationPage', () => ({ FeishuIntegrationPage: () => <p data-page="feishu">feishu</p> }));
-vi.mock('../../pages/InfrastructurePage', () => ({
-  InfrastructurePage: ({ section }: { section?: string }) => <p data-page={`infrastructure:${section}`}>infra</p>,
-}));
+vi.mock('./SettingsProviderPages', async (original) => {
+  const { useParams } = await import('react-router-dom');
+  return {
+    ...(await original<typeof import('./SettingsProviderPages')>()),
+    SettingsVendorPage: () => <p data-page={`vendor:${useParams().vendor}`}>vendor</p>,
+    SettingsPoolsPage: () => <p data-page="pools">pools</p>,
+  };
+});
+vi.mock('../../pages/ProviderPoolPage', () => ({ ProviderPoolPage: () => <p data-page="pool">pool</p> }));
 vi.mock('../../pages/RunnerDetailPage', async () => {
   const { useParams } = await import('react-router-dom');
   return {
@@ -88,17 +94,21 @@ const KEYS = [
 
 let container: HTMLDivElement;
 let root: Root | null = null;
+let keys: unknown[] = KEYS;
+let pools: unknown[] = [{ id: 'p1', name: 'Team', members: [] }];
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
   localStorage.setItem('orbit_token', 'access-token');
   resetSettingsReturn();
+  keys = KEYS;
+  pools = [{ id: 'p1', name: 'Team', members: [] }];
   apiMock.mockImplementation((async (path: string) => {
     if (path === '/runners') return RUNNERS;
     if (path === '/workspaces') return WORKSPACES;
-    if (path === '/providers/mine') return KEYS;
-    if (path === '/providers/pools') return [{ id: 'p1', name: 'Team', members: [] }];
+    if (path === '/providers/mine') return keys;
+    if (path === '/providers/pools') return pools;
     return [];
   }) as typeof api);
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({}) })));
@@ -256,8 +266,9 @@ describe('the Settings window', () => {
       '/settings/integrations/feishu': 'feishu',
       '/settings/machines/gpuBox': 'machine:gpuBox:',
       '/settings/machines/studioMac': 'machine:studioMac:',
-      '/settings/providers/anthropic': 'infrastructure:keys',
-      '/settings/providers/pools': 'infrastructure:pools',
+      '/settings/providers/anthropic': 'vendor:anthropic',
+      '/settings/providers/openai': 'vendor:openai',
+      '/settings/providers/pools': 'pools',
       '/settings/workspaces/wsOrbit': 'machine:gpuBox:wsOrbit',
       '/settings/workspaces/wsSite': 'machine:studioMac:wsSite',
     };
@@ -269,6 +280,34 @@ describe('the Settings window', () => {
     }
   });
 
+  it('draws Providers as the one way to connect a provider while there is no key and no pool', async () => {
+    keys = [];
+    pools = [];
+    await visit('/settings/general');
+    expect(rows('Providers').map((r) => [r.label, r.href, r.meta])).toEqual([
+      ['Connect a provider', '/settings/providers/new', null],
+    ]);
+    await click(nav().querySelector('a[href="/settings/providers/new"]'));
+    expect(page()).toBe('pick-vendor');
+  });
+
+  it('opens connecting a key, editing one and a pool’s page in the right-hand column', async () => {
+    for (const [path, answered] of [
+      ['/settings/providers/new', 'pick-vendor'],
+      ['/settings/providers/new/anthropic', 'key'],
+      ['/settings/providers/keys/k1', 'key'],
+      ['/settings/providers/pools/p1', 'pool'],
+    ] as const) {
+      await visit(path);
+      expect(addressBar()).toBe(path);
+      expect(container.querySelector('.settings-column [data-page]')?.getAttribute('data-page')).toBe(answered);
+      expect(nav()).toBeTruthy();
+      await act(async () => root?.unmount());
+      root = null;
+      container.remove();
+    }
+  });
+
   it('sends each + where it adds one', async () => {
     await visit('/settings/general');
     await click(group('Machines').querySelector('.settings-nav-add'));
@@ -277,7 +316,8 @@ describe('the Settings window', () => {
 
     await go('/settings/general');
     await click(group('Providers').querySelector('.settings-nav-add'));
-    expect(addressBar()).toBe('/providers/new');
+    expect(addressBar()).toBe('/settings/providers/new');
+    expect(page()).toBe('pick-vendor');
 
     // Until Settings has its own new-workspace page: the first online machine's Add workspace.
     await go('/settings/general');

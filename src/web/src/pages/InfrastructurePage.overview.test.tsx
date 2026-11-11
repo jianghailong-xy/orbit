@@ -286,22 +286,13 @@ describe('a machine’s engines, on its card', () => {
     expect(chips('HPC')).toEqual([{ says: 'Claude Code 1 of 2 signed in', out: true }]);
   });
 
-  it('leaves an offline machine to its card and an unavailable pool to its own, and opens each one’s page', async () => {
-    // Its one account switched off: nothing in it can run, and the server says so.
-    const off = { ...claudePool().members[0], enabled: false, state: 'DISABLED' as const, next: false };
-    pools = [claudePool({ unavailable: 'No account can run', members: [off] })];
+  // An unavailable pool's card and its page are Settings' Account pools page's now
+  // (SettingsPoolsPage.pools.test.tsx: "heads a pool nothing in can run with the server's reason").
+  it('leaves an offline machine to its card, and opens its page', async () => {
     await mount();
     const thinkpad = machineCard('ThinkPad');
     expect(thinkpad.classList.contains('offline')).toBe(true);
     await click(thinkpad.querySelector('a.re-manage'));
     expect(path).toBe(`/runners/${THINKPAD}`);
-
-    act(() => root?.unmount());
-    host?.remove();
-    await mount();
-    const pool = document.body.querySelector<HTMLElement>(`.pool-card[data-pool="${POOL}"]`)!;
-    expect(text(pool.querySelector('.re-head .pool-gauge'))).toBe('No account can run');
-    await click(pool.querySelector('a.re-manage'));
-    expect(path).toBe(`/providers/pools/${POOL}`);
   });
 });

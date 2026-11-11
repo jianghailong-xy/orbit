@@ -149,7 +149,7 @@ function connectedCounts(rows: readonly ProviderRow[]): Map<string, number> {
 }
 
 /** The vendor picker. Every card is a link into the connect page, so a vendor's onboarding is
- *  deep-linkable (/providers/new/anthropic) and the browser's back button works.
+ *  deep-linkable (/settings/providers/new/anthropic) and the browser's back button works.
  *
  *  A card is a vendor, never an engine — DeepSeek Harness is one of the engines a DeepSeek key runs
  *  on, so it has no card of its own; until a vendor is connected, its card says which engines its key
@@ -185,7 +185,7 @@ export function ProviderGallery() {
         return (
           <Link
             key={p.slug}
-            to={`/providers/new/${p.slug}`}
+            to={`/settings/providers/new/${p.slug}`}
             className={`provider-card${count ? ' connected' : ''}`}
           >
             {/* The check rides on the logo's corner rather than the row, so marking a card costs
@@ -215,7 +215,7 @@ export function ProviderGallery() {
           </Link>
         );
       })}
-      <Link to="/providers/new/custom" className="provider-card custom">
+      <Link to="/settings/providers/new/custom" className="provider-card custom">
         <ProviderTile slug="custom" label="Custom" muted />
         <div style={{ minWidth: 0 }}>
           <div className="pc-name">Custom</div>
@@ -227,9 +227,9 @@ export function ProviderGallery() {
 }
 
 /**
- * The vendor picker under the keys there are (docs/mocks/infrastructure-focus): one line, a pill for each
- * vendor with no key yet and one for Custom, each a link into its connect page as the gallery's cards are.
- * A vendor already connected takes another key from its own card's + Add key.
+ * The vendor picker under a vendor's keys (docs/mocks/settings-redesign, board-4): one line, a pill for
+ * each vendor with no key yet and one for Custom, each a link into its connect page as the gallery's
+ * cards are. A vendor already connected takes another key from its own page's Add key.
  */
 export function ProviderPills() {
   const providers = useQuery({
@@ -240,16 +240,15 @@ export function ProviderPills() {
   const connected = connectedCounts(providers.data ?? []);
   return (
     <div className="pv-more">
-      <span className="pv-more-l">Connect another provider</span>
       {offeredPresets((runners.data ?? []) as SignedInRunner[])
         .filter((p) => !connected.has(p.slug))
         .map((p) => (
-          <Link key={p.slug} to={`/providers/new/${p.slug}`} className="pv-pill">
+          <Link key={p.slug} to={`/settings/providers/new/${p.slug}`} className="pv-pill">
             <ProviderTile slug={p.slug} label={vendorName(p.slug)} size={18} />
             {vendorName(p.slug)}
           </Link>
         ))}
-      <Link to="/providers/new/custom" className="pv-pill">
+      <Link to="/settings/providers/new/custom" className="pv-pill">
         <ProviderTile slug="custom" label="Custom" size={18} muted />
         Custom
       </Link>

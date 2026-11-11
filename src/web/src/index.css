@@ -16648,83 +16648,28 @@ button.chat-jump-start:hover {
   font-weight: 500;
 }
 
-/* Infrastructure's API keys (ProviderKeyCards): a card per vendor, drawn as a machine's and a pool's are,
-   and a row per key — what it is and runs on, the model it starts on, whether it is on and when it was
-   last used, and its Edit and Delete. The name column gives way first; the model's keeps one width so
-   each card's rows line up. */
-.vk-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 236px 120px auto;
-  align-items: center;
-  gap: 10px 14px;
-  padding: 10px 14px;
-}
-.vk-row + .vk-row {
-  border-top: 1px solid var(--border-subtle);
-}
-.vk-id {
-  min-width: 0;
-}
-.vk-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.vk-model {
+/* One vendor's keys on its Settings page (ProviderKeyRows, docs/mocks/settings-redesign board-4): a
+   SettingsRow per key, its name over one line of what it runs on, the model it starts on, the pools it
+   is in and when it was last used; Edit and ⋯ on its right. */
+.vk-line {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 6px;
-  min-width: 0;
-  font-size: 11.5px;
-  color: var(--text-3);
+  gap: 2px 4px;
 }
-.vk-model .infra-model {
-  font-size: 11.5px;
-  color: var(--text-2);
-  white-space: normal;
+.vk-line .infra-model {
+  color: var(--text-1);
 }
-.vk-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-}
-/* When a session last ran on it; a key nobody has run on says so, a state rather than a time. */
 .vk-used {
-  font-size: 11.5px;
-  color: var(--text-3);
   white-space: nowrap;
 }
 .vk-act {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  justify-content: flex-end;
-}
-.vk-loading {
-  display: grid;
-  place-items: center;
-  min-height: 64px;
-}
-/* A narrow card stacks the row: the key, then the model, then its state beside its buttons. */
-@container re-card (max-width: 620px) {
-  .vk-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .vk-id,
-  .vk-model {
-    grid-column: 1 / -1;
-  }
-  .vk-state {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-  }
 }
 
-/* The vendors with no key yet, in one line under the keys (ProviderPills). */
+/* The vendors with no key yet, in one line under a vendor's keys (ProviderPills). */
 .pv-more {
   display: flex;
   flex-wrap: wrap;
@@ -16733,9 +16678,6 @@ button.chat-jump-start:hover {
   margin-top: 12px;
   font-size: 12px;
   color: var(--text-3);
-}
-.pv-more-l {
-  margin-right: 2px;
 }
 .pv-pill {
   display: inline-flex;

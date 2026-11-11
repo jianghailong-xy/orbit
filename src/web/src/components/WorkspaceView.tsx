@@ -3737,7 +3737,7 @@ export function WorkspaceView({
         .map((choice) => ({ engine: row.slug, provider: choice.slug })),
     );
     if (keyed[0]) pickDraft(keyed[0].engine, keyed[0].provider);
-    else navigate('/infrastructure#keys');
+    else navigate('/settings/providers');
   };
   // An account row under the draft engine's own sign-in: that sign-in, on that account — or on
   // Automatic (`null`). Like the provider, it binds the session being drafted and rewrites no
@@ -7102,7 +7102,7 @@ export function WorkspaceView({
     if (!selected || shownProviderListed || isLoginProvider(shownProvider) || shownProvider === AgentProvider.OPENCODE) return null;
     if (configuredProviders.some((p) => p.slug === shownProvider) || !ownKeys.data) return null;
     const row = ownKeys.data.find((p) => p.slug === shownProvider);
-    if (row) return row.enabled ? null : { status: 'Turned off', href: `/providers/${encodeId(row.id)}` };
+    if (row) return row.enabled ? null : { status: 'Turned off', href: `/settings/providers/keys/${encodeId(row.id)}` };
     return shownProvider === AgentProvider.DSH ? null : { status: 'Key deleted' };
   })();
   // Where this session could move without changing engine: the credentials its engine runs on here.
@@ -7942,14 +7942,14 @@ export function WorkspaceView({
       runnerVersion: runner.version,
       googleLogin: runner.antigravity?.googleLogin,
       runtime: shownEngine,
-      onConnectGemini: () => navigate(geminiProvider ? `/providers/${encodeId(geminiProvider.id)}` : '/providers/new/gemini'),
+      onConnectGemini: () => navigate(geminiProvider ? `/settings/providers/keys/${encodeId(geminiProvider.id)}` : '/settings/providers/new/gemini'),
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
         ? () => pickProvider(geminiChoice.slug)
         : undefined,
       onOpenProviders: () => navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=antigravity`),
       onInstall: runner.online && runner.antigravity?.supported ? () => installAntigravity.mutate() : undefined,
       installDisabled: installAntigravity.isPending || installDsh.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
-      onEditDshKey: () => navigate(dshProviderRow ? `/providers/${encodeId(dshProviderRow.id)}` : '/infrastructure#keys'),
+      onEditDshKey: () => navigate(dshProviderRow ? `/settings/providers/keys/${encodeId(dshProviderRow.id)}` : '/settings/providers'),
       onInstallDsh: runner.online && runner.capabilities?.includes(DSH_RUNNER_CAPABILITY) ? () => installDsh.mutate() : undefined,
       onRetry:
         authRetryText && !selectedTrashed && !selectedMissing
@@ -7977,7 +7977,7 @@ export function WorkspaceView({
       onNeedRetryText: selectedId ? () => setRetryMessageAskedFor(selectedId) : undefined,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
       // whose key the user actually holds.
-      onUseApiKey: () => navigate('/infrastructure#keys'),
+      onUseApiKey: () => navigate('/settings/providers'),
     }),
     // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
     // rebuild this every render and re-render the card through the context.

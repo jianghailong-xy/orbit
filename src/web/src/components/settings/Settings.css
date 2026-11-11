@@ -227,3 +227,50 @@
 .settings-empty {
   color: var(--text-2);
 }
+
+/* Providers: a vendor's page (board-4) and Account pools. */
+.sp-vendor-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sp-vendor-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.sp-vendor-sub {
+  margin: 6px 0 28px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.sp-count {
+  margin-left: 4px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.sp-pools-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.sp-pools-link:hover {
+  color: var(--text-1);
+}
+.pool-sec-action {
+  margin-left: auto;
+  align-self: center;
+}
+/* A pool's account rows, sized for a 900px page, in Settings' narrower column: the status and quota
+   columns give the name the room they don't need. Below 700px index.css stacks the row anyway. */
+@media (min-width: 701px) {
+  .settings-column .pool-row,
+  .settings-column .pool-detail .pool-row {
+    grid-template-columns: minmax(0, 1fr) 120px 110px auto;
+  }
+}

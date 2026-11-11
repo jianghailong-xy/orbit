@@ -9,6 +9,7 @@ import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
 import { SettingsLayout } from './components/settings';
 import { SettingsMachinePage, SettingsWorkspacePage } from './components/settings/SettingsInterimPages';
+import { SettingsPoolsPage, SettingsProvidersHome, SettingsVendorPage } from './components/settings/SettingsProviderPages';
 import { useRememberOutsideSettings } from './lib/settingsReturn';
 import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
 import { WorkspaceConsole } from './components/WorkspaceConsole';
@@ -56,14 +57,36 @@ function LegacySessionRedirect() {
   return <Navigate to={to} replace />;
 }
 
-// Runners and Providers are one page now, Infrastructure, and their addresses land on it
-// with the query they carried: older macOS/iOS clients open `/providers` with
-// `?runner=<id>&engine=<engine>` to sign an engine in, and that card still opens on that engine.
-// Bare `/providers` meant the keys, so it lands on them.
-function InfrastructureRedirect({ keys = false }: { keys?: boolean }) {
+// Runners are on Infrastructure, and their address lands on it with the query it carried: older
+// macOS/iOS clients open `/runners` and `/providers` with `?runner=<id>&engine=<engine>` to sign an
+// engine in, and that card still opens on that engine.
+function InfrastructureRedirect() {
   const { search } = useLocation();
-  const hash = keys && !new URLSearchParams(search).has('runner') ? '#keys' : '';
-  return <Navigate to={{ pathname: '/infrastructure', search, hash }} replace />;
+  return <Navigate to={{ pathname: '/infrastructure', search }} replace />;
+}
+
+// The API keys and account pools are Settings' Providers pages now (docs/mocks/settings-redesign,
+// board-4), and the addresses they had land there: /providers and /admin/providers on the keys,
+// /providers/new[/:slug] on connecting one, /providers/:id on editing it, /providers/pools[/:id] on the
+// pools. A `?runner=` (an engine to sign in, above) still goes to Infrastructure.
+function ProvidersRedirect() {
+  const { pathname, search } = useLocation();
+  if (new URLSearchParams(search).has('runner')) return <InfrastructureRedirect />;
+  const rest = pathname.replace(/^\/(admin\/)?providers\/?/, '');
+  const to = rest === '' || /^(new|pools)(\/|$)/.test(rest) ? rest : `keys/${rest}`;
+  return <Navigate to={{ pathname: `/settings/providers${to ? `/${to}` : ''}`, search }} replace />;
+}
+
+// Infrastructure's #keys and #pools sections are Settings' Providers pages now.
+function InfrastructureRoute() {
+  const { hash } = useLocation();
+  if (hash === '#keys') return <Navigate to="/settings/providers" replace />;
+  if (hash === '#pools') return <Navigate to="/settings/providers/pools" replace />;
+  return (
+    <DocView>
+      <InfrastructurePage />
+    </DocView>
+  );
 }
 
 // Signed out on an in-app page: log in first, then come back to it. The page (path + query) rides
@@ -186,8 +209,8 @@ export function App() {
               redirects to it too; the task list lives at "/tasks". Each view wraps itself in its
               layout contract (DocView = page gutter + scroll, FlushView = full-bleed). */}
           {/* Settings takes over the window (owner's choice A1, docs/mocks/settings-redesign): its own nav
-              of four groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines,
-              Providers and Workspaces open the pages that manage them today until each has its own. */}
+              of four groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
+              Workspaces open the pages that manage them today until each has its own. */}
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />
             <Route path="general" element={<SettingsPage />} />
@@ -207,8 +230,15 @@ export function App() {
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
             <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
             <Route path="machines/:id" element={<SettingsMachinePage />} />
-            <Route path="providers/pools" element={<InfrastructurePage section="pools" />} />
-            <Route path="providers/:vendor" element={<InfrastructurePage section="keys" />} />
+            {/* Providers (owner's choice C1, board-4): a page per connected vendor, Account pools, and a key's
+                connect and edit pages, all in Settings' right-hand column. */}
+            <Route path="providers" element={<SettingsProvidersHome />} />
+            <Route path="providers/new" element={<ProviderPickPage />} />
+            <Route path="providers/new/:slug" element={<ProviderConnectPage />} />
+            <Route path="providers/keys/:id" element={<ProviderConnectPage />} />
+            <Route path="providers/pools" element={<SettingsPoolsPage />} />
+            <Route path="providers/pools/:id" element={<ProviderPoolPage />} />
+            <Route path="providers/:vendor" element={<SettingsVendorPage />} />
             <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
           </Route>
           <Route element={<AppShell />}>
@@ -252,52 +282,12 @@ export function App() {
                 </DocView>
               }
             />
-            {/* Machines, API keys and account pools, for everyone (each user's own). Connecting a
-                key is its own two-page flow — pick a vendor, then paste a key — so
-                "/providers/new/anthropic" can be linked to directly; the pages under /providers and
-                /runners keep their addresses. Keep the old admin-only path as a redirect. */}
-            <Route
-              path="infrastructure"
-              element={
-                <DocView>
-                  <InfrastructurePage />
-                </DocView>
-              }
-            />
-            <Route path="providers" element={<InfrastructureRedirect keys />} />
-            <Route
-              path="providers/new"
-              element={
-                <DocView>
-                  <ProviderPickPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="providers/new/:slug"
-              element={
-                <DocView>
-                  <ProviderConnectPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="providers/:id"
-              element={
-                <DocView>
-                  <ProviderConnectPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="providers/pools/:id"
-              element={
-                <DocView>
-                  <ProviderPoolPage />
-                </DocView>
-              }
-            />
-            <Route path="admin/providers" element={<InfrastructureRedirect keys />} />
+            {/* Machines, for everyone (each user's own). Its #keys and #pools, and the old /providers
+                addresses, land on Settings' Providers pages. */}
+            <Route path="infrastructure" element={<InfrastructureRoute />} />
+            <Route path="providers" element={<ProvidersRedirect />} />
+            <Route path="providers/*" element={<ProvidersRedirect />} />
+            <Route path="admin/providers" element={<ProvidersRedirect />} />
             {/* Everything an agent has asked the owner to do: owner requests and coordinator questions. */}
             <Route
               path="waiting"

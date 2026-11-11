@@ -10,11 +10,12 @@ import type { Runner } from './components/TasksSidePanel';
 import { encodeId } from './lib/idCodec';
 
 /**
- * The Runners and Providers pages are one page, Infrastructure, and the addresses they had still
- * land on it with the query they carried: a bookmark, the sidebars of older macOS/iOS clients, and
- * those clients' "Sign in on the web", which opens `/providers?runner=<id>&engine=<engine>` — where
- * that machine's card has to open on that engine, as it did on Providers. Bare `/providers` meant
- * the keys, so it lands on them. The pages under both addresses keep theirs.
+ * The Runners page is Infrastructure, and `/runners` still lands on it with the query it carried: a
+ * bookmark, the sidebars of older macOS/iOS clients, and those clients' "Sign in on the web", which
+ * opens `/providers?runner=<id>&engine=<engine>` — where that machine's card has to open on that engine,
+ * as it did on Providers. The API keys and account pools are Settings' Providers pages
+ * (docs/mocks/settings-redesign, board-4): `/providers`, `/admin/providers`, `/infrastructure#keys` and
+ * `#pools`, and the pages under `/providers`, land there.
  *
  * Mounted under the real BrowserRouter on jsdom's own history, the way main.tsx mounts it, so what
  * is checked is the address bar the redirect leaves behind.
@@ -41,6 +42,15 @@ vi.mock('./pages/ProviderConnectPage', () => ({
   ProviderConnectPage: () => <p>a key’s page</p>,
 }));
 vi.mock('./pages/ProviderPoolPage', () => ({ ProviderPoolPage: () => <p>a pool’s page</p> }));
+vi.mock('./components/settings/SettingsProviderPages', async (original) => ({
+  ...(await original<typeof import('./components/settings/SettingsProviderPages')>()),
+  SettingsVendorPage: () => <p>a vendor’s page</p>,
+  SettingsPoolsPage: () => <p>the pools page</p>,
+}));
+vi.mock('./lib/useControlPlane', async (original) => ({
+  ...(await original<typeof import('./lib/useControlPlane')>()),
+  ControlPlaneProvider: ({ children }: { children: ReactNode }) => children,
+}));
 
 // = uuidToBase62(…): the cards' links encode it.
 const MAC = '33zx0JhRhJo8rd25d3qAM';
@@ -62,6 +72,7 @@ const machine = (id: string, name: string): Runner => ({
 });
 
 let container: HTMLDivElement;
+let keys: unknown[] = [];
 let root: Root | null = null;
 const scroll = vi.fn();
 
@@ -69,8 +80,10 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
   localStorage.setItem('orbit_token', 'access-token'); // signed in
+  keys = [];
   apiMock.mockImplementation((async (path: string) => {
     if (path === '/runners') return [machine(MAC, 'Mac Studio'), machine(HPC, 'HPC')];
+    if (path === '/providers/mine') return keys;
     return [];
   }) as typeof api);
   // No release manifest here.
@@ -134,28 +147,43 @@ const card = (name: string) =>
   )!;
 const isOpen = (name: string) => card(name).querySelector('.re-toggle')?.getAttribute('aria-expanded') === 'true';
 
+/** What the Settings window's right-hand column says: which page answered there. */
+const settingsPage = () => container.querySelector('.settings-column')?.textContent;
+
 describe('the Runners and Providers addresses', () => {
-  it('/runners lands on the Machines & models page: its machines, its keys and its pools', async () => {
+  it('/runners lands on the Machines & models page: its machines', async () => {
     await visit('/runners');
     expect(addressBar()).toBe('/infrastructure');
     expect(container.querySelector('h1')?.textContent).toBe('Machines & models');
-    expect(headings()).toEqual(['Machines', 'API keys', 'Account pools']);
+    expect(headings()).toEqual(['Machines']);
     // Nothing named, so nothing opened for it, and nothing scrolled to.
     expect([isOpen('Mac Studio'), isOpen('HPC')]).toEqual([false, false]);
     expect(scroll).not.toHaveBeenCalled();
   });
 
-  it('/providers lands on the Machines & models page’s keys, and brings them into view', async () => {
+  it.each(['/providers', '/admin/providers', '/infrastructure#keys'])(
+    '%s lands on the first connected vendor’s page in Settings',
+    async (path) => {
+      keys = [{ id: KEY, label: 'Work key', presetSlug: 'anthropic', engines: ['claude'], models: [] }];
+      await visit(path);
+      expect(addressBar()).toBe('/settings/providers/anthropic');
+      expect(settingsPage()).toBe('a vendor’s page');
+    },
+  );
+
+  it('/providers with no key at all lands on connecting one', async () => {
     await visit('/providers');
-    expect(addressBar()).toBe('/infrastructure#keys');
-    expect(headings()).toEqual(['Machines', 'API keys', 'Account pools']);
-    expect(scroll.mock.calls).toEqual([[{ block: 'start' }]]);
-    expect(scroll.mock.contexts[0]).toBe(container.querySelector('#keys'));
-    expect((scroll.mock.contexts[0] as HTMLElement).querySelector('h3')?.textContent).toBe('API keys');
+    expect(addressBar()).toBe('/settings/providers/new');
+    expect(settingsPage()).toBe('pick a vendor');
   });
 
-  it('/providers?runner=<id>&engine=<engine> opens that machine’s card on that engine, as Providers did', async () => {
-    await visit(`/providers?runner=${MAC}&engine=codex`);
+  it('/infrastructure#pools lands on Account pools in Settings', async () => {
+    await visit('/infrastructure#pools');
+    expect(addressBar()).toBe('/settings/providers/pools');
+    expect(settingsPage()).toBe('the pools page');
+  });
+
+  it('/providers?runner=<id>&engine=<engine> opens that machine’s card on that engine, as Providers did', async () => {    await visit(`/providers?runner=${MAC}&engine=codex`);
     expect(addressBar()).toBe(`/infrastructure?runner=${MAC}&engine=codex`);
     // That machine's card is open, the other one is not.
     expect([isOpen('Mac Studio'), isOpen('HPC')]).toEqual([true, false]);
@@ -181,13 +209,20 @@ describe('the Runners and Providers addresses', () => {
   it.each([
     ['/runners/register', 'register a machine'],
     [`/runners/${MAC}`, 'a machine’s page'],
-    ['/providers/new', 'pick a vendor'],
-    ['/providers/new/anthropic', 'a key’s page'],
-    [`/providers/${KEY}`, 'a key’s page'],
-    [`/providers/pools/${POOL}`, 'a pool’s page'],
   ])('leaves %s where it is', async (path, page) => {
     await visit(path);
     expect(addressBar()).toBe(path);
     expect(container.textContent).toBe(page);
+  });
+
+  it.each([
+    ['/providers/new', '/settings/providers/new', 'pick a vendor'],
+    ['/providers/new/anthropic', '/settings/providers/new/anthropic', 'a key’s page'],
+    [`/providers/${KEY}`, `/settings/providers/keys/${KEY}`, 'a key’s page'],
+    [`/providers/pools/${POOL}`, `/settings/providers/pools/${POOL}`, 'a pool’s page'],
+  ])('moves %s into Settings, at %s', async (path, to, page) => {
+    await visit(path);
+    expect(addressBar()).toBe(to);
+    expect(settingsPage()).toBe(page);
   });
 });

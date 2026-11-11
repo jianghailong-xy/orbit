@@ -830,7 +830,7 @@ describe('rule 5: Use an API key', () => {
     await send('Fix it');
     await act(async () => button('Use an API key instead')!.click());
     await settle();
-    expect(where).toBe('/infrastructure#keys');
+    expect(where).toBe('/settings/providers');
   });
 });
 

@@ -12,10 +12,10 @@ import { InfrastructurePage } from './InfrastructurePage';
 
 /**
  * /infrastructure as a page (docs/mocks/infrastructure-focus): its name, its line and Add, then
- * Machines, API keys and Account pools in that order — each with what it says before there is anything
- * in it — and last what each engine can run on (InfrastructurePage.overview.test.tsx); a key's own Edit
- * and Delete, the vendors not connected yet under the keys, and a machine's engines with every way in
- * they had on Providers.
+ * Machines — with what it says before there is anything in it — and last what each engine can run on
+ * (InfrastructurePage.overview.test.tsx); and a machine's engines with every way in they had on
+ * Providers. The API keys and account pools are Settings' Providers pages now
+ * (components/settings/SettingsVendorPage.keys.test.tsx, SettingsPoolsPage.*.test.tsx).
  */
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
@@ -185,7 +185,7 @@ const card = (name: string) =>
   [...document.body.querySelectorAll<HTMLElement>('.re-runner-card')].find((el) => text(el.querySelector('.re-runner')) === name)!;
 
 describe('/infrastructure', () => {
-  it('heads the page with its name, its line and Add, then Machines, API keys and Account pools in that order', async () => {
+  it('heads the page with its name, its line and Add, then Machines alone', async () => {
     await mount();
     expect(text(document.body.querySelector('h1'))).toBe('Machines & models');
     // Settings' page (docs/mocks/machines-and-models, 02): the way back to Settings above its name.
@@ -193,11 +193,8 @@ describe('/infrastructure', () => {
     expect([text(back), back?.getAttribute('href')]).toEqual(['‹ Settings', '/settings']);
     expect(text(document.body.querySelector('.prov-page-sub'))).toBe('Where your agents run, and whose model quota they spend.');
     expect(button('Add')).not.toBeNull();
-    expect([...document.body.querySelectorAll('.re-sec-head h3')].map(text)).toEqual([
-      'Machines',
-      'API keys',
-      'Account pools',
-    ]);
+    // The keys and pools are Settings' Providers pages now.
+    expect([...document.body.querySelectorAll('.re-sec-head h3')].map(text)).toEqual(['Machines']);
     // Nothing above the machines but the page's own head.
     expect(document.body.querySelector('.prov-page-head')?.nextElementSibling?.id).toBe('machines');
     expect(text(sectionHead('Machines')?.querySelector('.re-sec-sub'))).toBe(
@@ -205,11 +202,6 @@ describe('/infrastructure', () => {
     );
     // Slots on the machines that can take work: the offline one's are nobody's.
     expect(text(sectionHead('Machines')?.querySelector('.re-sec-count'))).toBe('3 machines · 7 / 12 slots busy');
-    expect(text(sectionHead('API keys')?.querySelector('.re-sec-sub'))).toBe(
-      'On your account and usable from every machine — billed per token.',
-    );
-    expect(text(sectionHead('API keys')?.querySelector('.re-sec-count'))).toBe('1 key');
-    expect(text(sectionHead('Account pools')?.querySelector('.re-sec-sub'))).toBe('Several accounts under one name.');
     // Each machine's card says how busy it is, and leads to its page.
     expect(text(card('Mac Studio').querySelector('.re-runner-meta'))).toBe('2 / 4 running · mac-studio.local · v0.1.240');
     expect(text(card('HPC').querySelector('.re-manage'))).toBe('Details →');
@@ -230,15 +222,14 @@ describe('/infrastructure', () => {
     host?.remove();
     await mount();
     await click((await openMenu(button('Add')))[1]);
-    expect(path).toBe('/providers/new');
+    expect(path).toBe('/settings/providers/new');
 
     act(() => root?.unmount());
     host?.remove();
     await mount();
     await click((await openMenu(button('Add')))[2]);
-    // The page's one way to a new pool: the pools' own head has no button of its own.
-    expect(await openDialog('New account pool')).not.toBeNull();
-    expect(path).toBe('/infrastructure');
+    // A new pool is made on the pools' own page, from its New account pool.
+    expect(path).toBe('/settings/providers/pools');
   });
 
   it('says what each section is for before there is anything in it', async () => {
@@ -250,46 +241,6 @@ describe('/infrastructure', () => {
     expect(empty.querySelector('a')?.getAttribute('href')).toBe('/runners/register');
     expect(text(empty.querySelector('a'))).toBe('Register a machine');
     expect(sectionHead('Machines')?.querySelector('.re-sec-count')).toBeNull();
-    const noKeys = document.body.querySelector<HTMLElement>('.provider-empty')!;
-    expect(text(noKeys.querySelector('h3'))).toBe('No keys yet');
-    expect(text(noKeys.querySelector('p'))).toBe('Pick a provider and paste your API key — or skip it and sign a machine in above.');
-    expect(noKeys.querySelector('a[href="/providers/new/anthropic"]')).not.toBeNull();
-    // The pools stand with none too, saying what one is, with nothing of their own to press: Add makes one.
-    expect(text(sectionHead('Account pools')?.querySelector('.re-sec-sub'))).toBe('Several accounts under one name.');
-    expect(sectionHead('Account pools')?.querySelector('button')).toBeNull();
-  });
-
-  it('puts the vendors not connected yet under the keys there are, edits a key on its page, and deletes one once asked', async () => {
-    await mount();
-    const row = document.body.querySelector<HTMLElement>('.vk-card .vk-row')!;
-    expect(text(row.querySelector('.vk-name'))).toBe('Anthropic');
-    expect(text(document.body.querySelector('.pv-more .pv-more-l'))).toBe('Connect another provider');
-    expect(document.body.querySelector('.pv-more a[href="/providers/new/openai"]')).not.toBeNull();
-    // Anthropic is connected: another of its keys is added from its own card.
-    expect(document.body.querySelector('.pv-more a[href="/providers/new/anthropic"]')).toBeNull();
-    expect(document.body.querySelector('.vk-card a[href="/providers/new/anthropic"]')).not.toBeNull();
-
-    await click(button('Delete', row));
-    expect(sent).toEqual([]);
-    // The question is a dialog named by itself, saying what the key goes from — here, nothing uses it.
-    const confirm = await openDialog('Delete Anthropic?');
-    await act(async () => {
-      await vi.waitFor(() => expect(text(confirm)).toContain('Nothing uses it right now.'));
-    });
-    expect([...confirm.querySelectorAll('.key-impact-row')].map(words)).toEqual(['Claude Code — not in use', 'OpenCode — not in use']);
-    await click(button('Delete key', confirm));
-    expect(sent).toEqual([{ method: 'DELETE', path: `/providers/mine/${ANTHROPIC.id}` }]);
-
-    await click(button('Edit', row));
-    expect(path).toBe(`/providers/${ANTHROPIC.id}`);
-  });
-
-  it('brings the pools into view for #pools, where a pool’s page goes back to', async () => {
-    await mount('/infrastructure#pools');
-    const scroll = vi.mocked(Element.prototype.scrollIntoView);
-    expect(scroll.mock.calls).toEqual([[{ block: 'start' }]]);
-    expect(scroll.mock.contexts[0]).toBe(document.body.querySelector('#pools'));
-    expect(text((scroll.mock.contexts[0] as HTMLElement).querySelector('h3'))).toBe('Account pools');
   });
 
   it('opens a machine on its engines, with each way in Providers had: sign in, install, add an account, pause it', async () => {

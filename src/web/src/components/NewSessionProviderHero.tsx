@@ -136,7 +136,7 @@ export function NewSessionProviderHero({
     <div className="np-list">
       {displayed.map(row)}
       <div className="np-sep" />
-      <Link to="/infrastructure" className="np-row np-connect" onClick={() => setOpen(false)}>
+      <Link to="/settings/providers/new" className="np-row np-connect" onClick={() => setOpen(false)}>
         <span className="np-plus">+</span>
         <span className="np-row-name">Connect a provider…</span>
       </Link>

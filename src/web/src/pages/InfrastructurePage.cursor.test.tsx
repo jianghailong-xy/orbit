@@ -8,7 +8,9 @@ import type { RunnerEngineHealth } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderRow } from '../lib/providerAdmin';
+import { SettingsVendorPage } from '../components/settings/SettingsProviderPages';
 import { InfrastructurePage } from './InfrastructurePage';
+import { ProviderPickPage } from './ProviderConnectPage';
 
 /**
  * Cursor CLI on /infrastructure (the owner's board, docs/mocks/cursor-engine Web 2 and Web 4): nothing of
@@ -116,7 +118,8 @@ async function settle() {
   }
 }
 
-async function mount() {
+/** /infrastructure for the machine's card; a Cursor key's vendor page, and picking a vendor, are Settings'. */
+async function mount(at = '/infrastructure') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   host = document.createElement('div');
   document.body.appendChild(host);
@@ -124,9 +127,11 @@ async function mount() {
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/infrastructure']}>
+        <MemoryRouter initialEntries={[at]}>
           <Routes>
             <Route path="/infrastructure" element={<InfrastructurePage />} />
+            <Route path="/settings/providers/new" element={<ProviderPickPage />} />
+            <Route path="/settings/providers/:vendor" element={<SettingsVendorPage />} />
             <Route path="*" element={<div>elsewhere</div>} />
           </Routes>
         </MemoryRouter>
@@ -138,20 +143,26 @@ async function mount() {
 
 const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
-describe('Cursor CLI on the Machines & models page', () => {
+describe('Cursor CLI on the Machines & models page and its vendor’s Settings page', () => {
   it('is nowhere while no runner of the account knows it', async () => {
     runners = [hpc(null, [])];
     keys = [];
     await mount();
     expect(document.body.querySelector('[data-engine="cursor"]')).toBeNull();
-    expect(document.body.querySelector('a[href="/providers/new/cursor-api"]')).toBeNull();
+    act(() => root?.unmount());
+    host?.remove();
+    await mount('/settings/providers/new');
+    expect(document.body.querySelector('a[href="/settings/providers/new/cursor-api"]')).toBeNull();
   });
 
   it('chips the accounts signed in to it on the machine’s card, and starts each of its keys on Auto', async () => {
     await mount();
     // The machine's card chips both accounts, and the key's row says what a session on it starts on.
     expect(text(document.body.querySelector('.re-runner-card .mc-row'))).toContain('Cursor CLI ×2');
-    expect(text(document.body.querySelector('.vk-row .vk-model'))).toBe('Starts on Auto');
+    act(() => root?.unmount());
+    host?.remove();
+    await mount('/settings/providers/cursor-api');
+    expect(text(document.body.querySelector('.settings-row .vk-model'))).toBe('· Starts on Auto');
   });
 
   it('draws no chip on the machine’s card for Cursor CLI signed out there: its row, once open, says so', async () => {
@@ -164,24 +175,24 @@ describe('Cursor CLI on the Machines & models page', () => {
 
   it('offers Cursor in the vendor gallery, on its own connect page, as already signed in on the machine', async () => {
     keys = [];
-    await mount();
-    const card = document.body.querySelector<HTMLAnchorElement>('a[href="/providers/new/cursor-api"]');
+    await mount('/settings/providers/new');
+    const card = document.body.querySelector<HTMLAnchorElement>('a[href="/settings/providers/new/cursor-api"]');
     expect(text(card?.querySelector('.pc-name'))).toBe('Cursor');
     expect(text(card?.querySelector('.pc-sub'))).toBe('Already signed in on HPC');
   });
 
   it('says on a key Cursor refused that it was refused, and where a new one is pasted', async () => {
     keys = [cursorKey({ keyCheckState: 'INVALID', keyCheckedAt: new Date(Date.now() - 4 * 60_000).toISOString() })];
-    await mount();
-    const line = document.body.querySelector('.vk-cards .dsb-line.fail');
+    await mount('/settings/providers/cursor-api');
+    const line = document.body.querySelector('.settings-card .dsb-line.fail');
     expect(text(line)).toBe('Rejected by Cursor · 4m ago · Paste a new key');
-    expect(line?.querySelector('a')?.getAttribute('href')).toBe(`/providers/${keys[0].id}`);
+    expect(line?.querySelector('a')?.getAttribute('href')).toBe(`/settings/providers/keys/${keys[0].id}`);
   });
 
   it('asks again from a key Cursor could not be reached to check, and says nothing of one it accepted', async () => {
     keys = [cursorKey({ keyCheckState: 'UNREACHABLE', keyCheckedAt: new Date(Date.now() - 12 * 60_000).toISOString() })];
-    await mount();
-    const line = document.body.querySelector('.vk-cards .dsb-line.fail');
+    await mount('/settings/providers/cursor-api');
+    const line = document.body.querySelector('.settings-card .dsb-line.fail');
     expect(text(line)).toBe('Couldn’t reach Cursor to check this key · 12m ago · Retry');
     await act(async () => line!.querySelector<HTMLButtonElement>('button')!.click());
     await settle();
@@ -190,7 +201,7 @@ describe('Cursor CLI on the Machines & models page', () => {
     act(() => root?.unmount());
     host?.remove();
     keys = [cursorKey()];
-    await mount();
-    expect(document.body.querySelector('.vk-cards .dsb-line.fail')).toBeNull();
+    await mount('/settings/providers/cursor-api');
+    expect(document.body.querySelector('.settings-card .dsb-line.fail')).toBeNull();
   });
 });

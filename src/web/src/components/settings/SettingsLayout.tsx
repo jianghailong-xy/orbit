@@ -180,22 +180,29 @@ function SettingsNav() {
         })}
       </NavGroup>
 
-      <NavGroup title="Providers" add={{ label: 'Connect a provider', onClick: () => navigate('/providers/new') }}>
-        {[...vendors].map(([vendor, count]) => (
-          <NavRow
-            key={vendor}
-            to={`/settings/providers/${vendor}`}
-            icon={<CloudOutlined />}
-            label={vendorName(vendor)}
-            trailing={<span className="settings-nav-meta">{count === 1 ? '1 key' : `${count} keys`}</span>}
-          />
-        ))}
-        <NavRow
-          to="/settings/providers/pools"
-          icon={<BlockOutlined />}
-          label="Account pools"
-          trailing={poolCount > 0 ? <span className="settings-nav-meta">{poolCount}</span> : undefined}
-        />
+      <NavGroup title="Providers" add={{ label: 'Connect a provider', onClick: () => navigate('/settings/providers/new') }}>
+        {vendors.size === 0 && poolCount === 0 ? (
+          // With no key and no pool at all, the group is the one way to connect a provider.
+          <NavRow to="/settings/providers/new" icon={<PlusOutlined />} label="Connect a provider" />
+        ) : (
+          <>
+            {[...vendors].map(([vendor, count]) => (
+              <NavRow
+                key={vendor}
+                to={`/settings/providers/${vendor}`}
+                icon={<CloudOutlined />}
+                label={vendorName(vendor)}
+                trailing={<span className="settings-nav-meta">{count === 1 ? '1 key' : `${count} keys`}</span>}
+              />
+            ))}
+            <NavRow
+              to="/settings/providers/pools"
+              icon={<BlockOutlined />}
+              label="Account pools"
+              trailing={poolCount > 0 ? <span className="settings-nav-meta">{poolCount}</span> : undefined}
+            />
+          </>
+        )}
       </NavGroup>
 
       <NavGroup title="Workspaces" add={{ label: 'Add a workspace', onClick: addWorkspace }}>

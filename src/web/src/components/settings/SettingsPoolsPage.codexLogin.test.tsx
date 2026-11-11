@@ -4,17 +4,17 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError } from '../api';
-import { openDialog } from '../components/RunnerEngines.test-helpers';
-import type { CodexLogin, CodexLoginPoll } from '../lib/codexLogin';
-import { encodeId } from '../lib/idCodec';
-import { formatResetTime, type ProviderPool } from '../lib/providerPools';
-import type { SharedPool } from '../lib/sharedPools';
-import { ProviderPoolPage } from './ProviderPoolPage';
-import { InfrastructurePage } from './InfrastructurePage';
+import { api, ApiError } from '../../api';
+import { openDialog } from '../RunnerEngines.test-helpers';
+import type { CodexLogin, CodexLoginPoll } from '../../lib/codexLogin';
+import { encodeId } from '../../lib/idCodec';
+import { formatResetTime, type ProviderPool } from '../../lib/providerPools';
+import type { SharedPool } from '../../lib/sharedPools';
+import { ProviderPoolPage } from '../../pages/ProviderPoolPage';
+import { SettingsPoolsPage } from './SettingsProviderPages';
 
 /**
- * A Codex pool of one's own ChatGPT account (migration 0323) on /infrastructure and on its own page, mounted
+ * A Codex pool of one's own ChatGPT account (migration 0323) on Settings' Account pools page and on its own page, mounted
  * for real against a fake API: one row per account it holds — its email, plan and `…AB12`, where it
  * stands, each window's quota and when it resets, and NEXT on the account a session would run on — and
  * "Add account", which asks first what kind of account (03-1; ProviderPoolPage.whoCanUseIt.test.tsx), then
@@ -24,8 +24,8 @@ import { InfrastructurePage } from './InfrastructurePage';
  * the pool. A new "Just me" Codex pool is one of these, and opens straight to signing in.
  */
 
-vi.mock('../api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api')>()),
+vi.mock('../../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../api')>()),
   api: vi.fn(),
 }));
 const apiMock = vi.mocked(api);
@@ -34,6 +34,8 @@ const id = (n: number) => encodeId(`0195c0de-0000-7000-8000-${String(n).padStart
 const POOL_ID = id(700);
 const AT = `/providers/pools/${POOL_ID}`;
 const LOGIN = `${AT}/codex-login`;
+/** The pool's page in Settings. */
+const PAGE = `/settings/providers/pools/${POOL_ID}`;
 const DEVICE_URL = 'https://auth.openai.com/codex/device';
 const CODE = 'QX7M-4TZPK';
 const IN_AN_HOUR = new Date(Date.now() + 60 * 60 * 1000).toISOString();
@@ -182,8 +184,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
           <MemoryRouter initialEntries={[at]}>
             <Probe />
             <Routes>
-              <Route path="/infrastructure" element={<InfrastructurePage />} />
-              <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
+              <Route path="/settings/providers/pools" element={<SettingsPoolsPage />} />
+              <Route path="/settings/providers/pools/:id" element={<ProviderPoolPage />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
@@ -235,25 +237,15 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     await click(button('Add account'));
     await click(button('Continue', dialog()!));
   };
-  /** Add › New account pool, the page's one way to a new pool; resolves once its dialog is open. */
+  /** New account pool, in the Account pools heading: the page's one way to a new pool; resolves once its dialog is open. */
   const newPool = async () => {
-    await click(button('Add'));
-    let item: HTMLElement | undefined;
-    await act(async () => {
-      await vi.waitFor(() => {
-        item = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')).find((el) =>
-          el.textContent?.startsWith('New account pool'),
-        );
-        if (!item) throw new Error('no menu is open');
-      }, { timeout: 20_000, interval: 20 });
-    });
-    await click(item);
+    await click(button('New account pool'));
     await openDialog('New account pool');
   };
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-    // Going back from a pool's page brings the page's pools into view (#pools); jsdom has no scrolling.
+    // jsdom has no scrolling.
     Element.prototype.scrollIntoView = vi.fn();
     path = '';
     state = null;
@@ -306,7 +298,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   });
 
   it('heads its card with Codex and "Just me", and gives the account a row: its email, plan, status and each window', async () => {
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     const card = container.querySelector<HTMLElement>('.pool-sec .pool-card')!;
     const head = card.querySelector<HTMLElement>('.re-head')!;
     expect(head.querySelector('.re-runner')?.textContent).toBe('My Codex');
@@ -332,7 +324,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('says so when no quota has been read yet — the account runs all the same', async () => {
     pools = [codexPool(account({ usage: null, usageUnavailable: 'no quota has been read for this account yet' }))];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(row().querySelector('.pool-status')?.textContent).toBe('Available');
     expect(row().querySelector('.pool-login-quota')?.textContent).toBe('No quota reported');
   });
@@ -349,7 +341,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         }),
       ),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(row().querySelector('.pool-status')?.textContent).toBe(`Spent · resets ${formatResetTime(IN_AN_HOUR)}`);
     expect(container.querySelector('.pool-gauge')?.textContent).toBe(`All spent · resets ${formatResetTime(IN_AN_HOUR)}`);
   });
@@ -366,7 +358,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         }),
       ),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(row().querySelector('.pool-status')?.textContent).toBe(`Spent · resets ${formatResetTime(IN_THREE_DAYS)}`);
     expect(container.querySelector('.pool-gauge')?.textContent).toBe(
       `All spent · resets ${formatResetTime(IN_THREE_DAYS)}`,
@@ -386,7 +378,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         }),
       ),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     const gauge = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head .pool-gauge')!;
     expect(gauge.querySelector('.pool-gauge-name')?.textContent).toBe('lin@example.com');
     expect(gauge.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 97%');
@@ -402,7 +394,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
     await act(async () => root.unmount());
     container.remove();
-    await mount(AT);
+    await mount(PAGE);
     const head = container.querySelector<HTMLElement>('.pool-detail .re-head .pool-gauge')!;
     expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 97%');
     expect(head.querySelector('.pool-gauge-pct')?.classList.contains('near-limit')).toBe(true);
@@ -420,7 +412,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         }),
       ),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     const gauge = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head .pool-gauge')!;
     expect(gauge.querySelector('.pool-gauge-pct')?.textContent).toBe('5h 64%');
     expect(gauge.querySelector('.pool-gauge-pct')?.classList.contains('near-limit')).toBe(false);
@@ -430,7 +422,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('signs an account OpenAI signed out in again from its card, as that account', async () => {
     pools = [codexPool(account({ state: 'SIGNED_OUT', lastError: 'refresh_token_reused' }))];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     expect(row().querySelector('.pool-status')?.textContent).toBe('Signed out');
     expect(row().querySelector('.pool-why')?.textContent).toBe(
       'OpenAI signed this account out — sign in again to put it back in the pool.',
@@ -450,7 +442,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   });
 
   it('shows its page: what it is, the account and its windows, and the way out', async () => {
-    await mount(AT);
+    await mount(PAGE);
     expect(container.querySelector('.pool-page-title h1')?.textContent).toBe('My Codex');
     expect(text()).toContain(
       'Codex pool · Just me · 1 of 1 account available · each session starts on the account whose quota resets soonest, and stays on it until that one runs out.',
@@ -484,12 +476,12 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(nameOf(del)).toBe('Delete My Codex?');
     await click(button('Delete', del));
     expect(sent[1]).toEqual({ method: 'DELETE', path: AT, body: undefined });
-    expect(path).toBe('/infrastructure');
+    expect(path).toBe('/settings/providers/pools');
   });
 
   it('puts an account in with the device flow: the notice, the code and its page, then the account', async () => {
     pools = [codexPool()];
-    await mount(AT);
+    await mount(PAGE);
     expect(text()).toContain('No account yet — no session can start on this pool until you sign in with ChatGPT.');
     expect(container.querySelector('.pool-gauge')?.textContent).toBe('Not signed in');
 
@@ -544,7 +536,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('gives up the sign-in on the server when the dialog is cancelled before the code was approved', async () => {
     pools = [codexPool()];
-    await mount(AT);
+    await mount(PAGE);
     await addAccount();
     await click(button('Get a code', dialog()!));
     await click(button('Cancel', dialog()!));
@@ -556,7 +548,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('gives up a sign-in whose code was still on its way when the dialog closed', async () => {
     pools = [codexPool()];
-    await mount(AT);
+    await mount(PAGE);
     // The server takes its time printing the code: the start is still out when the person gives up.
     let answer: (value: unknown) => void = () => {};
     const base = apiMock.getMockImplementation()!;
@@ -586,7 +578,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   it('offers a new code once the old one expired', async () => {
     pools = [codexPool()];
     polls = [{ status: 'EXPIRED', account: null }];
-    await mount(AT);
+    await mount(PAGE);
     await addAccount();
     await click(button('Get a code', dialog()!));
     await until(() => dialogText().includes('The code expired'));
@@ -600,7 +592,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   it('says why a sign-in did not finish, in the server’s words', async () => {
     pools = [codexPool()];
     polls = [{ status: 'FAILED', error: 'the codex CLI gave up (exit 1)', account: null }];
-    await mount(AT);
+    await mount(PAGE);
     await addAccount();
     await click(button('Get a code', dialog()!));
     await until(() => dialogText().includes('The sign-in didn’t finish'));
@@ -615,7 +607,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         email: 'lin@example.com',
       }),
     ];
-    await mount(AT);
+    await mount(PAGE);
     await addAccount();
     await click(button('Get a code', dialog()!));
     await until(() => dialogText().includes('already in'));
@@ -634,7 +626,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   it('reads a refusal with no account named the same way, without the address', async () => {
     pools = [codexPool(account())];
     polls = [new ApiError('This ChatGPT account is already in "My Codex"', 409, 'POOL_CODEX_ACCOUNT_DUPLICATE')];
-    await mount(AT);
+    await mount(PAGE);
     await addAccount();
     await click(button('Get a code', dialog()!));
     await until(() => dialogText().includes('already in'));
@@ -656,7 +648,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         hl(),
       ),
     ];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     const card = container.querySelector<HTMLElement>('.pool-sec .pool-card')!;
     const head = card.querySelector<HTMLElement>('.re-head')!;
     // The card says who can use it and how many of its accounts can run.
@@ -676,7 +668,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
     await act(async () => root.unmount());
     container.remove();
-    await mount(AT);
+    await mount(PAGE);
     const detail = container.querySelector<HTMLElement>('.pool-detail')!;
     // The card's head: how many accounts it holds, and which one the next session starts on.
     expect(detail.querySelector('.re-runner')?.textContent).toBe('Accounts2');
@@ -697,7 +689,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('signs one account out by its own fingerprint, and says the pool keeps running on the other', async () => {
     pools = [codexPool(account(), hl())];
-    await mount(AT);
+    await mount(PAGE);
     await click(labelled('Sign out lin@example.com')[0]);
     const confirm = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(nameOf(confirm)).toBe('Sign out lin@example.com?');
@@ -713,7 +705,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     await act(async () => root.unmount());
     container.remove();
     pools = [codexPool(account(), hl(), account({ email: 'third@example.com', fingerprint: '…CC34' }))];
-    await mount(AT);
+    await mount(PAGE);
     await click(labelled('Sign out lin@example.com')[0]);
     const again = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(descriptionOf(again)).toBe(
@@ -723,7 +715,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('adds a second account: the notice says what the pool runs on now, and the ending says how many it holds', async () => {
     pools = [codexPool(account())];
-    await mount(AT);
+    await mount(PAGE);
     await addAccount();
     expect(dialog()?.querySelector('.pa-lead')?.textContent).toBe(
       'Sign in with another ChatGPT account of yours to add it to My Codex. It runs on 1 account now.',
@@ -752,7 +744,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('makes a "Just me" Codex pool one of these, and opens it straight to signing in', async () => {
     pools = [];
-    await mount('/infrastructure');
+    await mount('/settings/providers/pools');
     await newPool();
     const modal = dialog()!;
     expect(modal.querySelector('[role="radiogroup"][aria-label="Engine"] [role="radio"][aria-checked="true"]')?.textContent?.trim()).toBe('Codex');
@@ -765,7 +757,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     pools = [codexPool()];
     await click(button('Create pool', modal));
     expect(sent).toEqual([{ method: 'POST', path: '/providers/pools', body: { label: 'Codex', engine: 'codex' } }]);
-    expect(path).toBe(AT);
+    expect(path).toBe(PAGE);
     expect(state).toEqual({ signIn: true });
     await until(() => nameOf(dialog()) === 'Sign in with ChatGPT');
     expect(dialog()?.querySelector('.pa-lead')?.textContent).toBe(
