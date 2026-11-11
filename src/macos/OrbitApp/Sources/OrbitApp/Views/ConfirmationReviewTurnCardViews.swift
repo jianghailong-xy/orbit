@@ -247,7 +247,7 @@ struct YouConfirmedCardView: View {
 }
 
 /// The queue's own line at a card's foot, in the words a queued message already uses.
-private struct ReviewTurnQueuedFoot: View {
+struct ReviewTurnQueuedFoot: View {
     let cancel: () -> Void
 
     var body: some View {

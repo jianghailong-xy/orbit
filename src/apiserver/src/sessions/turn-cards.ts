@@ -1,7 +1,15 @@
 import { readRunQuestionCard } from './run-question';
+import { readRunNoticeCard } from './run-notify';
+import { readSessionOpeningCard } from './session-opening-card';
+import { orbitResendSourceTurnId } from './watch-turn-key';
 import type { Prisma, SessionRunSource } from '@prisma/client';
 import type {
   ConfirmationAnswersCard,
+  EvidenceReviewCard,
+  EvidenceSendBackCard,
+  RunNoticeCard,
+  RunQuestionCard,
+  SessionOpeningCard,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
@@ -27,6 +35,7 @@ import {
   readConfirmationReturnCard,
   readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
+import { readEvidenceReviewCard, readEvidenceSendBackCard } from '../tasks/evidence-review';
 import { readTaskStartCard } from '../tasks/task-start-card';
 import { externalSenderOf, readSessionMessageCard } from './session-message';
 import { readSessionReplyCards, readTurnRequestIds } from './session-request';
@@ -50,7 +59,11 @@ import { readSessionReplyCards, readTurnRequestIds } from './session-request';
  * the queue that way, and `taskStart` was never on it at all.
  */
 export interface TurnCards {
-  runQuestion?: NonNullable<Awaited<ReturnType<typeof readRunQuestionCard>>>;
+  runQuestion?: RunQuestionCard;
+  runNotice?: RunNoticeCard;
+  evidenceReview?: EvidenceReviewCard;
+  evidenceSendBack?: EvidenceSendBackCard;
+  sessionOpening?: SessionOpeningCard;
   openItemDelivery?: OpenItemDeliveryCard;
   ownerAnswer?: OwnerAnswerCard;
   coordinatorDelivery?: CoordinatorDeliveryCard;
@@ -79,7 +92,7 @@ export interface TurnCards {
  */
 export async function readTurnCards(
   db: Prisma.TransactionClient,
-  session: { id: string; ownerId: string; taskId: string | null; runSource: SessionRunSource | null },
+  session: { id: string; ownerId: string; taskId: string | null; runSource: SessionRunSource | null; promptByOrbit?: boolean },
   turns: ReadonlyArray<{
     id: string;
     clientTurnId: string;
@@ -172,6 +185,40 @@ export async function readTurnCards(
   for (const turn of turns) {
     const runQuestion = await readRunQuestionCard(db, turn.clientTurnId);
     if (runQuestion) add(turn.id, { runQuestion });
+    const runNotice = await readRunNoticeCard(db, session.id, turn.clientTurnId);
+    if (runNotice) add(turn.id, { runNotice });
+  }
+  // A revision handed to the session that dispatched its task, and a send-back's note handed to the
+  // run that submitted it (tasks/evidence-review.ts), by the turn's own key.
+  for (const turn of turns) {
+    const evidenceReview = await readEvidenceReviewCard(db, turn.clientTurnId);
+    if (evidenceReview) add(turn.id, { evidenceReview });
+    const evidenceSendBack = await readEvidenceSendBackCard(db, turn);
+    if (evidenceSendBack) add(turn.id, { evidenceSendBack });
+  }
+  // The opening of a session Orbit opened with a prompt of its own (session-opening-card.ts).
+  for (const turn of turns) {
+    const sessionOpening = await readSessionOpeningCard(db, session, turn);
+    if (sessionOpening) add(turn.id, { sessionOpening });
+  }
+  // A re-send of Orbit's words after a failed turn is drawn as the card the turn it re-sends was: its
+  // key names that turn (`orbitResendSourceTurnId`), which is read here — through any re-sends of
+  // re-sends — and its cards read as if it were this turn. The re-send's own key reads none.
+  for (const turn of turns) {
+    let sourceId = orbitResendSourceTurnId(turn.clientTurnId);
+    let source: (typeof turns)[number] | null = null;
+    for (let hop = 0; sourceId && hop < 8; hop += 1) {
+      const row = await db.conversationTurn.findFirst({
+        where: { id: sourceId, sessionId: session.id },
+        select: { id: true, clientTurnId: true, content: true, senderSessionId: true },
+      });
+      if (!row) break;
+      source = row;
+      sourceId = orbitResendSourceTurnId(row.clientTurnId);
+    }
+    if (!source || orbitResendSourceTurnId(source.clientTurnId)) continue;
+    const resent = (await readTurnCards(db, session, [source])).get(source.id);
+    if (resent) add(turn.id, resent);
   }
   return cards;
 }

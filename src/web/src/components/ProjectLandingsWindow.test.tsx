@@ -281,6 +281,63 @@ afterEach(async () => {
 });
 
 describe('a landing in the window', () => {
+  it('opens each attempt with what queued it, as the chat\'s user bubble, then its steps, then the sentence', async () => {
+    const entry = (id: string, kind: string, minute: number, text: string, extra: Record<string, unknown> = {}) => ({
+      id, seq: Number(id.slice(1)), kind, at: at(11, minute), claim: kind === 'ENQUEUED' || kind === 'RETRY' ? 0 : 1, round: null,
+      check: null, phase: null, step: null, actor: null, reason: null, data: null, text, ...extra,
+    });
+    view = landing({
+      timeline: {
+        sections: [
+          {
+            title: 'Generation 1', jobId: 'job-0', kind: 'LAND_TASK', generation: 1, state: 'CHECK_FAILED',
+            trigger: { cause: 'DONE', by: 'TASK', at: at(11, 2), sourceRef: 'refs/heads/orbit/task-ledger-1a2b3c',
+              sourceSha: null, sessionId: 'work-1', reason: null },
+            entries: [
+              entry('e1', 'ENQUEUED', 2, 'Task marked done · queued to land on project/p1'),
+              entry('e2', 'CLAIMED', 3, 'Claimed by runner wikova · claim 1'),
+              entry('e3', 'RESULT', 7, 'Check failed · nothing was pushed', { data: { state: 'CHECK_FAILED' } }),
+            ],
+          },
+          {
+            title: 'Generation 2', jobId: 'job-1', kind: 'LAND_TASK', generation: 2, state: 'RUNNING',
+            trigger: { cause: 'RETRY', by: 'COORDINATOR', at: at(11, 9), sourceRef: 'refs/heads/orbit/task-ledger-1a2b3c',
+              sourceSha: '5b2e9f0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', sessionId: 'coord-1', reason: 'The baseline was repaired' },
+            entries: [
+              entry('e4', 'RETRY', 9, 'Rerun by the coordinator · The baseline was repaired'),
+              entry('e5', 'ENQUEUED', 9, 'Queued again to land on project/p1'),
+              entry('e6', 'CLAIMED', 10, 'Claimed by runner wikova · claim 1'),
+            ],
+          },
+        ],
+        facts: [],
+        truncated: false,
+      },
+    });
+    await mount();
+    const turn = page().querySelector<HTMLElement>(`[data-landing-entry="${SESSION}"]`)!;
+    const bubbles = [...turn.querySelectorAll<HTMLElement>('.landings-window-trigger')];
+    expect(bubbles.map((bubble) => [bubble.querySelector('.chat-user-from')?.textContent, bubble.querySelector('.chat-user')?.textContent]))
+      .toEqual([
+        ['From the task · Done', 'Land Ledger migration order · orbit/task-ledger-1a2b3c'],
+        ['From the coordinator · Rerun', 'The baseline was repaired'],
+      ]);
+    expect(bubbles[0].querySelector('.chat-time')?.textContent).not.toBe('');
+    // In the turn's order: each bubble before its attempt's steps line, the running head under the newest bubble, and
+    // the sentence after the steps.
+    const order = [...turn.querySelectorAll('.landings-window-trigger, .chat-turn-head, .landings-window-steps-line, .landings-window-reply')]
+      .map((node) => node.classList.contains('landings-window-trigger') ? 'ask'
+        : node.classList.contains('chat-turn-head') ? 'head'
+          : node.classList.contains('landings-window-reply') ? 'reply' : 'steps');
+    expect(order).toEqual(['ask', 'steps', 'ask', 'head', 'steps', 'reply']);
+    // The lines that queued an attempt are the bubble's: no Queue step repeats them.
+    await openSteps();
+    expect([...turn.querySelectorAll('.chat-tool-name')].map((name) => name.textContent)).not.toContain('Queue');
+    // The bubble opens the conversation it came from.
+    await act(async () => bubbles[0].querySelector<HTMLElement>('.chat-user')!.click());
+    expect(openedSession).toBe('work-1');
+  });
+
   it('draws the window’s head, the landing’s card and its record, and the read-only footer', async () => {
     view = landing({
       timeline: {
@@ -840,9 +897,9 @@ describe('a settled merge round', () => {
     ].join(''));
     // One attempt: its steps line is `1 step`, open, and its check is a step whose row says how it ended.
     expect(page().querySelector(`[data-landing-entry="${SESSION}"] .landings-window-steps-line`)?.textContent).toBe('1 step');
-    // The sentence comes first and the steps under it, as the chat says what it does before its tool calls.
+    // As the chat's turn: the steps line comes before the sentence, as tool calls come before the reply.
     const turn = page().querySelector(`[data-landing-entry="${SESSION}"]`)!;
-    expect(turn.querySelector('.landings-window-reply')!.compareDocumentPosition(turn.querySelector('.landings-window-steps-line')!)
+    expect(turn.querySelector('.landings-window-steps-line')!.compareDocumentPosition(turn.querySelector('.landings-window-reply')!)
       & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(page().querySelector(`[data-landing-entry="${SESSION}"] .landing-step[data-step="check:MERGE_CHECK"] .chat-tool-summary`)?.textContent)
       .toBe('Merge check passed · 17m 41s');
@@ -1088,6 +1145,10 @@ describe('the window', () => {
     }
     expect(value(rule('.landings-window-steps-line'), 'background')).toBe('transparent');
     expect(value(rule('.landing-step-row'), 'background')).toBe('transparent');
+    // A step row keeps the chat tool row's own size: it takes the family, never the whole font, from the page.
+    expect(rule('.landing-step-row')).not.toMatch(/(^|[;{\s])font:/u);
+    expect(value(rule('.landing-step-row'), 'font-family')).toBe('inherit');
+    expect(value(rule('.landings-window-steps-line:focus'), 'outline')).toBe('none');
     expect(value(rule('.landings-window-reply'), 'cursor')).toBe('pointer');
     expect(value(rule('.landings-window-entry.is-outlined .landings-window-reply'), 'box-shadow')).toBe('inset 2px 0 0 var(--brand)');
     // A press leaves no focus box round the sentence.
