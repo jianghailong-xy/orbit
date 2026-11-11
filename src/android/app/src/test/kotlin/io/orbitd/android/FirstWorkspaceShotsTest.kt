@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.composer.MachineSetupCopy
+import io.orbitd.android.composer.WelcomeCopy
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
@@ -142,6 +143,47 @@ class FirstWorkspaceShotsTest {
         ).assertIsEnabled()
 
         shot("02-drawer-set-up")
+    }
+
+    /** A new account's first machine (docs/mocks/new-user-onboarding): the setup card greets it and offers first messages, which only
+     *  fill the composer. */
+    @Test fun aNewAccountsSetupCardGreetsItAndOffersFirstMessagesThatFillTheComposer() {
+        FirstWorkspaceShell.history = false
+        signIn()
+        awaitText(WelcomeCopy.welcomeTitle("Owner"))
+        awaitText(WelcomeCopy.WELCOME_LEAD)
+        awaitText(MachineSetupCopy.SETUP_REGISTER_DIR)
+        awaitText(MachineSetupCopy.setupSignIn("Claude Code", "orbit@austin"))
+        compose.onAllNodesWithText(MachineSetupCopy.setupTitle("orbit@austin"), useUnmergedTree = true)
+            .fetchSemanticsNodes().let { nodes -> assertTrue("only the drawer row says Set up", nodes.size <= 1) }
+        awaitText(WelcomeCopy.WELCOME_FIRST)
+        awaitText(WelcomeCopy.WELCOME_FIRST_HELP)
+        compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).assertCountEquals(3)
+        WelcomeCopy.WELCOME_EXAMPLES.forEach { awaitText(it) }
+        awaitText(WelcomeCopy.WELCOME_PLACEHOLDER)
+        assertTrue("the Open list was read", FirstWorkspaceShell.calls.contains("GET sessions?view=open&limit=1"))
+        assertTrue("the Completed list was read", FirstWorkspaceShell.calls.contains("GET sessions?view=completed&limit=1"))
+
+        val second = WelcomeCopy.WELCOME_EXAMPLES[1]
+        compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true)[1].performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.waitUntil(30_000) {
+            compose.onAllNodes(hasTestTag("composer-input") and hasText(second), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true)[1].assertIsSelected()
+        assertFalse("picking an example sends nothing", FirstWorkspaceShell.calls.contains("POST sessions"))
+        shot("05-welcome-setup-card")
+    }
+
+    /** An account that has had a session sees today's setup card: its title, no greeting and no examples. */
+    @Test fun anAccountWithHistorySeesNoWelcome() {
+        signIn()
+        awaitText("Found · git repository · main")
+        compose.waitUntil(30_000) { FirstWorkspaceShell.calls.contains("GET sessions?view=completed&limit=1") }
+        compose.waitForIdle()
+        compose.onAllNodesWithText(WelcomeCopy.welcomeTitle("Owner"), substring = true, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText(WelcomeCopy.WELCOME_PLACEHOLDER, useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test fun heldMessageWaitsCanBeWithdrawnAutoCreatesTheSessionOnceReadyAndDrawsTheCreatedWorkspaceLine() {
@@ -345,11 +387,15 @@ internal object FirstWorkspaceShell {
     /** With [slots]: the register directory's first question is not answered until another takes its place. */
     @Volatile var slowFirstRegisterAnswer = false
     @Volatile var workspaceCreated = false
+    /** Whether the account's Completed list holds a session: by default it does, so the setup card is today's, not a new account's
+     *  welcome card (docs/mocks/new-user-onboarding). */
+    @Volatile var history = true
     @Volatile var workspaceName = "app"
     @Volatile private var asked: String? = null
     private val asks = ConcurrentHashMap<String, Int>()
 
     fun reset() {
+        history = true
         calls.clear()
         bodies.clear()
         disk.clear()
@@ -555,6 +601,8 @@ internal object FirstWorkspaceShell {
                 workspaceCreated = true
                 ok("""{"id":"$SESSION"}""")
             }
+            path == "sessions" && method == "GET" && history && !workspaceCreated && query == "view=completed&limit=1" ->
+                ok("""[{"id":"34FwSessionEarlier0001","title":"An earlier session","status":"COMPLETED"}]""")
             path == "sessions" && method == "GET" -> ok(if (workspaceCreated) "[${sessionDetailJson()}]" else "[]")
             path == "sessions/$SESSION" && method == "GET" -> ok(sessionDetailJson().toString())
             path == "sessions/$SESSION/events/page" -> ok(

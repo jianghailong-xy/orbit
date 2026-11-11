@@ -62,6 +62,9 @@ internal fun MachineSetupCard(
     onUseKey: () -> Unit,
     onOpenMachine: () -> Unit,
     onSignedIn: () -> Unit,
+    /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it, and offers first messages to try, which fill
+     *  the page's composer. */
+    welcome: MachineWelcome? = null,
 ) {
     val machine = RunnerPage.displayName(runner)
     val offline = !online
@@ -85,7 +88,8 @@ internal fun MachineSetupCard(
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (welcome != null) WelcomeHead(welcome.name)
+            else Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(
                     Modifier
                         .size(32.dp)
@@ -268,6 +272,11 @@ internal fun MachineSetupCard(
 
             HorizontalDivider()
 
+            if (welcome != null) {
+                WelcomeExamples(step = 3, picked = welcome.composerText, onPick = welcome.onExample)
+                HorizontalDivider()
+            }
+
             val folder = state.folder
             if (ready && folder != null) {
                 Text(
@@ -288,8 +297,11 @@ internal fun MachineSetupCard(
     }
 }
 
+/** What a new account's first machine adds to the setup card. */
+internal data class MachineWelcome(val name: String?, val composerText: String, val onExample: (String) -> Unit)
+
 @Composable
-private fun SetupStepRow(number: Int, done: Boolean, content: @Composable ColumnScope.() -> Unit) {
+internal fun SetupStepRow(number: Int, done: Boolean, content: @Composable ColumnScope.() -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 9.dp),
         verticalAlignment = Alignment.Top,

@@ -16,6 +16,7 @@ import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.LocalDefaultModels
 import io.orbitd.android.management.ManagementApi
+import io.orbitd.android.management.AddRunnerDialog
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.rememberNow
 import io.orbitd.android.management.rememberResumed
@@ -64,12 +65,28 @@ fun NewSessionComposer(
             model.consumeCreated()
         }
     }
+    // A new account's first draft in its managed runner's default workspace wears the welcome card (docs/mocks/new-user-onboarding)
+    // in place of the engine row. Only while the account has never had a session.
+    val managementApi = remember(handle) { ManagementApi(app.session, handle, app.processScope) }
+    val managedReader = rememberManagedRunner(managementApi, ask = true)
+    val managed = managedReader.shown
+    val managedDraft = managed?.status?.workspaceId?.let { ObjectId.same(it, workspaceId) } == true
+    val welcomeUp = rememberNewAccount(managementApi, managedDraft) && managedDraft
+    FollowManagedRunner(managedReader, follow = welcomeUp)
+    var focusRequest by remember(target) { mutableIntStateOf(0) }
+    var addingOwn by remember(target) { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val composerHeight = if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
         Column(Modifier.fillMaxSize()) {
             Text(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceId) }?.name ?: "New session", Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
             route.folderId?.let { id -> Text(data.folders.firstOrNull { ObjectId.same(it.id, id) }?.name ?: "Folder", Modifier.padding(horizontal = 16.dp)) }
             error?.let { Text(it); TextButton(onClick = { retry++ }) { Text("Retry workspace") } }
+            if (welcomeUp && managed != null) {
+                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp)) {
+                    ManagedWelcomeDraft(app, handle, model, state, detail, data, managed, managedReader, managementApi, open,
+                        onOwnInstead = { addingOwn = true }) { focusRequest++ }
+                }
+            } else {
             // First the engine — the CLI this session runs on for good — then, in the composer's model menu, the credential it spends.
             detail?.let { workspace ->
                 val effective = JsonObject(workspace + state.draft.resumeConfig)
@@ -85,12 +102,93 @@ fun NewSessionComposer(
                 if (choosingEngine) EngineChoices(model, state, effective, handle.account.server, openRunner) { choosingEngine = false }
             }
             Spacer(Modifier.weight(1f))
+            }
             val current = detail
             val fresh = current != null && current.flag("enabled") != false
             val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
-            Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, target.key, session, target, openRunner = openRunner) }
+            Box(Modifier.heightIn(max = composerHeight)) {
+                SessionComposer(app, handle, target.key, session, target, focusRequest = focusRequest, openRunner = openRunner,
+                    placeholder = if (welcomeUp) WelcomeCopy.WELCOME_PLACEHOLDER else null)
+            }
         }
     }
+    if (addingOwn) AddRunnerDialog(managementApi, onDismiss = { addingOwn = false }) { id ->
+        addingOwn = false
+        open(OrbitRoute(Destination.DRAFT, id = id))
+    }
+}
+
+/**
+ * The managed welcome card on its draft: the managed runner's runner read again every few seconds (its first heartbeat opens the model
+ * step), the engine a sign-in is offered for, and the credential the draft would run on.
+ */
+@Composable
+private fun ManagedWelcomeDraft(
+    app: OrbitApplication,
+    handle: SessionHandle,
+    model: ComposerModel,
+    state: ComposerState,
+    detail: JsonObject?,
+    data: DirectoryData,
+    managed: ManagedRunner.Shown,
+    reader: ManagedRunnerReader,
+    managementApi: ManagementApi,
+    open: (OrbitRoute) -> Unit,
+    onOwnInstead: () -> Unit,
+    onPicked: () -> Unit,
+) {
+    val runnerId = managed.status.runnerId
+    val nowMs = rememberNow()
+    val resumed = rememberResumed()
+    val scope = rememberCoroutineScope()
+    var liveRunner by remember(runnerId) { mutableStateOf<JsonObject?>(null) }
+    val runner = liveRunner ?: runnerId?.let { id -> data.effectiveRunnerRows.firstOrNull { ObjectId.same(it.text("id"), id) } }
+    LaunchedEffect(model) { if (model.state.value.let { it.catalog == null && !it.catalogLoading }) model.loadCatalog() }
+    LaunchedEffect(model, runnerId, resumed) {
+        if (!resumed || runnerId == null) return@LaunchedEffect
+        while (true) {
+            runCatching { model.api.runner(runnerId) }.getOrNull()?.let { liveRunner = it }
+            delay(MachineSetup.refreshMs(liveRunner))
+            model.refreshCatalog()
+        }
+    }
+    val online = runner != null && !RunnerPage.isOffline(runner, nowMs)
+    val startsNow = managed.display.startsNewSession
+    val effective = detail?.let { JsonObject(it + state.draft.resumeConfig) } ?: state.draft.resumeConfig
+    val draftEngine = state.catalog?.engineOf(effective)
+    // Before a first session can start there is no draft engine to sign in, so the runner's own first one.
+    val engine = draftEngine?.takeIf { startsNow && it in ProviderEngines.LOGIN_ENGINES }
+        ?: runner?.let(MachineSetup::firstEngineOn) ?: ProviderEngines.CLAUDE
+    val providerSlug = state.draft.resumeConfig.text("provider") ?: effective.text("provider")?.takeIf { it.isNotEmpty() } ?: engine
+    val antigravityKey = state.catalog?.antigravityKeyAvailable(effective) == true
+    val providerOption = state.catalog?.takeIf { startsNow || state.draft.resumeConfig["provider"] != null }
+        ?.current(engine, providerSlug, antigravityKey)
+    val credential = runner?.let { MachineSetup.credential(it, engine, providerOption) } ?: SetupCredential.SignIn
+    val keyToUse = MachineSetup.firstKey(state.catalog?.engines(preferred = listOf(engine to providerSlug), antigravityKey = antigravityKey).orEmpty(), engine)
+    ManagedWelcomeCard(
+        name = rememberAccountName(managementApi, true),
+        reader = reader,
+        shown = managed,
+        runner = runner,
+        online = online,
+        engine = engine,
+        credential = credential,
+        composerText = state.draft.text,
+        startsNow = startsNow,
+        managementApi = managementApi,
+        onOpenRunner = { id -> open(OrbitRoute(Destination.RUNNER, id)) },
+        onOwnInstead = onOwnInstead,
+        onExample = { text -> model.edit(text, text.length, text.length); onPicked() },
+        onUseKey = keyToUse?.let { pick -> { model.config(buildJsonObject { put("engine", pick.engine); put("provider", pick.provider) }) } },
+        onChangeCredential = { model.config(buildJsonObject { put("engine", engine); put("provider", engine) }) },
+        onSignedIn = {
+            app.realtime.refreshDirectory()
+            scope.launch {
+                runnerId?.let { id -> runCatching { model.api.runner(id) }.getOrNull()?.let { liveRunner = it } }
+                model.refreshCatalog()
+            }
+        },
+    )
 }
 
 @Composable
@@ -155,6 +253,10 @@ private fun MachineDraftComposer(
     val existingWorkspace = data.workspaces.firstOrNull { ObjectId.same(it.runnerId, runnerId) }
     val bare = data.ready && existingWorkspace == null
     val ready = MachineSetup.isReady(bare = bare, folder = setupState.folder, online = online, credential = credential)
+    // A new account's first machine: the setup card greets it and offers first messages (docs/mocks/new-user-onboarding).
+    val machineWelcome = rememberNewAccount(managementApi, bare) && bare
+    val welcomeName = rememberAccountName(managementApi, machineWelcome)
+    var focusRequest by remember(target) { mutableIntStateOf(0) }
     val otherEngines = runner?.let {
         MachineSetup.otherEngines(it, engine, state.catalog?.fleet ?: data.effectiveRunnerRows)
     }.orEmpty()
@@ -266,6 +368,9 @@ private fun MachineDraftComposer(
                                 model.refreshCatalog()
                             }
                         },
+                        welcome = if (!machineWelcome) null else MachineWelcome(welcomeName, state.draft.text) { text ->
+                            model.edit(text, text.length, text.length); focusRequest++
+                        },
                     )
                     setupState.held?.let { held ->
                         HeldFirstMessageView(
@@ -296,7 +401,8 @@ private fun MachineDraftComposer(
                 )
             }
             Box(Modifier.heightIn(max = composerHeight)) {
-                SessionComposer(app, handle, target.key, session, target, openRunner = openRunner)
+                SessionComposer(app, handle, target.key, session, target, focusRequest = focusRequest, openRunner = openRunner,
+                    placeholder = if (machineWelcome && runner != null && (online || MachineSetup.isConnecting(runner))) WelcomeCopy.WELCOME_PLACEHOLDER else null)
             }
         }
     }

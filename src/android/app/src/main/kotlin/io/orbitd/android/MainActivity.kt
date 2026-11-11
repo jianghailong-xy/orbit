@@ -58,6 +58,10 @@ import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.MachineSetup
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.NewSessionComposer
+import io.orbitd.android.composer.NoMachineWelcomeCard
+import io.orbitd.android.composer.rememberAccountName
+import io.orbitd.android.composer.rememberManagedOffered
+import io.orbitd.android.composer.rememberNewAccount
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
 import kotlinx.coroutines.delay
@@ -380,7 +384,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
-                                Destination.WORKSPACES -> WorkspaceHome(data, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
+                                Destination.WORKSPACES -> WorkspaceHome(data, management, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, signedIn.handle, ::open, { app.realtime.refreshDirectory() },
                                     watches.summaries, scopeList)
                                 Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, ::open)
@@ -475,10 +479,25 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
 /** What stands in for a workspace's list until the launch has landed on one (iOS `workspaceList`): a bare spinner while the list is
  * coming, or why it can't, or that there is nothing to land on. With workspaces this page is gone a frame later. */
 @Composable
-private fun WorkspaceHome(data: DirectoryData, startSession: () -> Unit, retry: () -> Unit) {
+private fun WorkspaceHome(data: DirectoryData, management: ManagementApi, startSession: () -> Unit, retry: () -> Unit) {
     // Before the phone has said what network it has, having none yet means nothing.
     var patient by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(2_000); patient = false }
+    // A new account with no machine at all, on a server that starts none for it, meets the welcome card (docs/mocks/new-user-onboarding,
+    // P3): how to connect a computer. Once one comes online the launch's landing takes its setup page.
+    val noMachine = data.ready && data.workspaces.isEmpty() && data.effectiveRunnerRows.isEmpty()
+    val managedOffered = rememberManagedOffered(management, noMachine)
+    val welcome = rememberNewAccount(management, noMachine && managedOffered == false) && noMachine && managedOffered == false
+    val welcomeName = rememberAccountName(management, welcome)
+    var troubled by remember { mutableStateOf(false) }
+    if (troubled) AddRunnerDialog(management, onDismiss = { troubled = false }) { troubled = false; retry() }
+    if (welcome) {
+        ReportDirectoryDrawn(data, rememberLazyListState()) { false }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 12.dp)) {
+            NoMachineWelcomeCard(welcomeName, management, onTrouble = { troubled = true }, onArrived = retry)
+        }
+        return
+    }
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         when {
             data.ready && data.workspaces.isEmpty() -> {
