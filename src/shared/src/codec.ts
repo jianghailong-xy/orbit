@@ -458,6 +458,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // `owner_request.blocks_task_ids` (0503): the tasks an owner request blocks — task addresses like `taskIds`.
   'blocksTaskIds',
   'dependsOnTaskIds',
+  // `POST /projects/:id/criteria/:criterionKey/move`: the tasks that went with the criterion, the
+  // ones that stayed, and the open items that went with them — and, on a refusal, the items in the way.
+  'movedTaskIds',
+  'keptTaskIds',
+  'movedOpenItemIds',
+  'itemIds',
   'anchorTaskId',
   'attachmentIds',
   // An account pool's membership (migration 0265): the pool and the provider a member row names, and

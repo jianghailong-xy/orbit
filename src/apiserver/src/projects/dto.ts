@@ -27,6 +27,7 @@ import {
   type AcceptedGap,
   type DeliveryMode,
   type DoneRequestGap,
+  type MoveCriterionRequestBody,
   type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestBody,
   type ProjectStartRequestBody,
@@ -952,4 +953,20 @@ export class DecideProjectHandoffDto {
     message: 'acknowledgedCrossingKey must be the crossingKey you read from the crossing',
   })
   acknowledgedCrossingKey?: string;
+}
+
+/** The project a move creates: a title, and a goal when the owner gave one. */
+export class MoveCriterionNewProjectDto {
+  @IsString() title!: string;
+  @IsOptional() @IsString() @MaxLength(MAX_PROJECT_GOAL_CHARS) goal?: string | null;
+}
+
+/**
+ * `POST /projects/:id/criteria/:criterionKey/move` (`@orbit/shared` `MoveCriterionRequestBody`):
+ * exactly one destination. The service says which was missing (CRITERION_MOVE_TARGET_REQUIRED).
+ */
+export class MoveCriterionDto implements MoveCriterionRequestBody {
+  @IsOptional() @IsPublicId() toProjectId?: string;
+  @IsOptional() @ValidateNested() @Type(() => MoveCriterionNewProjectDto)
+  newProject?: MoveCriterionNewProjectDto;
 }

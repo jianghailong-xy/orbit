@@ -29,6 +29,8 @@ import {
   type SessionFilingState,
   type SessionRunState,
   toUuid,
+  type MoveCriterionRefusal,
+  type MoveCriterionResult,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
@@ -67,9 +69,13 @@ import {
   MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS,
   REMOVED_CRITERION_WIRING_FIELDS,
   removedCriterionWiring,
+  type MoveCriterionDto,
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
+import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
+import { settleTaskSegmentAfterMove } from './landing-session';
+import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
 import {
   CRITERIA_DECISION_ALREADY_SETTLED,
   CRITERIA_DECISION_BASE_SEAL_MOVED,
@@ -213,7 +219,11 @@ import {
 } from './project-pause';
 import { projectMoves } from '../tasks/project-pause-dispatch';
 import { readProjectTaskWorkStates, type ProjectTaskWorkStateFields } from './project-task-work-state';
-import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
+import {
+  isLockNotAvailable,
+  taskNotRetiredSql,
+  verificationFailureIsHistorySql,
+} from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
@@ -3948,6 +3958,165 @@ export class ProjectsService {
       loggedRetry(this.logger, 'projects.resume'),
     );
     return this.afterPause(ownerId, id, 'RESUME', written);
+  }
+
+  /**
+   * `POST /projects/:id/criteria/:criterionKey/move` — the done card's "Move to a follow-up…": one
+   * unmet criterion of this project and its serving tasks that are not DONE or CANCELLED, moved to
+   * `toProjectId` or to a project this move creates (`newProject`), in ONE transaction.
+   * `criterion-move.ts` says what moves, what stays and every refusal.
+   *
+   * The owner's alone: a request made from a session is refused 403 before anything is read. No
+   * session may move work across projects without the owner's answer (project_crossings), and this
+   * move IS that answer, so there is no coordinator door to it.
+   *
+   * Locks, in the canonical order: the owner row (rank 10, the task-graph mutex, which also covers the
+   * new project's foreign key), both projects FOR NO KEY UPDATE sorted (40), the source's serving
+   * tasks FOR UPDATE NOWAIT sorted (50, CRITERION_MOVE_BUSY rather than a wait), and then the rows
+   * written under them. Every refusal is decided under those locks before the first write.
+   */
+  async moveCriterion(
+    ownerId: string,
+    projectId: string,
+    criterionKey: string,
+    dto: MoveCriterionDto,
+    actingSessionId?: string,
+    credential?: AuthCredential,
+  ): Promise<MoveCriterionResult> {
+    if (actingSessionId?.trim()) {
+      throw new ForbiddenException({
+        code: 'CRITERION_MOVE_OWNER_ONLY',
+        message: 'Moving a criterion to another project is the account owner\'s own decision, so a '
+          + 'request made from a session is refused. Nothing was written.',
+      });
+    }
+    const badTarget = (message: string) => new BadRequestException({
+      code: 'CRITERION_MOVE_TARGET_REQUIRED' satisfies MoveCriterionRefusal, message,
+    });
+    const toProjectId = typeof dto?.toProjectId === 'string' && dto.toProjectId.trim()
+      ? dto.toProjectId.trim()
+      : null;
+    const newProject = dto?.newProject ?? null;
+    if ((toProjectId === null) === (newProject === null)) {
+      throw badTarget('name exactly one destination: toProjectId, or newProject with a title');
+    }
+    const newTitle = typeof newProject?.title === 'string' ? newProject.title.trim() : '';
+    if (newProject && !newTitle) throw badTarget('the new project needs a title');
+    let criterionId: string;
+    let targetId: string | null;
+    try {
+      criterionId = toUuid(criterionKey);
+      targetId = toProjectId === null ? null : toUuid(toProjectId);
+    } catch {
+      throw new NotFoundException('no such criterion or project');
+    }
+    if (targetId === projectId) {
+      throw new BadRequestException({
+        code: 'CRITERION_MOVE_SAME_PROJECT' satisfies MoveCriterionRefusal,
+        message: 'the criterion is already in this project; choose another one or create a new one',
+      });
+    }
+
+    const moved = await withTransactionRetry(this.prisma, async (tx) => {
+      await lockOwnerTaskGraph(tx, ownerId);
+      const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "project"
+         WHERE "id" = ANY(${orderedIds([projectId, targetId])}::uuid[])
+           AND "owner_id" = ${ownerId}::uuid
+         ORDER BY "id"
+         FOR NO KEY UPDATE`);
+      if (locked.length !== (targetId ? 2 : 1)) throw new NotFoundException('project not found');
+      const definition = await tx.projectAcceptanceCriterionDefinition.findFirst({
+        where: { id: criterionId, projectId },
+        select: { id: true },
+      });
+      if (!definition) throw new NotFoundException('this project states no such criterion');
+
+      const serving = await tx.task.findMany({
+        where: { ownerId, projectId, criterionDefinitionId: criterionId },
+        select: { id: true },
+      });
+      try {
+        await tx.$queryRaw`
+          SELECT "id" FROM "task"
+           WHERE "id" = ANY(${orderedIds(serving.map((task) => task.id))}::uuid[])
+           ORDER BY "id"
+           FOR UPDATE NOWAIT`;
+      } catch (error) {
+        if (!isLockNotAvailable(error)) throw error;
+        throw new ConflictException({
+          code: 'CRITERION_MOVE_BUSY' satisfies MoveCriterionRefusal,
+          message: 'a task serving this criterion is being written right now (a run starting on it, '
+            + 'most likely); nothing was written — try again in a moment',
+          taskIds: serving.map((task) => task.id),
+          itemIds: [],
+        });
+      }
+
+      const facts = await readCriterionMoveFacts(tx, ownerId, { sourceId: projectId, targetId, criterionId });
+      if (!facts) throw new NotFoundException('this project states no such criterion');
+      const decided = planCriterionMove(facts);
+      if ('refusal' in decided) {
+        const { code, message, taskIds, itemIds } = decided.refusal;
+        throw new ConflictException({ code, message: `${message}. Nothing was written.`, taskIds, itemIds });
+      }
+
+      const target = targetId ?? (await tx.project.create({
+        data: {
+          ownerId,
+          title: newTitle,
+          goal: ProjectsService.blankToNull(newProject?.goal ?? undefined),
+          runtime: { create: {} },
+        },
+        select: { id: true },
+      })).id;
+      const seals = await writeCriterionMove(tx, ownerId, {
+        sourceId: projectId, targetId: target, criterionId, plan: decided.plan,
+      }, credential);
+      return { target, plan: decided.plan, seals };
+    }, loggedRetry(this.logger, 'projects.moveCriterion')).catch((error: unknown) => {
+      // 0389's guard, reached only by a run claimed after the read above: the same refusal.
+      if (error instanceof Error && error.message.includes('TASK_CLAIMED_PROJECT_MOVE')) {
+        throw new ConflictException({
+          code: 'CRITERION_MOVE_TASK_RUNNING' satisfies MoveCriterionRefusal,
+          message: 'a task serving this criterion started a run while it was being moved. Nothing was written.',
+          taskIds: [],
+          itemIds: [],
+        });
+      }
+      throw error;
+    });
+
+    // After the commit: the landing A had open for each moved task is not A's any more (the move
+    // confirmation's rule), and both projects' derived status and done requests are read again.
+    for (const taskId of moved.plan.movedTaskIds) {
+      await settleTaskSegmentAfterMove(this.prisma, { ownerId, taskId, fromProjectId: projectId })
+        .catch((e) => this.logger.warn(`landing settlement after criterion move failed: ${
+          (e as { message?: string })?.message ?? String(e)}`));
+    }
+    await this.reprojectProjectStatus(ownerId, projectId);
+    await this.reprojectProjectStatus(ownerId, moved.target);
+    if (this.openItems && moved.plan.movedOpenItemIds.length > 0) {
+      await this.openItems.deliverForItems(moved.plan.movedOpenItemIds)
+        .catch((e) => this.logger.warn(`moved open items not delivered: ${
+          (e as { message?: string })?.message ?? String(e)}`));
+    }
+    for (const id of [projectId, moved.target]) {
+      this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
+    }
+    for (const taskId of [...moved.plan.movedTaskIds, ...moved.plan.keptTaskIds]) {
+      this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+    }
+    return {
+      fromProjectId: projectId,
+      toProjectId: moved.target,
+      createdProject: targetId === null,
+      criterionKey: criterionKeyOf(criterionId),
+      movedTaskIds: moved.plan.movedTaskIds,
+      keptTaskIds: moved.plan.keptTaskIds,
+      movedOpenItemIds: moved.plan.movedOpenItemIds,
+      fromCriteriaDigest: moved.seals,
+    };
   }
 
   /**

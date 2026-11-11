@@ -335,6 +335,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'POST /projects/:id/pause': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/resume': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/criteria/:criterionKey/move': {
+    request: (of) => ({
+      params: { id: of.projectId, criterionKey: of.projectCriterionId },
+      body: { newProject: { title: 'census follow-up' } },
+    }),
+  },
   'POST /projects/:id/sessions/complete': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/acceptance/criteria-decisions/pending': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/acceptance/criteria-decisions/:intentId': {
@@ -996,6 +1002,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
           { id: of.projectCriterionId, text: 'the census holds elsewhere', verificationMethod: 'the census' },
         ],
       },
+    }),
+  },
+  // The destination is read under the owner's own key: another account's project is one that names
+  // nothing (404), before anything is moved.
+  'POST /projects/:id/criteria/:criterionKey/move body toProjectId': {
+    request: (of, mine) => ({
+      params: { id: mine.projectId, criterionKey: mine.projectCriterionId },
+      body: { toProjectId: of.projectId },
     }),
   },
   'POST /projects/:id/coordinator body workspaceId': {

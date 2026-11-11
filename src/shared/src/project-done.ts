@@ -254,3 +254,64 @@ export interface DoneState {
 export interface ProjectDoneCheck extends DoneState {
   findings: ProjectDoneFinding[];
 }
+
+/**
+ * `POST /projects/:id/criteria/:criterionKey/move` — the done card's "Move to a follow-up…": one
+ * unmet acceptance criterion of this project, and the serving tasks of it that are not DONE or
+ * CANCELLED, moved to another project in one transaction. Name exactly one destination:
+ * `toProjectId`, an OPEN project of the same owner, or `newProject`, created by the move.
+ *
+ * The account owner's alone: a request made from a session is refused 403.
+ */
+export interface MoveCriterionRequestBody {
+  toProjectId?: string;
+  newProject?: { title: string; goal?: string | null };
+}
+
+/** Why a move was refused (409 unless noted), each with the tasks or items that stand in the way. */
+export const MOVE_CRITERION_REFUSALS = [
+  /** 400: neither or both of `toProjectId` and `newProject` were sent, or the title is blank. */
+  'CRITERION_MOVE_TARGET_REQUIRED',
+  /** 400: `toProjectId` is the project the criterion is already in. */
+  'CRITERION_MOVE_SAME_PROJECT',
+  /** The source project is DONE or CANCELLED: reopen it first. */
+  'CRITERION_MOVE_SOURCE_NOT_OPEN',
+  /** The destination project is DONE or CANCELLED. */
+  'CRITERION_MOVE_TARGET_NOT_OPEN',
+  /** The criterion is met; only an unmet criterion is moved to a follow-up. */
+  'CRITERION_MOVE_CRITERION_MET',
+  /** A task that would move has a live run (queued, running, waiting for input or interrupted). */
+  'CRITERION_MOVE_TASK_RUNNING',
+  /** A task that would move is being landed on the source project's line. */
+  'CRITERION_MOVE_TASK_LANDING',
+  /** A task that would move is being written by something else right now; try again. */
+  'CRITERION_MOVE_BUSY',
+  /** A task that would move depends on, or is depended on by, open work staying behind. */
+  'CRITERION_MOVE_DEPENDENCY_CROSSES',
+  /** A parent, subtask, check, supersession or fix link would cross the two projects. */
+  'CRITERION_MOVE_LINK_CROSSES',
+  /** An open item about a task that would move belongs to the source project (a landing on its line,
+   *  a question its coordinator asked) and is answered there first. A TASK_FAILED item moves with
+   *  its task instead. */
+  'CRITERION_MOVE_TASK_ITEM_OPEN',
+] as const;
+export type MoveCriterionRefusal = (typeof MOVE_CRITERION_REFUSALS)[number];
+
+/** What a move answers: where the criterion went and what went with it. */
+export interface MoveCriterionResult {
+  fromProjectId: string;
+  toProjectId: string;
+  /** True when the destination was created by this move. */
+  createdProject: boolean;
+  /** The criterion's key, which the move does not change. */
+  criterionKey: string;
+  /** Serving tasks that moved with it. */
+  movedTaskIds: string[];
+  /** DONE and CANCELLED serving tasks, which stay with the source project and no longer serve the
+   *  criterion (their declaration reads as one whose criterion is gone). */
+  keptTaskIds: string[];
+  /** Open TASK_FAILED items about the moved tasks, which moved with them. */
+  movedOpenItemIds: string[];
+  /** The source project's criteria seal before and after the move. */
+  fromCriteriaDigest: { before: string; after: string };
+}
