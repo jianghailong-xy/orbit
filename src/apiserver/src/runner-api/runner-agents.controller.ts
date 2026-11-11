@@ -40,6 +40,18 @@ export const ORCHESTRATOR_WORKSPACE_CREATE_FIELDS = [
   'defaultMergeTarget',
 ] as const;
 
+// Fields that decide what an Agent's runs cost or where they may go: the owner's, through the workspace
+// and preferences APIs (docs/subagent-design.md §7). Unlike the other fields this route leaves out, these
+// are refused by name rather than dropped, so an agent that tries learns it cannot instead of reading
+// a 200 as done.
+export const HUMAN_ONLY_WORKSPACE_FIELDS = [
+  'modelRouting',
+  'modelRoutingOptimizeFor',
+  'modelRoutingProviders',
+  'subagentsEnabled',
+  'subagentsMaxRunning',
+] as const;
+
 export type OrchestratorWorkspaceInput = {
   name?: string;
   description?: string;
@@ -183,6 +195,14 @@ export function sanitizeWorkspaceWrite(body: unknown): OrchestratorWorkspaceInpu
     throw new BadRequestException('workspace body must be an object');
   }
   const input = body as Record<string, unknown>;
+  const humanOnly = HUMAN_ONLY_WORKSPACE_FIELDS.filter((field) => input[field] !== undefined);
+  if (humanOnly.length > 0) {
+    throw new BadRequestException({
+      code: 'HUMAN_ONLY_WORKSPACE_FIELD',
+      message: `${humanOnly.join(', ')} can only be set by the owner, in the Agent's settings`,
+      fields: humanOnly,
+    });
+  }
   const sanitized: Record<string, unknown> = {};
   for (const field of ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) {
     if (field === 'enableWorktree') {

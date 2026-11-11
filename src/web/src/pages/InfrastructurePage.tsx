@@ -12,6 +12,7 @@ import { latestRunnerVersion, runnerAttention, type AttentionWorkspace } from '.
 import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../lib/sharedPools';
 import { AccountPools, NewPoolModal, PoolHint } from '../components/AccountPools';
 import { KeyImpact } from '../components/KeyImpact';
+import { ModelTiers } from '../components/ModelTiers';
 import { ProviderGallery, ProviderPills } from '../components/ProviderGallery';
 import { ProviderKeyCards } from '../components/ProviderKeyCards';
 import { RunnerEngines } from '../components/RunnerEngines';
@@ -239,6 +240,8 @@ export function InfrastructurePage() {
       <div ref={poolSection} id="pools">
         {!pools.isPending && !shared.isPending && <AccountPools pools={poolList} refusals={refusals} />}
       </div>
+
+      <ModelTiers />
 
       {creatingPool && <NewPoolModal rows={providers.data ?? []} onClose={() => setCreatingPool(false)} />}
       {confirmHolder}
