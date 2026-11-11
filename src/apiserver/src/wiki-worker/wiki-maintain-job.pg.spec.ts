@@ -168,6 +168,7 @@ import { wikiMaintainJobPrincipal, wikiMaintainJobRunner, type WikiMaintainJobDe
 import { wikiStoredText } from './wiki-stored-text';
 import { wikiVerifyRetrySuffix } from './wiki-verify';
 import { wikiVerifyPrincipal } from './wiki-verify-job';
+import { appendWikiContext } from '../wiki/wiki-push';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;
@@ -364,6 +365,8 @@ async function fixture(
     snapshotRow?: boolean;
     /** The maintenance settings name the workspace (true, the default). */
     workspace?: boolean;
+    /** The space's review mode: automatic unless a case names another. */
+    reviewMode?: 'manual' | 'tiered' | 'automatic';
   } = {},
 ): Promise<Fixture> {
   const runnerId = randomUUID();
@@ -385,7 +388,7 @@ async function fixture(
       repoUrlNorm: over.repoUrl === false ? null : `github.com/example/app-${spaceId.slice(0, 8)}`,
       rootCommitSha: over.repoUrl === false ? null : 'b'.repeat(40),
       settings: {
-        reviewMode: 'automatic',
+        reviewMode: over.reviewMode ?? 'automatic',
         maintenance: { enabled: true, workspaceId: over.workspace === false ? null : workspaceId, provider: 'local-vllm' },
       },
     },
@@ -1157,6 +1160,133 @@ test('a git checkout\'s run is on tier git with no reason, and still checks its 
   assert.equal((report.entries as Record<string, number>).foreign, 1, 'with a snapshot, an entry anchored outside it is still foreign');
   assert.equal((report.anchors as Record<string, number>).entries, 2);
   assert.equal((report.docs as Record<string, unknown>).skipped, 'no_confirmed_plan');
+});
+
+// ── The code anchors of a run that could not read the repository (docs/wiki-repo-tiers-design.md §5.2, Q2) ──────
+
+/** An extraction of one entry anchored as given: what a sessions-tier run keeps, anchors and all, marked deferred. */
+function anchoredExtractor(fx: Fixture, title: string, anchors: Record<string, unknown>): (hit: Hit) => string {
+  return (hit) => {
+    if (hit.prompt.includes('==== CASE FILE ====')) {
+      if (hit.prompt.includes('狼人杀')) return '{"offTopic": true}';
+      return JSON.stringify([pitfall(fx, title, { anchors })]);
+    }
+    return '{"verdict":"supported","reason":"the cited turn says exactly this"}';
+  };
+}
+
+/** The entries `<orbit_wiki_context>` hands a session of the fixture's workspace, by id. */
+async function pushedOf(h: Harness, fx: Fixture): Promise<Set<string>> {
+  const content = await appendWikiContext(h.prisma as unknown as Prisma.TransactionClient, {
+    sessionId: fx.sessionId,
+    turnId: randomUUID(),
+    leaseGeneration: randomUUID(),
+    ownerId: h.ownerId,
+    workspaceId: fx.workspaceId,
+    taskId: null,
+    task: null,
+    dispatchOrigin: 'USER',
+    content: 'the upload test fails with ECONNREFUSED',
+  }, { mode: 'on', canaryOwners: new Set<string>(), problems: [] });
+  return new Set([...String(content).matchAll(/\(orbit-wiki:([0-9A-Za-z]+)\)/gu)].map((match) => toUuid(match[1]!)));
+}
+
+/** The anchors of an add op, wherever its payload keeps the draft. */
+function opAnchors(payload: unknown): Array<Record<string, unknown>> {
+  const body = (payload ?? {}) as Record<string, unknown>;
+  const draft = (body.entry ?? body.draft ?? body) as Record<string, unknown>;
+  return (draft.anchors ?? []) as Array<Record<string, unknown>>;
+}
+
+/**
+ * A manual space whose workspace is not git: the sessions-tier run proposes the entry with its code anchors marked
+ * deferred, the owner accepts it from Review, and it is live — and out of the push until a run that reads the code has
+ * checked them. Returns the entry the accept made.
+ */
+async function deferredEntry(h: Harness, fx: Fixture, title: string, anchors: Record<string, unknown>): Promise<string> {
+  await h.prisma.wikiSpaceWorkspace.create({ data: { spaceId: fx.spaceId, ownerId: h.ownerId, workspaceId: fx.workspaceId } });
+  h.model.answer = anchoredExtractor(fx, title, anchors);
+  const page = pageOf(fx);
+  h.maintenance.dossierPage = (async () => page) as unknown as WikiMaintenance['dossierPage'];
+  const play: RunnerPlay = { snapshotError: '/tmp/maintain-spec is not a git checkout: exit status 128', snapshotReason: 'not_git' };
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), play);
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.repo, { tier: 'sessions', reason: 'not_git' });
+  assert.equal((report.entries as Record<string, number>).foreign, 0, `an entry with code anchors is not another repository's: ${JSON.stringify(report)}`);
+
+  // In Review, its code anchors deferred.
+  const review = await h.service.listReview(h.ownerId, fx.spaceId);
+  const ops = review.flatMap((changeset) => changeset.ops as Array<Record<string, unknown>>).filter((op) => op.op === 'add');
+  assert.equal(ops.length, 1, JSON.stringify(review));
+  const op = ops[0]!;
+  assert.equal(op.decision, 'pending');
+  const proposed = opAnchors(op.payload);
+  assert.ok(proposed.length > 0, JSON.stringify(op.payload));
+  for (const anchor of proposed) assert.equal(anchor.deferred, true, JSON.stringify(anchor));
+
+  // The owner accepts it: live, its anchors deferred and never checked, and still not pushed.
+  await h.service.decide(h.ownerId, h.ownerId, String(op.changesetId), [{ opId: String(op.id), action: 'accept' }] as never, null);
+  const entry = await h.prisma.wikiEntry.findFirstOrThrow({ where: { ownerId: h.ownerId, spaceId: fx.spaceId, title } });
+  assert.equal(entry.status, 'active');
+  assert.equal(entry.anchorState, 'unchecked');
+  for (const anchor of entry.anchors as Array<Record<string, unknown>>) {
+    assert.equal(anchor.deferred, true);
+    assert.equal(anchor.check, undefined);
+  }
+  assert.equal((await pushedOf(h, fx)).has(entry.id), false, 'an entry with a deferred code anchor nobody checked is not pushed');
+  return entry.id;
+}
+
+test('a sessions-tier run keeps an entry\'s code anchors as deferred: in Review, not pushed once accepted; the first run that reads the code checks them, drops deferred, and pushes it', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { title: 'Deferred Garden', reviewMode: 'manual', wholeFile: true });
+  const sha = 'f'.repeat(40);
+  const entryId = await deferredEntry(h, fx, 'PORT 在导入时读取 deferred', { paths: ['src/app.go'], commits: [sha] });
+  const anchors = (await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: entryId } })).anchors as Array<Record<string, unknown>>;
+  assert.deepEqual(anchors.map((anchor) => [anchor.type, anchor.path ?? anchor.sha]), [['path', 'src/app.go'], ['commit', sha]]);
+
+  // A run on the git tier: the anchors go to the runner, are found, and lose deferred.
+  const again = await runAgain(h, fx);
+  noDossiers(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, again.jobId)).state));
+  const job = await jobOf(h, again.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual(((await runRow(h, again.runId)).report as Record<string, unknown>).repo, { tier: 'git', reason: null });
+  const checked = await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: entryId } });
+  assert.equal(checked.anchorState, 'verified');
+  for (const anchor of checked.anchors as Array<Record<string, unknown>>) {
+    assert.equal(anchor.deferred, undefined, JSON.stringify(anchor));
+    assert.equal((anchor.check as Record<string, unknown>).state, 'verified');
+  }
+  assert.equal((await pushedOf(h, fx)).has(entryId), true, 'checked, it is pushed by today\'s rules');
+  const challenges = await h.prisma.wikiChangesetOp.count({ where: { ownerId: h.ownerId, entryId, op: 'challenge' } });
+  assert.equal(challenges, 0);
+});
+
+test('the first check of a deferred entry finds none of its code anchors in this repository: one challenge saying so, and the entry is not deleted', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { title: 'Foreign Garden', reviewMode: 'manual', wholeFile: true });
+  const entryId = await deferredEntry(h, fx, '游戏面板渲染慢 deferred', { paths: ['src/components/GameBoard.tsx'], commits: [] });
+
+  const again = await runAgain(h, fx);
+  noDossiers(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, again.jobId)).state), { checkAnchor: runnerAt(['src/components/GameBoard.tsx']) });
+  const job = await jobOf(h, again.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  const entry = await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: entryId } });
+  assert.equal(entry.status, 'active', 'a challenge, never a delete: the owner accepted it');
+  assert.equal(entry.anchorState, 'missing');
+  assert.equal(entry.challenged, true);
+  for (const anchor of entry.anchors as Array<Record<string, unknown>>) assert.equal(anchor.deferred, undefined);
+  const challenges = await h.prisma.wikiChangesetOp.findMany({ where: { ownerId: h.ownerId, entryId, op: 'challenge' }, select: { payload: true, decision: true } });
+  assert.equal(challenges.length, 1);
+  assert.equal(challenges[0]!.decision, 'pending');
+  assert.match(JSON.stringify(challenges[0]!.payload), /None of its code anchors exist in this repository/u);
+  assert.equal((await pushedOf(h, fx)).has(entryId), false);
 });
 
 test('an op whose first answer is no verdict is asked again under a unit of its own, `<opId>#retry`, told why as the runner tells it, and gets its verdict there', { skip }, async () => {
