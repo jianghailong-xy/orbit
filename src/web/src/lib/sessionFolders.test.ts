@@ -9,6 +9,7 @@ import {
   listShowsFolders,
   moveConfirmAction,
   moveConfirmParagraphs,
+  moveConfirmTitle,
   moveFailureText,
   moveTargetFolders,
   moveTargetFooter,
@@ -142,6 +143,7 @@ const target = (over: Partial<SessionMoveTarget> = {}): SessionMoveTarget => ({
   reason: null,
   conversation: 'continues',
   folders: [],
+  startsCoordinator: false,
   ...over,
 });
 
@@ -155,6 +157,7 @@ const answer = (over: Partial<SessionMoveTargets> = {}): SessionMoveTargets => (
   changedFiles: 0,
   unmergedFiles: 0,
   mergeTarget: null,
+  coordinates: null,
   targets: [target()],
   ...over,
 });
@@ -164,7 +167,7 @@ const providerName = (slug: string) => (slug === 'codex' ? 'Codex' : 'Claude');
 describe('moveTargetRows', () => {
   it('opens a workspace the session can go to and names its provider and runner', () => {
     expect(moveTargetRows(answer(), providerName)).toEqual([
-      { target: target(), enabled: true, detail: 'Codex · wikova' },
+      { target: target(), enabled: true, startsNew: false, detail: 'Codex · wikova' },
     ]);
   });
 
@@ -307,5 +310,41 @@ describe('runWorkspaceMove', () => {
       sleep: noSleep,
     });
     expect(refused).toBe('The session woke up; stop it first.');
+  });
+});
+
+describe('a project’s coordinator in the Move panel', () => {
+  const coordinates = { projectId: 'p1', title: 'Session list redesign' };
+
+  it('offers Start new here… only where the conversation cannot go and a new coordinator can', () => {
+    const rows = moveTargetRows(
+      answer({
+        coordinates,
+        targets: [
+          target(),
+          target({ workspaceId: 'w3', reason: 'Codex keeps this conversation on wikova', startsCoordinator: true }),
+          target({ workspaceId: 'w4', reason: 'This workspace is disabled.', startsCoordinator: false }),
+        ],
+      }),
+      providerName,
+    );
+    expect(rows.map((r) => [r.enabled, r.startsNew])).toEqual([[true, false], [false, true], [false, false]]);
+    // Never for a session that coordinates nothing, nor when the session itself cannot leave.
+    expect(moveTargetRows(answer({ targets: [target({ reason: 'x', startsCoordinator: true })] }), providerName)[0].startsNew).toBe(false);
+    expect(
+      moveTargetRows(answer({ coordinates, reason: 'Stop the session first.', targets: [target({ reason: 'x', startsCoordinator: true })] }), providerName)[0].startsNew,
+    ).toBe(false);
+  });
+
+  it('says the project goes with it, and what an ended coordinator misses', () => {
+    const a = answer({ coordinates, needsEnd: true, branch: 'b', changedFiles: 3, unmergedFiles: 3, mergeTarget: 'main' });
+    expect(moveConfirmTitle(target({ name: 'orbit-prod' }), a)).toBe('Move the coordinator to orbit-prod?');
+    expect(moveConfirmTitle(target({ name: 'orbit-prod' }), answer())).toBe('Move to orbit-prod?');
+    expect(moveConfirmParagraphs(a, target({ name: 'orbit-prod' }), 'orbit')).toEqual([
+      'The conversation moves with it. Your next message continues it in orbit-prod.',
+      'Session list redesign is coordinated from orbit-prod from now on, and its row moves to orbit-prod’s list. Its tasks keep running where they are.',
+      '3 changed files aren’t merged into main yet. They stay on branch b in orbit.',
+      'The session ends first. Until you message it again, Orbit’s updates for the project wait on the project page.',
+    ]);
   });
 });

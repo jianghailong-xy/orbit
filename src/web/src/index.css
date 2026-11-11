@@ -6296,6 +6296,24 @@ button.toast--pill:focus-visible {
 .move-dialog-option.off .move-dialog-name small {
   color: var(--text-3);
 }
+/* A project's coordinator whose conversation cannot go to this workspace, where a new coordinator
+   could open instead: the row stays greyed and carries Start new here…. */
+.move-dialog-option.has-start-new {
+  cursor: default;
+}
+.move-dialog-start-new {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.move-dialog-start-new:hover:not(:disabled) {
+  text-decoration: underline;
+}
 .move-dialog-count {
   flex: none;
   font-size: 12.5px;

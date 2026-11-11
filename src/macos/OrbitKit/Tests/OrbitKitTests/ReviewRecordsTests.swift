@@ -16,22 +16,22 @@ final class ReviewRecordsTests: XCTestCase {
     }
 
     func testTheClockOnTheDayAndTheDateAfter() {
-        XCTAssertEqual(ReviewRecords.time(at, now: now, calendar: calendar, timeZone: utc), "14:06")
+        XCTAssertEqual(ReviewRecords.time(at, now: now, calendar: calendar, timeZone: utc), "2:06\u{202F}PM")
         XCTAssertEqual(ReviewRecords.time(at, now: at.addingTimeInterval(86_400), calendar: calendar, timeZone: utc),
-                       "10/15 14:06")
+                       "10/15 2:06\u{202F}PM")
     }
 
     func testTheApprovals() {
         XCTAssertEqual(ReviewRecords.question(at: at, now: now),
-                       ReviewRecordFooter(mark: .done, line: "Answered by you · 14:06", detail: "Sent to the agent"))
+                       ReviewRecordFooter(mark: .done, line: "Answered by you · 2:06\u{202F}PM", detail: "Sent to the agent"))
         XCTAssertEqual(ReviewRecords.plan(approved: true, at: at, now: now),
-                       ReviewRecordFooter(mark: .done, line: "Approved by you · 14:06",
+                       ReviewRecordFooter(mark: .done, line: "Approved by you · 2:06\u{202F}PM",
                                           detail: "The agent is running the plan"))
         XCTAssertEqual(ReviewRecords.plan(approved: false, at: at, now: now),
-                       ReviewRecordFooter(mark: .keptOpen, line: "Kept planning · by you · 14:06",
+                       ReviewRecordFooter(mark: .keptOpen, line: "Kept planning · by you · 2:06\u{202F}PM",
                                           detail: "The agent goes on planning"))
         XCTAssertEqual(ReviewRecords.toolAsk(at: at, now: now),
-                       ReviewRecordFooter(mark: .done, line: "Approved by you · 14:06", detail: "Sent to the agent"))
+                       ReviewRecordFooter(mark: .done, line: "Approved by you · 2:06\u{202F}PM", detail: "Sent to the agent"))
     }
 
     func testAnAnswerSplitsIntoThePicksAndTheWordsTyped() {
@@ -49,26 +49,26 @@ final class ReviewRecordsTests: XCTestCase {
 
     func testTheDecisionCards() {
         XCTAssertEqual(ReviewRecords.evidence(revision: "2", at: at, now: now),
-                       ReviewRecordFooter(mark: .done, line: "Confirmed done by you · 14:06", detail: "Recorded on rev 2"))
+                       ReviewRecordFooter(mark: .done, line: "Confirmed done by you · 2:06\u{202F}PM", detail: "Recorded on rev 2"))
         XCTAssertEqual(ReviewRecords.ownerConfirmed(at: at, reportedAt: "2026-10-15T13:58:00Z", now: now).detail,
-                       "Recorded on the 13:58 report")
+                       "Recorded on the 1:58\u{202F}PM report")
         XCTAssertNil(ReviewRecords.ownerConfirmed(at: at, reportedAt: nil, now: now).detail,
                      "a report that did not say when leaves the line out")
         XCTAssertEqual(ReviewRecords.started(criteria: 3, seal: "a1b2c3", at: at, now: now),
-                       ReviewRecordFooter(mark: .done, line: "Started by you · 14:06",
+                       ReviewRecordFooter(mark: .done, line: "Started by you · 2:06\u{202F}PM",
                                           detail: "On 3 criteria at seal a1b2c3"))
         XCTAssertEqual(ReviewRecords.confirmed(criteria: 5, seal: "d4e5f6", changes: "1 new, 1 stricter", at: at, now: now),
-                       ReviewRecordFooter(mark: .done, line: "Confirmed by you · 14:06",
+                       ReviewRecordFooter(mark: .done, line: "Confirmed by you · 2:06\u{202F}PM",
                                           detail: "5 criteria at seal d4e5f6 — 1 new, 1 stricter"))
         XCTAssertEqual(ReviewRecords.confirmed(criteria: 1, seal: "d4e5f6", changes: nil, at: at, now: now).detail,
                        "1 criterion at seal d4e5f6")
         XCTAssertEqual(ReviewRecords.criteriaDecision(approved: true, baseSeal: "d4e5f6", resultingSeal: "e7f8a9",
                                                       at: at, now: now),
-                       ReviewRecordFooter(mark: .done, line: "Approved by you · 14:06",
+                       ReviewRecordFooter(mark: .done, line: "Approved by you · 2:06\u{202F}PM",
                                           detail: "Re-sealed: d4e5f6 → e7f8a9"))
         XCTAssertEqual(ReviewRecords.criteriaDecision(approved: false, baseSeal: "d4e5f6", resultingSeal: nil,
                                                       at: at, now: now),
-                       ReviewRecordFooter(mark: .refused, line: "Refused by you · 14:06",
+                       ReviewRecordFooter(mark: .refused, line: "Refused by you · 2:06\u{202F}PM",
                                           detail: "The criteria stay at seal d4e5f6"))
     }
 }
