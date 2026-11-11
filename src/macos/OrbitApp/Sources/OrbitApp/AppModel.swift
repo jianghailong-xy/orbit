@@ -3206,6 +3206,21 @@ final class AppModel {
         }
     }
 
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
+    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
+    func openProjectMemberFromSheet(_ session: Session) {
+        sessionDetails.store(session)
+        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
+    }
+
+    /// The count the project sessions button draws beside its glyph (`SessionProjectSheet`).
+    func projectSessionCount(_ projectID: String) -> Int {
+        SessionProjectSheet.sessionCount(
+            projectID: projectID,
+            page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
+            known: sessions + (agents?.allSessions ?? []))
+    }
+
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.
     /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and

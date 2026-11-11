@@ -566,6 +566,15 @@ public struct NavState: Equatable, Sendable {
         }
     }
 
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): it takes
+    /// the place of the conversation the sheet was opened over, so Back returns to the list (or the
+    /// folder page) that conversation was opened from, never to the conversation it replaced.
+    public mutating func switchConsole(to node: NavNode) {
+        withPath {
+            if case .console? = $0.last { $0[$0.count - 1] = node } else { $0.append(node) }
+        }
+    }
+
     /// Back to `sessionID`'s console when it is the page directly under the one on top: the
     /// conversation a phone opened its project's page over. Going to that conversation again is a
     /// pop, so the stack reads conversation › project page instead of growing a second copy of the

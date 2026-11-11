@@ -57,6 +57,11 @@ struct ConsoleView: View {
     /// A phone's stack: the task or project the ⋯ menu opens goes over this console, so the back
     /// swipe returns here (`opensPagesOverConsole`).
     @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
+    /// The project sessions sheet a phone's navigation bar button puts up (board 5), and what a
+    /// press inside it opens once it has closed.
+    @State private var projectSheet: SessionProjectAddress?
+    @State private var showsProjectSheet = false
+    @State private var afterProjectSheet: (() -> Void)?
     #endif
 
     var body: some View {
@@ -459,6 +464,13 @@ struct ConsoleView: View {
         // or task a session belongs to are in the menu; whether it runs, the composer's stop button
         // says.
         .toolbar {
+            // The project's sessions, left of the ⋯ menu, on the coordinator's conversation and on
+            // every member's (owner 2026-11-11, docs/mocks/project-sessions-column board 5). Only a
+            // phone's stack: the iPad and the Mac keep the project's page in their own column.
+            if opensPagesOverConsole,
+               let projectID = SessionProjectSheet.projectID(of: appModel.session(id: sessionID)) {
+                ToolbarItem(placement: .topBarTrailing) { projectSessionsButton(projectID) }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 // A landing session is platform work (LS6): its page carries the ⋯ menu the design
                 // gives it, and none of the conversation's own actions — no rename, share, pin,
@@ -475,6 +487,23 @@ struct ConsoleView: View {
             }
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
+        .sheet(isPresented: $showsProjectSheet, onDismiss: {
+            let action = afterProjectSheet
+            afterProjectSheet = nil
+            action?()
+        }) {
+            if let address = projectSheet {
+                NavigationStack {
+                    SessionProjectPage(address: address, leaveSheet: { action in
+                        afterProjectSheet = action
+                        showsProjectSheet = false
+                    })
+                }
+                .environment(appModel)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
         .sheet(item: $taggingSession) { session in
             SessionTagSheet(session: session)
                 .environment(appModel)
@@ -531,6 +560,28 @@ struct ConsoleView: View {
     }
 
     #if os(iOS)
+    /// The project glyph and the project's session count ("⊞ 11"); a press puts the project's
+    /// sessions page up as a sheet, opening at medium height.
+    private func projectSessionsButton(_ projectID: String) -> some View {
+        let count = appModel.projectSessionCount(projectID)
+        return Button {
+            let session = appModel.session(id: sessionID)
+            projectSheet = SessionProjectAddress(
+                projectID: projectID,
+                agentID: session?.agent?.id ?? session?.agentId ?? appModel.selectedAgentID ?? "",
+                view: .open)
+            showsProjectSheet = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: SessionProjectSheet.glyph)
+                if count > 0 { Text("\(count)").monospacedDigit() }
+            }
+        }
+        .accessibilityLabel(SessionProjectSheet.buttonLabel)
+        .accessibilityValue(count > 0 ? "\(count) sessions" : "")
+        .accessibilityIdentifier("project-sessions-button")
+    }
+
     private func sessionWorkspace(_ session: Session) -> Agent? {
         appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
     }

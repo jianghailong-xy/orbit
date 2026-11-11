@@ -393,7 +393,16 @@ struct SessionFolderPage: View {
             case .project: app.openProjectSessions(projectAddress)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(projectAddress) })
+        // A phone opens the coordinator's conversation, not the project's sessions page, which is
+        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
+        // column keeps the page.
+        let onTap = {
+            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
+            case .sessions: app.openProjectSessions(projectAddress)
+            }
+        }
+        return SessionProjectRowView(row: row, onOpen: onTap)
         .sessionProjectRowActions(row, view: address.view, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
