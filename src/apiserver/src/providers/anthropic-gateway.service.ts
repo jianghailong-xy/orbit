@@ -248,7 +248,7 @@ export class AnthropicGatewayService {
         return;
       }
       res.status(200).json(whole.message);
-      this.answered(caller);
+      void this.answered(caller);
       const usage = whole.message.usage as { input_tokens?: number; output_tokens?: number } | undefined;
       line(`${status} in ${usage?.input_tokens ?? 0} out ${usage?.output_tokens ?? 0}`);
       return;
@@ -270,7 +270,7 @@ export class AnthropicGatewayService {
         const failure = gatewayFailure(null, failed.code, failed.message, { ...said, spentUntil: spentUntil(answer.response.headers, new Date()) });
         void this.effect(caller, failure.effect, failure.spentUntil);
       } else if (complete) {
-        this.answered(caller);
+        void this.answered(caller);
       }
       line(`${status}${complete ? '' : ' (cut off)'}${failed ? ` failed mid-stream ${failed.code}` : ''}${usage}`);
     }, { contentType: 'text/event-stream; charset=utf-8', push: (chunk) => toSse(converter.push(chunk)), end: () => toSse(converter.end()) });
@@ -310,11 +310,13 @@ export class AnthropicGatewayService {
   }
 
   /** A response OpenAI answered whole: a budget it had said was spent is not any more. */
-  private answered(caller: AnthropicGatewayCaller): void {
+  private async answered(caller: AnthropicGatewayCaller): Promise<void> {
     if (!caller.key.spentUntil) return;
-    void this.prisma.modelProvider
-      .updateMany({ where: { id: caller.key.id, spentUntil: { not: null } }, data: { spentUntil: null } })
-      .catch((e) => this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: could not clear spent: ${(e as Error).message}`));
+    try {
+      await this.prisma.modelProvider.updateMany({ where: { id: caller.key.id, spentUntil: { not: null } }, data: { spentUntil: null } });
+    } catch (e) {
+      this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: could not clear spent: ${(e as Error).message}`);
+    }
   }
 
   /**

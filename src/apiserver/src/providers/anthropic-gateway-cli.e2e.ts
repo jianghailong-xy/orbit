@@ -12,8 +12,13 @@
  *    arms on the words the CLI ended the turn with, decided by the real RunnerApiController.retryPlanFor —
  *    the decision event ingestion makes for that reply.
  *
- * The CLI is found at ORBIT_CLAUDE_BIN, else ~/.local/bin/claude (where the runner installs it); without one
- * these tests are skipped, saying so.
+ * Not a unit spec: it needs the claude CLI, which CI and the merge check do not install, and no spec outside the
+ * .pg family may skip (verification-tiering.spec.ts). Run it on a host that has the CLI:
+ *
+ *   npm run test:gateway-cli -w @orbit/apiserver
+ *
+ * The CLI is found at ORBIT_CLAUDE_BIN, else ~/.local/bin/claude (where the runner installs it); without one the
+ * run fails, saying so.
  */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -48,8 +53,7 @@ import { encryptSecret } from './provider-crypto';
 process.env.PROVIDER_SECRET_KEY ??= 'anthropic-gateway-cli-spec';
 
 const CLAUDE = process.env.ORBIT_CLAUDE_BIN ?? path.join(homedir(), '.local/bin/claude');
-const SKIP = existsSync(CLAUDE) ? false : `no claude CLI at ${CLAUDE} (set ORBIT_CLAUDE_BIN)`;
-const CASE = { skip: SKIP, timeout: 180_000 };
+const CASE = { timeout: 180_000 };
 
 const TOKEN = 'orbit-gwk-cli-spec-token';
 const USER = '0190f3c2-0000-7000-8000-0000000000bb';
@@ -98,6 +102,7 @@ function err(status: number, code: string | null, message: string, headers?: Rec
 }
 
 before(async () => {
+  assert.ok(existsSync(CLAUDE), `no claude CLI at ${CLAUDE} (set ORBIT_CLAUDE_BIN)`);
   upstream = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
