@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>45 wiki chat: the panel is open when the wiki opens</title>
+<link rel="stylesheet" href="comment-session.css">
+<style>
+/* Board 45 only. c- is the chat panel (as board 42); h- is the wiki Home list; b- is board chrome. */
+.b-part { padding: 2px 24px 18px; }
+.notes li > .n.dot { background: none; color: #77777f; }
+.o-doc.c-doc { width: auto; flex: 1; min-width: 0; padding: 18px 22px 22px 26px; }
+.c-panel { width: 360px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: #fff; border-radius: 0 0 12px 0; font-size: 13.5px; line-height: 1.6; }
+.c-head { display: flex; align-items: center; gap: 4px; padding: 9px 10px 9px 14px; border-bottom: 1px solid var(--border-subtle); }
+.c-head .t { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.c-head .caret { color: var(--text-3); font-size: 10px; margin: 0 auto 0 4px; flex: none; }
+.c-ib { width: 26px; height: 26px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--text-2); font-size: 14px; }
+.c-run { display: flex; gap: 5px; align-items: center; padding: 7px 14px; font-size: 12px; color: var(--text-3); border-bottom: 1px solid var(--border-subtle); }
+.c-body { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+.c-empty { margin: 34px 10px; text-align: center; color: var(--text-2); font-size: 13px; line-height: 1.7; }
+.c-compose { margin: 2px 12px 12px; border: 1px solid var(--border); border-radius: 12px; padding: 8px 9px 8px 10px; background: #fff; }
+.c-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; line-height: 1.5; border-radius: 6px; padding: 1px 7px; background: var(--fill-muted); color: var(--text-1); margin-bottom: 6px; }
+.c-chip .x { color: var(--text-3); font-size: 10px; }
+.c-input { font-size: 13px; line-height: 1.6; min-height: 38px; color: var(--text-4); }
+.c-cfoot { display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 12px; }
+.c-cfoot .m { margin-left: auto; color: var(--text-1); font-weight: 600; }
+.c-send { width: 26px; height: 26px; border-radius: 50%; background: #c9cdd4; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex: none; }
+.o-win.c-has-fab { position: relative; }
+.c-fab { position: absolute; right: 24px; bottom: 24px; width: 52px; height: 52px; border-radius: 50%; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 23px; box-shadow: 0 6px 18px rgba(51,112,255,.35), 0 2px 6px rgba(31,35,41,.16); z-index: 3; }
+.c-fab.inline { position: relative; right: auto; bottom: auto; width: 40px; height: 40px; font-size: 18px; flex: none; }
+
+/* wiki Home, sample text */
+.h-search { border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; color: var(--text-4); font-size: 13px; margin-bottom: 14px; display: flex; gap: 8px; align-items: center; }
+.h-card { border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 16px 4px; margin-bottom: 12px; }
+.h-card h4 { margin: 0 0 6px; font-size: 14.5px; }
+.h-card h4 .num, .h-it .num { color: var(--text-3); font-weight: 600; margin-right: 8px; font-variant-numeric: tabular-nums; }
+.h-it { border-top: 1px solid var(--border-subtle); padding: 7px 0 8px; }
+.h-it b { font-size: 13.5px; }
+.h-it p { margin: 2px 0 0 30px; color: var(--text-2); font-size: 12.5px; line-height: 1.6; }
+.h-count { color: var(--text-3); font-size: 12.5px; margin: -4px 0 12px; }
+
+/* frame captions */
+.b-cap { font-size: 15px; font-weight: 700; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+.b-cap .n { width: 24px; height: 24px; border-radius: 50%; background: #16161a; color: #fff; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
+.b-cap small { font-weight: 500; color: #66666e; font-size: 13px; }
+.b-gap { height: 26px; }
+
+/* rules table, peers, questions */
+.b-tb { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.55; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.b-tb th { text-align: left; font-weight: 700; color: #34343c; padding: 10px 14px; background: #f6f6f8; border-bottom: 1px solid #dcdce2; }
+.b-tb td { padding: 9px 14px; border-bottom: 1px solid #ececf0; vertical-align: top; }
+.b-tb td.chg { background: #f2f8ff; }
+.b-tb code, .b-peer code, .b-q code, .b-land code { font: 12.5px var(--mono); background: rgba(0,0,0,.06); padding: 0 4px; border-radius: 4px; }
+.b-peers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.b-peer { background: #fff; border-radius: 12px; padding: 14px 16px 12px; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 13px; line-height: 1.6; color: #34343c; }
+.b-peer h3 { margin: 0 0 2px; font-size: 15px; color: #16161a; }
+.b-peer .k { color: #77777f; font-size: 12px; margin-bottom: 8px; }
+.b-peer .take { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d5d6db; }
+.b-peer .take b { color: #0a5ca8; }
+.b-peer .skip b { color: #8f5200; }
+.b-mini { margin: 6px 0 8px; height: 92px; border: 1px solid #d5d6db; border-radius: 8px; display: flex; overflow: hidden; background: #fff; }
+.b-mini > div { border-right: 1px solid #e3e3e8; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #77777f; }
+.b-mini > div:last-child { border-right: 0; }
+.b-mini .ai { background: #eaf1ff; color: #245ae0; font-weight: 600; }
+.b-mini .rail { width: 22px; flex: none; background: #f4f4f6; }
+.b-qs { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.b-q { background: #fff; border-radius: 12px; padding: 16px 18px 8px; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 13.5px; line-height: 1.6; }
+.b-q h3 { margin: 0 0 10px; font-size: 15px; }
+.b-q .opt { margin: 0 0 12px; padding-left: 14px; border-left: 3px solid #d0d0d8; }
+.b-q .opt.rec { border-left-color: #f08c00; }
+.b-q .opt b { color: #16161a; }
+.b-q .row2 { display: flex; gap: 14px; align-items: center; margin-top: 6px; }
+.b-strip { width: 150px; height: 84px; border: 1px solid #d5d6db; border-radius: 8px; position: relative; background: #fff; flex: none; }
+.b-strip .pg { position: absolute; left: 8px; top: 8px; right: 34px; bottom: 8px; background: repeating-linear-gradient(#eceef1 0 3px, transparent 3px 11px); }
+.b-strip .fab { position: absolute; right: 8px; bottom: 8px; width: 18px; height: 18px; border-radius: 50%; background: var(--brand); }
+.b-strip .rl { position: absolute; right: 0; top: 0; bottom: 0; width: 26px; border-left: 1px solid #d5d6db; background: #f7f8fa; border-radius: 0 8px 8px 0; }
+.b-strip .rl i { display: block; width: 12px; height: 12px; border-radius: 3px; background: #c9d6f5; margin: 8px auto 0; }
+.b-land { background: #fff; border-radius: 12px; padding: 14px 20px 6px 18px; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 13.5px; line-height: 1.65; }
+.b-land ol { margin: 0; padding-left: 20px; }
+.b-land li { margin-bottom: 8px; }
+.b-src { font-size: 12px; color: #77777f; margin-top: 10px; line-height: 1.6; }
+.b-src a { color: #0a5ca8; text-decoration: none; }
+</style>
+</head>
+<body>
+<script src="wiki-desktop-icons.js"></script>
+<script src="wiki-p2-icons.js"></script>
+<script src="wiki-p3-icons.js"></script>
+<div class="board">
+<h1 class="b-h1">45 · Wiki 右边的聊天面板：打开 wiki 时就是展开的</h1>
+<p class="b-sub">你的要求：「wiki 右边的聊天框需要默认展开」。现在打开 wiki，面板是收起的，要点右下角的圆按钮才出来；打开过的状态只记在当前标签页（<code>sessionStorage</code>），新开标签或重启 app 又是收起的。
+<b>这张图只改「什么时候默认展开、关掉后怎么记」，面板本身（图 42、43）一个像素不动。</b>窗口按你截图的 Home 页画，正文是示意文字。</p>
+<div class="b-legend"><span><span class="tag new">新</span>这次要改的</span><span><span class="tag keep">沿用</span>照旧</span><span><span class="tag ask">待你定</span>两个选择，各有推荐</span><span><span class="tag demo">示意</span>演示用的内容</span></div>
+
+<section class="b-part">
+<div class="band"><span class="bn">1</span>打开 wiki：今天 vs 提议 <small>· 窗口 ≥ 1200 时</small></div>
+<div class="row">
+  <div>
+    <div class="b-cap"><span class="n">①</span>今天 <small>· 收起，只有右下角的圆按钮</small></div>
+    <div class="o-win c-has-fab" style="width:1180px">
+      <div class="o-wtop"><span class="t">Wiki</span><span class="o-space">orbit<svg class="ic"><use href="#i-caret-down"/></svg></span><span class="grow"></span>
+        <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+      <div class="o-wbody">
+        <nav class="o-dir">
+          <div class="it on"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+          <div class="it"><svg class="ic"><use href="#i-appstore"/></svg>Browse by category</div>
+          <div class="it"><svg class="ic"><use href="#i-sort-ascending"/></svg>A–Z index</div>
+          <div class="cat">产品概览</div>
+          <div class="it"><span class="no">1.1</span>产品定位</div>
+          <div class="it"><span class="no">1.2</span>系统架构</div>
+          <div class="cat">任务与项目</div>
+          <div class="it"><span class="no">2.1</span>任务生命周期</div>
+          <div class="it"><span class="no">2.2</span>项目启动</div>
+        </nav>
+        <main class="o-doc c-doc" style="padding-right:90px">
+          <div class="h-search"><svg class="ic"><use href="#i-search"/></svg>Search the wiki</div>
+          <div class="h-card"><h4><span class="num">1</span>产品概览</h4>
+            <div class="h-it"><b><span class="num">1.1</span>产品定位</b><p>示意：这一篇讲产品解决什么问题、给谁用，以及和相邻工具的边界。</p></div>
+            <div class="h-it"><b><span class="num">1.2</span>系统架构</b><p>示意：控制面、runner 与各个客户端怎么分工，数据从哪里流到哪里。</p></div>
+          </div>
+          <div class="h-card" style="margin-bottom:0"><h4><span class="num">2</span>任务与项目</h4>
+            <div class="h-it"><b><span class="num">2.1</span>任务生命周期</b><p>示意：一个任务从创建、运行到验收的几种状态，以及谁能改它。</p></div>
+          </div>
+        </main>
+      </div>
+      <span class="c-fab"><svg class="ic"><use href="#i-comment"/></svg></span>
+    </div>
+  </div>
+  <div class="notes" style="padding-top:34px"><ol>
+    <li><span class="n dot">·</span>面板要点圆按钮才出来。点开后翻页不关，刷新也在（地址带 <code>?chat=</code>）。</li>
+    <li><span class="n dot">·</span>但只记在<b>这个标签页</b>：新开一个标签、从侧栏再点 Wiki、重启 app，都回到收起。</li>
+    <li><span class="n dot">·</span>和你截图一样，宽屏上正文右边留着一大块空白。</li>
+  </ol></div>
+</div>
+
+<div class="b-gap"></div>
+<div class="row">
+  <div>
+    <div class="b-cap"><span class="n">②</span>提议 <span class="tag new">新</span><small>· 打开 wiki，面板已经在右边</small></div>
+    <div class="o-win" style="width:1180px">
+      <div class="o-wtop"><span class="t">Wiki</span><span class="o-space">orbit<svg class="ic"><use href="#i-caret-down"/></svg></span><span class="grow"></span>
+        <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+      <div class="o-wbody">
+        <nav class="o-dir">
+          <div class="it on"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+          <div class="it"><svg class="ic"><use href="#i-appstore"/></svg>Browse by category</div>
+          <div class="it"><svg class="ic"><use href="#i-sort-ascending"/></svg>A–Z index</div>
+          <div class="cat">产品概览</div>
+          <div class="it"><span class="no">1.1</span>产品定位</div>
+          <div class="it"><span class="no">1.2</span>系统架构</div>
+          <div class="cat">任务与项目</div>
+          <div class="it"><span class="no">2.1</span>任务生命周期</div>
+          <div class="it"><span class="no">2.2</span>项目启动</div>
+        </nav>
+        <main class="o-doc c-doc">
+          <div class="h-search"><svg class="ic"><use href="#i-search"/></svg>Search the wiki</div>
+          <div class="h-card"><h4><span class="num">1</span>产品概览</h4>
+            <div class="h-it"><b><span class="num">1.1</span>产品定位</b><p>示意：这一篇讲产品解决什么问题、给谁用，以及和相邻工具的边界。</p></div>
+            <div class="h-it"><b><span class="num">1.2</span>系统架构</b><p>示意：控制面、runner 与各个客户端怎么分工，数据从哪里流到哪里。</p></div>
+          </div>
+          <div class="h-card" style="margin-bottom:0"><h4><span class="num">2</span>任务与项目</h4>
+            <div class="h-it"><b><span class="num">2.1</span>任务生命周期</b><p>示意：一个任务从创建、运行到验收的几种状态，以及谁能改它。</p></div>
+          </div>
+        </main>
+        <aside class="c-panel">
+          <div class="c-head"><span class="t mk l" data-n="2">New chat</span><svg class="ic caret"><use href="#i-caret-down"/></svg><span class="c-ib"><svg class="ic"><use href="#i-plus"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-arrow-right"/></svg></span><span class="c-ib mk" data-n="3"><svg class="ic"><use href="#i-close"/></svg></span></div>
+          <div class="c-run"><span>Runs in</span><span class="o-pick">orbit-develop · HPC<svg class="ic"><use href="#i-caret-down"/></svg></span></div>
+          <div class="c-body mk" data-n="1"><div class="c-empty">Ask about this page, or say what should change.<br>Nothing in the wiki changes until you apply it.</div></div>
+          <div class="c-compose">
+            <span class="c-chip"><svg class="ic"><use href="#i-read"/></svg>Home<svg class="ic x"><use href="#i-close"/></svg></span>
+            <div class="c-input">Ask about this page, or say what should change</div>
+            <div class="c-cfoot"><svg class="ic"><use href="#i-plus"/></svg><span>Auto</span><span class="m">Opus 5.5 <span style="font-weight:400;color:var(--text-2)">Default</span></span><span class="c-send"><svg class="ic"><use href="#i-up-small"/></svg></span></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+  <div class="notes" style="padding-top:34px"><ol>
+    <li><span class="n">1</span><span class="tag new">新</span>窗口 ≥ 1200 时，打开 wiki 任何一页（Settings 除外），面板<b>已经停靠在右边</b>，挤开正文、不盖正文。圆按钮照旧在面板打开时藏起来。</li>
+    <li><span class="n">2</span><span class="tag keep">沿用</span><b>展开到哪一场</b>和点圆按钮一样（<code>wikiChatToOpen</code>）：有等你处理的那场先开，否则继续最近还开着的一场，都没有就是 New chat。不另造一条规则。</li>
+    <li><span class="n">3</span><span class="tag new">新</span>点 <b>✕</b> 就是你说「不要」：<b>记住收起</b>，之后打开 wiki 不再自动展开，直到你再点一次圆按钮。只按 space 记，各个 wiki 互不影响。记多久见 <b>4 · Q1</b>。</li>
+    <li><span class="n dot">·</span><span class="tag keep">沿用</span>面板宽度、拖宽、目录在 1200–1439 折进 Contents，都照旧（图 42 ⑥）。<b>默认展开不会改变「点开后」的任何样子</b>，只是省掉那一下点击。</li>
+    <li><span class="n dot">·</span>首屏要等聊天列表读回再决定开哪一场，否则面板会先显示 New chat 再跳到进行中的那场。等待时先按面板宽度把正文排好，正文不跳。</li>
+  </ol></div>
+</div>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">2</span>什么时候自动展开 <small>· 蓝底是改了的格子</small></div>
+<table class="b-tb">
+  <tr><th style="width:250px">情况</th><th>今天</th><th>提议</th></tr>
+  <tr><td>窗口 ≥ 1440（宽，停靠，目录还在）</td><td>收起</td><td class="chg"><b>展开</b>，停靠在右</td></tr>
+  <tr><td>窗口 1200–1439（停靠，目录折进 Contents）</td><td>收起</td><td class="chg"><b>展开</b>，停靠在右；目录照旧折进 Contents</td></tr>
+  <tr><td>窗口 640–1199（面板盖在正文右侧）</td><td>收起</td><td>收起，不变。这时面板会盖住正文，默认盖住等于每次都要先关掉它</td></tr>
+  <tr><td>手机 &lt; 640（底部 sheet）</td><td>收起</td><td>收起，不变</td></tr>
+  <tr><td>Settings 页、分享链接</td><td>没有面板</td><td>没有面板，不变</td></tr>
+  <tr><td>你点过 ✕</td><td>这个标签页收起；新标签又是收起</td><td class="chg">记住收起，不再自动展开；点圆按钮打开后，忘掉这条，回到默认展开</td></tr>
+  <tr><td>地址里带 <code>?chat=…</code>（活动、通知点进来）</td><td>打开那一场</td><td>打开那一场，不变；就算你点过 ✕ 也打开，因为这是你明确点的</td></tr>
+  <tr><td>把窗口从 1300 拉窄到 1000</td><td>开着的面板改为盖在正文上</td><td class="chg">如果是<b>自动展开</b>的：随之收起，拉宽回来再展开。你自己点开的：照旧改为盖在正文上</td></tr>
+</table>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">3</span>同类产品怎么做 <small>· 只摘和「默认展开、怎么收起」有关的部分</small></div>
+<div class="b-peers">
+  <div class="b-peer"><h3>VS Code / Cursor</h3><div class="k">右侧 secondary side bar 放 Chat</div>
+    <div class="b-mini"><div style="width:30px">栏</div><div style="flex:1">编辑器</div><div class="ai" style="width:70px">Chat</div></div>
+    2025-04 加了设置 <code>workbench.secondarySideBar.defaultVisibility</code>，起初默认隐藏；<b>2025-08（1.104）改为打开项目时默认显示</b>，空窗口不显示。关掉后按 workspace 记住。
+    <div class="take"><b>借：</b>有内容可聊时默认展开、没东西可聊时不展开；关掉按 space 记住。</div></div>
+  <div class="b-peer"><h3>NotebookLM</h3><div class="k">Sources · Chat · Studio 三栏</div>
+    <div class="b-mini"><div class="rail">›</div><div class="ai" style="flex:1">Chat</div><div style="width:60px">Studio</div></div>
+    Chat 是常驻的中栏，从不收起；两侧栏可以缩成一条<b>窄条（rail）</b>，不是完全消失。窗口窄了三栏变成顶上的三个标签。
+    <div class="take"><b>借：</b>窄窗不硬塞三栏，换一种形态（我们窄窗照旧收起成圆按钮）。<span class="skip"><b>不借：</b>Chat 永远在。wiki 主要是读，聊天是辅助。</span></div></div>
+  <div class="b-peer"><h3>Confluence · Rovo</h3><div class="k">右下角按钮，打开右侧面板</div>
+    <div class="b-mini"><div style="width:30px">栏</div><div style="flex:1">页面</div><div class="ai" style="width:64px">Rovo</div></div>
+    入口和我们今天一样：右下角按钮，面板与页面并排。公开的 bug ROVO-1249：用户抱怨<b>刷新后面板消失</b>，要重新打开、重新找回对话，期望它一直留在旁边。
+    <div class="take"><b>借：</b>反面教材。用户把面板当作页面的一部分，消失就是丢东西。这正是「默认展开 + 跨标签记住」要解决的。</div></div>
+  <div class="b-peer"><h3>Notion AI</h3><div class="k">聊天可切两种模式</div>
+    <div class="b-mini"><div style="width:30px">栏</div><div style="flex:1;position:relative">页面<span style="position:absolute;right:6px;bottom:6px;width:34px;height:40px;border:1px solid #bcd3ff;background:#eaf1ff;border-radius:5px"></span></div><div class="ai" style="width:56px">Sidebar</div></div>
+    聊天窗口顶上的「Switch chat mode」可选 <b>Sidebar</b>（右侧停靠）或 <b>Floating</b>（浮窗盖在页面上）。行内 ⌘J 的对话可以一键「Open in chat」挪进侧栏。
+    <div class="take"><b>借（以后）：</b>选区 Ask 的对话直接进侧栏，我们图 42 已经是这样。<span class="skip"><b>不借：</b>模式切换。多一个设置，对你的用法没帮助。</span></div></div>
+</div>
+<div class="b-src">来源：<a href="https://code.visualstudio.com/docs/configure/custom-layout">VS Code Custom Layout</a> · <a href="https://github.com/microsoft/vscode-docs/pull/9540">vscode-docs#9540（1.104 默认改为 visibleInWorkspace）</a> · <a href="https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-new-features-december-2024/">Google：NotebookLM 三栏</a> · <a href="https://9to5google.com/2024/12/13/notebooklm-redesign-plus-tier/">9to5Google</a> · <a href="https://jira.atlassian.com/browse/ROVO-1249">ROVO-1249</a> · <a href="https://support.atlassian.com/rovo/docs/chat/">Atlassian：Rovo Chat</a> · <a href="https://www.notion.com/help/notion-agent">Notion Agent</a>。NotebookLM 的 rail 细节和 Notion 的默认模式没找到官方说明，按评测文章写的。</div>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">4</span>待你定 <small>· 两个问题，各有推荐</small></div>
+<div class="b-qs">
+  <div class="b-q"><h3>Q1 · 点了 ✕ 以后，「收起」记多久？</h3>
+    <div class="opt rec"><b>A · 一直记住，直到你再点圆按钮</b> <span class="tag ask">推荐</span><br>存在本机（<code>localStorage</code>），按 space 记；新标签、重启 app 都还是收起。和 VS Code 按 workspace 记一样。你关它是有原因的，不该每次打开又弹出来。</div>
+    <div class="opt"><b>B · 只记到这个标签页关掉</b><br>存在 <code>sessionStorage</code>，和今天记「开着哪一场」一样；新标签又默认展开。好处是不会「关了一次就永远看不到」；坏处是不想要它的人每次都得再关一遍。</div>
+  </div>
+  <div class="b-q"><h3>Q2 · 收起以后长什么样？</h3>
+    <div class="opt rec"><b>A · 照旧：右下角圆按钮</b> <span class="tag ask">推荐</span>
+      <div class="row2"><div class="b-strip"><i class="pg"></i><i class="fab"></i></div><div>图 42 已定，带四种状态（Working、needs you…）。不改，零成本。</div></div></div>
+    <div class="opt"><b>B · 缩成右边一条窄条（NotebookLM 的 rail）</b>
+      <div class="row2"><div class="b-strip"><i class="pg" style="right:34px"></i><i class="rl"><i></i><i></i></i></div><div>收起后右边留 40 宽的一条，放展开键和状态。更像「面板一直在」，但要重画状态、和条目抽屉的关系也要重想。</div></div></div>
+  </div>
+</div>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">5</span>落地（按代价排） <small>· 按 Q1 A、Q2 A 估</small></div>
+<div class="b-land"><ol>
+  <li><b>web，一处改动</b>：<code>src/web/src/lib/wikiChat.ts</code> 加「按 space 记住收起」（<code>localStorage</code>，键 <code>orbit.wikiChat.closed</code>）；<code>WikiChatHost</code>（<code>components/WikiChat.tsx</code>）在地址和标签页都没说开哪场、窗口停靠（<code>wikiChatDocks</code>）、也没记住收起时，聊天列表读回后用 <code>wikiChatToOpen</code> 打开。✕ 写入「收起」，圆按钮清掉它。</li>
+  <li><b>测试</b>：<code>wikiChat.test.ts</code> 加记住/清掉；<code>WikiChat.test.tsx</code> 加：1440 打开即展开、1000 不展开、点 ✕ 后刷新仍收起、点圆按钮后恢复、<code>?chat=</code> 优先于「收起」、自动展开的面板在窗口拉窄时收起。</li>
+  <li><b>不在这次</b>：iPad、macOS 的第三栏和 Android 平板。等 web 用几天再定要不要跟（安卓跟 iOS）。</li>
+</ol></div>
+</section>
+
+</div>
+</body>
+</html>
