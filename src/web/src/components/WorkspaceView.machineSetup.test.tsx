@@ -911,12 +911,12 @@ describe('rule 8: the line that opens the conversation', () => {
     expect(patched).toEqual([]);
   });
 
-  it('Settings opens the workspace on its machine’s page', async () => {
+  it('Settings opens the workspace’s Settings page', async () => {
     detail = made;
     await open(`/sessions/${SESSION}`);
     await waitForUi(() => expect(line()).toBeTruthy());
     await act(async () => button('Settings')!.click());
-    await waitForUi(() => expect(where).toBe(`/runners/${encodeId(AUSTIN)}?workspace=${encodeId(MADE_WORKSPACE)}`));
+    await waitForUi(() => expect(where).toBe(`/settings/workspaces/${encodeId(MADE_WORKSPACE)}`));
   });
 
   it('a workspace deleted since is still what was made, with nothing left to change', async () => {
