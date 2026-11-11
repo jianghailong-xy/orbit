@@ -367,7 +367,7 @@ final class WikiWiringTests: XCTestCase {
                             "ForEach(banners.filter { $0.band == band }) { banner in",
                             "case .runs:", "if content.health?.serverExecutes == true {",
                             "runsHeader", "Button { actions.openJob(job.id) } label: {",
-                            "WikiRunListRow(row: WikiRunsLogic.row(job, now: now))", "rows.empty(WikiRunsCopy.none)",
+                            "WikiRunListRow(row: WikiRunsLogic.row(job, now: now), tier: WikiRunsLogic.tier(job))", "rows.empty(WikiRunsCopy.none)",
                             "case .recentDecisions:", "case .recentlyChanged:",
                             "WikiCopy.newSinceLastLooked(newRows)", "rows.changeRow(item, new: isNew(item.at))",
                             "rows.runRow(changesetId, origin: origin, at: at, changes: items.count, new: isNew(at))",
@@ -375,7 +375,8 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertFalse(bands.contains("principles"), "Principles are content, not Activity")
         assertOrder(page, [".navigationTitle(WikiCopy.activity)", "ToolbarItem(placement: .principal) { titleBlock }",
                            "Text(WikiCopy.activity).font(.headline)", "Text(spaceName).font(.caption2)"], "Review's bar")
-        XCTAssertTrue(page.contains("Text(wikiStatusText(content.statusParts(now: now)))"), "the status line")
+        XCTAssertTrue(page.contains("let parts = content.statusParts(now: now, narrow: narrow)"), "the status line")
+        XCTAssertTrue(page.contains("Text(wikiStatusText(parts))"), "the status line")
         let screen = try slice(view, from: "struct WikiActivityView: View {", to: "private func name(of space:")
         assertOrder(screen, [".task(id: wiki.currentSpace?.slug) {", "seen = wiki.seenBefore(slug)", "wiki.moveSeen(slug)",
                              "await wiki.loadOtherPlans()"], "the stamp, read before it moves")

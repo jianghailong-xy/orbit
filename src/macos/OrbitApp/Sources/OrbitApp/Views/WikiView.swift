@@ -1235,6 +1235,10 @@ struct WikiEntryPage: View {
                     .font(.orbitMono)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
+                if WikiLogic.anchorDeferred(anchor) {
+                    Text(WikiCopy.anchorDeferred).font(.orbitLabel).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 WikiMarkText(mark: mark)
             }
         }
@@ -1916,12 +1920,14 @@ func wikiStatusText(_ parts: [WikiStatusPart]) -> AttributedString {
     return line
 }
 
-/// A part's colour: amber while a run waits, red when it broke; the line's own grey otherwise.
+/// A part's colour: amber while a run waits, red when it broke, grey when muted — the folder tier's words stay grey
+/// though they lead to Settings; the line's own colour otherwise.
 private func wikiStatusColour(_ tone: WikiStatusPart.Tone) -> Color? {
     switch tone {
     case .warn: return Color.orange
     case .error: return Color.red
-    case .muted, .plain: return nil
+    case .muted: return Color.secondary
+    case .plain: return nil
     }
 }
 
