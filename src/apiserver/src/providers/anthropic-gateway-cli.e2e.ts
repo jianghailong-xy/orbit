@@ -3,7 +3,11 @@
  * version the runner ships, run with the runner's flags and the environment injectedEnv gives a Claude Code
  * session on an OpenAI key — talks to AnthropicGatewayController / AnthropicGatewayService over HTTP, and they
  * talk to a scripted stand-in for OpenAI's /v1/responses. Only the database is replaced: a stand-in answering
- * the token read and recording the key row's writes.
+ * the token read and recording the key row's writes (key-gateway-errors.pg.spec.ts makes the same writes on
+ * PostgreSQL). The key's endpoint is OpenAI's own, https://api.openai.com/v1, and passes the gateway's upstream
+ * guard (gateway-upstream.ts) as any key would: its name resolves (`resolveHost`, answered here with a public
+ * address) and the gateway's agent opens the pinned connection — which here reaches the stand-in, in plain HTTP,
+ * as gateway-upstream.spec.ts does.
  *
  * Each §5.4 row is one test, and each asserts both ends of it:
  *  - what the CLI did: retried (its `api_retry` events), compacted (`compact_boundary`), finished the turn, or
@@ -24,7 +28,8 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { Agent as HttpsAgent } from 'node:https';
+import net, { type AddressInfo, type Socket } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -122,7 +127,8 @@ before(async () => {
     });
   });
   await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
-  const upstreamBase = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1`;
+  const upstreamPort = (upstream.address() as AddressInfo).port;
+  const upstreamBase = 'https://api.openai.com/v1';
   const prisma = {
     keyGatewayToken: {
       findUnique: async ({ where }: { where: { tokenHash: string } }) => where.tokenHash !== sha256(TOKEN) ? null : {
@@ -150,7 +156,19 @@ before(async () => {
       },
     },
   } as unknown as PrismaService;
-  const controller = new AnthropicGatewayController(new AnthropicGatewayService(prisma, new DisabledAccounts(prisma)));
+  const service = new AnthropicGatewayService(prisma, new DisabledAccounts(prisma));
+  // The upstream guard runs as for any key: api.openai.com resolves (to a public address), and the connection the
+  // gateway's agent is asked for is opened — to the stand-in, instead of OpenAI.
+  service.resolveHost = async (host) => {
+    assert.equal(host, 'api.openai.com');
+    return [{ address: '162.159.140.245', family: 4 }];
+  };
+  service.agent = new (class extends HttpsAgent {
+    override createConnection(): Socket {
+      return net.connect(upstreamPort, '127.0.0.1');
+    }
+  })();
+  const controller = new AnthropicGatewayController(service);
   const app = express();
   app.use((req, res, next) => {
     const json = res.json.bind(res);
