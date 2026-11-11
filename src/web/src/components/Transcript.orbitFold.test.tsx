@@ -159,20 +159,54 @@ describe('turns Orbit opened, folded', () => {
     seq = 0;
     turn = 0;
     const events = [
-      ...exchange(0, delivery(0, 'TASK_RUN_STOPPED', B1, 'B1 Targeted hints'), 'B1 stopped; restarting it.'),
+      ...exchange(0, delivery(0, 'PROJECT_BLOCKER_RAISED', B1, 'B1 Targeted hints'), 'B1 is blocked; restarting it.'),
       ...exchange(5, { text: watchText({ kind: 'TASK', id: B4, status: 'FAILED' }) }, 'B4 failed.'),
       ...exchange(10, delivery(10, 'EVIDENCE_SUBMITTED', B4, 'B4 Link gateway', 1), 'Need your call on B4.', ['mcp__orbit__ask_owner']),
       ...exchange(15, delivery(15, 'EVIDENCE_SUBMITTED', B1, 'B1 Targeted hints', 3), 'I confirmed B1.', []),
       ...exchange(20, { text: 'ok' }, 'Done.', []),
     ];
     mount(events);
-    expect(container.textContent).toContain('B1 stopped; restarting it.');
+    expect(container.textContent).toContain('B1 is blocked; restarting it.');
     expect(container.textContent).toContain('B4 failed.');
     expect(container.textContent).toContain('Need your call on B4.');
     // The one that is none of those still folds: its reply is the row's words, not a message of its own.
     expect(all('.orbit-exchange-root')).toHaveLength(1);
     expect(q('.orbit-exchange-root .orbit-exchange-reply')!.textContent).toBe('I confirmed B1.');
     expect(text('.chat-msg.chat-assistant')).not.toContain('I confirmed B1.');
+  });
+
+  it('folds a stopped run, a run notice and a task run\'s message under their tasks', () => {
+    seq = 0;
+    turn = 0;
+    const NOTE = [
+      `<orbit-run-notice task="${B4}" run-session="${RUN_OF_B1}" from-session="${RUN_OF_B1}" from-mode="auto">`,
+      'A run of the task “B4 Link gateway” used notify. It did not reach the account owner.',
+      'Message: Background job bgj_1 ended (exit code 0)',
+      'Nothing is waiting for your reply. If the owner should know or decide, use ask_owner with your recommendation.',
+      '</orbit-run-notice>',
+    ].join('\n');
+    const events = [
+      ...exchange(0, delivery(0, 'TASK_RUN_STOPPED', B1, 'B1 Targeted hints'), 'B1 is waiting on purpose; nothing to do.'),
+      ...exchange(5, { text: NOTE, controlPlaneNote: NOTE }, 'A progress signal from B4; nothing to do.'),
+      ...exchange(10, {
+        text: 'B4 scope note: I will keep the old route until A3 lands.',
+        sessionMessage: { fromSessionId: RUN_OF_B1, fromTitle: 'Task: B4 Link gateway', fromAgentName: 'orbit', fromTaskId: B4 },
+      }, 'Agreed with B4’s scope note.'),
+      ...exchange(20, { text: 'ok' }, 'Done.', []),
+    ];
+    mount(events);
+    expect(q('.orbit-exchanges-count')!.textContent).toBe('3 Orbit updates handled');
+    expect(q('.orbit-exchanges-kinds')!.textContent).toBe('1 project update, 1 run notice, 1 message');
+    expect(q('.smc')).toBeNull();
+    expect(text('.chat-msg.chat-user')).toEqual(['ok']);
+    act(() => q('.orbit-exchanges-line')!.click());
+    // B4 waits on B1: one root, with the notice and the message under B4.
+    expect(text('.orbit-exchanges-body > .orbit-branch > .orbit-branch-line .orbit-branch-title')).toEqual(['B1 Targeted hints']);
+    act(() => q('.orbit-branch-line')!.click());
+    act(() => all('.orbit-branch .orbit-branch .orbit-branch-line')[0].click());
+    expect(text('.orbit-branch .orbit-branch .orbit-exchange-what')).toEqual(['Run notice', 'Message']);
+    act(() => all('.orbit-branch .orbit-branch .orbit-exchange-line')[1].click());
+    expect(q('.orbit-exchange.is-open .smc')).not.toBeNull();
   });
 
   it('leaves a turn the agent has not answered as the line its card draws', () => {
