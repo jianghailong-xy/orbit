@@ -65,8 +65,10 @@ describe('Settings → Access tokens', () => {
     expect(container.querySelector('.opened')?.textContent).toBe('the tokens page');
   });
 
-  it('is routed at settings/access-tokens inside the app shell, wrapped in DocView like Shared links', () => {
-    expect(app).toMatch(/path="settings\/access-tokens"\s*\n\s*element=\{\s*\n\s*<DocView>\s*\n\s*<AccessTokensPage \/>/);
-    expect(app.indexOf('path="settings/access-tokens"')).toBeGreaterThan(app.indexOf('path="settings/shared-links"'));
+  it('is routed at /settings/access-tokens inside the Settings window, after Shared links', () => {
+    const settings = app.slice(app.indexOf('<Route path="settings" element={<SettingsLayout />}>'));
+    const block = settings.slice(0, settings.indexOf('</Route>'));
+    expect(block).toContain('<Route path="access-tokens" element={<AccessTokensPage />} />');
+    expect(block.indexOf('path="access-tokens"')).toBeGreaterThan(block.indexOf('path="shared-links"'));
   });
 });
