@@ -99,6 +99,7 @@ import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectSettledUnmergedProducer } from './project-settled-unmerged.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
+import { PushService } from '../push/push.service';
 import { ProjectsService } from './projects.service';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
@@ -185,6 +186,8 @@ function connect(url: string): Stack {
       new ProjectSettledUnmergedProducer(prisma, convergence, deliveries)],
     [CompletionEvidenceProducer, producer],
     [CoordinatorEvidenceQueueService, new CoordinatorEvidenceQueueService(prisma, producer)],
+    // @Optional on ProjectsService (9afb7d156): no push transport here, as in a module without one.
+    [PushService, undefined],
   ]);
   return {
     db,
