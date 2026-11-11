@@ -48,8 +48,10 @@ export function isEngine(value: unknown): value is AgentProvider {
 export type EngineCredential =
   /** The engine's own sign-in on the runner; the provider slug is the engine's name. */
   | { kind: 'login'; engine: LoginEngine }
-  /** An account pool (ProviderPool), which runs on the engine it was made on. */
-  | { kind: 'pool'; engine: AgentProvider }
+  /** An account pool (ProviderPool), which runs on the engine it was made on. `ownLogin` says it is a
+   *  Codex pool of the caller's own ChatGPT accounts (not shared, not somebody else's), the one kind
+   *  of pool Claude Code may also run on, through Orbit's gateway (EngineTableOptions.codexLoginGateway). */
+  | { kind: 'pool'; engine: AgentProvider; ownLogin?: boolean }
   /** A configured key (ModelProvider). `runtime` is the row's column, which names the protocol its
    *  endpoint speaks; `subscriptionToken` is whether the decrypted key is a Claude subscription
    *  token (`sk-ant-oat…`), which Anthropic serves to Claude Code alone. */
@@ -99,6 +101,10 @@ export interface EngineTableOptions {
   /** Orbit's /api/gw/anthropic gateway is on (docs/claude-engine-openai-gateway-design.md §4.2, D6):
    *  an OpenAI key also runs on Claude Code, after its default engine Codex (D7). */
   anthropicGateway?: boolean;
+  /** Claude Code on the account owner's own Codex login pool is on (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY;
+   *  docs/claude-engine-openai-gateway-design.md §9): such a pool also runs on Claude Code, after its
+   *  default engine Codex (D7). A shared pool, or anybody else's, never does. */
+  codexLoginGateway?: boolean;
 }
 
 /** The engines `credential` can run on, its default engine first and the rest in ALL_ENGINES order;
@@ -106,8 +112,12 @@ export interface EngineTableOptions {
 export function credentialEngines(credential: EngineCredential, options: EngineTableOptions = {}): AgentProvider[] {
   switch (credential.kind) {
     case 'login':
-    case 'pool':
       return isEngine(credential.engine) ? [credential.engine] : [];
+    case 'pool':
+      if (!isEngine(credential.engine)) return [];
+      return credential.engine === AgentProvider.CODEX && credential.ownLogin && options.codexLoginGateway
+        ? [AgentProvider.CODEX, AgentProvider.CLAUDE]
+        : [credential.engine];
     case 'opencode':
       return [AgentProvider.OPENCODE];
     case 'key':

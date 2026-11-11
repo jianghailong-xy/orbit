@@ -3,6 +3,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
 import { AdminProvidersController } from './admin-providers.controller';
 import { AnthropicGatewayController } from './anthropic-gateway.controller';
 import { AnthropicGatewayService } from './anthropic-gateway.service';
+import { AnthropicLoginGatewayService } from './anthropic-login-gateway.service';
 import { CodexLoginService } from './codex-login.service';
 import { DeepSeekBalanceService } from './deepseek-balance.service';
 import {
@@ -54,6 +55,7 @@ import { SharedPoolsService } from './shared-pools.service';
     { provide: POOL_LOGIN_TOKEN_ENDPOINT, useValue: OPENAI_OAUTH_TOKEN_URL },
     // Claude Code on an OpenAI key (docs/claude-engine-openai-gateway-design.md §4.1): to the key's own endpoint.
     AnthropicGatewayService,
+    AnthropicLoginGatewayService,
   ],
   // For RunnerApiModule's provider list, and for QueueModule's claim, which reads an account pool's
   // quota. Exported rather than re-provided there: a second provider entry would be a second

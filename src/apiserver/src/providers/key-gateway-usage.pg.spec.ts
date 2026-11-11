@@ -45,6 +45,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { AnthropicGatewayController } from './anthropic-gateway.controller';
+import { AnthropicLoginGatewayService } from './anthropic-login-gateway.service';
 import { AnthropicGatewayService } from './anthropic-gateway.service';
 import { ANTHROPIC_GATEWAY_FLAG } from './key-gateway';
 import { responseCostMicros, type ResponsesUsage } from './openai-prices';
@@ -141,7 +142,9 @@ suite('the gateway books a Claude-on-OpenAI session\'s usage and cost, on real P
       return net.connect(upstreamPort, '127.0.0.1');
     }
   })();
-  @Module({ controllers: [AnthropicGatewayController], providers: [{ provide: AnthropicGatewayService, useValue: gateway }] })
+  @Module({ controllers: [AnthropicGatewayController], providers: [{ provide: AnthropicGatewayService, useValue: gateway },
+      // The login pools' upstream (design §9): present, and never reached by a key's token.
+      { provide: AnthropicLoginGatewayService, useValue: {} }] })
   class GatewayDoors {}
   const app = await NestFactory.create(GatewayDoors, { bodyParser: false, logger: false, abortOnError: false });
   app.setGlobalPrefix('api');

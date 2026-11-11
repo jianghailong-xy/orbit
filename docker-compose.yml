@@ -212,6 +212,9 @@ services:
       # Optional: Claude Code on an OpenAI API key through this server's /api/gw/anthropic gateway (docs/configuration.md).
       # `true` turns it on; anything else leaves every key's engines and dispatch environment as they were.
       ORBIT_CLAUDE_OPENAI_GATEWAY: "${ORBIT_CLAUDE_OPENAI_GATEWAY:-}"
+      # Optional: Claude Code on the account owner's own Codex login pool, through the same gateway (docs/configuration.md).
+      # `true` turns it on; anything else leaves every pool's engines and dispatch environment as they were.
+      ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY: "${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}"
       # Optional: hosts besides api.openai.com that gateway may call (comma-separated; public https only, no redirects).
       ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"
       # Optional: the proxies in front of the gateway (a CDN such as Cloudflare, a load balancer, a TLS proxy on the host),

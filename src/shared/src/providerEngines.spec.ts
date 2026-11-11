@@ -50,6 +50,18 @@ describe('credentialEngines', () => {
     expect(credentialEngines({ kind: 'opencode' })).toEqual(['opencode']);
   });
 
+  it("runs the owner's own Codex login pool on Claude Code too only with the login gateway on", () => {
+    const own = { kind: 'pool', engine: AgentProvider.CODEX, ownLogin: true } as const;
+    const on = { codexLoginGateway: true };
+    expect(credentialEngines(own)).toEqual(['codex']);
+    expect(credentialEngines(own, { anthropicGateway: true })).toEqual(['codex']);
+    expect(credentialEngines(own, on)).toEqual(['codex', 'claude']);
+    expect(defaultEngineOf(own, on)).toBe('codex');
+    // A shared pool, or anybody else's, is never ownLogin; a Claude pool is never widened.
+    expect(credentialEngines({ kind: 'pool', engine: AgentProvider.CODEX }, on)).toEqual(['codex']);
+    expect(credentialEngines({ kind: 'pool', engine: AgentProvider.CLAUDE, ownLogin: true }, on)).toEqual(['claude']);
+  });
+
   it('runs a key on its dialect’s own engine first, then OpenCode', () => {
     expect(credentialEngines(GLM)).toEqual(['claude', 'opencode']);
     expect(credentialEngines(key('codex', 'openai', 'https://api.openai.com/v1'))).toEqual(['codex', 'opencode']);

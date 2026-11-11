@@ -63,7 +63,7 @@ export interface AnthropicGatewayCaller {
 
 /** The paths the gateway answers, matched without the query (the CLI sends `?beta=true`). */
 const MESSAGES = '/v1/messages';
-const COUNT_TOKENS = '/v1/messages/count_tokens';
+export const COUNT_TOKENS = '/v1/messages/count_tokens';
 
 /** The path under the gateway a request asks for, without its query. */
 export function anthropicGatewayPath(url: string): string {
@@ -468,6 +468,11 @@ function contextWindow(key: AnthropicGatewayCaller['key'], model: string): numbe
 /** What a failure's wording may name: the key, the model, and for an overflow the window and estimate. */
 export interface FailureContext {
   keyLabel: string;
+  /**
+   * What the credential is called in place of `the OpenAI key "<keyLabel>"`: a ChatGPT account of a Codex login
+   * pool (anthropic-login-gateway.service.ts), whose 401 the login gateway answers itself.
+   */
+  subject?: string;
   model: string;
   contextWindow?: number;
   inputTokensEstimate?: number;
@@ -508,11 +513,13 @@ export function gatewayFailure(
   const said = message.trim().replace(/\.$/, '');
   const detail = said ? `: ${said}` : '';
   const key = `"${ctx.keyLabel}"`;
+  const subject = ctx.subject ?? `the OpenAI key ${key}`;
+  const theKey = ctx.subject ?? `the key ${key}`;
   if (SPENT_ERROR_CODES.has(code)) {
     return {
       status: 429,
       type: 'rate_limit_error',
-      message: `You hit your usage limit on the OpenAI key ${key} · resets ${resetsPhrase(ctx.spentUntil)}`,
+      message: `You hit your usage limit on ${subject} · resets ${resetsPhrase(ctx.spentUntil)}`,
       cliRetries: false,
       effect: 'key_spent',
       spentUntil: ctx.spentUntil,
@@ -525,22 +532,24 @@ export function gatewayFailure(
     return {
       status: 401,
       type: 'authentication_error',
-      message: `OpenAI refused the key ${key}${detail}. Orbit marked it invalid: add a new key in Providers to go on.`,
+      message: ctx.subject
+        ? `OpenAI refused ${ctx.subject}${detail}.`
+        : `OpenAI refused the key ${key}${detail}. Orbit marked it invalid: add a new key in Providers to go on.`,
       cliRetries: false,
       effect: 'key_invalid',
     };
   }
   if (status === 404 || code === 'model_not_found') {
-    return { status: 404, type: 'not_found_error', message: `OpenAI has no model "${ctx.model}" for the key ${key}${detail}.`, cliRetries: false, effect: null };
+    return { status: 404, type: 'not_found_error', message: `OpenAI has no model "${ctx.model}" for ${theKey}${detail}.`, cliRetries: false, effect: null };
   }
   if (status === 403) {
-    return { status: 403, type: 'permission_error', message: `The key ${key} may not use the model "${ctx.model}" on OpenAI${detail}.`, cliRetries: false, effect: null };
+    return { status: 403, type: 'permission_error', message: `${theKey.charAt(0).toUpperCase()}${theKey.slice(1)} may not use the model "${ctx.model}" on OpenAI${detail}.`, cliRetries: false, effect: null };
   }
   if (status === 429 || code === 'rate_limit_exceeded') {
     return {
       status: 429,
       type: 'rate_limit_error',
-      message: `OpenAI is rate-limiting the key ${key}, and was still refusing after the Orbit gateway waited${detail}.`,
+      message: `OpenAI is rate-limiting ${theKey}, and was still refusing after the Orbit gateway waited${detail}.`,
       cliRetries: false,
       effect: null,
     };
@@ -558,7 +567,7 @@ export function gatewayFailure(
 }
 
 /** A failure as the CLI gets it. */
-function answerFailure(res: Response, failure: GatewayFailure): void {
+export function answerFailure(res: Response, failure: GatewayFailure): void {
   if (!failure.cliRetries) res.setHeader('x-should-retry', 'false');
   refuseAnthropic(res, failure.status, failure.type, failure.message);
 }

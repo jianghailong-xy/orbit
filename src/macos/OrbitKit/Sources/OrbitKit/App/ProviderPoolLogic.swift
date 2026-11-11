@@ -32,7 +32,8 @@ public enum ProviderPools {
             return ConfiguredProvider(slug: pool.slug, label: pool.label,
                                       runtime: codex ? "codex" : "claude",
                                       presetSlug: codex ? SharedPools.keyPresetSlug : "anthropic",
-                                      modelsFromRuntime: true)
+                                      modelsFromRuntime: true,
+                                      engines: pool.shared == nil ? pool.engines : nil)
         }
     }
 

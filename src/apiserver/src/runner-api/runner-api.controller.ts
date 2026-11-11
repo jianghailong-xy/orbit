@@ -3844,7 +3844,7 @@ export class RunnerApiController {
       const customRow = declaredIsBuiltin
         ? keyRow
         : (keyRow ??
-          (await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
+          (await this.queue.resolveLoginPool(this.prisma, s, declared!, false, engines.get(s.id))) ??
           (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
           (await this.queue.resolveSharedPool(this.prisma, s, declared!)));
       // As on the claim: a Claude pool of the owner's own that none of its members can run is rebuilt on
@@ -5541,7 +5541,7 @@ export class RunnerApiController {
     const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
       ? keyRow
       : (keyRow ??
-        (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
+        (await this.queue.resolveLoginPool(tx, session, session.provider!, false, engine)) ??
         (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
         (await this.queue.resolveSharedPool(tx, session, session.provider!)));
     // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on

@@ -26,6 +26,7 @@ import { ACCOUNT_DISABLED_MESSAGE, DisabledAccounts } from '../auth/disabled-acc
 import { sha256 } from '../common/crypto.util';
 import type { PrismaService } from '../prisma/prisma.service';
 import { AnthropicGatewayController } from './anthropic-gateway.controller';
+import type { AnthropicLoginGatewayService } from './anthropic-login-gateway.service';
 import { AnthropicGatewayService } from './anthropic-gateway.service';
 import { ANTHROPIC_GATEWAY_FLAG } from './key-gateway';
 import { outsideThePoolGateway } from './pool-gateway.controller';
@@ -108,7 +109,7 @@ before(async () => {
       return connect(upstreamPort, '127.0.0.1');
     }
   })();
-  const controller = new AnthropicGatewayController(service);
+  const controller = new AnthropicGatewayController(service, {} as AnthropicLoginGatewayService);
   const app = express();
   // main.ts's own layers: the body parsers every other route gets, which must leave this one's body unread.
   app.use(outsideThePoolGateway(json({ limit: '10mb' })));

@@ -102,6 +102,61 @@
       "codex"
     ]
   },
+  "account-pool/claude-on-own-codex-pool": {
+    "resolution": {
+      "provider": "codex-pool",
+      "runtimeSessionId": "runtime-account-pool/claude-on-own-codex-pool",
+      "engine": "claude",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "gpt-5.6-sol",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": null,
+    "refusal": "provider \"codex-pool\" cannot run on Claude Code; it runs on Codex, OpenCode",
+    "engines": [
+      "codex"
+    ]
+  },
+  "account-pool/codex-on-shared-codex-pool": {
+    "resolution": {
+      "provider": "shared-codex-pool",
+      "runtimeSessionId": "runtime-account-pool/codex-on-shared-codex-pool",
+      "engine": "codex",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "gpt-5.1",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": {
+      "PARITY_WORKSPACE_VAR": "kept",
+      "OPENAI_BASE_URL": "https://orbit.parity.invalid/api/gw/codex",
+      "OPENAI_API_KEY": "orbit-gw-parity-shared-token"
+    },
+    "refusal": null,
+    "engines": [
+      "codex"
+    ]
+  },
+  "account-pool/claude-on-shared-codex-pool": {
+    "resolution": {
+      "provider": "shared-codex-pool",
+      "runtimeSessionId": "runtime-account-pool/claude-on-shared-codex-pool",
+      "engine": "claude",
+      "keyFingerprint": null,
+      "endpoint": null,
+      "model": "gpt-5.1",
+      "dispatchable": true,
+      "refusal": null
+    },
+    "env": null,
+    "refusal": "provider \"shared-codex-pool\" cannot run on Claude Code; it runs on Codex, OpenCode",
+    "engines": [
+      "codex"
+    ]
+  },
   "anthropic-key/claude": {
     "resolution": {
       "provider": "anthropic",

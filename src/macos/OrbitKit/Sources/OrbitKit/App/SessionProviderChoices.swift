@@ -19,6 +19,9 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// Which credential an engine's own sign-in is, in small type beside it: Antigravity's Google
     /// account or the machine's Gemini key, OpenCode's `opencode auth`.
     public let labelDetail: String?
+    /// A sentence the menu shows with the row, for what picking it risks: a Codex pool under Claude
+    /// Code (`SessionProviderChoices.codexPoolOnClaudeNotice`). Nil for anything else.
+    public let notice: String?
     public let kind: Kind
     /// Which brand's mark/tint to draw. An engine's own sign-in borrows its vendor preset, a key uses
     /// the preset it was created from, and a self-maintained endpoint has none.
@@ -65,10 +68,12 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
                 unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
                 poolUnit: String? = nil, inPool: Bool = false, note: String? = nil,
-                accounts: [AccountChoice]? = nil, labelDetail: String? = nil, regionBlocked: Bool = false) {
+                accounts: [AccountChoice]? = nil, labelDetail: String? = nil, regionBlocked: Bool = false,
+                notice: String? = nil) {
         self.slug = slug
         self.label = label
         self.labelDetail = labelDetail
+        self.notice = notice
         self.kind = kind
         self.brandKey = brandKey
         self.modelLabel = modelLabel
@@ -386,6 +391,24 @@ public enum SessionProviderChoices {
         ProviderPools.runsCodex(pool) ? "codex" : "claude"
     }
 
+    /// Whether `engine` runs on the pool: the engines the server lists for a pool of one's own, else
+    /// the one it was made on. A shared pool runs on Codex alone, whatever it lists (web's `poolRunsOn`).
+    static func poolRuns(_ pool: ProviderPool, on engine: String) -> Bool {
+        if pool.shared == nil, let engines = pool.engines { return engines.contains(engine) }
+        return poolEngine(pool) == engine
+    }
+
+    /// Said with a Codex pool of one's own listed under Claude Code, which runs on its ChatGPT account
+    /// through Orbit's gateway rather than the Codex CLI (web's `CODEX_POOL_ON_CLAUDE_NOTICE`).
+    public static let codexPoolOnClaudeNotice =
+        "Runs Claude Code on your ChatGPT account outside the official Codex CLI. OpenAI may restrict the account."
+
+    /// The notices of a menu group's rows, each once, in row order.
+    public static func notices(_ choices: [ProviderChoice]) -> [String] {
+        var seen = Set<String>()
+        return choices.compactMap(\.notice).filter { seen.insert($0).inserted }
+    }
+
     /// What an engine's sign-in is called in the menu: the one account the runner reports by its own
     /// name, else Default — the account dispatch resolves a session on the sign-in to.
     static func signInLabel(_ health: RunnerEngineHealth?) -> String {
@@ -449,13 +472,13 @@ public enum SessionProviderChoices {
         // none can (pool-credential-select.ts, 2026-10-03), so what the pool holds is what they can run
         // on, and the pool's own answer (`unavailable`) is the reason. A missing CLI outranks the
         // members, because it is the one of the two a runner can fix.
-        let pools = sources.pools.filter { poolEngine($0) == engine }.map { pool -> ProviderChoice in
+        let pools = sources.pools.filter { poolRuns($0, on: engine) }.map { pool -> ProviderChoice in
             let region = regionBlocked(engine, sources: sources, credential: .pool(engine: poolEngine(pool)))
             return ProviderChoice(
                 slug: pool.slug,
                 label: pool.label,
                 kind: .pool,
-                brandKey: enginePreset[engine],
+                brandKey: enginePreset[poolEngine(pool)],
                 modelLabel: modelLabel(engine: engine, provider: pool.slug, sources: sources),
                 unavailable: region ? ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED : carried ?? poolBlocker(pool),
                 fixEngine: region || carried != nil ? engine : nil,
@@ -464,7 +487,8 @@ public enum SessionProviderChoices {
                 // accounts counts accounts (the reader's own words — ProviderPools.memberNoun).
                 poolUnit: pool.shared != nil && !pool.members.contains { $0.login != nil } ? "key" : nil,
                 note: ProviderPools.spentNote(pool, now: sources.now),
-                regionBlocked: region)
+                regionBlocked: region,
+                notice: engine == "claude" && poolEngine(pool) == "codex" ? codexPoolOnClaudeNotice : nil)
         }
 
         let poolSlugs = Set(sources.pools.map(\.slug))
