@@ -16,9 +16,8 @@ import OrbitKit
 /// leave, the whole group is greyed with why under it. A server without move-targets shows no group.
 ///
 /// A project's coordinator (docs/mocks/coordinator-move-workspace 03-final): the title's line names
-/// the project, the group says the project's coordinator moves with it, and a workspace its
-/// conversation can't go to but a new coordinator could open in carries Start new here…, which asks
-/// and then starts the project's next coordinator there.
+/// the project, and the group says the project's coordinator moves with it. Starting a new one
+/// elsewhere is the project page's Change workspace (04-change), not this panel's.
 struct SessionMoveSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -41,12 +40,6 @@ struct SessionMoveSheet: View {
     @State private var targetsFailure: String?
     /// The server has no move-targets (it predates moving between workspaces): no second group.
     @State private var targetsUnsupported = false
-    /// The workspace Start new here… was pressed on, while its confirmation is up.
-    @State private var startingIn: SessionMoveTarget?
-    /// Set while the new coordinator is being started, which holds the panel still.
-    @State private var starting = false
-    /// Why the last Start new here… didn't start one, shown as an alert.
-    @State private var startFailure: String?
 
     var body: some View {
         NavigationStack {
@@ -72,7 +65,7 @@ struct SessionMoveSheet: View {
                 }
                 workspaceGroup
             }
-            .disabled(creating || starting)
+            .disabled(creating)
             .navigationDestination(for: SessionMoveTarget.self) { target in
                 SessionMoveTargetPage(session: session, workspace: workspace, target: target,
                                       answer: targets ?? SessionMoveTargets(targets: [target]),
@@ -100,22 +93,6 @@ struct SessionMoveSheet: View {
                 Button(SessionMoveCopy.ok, role: .cancel) {}
             } message: {
                 Text(failure ?? "")
-            }
-            .alert(StartCoordinatorCopy.title(startingIn?.name ?? ""), isPresented: confirmingStart,
-                   presenting: startingIn) { target in
-                Button(StartCoordinatorCopy.action(target.name, outgoing: .open), role: .destructive) {
-                    startCoordinator(in: target)
-                }
-                Button(StartCoordinatorCopy.keep, role: .cancel) {}
-            } message: { target in
-                Text(StartCoordinatorCopy.paragraphs(project: targets?.coordinates?.title ?? "",
-                                                     to: target.name, from: workspace.name,
-                                                     outgoing: .open).joined(separator: "\n\n"))
-            }
-            .alert(StartCoordinatorCopy.couldNotStart, isPresented: startFailed) {
-                Button(SessionMoveCopy.ok, role: .cancel) {}
-            } message: {
-                Text(startFailure ?? "")
             }
         }
         .presentationDetents([.medium, .large])
@@ -227,16 +204,9 @@ struct SessionMoveSheet: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
-            if row.startsNew {
-                // Its conversation can't come here, but a new coordinator can open here instead.
-                Button(StartCoordinatorCopy.startNewHere) { startingIn = row.target }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(Color.accentColor)
-                    .font(.subheadline)
-            }
         }
         .contentShape(Rectangle())
-        .accessibilityElement(children: row.startsNew ? .contain : .combine)
+        .accessibilityElement(children: .combine)
     }
 
     /// What a workspace's next session would start on, as its row names it (web `SessionMoveModal`): an
@@ -278,26 +248,6 @@ struct SessionMoveSheet: View {
             creating = false
             if let refused { failure = refused } else { dismiss() }
         }
-    }
-
-    /// Start new here…, confirmed: the project's next coordinator opens there and is put on screen;
-    /// the panel closes, or says why it didn't start.
-    private func startCoordinator(in target: SessionMoveTarget) {
-        guard let projectID = targets?.coordinates?.projectId else { return }
-        starting = true
-        Task {
-            let refused = await app.startCoordinator(ofProject: projectID, in: target)
-            starting = false
-            if let refused { startFailure = refused } else { dismiss() }
-        }
-    }
-
-    private var confirmingStart: Binding<Bool> {
-        Binding(get: { startingIn != nil }, set: { if !$0 { startingIn = nil } })
-    }
-
-    private var startFailed: Binding<Bool> {
-        Binding(get: { startFailure != nil }, set: { if !$0 { startFailure = nil } })
     }
 
     private var failed: Binding<Bool> {

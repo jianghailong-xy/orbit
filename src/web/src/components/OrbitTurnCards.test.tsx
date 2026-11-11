@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import type { EvidenceReviewCard, RunQuestionCard } from '@orbit/shared';
 import {
@@ -42,7 +43,12 @@ const RUN = '01a0cca7-0000-7000-8000-0000000000d3';
 const NOW = new Date('2026-11-11T05:20:00.000Z');
 
 function html(node: JSX.Element): string {
-  return renderToStaticMarkup(<MemoryRouter>{node}</MemoryRouter>);
+  // The question card reads its request live; a static render never fetches.
+  return renderToStaticMarkup(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>{node}</MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
 
 const review = (over: Partial<EvidenceReviewCard> = {}): EvidenceReviewCard => ({

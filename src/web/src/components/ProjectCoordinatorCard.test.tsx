@@ -555,7 +555,7 @@ describe('ProjectCoordinatorCard — UNAVAILABLE', () => {
   it('gives both ways out — repair the workspace, or start the next coordinator elsewhere', () => {
     const labels = buttonLabels(paint(unavailableStatus()));
     expect(labels).toContain('Enable orbit-main');
-    expect(labels).toContain('Start a new coordinator in…');
+    expect(labels).toContain('Change workspace…');
     expect(labels.some((l) => /Rebind/i.test(l))).toBe(false);
   });
 
@@ -579,7 +579,7 @@ describe('ProjectCoordinatorCard — UNAVAILABLE', () => {
       workspaceNameAbsentReason: 'COORDINATION_WORKSPACE_PURGED',
     };
     const labels = buttonLabels(paint(forgotten));
-    expect(labels).toContain('Start a new coordinator in…');
+    expect(labels).toContain('Change workspace…');
     expect(labels.some((l) => /Enable|Restore|Bind .* to a runner/i.test(l))).toBe(false);
     expect(text(paint(forgotten))).toContain('no longer records the workspace');
   });

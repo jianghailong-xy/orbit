@@ -88,20 +88,13 @@ import { Alert } from '../components/ui/Alert';
 import { Badge, type BadgeProps } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { useConfirm } from '../components/ui/ConfirmDialog';
-import { SessionMoveModalFor } from '../components/SessionMoveModal';
+import { CHANGE_COPY } from '../lib/coordinatorWorkspace';
 import {
-  START_COORDINATOR_COPY,
-  startCoordinatorAction,
-  startCoordinatorParagraphs,
-  startCoordinatorTitle,
-  type OutgoingCoordinator,
-} from '../lib/coordinatorWorkspace';
-import {
-  CoordinatorWorkspaceDialog,
+  CoordinatorChangeDialog,
   coordinatorSessionPath,
   replaceProjectCoordinator,
   type CoordinatorResult,
-} from '../components/StartCoordinatorIn';
+} from '../components/CoordinatorChange';
 import { Dialog } from '../components/ui/Dialog';
 import { Empty } from '../components/ui/Empty';
 import { Popconfirm } from '../components/ui/Popconfirm';
@@ -1377,7 +1370,7 @@ export function ProjectDetailPage() {
 }
 
 // What POST /projects/:id/coordinator answers with, where its conversation is read, and the
-// replace door: shared with the Move panel's "Start new here…" (components/StartCoordinatorIn).
+// replace door: shared with the coordinator's Change (components/CoordinatorChange).
 export { coordinatorSessionPath, replaceProjectCoordinator, type CoordinatorResult };
 
 /**
@@ -1499,10 +1492,9 @@ export function ProjectCoordinatorSection({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [confirm, confirmation] = useConfirm();
-  // Start a new coordinator in… (docs/mocks/coordinator-move-workspace 03-final ④–⑥) and Move…
-  // (②–③): the picker, and the Move panel opened on the coordinator conversation.
-  const [pickingWorkspace, setPickingWorkspace] = useState(false);
-  const [moving, setMoving] = useState(false);
+  // Change (docs/mocks/coordinator-move-workspace/04-change): where this project is coordinated
+  // from — the conversation moves along, or a new one opens there.
+  const [changing, setChanging] = useState(false);
   const [choosingLanding, setChoosingLanding] = useState(false);
   // The workspace the reader named for a coordinator that has never opened. Kept rather than sent
   // and forgotten, because every later press has to carry the same choice — a Retry that fell back
@@ -1514,8 +1506,7 @@ export function ProjectCoordinatorSection({
 
   const replace = useMutation({
     mutationKey: ['project', projectId, 'coordinator', 'replace'],
-    // A workspace named here is "start it THERE"; none keeps the one the project is coordinated in.
-    mutationFn: (workspaceId?: string) => replaceProjectCoordinator(projectId, workspaceId),
+    mutationFn: () => replaceProjectCoordinator(projectId),
     onSuccess: (result) => {
       // The card is read from the project document, and the pointer it draws just moved.
       qc.invalidateQueries({ queryKey: ['project', projectId] });
@@ -1558,7 +1549,7 @@ export function ProjectCoordinatorSection({
       // That is asked about first, in the words of what it does rather than "are you sure".
       case 'replace':
         if (status.data?.coordination.session?.lifecycleState === SessionLifecycleState.COMPLETED) {
-          replace.mutate(undefined);
+          replace.mutate();
           return;
         }
         void confirm({
@@ -1573,17 +1564,13 @@ export function ProjectCoordinatorSection({
             'conversation stays readable.',
           confirmText: 'Complete and start a new one',
           cancelText: 'Keep this coordinator',
-          onConfirm: () => replace.mutate(undefined),
+          onConfirm: () => replace.mutate(),
         });
         return;
-      // The same, in a workspace the reader picks. It also stands in for rebinding: a project whose
+      // Where the project is coordinated from. It also stands in for rebinding: a project whose
       // workspace broke starts its next coordinator somewhere that works, in one step.
-      case 'start-elsewhere':
-        setPickingWorkspace(true);
-        return;
-      // The conversation itself goes, and the project's coordination with it (the session's Move).
-      case 'move':
-        setMoving(true);
+      case 'change-coordinator-workspace':
+        setChanging(true);
         return;
       // Two different things, and only the second is a write of its own. Naming the landing of a
       // coordinator that has never opened records nothing: the name rides along with the open that
@@ -1664,8 +1651,8 @@ export function ProjectCoordinatorSection({
               description={failure.message}
               action={
                 unavailable ? (
-                  <Button size="small" onClick={() => setPickingWorkspace(true)}>
-                    {START_COORDINATOR_COPY.menuTitle}
+                  <Button size="small" onClick={() => setChanging(true)}>
+                    {CHANGE_COPY.button}
                   </Button>
                 ) : (
                   // Retries the press that FAILED, not the other one: a replacement that lost a race
@@ -1675,7 +1662,7 @@ export function ProjectCoordinatorSection({
                   <Button
                     size="small"
                     danger
-                    onClick={() => (replace.error ? replace.mutate(replace.variables) : open.mutate(landing))}
+                    onClick={() => (replace.error ? replace.mutate() : open.mutate(landing))}
                   >
                     Retry
                   </Button>
@@ -1689,55 +1676,25 @@ export function ProjectCoordinatorSection({
         </>
       )}
 
-      {pickingWorkspace ? (
-        <CoordinatorWorkspaceDialog
+      {changing && status.data ? (
+        <CoordinatorChangeDialog
+          projectId={projectId}
           projectTitle={projectTitle}
-          currentWorkspaceId={boundWorkspaceId}
-          onClose={() => setPickingWorkspace(false)}
-          onPick={(to) => {
-            setPickingWorkspace(false);
-            // Where it already is: the plain Start a new coordinator, asked as it always is.
-            if (to.current) {
-              act('replace');
-              return;
-            }
-            const lifecycle = status.data?.coordination.session?.lifecycleState;
-            const outgoing: OutgoingCoordinator = !status.data?.coordination.session
-              || status.data.coordination.session.deletedAt
-              ? 'none'
-              : lifecycle === SessionLifecycleState.COMPLETED
-                ? 'completed'
-                : 'open';
-            void confirm({
-              width: 480,
-              title: startCoordinatorTitle(to.name),
-              description: (
-                <div className="move-confirm-body">
-                  {startCoordinatorParagraphs({
-                    project: projectTitle,
-                    to: to.name,
-                    from: status.data?.coordination.workspaceName ?? null,
-                    outgoing,
-                  }).map((p) => <p key={p}>{p}</p>)}
-                </div>
-              ),
-              confirmText: startCoordinatorAction(to.name, outgoing),
-              cancelText: START_COORDINATOR_COPY.keep,
-              danger: outgoing === 'open',
-              onConfirm: () => replace.mutate(to.workspaceId),
-            });
+          coordinator={{
+            sessionId:
+              status.data.coordination.session && !status.data.coordination.session.deletedAt
+                ? status.data.coordination.session.id
+                : null,
+            outgoing:
+              !status.data.coordination.session || status.data.coordination.session.deletedAt
+                ? 'none'
+                : status.data.coordination.session.lifecycleState === SessionLifecycleState.COMPLETED
+                  ? 'completed'
+                  : 'open',
+            workspaceId: boundWorkspaceId,
+            workspaceName: status.data.coordination.workspaceName ?? null,
           }}
-        />
-      ) : null}
-
-      {moving && status.data?.coordination.session && boundWorkspaceId ? (
-        <SessionMoveModalFor
-          session={{ id: status.data.coordination.session.id, title: status.data.coordination.session.title }}
-          workspace={{ id: boundWorkspaceId, name: status.data.coordination.workspaceName ?? '' }}
-          onClose={() => {
-            setMoving(false);
-            void qc.invalidateQueries({ queryKey: ['project', projectId] });
-          }}
+          onClose={() => setChanging(false)}
         />
       ) : null}
 

@@ -78,8 +78,8 @@ export interface SessionMoveTarget {
   /** The folders the session can be filed in there. */
   folders: SessionMoveFolder[];
   /** The session is a project's coordinator and a new coordinator for that project could open here
-   *  (enabled, with a runner) — the Move panel's "Start new here…" when the conversation itself cannot
-   *  come along. Always false for any other session. */
+   *  (enabled, with a runner) — the coordinator's Change offers "Start a new one there" when the
+   *  conversation itself cannot come along. Always false for any other session. */
   startsCoordinator: boolean;
 }
 
