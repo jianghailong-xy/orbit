@@ -384,7 +384,7 @@ class WikiMaintainStop extends Error {
 /** Run one `maintain` job: its run row, the whole pipeline, and what its end leaves. */
 export async function runWikiMaintainJob(context: WikiJobContext, deps: WikiMaintainJobDeps): Promise<Record<string, unknown>> {
   const runId = readRunId(context.job.input);
-  return new WikiMaintainRun(context, deps, runId, readBackfill(context.job.input)).execute();
+  return new WikiMaintainRun(context, deps, runId, readBackfill(context.job.input), context.job.input?.acceptFolder === true).execute();
 }
 
 /** The job's input as its row holds it: the run it executes (`maintenance.job.server`). */
@@ -482,6 +482,8 @@ class WikiMaintainRun {
     private readonly runId: string,
     /** The sessions this run was given, or null when it reads the cursor's pages. */
     private readonly backfill: WikiMaintainBackfill | null = null,
+    /** `Use this folder` (contract `maintenance.run`): this run's folder snapshot is kept whatever it shares with the last. */
+    private readonly acceptFolder = false,
   ) {
     if (backfill) this.report.backfill = { reason: backfill.reason, unread: [], heldBack: [] };
   }
@@ -866,7 +868,8 @@ class WikiMaintainRun {
       ? await this.deps.prisma.wikiRepoSnapshot.findFirst({ where: { spaceId: job.spaceId, ownerId: job.ownerId }, select: { sha: true } })
       : null;
     // A runner that reads folders is allowed to by the enqueue (`allowFolder`), for this and every other operation.
-    return this.operation('snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of the default branch');
+    return this.operation('snapshot', { skipSha: held?.sha ?? null, ...(this.acceptFolder ? { acceptFolder: true } : {}) },
+      'the snapshot of the default branch');
   }
 
   /** The space's snapshot row, read back after a snapshot operation named its sha: the index the run's steps query. */

@@ -1096,8 +1096,10 @@
         "who": "The server (WikiMaintenanceTrigger), for every space of the owner whose maintenance is on, when an event this replica published names a committed fact of the space that is still after the cursor: a session of the space at rest, an approval it answered, a merge receipt of it (all through the session's own events), or a settled task of the space (task.changed). A merge receipt or a criterion revision that publishes nothing of its own is counted in the backlog and taken in with the next fact that arrives. The end of a run that queued the space's articles job asks too (maintenance.job.server.trigger, the owner's decision of 2026-10-10).",
         "due": [
           "backlog",
-          "age"
+          "age",
+          "owner"
         ],
+        "owner": "A run the owner asked for (maintenance.run): no fact made it and it is no hint's. due owner, counted against the day like the other two.",
         "conditions": "Due when rules.backlogThreshold sessions have a fact after the cursor, or when the oldest fact after it is older than rules.maxPendingAgeHours as the new fact arrives. No clock starts a run: a space that turns due in silence makes its run with its next fact.",
         "notMade": [
           "maintenance is off, or names no workspace",
@@ -1258,6 +1260,26 @@
         "failureKinds": "infra: the runner too old for a repository operation in a step past the probe (a runner away, too old to be handed one at all, or a working directory that is not git is tier sessions at the probe, which no failure of the run is: repoOps.tiers), a read or a snapshot past its wait or its limit, a request past its step's wait limit, the worker crashing (its lease ran out, jobs.lease.sweep), the database failing under the run — a transaction it could not start in time or that its timeout closed (P2028), no connection in time (P2024), a connection or resource SQLSTATE (classes 08, 53, 57, 58), a deadlock or serialization conflict still there after the transaction's own retries (2026-10-17: a P2028 at the anchors step failed the canary's runs 6e62f826 and 34cadf93 as content). The run is not ended and nothing is counted: the job goes back to queued on the backoff (jobs.retry, §5.5), and its replay finds nothing half-written, since each of those rolled back whole. The worker stopping is neither kind: the job is handed back (jobs.lease.handBack), queued at once with its attempts as they were, and the run is not ended. content: the model's answers that do not hold up, an op the server refuses after its dry run, a step's own error. The run ends failed (finishWikiMaintenanceJob) — the cursor advances as it rules and the space's consecutive failures go up by one, so three in a row tell the owner — and the job fails as content.",
         "health": "The run rows are the count, never a task or a session (maintenance.job.catchUp.dailyLimit, maintenance.health): a run of a job is counted off its row, a run made in active catch-up whose localEndpoint is set is not counted, and no provider is read to decide it — the worker writes localEndpoint when it starts the run, from the System model's address."
       }
+    },
+    "probe": {
+      "phase": 2,
+      "doc": "docs/wiki-repo-tiers-design.md §7.3 (P3)",
+      "route": "POST /api/wiki/spaces/:id/maintenance/probe",
+      "who": "The space's owner on the user door with no session header (WIKI_OWNER_CHANNEL_ONLY) and no personal access token; another account's space or workspace is the plain 404.",
+      "request": "{ workspaceId }: the workspace the settings form is about to choose, which need not be the one maintenance names.",
+      "asks": "The workspace's runner, with the probe kind (repoOps.kindRuns.probe), only when it is beating and declares repoOps.probeCapability; the answer is waited for repoOps.probe.waitSeconds. Otherwise nothing is asked.",
+      "answer": "WikiRepoProbeAnswer { workspaceId, tier, reason, origin, tone, title, note, canTurnOn, checkedAt } (wikiRepoProbeAnswer in src/shared/src/wikiRepoOps.ts). tone ok: 'Git checkout of <origin>'. tone folder: 'Folder, not git' and 'Entries and code checks work. Commit anchors are not checked.'. tone paused (tier sessions: not_found, no_work_dir): wikiRepoDetail's sentence, '<dir> was not found on <runner>', and 'Maintenance can still learn from sessions. Code checks wait until the folder is back.'. tone wrong (tier wrong_repository: wrong_repository, root_mismatch): '<dir> is a clone of <url>, not this wiki's repository', canTurnOn false. tone unchecked (tier null): 'Could not check: <runner> is offline', or the runner too old, missing or silent; canTurnOn true.",
+      "turnOn": "PATCH /api/wiki/spaces/:id that turns maintenance on, or names another workspace while it is on, asks the same probe first and is refused WIKI_MAINTENANCE_WRONG_REPOSITORY when canTurnOn is false. POST /api/wiki/spaces does not: the space it would ask about does not exist yet, and its form offers only workspaces of the repository it names."
+    },
+    "run": {
+      "phase": 2,
+      "doc": "docs/wiki-repo-tiers-design.md §7.3 (P3)",
+      "route": "POST /api/wiki/spaces/:id/maintenance/run",
+      "who": "The space's owner, as maintenance.probe: no session header, no personal access token.",
+      "request": "{ acceptFolder? }. acceptFolder true is Use this folder: the run's folder snapshot is kept even when it shares less than repoOps.folder.minPathOverlap of the last snapshot's paths, and later runs compare with it (job input acceptFolder, snapshot input acceptFolder).",
+      "makes": "One maintain job and its run row at once, due owner, under the space's lock by the writer a fact's run is made by: its first step is the probe, so the folder is checked again before anything else. Its expected position is what a fact's run would be given, or none when nothing settled is pending.",
+      "answer": "201 { jobId, runId }. Maintenance off: 400. Another run not ended: 409 WIKI_MAINTENANCE_RUNNING. The day's runs used up: 409 WIKI_MAINTENANCE_DAILY_LIMIT, and the card says Daily limit reached with the button off (health.maintenance.dailyLimitReached).",
+      "card": "The Settings maintenance card shows Check again and run now and Change workspace… while health.repo.tier is not git (null excepted) or the last run's outcome is failed; Use this folder as well while health.repo.reason is path_overlap, asked once in a confirmation."
     },
     "health": {
       "phase": 2,
@@ -2712,16 +2734,18 @@
     "capability": "wiki-repo-op/v1",
     "readCapability": "wiki-repo-op-read/v1",
     "folderCapability": "wiki-repo-op-folder/v1",
+    "probeCapability": "wiki-repo-op-probe/v1",
     "table": "wiki_repo_op",
     "migration": "src/apiserver/prisma/migrations/0402_wiki_repo_op/migration.sql",
     "fileMigration": "src/apiserver/prisma/migrations/0406_wiki_repo_file/migration.sql",
     "columns": ["id", "job_id", "owner_id", "space_id", "workspace_id", "runner_id", "kind", "input", "state", "lease_owner", "claim_generation", "claimed_at", "heartbeat_at", "result", "error", "created_at", "updated_at", "ended_at"],
-    "kinds": ["snapshot", "read", "diff", "anchors"],
+    "kinds": ["snapshot", "read", "diff", "anchors", "probe"],
     "kindRuns": {
       "snapshot": "Everything the server asks of one commit at once: fetch origin/main, resolve the sha, and build the index the pipelines query — every path with its size, every document's title and headings, every source file's symbols, the commits reachable from origin/main, and the README's first paragraph. A sha the server already holds is not sent again (`input.skipSha`). Above `fragments.inlineBytes` it travels in fragments. With `input.allowFolder` — written only for a runner that declares folderCapability — a working directory that is not a git checkout is scanned instead of failing not_git, and the answer is a folder's snapshot (repoOps.folder).",
       "read": "The whole text of named paths at a named sha — the file itself, not a window of it (owner 2026-10-08). One file may be up to `read.wholeFileBytes` (2 MB); a larger one is not read at all: its item answers found: false with reason `too_large` and its size, and the pipelines treat it as missing and say why. An answer larger than `fragments.inlineBytes` travels in fragments as a snapshot's index does, and is reassembled by its sha256 and byte count before anything is cached. What a pipeline gives the model is cut server-side by `read.docSectionChars`, `read.contractChars` and `read.sectionChars`; those are cutting rules, not read limits. A runner that has not declared `readCapability` answers with the old window: at most `read.boundedChars` characters an item, the whole request answering `read.sectionChars`, its end marked `truncated`.",
       "diff": "`git diff --name-status -M` between two commits, and the design documents the range added or copied (`--diff-filter=AR -- docs/`) — what a maintenance run looks for.",
-      "anchors": "The anchor checks a maintenance run already makes (`src/runner-go/wiki_anchors.go`), reused: a path exists, a symbol's region hashes as it is held to, a commit is reachable from the snapshot's commit set."
+      "anchors": "The anchor checks a maintenance run already makes (`src/runner-go/wiki_anchors.go`), reused: a path exists, a symbol's region hashes as it is held to, a commit is reachable from the snapshot's commit set.",
+      "probe": "Which tier the working directory would be read on, and nothing else (docs/wiki-repo-tiers-design.md §7.3, P3): no fetch, no snapshot, no file read. A directory that is a git checkout answers {tier: git, origin} once its origin is the space's repo.urlNorm and the history it already holds — the commit checked out, else origin's default branch as last fetched — starts from rootCommitSha; a directory that is there and is not git answers {tier: folder}. Anything else fails with its reason (repoOps.reasons): no_work_dir, not_found, wrong_repository (its words name the other origin), root_mismatch. Handed only to a runner that declares probeCapability, and asked by the maintenance settings with no job behind it (wiki_repo_op.job_id NULL, migration 0530: the only kind that may name none). The claim hands it to no runner that has not declared probeCapability."
     },
     "states": ["queued", "running", "succeeded", "failed", "cancelled"],
     "dispatch": {
@@ -2814,7 +2838,9 @@
     "probe": {
       "maxAttempts": 3,
       "rule": "A maintenance run's snapshot that fails transiently ends the attempt as infra, and the job is tried again on the infra backoff (jobs.retry); once this job's snapshots have not succeeded maxAttempts times (each attempt's probe asks once), the run goes on without the repository on tier sessions, for the last failure's reason, and ends succeeded when nothing else fails. A premise never comes here.",
-      "operation": "The probe is the snapshot operation today (repoOps.kinds.snapshot); a probe kind that only reads the tier is P3's."
+      "operation": "A maintenance run's probe is its snapshot operation (repoOps.kinds.snapshot): the tier is what the snapshot found. The maintenance settings ask the probe kind (repoOps.kindRuns.probe), which only reads the tier.",
+      "waitSeconds": 15,
+      "migration": "src/apiserver/prisma/migrations/0530_wiki_repo_probe/migration.sql"
     },
     "safety": "An operation checks its checkout before it reads it: the repository's origin URL must be the space's `repo.urlNorm` and the checkout's root commit must be the space's `rootCommitSha`. Otherwise it fails, says which repository it found, and reads nothing.",
     "waiting": "A job that needs a repository operation is parked (wiki_job state waiting, waiting_for 'repo', no lease) and woken by a NOTIFY on the wiki_repo_op channel when the operation settles. A runner that has not declared `wiki-repo-op/v1` is handed nothing: the operation stays queued, the job stays parked until its wait limit, and the space's health line says the runner has to be upgraded. The import's snapshot (import.server.snapshot) is the exception: it is waited for holding the job's lease, a bounded wait with a fallback, so a runner that is away costs the import its fresh anchors and never the run. The documents' build (docs.build.server.repository) waits for its snapshot and its reads the same way, each bounded by docs.build.server.repoWaitSeconds: they are many and short, and a job parked on each would replay the build each time; one past its limit fails the attempt as infra.",
@@ -2859,7 +2885,10 @@
     { "code": "WIKI_PLAN_GATE", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan draft, an owner's edit of the plan, a proposed change to it or the acceptance of one did not pass the plan's gate (plan.gate): errors[] lists everything it found, each with its check and where it is. Nothing is stored." },
     { "code": "WIKI_PLAN_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan request was built on a version that is no longer the space's newest (plan.versions), confirmed a version that is no longer a draft, or answered a proposal already decided. Nothing is written; read the plan again." },
     { "code": "WIKI_PLAN_UNCONFIRMED", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A space's documents were to be written, or a change proposed to its plan, and the space has no plan its owner confirmed (plan.guard)." },
-    { "code": "WIKI_DOC_INVALID", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A document write does not have the shape docs.schema gives it: a field it does not name, a repository footnote with no sha or no lines, a record footnote with no id, a section the confirmed plan's document does not have, a via entry that is not an entry of the space. errors[] lists everything it found, each { path, message }, the first docs.rules.errorsMax. Nothing is written." }
+    { "code": "WIKI_DOC_INVALID", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A document write does not have the shape docs.schema gives it: a field it does not name, a repository footnote with no sha or no lines, a record footnote with no id, a section the confirmed plan's document does not have, a via entry that is not an entry of the space. errors[] lists everything it found, each { path, message }, the first docs.rules.errorsMax. Nothing is written." },
+    { "code": "WIKI_MAINTENANCE_RUNNING", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "POST /api/wiki/spaces/:id/maintenance/run while a maintain job of the space has not ended (queued, running or waiting): one run of a space at a time (maintenance.run). Nothing is made." },
+    { "code": "WIKI_MAINTENANCE_DAILY_LIMIT", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "POST /api/wiki/spaces/:id/maintenance/run when the space has made settings.maintenance.dailyRunLimit runs since midnight UTC (wikiMaintenanceRunsToday): the owner's run counts against the day like any other. Nothing is made." },
+    { "code": "WIKI_MAINTENANCE_WRONG_REPOSITORY", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "PATCH /api/wiki/spaces/:id turning maintenance on, or naming another workspace while it is on, when the workspace's runner answers that its folder is another repository's checkout (maintenance.probe: wrong_repository or root_mismatch). The message is the probe's sentence. Nothing is written." }
   ],
   "refusalRules": {
     "order": ["changesetSize", "schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "taint", "effect", "quota", "similar"],
@@ -3012,6 +3041,8 @@
           "GET /api/wiki/spaces/:id/articles/:slug/:part",
           "GET /api/wiki/spaces/:id/article-index",
           "GET /api/wiki/spaces/:id/health",
+          "POST /api/wiki/spaces/:id/maintenance/probe",
+          "POST /api/wiki/spaces/:id/maintenance/run",
           "GET /api/wiki/spaces/:id/plan",
           "GET /api/wiki/spaces/:id/plan/versions",
           "GET /api/wiki/spaces/:id/plan/versions/:version",

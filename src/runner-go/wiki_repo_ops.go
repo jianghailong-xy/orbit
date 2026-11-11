@@ -256,6 +256,10 @@ func runWikiRepoOp(cmd WikiRepoOpCommand, progress func()) wikiRepoOpOutcome {
 			return wikiRepoOpFailed(fmt.Sprintf("the operation's input could not be read: %v", unmarshalErr))
 		}
 	}
+	if cmd.Kind == "probe" {
+		// The probe only looks (wiki_repo_probe.go): it fetches nothing, so it never goes through the checkout's fetch.
+		return wikiRepoOpProbe(cmd)
+	}
 	root, ref, err := wikiRepoOpCheckout(cmd, input)
 	if err != nil {
 		// A directory that is there but is not a git checkout is read as a folder, when the server allows it.

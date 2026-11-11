@@ -99,8 +99,11 @@ export const WIKI_BACKFILL = {
 export const WIKI_MAINTENANCE_FAILURE_KINDS = ['infra', 'content'] as const;
 export type WikiMaintenanceFailureKind = (typeof WIKI_MAINTENANCE_FAILURE_KINDS)[number];
 
-/** What made a maintenance run: the backlog reached the threshold, or its oldest fact the age. */
-export const WIKI_MAINTENANCE_DUE = ['backlog', 'age'] as const;
+/**
+ * What made a maintenance run: the backlog reached the threshold, its oldest fact the age, or the owner asked for one now
+ * (`Check again and run now`, POST /api/wiki/spaces/:id/maintenance/run) — which the day's limit counts like any other.
+ */
+export const WIKI_MAINTENANCE_DUE = ['backlog', 'age', 'owner'] as const;
 export type WikiMaintenanceDue = (typeof WIKI_MAINTENANCE_DUE)[number];
 
 /**

@@ -28,6 +28,14 @@ export const WIKI_REPO_OP_READ_CAPABILITY = 'wiki-repo-op-read/v1';
  */
 export const WIKI_REPO_OP_FOLDER_CAPABILITY = 'wiki-repo-op-folder/v1';
 
+/**
+ * The capability a runner declares when it answers the `probe` kind (docs/wiki-repo-tiers-design.md §7.3, contract
+ * `repoOps.probeCapability`). Its Go twin is `wikiRepoOpProbeCapabilityV1` in `src/runner-go/wiki_repo_probe.go`. A runner
+ * that does not declare it is asked nothing: an older one would fetch before it found it does not know the kind, so the
+ * settings form says it could not check instead.
+ */
+export const WIKI_REPO_OP_PROBE_CAPABILITY = 'wiki-repo-op-probe/v1';
+
 /** What the health line says of a folder that is not git when the runner cannot read folders yet (design §4.3). */
 export const WIKI_REPO_UPGRADE_TO_READ_FOLDERS = 'Upgrade the runner to read folders';
 
@@ -68,10 +76,11 @@ export function wikiRepoPathOverlap(last: Iterable<string>, next: Iterable<strin
 }
 
 /**
- * What a repository operation asks for (contract `repoOps.kinds`). Four questions, and no fifth: a pipeline
+ * What a repository operation asks for (contract `repoOps.kinds`). Four questions a job asks, and the probe the
+ * maintenance settings ask (P3): which tier a working directory would be read on, with no job behind it. A pipeline
  * that needs more than these changes this list first.
  */
-export const WIKI_REPO_OP_KINDS = ['snapshot', 'read', 'diff', 'anchors'] as const;
+export const WIKI_REPO_OP_KINDS = ['snapshot', 'read', 'diff', 'anchors', 'probe'] as const;
 export type WikiRepoOpKind = (typeof WIKI_REPO_OP_KINDS)[number];
 
 /** Where an operation is (contract `repoOps.states`). A settled row is terminal; the row is the record. */
@@ -235,8 +244,12 @@ export const WIKI_REPO_WRONG_REPOSITORY_REASONS = ['wrong_repository', 'root_mis
 export const WIKI_REPO_TIER_REASONS = [...WIKI_REPO_PREMISE_REASONS, ...WIKI_REPO_TRANSIENT_REASONS] as const;
 export type WikiRepoTierReason = (typeof WIKI_REPO_TIER_REASONS)[number];
 
-/** How a maintenance run's probe is tried (contract `repoOps.probe`): a transient failure at most this many attempts. */
-export const WIKI_REPO_PROBE = { maxAttempts: 3 } as const;
+/**
+ * How a maintenance run's probe is tried (contract `repoOps.probe`): a transient failure at most `maxAttempts` attempts.
+ * `waitSeconds` is how long the settings' probe (`POST /api/wiki/spaces/:id/maintenance/probe`, and Turn on's check)
+ * waits for the runner's answer before it says it could not check.
+ */
+export const WIKI_REPO_PROBE = { maxAttempts: 3, waitSeconds: 15 } as const;
 
 /**
  * The words of a failure from a runner that names no reason — every runner before the reasons, and the server's own
@@ -326,6 +339,87 @@ export function wikiRepoDetail(
     default:
       return `Reading ${wikiRepoDirLabel(where.dir) ?? 'the folder'} failed`;
   }
+}
+
+// ── The settings' probe (docs/wiki-repo-tiers-design.md §7.3) ───────────────────────────────────
+
+/**
+ * How the settings form draws a probe's answer, under the workspace picker:
+ *
+ *   ok         green: a git checkout of the space's repository;
+ *   folder     purple: a folder that is not git — read as it stands, commit anchors not checked;
+ *   paused     amber: nothing can be read there now — maintenance learns from sessions, code checks wait;
+ *   wrong      red: another repository's checkout — maintenance cannot be turned on with it;
+ *   unchecked  grey: the runner could not be asked — offline, too old, or silent — and Turn on is still allowed.
+ */
+export const WIKI_REPO_PROBE_TONES = ['ok', 'folder', 'paused', 'wrong', 'unchecked'] as const;
+export type WikiRepoProbeTone = (typeof WIKI_REPO_PROBE_TONES)[number];
+
+/** The probe's fixed words (English, as every client draws them). */
+export const WIKI_REPO_PROBE_COPY = {
+  folderTitle: 'Folder, not git',
+  folderNote: 'Entries and code checks work. Commit anchors are not checked.',
+  pausedNote: 'Maintenance can still learn from sessions. Code checks wait until the folder is back.',
+} as const;
+
+/**
+ * What `POST /api/wiki/spaces/:id/maintenance/probe` answers (contract `maintenance.probe`): the tier the workspace's
+ * folder would be read on now — null when the runner could not be asked — why it would read less than git, the origin a
+ * git checkout is a clone of, and the words the form draws. `canTurnOn` is false only for another repository's checkout.
+ */
+export interface WikiRepoProbeAnswer {
+  workspaceId: string;
+  tier: WikiRepoTier | null;
+  reason: WikiRepoTierReason | null;
+  origin: string | null;
+  tone: WikiRepoProbeTone;
+  title: string;
+  note: string | null;
+  canTurnOn: boolean;
+  checkedAt: string;
+}
+
+/**
+ * The probe's answer in words. `found` is what the runner answered — a tier, or the reason it failed with and its own
+ * words (`said`, which name another repository's address) — or the reason the server did not ask it (`runner_offline`,
+ * `runner_missing`, `runner_upgrade`, `no_workspace`, `op_timeout`). `where` names the folder and the machine.
+ */
+export function wikiRepoProbeAnswer(
+  workspaceId: string,
+  found: { tier: 'git' | 'folder'; origin?: string | null } | { reason: WikiRepoTierReason; said?: string | null },
+  where: { dir?: string | null; runner?: string | null },
+  checkedAt: Date,
+): WikiRepoProbeAnswer {
+  const base = { workspaceId, checkedAt: checkedAt.toISOString() };
+  if ('tier' in found) {
+    if (found.tier === 'folder') {
+      return { ...base, tier: 'folder', reason: null, origin: null, tone: 'folder', title: WIKI_REPO_PROBE_COPY.folderTitle, note: WIKI_REPO_PROBE_COPY.folderNote, canTurnOn: true };
+    }
+    const origin = (found.origin ?? '').trim() || null;
+    return {
+      ...base, tier: 'git', reason: null, origin, tone: 'ok',
+      title: origin ? `Git checkout of ${origin}` : 'Git checkout with no remote', note: null, canTurnOn: true,
+    };
+  }
+  const { reason } = found;
+  const runner = (where.runner ?? '').trim() || 'the runner';
+  const unchecked = (title: string): WikiRepoProbeAnswer => ({ ...base, tier: null, reason, origin: null, tone: 'unchecked', title, note: null, canTurnOn: true });
+  switch (reason) {
+    case 'runner_offline': return unchecked(`Could not check: ${runner} is offline`);
+    case 'runner_upgrade': return unchecked(`Could not check: upgrade ${runner} to check the folder`);
+    case 'runner_missing': return unchecked('Could not check: the workspace is not on a runner');
+    case 'op_timeout':
+    case 'runner_lost':
+    case 'op_failed':
+      return unchecked(`Could not check: ${runner} did not answer`);
+    default:
+      break;
+  }
+  const title = wikiRepoDetail(reason, { dir: where.dir, runner: where.runner, said: found.said });
+  if ((WIKI_REPO_WRONG_REPOSITORY_REASONS as readonly string[]).includes(reason)) {
+    return { ...base, tier: 'wrong_repository', reason, origin: null, tone: 'wrong', title, note: null, canTurnOn: false };
+  }
+  return { ...base, tier: 'sessions', reason, origin: null, tone: 'paused', title, note: WIKI_REPO_PROBE_COPY.pausedNote, canTurnOn: true };
 }
 
 /** What one `read` item asks for (contract `repoOps.kinds.read`). */

@@ -256,6 +256,9 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_PLAN_STALE: 409,
   WIKI_PLAN_UNCONFIRMED: 409,
   WIKI_DOC_INVALID: 422,
+  WIKI_MAINTENANCE_RUNNING: 409,
+  WIKI_MAINTENANCE_DAILY_LIMIT: 409,
+  WIKI_MAINTENANCE_WRONG_REPOSITORY: 409,
 };
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */

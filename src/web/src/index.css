@@ -25265,6 +25265,25 @@ button.project-open-item-action:disabled {
 .wk-setup-limit .orbit-number-input { width: 72px; }
 .wk-setup-days { margin-top: 8px; }
 .wk-setup-refusal { margin: 14px 0 0; }
+/* The settings' probe under the workspace picker (docs/wiki-repo-tiers-design.md §7.3, mock 44 ⑤). */
+.wk-probe { display: flex; gap: 8px; margin-top: 6px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; }
+.wk-probe b { font-weight: 600; }
+.wk-probe .g { flex: none; width: 12px; text-align: center; font-weight: 600; }
+.wk-probe.ok { background: var(--success-bg); color: var(--success); }
+.wk-probe.folder { background: color-mix(in srgb, var(--route-shadow) 10%, transparent); color: var(--route-shadow); }
+.wk-probe.paused { background: var(--warning-bg); color: var(--warning); }
+.wk-probe.wrong { background: var(--error-bg); color: var(--error); }
+.wk-probe.unchecked { background: color-mix(in srgb, var(--text-3) 10%, transparent); color: var(--text-2); }
+/* The maintenance card's repository part: its tag beside the title, the line, and the ways to set it right. */
+.wk-repo-tag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; vertical-align: 1px;
+  border: 1px solid transparent; }
+.wk-repo-tag.muted { color: var(--text-2); background: color-mix(in srgb, var(--text-3) 10%, transparent); border-color: var(--border-subtle); }
+.wk-repo-tag.warn { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
+.wk-repo-tag.error { color: var(--error); background: var(--error-bg); border-color: var(--error-border); }
+.wk-repo-card { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border-subtle); }
+.wk-repo-line { font-size: 13px; line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere; }
+.wk-repo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.wk-repo-blocked { margin-top: 6px; font-size: 12px; color: var(--text-3); }
 /* Maintenance as the server runs the wiki (mock 35 ①②): the System model and its state, read-only, and the line that
    says where the wiki's material goes. */
 .wk-model-line .dim { color: var(--text-3); }

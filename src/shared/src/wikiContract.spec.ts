@@ -115,6 +115,8 @@ import {
   WIKI_REPO_WRONG_REPOSITORY_REASONS,
   WIKI_REPO_ATTENTION_REASONS,
   WIKI_REPO_PROBE,
+  WIKI_REPO_PROBE_COPY,
+  WIKI_REPO_OP_PROBE_CAPABILITY,
   wikiRepoFailureReason,
   wikiRepoReasonIsPremise,
   WIKI_REPO_OP_CAPABILITY,
@@ -382,6 +384,33 @@ describe('wiki contract', () => {
     expect(steps[at('docs:')]).toMatch(/docs\.skipped no_repository/u);
     expect(job.docs.skipped).toContain('no_repository');
     expect(job.report).toMatch(/repo \{tier, reason\}/u);
+  });
+
+  it('probes a workspace for the settings and runs maintenance at the owner\'s ask (repo tiers P3)', () => {
+    const repoOps = CONTRACT.repoOps;
+    expect(repoOps.probeCapability).toBe(WIKI_REPO_OP_PROBE_CAPABILITY);
+    expect(WIKI_REPO_OP_KINDS).toContain('probe');
+    const runner = readFileSync(path.join(ROOT, 'src/runner-go/wiki_repo_probe.go'), 'utf8');
+    expect(runner).toContain(`const wikiRepoOpProbeCapabilityV1 = "${WIKI_REPO_OP_PROBE_CAPABILITY}"`);
+    expect(repoOps.kindRuns.probe).toMatch(/no fetch, no snapshot/u);
+    expect(repoOps.probe.waitSeconds).toBe(WIKI_REPO_PROBE.waitSeconds);
+    expect(repoOps.probe.maxAttempts).toBe(WIKI_REPO_PROBE.maxAttempts);
+    expect(existsSync(path.join(ROOT, repoOps.probe.migration)), `${repoOps.probe.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, repoOps.probe.migration), 'utf8');
+    expect(sql).toContain(`'anchors', 'probe'`);
+    expect(sql).toContain(`'backlog', 'age', 'owner'`);
+    const maintenance = CONTRACT.maintenance;
+    expect(maintenance.probe.route).toBe('POST /api/wiki/spaces/:id/maintenance/probe');
+    expect(maintenance.run.route).toBe('POST /api/wiki/spaces/:id/maintenance/run');
+    for (const words of [WIKI_REPO_PROBE_COPY.folderTitle, WIKI_REPO_PROBE_COPY.folderNote, WIKI_REPO_PROBE_COPY.pausedNote]) {
+      expect(maintenance.probe.answer).toContain(words);
+    }
+    expect(maintenance.run.answer).toMatch(/WIKI_MAINTENANCE_RUNNING/u);
+    expect(maintenance.run.answer).toMatch(/WIKI_MAINTENANCE_DAILY_LIMIT/u);
+    expect(maintenance.job.trigger.due).toContain('owner');
+    const users: string[] = CONTRACT.agentSurface.doors.user.routes;
+    expect(users).toContain(maintenance.probe.route);
+    expect(users).toContain(maintenance.run.route);
   });
 
   it('reads a working directory that is not git as a folder, for a runner that declares it (repo tiers P4)', () => {

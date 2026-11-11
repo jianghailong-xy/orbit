@@ -7,6 +7,7 @@ import {
   WIKI_REPO_OP_CAPABILITY,
   WIKI_REPO_OP_FOLDER_CAPABILITY,
   WIKI_REPO_OP_KINDS,
+  WIKI_REPO_OP_PROBE_CAPABILITY,
   WIKI_REPO_OP_READ_CAPABILITY,
   WIKI_REPO_OP_RESULT_STATES,
   WIKI_REPO_TIER_REASONS,
@@ -147,7 +148,8 @@ export interface WikiRepoOpDispatchHeartbeat {
 /** What a settled operation says. Terminal states are the answer; the rest are still moving. */
 export interface WikiRepoOpRead {
   id: string;
-  jobId: string;
+  /** Null for a settings probe, which no job asks (migration 0530). */
+  jobId: string | null;
   spaceId: string;
   kind: string;
   state: string;
@@ -183,6 +185,8 @@ export interface WikiRepoReadiness {
     wholeFile: boolean;
     /** It declared `wiki-repo-op-folder/v1`: a working directory that is not git is read as a folder (design §4.3). */
     folder: boolean;
+    /** It declared `wiki-repo-op-probe/v1`: the settings' probe can ask it which tier a folder is on (design §7.3). */
+    probe: boolean;
     online: boolean;
   } | null;
   /** Operations of this space that have not settled: what a reader is waiting on. */
@@ -243,19 +247,29 @@ export class WikiRepoOps {
    */
   async enqueueWikiRepoOp(input: {
     id?: string;
-    jobId: string;
+    /** The job that asks. Only a probe may name none (migration 0530): it names its space instead. */
+    jobId: string | null;
     kind: WikiRepoOpKind;
     input?: Record<string, unknown>;
     /** Another workspace than the space's maintenance one; the caller knows which checkout it means. */
     workspaceId?: string;
+    /** A probe with no job: the space it is about, and its owner. */
+    space?: { id: string; ownerId: string };
   }): Promise<{ id: string; target: WikiRepoOpTarget }> {
     const id = input.id ?? randomUUID();
-    const job = await this.prisma.wikiJob.findUnique({
-      where: { id: input.jobId },
-      select: { id: true, ownerId: true, spaceId: true, space: { select: { settings: true } } },
-    });
+    const job = input.jobId !== null
+      ? await this.prisma.wikiJob.findUnique({
+        where: { id: input.jobId },
+        select: { id: true, ownerId: true, spaceId: true, space: { select: { settings: true } } },
+      })
+      : input.kind === 'probe' && input.space
+        ? await this.prisma.wikiSpace.findFirst({ where: { id: input.space.id, ownerId: input.space.ownerId }, select: { id: true, ownerId: true, settings: true } })
+          .then((space) => space && { id: null, ownerId: space.ownerId, spaceId: space.id, space: { settings: space.settings } })
+        : null;
     if (!job) {
-      throw new WikiRepoOpRefused('NOT_FOUND', `no job ${input.jobId} to enqueue a repository operation for`);
+      throw new WikiRepoOpRefused('NOT_FOUND', input.jobId !== null
+        ? `no job ${input.jobId} to enqueue a repository operation for`
+        : `no space to probe, or a ${input.kind} that names no job`);
     }
     const workspaceId = input.workspaceId ?? maintenanceWorkspaceOf(job.space.settings);
     if (!workspaceId) {
@@ -403,7 +417,7 @@ export class WikiRepoOps {
           where: { id: input.id, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
           select: {
             id: true, jobId: true, ownerId: true, spaceId: true, kind: true, state: true,
-            runnerId: true, leaseOwner: true, claimGeneration: true,
+            runnerId: true, leaseOwner: true, claimGeneration: true, input: true,
           },
         });
         if (!row) throw new WikiRepoOpRefused('NOT_FOUND');
@@ -613,7 +627,8 @@ export async function claimWikiRepoOps(
 
   const claims: WikiRepoOpClaim[] = [];
   for (let i = 0; i < WIKI_REPO_OPS.perHeartbeat; i += 1) {
-    const row = await claimOne(prisma, heartbeat.runnerId, heartbeat.leaseOwner).catch((error: unknown) => {
+    const probes = heartbeat.capabilities.includes(WIKI_REPO_OP_PROBE_CAPABILITY);
+    const row = await claimOne(prisma, heartbeat.runnerId, heartbeat.leaseOwner, probes).catch((error: unknown) => {
       log?.warn(`wiki repo op claim failed: ${(error as Error)?.message ?? String(error)}`);
       return null;
     });
@@ -635,6 +650,8 @@ async function claimOne(
   prisma: PrismaService,
   runnerId: string,
   leaseOwner: string,
+  /** The process answers `probe` (wiki-repo-op-probe/v1); one that does not is handed none. */
+  probes: boolean,
 ): Promise<WikiRepoOpClaim | null> {
   const staleBefore = new Date(Date.now() - WIKI_REPO_OPS.staleSeconds * 1000);
   const rows = await prisma.$queryRaw<WikiRepoOpClaim[]>(Prisma.sql`
@@ -644,6 +661,7 @@ async function claimOne(
         JOIN "workspace" w ON w."id" = o."workspace_id"
        WHERE w."runner_id" = ${runnerId}::uuid
          AND w."work_dir" IS NOT NULL
+         AND (o."kind" <> 'probe' OR ${probes})
          AND (
            o."state" = 'queued'
            -- Or one this process may take over: claimed, and quiet for longer than the stale window. Its
@@ -720,7 +738,9 @@ export async function failAbandonedWikiRepoOps(prisma: PrismaService, limit = 50
   return prisma.$executeRaw`
     WITH abandoned AS (
       SELECT o."id",
-             CASE WHEN j."state" IN ('succeeded', 'failed', 'cancelled')
+             CASE WHEN j."id" IS NULL
+               THEN 'the ' || o."kind" || ' was asked by no job, and nobody waits for its answer any more, so it is closed'
+             WHEN j."state" IN ('succeeded', 'failed', 'cancelled')
                THEN 'the job (' || j."kind" || ' ' || j."id" || ') ended ' || j."state" || ' with this ' || o."kind"
                     || ' still running: nobody waits for its answer, so it is closed'
                ELSE 'the runner''s claim has been silent since '
@@ -728,10 +748,12 @@ export async function failAbandonedWikiRepoOps(prisma: PrismaService, limit = 50
                     || ' and no answer came: the runner gave up on it or is gone, so it is closed'
              END AS "reason"
         FROM "wiki_repo_op" o
-        JOIN "wiki_job" j ON j."id" = o."job_id"
+        -- A settings probe has no job (migration 0530): its asker waited WIKI_REPO_PROBE.waitSeconds at most, so a probe
+        -- quiet for the takeover window is waited for by nobody.
+        LEFT JOIN "wiki_job" j ON j."id" = o."job_id"
        WHERE o."state" = 'running'
          AND o."heartbeat_at" < now() - ${WIKI_REPO_OPS.staleSeconds}::int * interval '1 second'
-         AND (j."state" IN ('succeeded', 'failed', 'cancelled')
+         AND (j."id" IS NULL OR j."state" IN ('succeeded', 'failed', 'cancelled')
               OR o."heartbeat_at" < now() - ${WIKI_REPO_OPS.abandonedSeconds}::int * interval '1 second')
        ORDER BY o."heartbeat_at", o."id"
        LIMIT ${limit}
@@ -756,7 +778,7 @@ export async function failAbandonedWikiRepoOps(prisma: PrismaService, limit = 50
  */
 async function settleSnapshot(
   tx: Prisma.TransactionClient,
-  row: { id: string; spaceId: string; ownerId: string; kind: string },
+  row: { id: string; spaceId: string; ownerId: string; kind: string; input?: unknown },
   result: Record<string, unknown> | null,
 ): Promise<Record<string, unknown> | FolderSnapshotRefused | null> {
   if (row.kind !== 'snapshot') return null;
@@ -829,7 +851,10 @@ async function settleSnapshot(
     index = null;
   }
   const source: WikiRepoSnapshotSource = index?.source === 'folder' ? 'folder' : 'git';
-  if (source === 'folder') {
+  // `Use this folder` (design §7.3): the owner accepted this folder for one run, so its snapshot is kept whatever it shares
+  // with the last one, and the runs after it compare with it.
+  const accepted = (row.input as { acceptFolder?: unknown } | null)?.acceptFolder === true;
+  if (source === 'folder' && !accepted) {
     const refused = await folderOverlapRefusal(tx, row, index?.files ?? []);
     if (refused !== null) return refused;
   }
@@ -1524,7 +1549,13 @@ function maintenanceWorkspaceOf(settings: unknown): string | null {
  */
 export async function readWikiRepoReadiness(
   prisma: PrismaService,
-  input: { ownerId: string; spaceId: string; now?: Date },
+  input: {
+    ownerId: string;
+    spaceId: string;
+    now?: Date;
+    /** Another workspace than the space's maintenance one: the one the settings form is about to choose (design §7.3). */
+    workspaceId?: string;
+  },
 ): Promise<WikiRepoReadiness> {
   const now = input.now ?? new Date();
   const space = await prisma.wikiSpace.findFirst({
@@ -1534,7 +1565,7 @@ export async function readWikiRepoReadiness(
   const pending = await prisma.wikiRepoOp.count({
     where: { spaceId: input.spaceId, ownerId: input.ownerId, state: { in: ['queued', 'running'] } },
   });
-  const workspaceId = maintenanceWorkspaceOf(space?.settings);
+  const workspaceId = input.workspaceId ?? maintenanceWorkspaceOf(space?.settings);
   const workspace = workspaceId
     ? await prisma.workspace.findFirst({
       where: { id: workspaceId, ownerId: input.ownerId, deletedAt: null },
@@ -1570,7 +1601,8 @@ export async function readWikiRepoReadiness(
   const capability = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_CAPABILITY);
   const wholeFile = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_READ_CAPABILITY);
   const folder = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_FOLDER_CAPABILITY);
-  const runner = { id: runnerRow.id, name: runnerRow.name, version: runnerRow.version, capability, wholeFile, folder, online };
+  const probe = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_PROBE_CAPABILITY);
+  const runner = { id: runnerRow.id, name: runnerRow.name, version: runnerRow.version, capability, wholeFile, folder, probe, online };
   // A machine that cannot be handed repository work at all, and one that can but reads only the old
   // bounded window, are both the runner to upgrade: the reason the status line gives is the same one, and
   // the second still runs the steps (cut short) while the first would make them wait.
@@ -1578,7 +1610,7 @@ export async function readWikiRepoReadiness(
   return { look, workspace: { id: workspace.id, workDir: workspace.workDir }, runner, pending };
 }
 
-/** One operation's kind is one of the four the contract names; anything else is a caller's mistake. */
+/** One operation's kind is one of the five the contract names; anything else is a caller's mistake. */
 export function isWikiRepoOpKind(kind: string): kind is WikiRepoOpKind {
   return (WIKI_REPO_OP_KINDS as readonly string[]).includes(kind);
 }

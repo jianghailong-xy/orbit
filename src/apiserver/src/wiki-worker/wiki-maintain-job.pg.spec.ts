@@ -143,7 +143,7 @@ import { Client } from 'pg';
 
 import { buildDossier, loadDossierRecords, wikiClaimsHeldOut, type DossierReader } from '../wiki/wiki-dossier';
 import { encodeCursorToken, WikiMaintenance } from '../wiki/wiki-maintenance';
-import { finishWikiMaintenanceJob, requestWikiBackfill, wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from '../wiki/wiki-maintenance-run';
+import { finishWikiMaintenanceJob, requestWikiBackfill, runWikiMaintenanceNow, wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from '../wiki/wiki-maintenance-run';
 import { cutRunes } from './wiki-import-extract';
 import { wikiMaintainPrompt, wikiMaintainTopicsOf } from './wiki-maintain';
 import { rebaselinedAnchors } from '../wiki/wiki-anchors';
@@ -1370,6 +1370,40 @@ test('a space with a repository address whose folder shares less than half of th
     await h.prisma.wikiRepoSnapshot.findFirstOrThrow({ where: { spaceId: fx.spaceId }, select: { sha: true, source: true } }),
     { sha: TREE_TWO, source: 'folder' },
   );
+});
+
+test('Use this folder: after a path_overlap run, the owner\'s run with acceptFolder keeps the folder\'s snapshot, and the next run compares with it', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { capabilities: FOLDER_RUNNER });
+  noDossiers(h, fx);
+  const other = folderIndex(TREE_ONE, ['README.md', 'other/main.go', 'other/notes.md']);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), { snapshotIndex: other });
+  assert.deepEqual(await runTier(h, fx.runId), { repo_tier: 'wrong_repository', repo_reason: 'path_overlap' });
+  assert.equal((await h.prisma.wikiRepoSnapshot.findFirstOrThrow({ where: { spaceId: fx.spaceId }, select: { source: true } })).source, 'git');
+
+  // The owner presses Use this folder: a run now, due owner, whose snapshot is asked with acceptFolder.
+  const accepted = await runWikiMaintenanceNow(h.prisma as unknown as PrismaService, { ownerId: h.ownerId, spaceId: fx.spaceId, acceptFolder: true });
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, accepted.jobId)).state), { snapshotIndex: other });
+  const job = await jobOf(h, accepted.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  const snapshotOps = await h.sql.query<{ state: string; accept: boolean | null }>(
+    `SELECT "state", ("input"->>'acceptFolder')::boolean AS "accept" FROM "wiki_repo_op" WHERE "job_id" = $1 AND "kind" = 'snapshot'`, [accepted.jobId]);
+  assert.deepEqual(snapshotOps.rows, [{ state: 'succeeded', accept: true }]);
+  assert.deepEqual(await runTier(h, accepted.runId), { repo_tier: 'folder', repo_reason: null });
+  assert.deepEqual(
+    await h.prisma.wikiRepoSnapshot.findFirstOrThrow({ where: { spaceId: fx.spaceId }, select: { sha: true, source: true } }),
+    { sha: TREE_ONE, source: 'folder' },
+    'the folder\'s snapshot landed',
+  );
+  const run = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { id: accepted.runId }, select: { due: true } });
+  assert.equal(run.due, 'owner');
+
+  // Later runs compare with it: the same folder, a moment later, is no longer another directory.
+  const next = await runAgain(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, next.jobId)).state),
+    { snapshotIndex: folderIndex(TREE_TWO, ['README.md', 'other/main.go', 'other/notes.md']) });
+  assert.deepEqual(await runTier(h, next.runId), { repo_tier: 'folder', repo_reason: null });
 });
 
 // ── The code anchors of a run that could not read the repository (docs/wiki-repo-tiers-design.md §5.2, Q2) ──────
