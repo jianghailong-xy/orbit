@@ -724,12 +724,17 @@ export class ProvidersService {
     if (preset && catalogModels(preset).some((entry) => entry.value === model && entry.tier)) {
       throw new BadRequestException({ code: 'TIER_FROM_CATALOGUE', message: `${model} takes its tier from the catalogue` });
     }
-    const tiers = { ...((current.modelTiers ?? {}) as Record<string, string>) };
-    if (tier) tiers[model] = tier;
-    else delete tiers[model];
-    const row = await this.prisma.modelProvider.update({ where: { id }, data: { modelTiers: tiers } });
-    this.publishChanged(ownerId, row.id);
-    return this.desensitize(row);
+    // The model's own key of the map, set or removed inside the statement: two tiers set at once on one key's
+    // models cannot overwrite each other the way reading the map and writing it back would.
+    await this.prisma.$executeRaw`
+      UPDATE "model_provider"
+         SET "model_tiers" = CASE WHEN ${tier}::text IS NULL
+                               THEN "model_tiers" - ${model}::text
+                             ELSE "model_tiers" || jsonb_build_object(${model}::text, ${tier}::text)
+                             END
+       WHERE "id" = ${current.id}::uuid`;
+    this.publishChanged(ownerId, current.id);
+    return this.desensitize(await this.prisma.modelProvider.findUniqueOrThrow({ where: { id: current.id } }));
   }
 
   /** The id of one of the caller's own providers, found by the slug `orbit provider list` shows — the
