@@ -15,7 +15,10 @@ import { type MonoTypeOperatorFunction, ReplaySubject, takeUntil } from 'rxjs';
  *      drill of 2026-11-11 (grace30-r2, host load 34 to 45) had 7 POSTs reset that way. So a stop goes on taking in
  *      connections and reading requests until one turn of the event loop has brought none, and only then closes.
  *   2. The session streams and the control-plane stream end (`untilStopping`), cleanly, so that each client opens
- *      its stream again, on another apiserver, from the last stored event it had (`sinceSeq`).
+ *      its stream again, on another apiserver, from the last stored event it had (`sinceSeq`). The long polls end
+ *      the same way, with the answer they give when their wait runs out (`isStopping`, `pauseUnlessStopping`): the
+ *      approval long poll says PENDING, and its reader asks again at once, now of another apiserver; a merge's
+ *      `waitSeconds` says TIMED_OUT, the merge still queued.
  *   3. Requests in flight are answered, for up to DRAIN_MS. Each answer from here on says `Connection: close`, and
  *      the connection is closed once it is sent, so a caller never sends another request on it. An idle connection
  *      is closed at once (Node's `server.close()`). Without this a connection busy when the stop began would stay
@@ -37,12 +40,10 @@ import { type MonoTypeOperatorFunction, ReplaySubject, takeUntil } from 'rxjs';
  * A stop that has not ended by STOP_MS exits 1 rather than wait for that. STOP_MS counts from when this process gets the
  * signal, which on a loaded host is a while after `docker stop` sent it (2 s in grace30-r2), so it leaves the grace
  * period 5 s (graceful-stop.spec.ts holds it). The shutdown hooks after the drain took up to 1.4 s there, so they get 2 s.
- * The requests an apiserver answers take milliseconds; the few that wait on purpose are answered if they end within
- * DRAIN_MS of the stop: the approval long poll over HTTPS and the Cursor key check wait 25 s, so one that began more
- * than about 3 s before the stop is answered, and one that began later is cut. The approval long poll's caller asks
- * again after 2 s (runner-go awaitApprovalDecision); the person who asked for a Cursor key check is told it could not
- * be checked, and asks again. A merge's `waitSeconds` can ask for up to 300 s: one still waiting at DRAIN_MS is cut, and
- * its caller is told the call failed while the merge stays queued and lands as usual (merge_receipts reads its outcome).
+ * The requests an apiserver answers take milliseconds. Of the few that wait on purpose, the approval long poll and a
+ * merge's `waitSeconds` end at the stop (step 2). The Cursor key check waits up to 25 s for a runner's answer, which it
+ * cannot give early: one that began more than about 2 s before the stop is answered, and one that began later is cut,
+ * and the person who asked is told the key could not be checked and asks again.
  */
 export const DRAIN_MS = 23_000;
 export const LINGER_MS = 4_000;
@@ -131,7 +132,29 @@ export function drainable(server: Server): DrainableServer {
   };
 }
 
-/** Ends every stream that `untilStopping` follows. */
+let stopped = false;
+
+/** Whether the stop has begun: a request that waits on purpose answers now with what it would say when its wait ran out. */
+export function isStopping(): boolean {
+  return stopped;
+}
+
+/** Waits `ms`, or less: until the stop begins. */
+export function pauseUnlessStopping(ms: number): Promise<void> {
+  if (stopped) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(done, ms);
+    const sub = stopping.subscribe(done);
+    function done() {
+      clearTimeout(timer);
+      sub?.unsubscribe();
+      resolve();
+    }
+  });
+}
+
+/** Ends every stream that `untilStopping` follows, and every wait in `pauseUnlessStopping`. */
 export function endStreams(): void {
+  stopped = true;
   stopping.next();
 }
