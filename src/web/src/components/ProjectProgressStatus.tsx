@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, baselineTitle } from '../lib/landingCheck';
 import { useCallback, useId, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -142,6 +143,7 @@ const TITLED_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
 ]);
 
 function itemHeading(row: ProjectOpenItemRow): string {
+  if (row.baseline) return baselineTitle(row.facts?.targetRef?.replace(/^refs\/heads\//u, '') ?? 'the project branch');
   if (row.kind === 'DELIVERY_REVIEW') {
     const reason = row.facts?.review?.reason;
     return (reason ? REVIEW_HEADING[reason] : undefined) ?? row.title;
@@ -1452,6 +1454,17 @@ function chainStanding(failure: NonNullable<OpenItemFacts['failure']>): string {
  */
 function ItemFactRows({ row, heading }: { row: ProjectOpenItemRow; heading: string }): JSX.Element | null {
   const facts = row.facts;
+  if (row.baseline) return <div className="project-open-item-facts" data-baseline-card="true">
+    <p>{LANDING_CHECK_COPY.BASELINE_BODY}</p>
+    <FactRow label={LANDING_CHECK_COPY.HELD}>{row.heldTaskIds?.length ?? 0}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.UPSTREAM}>{row.baseline.upstreamSha}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.TIP}>{row.baseline.targetSha}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.BASELINE}>{row.baseline.mergeTreeSha}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.LABEL}>{row.baseline.check.command}</FactRow>
+    <details><summary>{LANDING_CHECK_COPY.VIEW_HELD}</summary>{row.heldTaskIds?.map((id) =>
+      <div key={id}><Link to={`/tasks/${encodeId(id)}`}>{id}</Link></div>)}</details>
+    <p>{LANDING_CHECK_COPY.RESUMES}</p>
+  </div>;
   // §4.6 X-E5's card draws the claim it is about in three rows (board v4 06 c): which landing, on
   // which runner and since when, and where the runner had got to. An item an older build opened
   // carries none of it and keeps the sentence it always did.

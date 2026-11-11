@@ -1118,7 +1118,8 @@ object StartProjectCopy {
     }
     /** `upstreamRef` is the main branch as a full ref: a coordinator's suggestion, or the one the project already stands on. */
     data class Settings(val line: String, val projectBranchName: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String?,
-        val upstreamRef: String? = null)
+        val upstreamRef: String? = null, val landingCheckCommand: String? = null,
+        val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
     /** `StartProject.defaultSettings`: the decided line, else a branch when the plan has dependencies — and the main branch the
      * project already stands on, which a start that names none would keep (the card's own order puts the owner's choices first). */
     fun defaultSettings(view: JsonObject?, maxConcurrentTasks: Int?, graph: DependencyGraph?): Settings {
@@ -1126,7 +1127,8 @@ object StartProjectCopy {
         val line = decided ?: if (graph?.let(::planHasDependencies) == true) "PROJECT_BRANCH" else "MAIN"
         val branch = if (decided == "PROJECT_BRANCH") view?.text("ref")?.takeIf { it.isNotEmpty() }?.let { "refs/heads/$it" } else null
         return Settings(line, branch, true, maxConcurrentTasks ?: 1, view?.text("mergeCheckCommand"),
-            view?.text("upstreamRef")?.takeIf { it.isNotEmpty() }?.let(RunSettings::mainBranchRef))
+            view?.text("upstreamRef")?.takeIf { it.isNotEmpty() }?.let(RunSettings::mainBranchRef),
+            view?.text("landingCheckCommand"), view?.number("landingCheckTimeoutSeconds"), view?.number("mergeCheckTimeoutSeconds"))
     }
 
     /** The main branch a start opens with, by name: the first of the one this project's owner already chose for it, the one they
@@ -1147,15 +1149,17 @@ object StartProjectCopy {
         val count = settings.number("maxConcurrentTasks")?.takeIf { it >= 0 } ?: return null
         val check = when (val value = settings["mergeCheckCommand"]) { null, JsonNull -> null; is JsonPrimitive -> if (value.isString) value.content else return null; else -> return null }
         val digest = asked.text("criteriaDigest") ?: return null
-        return Request(Settings(line, settings.text("projectBranchName"), automatic, count, check, settings.text("upstreamRef")), asked.text("why").orEmpty(), digest)
+        return Request(Settings(line, settings.text("projectBranchName"), automatic, count, check, settings.text("upstreamRef"),
+            settings.text("landingCheckCommand"), settings.number("landingCheckTimeoutSeconds"), settings.number("mergeCheckTimeoutSeconds")), asked.text("why").orEmpty(), digest)
     }
     /** The settings as the card edits them — opened with Automatic on whatever was suggested (`StartSettingsDraft`). `upstream` is
      * the main branch by name, `refs/heads/` left off: what the row shows and the picker takes — null for a project with no
      * repository, which has no main branch to choose, and for an integration read that did not answer. `deliveryMode` is how the work
      * reaches it (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read that does not say, or a server that predates it. */
     data class Draft(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
-        val upstream: String? = null, val deliveryMode: String? = null) {
-        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks
+        val upstream: String? = null, val deliveryMode: String? = null, val landingCheckCommand: String = "",
+        val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null) {
+        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks && (landingCheckTimeoutSeconds == null || landingCheckTimeoutSeconds > 0)
         val hasMergeCheck get() = mergeCheckCommand.isNotBlank()
         /** The branch every sentence about where work goes names: the one on the card, or main for a project with none. */
         val main get() = upstream ?: RunSettings.defaultMainBranch
@@ -1167,7 +1171,8 @@ object StartProjectCopy {
              * on a line that stays main, and otherwise on PLATFORM, the default. */
             fun of(settings: Settings, view: JsonObject? = null) = Draft(settings.line, true, settings.maxConcurrentTasks, settings.mergeCheckCommand.orEmpty(),
                 if (ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
-                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) })
+                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
+                settings.landingCheckTimeoutSeconds, settings.mergeCheckTimeoutSeconds)
         }
     }
     /** `StartProject.body`: the seal, every setting, and the request answered — the branch only with a project branch, a blank check
@@ -1180,6 +1185,11 @@ object StartProjectCopy {
         draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
         put("automatic", draft.automatic); put("maxConcurrentTasks", draft.maxConcurrentTasks)
         put("mergeCheckCommand", if (check.isEmpty()) JsonNull else JsonPrimitive(check))
+        if (draft.line == "PROJECT_BRANCH") {
+            put("landingCheckCommand", draft.landingCheckCommand.takeIf { it.isNotBlank() }?.let(::JsonPrimitive) ?: JsonNull)
+            put("landingCheckTimeoutSeconds", draft.landingCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
+        }
+        put("mergeCheckTimeoutSeconds", draft.mergeCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
         // With a main line only: the door refuses AGENT_PUSH anywhere else, and a card that offered no choice records none.
         if (draft.line == "MAIN") draft.deliveryMode?.let { put("deliveryMode", it) }
         put("requestId", requestId?.let(::JsonPrimitive) ?: JsonNull)
@@ -1306,8 +1316,8 @@ object RunSettings {
     const val mergeCheckNoneSays = "Work lands once it rebases cleanly."
     const val atMost = "At most"
     const val mergeCheck = "Merge check"
-    const val mergeCheckHint = "Runs on the combined tree before anything lands — on the project branch and again before main."
-    fun mergeCheckHint(main: String) = "Runs on the combined tree before anything lands — on the project branch and again before $main."
+    const val mergeCheckHint = "Runs before merging into main."
+    fun mergeCheckHint(main: String) = "Runs before merging into $main."
     /** …while the agent pushes its own work: the check is the agent's, on its work rebased onto main, and Orbit runs none. */
     fun mergeCheckHintAgentPush(main: String) = "Run by the agent before it pushes, on its work rebased onto $main. Orbit doesn’t run it."
     const val mergeCheckPlaceholder = "No check — work lands once it rebases cleanly"

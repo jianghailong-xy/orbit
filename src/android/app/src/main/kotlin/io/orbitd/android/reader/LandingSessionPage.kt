@@ -459,7 +459,7 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
     val attempt = view.currentAttempt
     val live = current && attempt?.state == "RUNNING" && !attempt.timedOut
     var openLog by remember(section.jobId) { mutableStateOf<LandingLogSelectors?>(null) }
-    val steps = remember(section) { LandingSteps.steps(section.entries, section.kind) }
+    val steps = remember(section, view.checks, attempt) { LandingSteps.steps(LandingSessionModel.scopedEntries(section.entries, view, section.jobId), section.kind) }
     Column(Modifier.fillMaxWidth().testTag("landing:section:${section.jobId}"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         if ((view.timeline?.sections?.size ?: 0) > 1) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(section.title, Modifier.testTag("landing:section-title:${section.jobId}"), style = MaterialTheme.typography.labelLarge,
@@ -528,7 +528,7 @@ private fun LandingStepRow(section: LandingSection, step: LandingStep, status: S
             Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(12.dp).rotate(if (open) 90f else 0f), tint = muted.copy(alpha = 0.6f))
             Text(step.name, Modifier.testTag("landing:step-name"), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                 fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
-            Text(step.summary.text, Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
+            Text(LandingSessionModel.timelineText(step.summary), Modifier.weight(1f).testTag("landing:step-summary"), style = MaterialTheme.typography.bodyMedium, color = muted,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(when (status) {
                 StepStatus.FAILED -> LandingStepWords.FAILED
@@ -567,7 +567,7 @@ private fun LandingEntryLine(section: LandingSection, index: Int, entry: Landing
             val mark = landingMark(entry, section.kind, section.entries, index)
             Text(mark.first, Modifier.width(16.dp).testTag("landing:mark:$index"), style = MaterialTheme.typography.bodySmall,
                 color = mark.second)
-            Text(entry.text, Modifier.weight(1f).testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
+            Text(LandingSessionModel.timelineText(entry), Modifier.weight(1f).testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
             if (selectors != null) {
                 TextButton(onClick = { setOpenLog(if (openLog == selectors) null else selectors) },
                     modifier = Modifier.testTag("landing:log:$index")) { Text("${LandingSessionCopy.LOG} ›", style = MaterialTheme.typography.bodySmall) }
@@ -587,7 +587,7 @@ private fun LandingEntryLine(section: LandingSection, index: Int, entry: Landing
 private fun landingMark(entry: LandingEntry, jobKind: String, entries: List<LandingEntry>, index: Int): Pair<String, Color> = when (entry.kind) {
     "TAKEN_OVER" -> "↗" to Color(0xFF0066BE)
     "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK" ->
-        if (LandingSessionModel.entryOk(entry, jobKind)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
+        if (entry.data?.text("skipped") == "PATHS_EXEMPT") "≡" to Color.Unspecified else if (LandingSessionModel.entryOk(entry, jobKind)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
     "STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED" -> "✗" to Color(0xFFB3261E)
     "ENQUEUED", "REQUEUED", "NEXT_GENERATION", "SKIPPED_CHECK", "FIX_TASK" -> "≡" to Color.Unspecified
     "RELEASED" -> "↩" to Color.Unspecified

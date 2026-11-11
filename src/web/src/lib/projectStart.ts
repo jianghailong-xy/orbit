@@ -283,9 +283,9 @@ export const RUN_SWITCH_OFF = 'Off';
 export const RUN_AT_MOST = 'At most';
 export const RUN_MERGE_CHECK = 'Merge check';
 export const RUN_MERGE_CHECK_HINT =
-  'Runs on the combined tree before anything lands — on the project branch and again before main.';
+  'Runs before merging into main.';
 export function runMergeCheckHint(main: string = DEFAULT_MAIN_BRANCH): string {
-  return `Runs on the combined tree before anything lands — on the project branch and again before ${main}.`;
+  return `Runs before merging into ${main}.`;
 }
 /** The merge check while the agent pushes its own work: Orbit runs nothing, the agent runs it. */
 export function runMergeCheckHintAgentPush(main: string = DEFAULT_MAIN_BRANCH): string {

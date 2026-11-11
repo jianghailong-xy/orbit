@@ -297,6 +297,7 @@ object ExceptionCards {
 
     /** How the item became the owner's, one sentence per way; null for an item that was the owner's from the start. */
     fun heading(row: JsonObject, now: Instant = Instant.now()): String? {
+        if (row.obj("baseline") != null) return LandingCheckCopy.title(row.obj("facts")?.text("targetRef")?.removePrefix("refs/heads/") ?: "the project branch")
         // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation` would only ever say "1s". Its heading
         // is the fact it is about — how long the claim has been silent, counted from the last report the runner made (board v4 06).
         if (row.text("kind") == "LANDING_LEASE_EXPIRED") {
@@ -430,6 +431,15 @@ object ExceptionCards {
     /** The rows of the item's payload, in the browser's order (`ItemFactRows`), field for field. X-E5 draws the claim it is about in
      * three rows instead of the item's sentence; an item an older build opened carries no lease and keeps that sentence. */
     fun facts(row: JsonObject): Facts {
+        row.obj("baseline")?.let { baseline -> return Facts.Rows(listOf(
+            FactRow("", LandingCheckCopy.baselineBody),
+            FactRow(LandingCheckCopy.held, row.strings("heldTaskIds").size.toString()),
+            FactRow(LandingCheckCopy.upstream, baseline.text("upstreamSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.tip, baseline.text("targetSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.baseline, baseline.text("mergeTreeSha").orEmpty(), mono = true),
+            FactRow(LandingCheckCopy.label, baseline.obj("check")?.text("command").orEmpty(), mono = true),
+            FactRow("", LandingCheckCopy.resumes))) }
+
         if (row.text("kind") == "LANDING_LEASE_EXPIRED") row.obj("lease")?.let { return Facts.Rows(leaseFacts(row, it)) }
         val facts = row.obj("facts") ?: return Facts.DetailLine(row.text("detailLine").orEmpty())
         val rows = mutableListOf<FactRow>()

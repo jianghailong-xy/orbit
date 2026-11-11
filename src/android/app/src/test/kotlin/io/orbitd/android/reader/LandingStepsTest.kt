@@ -25,6 +25,34 @@ class LandingStepsTest {
         return LandingEntry(kind, "2026-11-10T15:%02d:00.000Z".format(20 + seq), 1, 1, check, check?.let { 1 }, phase, null, text, data)
     }
 
+    @Test fun landingVerdictsKeepBaselineAttributionSeparate() {
+        listOf("Landing check passed · 14m", "Landing check failed · exit 1 · 14m",
+            "Landing check skipped · only exempt paths changed").forEach { text ->
+            listOf("also fails", "passes").forEach { verdict ->
+                val task = line("CHECK_FINISHED", text, check = "LANDING_CHECK")
+                val baseline = line("CHECK_FINISHED", "Checked the project branch with main, without this task · $verdict", check = "LANDING_CHECK")
+                    .copy(data = buildJsonObject { put("scope", "BASELINE") })
+                val rows = LandingSteps.steps(listOf(task, baseline), "LAND_TASK")
+                assertEquals(listOf("check:LANDING_CHECK", "check:BASELINE"), rows.map { it.key })
+                assertEquals(listOf(text, baseline.text), rows.map { it.summary.text })
+                assertEquals("Landing check", rows.first().name)
+            }
+        }
+    }
+
+    @Test fun scopeRecoveryNeverAssignsNewestResultsToOtherAttemptsClaimsOrRounds() {
+        val view = LandingSessionModel.read(kotlinx.serialization.json.Json.parseToJsonElement("""{
+          "currentAttempt":{"jobId":"new","kind":"LAND_TASK","state":"CHECK_FAILED","claim":1,"round":1},
+          "checks":[{"name":"LANDING_CHECK","scope":"BASELINE","exitCode":1,"expectedExitCode":0}]}
+          """).let { it as kotlinx.serialization.json.JsonObject })
+        val entry = line("CHECK_FINISHED", "Landing check failed · exit 1 · 14m", check = "LANDING_CHECK", exit = 1)
+        val scoped = LandingSessionModel.scopedEntries(listOf(entry), view, "new")
+        assertEquals("Checked the project branch with main, without this task · also fails", LandingSessionModel.timelineText(scoped.single()))
+        assertEquals(listOf(entry), LandingSessionModel.scopedEntries(listOf(entry), view, "old"))
+        assertEquals(listOf(entry.copy(claim = 2)), LandingSessionModel.scopedEntries(listOf(entry.copy(claim = 2)), view, "new"))
+        assertEquals(listOf(entry.copy(round = 2)), LandingSessionModel.scopedEntries(listOf(entry.copy(round = 2)), view, "new"))
+    }
+
     @Test fun aLandedTasksFifteenLinesAreFiveSteps() {
         // The owner's 2026-11-11 screenshot, line for line.
         val entries = listOf(

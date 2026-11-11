@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, inheritedLandingCommand, inheritedLandingTimeout } from '../lib/landingCheck';
 import { useRef, useState, type JSX } from 'react';
 import Markdown from './Markdown';
 import remarkGfm from 'remark-gfm';
@@ -262,28 +263,14 @@ const isMergeCheckChange = (a: ApprovalInfo): boolean =>
   a.toolName === 'orbit_project_update_integration';
 
 interface MergeCheckChangeInput {
+  snapshot: Record<string, unknown>;
   projectTitle: string;
-  /** The check as the project stands, or null when it has none. */
-  current: string | null;
-  /** What it would become; null clears it. */
-  next: string | null;
-  /** The budget for the new check, in seconds, when the proposal named one. */
-  timeout: number | null;
 }
 
 function mergeCheckChangeInput(a: ApprovalInfo): MergeCheckChangeInput | null {
   if (!isMergeCheckChange(a)) return null;
-  const obj = (a.input ?? {}) as Record<string, unknown>;
-  const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
-  const timeout = obj.mergeCheckTimeoutSeconds;
-  return {
-    projectTitle: text(obj.projectTitle) ?? '',
-    current: text(obj.currentMergeCheckCommand),
-    next: text(obj.mergeCheckCommand),
-    // Absent means the budget is left as it is, which is not the same as "no budget" — so a
-    // proposal that named none shows no second line rather than a zero.
-    timeout: typeof timeout === 'number' ? timeout : null,
-  };
+  const snapshot = (a.input ?? {}) as Record<string, unknown>;
+  return { snapshot, projectTitle: typeof snapshot.projectTitle === 'string' ? snapshot.projectTitle : '' };
 }
 
 /**
@@ -663,7 +650,7 @@ export function ApprovalPanel({
                   : skipCheck
                     ? `⏭ Confirm: land ${skipCheck.taskTitle || 'this task'} without the merge check?`
                     : mergeCheck
-                      ? `🔧 Confirm: change the merge check of ${mergeCheck.projectTitle || 'this project'}?`
+                      ? LANDING_CHECK_COPY.CONFIRM_TITLE
                       : deleting
                         ? `🗑 Confirm: delete ${deleting.noun} “${deleting.name || `this ${deleting.noun}`}”?`
                         : writing
@@ -731,7 +718,7 @@ export function ApprovalPanel({
                     : skipCheck
                       ? 'Land it without the check'
                       : mergeCheck
-                        ? 'Change the check'
+                        ? LANDING_CHECK_COPY.CONFIRM_ACTION
                         : deleting
                           ? 'Delete it'
                           : writing
@@ -943,19 +930,34 @@ function WorkspaceWriteBody({ input }: { input: WorkspaceWriteInput }): JSX.Elem
  * state, not as "no check at all".
  */
 function MergeCheckChangeBody({ input }: { input: MergeCheckChangeInput }): JSX.Element {
-  const current = input.current ?? 'no check configured';
-  const next = input.next ?? 'no check — nothing runs on the combined tree';
+  const raw = input.snapshot;
+  const command = (value: unknown): string | null => typeof value === 'string' ? value : null;
+  const seconds = (value: unknown): number | null => typeof value === 'number' ? value : null;
+  const value = (key: string, after: boolean): unknown =>
+    after && Object.prototype.hasOwnProperty.call(raw, key) ? raw[key] : raw[`current${key[0].toUpperCase()}${key.slice(1)}`];
   return (
     <div className="dag-approval">
-      <p className="dag-approval-note">
-        Run on the combined tree before this project's work lands. Nothing else about the
-        project's integration line changes.
-      </p>
-      <Command label="now" command={current} />
-      <Command label="after" command={next} />
-      {input.timeout !== null && (
-        <p className="dag-approval-caption">killed after {input.timeout}s</p>
-      )}
+      {input.projectTitle && <p className="dag-approval-note">{input.projectTitle}</p>}
+      <div className="landing-check-confirmation">
+        {(['landing', 'merge'] as const).map((layer) => (
+          <section key={layer}>
+            <h4>{layer === 'landing' ? LANDING_CHECK_COPY.LABEL : 'Merge check'}</h4>
+            <p className="dag-approval-caption">{layer === 'landing' ? LANDING_CHECK_COPY.HINT : 'Runs before merging into main.'}</p>
+            {[false, true].map((after) => {
+              const check = command(value(`${layer}CheckCommand`, after));
+              const timeout = seconds(value(`${layer}CheckTimeoutSeconds`, after));
+              return <div key={String(after)}>
+                <Command label={after ? 'after' : 'now'} command={check ?? (layer === 'landing'
+                  ? inheritedLandingCommand(command(value('mergeCheckCommand', after))) : 'no check configured')} />
+                <p className="dag-approval-caption">{LANDING_CHECK_COPY.TIMEOUT}: {timeout === null
+                  ? layer === 'landing' ? inheritedLandingTimeout(seconds(value('mergeCheckTimeoutSeconds', after))) : '3600 seconds'
+                  : `${timeout} seconds`}</p>
+              </div>;
+            })}
+          </section>
+        ))}
+      </div>
+      <p className="dag-approval-caption">{LANDING_CHECK_COPY.APPLIES}</p>
     </div>
   );
 }

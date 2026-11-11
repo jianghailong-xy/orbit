@@ -126,7 +126,7 @@ class StartProjectCardTest {
         compose.onNodeWithTag("$tag-merge-check-value", useUnmergedTree = true).performScrollTo().assertTextEquals(RunSettings.mergeCheckNone)
         shows(RunSettings.mergeCheckNoneSays); shows(RunSettings.automaticOnUnchecked)
         compose.onNodeWithText(RunSettings.noMergeCheckWarning).assertDoesNotExist()
-        compose.onNodeWithTag("$tag-merge-check").performClick()
+        compose.onNodeWithTag("$tag-merge-check").performScrollTo().performClick()
         compose.onNodeWithTag("$tag-merge-check-command").performScrollTo().performTextInput("make check")
         compose.onNodeWithTag("$tag-merge-check-value", useUnmergedTree = true).assertTextEquals(RunSettings.mergeCheckSet)
         shows(RunSettings.mergeCheckHint); shows(RunSettings.automaticOnChecked)

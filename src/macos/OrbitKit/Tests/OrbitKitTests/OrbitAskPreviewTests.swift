@@ -305,7 +305,8 @@ final class OrbitAskPreviewTests: XCTestCase {
     func testAMergeCheckCardIsDrawnFromThePreview() throws {
         let card = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift")
         for shown in ["Approvals.mergeCheckChangePreview(toolName:",
-                      "mergeCheck.projectLine", "mergeCheck.currentLine", "mergeCheck.nextLine", "mergeCheck.timeoutLine",
+                      "mergeCheck.projectLine", "checkLayer(mergeCheck, layer: \"landing\")",
+                      "checkLayer(mergeCheck, layer: \"merge\")", "preview.commandLine(layer, after: after)", "preview.budgetLine(layer, after: after)",
                       "MergeCheckChangePreview.action", "mergeCheck.declineName"] {
             XCTAssertTrue(card.contains(shown), "\(shown) is part of what this card shows and the press it offers")
         }

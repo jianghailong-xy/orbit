@@ -156,6 +156,7 @@ public struct BlockerResolvePreview: Equatable, Sendable {
 /// (`runner-go/mcp.go`, `projectMergeCheckCard`), and the server writes only what this card carried —
 /// so the two commands are the whole decision. Web draws the same pair (`MergeCheckChangeBody`).
 public struct MergeCheckChangePreview: Equatable, Sendable {
+    public let snapshot: JSONValue
     public let projectTitle: String
     /// The check as the project stands, or nil when it has none.
     public let current: String?
@@ -166,12 +167,27 @@ public struct MergeCheckChangePreview: Equatable, Sendable {
     /// The budget the proposal names, in seconds; nil leaves it as it is.
     public let timeoutSeconds: Int?
 
+    public func value(_ key: String, after: Bool) -> JSONValue? {
+        if after, let proposed = snapshot[key] { return proposed }
+        return snapshot["current" + key.prefix(1).uppercased() + key.dropFirst()]
+    }
+    public func commandLine(_ layer: String, after: Bool) -> String {
+        if let command = value(layer + "CheckCommand", after: after)?.stringValue { return command }
+        return layer == "landing" ? LandingCheckCopy.inheritedCommand(value("mergeCheckCommand", after: after)?.stringValue)
+            : "no check configured"
+    }
+    public func budgetLine(_ layer: String, after: Bool) -> String {
+        if let seconds = value(layer + "CheckTimeoutSeconds", after: after)?.intValue { return "\(seconds) seconds" }
+        return layer == "landing" ? LandingCheckCopy.inheritedTimeout(value("mergeCheckTimeoutSeconds", after: after)?.intValue)
+            : "3600 seconds"
+    }
+
     /// The header holds one line beside its badge, so the project's name takes the row under it.
-    public static let heading = "Change the merge check?"
+    public static let heading = LandingCheckCopy.confirmTitle
     public var projectLine: String { projectTitle.isEmpty ? "This project" : projectTitle }
     public static let note = "Run on the combined tree before this project's work lands. "
         + "Nothing else about the project's integration line changes."
-    public static let action = "Change the check"
+    public static let action = LandingCheckCopy.confirmAction
     /// An empty line reads as a loading state, so a missing check is said in words.
     public var currentLine: String { current ?? "no check configured" }
     public var nextLine: String {
@@ -501,6 +517,7 @@ public extension Approvals {
             return s
         }
         return MergeCheckChangePreview(
+            snapshot: input,
             projectTitle: input["projectTitle"]?.stringValue ?? "",
             current: command("currentMergeCheckCommand"),
             next: command("mergeCheckCommand"),

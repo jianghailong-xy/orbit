@@ -619,6 +619,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         ProjectDialog.OpenItems -> OpenItemsSheet(state, doc, now, enabled, startOwn = { dialog = ProjectDialog.Start }, recordDone = { dialog = ProjectDialog.Done },
             // Review on the coordinator's request to start: into its conversation, onto the start card.
             reviewStart = { row -> dialog = null; openCoordinator(row.text("itemId")?.let { "start:$it" }) }, perform = perform,
+            openTask = { taskId -> dialog = null; openTask(taskId) },
             retry = { scope.launch { load(refreshGraph = false) } }, close = { dialog = null })
     }
 }
@@ -713,7 +714,7 @@ private fun LazyListScope.openItemsAttention(state: ProjectPageState, doc: JsonO
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, startOwn: () -> Unit, recordDone: () -> Unit,
-    reviewStart: (JsonObject) -> Unit, perform: (String, JsonObject) -> Unit, retry: () -> Unit, close: () -> Unit) {
+    reviewStart: (JsonObject) -> Unit, perform: (String, JsonObject) -> Unit, openTask: (String) -> Unit, retry: () -> Unit, close: () -> Unit) {
     ModalBottomSheet(onDismissRequest = close, modifier = Modifier.testTag("project-open-items-sheet")) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 12.dp, bottom = 24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -756,11 +757,11 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
                                     "project-done-own", recordDone)
                                 null -> Unit
                             }
-                            needsYou.forEach { row -> OpenItemRow(row, now, main, enabled, perform) { perform("REVIEW", row) } }
+                            needsYou.forEach { row -> OpenItemRow(row, now, main, enabled, perform, openTask) { perform("REVIEW", row) } }
                         }
                         if (withCoordinator.isNotEmpty()) {
                             GroupLabel(ProjectPage.withCoordinatorGroup)
-                            withCoordinator.forEach { row -> OpenItemRow(row, now, main, enabled, perform) { perform("OPEN_COORDINATOR", row) } }
+                            withCoordinator.forEach { row -> OpenItemRow(row, now, main, enabled, perform, openTask) { perform("OPEN_COORDINATOR", row) } }
                         }
                         if (summary.count == 0 && start == null && done == null)
                             Text(ProjectPage.nothingWaiting, Modifier.padding(top = 12.dp).testTag("project-open-items-empty"), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -821,7 +822,7 @@ private fun OwnRow(title: String, note: String, ink: Color, enabled: Boolean, ta
  * an observation of [main] — how long it has waited, and its first press across the row; the whole row opens the card it is answered
  * on, in the coordinator conversation. */
 @Composable
-private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Boolean, perform: (String, JsonObject) -> Unit, tap: () -> Unit) {
+private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Boolean, perform: (String, JsonObject) -> Unit, openTask: (String) -> Unit, tap: () -> Unit) {
     val owner = row.text("assignee") != "COORDINATOR"
     val action = ProjectPage.primaryAction(row)
     val tag = "open-item:${row.text("itemId")}"
@@ -832,7 +833,17 @@ private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Bo
             Text(ProjectPage.who(row), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(row.text("title").orEmpty(), fontWeight = FontWeight.SemiBold)
+            Text(if (row.obj("baseline") == null) row.text("title").orEmpty() else ExceptionCards.headingLine(row), fontWeight = FontWeight.SemiBold)
+            if (row.obj("baseline") != null) {
+                var heldOpen by remember { mutableStateOf(false) }
+                TextButton(onClick = { heldOpen = !heldOpen }, enabled = enabled) { Text(LandingCheckCopy.viewHeld) }
+                if (heldOpen) row.strings("heldTaskIds").forEach { taskId ->
+                    TextButton(onClick = { openTask(taskId) }, enabled = enabled) { Text(taskId) }
+                }
+                (ExceptionCards.facts(row) as? ExceptionCards.Facts.Rows)?.rows?.forEach { fact ->
+                    Text(if (fact.label.isEmpty()) fact.value else "${fact.label}: ${fact.value}", style = MaterialTheme.typography.labelMedium)
+                }
+            }
             row.text("detailLine")?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             ExceptionCards.handlingLine(row, now, main)?.let { line ->
                 Row(Modifier.testTag("$tag:handling"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

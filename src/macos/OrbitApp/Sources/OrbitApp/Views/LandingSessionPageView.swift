@@ -297,7 +297,7 @@ struct LandingTimelineView: View {
     @ViewBuilder private func sectionView(_ section: IntegrationTimelineSection,
                                           landing: SessionLandingView) -> some View {
         let current = section.jobId == landing.currentAttempt?.jobId
-        let steps = LandingSteps.steps(section.entries, kind: section.kind)
+        let steps = LandingSteps.steps(LandingCheckCopy.scopedEntries(section.entries, landing: landing, jobID: section.jobId), kind: section.kind)
         let live = current && landing.currentAttempt?.state == "RUNNING" && landing.currentAttempt?.timedOut == false
         VStack(alignment: .leading, spacing: 3) {
             if (landing.timeline?.sections.count ?? 0) > 1 {
@@ -373,7 +373,7 @@ struct LandingTimelineView: View {
                 Text(step.name)
                     .font(.orbitMono.weight(.semibold)).foregroundStyle(.primary)
                     .lineLimit(1).fixedSize()
-                Text(step.summary.text)
+                Text(LandingCheckCopy.timelineText(step.summary))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
@@ -425,7 +425,7 @@ struct LandingTimelineView: View {
                     .font(.orbitMeta.weight(.semibold))
                     .foregroundStyle(mark.color)
                     .frame(width: 16)
-                Text(entry.text)
+                Text(LandingCheckCopy.timelineText(entry))
                     .font(.orbitLabel)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
@@ -470,6 +470,7 @@ struct LandingTimelineView: View {
     /// What a timeline mark says, and the ink it says it in (mockups 05 a/e/i).
     private func glyph(_ entry: IntegrationTimelineEntry, jobKind: String,
                        entries: [IntegrationTimelineEntry], index: Int) -> Mark {
+        if entry.data?["skipped"]?.stringValue == "PATHS_EXEMPT" { return Mark(glyph: "≡", color: .secondary) }
         switch entry.kind {
         case "TAKEN_OVER":
             return Mark(glyph: "↗", color: .accentColor)
@@ -539,7 +540,7 @@ private struct LandingCheckLogView: View {
                                 Text(LandingPageCopy.bytesOmitted(entry.truncatedBytes))
                                     .font(.orbitMeta).foregroundStyle(.secondary)
                             }
-                            Text(entry.text)
+                            Text(LandingCheckCopy.timelineText(entry))
                                 .font(.orbitMono)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)

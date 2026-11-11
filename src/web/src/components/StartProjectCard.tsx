@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, inheritedLandingCommand, inheritedLandingTimeout } from '../lib/landingCheck';
 import {
   lazy,
   useEffect,
@@ -164,6 +165,8 @@ export interface StartSettingsDraft {
   automatic: boolean;
   maxConcurrentTasks: number | null;
   mergeCheckCommand: string;
+  landingCheckCommand?: string;
+  landingCheckTimeoutSeconds?: number | null;
   /** The check's budget in seconds — null, an empty box, for the one-hour default. */
   mergeCheckTimeoutSeconds: number | null;
   /** How the work reaches main (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read
@@ -198,6 +201,8 @@ export function startDraftOf(
     automatic: true,
     maxConcurrentTasks: settings.maxConcurrentTasks,
     mergeCheckCommand: settings.mergeCheckCommand ?? '',
+    landingCheckCommand: settings.landingCheckCommand ?? '',
+    landingCheckTimeoutSeconds: settings.landingCheckTimeoutSeconds ?? null,
     // The coordinator's budget when it suggested one, and an empty box — the default — when it did
     // not: what it sends is what the card opens on, and the owner may change it.
     mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds ?? null,
@@ -212,7 +217,8 @@ export function startDraftOf(
 /** Whether the draft is a set of settings the door would take: a whole number of tasks in range. */
 export function startDraftComplete(draft: StartSettingsDraft): boolean {
   const count = draft.maxConcurrentTasks;
-  return count !== null && Number.isInteger(count) && count >= 1 && count <= START_MAX_CONCURRENT_TASKS;
+  return count !== null && Number.isInteger(count) && count >= 1 && count <= START_MAX_CONCURRENT_TASKS
+    && (draft.landingCheckTimeoutSeconds == null || (Number.isInteger(draft.landingCheckTimeoutSeconds) && draft.landingCheckTimeoutSeconds > 0));
 }
 
 /**
@@ -238,6 +244,10 @@ export function startBody(
     maxConcurrentTasks: draft.maxConcurrentTasks ?? request.settings.maxConcurrentTasks,
     mergeCheckCommand: draft.mergeCheckCommand.trim() || null,
     mergeCheckTimeoutSeconds: draft.mergeCheckTimeoutSeconds,
+    ...(draft.line === 'PROJECT_BRANCH' ? {
+      landingCheckCommand: draft.landingCheckCommand?.trim() ? draft.landingCheckCommand : null,
+      landingCheckTimeoutSeconds: draft.landingCheckTimeoutSeconds ?? null,
+    } : {}),
     // With a main line only: the door refuses AGENT_PUSH anywhere else (409
     // DELIVERY_MODE_NEEDS_MAIN_LINE), and a card that offered no choice records none.
     ...(draft.line === 'MAIN' && draft.deliveryMode ? { deliveryMode: draft.deliveryMode } : {}),
@@ -603,6 +613,22 @@ export function StartProjectCard({
               ) : null}
             </div>
           ) : null}
+          <div className="start-card-row" data-landing-check="true">
+            <div className="start-card-row-head"><span>{LANDING_CHECK_COPY.LABEL}</span></div>
+            {draft.line === 'MAIN' ? <div className="start-card-hint">{LANDING_CHECK_COPY.MAIN}</div> : <>
+              <Textarea value={draft.landingCheckCommand ?? ''} disabled={!editable}
+                aria-label={LANDING_CHECK_COPY.LABEL} placeholder={LANDING_CHECK_COPY.COMMAND_PLACEHOLDER}
+                onChange={(event) => set({ landingCheckCommand: event.target.value })} />
+              <div className="start-card-hint">{LANDING_CHECK_COPY.HINT}</div>
+              {!draft.landingCheckCommand && <div className="start-card-hint">{inheritedLandingCommand(draft.mergeCheckCommand || null)}</div>}
+              <NumberInput value={draft.landingCheckTimeoutSeconds ?? null} min={1} precision={0} disabled={!editable}
+                aria-label={`${LANDING_CHECK_COPY.LABEL} ${LANDING_CHECK_COPY.TIMEOUT}`}
+                placeholder={LANDING_CHECK_COPY.TIMEOUT_PLACEHOLDER}
+                onValueChange={(value) => set({ landingCheckTimeoutSeconds: value })} />
+              <div className="start-card-hint">{LANDING_CHECK_COPY.TIMEOUT_HINT}</div>
+              {draft.landingCheckTimeoutSeconds == null && <div className="start-card-hint">{inheritedLandingTimeout(draft.mergeCheckTimeoutSeconds)}</div>}
+            </>}
+          </div>
           <div className="start-card-row">
             <button
               type="button"
@@ -1020,7 +1046,7 @@ export function SessionStartProjectCard({
 export function defaultStartSettings(
   view: Pick<
     ProjectIntegrationView,
-    'line' | 'ref' | 'upstreamRef' | 'mergeCheckCommand' | 'mergeCheckTimeoutSeconds'
+    'line' | 'ref' | 'upstreamRef' | 'mergeCheckCommand' | 'mergeCheckTimeoutSeconds' | 'landingCheckCommand' | 'landingCheckTimeoutSeconds'
   >,
   project: { maxConcurrentTasks?: number },
   graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'> | null,
@@ -1034,6 +1060,8 @@ export function defaultStartSettings(
     ...(view.upstreamRef ? { upstreamRef: mainBranchRef(view.upstreamRef) } : {}),
     automatic: true,
     maxConcurrentTasks: project.maxConcurrentTasks ?? 1,
+    landingCheckCommand: view.landingCheckCommand ?? null,
+    landingCheckTimeoutSeconds: view.landingCheckTimeoutSeconds ?? null,
     mergeCheckCommand: view.mergeCheckCommand ?? null,
     // The budget the project's check already runs on, which a start that names none keeps.
     mergeCheckTimeoutSeconds: view.mergeCheckTimeoutSeconds ?? null,

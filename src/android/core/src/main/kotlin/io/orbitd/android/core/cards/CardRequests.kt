@@ -63,6 +63,11 @@ object CardRequests {
                     put("line", settings.line); put("automatic", settings.automatic); put("maxConcurrentTasks", settings.maxConcurrentTasks)
                     put("mergeCheckCommand", settings.mergeCheckCommand?.trim()?.takeIf { it.isNotBlank() }?.let(::JsonPrimitive) ?: JsonNull)
                     if (settings.line == "PROJECT_BRANCH") settings.projectBranchName?.trim()?.takeIf { it.isNotBlank() }?.let { put("projectBranchName", it) }
+                    if (settings.line == "PROJECT_BRANCH") {
+                        put("landingCheckCommand", settings.landingCheckCommand?.takeIf { it.isNotBlank() }?.let(::JsonPrimitive) ?: JsonNull)
+                        put("landingCheckTimeoutSeconds", settings.landingCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
+                    }
+                    put("mergeCheckTimeoutSeconds", settings.mergeCheckTimeoutSeconds?.let(::JsonPrimitive) ?: JsonNull)
                     // The main branch rides only as the card showed it: a press that brings no settings of its own names none, and
                     // the project keeps the one it stands on rather than taking the coordinator's suggestion as the owner's choice.
                     input.settings?.upstreamRef?.trim()?.takeIf { it.isNotBlank() }?.let { put("upstreamRef", it) }

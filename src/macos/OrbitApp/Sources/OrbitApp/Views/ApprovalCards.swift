@@ -241,6 +241,18 @@ struct ToolApprovalCard: View {
     }
     /// Changing a project's merge check: what it is now and what it would become. Without it the
     /// plain card drew no body at all — a yes to a command nobody could see.
+    private func checkLayer(_ preview: MergeCheckChangePreview, layer: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(layer == "landing" ? LandingCheckCopy.label : RunSettings.mergeCheck).font(.orbitSubtext)
+            Text(layer == "landing" ? LandingCheckCopy.hint : "Runs before merging into main.").font(.orbitLabel)
+            ForEach([false, true], id: \.self) { after in
+                Text(after ? "after" : "now").font(.orbitLabel).foregroundStyle(.secondary)
+                workspaceWriteBlock(preview.commandLine(layer, after: after))
+                Text(LandingCheckCopy.timeout + ": " + preview.budgetLine(layer, after: after)).font(.orbitLabel)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var mergeCheck: MergeCheckChangePreview? {
         approval.input.flatMap {
             Approvals.mergeCheckChangePreview(toolName: approval.toolName ?? "", from: $0)
@@ -461,18 +473,17 @@ struct ToolApprovalCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(mergeCheck.projectLine).font(.orbitProse)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(MergeCheckChangePreview.note).font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("now").font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                workspaceWriteBlock(mergeCheck.currentLine)
-                Text("after").font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                workspaceWriteBlock(mergeCheck.nextLine)
-                if let timeout = mergeCheck.timeoutLine {
-                    Text(timeout).font(.orbitLabel).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        checkLayer(mergeCheck, layer: "landing")
+                        checkLayer(mergeCheck, layer: "merge")
+                    }
+                    VStack(alignment: .leading, spacing: 16) {
+                        checkLayer(mergeCheck, layer: "landing")
+                        checkLayer(mergeCheck, layer: "merge")
+                    }
                 }
+                Text(LandingCheckCopy.applies).font(.orbitLabel).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if let deleting {
@@ -3179,6 +3190,27 @@ struct StartProjectCard: View {
                 mainBranchRow(upstream, editable: editable)
             }
             Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                Text(LandingCheckCopy.label).font(.orbitProse)
+                if draft.line == .main {
+                    Text(LandingCheckCopy.main).font(.orbitLabel).foregroundStyle(.secondary)
+                } else {
+                    TextField(LandingCheckCopy.commandPlaceholder, text: Binding(
+                        get: { draft.landingCheckCommand }, set: { value in update { $0.landingCheckCommand = value } }), axis: .vertical)
+                        .font(.orbitMono).disabled(!editable)
+                    Text(LandingCheckCopy.hint).font(.orbitLabel).foregroundStyle(.secondary)
+                    if draft.landingCheckCommand.isEmpty {
+                        Text(LandingCheckCopy.inheritedCommand(draft.mergeCheckCommand.isEmpty ? nil : draft.mergeCheckCommand)).font(.orbitLabel)
+                    }
+                    TextField(LandingCheckCopy.timeoutPlaceholder, value: Binding(
+                        get: { draft.landingCheckTimeoutSeconds }, set: { value in update { $0.landingCheckTimeoutSeconds = value } }), format: .number)
+                        .accessibilityLabel(LandingCheckCopy.timeout).disabled(!editable)
+                    Text(LandingCheckCopy.timeoutHint).font(.orbitLabel)
+                    if draft.landingCheckTimeoutSeconds == nil {
+                        Text(LandingCheckCopy.inheritedTimeout(draft.mergeCheckTimeoutSeconds)).font(.orbitLabel)
+                    }
+                }
+            }.startRow()
             mergeCheckRow(editable: editable)
             Divider()
             atMostRow(editable: editable)
@@ -4579,6 +4611,14 @@ private struct OwnerItemCardView: View {
                 }
             }
         }
+        if row.baseline != nil {
+            DisclosureGroup(LandingCheckCopy.viewHeld) {
+                ForEach(row.heldTaskIds, id: \.self) { id in
+                    Link(id, destination: URL(string: "orbit-task:\(id)")!).font(.orbitLabel)
+                }
+            }
+        }
+
     }
 
     /// The rerun or observation handling the item while it is in flight (§4.7 H1, §10.8) — the

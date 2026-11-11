@@ -1225,6 +1225,17 @@ public enum ExceptionCards {
     /// field for field (`ProjectProgressStatus.tsx`). The one place the two may differ is the font a
     /// row is drawn in; the rows, their order and every word in them are the same.
     public static func facts(_ row: ProjectOpenItemRow) -> ItemFacts {
+        if let baseline = row.baseline {
+            return .rows(FactBlock(rows: [
+                FactRow(label: "", value: LandingCheckCopy.baselineBody),
+                FactRow(label: LandingCheckCopy.held, value: String(row.heldTaskIds.count)),
+                FactRow(label: LandingCheckCopy.upstream, value: baseline.upstreamSha, mono: true),
+                FactRow(label: LandingCheckCopy.tip, value: baseline.targetSha, mono: true),
+                FactRow(label: LandingCheckCopy.baseline, value: baseline.mergeTreeSha, mono: true),
+                FactRow(label: LandingCheckCopy.label, value: baseline.check.command ?? "", mono: true),
+                FactRow(label: "", value: LandingCheckCopy.resumes),
+            ]))
+        }
         // §4.6 X-E5 draws the claim it is about in three rows (board v4 06 c) instead of the
         // item's sentence: which landing, on which runner and since when, and where the runner had
         // got to. An item an older build opened carries no lease and keeps the sentence it always
@@ -1842,6 +1853,7 @@ public enum ExceptionCards {
     /// `escalationHeading`, verbatim. Nil for an item that was the owner's from the start, which is
     /// every other kind this card draws and says so in its own title.
     public static func heading(_ row: ProjectOpenItemRow, now: Date = Date()) -> String? {
+        if row.baseline != nil { return LandingCheckCopy.title(row.facts?.targetRef?.replacingOccurrences(of: "refs/heads/", with: "") ?? "the project branch") }
         // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation`
         // would only ever say "1s". Its heading is the fact it is about — how long the claim has
         // been silent, counted from the last report the runner made and the moment the clock opened

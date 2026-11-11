@@ -501,7 +501,7 @@ describe('the words, as the copy table has them', () => {
     expect(RUN_AUTOMATIC_HINT_MAIN).toContain(
       'Merging into main always asks you — to skip that card, choose “The agent pushes it” under Delivery.');
     expect(RUN_MERGE_CHECK_HINT).toBe(
-      'Runs on the combined tree before anything lands — on the project branch and again before main.');
+      'Runs before merging into main.');
     expect(startExplanation(4)).toBe(
       'Orbit derives done from these 4 criteria and nothing else. If they change later, it asks you to '
       + 'confirm the new version — the project keeps running.');
@@ -671,6 +671,7 @@ describe('what a press sends', () => {
       maxConcurrentTasks: 3,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
       mergeCheckTimeoutSeconds: 900,
+      landingCheckCommand: '', landingCheckTimeoutSeconds: null,
       // No integration read: no delivery choice on offer, and none sent.
       deliveryMode: null,
     });
@@ -691,6 +692,7 @@ describe('what a press sends', () => {
       maxConcurrentTasks: 5,
       mergeCheckCommand: 'npm test',
       mergeCheckTimeoutSeconds: 90,
+      landingCheckCommand: null, landingCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
     // Directly into main names no branch — the door refuses one — and a blank check is none. An
@@ -990,6 +992,7 @@ describe('the press', () => {
       maxConcurrentTasks: 5,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
       mergeCheckTimeoutSeconds: null,
+      landingCheckCommand: null, landingCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
     // The question is answered: the card goes, and the record is the conversation's to draw.
@@ -1013,7 +1016,7 @@ describe('the press', () => {
     await key({ ctrlKey: true });
     expect(armed).toEqual([]);
     expect(bodies, 'the chord reached the door').toEqual([]);
-    expect(card().querySelectorAll('textarea'), 'a text box grew inside the card').toHaveLength(0);
+    expect(card().querySelectorAll('textarea:not([aria-label="Landing check"])'), 'a reply box grew inside the card').toHaveLength(0);
 
     await key();
     await until(() => bodies.length === 1, 'the bare key to press Start');
@@ -1167,7 +1170,7 @@ describe('the main branch on the card', () => {
     server.integration = integrationOf();
     server.row = rowOf('item-1', suggestingMaster());
     const { card } = await delivered();
-    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Main branch', 'Merge check', 'At most']);
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Main branch', 'Landing check', 'Merge check', 'At most']);
     expect(mainBranchShown(card())).toBe('master');
     // Nobody chose it before: nothing to say under it.
     expect(settingRow(card(), 'Main branch').querySelector('.start-card-hint')).toBeNull();
@@ -1182,7 +1185,7 @@ describe('the main branch on the card', () => {
     expect(comesToYou(card())).toContain('Merging the branch into master');
     expect(card().textContent).not.toMatch(/into main\b/u);
     await mergeCheckBox(card());
-    expect(settingRow(card(), 'Merge check').textContent).toContain('on the project branch and again before master.');
+    expect(settingRow(card(), 'Merge check').textContent).toContain('Runs before merging into master.');
   });
 
   it('lists the branches the runner reported in the menu, and the line menu says directly into master', async () => {
@@ -1251,6 +1254,7 @@ describe('the main branch on the card', () => {
       maxConcurrentTasks: 3,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
       mergeCheckTimeoutSeconds: null,
+      landingCheckCommand: null, landingCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
   });
@@ -1278,7 +1282,7 @@ describe('the main branch on the card', () => {
       settings: { line: 'MAIN', automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: null },
     }));
     const { card } = await delivered();
-    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Merge check', 'At most']);
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Landing check', 'Merge check', 'At most']);
     expect(settingRow(card(), 'Automatic').textContent).toContain(RUN_AUTOMATIC_ON_MAIN);
     await act(async () => {
       action(card(), START_PROJECT_ACTION).click();
@@ -1404,11 +1408,11 @@ describe('the delivery mode on the card', () => {
     server.row = rowOf('item-1', suggestingMain());
     const { card } = await delivered();
     // Delivery straight under the line it belongs to, before Main branch (owner decision 2026-11-10).
-    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Delivery', 'Main branch', 'Merge check', 'At most']);
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Delivery', 'Main branch', 'Landing check', 'Merge check', 'At most']);
     expect(deliveryField(card()).textContent).toBe('Orbit lands it');
     await mergeCheckBox(card());
     expect(settingRow(card(), 'Merge check').textContent).toContain(
-      'Runs on the combined tree before anything lands — on the project branch and again before main.');
+      'Runs before merging into main.');
     expect(deliveryLocked(card())).toBe(false);
     expect(settingRow(card(), 'Delivery').querySelector(':scope > .start-card-hint')?.textContent)
       .toBe('The agent doesn’t push to main: Orbit lands its branch once the work is accepted.');
