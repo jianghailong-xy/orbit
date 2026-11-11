@@ -104,6 +104,30 @@ class OrbitTurnCardsTest {
         assertEquals(OrbitTurnCards.aTaskRun, OrbitTurnCards.runTaskTitle(only(turn("runQuestion") { body(); put("taskTitle", "") }).source))
         assertTrue(transcriptCards(turn("runQuestion") { body(); put("replyBy", JsonNull) }).isEmpty())
         assertTrue(transcriptCards(turn("runQuestion", type = "assistant", body = body)).isEmpty())
+
+        // The stored card was read before anyone answered; its request's card as it stands now is drawn over it.
+        val request = buildJsonObject { put("id", "q"); put("state", "REPLIED"); put("runQuestion", answered) }
+        val shown = OrbitTurnCards.runQuestionShown(card.source, request)
+        assertEquals(answered, shown)
+        assertEquals(OrbitTurnCards.StateLine("Answered by this session.", OrbitTurnCards.Tone.SUCCESS), OrbitTurnCards.runQuestionState(shown, now))
+        assertEquals(listOf(OrbitTurnCards.Option("Keep its place", true), OrbitTurnCards.Option("Go to the back", false)),
+            OrbitTurnCards.runQuestions(shown).single().options)
+        val ownerAnswered = buildJsonObject { answered.forEach { (k, v) -> put(k, v) }; put("state", "OWNER_ANSWERED"); put("answeredBy", "OWNER") }
+        assertEquals("Answered by you.", OrbitTurnCards.runQuestionState(
+            OrbitTurnCards.runQuestionShown(card.source, buildJsonObject { put("runQuestion", ownerAnswered) }), now).text)
+        // Passed to the owner: the live card's wording, not the stored one's.
+        val passed = buildJsonObject { card.source.forEach { (k, v) -> put(k, v) }; put("state", "NO_REPLY") }
+        assertEquals("Passed to you at ${at(replyBy, now)}.", OrbitTurnCards.runQuestionState(
+            OrbitTurnCards.runQuestionShown(card.source, buildJsonObject { put("runQuestion", passed) }), now).text)
+        // No request read, a request without the card, or a malformed one: the stored card.
+        assertSame(card.source, OrbitTurnCards.runQuestionShown(card.source, null))
+        assertSame(card.source, OrbitTurnCards.runQuestionShown(card.source, buildJsonObject { put("id", "q") }))
+        assertSame(card.source, OrbitTurnCards.runQuestionShown(card.source, buildJsonObject {
+            put("runQuestion", buildJsonObject { answered.forEach { (k, v) -> put(k, v) }; put("replyBy", JsonNull) }) }))
+        // A stored card that already names its answerer never changes: the request's card is not used (and the view does not read it).
+        val live = buildJsonObject { put("runQuestion", ownerAnswered) }
+        assertSame(answered, OrbitTurnCards.runQuestionShown(answered, live))
+        assertEquals("Answered by this session.", OrbitTurnCards.runQuestionState(OrbitTurnCards.runQuestionShown(answered, live), now).text)
     }
 
     @Test fun noticeFromATaskRun() {
