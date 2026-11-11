@@ -155,6 +155,7 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
             FormSection(footer = RunnerCopy.ADD_FOOTER) { TextButton(onClick = { adding = true }) { Text(RunnerCopy.ADD) } }
             PoolsSection(model.memberPools(now), model.ownPools(now), now, ::page)
             KeysSection(model, ::page)
+            ModelTiersSection(api, revision)
             Spacer(Modifier.height(48.dp))
         }
         notice.Host(Modifier.align(Alignment.BottomCenter))
