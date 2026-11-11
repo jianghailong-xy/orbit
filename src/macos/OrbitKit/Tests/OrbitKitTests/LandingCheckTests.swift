@@ -103,7 +103,7 @@ final class LandingCheckTests: XCTestCase {
     }
     func testScopeRecoveryNeverAssignsNewestResultsToAnotherAttemptClaimOrRound() {
         let entry = IntegrationTimelineEntry(kind: "CHECK_FINISHED", claim: 2, round: 3,
-            check: LandingTimelineCheck(name: "LANDING_CHECK", index: 1), data: ["exitCode": .number(1), "expectedExitCode": .number(0)],
+            check: LandingTimelineCheck(name: "LANDING_CHECK", index: 1), data: ["exitCode": .int(1), "expectedExitCode": .int(0)],
             text: "Landing check failed · exit 1 · 14m")
         let landing = SessionLandingView(checks: [LandingCheckResult(scope: "BASELINE")],
             currentAttempt: SessionLandingAttempt(jobId: "new", kind: "LAND_TASK", state: "CHECK_FAILED", round: 3, claim: 2))

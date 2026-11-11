@@ -1,7 +1,5 @@
 package io.orbitd.android.reader
 
-import io.orbitd.android.core.cards.LandingCheckCopy
-
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectPage
@@ -14,6 +12,8 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 // One landing in a project's Landings window (contract §2.9 LS1, LS6, LS7; design §3; mockups v4
 // docs/mocks/landing-session/v4/05-landing-session-page and 07-android, and since revision 28 the window of
@@ -410,7 +410,6 @@ object LandingSessionModel {
         return if (hours > 0) "${hours}h ${"%02d".format(mins)}m" else "${mins}m ${"%02d".format(seconds)}s"
     }
 
-    /** `Merge check` / `Task acceptance`, the names the check rows use. */
     /** Older events omit scope. The result array belongs only to the newest claim/round. */
     fun scopedEntries(entries: List<LandingEntry>, view: LandingView, jobId: String): List<LandingEntry> {
         val attempt = view.currentAttempt?.takeIf { it.jobId == jobId } ?: return entries
@@ -424,6 +423,7 @@ object LandingSessionModel {
     fun timelineText(entry: LandingEntry) = if (entry.kind == "CHECK_FINISHED" && entry.data?.text("scope") == "BASELINE")
         LandingCheckCopy.attribution(checkPassed(entry)) else entry.text
 
+    /** The names the check rows use. */
     fun checkLabel(name: String?) = if (name == "LANDING_CHECK") LandingCheckCopy.label else if (name == "MERGE_CHECK") LandingSessionCopy.MERGE_CHECK else LandingSessionCopy.TASK_ACCEPTANCE
 
     private fun section(view: LandingView, jobId: String) = view.timeline?.sections?.firstOrNull { it.jobId == jobId }

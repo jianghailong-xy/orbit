@@ -42,7 +42,7 @@ final class LandingViewsWiringTests: XCTestCase {
         for part in ["struct LandingStatusCardView: View {",
                      "struct LandingTimelineView: View {",
                      "struct LandingLineView: View {",
-                     "LandingSteps.steps(section.entries, kind: section.kind)",
+                     "LandingSteps.steps(LandingCheckCopy.scopedEntries(section.entries, landing: landing, jobID: section.jobId), kind: section.kind)",
                      "LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,",
                      "LandingPageCopy.outcomeCard(landing, promotion: promotion)",
                      "LandingPageCopy.gates(landing, now: now, updatedAt: readAt, failed: readFailed)",
