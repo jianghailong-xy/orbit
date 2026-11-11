@@ -111,11 +111,14 @@ export function SessionMoveModal({
     setPhase(null);
   }, [open]);
 
+  // Read defensively: an older server answers the route with something that isn't this shape.
+  const answer = targetsQ.data && Array.isArray(targetsQ.data.targets) ? targetsQ.data : undefined;
+  // The project this session coordinates, when it is one: it moves with the session.
+  const coordinates = answer?.coordinates ?? null;
+
   if (!session || !workspace) return null;
 
   const busy = phase !== null;
-  // Read defensively: an older server answers the route with something that isn't this shape.
-  const answer = targetsQ.data && Array.isArray(targetsQ.data.targets) ? targetsQ.data : undefined;
   const byName = foldersByName(folders);
   // A session whose folder isn't among the workspace's (deleted since the row was read) is in no
   // folder, which is where the list shows it.
@@ -181,7 +184,7 @@ export function SessionMoveModal({
 
   const confirmMove = (target: SessionMoveTarget, folder: { id: string } | null, current: SessionMoveTargets): void => {
     void confirm({
-      title: moveConfirmTitle(target),
+      title: moveConfirmTitle(target, current),
       description: (
         <div className="move-confirm-body">
           {moveConfirmParagraphs(current, target, workspace.name).map((p) => (
@@ -336,7 +339,11 @@ export function SessionMoveModal({
               </button>
             ))}
           </div>
-          {answer.reason && <div className="move-dialog-note">{answer.reason}</div>}
+          {answer.reason ? (
+            <div className="move-dialog-note">{answer.reason}</div>
+          ) : coordinates ? (
+            <div className="move-dialog-note">{MOVE_COPY.coordinatorMoves}</div>
+          ) : null}
         </>
       ) : null}
     </>
@@ -401,7 +408,10 @@ export function SessionMoveModal({
         )
       }
     >
-      <div className="move-dialog-sub">{session.title || 'Untitled session'}</div>
+      <div className="move-dialog-sub">
+        {session.title || 'Untitled session'}
+        {coordinates ? ` · ${MOVE_COPY.coordinatorOf(coordinates.title)}` : null}
+      </div>
       {step ? targetStep : firstStep}
       {phase && phase !== 'filing' && (
         <div className="move-dialog-progress" role="status">

@@ -6,6 +6,17 @@ import { api } from '../api';
 import { copyText } from '../lib/clipboard';
 import { machineDraftPath } from '../lib/machineSetup';
 import { REGISTER_NEXT, START_A_SESSION } from '../lib/machineSetupCopy';
+import {
+  WELCOME_AFTER_STEP_ONE,
+  WELCOME_COMPUTER,
+  WELCOME_COMPUTER_OWN,
+  WELCOME_FIRST,
+  WELCOME_HAVING_TROUBLE,
+  WELCOME_MODEL,
+  WELCOME_MODEL_HELP,
+  WELCOME_WAITING_CONNECT,
+} from '../lib/welcomeCopy';
+import { WelcomeHead } from './WelcomeCard';
 import { Segmented } from './ui/Segmented';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
@@ -80,17 +91,74 @@ export function RunnerRegisterGuide() {
   // TODO: switch to a push signal if the API ever exposes one.
   const baselineOnline = useRef<Set<string> | null>(null);
   const [connected, setConnected] = useState<{ id: string; name: string } | null>(null);
+  // An account with no machine at all is a new one: the guide is the first step of its welcome card
+  // (docs/mocks/new-user-onboarding, P3), and moves on to the machine's setup card by itself.
+  const [welcome, setWelcome] = useState(false);
   useEffect(() => {
     if (!list) return;
     if (baselineOnline.current === null) {
       // First load establishes the baseline; nothing to detect yet.
       baselineOnline.current = new Set(list.filter((r) => r.online).map((r) => r.id));
+      setWelcome(list.length === 0);
       return;
     }
     if (connected) return; // latch the first runner we see come online
     const fresh = list.find((r) => r.online && !baselineOnline.current!.has(r.id));
     if (fresh) setConnected({ id: fresh.id, name: fresh.name });
   }, [list, connected]);
+
+  useEffect(() => {
+    if (welcome && connected) navigate(machineDraftPath(connected.id), { replace: true });
+  }, [welcome, connected, navigate]);
+
+  if (welcome) {
+    return (
+      <div className="runner-guide">
+        <div className="msc-draft">
+          <div className="msc welcome-card">
+            <WelcomeHead />
+            <div className="msc-step" data-step="computer">
+              <span className="msc-num">1</span>
+              <div>
+                <div className="msc-step-title">{WELCOME_COMPUTER}</div>
+                <div className="msc-step-help">{WELCOME_COMPUTER_OWN}</div>
+                <Segmented<OS>
+                  className="runner-os"
+                  aria-label="Operating system"
+                  value={os}
+                  onValueChange={setOs}
+                  options={OS_OPTIONS}
+                />
+                <div className="welcome-cmd">
+                  <CommandBox cmd={installCmd[os]} copied={copied} onCopy={() => copy(installCmd[os])} />
+                </div>
+                <div className="msc-verdict wait">{WELCOME_WAITING_CONNECT}</div>
+                <div className="msc-alt">
+                  {/* TODO: link to runner setup/troubleshooting docs when available. */}
+                  <a className="msc-change">{WELCOME_HAVING_TROUBLE}</a>
+                </div>
+              </div>
+            </div>
+            <div className="msc-step" data-step="model">
+              <span className="msc-num">2</span>
+              <div>
+                <div className="msc-step-title">{WELCOME_MODEL}</div>
+                <div className="msc-step-help">{WELCOME_MODEL_HELP}</div>
+                <div className="welcome-later">{WELCOME_AFTER_STEP_ONE}</div>
+              </div>
+            </div>
+            <div className="msc-step" data-step="first">
+              <span className="msc-num">3</span>
+              <div>
+                <div className="msc-step-title">{WELCOME_FIRST}</div>
+                <div className="welcome-later">{WELCOME_AFTER_STEP_ONE}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="runner-guide">

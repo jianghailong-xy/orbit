@@ -125,6 +125,10 @@ let writes: Array<{ method: string; path: string; body: Record<string, unknown> 
 let uploads: Array<{ scope: string; name: string; type: string; id: string }>;
 /** The chat session's detail. */
 let session: Record<string, unknown>;
+/** Every chats read's query, in order (`q=…&offset=…`, or empty). */
+let chatReads: string[];
+/** How many chats one read serves: the server's rules.chatsListed, made small where paging is the point. */
+let chatsPage: number;
 
 const reply = (status: number, body: unknown): Response =>
   ({ ok: status < 400, status, statusText: '', text: async () => JSON.stringify(body), json: async () => body }) as unknown as Response;
@@ -157,7 +161,15 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   }
   if (path === '/api/wiki/spaces') return reply(200, [SPACE]);
   if (path === space) return reply(200, SPACE);
-  if (path === `${space}/chats`) return reply(200, chats);
+  if (path === `${space}/chats`) {
+    // One page, as the server pages it (contract `chat.list.page`): a title search and an offset.
+    const params = new URLSearchParams(url.split('?')[1] ?? '');
+    chatReads.push(params.toString());
+    const q = (params.get('q') ?? '').toLowerCase();
+    const matched = chats.chats.filter((row) => !q || row.title.toLowerCase().includes(q));
+    const offset = Number(params.get('offset') ?? 0);
+    return reply(200, { ...chats, chats: matched.slice(offset, offset + chatsPage), more: matched.length > offset + chatsPage });
+  }
   if (path === `${space}/docs`) return reply(200, SHARED.docs.directory.read);
   if (path === `${space}/docs/session-runtime`) return reply(200, DOC);
   if (path === `${space}/plan`) return reply(200, { spaceId: SPACE_ID, confirmed: SHARED.plan.versions.v1, draft: null, proposals: [], job: null });
@@ -198,6 +210,8 @@ beforeEach(() => {
   chats = { spaceId: SPACE_ID, workspace: { ...DEVELOP, eligible: true }, choices: [DEVELOP, MAC], fab: NO_COUNTS, chats: [] };
   writes = [];
   uploads = [];
+  chatReads = [];
+  chatsPage = 50;
   session = {
     id: 'S1chat', title: 'Runner offline: why three heartbeats', runState: 'AWAITING_INPUT', status: 'AWAITING_INPUT',
     workspace: { id: 'w1', name: 'orbit-develop' }, assignedRunnerId: 'r1', engine: 'claude', provider: 'claude',
@@ -207,7 +221,9 @@ beforeEach(() => {
   stream.idle = true;
   stream.accepted = [];
   stream.queued = [];
-  storage = { local: new Map(), session: new Map() };
+  // The panel as these cases knew it: hidden until the button opens it. Board 45 opens it by default where it docks
+  // unless the owner hid it with ✕, which is what this says; the cases of board 45 below take it out.
+  storage = { local: new Map([['orbit.wikiChat.closed', JSON.stringify({ orbit: true })]]), session: new Map() };
   windowWidth(1500);
   vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} });
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -405,14 +421,16 @@ describe('the round button (design §3, board 42 ⓪)', () => {
 });
 
 describe('the panel (design §4.1, board 42 ①)', () => {
-  it('docks at 1440 and wider, 400 wide or as dragged up to 560, the directory where it was; ✕ hides it', async () => {
-    storage.local.set('orbit.wikiChat.width', '640');
+  it('docks at 1440 and wider, a third of the window or as dragged up to half of it, the directory where it was; ✕ hides it', async () => {
+    await open('/wiki/orbit/d/session-runtime?chat=new');
+    expect(panel()!.style.width, 'a third of 1500').toBe('500px');
+    storage.local.set('orbit.wikiChat.width', '900');
     await open('/wiki/orbit/d/session-runtime?chat=new');
     expect(host().className).toContain('is-wide');
     expect(host().className).toContain('is-docked');
     expect(host().className).not.toContain('is-fold');
-    expect(panel()!.style.width).toBe('560px');
-    expect(host().style.getPropertyValue('--wk-chat-w')).toBe('560px');
+    expect(panel()!.style.width, 'dragged, held to half of 1500').toBe('750px');
+    expect(host().style.getPropertyValue('--wk-chat-w')).toBe('750px');
     // Head: the title (the chat history), +, ↗ (nothing to open before the first message) and ✕.
     expect(panel()!.querySelector('.wk-chat-title')?.textContent).toBe('New chat');
     expect(byLabel('New chat')).toBeTruthy();
@@ -428,7 +446,7 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     await open('/wiki/orbit/d/session-runtime?chat=new');
     expect(host().className).toMatch(/is-docked/);
     expect(host().className).toMatch(/is-fold/);
-    expect(panel()!.style.width).toBe('400px');
+    expect(panel()!.style.width, 'a third of 1300').toBe('433px');
 
     windowWidth(900);
     await act(async () => window.dispatchEvent(new Event('resize')));
@@ -500,8 +518,8 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     await open('/wiki/orbit?chat=new');
     await press(panel()!.querySelector('.wk-chat-title'));
     const rows = [...document.querySelectorAll('.wk-chat-history-row')];
-    expect(rows.map((row) => row.textContent)).toEqual(['Runner offline: why three heartbeats']);
-    await press(rows[0]);
+    expect(rows.map((row) => row.querySelector('.t')?.textContent)).toEqual(['Runner offline: why three heartbeats']);
+    await press(rows[0]!.querySelector('.wk-chat-history-open'));
     expect(where()).toBe('/wiki/orbit?chat=S1chat');
     expect(panel()!.querySelector('.wk-chat-title')?.textContent).toBe('Runner offline: why three heartbeats');
   });
@@ -919,5 +937,173 @@ describe('the composer: the session page’s own (board 43, plan A)', () => {
       URL.createObjectURL = own.create;
       URL.revokeObjectURL = own.revoke;
     }
+  });
+});
+
+describe('open by default where it docks (board 45 ①②, owner 11-11)', () => {
+  const ROW = { status: 'AWAITING_INPUT', open: true, createdAt: '', updatedAt: '', drafts: 0, needsYou: 0 };
+  beforeEach(() => storage.local.delete('orbit.wikiChat.closed'));
+
+  it('opens a wiki page with the panel shown, on the chat the button would open, and writes no address', async () => {
+    await open('/wiki/orbit');
+    expect(panel()?.querySelector('.wk-chat-title')?.textContent).toBe('New chat');
+    expect(fab()).toBeNull();
+    expect(host().classList.contains('is-docked')).toBe(true);
+    expect(where()).toBe('/wiki/orbit');
+
+    chats = { ...chats, chats: [{ ...ROW, sessionId: 'S1chat', title: 'Runner offline: why three heartbeats' }] };
+    await open('/wiki/orbit/d/session-runtime');
+    expect(panel()?.querySelector('.wk-chat-title')?.textContent).toBe('Runner offline: why three heartbeats');
+    expect(where()).toBe('/wiki/orbit/d/session-runtime');
+  });
+
+  it('stays folded where the panel would lie over the page, and on Settings', async () => {
+    windowWidth(1000);
+    await open('/wiki/orbit');
+    expect(panel()).toBeNull();
+    expect(fab()).toBeTruthy();
+    windowWidth(1500);
+    await open('/wiki/orbit/settings');
+    expect(panel()).toBeNull();
+  });
+
+  it('folds away with the window narrowed past docking, and comes back widened', async () => {
+    await open('/wiki/orbit');
+    expect(panel()).toBeTruthy();
+    windowWidth(1100);
+    await act(async () => window.dispatchEvent(new Event('resize')));
+    await settle();
+    expect(panel()).toBeNull();
+    expect(fab()).toBeTruthy();
+    windowWidth(1500);
+    await act(async () => window.dispatchEvent(new Event('resize')));
+    await settle();
+    expect(panel()).toBeTruthy();
+  });
+
+  it('remembers ✕ on the device across loads until the round button opens it again; an address that names a chat still opens', async () => {
+    chats = { ...chats, chats: [{ ...ROW, sessionId: 'S1chat', title: 'Runner offline' }] };
+    await open('/wiki/orbit');
+    await press(byLabel('Hide chat'));
+    expect(panel()).toBeNull();
+    expect(JSON.parse(storage.local.get('orbit.wikiChat.closed')!)).toEqual({ orbit: true });
+    storage.session.clear();
+    await open('/wiki/orbit');
+    expect(panel(), 'a new load, a new tab: still hidden').toBeNull();
+    await open('/wiki/orbit?chat=S1chat');
+    expect(panel(), 'the address is a press of its own').toBeTruthy();
+    storage.session.clear();
+    await open('/wiki/orbit');
+    expect(panel()).toBeNull();
+    await press(fab());
+    expect(panel()).toBeTruthy();
+    expect(JSON.parse(storage.local.get('orbit.wikiChat.closed')!)).toEqual({});
+    storage.session.clear();
+    await open('/wiki/orbit');
+    expect(panel(), 'the button undid ✕').toBeTruthy();
+  });
+});
+
+describe('the history the title opens (board 45 ④, owner 11-11: Q3 A, Q4 A)', () => {
+  const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  const row = (sessionId: string, title: string, more: Record<string, unknown> = {}) => ({
+    sessionId, title, status: 'AWAITING_INPUT', open: true, completed: false, working: false,
+    createdAt: at(600), updatedAt: at(5), lastActiveAt: at(5), drafts: 0, needsYou: 0, ...more,
+  });
+  const historyRows = () =>
+    [...document.querySelectorAll('.wk-chat-history-row')].map((one) =>
+      `${one.querySelector('.t')?.textContent} | ${one.querySelector('.m')?.textContent}`);
+  const openHistory = async () => press(panel()!.querySelector('.wk-chat-title'));
+
+  beforeEach(() => {
+    chats = {
+      ...chats,
+      chats: [
+        row('S3quiet', 'Glossary: worktree', { lastActiveAt: at(3) }),
+        row('S2work', 'Split chapter 4', { working: true }),
+        row('S1chat', 'Runner offline', { needsYou: 1, lastActiveAt: at(120) }),
+        row('S4done', 'English UI copy', { completed: true, open: false, status: 'SUCCEEDED', lastActiveAt: at(60 * 30) }),
+      ],
+    };
+  });
+
+  it('turns the panel into the list: Open with what needs the owner first, then the working, then by time; Completed folded', async () => {
+    await open('/wiki/orbit?chat=S1chat');
+    await openHistory();
+    expect(panel()!.querySelector('.wk-chat-title .t')?.textContent).toBe('Chats');
+    expect(panel()!.querySelector('.wk-chat-main')?.hasAttribute('hidden'), 'the chat stays, hidden').toBe(true);
+    expect(historyRows()).toEqual(['Runner offline | 1 needs you', 'Split chapter 4 | Working…', 'Glossary: worktree | 3m ago']);
+    expect(document.querySelector('.wk-chat-history-row.on .t')?.textContent).toBe('Runner offline');
+    const fold = document.querySelector<HTMLButtonElement>('.wk-chat-history-group.is-fold')!;
+    expect(fold.textContent).toContain('Completed');
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    await press(fold);
+    expect(historyRows()).toContain('English UI copy | Yesterday');
+    // Esc goes back to the chat it was opened over.
+    await act(async () => panel()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await settle();
+    expect(document.querySelector('.wk-chat-history')).toBeNull();
+    expect(panel()!.querySelector('.wk-chat-title .t')?.textContent, 'the session’s own title').toBe('Runner offline: why three heartbeats');
+  });
+
+  it('searches titles on the server, Completed included, and asks for the next page with Show more', async () => {
+    chatsPage = 2;
+    await open('/wiki/orbit?chat=new');
+    await openHistory();
+    expect(historyRows()).toHaveLength(2);
+    await press([...document.querySelectorAll('button')].find((b) => b.textContent === 'Show more'));
+    expect(chatReads).toContain('offset=2');
+    expect(historyRows()).toHaveLength(3);
+    const search = document.querySelector<HTMLInputElement>('.wk-chat-history-search input')!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setValue.call(search, 'english');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    expect(chatReads).toContain('q=english');
+    expect(historyRows()).toEqual(['English UI copy | Yesterday']);
+    await act(async () => {
+      setValue.call(search, 'nothing like it');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    expect(document.querySelector('.wk-chat-history-none')?.textContent).toBe('No chats match');
+  });
+
+  const menuOf = async (title: string) => {
+    const one = [...document.querySelectorAll('.wk-chat-history-row')].find((r) => r.querySelector('.t')?.textContent === title)!;
+    await press(one.querySelector('.wk-chat-history-more'));
+    return [...document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];
+  };
+
+  it('holds the session list’s actions in a row’s ⋯, through the same doors', async () => {
+    await open('/wiki/orbit?chat=new');
+    await openHistory();
+    const items = await menuOf('Split chapter 4');
+    expect(items.map((item) => item.textContent)).toEqual(['Rename…', 'Open as a full session', 'Complete', 'Move to Trash']);
+    await press(items.find((item) => item.textContent === 'Complete'));
+    expect(writes.at(-1)).toMatchObject({ method: 'POST', path: '/api/sessions/S2work/complete' });
+
+    await press((await menuOf('Glossary: worktree')).find((item) => item.textContent === 'Rename…'));
+    const field = document.querySelector<HTMLInputElement>('.wk-chat-history-rename')!;
+    expect(field.getAttribute('aria-label')).toBe('Chat name');
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setValue.call(field, 'Glossary: worktree and branch');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    await settle();
+    expect(writes.at(-1)).toMatchObject({ method: 'PATCH', path: '/api/sessions/S3quiet', body: { title: 'Glossary: worktree and branch' } });
+  });
+
+  it('moves a chat to Trash with no question, and the panel turns to a new chat when it was the one shown', async () => {
+    await open('/wiki/orbit?chat=S1chat');
+    await openHistory();
+    await press((await menuOf('Runner offline')).find((item) => item.textContent === 'Move to Trash'));
+    expect(writes.at(-1)).toMatchObject({ method: 'DELETE', path: '/api/sessions/S1chat' });
+    expect(where()).toBe('/wiki/orbit?chat=new');
+    expect(document.querySelector('.wk-chat-history'), 'the list stays').toBeTruthy();
   });
 });

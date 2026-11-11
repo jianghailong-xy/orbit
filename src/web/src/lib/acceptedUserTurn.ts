@@ -29,7 +29,11 @@ export const TURN_CARD_FIELDS = {
   projectStarted: true,
   confirmationReviewRequest: true,
   confirmationReturn: true,
+  confirmationAnswers: true,
+  evidenceReview: true,
+  evidenceSendBack: true,
   runQuestion: true,
+  runNotice: true,
   sessionMessage: true,
   sessionReplies: true,
 } satisfies Record<keyof TurnCards, true>;
@@ -164,7 +168,8 @@ function listedWithItsBlock(turn: QueuedTurnRow): boolean {
   if (turn.sessionMessage) return false;
   if (
     turn.authoredByOrbit
-    && (turn.sessionReplies || turn.confirmationReviewRequest || turn.confirmationReturn || turn.runQuestion)
+    && (turn.sessionReplies || turn.confirmationReviewRequest || turn.confirmationReturn
+      || turn.evidenceReview || turn.runQuestion || turn.runNotice)
   ) {
     return true;
   }

@@ -258,6 +258,9 @@ private sealed interface ProjectDialog {
     data class Status(val status: String) : ProjectDialog
     data object Delete : ProjectDialog
     data object Replace : ProjectDialog
+    /** Change workspace…: the list, then the question for the workspace picked. */
+    data object Change : ProjectDialog
+    data class ChangeConfirm(val workspaceId: String, val name: String) : ProjectDialog
     data class Resolve(val blocker: JsonObject) : ProjectDialog
     data class ResumeList(val item: JsonObject) : ProjectDialog
     data object Start : ProjectDialog
@@ -402,8 +405,8 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             catch (failure: Exception) { state.notice = "Couldn't open the coordinator: ${failureReason(failure)}." }
         }
     }
-    fun replaceCoordinator() = write("Couldn't start a new coordinator: ") {
-        api.replaceCoordinator(id, "replace:${state.coordinator?.obj("coordination")?.text("sessionId")}")?.text("sessionId")
+    fun replaceCoordinator(workspaceId: String? = null) = write("Couldn't start a new coordinator: ") {
+        api.replaceCoordinator(id, "replace:${state.coordinator?.obj("coordination")?.text("sessionId")}", workspaceId)?.text("sessionId")
             ?.let { if (state.attached) open(OrbitRoute(Destination.SESSION, it)) }
     }
 
@@ -485,7 +488,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         overviewSection(state, doc, now, openTask, openLanding = { open(OrbitRoute(Destination.SESSION, it)) }, retry = { retryJob(it) }) {
             dialog = ProjectDialog.LandingJobs }
         coordinatorSection(state, doc, now, enabled, openCoordinator = { openCoordinator() }, replace = { finished ->
-            if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace })
+            if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace }, change = { dialog = ProjectDialog.Change })
         if (started != false) item(key = "runs") {
             RunSettingsSection(state, doc, now, enabled, editMergeCheck = { dialog = ProjectDialog.MergeCheck },
                 integration = { body -> if (body != null && body.isNotEmpty()) write("${RunSettings.notSaved} — ") { api.updateIntegration(id, body, revision(doc) + body) } },
@@ -495,7 +498,11 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                     else write("${RunSettings.notSaved} — ") { api.authorize(id, body) }
                 },
                 stepConcurrency = { stepConcurrency(it) },
-                pause = { next -> write("${if (next) RunSettings.notPaused else RunSettings.notResumed} — ") { api.pause(id, next, revision(doc)) } })
+                pause = { next -> write("${if (next) RunSettings.notPaused else RunSettings.notResumed} — ") { api.pause(id, next, revision(doc)) } },
+                // Read at the press: a merge still live asks before the agent takes over. One that cannot be read asks too.
+                mergeLive = {
+                    try { RunSettings.mergeLive(api.currentPromotion(id)) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { true }
+                })
         }
         doc.text("goal")?.trim()?.takeIf { it.isNotEmpty() }?.let { goal -> item(key = "goal") { SectionHead("Goal"); Folded(goal, 132, link) } }
         state.graph?.takeIf { it.objects("marks").isNotEmpty() }?.let { graph -> item(key = "graph") {
@@ -577,6 +584,21 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             confirmButton = { TextButton(onClick = { dialog = null; replaceCoordinator() }, enabled = enabled, modifier = Modifier.testTag("project-replace-confirm")) {
                 Text(ProjectPage.replaceCoordinatorConfirm, color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text(ProjectPage.replaceCoordinatorKeep) } })
+        ProjectDialog.Change -> CoordinatorChangeSheet(api, state.coordinator?.obj("coordination")?.text("workspaceId"), close = { dialog = null }) { row ->
+            dialog = ProjectDialog.ChangeConfirm(row.workspaceId, row.name)
+        }
+        is ProjectDialog.ChangeConfirm -> {
+            val outgoing = CoordinatorChange.outgoing(state.coordinator)
+            AlertDialog(onDismissRequest = { dialog = null }, title = { Text(CoordinatorChange.title(doc.text("title") ?: "this project", current.name)) },
+                text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CoordinatorChange.paragraphs(current.name, state.coordinator?.obj("coordination")?.text("workspaceName"), outgoing).forEach { Text(it) }
+                } },
+                confirmButton = { TextButton(onClick = { dialog = null; replaceCoordinator(current.workspaceId) }, enabled = enabled,
+                    modifier = Modifier.testTag("project-change-confirm")) {
+                    Text(CoordinatorChange.action(current.name, outgoing),
+                        color = if (outgoing == CoordinatorChange.Outgoing.OPEN) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) } },
+                dismissButton = { TextButton(onClick = { dialog = null }) { Text(CoordinatorChange.cancel) } })
+        }
         is ProjectDialog.Resolve -> {
             var reason by remember(current.blocker.text("id")) { mutableStateOf("") }
             AlertDialog(onDismissRequest = { dialog = null }, title = { Text(ProjectPage.resolveBlockerTitle(current.blocker)) },
@@ -961,7 +983,8 @@ internal fun LandingJobsList(lines: List<LandingJobLine>, retry: suspend (String
     }
 }
 
-private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, openCoordinator: () -> Unit, replace: (Boolean) -> Unit) {
+private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, openCoordinator: () -> Unit, replace: (Boolean) -> Unit,
+    change: () -> Unit) {
     val status = state.coordinator ?: return
     val pill = ProjectPage.coordinatorPill(status)
     val coordination = status.obj("coordination") ?: JsonObject(emptyMap())
@@ -999,6 +1022,8 @@ private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonO
                         FilledTonalButton(onClick = { more = true }, enabled = enabled, contentPadding = PaddingValues(horizontal = 12.dp),
                             modifier = Modifier.testTag("project-coordinator-more").semantics { contentDescription = "More coordinator actions" }) { Text("▾") }
                         DropdownMenu(more, { more = false }) {
+                            DropdownMenuItem(text = { Text(CoordinatorChange.button) }, onClick = { more = false; change() },
+                                modifier = Modifier.testTag("project-coordinator-change"))
                             DropdownMenuItem(text = { Column(Modifier.widthIn(max = 300.dp)) {
                                 Text(ProjectPage.startNewCoordinator)
                                 Text(ProjectPage.startNewCoordinatorDetail(finished), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

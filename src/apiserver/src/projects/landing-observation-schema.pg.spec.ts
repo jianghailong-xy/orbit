@@ -731,8 +731,17 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
     const applied0453 = await shape(sql);
 
     await t.test('the result is the schema a database migrated from empty has', async () => {
-      assert.deepEqual(applied0453, await shape(caseClient),
-        'the tables 0453 alters differ between a database migrated over data and one migrated from empty');
+      // 0508 and 0513 extend the codebase and job after 0453. Compare at that frontier,
+      // then restore 0453 so the next assertion still proves its own replay is unchanged.
+      await sql.query('BEGIN');
+      try {
+        await sql.query(readFileSync(path.join(MIGRATIONS, '0508_project_landing_check', 'migration.sql'), 'utf8'));
+        await sql.query(readFileSync(path.join(MIGRATIONS, '0513_integration_baseline_red', 'migration.sql'), 'utf8'));
+        assert.deepEqual(await shape(sql), await shape(caseClient),
+          'the tables 0453 alters differ between a database migrated over data and one migrated from empty');
+      } finally {
+        await sql.query('ROLLBACK');
+      }
     });
 
     await t.test('a second run changes neither the schema nor a row', async () => {

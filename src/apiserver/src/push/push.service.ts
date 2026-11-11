@@ -10,7 +10,7 @@ import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus, type DeviceToken } from '@prisma/client';
-import { AgentProvider, ENGINE_CLI_NAMES, uuidToBase62, type LoginEngine } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
@@ -596,7 +596,7 @@ export class PushService {
                   await recordRunNotify(tx, {
                     id: requestId, kind: 'RUN_NOTIFY', ownerId: input.ownerId, fromSessionId: input.sessionId!,
                     toSessionId: hold.coordinatorSessionId, turnId: turn.id, clientTurnId,
-                    requestPreview: input.message.trim().slice(0, 200), replyBy: dueAt,
+                    requestPreview: input.message.trim().slice(0, RUN_NOTICE_MESSAGE_MAX), replyBy: dueAt,
                   });
                 } },
               );
@@ -1172,6 +1172,36 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki memory writes notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * The owner's one alert that maintenance runs keep finding a repository somebody has to set right — another
+   * repository's folder, or a credential the remote refused (wiki contract `maintenance.health.notifyRepository`): the
+   * failing alert's kind and thread, so it opens the same space, in the reason's own words.
+   */
+  async notifyWikiRepositoryAttention(input: { ownerId: string; spaceId: string; title: string; runs: number; detail: string }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const { tokens, feishu } = await this.channels(input.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const detail = input.detail.split('\n', 1)[0]!.trim();
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: `Wiki code checks paused for ${input.runs} runs`,
+            body: `${input.title}: ${detail.length > 160 ? `${detail.slice(0, 159)}…` : detail}. Fix it in the wiki's Settings.`,
+          },
+          sound: 'default',
+          'thread-id': `wiki-${input.spaceId}`,
+        },
+        wikiSpaceID: input.spaceId,
+        kind: 'wiki-maintenance-failing',
+      });
+      this.background(this.feishuOfPush(feishu, body));
+      await this.deliver(tokens, body, 'alert', '10');
+    } catch (err) {
+      this.log.warn(`wiki repository notify failed: ${(err as Error).message}`);
     }
   }
 

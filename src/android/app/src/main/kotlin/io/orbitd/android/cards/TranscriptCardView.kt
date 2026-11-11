@@ -36,27 +36,20 @@ import kotlinx.serialization.json.JsonPrimitive
 @Composable
 internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, event: RunEvent? = null) {
     val ts = event?.ts
-    if (card.key.endsWith(":runQuestion")) {
-        val source = card.source
-        val pending = source.text("state") == "PENDING" && source.text("approvalStatus") == "PENDING"
-        Column(Modifier.fillMaxWidth().testTag("run-question-card").padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Run question", style = MaterialTheme.typography.labelMedium)
-            Text(source.text("taskTitle").orEmpty(), style = MaterialTheme.typography.titleSmall)
-            Text(if (pending) "Waiting for the coordinator" else "No longer waiting for the coordinator")
-            if (pending) Text("Reply by ${source.text("replyBy").orEmpty()}")
-            source.objects("questions").forEach { question ->
-                Text(question.text("question").orEmpty(), style = MaterialTheme.typography.titleSmall)
-                Text(if (question.flag("multiSelect")) "Choose any that apply" else "Choose one")
-                question.objects("options").forEach { option ->
-                    Text("• ${option.text("label").orEmpty()}${option.text("description")?.let { " — $it" }.orEmpty()}")
-                }
-            }
-        }
-        return
-    }
     // A review's two turns are drawn as their own cards (A08-1), not as a list of their fields.
     if (card.family == CardFamily.REVIEW && (card.key.endsWith(":confirmationReviewRequest") || card.key.endsWith(":confirmationReturn"))) {
         ReviewTurnCard(card, ts, open); return
+    }
+    // So are the owner's answers handed to the reviewer once they confirmed (contract §7 Q5): "You confirmed", never the reader's bubble.
+    if (card.family == CardFamily.REVIEW && card.key.endsWith(":confirmationAnswers")) {
+        val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
+        YouConfirmedCard(card, event, open, undelivered = delivery == "failed" || delivery == "unconfirmed"); return
+    }
+    // Five more of Orbit's own turns (docs/mocks/orbit-turn-cards/): Evidence to review, Evidence sent back, a task run's question and
+    // notice, and the opening of a session Orbit opened — each its own card, never a list of its fields or the reader's bubble.
+    if (isOrbitTurnCard(card)) {
+        val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
+        OrbitTurnCardView(card, event, open, undelivered = delivery == "failed" || delivery == "unconfirmed"); return
     }
     // A background job's news or a wakeup coming due is a line in the agent's stream (A08-11), not a card of fields.
     if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":wake")) {

@@ -1,8 +1,13 @@
-import type { RunQuestion } from './lib/runQuestion';
 import type { MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
 import type {
   BgShell,
+  ConfirmationAnswersCard,
   ConfirmationReturnCard,
+  EvidenceReviewCard,
+  EvidenceSendBackCard,
+  RunNoticeCard,
+  RunQuestionCard,
+  SessionOpeningCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
   ConversationTurnKind,
@@ -779,7 +784,13 @@ export interface TurnCards {
    *  the run (docs/owner-confirmation-review-contract.md §2 D7, §8 B3). Orbit's turns. */
   confirmationReviewRequest?: ConfirmationReviewRequestCard;
   confirmationReturn?: ConfirmationReturnCard;
-  runQuestion?: RunQuestion;
+  /** The owner's answers handed to the reviewer once they confirmed (§7 Q5). Orbit's turn. */
+  confirmationAnswers?: ConfirmationAnswersCard;
+  /** Five more of Orbit's own turns (docs/mocks/orbit-turn-cards/): Orbit's, never the reader's words. */
+  evidenceReview?: EvidenceReviewCard;
+  evidenceSendBack?: EvidenceSendBackCard;
+  runQuestion?: RunQuestionCard;
+  runNotice?: RunNoticeCard;
   /** Another Orbit session's message (`SessionMessageCard`): who sent it, as the runner's echo will
    *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
    *  sent. */

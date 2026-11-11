@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { uuidToBase62, type RunNoticeCard } from '@orbit/shared';
 import { attribute, readBlockSender } from './session-message';
 
 export const RUN_NOTIFY_TURN_PREFIX = 'run-notify:v1:';
@@ -40,4 +40,31 @@ export async function runNotifyContent(
 /** M3: called only while createTurn holds the recipient session lock. */
 export async function recordRunNotify(tx: Prisma.TransactionClient, data: Prisma.SessionRequestUncheckedCreateInput): Promise<void> {
   await tx.sessionRequest.create({ data });
+}
+
+/** The "Notice from a task run" card a run-notify turn's echo and its queued row carry. */
+export async function readRunNoticeCard(
+  db: Prisma.TransactionClient,
+  recipientSessionId: string,
+  key: string | null | undefined,
+): Promise<RunNoticeCard | null> {
+  if (!isRunNotifyTurn(key)) return null;
+  const id = key!.slice(RUN_NOTIFY_TURN_PREFIX.length).split(':')[0];
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const request = await db.sessionRequest.findFirst({
+    where: { id, toSessionId: recipientSessionId, kind: 'RUN_NOTIFY' },
+  });
+  if (!request) return null;
+  const run = await db.session.findFirst({
+    where: { id: request.fromSessionId, ownerId: request.ownerId },
+    select: { task: { select: { id: true, title: true } } },
+  });
+  return {
+    requestId: request.id,
+    taskId: run?.task?.id ?? null,
+    taskTitle: run?.task?.title ?? '',
+    runSessionId: request.fromSessionId,
+    message: request.requestPreview,
+    state: request.state,
+  };
 }

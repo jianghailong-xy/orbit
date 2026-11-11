@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { uuidToBase62, type RunQuestionCard } from '@orbit/shared';
 import { orchestrationEnabled } from '../common/orchestration-switch';
 import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coordinator-evidence-queue';
 import { conversationIsOver } from '../projects/project-open-item';
@@ -139,14 +139,20 @@ export async function questionsWithCoordinator(db: Db, sessionIds: string[]) {
   return result;
 }
 
-export async function readRunQuestionCard(db: Db, key: string) {
+export async function readRunQuestionCard(db: Db, key: string): Promise<RunQuestionCard | null> {
   const approvalId = questionApprovalId(key);
   if (!approvalId) return null;
   const request = await db.sessionRequest.findFirst({ where: { kind: 'RUN_QUESTION', approvalId } });
   const approval = await db.approval.findUnique({ where: { id: approvalId } });
   if (!request || !approval) return null;
   const run = await db.session.findUnique({ where: { id: request.fromSessionId }, select: { taskId: true, task: { select: { title: true } } } });
+  // Answered once the card is no longer PENDING with picks recorded: by this coordinator when its
+  // reply wrote them (`decidedCredentialKind = COORDINATOR`), by the account owner otherwise.
+  const answered = approval.status === 'ALLOWED' && approval.answers != null;
   return { requestId: request.id, approvalId, taskId: run?.taskId ?? null, taskTitle: run?.task?.title ?? '',
     runSessionId: request.fromSessionId, replyBy: request.replyBy.toISOString(), state: request.state,
-    questions: (approval.input as Prisma.JsonObject).questions ?? [], approvalStatus: approval.status };
+    questions: ((approval.input as Prisma.JsonObject).questions ?? []) as unknown as RunQuestionCard['questions'],
+    approvalStatus: approval.status,
+    answers: answered ? approval.answers as Record<string, string[]> : null,
+    answeredBy: answered ? (approval.decidedCredentialKind === 'COORDINATOR' ? 'SESSION' : 'OWNER') : null };
 }

@@ -95,7 +95,7 @@ struct SessionMoveTargetPage: View {
                     .disabled(phase != nil)
             }
         }
-        .alert(SessionMoveCopy.confirmTitle(current), isPresented: confirming, presenting: picked) { pick in
+        .alert(SessionMoveCopy.confirmTitle(current, answer), isPresented: confirming, presenting: picked) { pick in
             Button(SessionMoveCopy.cancel, role: .cancel) {}
             Button(SessionMoveCopy.confirmAction(answer)) { move(pick) }
                 .keyboardShortcut(.defaultAction)

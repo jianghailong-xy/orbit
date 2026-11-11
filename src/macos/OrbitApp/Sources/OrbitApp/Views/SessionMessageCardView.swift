@@ -26,27 +26,29 @@ struct SessionMessageCardView: View {
     /// taken it. Withdrawing hands none of it back to the composer: the words are the sending
     /// session's, not the reader's (`ComposerLogic.restorableText`).
     var onCancelQueued: (() -> Void)? = nil
+    /// A record link or a search hit asked for this turn: a folded message opens to show it.
+    var revealed: Bool = false
 
     @Environment(\.openURL) private var openURL
     @State private var expanded = false
-    /// Collapse a giant message past this many characters, as the owner's own bubble does: one huge
-    /// Text lays out synchronously and stalls the console.
-    private let truncateAt = 6000
+    /// The body's full height and one line of its font, measured as drawn: a message taller than
+    /// `SessionMessageCard.clampFrom` lines shows its first `clampLines` until "Show more" (web parity:
+    /// `SessionMessageCard.tsx`, measured rather than counted, which replaced a 6,000-character cut).
+    @State private var bodyHeight: CGFloat = 0
+    @State private var lineHeight: CGFloat = 0
 
     private var queued: Bool { onCancelQueued != nil }
+    private var tall: Bool { SessionMessageCard.folds(height: bodyHeight, lineHeight: lineHeight) }
+    private var clamped: Bool { tall && !expanded && !revealed }
 
     var body: some View {
-        let long = text.count > truncateAt
-        let shown = long && !expanded ? String(text.prefix(truncateAt)) : text
         VStack(alignment: .leading, spacing: 6) {
             head
-            if !shown.isEmpty {
-                MarkdownView(source: shown, base: .body, ink: .primary)
-                    .font(.orbitProse)
-                    .textSelection(.enabled)
+            if !text.isEmpty {
+                messageBody
             }
-            if long {
-                Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
+            if tall && !revealed {
+                Button(expanded ? SessionMessageCard.showLess : SessionMessageCard.showMore) { expanded.toggle() }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
             }
             foot
@@ -72,6 +74,38 @@ struct SessionMessageCardView: View {
                 .tint.opacity(0.28),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+    }
+
+    /// The sending agent's words: whole, or their first lines fading out while the message is folded.
+    /// The text is laid out at its full height and measured there, then clipped, so opening it moves
+    /// nothing but the foot.
+    private var messageBody: some View {
+        MarkdownView(source: text, base: .body, ink: .primary)
+            .font(.orbitProse)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: SessionMessageBodyHeightKey.self, value: proxy.size.height)
+            })
+            .background(alignment: .topLeading) {
+                // One line of the body's font, never shown: what "a line" is on this device and size.
+                Text(verbatim: "Ag").font(.orbitProse).fixedSize().hidden()
+                    .background(GeometryReader { proxy in
+                        Color.clear.preference(key: SessionMessageLineHeightKey.self, value: proxy.size.height)
+                    })
+            }
+            .onPreferenceChange(SessionMessageBodyHeightKey.self) { bodyHeight = $0 }
+            .onPreferenceChange(SessionMessageLineHeightKey.self) { lineHeight = $0 }
+            .frame(maxHeight: clamped ? lineHeight * CGFloat(SessionMessageCard.clampLines) : nil, alignment: .top)
+            .clipped()
+            .mask {
+                if clamped {
+                    LinearGradient(stops: [.init(color: .black, location: 0.7), .init(color: .clear, location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                } else {
+                    Rectangle()
+                }
+            }
     }
 
     /// The queue's own line while the message waits behind a running turn: how it stands, and Cancel.
@@ -132,4 +166,16 @@ struct SessionMessageCardView: View {
             }
         }
     }
+}
+
+/// The message body's full height, as laid out before it is clipped.
+private struct SessionMessageBodyHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// One line of the body's font.
+private struct SessionMessageLineHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

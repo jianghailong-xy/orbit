@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>过长的会话消息卡片：收起与展开</title>
+<style>
+  body { margin: 0; background: #eceef2; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', sans-serif; color: #1d2330; }
+  .board { width: 2240px; padding: 48px; box-sizing: border-box; background: #eceef2; }
+  h1 { font-size: 34px; margin: 0 0 8px; }
+  .sub { font-size: 17px; color: #5b6475; margin-bottom: 28px; line-height: 1.6; }
+  .row { display: flex; gap: 24px; align-items: flex-start; margin-bottom: 32px; }
+  .frame { background: #fff; border-radius: 14px; padding: 18px 18px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .frame h2 { font-size: 19px; margin: 0 0 4px; }
+  .frame .cap { font-size: 14px; color: #5b6475; margin: 0 0 12px; line-height: 1.55; max-width: 540px; }
+  .frame img { display: block; border: 1px solid #e3e6eb; border-radius: 8px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; vertical-align: 2px; }
+  .t-now { background: #fde8e8; color: #b42318; } .t-new { background: #e3f0ff; color: #1757c2; }
+  .panel { background: #fff; border-radius: 14px; padding: 22px 26px; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 15px; line-height: 1.65; }
+  .panel h2 { font-size: 20px; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid #e8eaee; }
+  th { color: #5b6475; font-weight: 600; background: #f6f7f9; }
+  code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; background: #f1f3f6; padding: 1px 5px; border-radius: 4px; }
+  .q { background: #fff8e6; border: 1px solid #f3d27a; border-radius: 10px; padding: 14px 18px; }
+  .q b { color: #8a5a00; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>过长的会话消息卡片 · 按高度收起，点一下展开</h1>
+  <div class="sub">
+    现在：其他会话发来的消息卡片只有超过 <b>6000 个字符</b>才会截断（“Show N more characters”）。真实消息大多 500–3000 字，却有 10–40 行：Runner 链路加固协调会话里 25 条这类消息，19 条超过 12 行，3 条超过 140 行。你截图里那条约 2200 字，整张卡片一屏都放不下。<br>
+    方案：改为<b>按高度</b>收起，只显示前 8 行左右，底部渐隐，下面一个 “Show more”；展开后变 “Show less”。截图来自真实 Web 控制台，回放的是这个协调会话的真实记录（卡片已是靠左的新布局）。
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2><span class="tag t-now">① 现在</span>整条展开</h2>
+      <p class="cap">卡片正文约 1050 px 高，桌面上一屏装不下；协调者对它的回复被推到下一屏。</p>
+      <img src="shots/today.png" width="540">
+    </div>
+    <div class="frame">
+      <h2><span class="tag t-new">② 方案</span>收起：前 8 行 + 渐隐 + Show more</h2>
+      <p class="cap">来源、发信任务、开头几行（通常就是这条消息要说的事）都还在；下面紧接着就是协调者的回复，一屏看完“谁说了什么 → 怎么处理的”。</p>
+      <img src="shots/clamped.png" width="540">
+    </div>
+    <div class="frame">
+      <h2><span class="tag t-new">③ 方案</span>点开：全文 + Show less</h2>
+      <p class="cap">和现在完全一样的全文；“Show less” 收回去。</p>
+      <img src="shots/expanded.png" width="540">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <h2>手机</h2>
+      <p class="cap">左：现在（正文约 1740 px，三屏多）　右：方案（收起后一屏内）</p>
+      <div style="display:flex; gap:12px"><img src="shots/today-phone.png" width="300"><img src="shots/clamped-phone.png" width="300"></div>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:24px;">
+      <div class="panel">
+        <h2>规则</h2>
+        <table>
+          <tr><th style="width:30%">情况</th><th>怎么画</th></tr>
+          <tr><td>正文超过约 12 行</td><td>收起到约 8 行，底部渐隐，下面 <code>Show more</code>。没被截掉的消息不出现按钮。</td></tr>
+          <tr><td>展开后</td><td>全文 + <code>Show less</code>；展开状态只在本页面保留，刷新后恢复收起。</td></tr>
+          <tr><td>⌘F 搜到收起部分里的字</td><td>自动展开到能看见（和折叠行、步骤行一样）。</td></tr>
+          <tr><td>导出 / 分享链接的静态页</td><td>全文，不收起。</td></tr>
+          <tr><td>现有的 6000 字截断</td><td>去掉，由按高度收起代替（超长消息也只是收起，不再按字数砍）。</td></tr>
+          <tr><td>卡片头部、来源、“Sent by another Orbit session”</td><td>不动，永远可见。</td></tr>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>改动范围</h2>
+        <ul style="margin:0; padding-left:20px">
+          <li>Web：<code>SessionMessageCard.tsx</code>（按高度判断是否截掉，<code>ResizeObserver</code>）、<code>index.css</code>、⌘F 展开、测试。</li>
+          <li>iOS / macOS、Android：同样的规则和文案。</li>
+          <li>不改服务端。</li>
+        </ul>
+      </div>
+      <div class="q">
+        <b>待你定</b>
+        <ol style="margin:6px 0 0; padding-left:20px;">
+          <li><b>收起后显示几行？</b>推荐 8 行（如图）。</li>
+          <li><b>还有哪些卡片要一起做？</b>推荐先只做“其他会话发来的消息”——这类最长、最常见。任务开工卡片（任务说明）也可能很长，可以一起做；例外项卡片已经自带“Show N more files”和收起的原文，不需要。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

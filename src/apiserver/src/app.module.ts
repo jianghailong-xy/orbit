@@ -40,6 +40,7 @@ import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
 import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
 import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
@@ -86,6 +87,8 @@ import { FeishuActionsModule } from './feishu/feishu-actions.module';
     // Each account's own Feishu (Lark) app, and the administrators' switch for them (docs/feishu-bot-design.md).
     FeishuModule,
     FeishuActionsModule,
+    // Outgoing email: Admin → Email and the welcome-email outbox worker (docs/welcome-email-design.md).
+    EmailModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

@@ -136,6 +136,10 @@ export const MOVE_COPY = {
   ending: 'Ending the session…',
   moving: 'Moving…',
   endTimedOut: 'The session hasn’t finished ending, so it wasn’t moved. Try again once it has ended.',
+  /** After the session's title when it is a project's coordinator. */
+  coordinatorOf: (project: string) => `Coordinator of ${project}`,
+  /** Under Move to Another Workspace for a project's coordinator. */
+  coordinatorMoves: 'The project’s coordinator moves with it.',
 } as const;
 
 /** Why a request failed, in a clause: the server's own sentence when it gave one. */
@@ -232,7 +236,8 @@ export const moveTargetFooter = (target: SessionMoveTarget): string => {
   return sentences.join(' ');
 };
 
-export const moveConfirmTitle = (target: SessionMoveTarget): string => `Move to ${target.name}?`;
+export const moveConfirmTitle = (target: SessionMoveTarget, answer?: SessionMoveTargets): string =>
+  answer?.coordinates ? `Move the coordinator to ${target.name}?` : `Move to ${target.name}?`;
 
 /** The confirmation's paragraphs (§5.3): the conversation goes, the agent's memory of it is
  *  summarized when another runner rebuilds it, the changes stay on their branch in the old
@@ -246,20 +251,35 @@ export const moveConfirmParagraphs = (
   if (target.conversation === 'rebuilt') {
     paragraphs.push('Earlier parts of the conversation are summarized for the agent.');
   }
-  if (answer.branch && answer.changedFiles > 0) {
-    const unmerged = answer.unmergedFiles;
-    if (unmerged > 0) {
-      const files = unmerged === 1 ? '1 changed file isn’t' : `${unmerged} changed files aren’t`;
-      const they = unmerged === 1 ? 'It stays' : 'They stay';
-      paragraphs.push(
-        `${files} merged into ${answer.mergeTarget ?? 'main'} yet. ${they} on branch ${answer.branch} in ${fromWorkspace}.`,
-      );
-    } else {
-      paragraphs.push(`Changes made so far stay on branch ${answer.branch} in ${fromWorkspace}.`);
-    }
+  // A project's coordinator takes its project along (the server writes both in one transaction).
+  if (answer.coordinates) {
+    paragraphs.push(
+      `${answer.coordinates.title} is coordinated from ${target.name} from now on, and its row moves to ${target.name}’s list. Its tasks keep running where they are.`,
+    );
   }
-  if (answer.needsEnd) paragraphs.push('The session ends first.');
+  const files = moveFilesSentence(answer, fromWorkspace);
+  if (files) paragraphs.push(files);
+  if (answer.needsEnd) {
+    // An ended coordinator is not handed Orbit's updates (it is never revived for them): they wait
+    // on the project page until someone messages it again.
+    paragraphs.push(
+      answer.coordinates
+        ? 'The session ends first. Until you message it again, Orbit’s updates for the project wait on the project page.'
+        : 'The session ends first.',
+    );
+  }
   return paragraphs;
+};
+
+/** What becomes of the changes the session made: how many aren't merged yet, on which branch, in
+ *  which workspace. Null when the session changed nothing on a branch. */
+export const moveFilesSentence = (answer: SessionMoveTargets, fromWorkspace: string): string | null => {
+  if (!answer.branch || answer.changedFiles <= 0) return null;
+  const unmerged = answer.unmergedFiles;
+  if (unmerged <= 0) return `Changes made so far stay on branch ${answer.branch} in ${fromWorkspace}.`;
+  const files = unmerged === 1 ? '1 changed file isn’t' : `${unmerged} changed files aren’t`;
+  const they = unmerged === 1 ? 'It stays' : 'They stay';
+  return `${files} merged into ${answer.mergeTarget ?? 'main'} yet. ${they} on branch ${answer.branch} in ${fromWorkspace}.`;
 };
 
 /** End and Move for a session that has to be ended first. */

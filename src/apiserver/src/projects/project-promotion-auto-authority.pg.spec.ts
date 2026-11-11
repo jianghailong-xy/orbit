@@ -51,6 +51,12 @@ import {
   promotionDedupeKey,
   promotionOnPass,
 } from './project-promotion';
+import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectsService } from './projects.service';
+import { criterionKeyOf } from './project-acceptance';
+import { readDerivedProjectDoneReading } from './project-done-derived';
+import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
+import { HttpException } from '@nestjs/common';
 import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
@@ -215,6 +221,8 @@ interface World {
   runnerId: string;
   workspaceId: string;
   projectId: string;
+  coordinatorSessionId: string;
+  requestPromotions: boolean;
   /** What this world's runner declares on every heartbeat. */
   capabilities: string[];
   repoUrl: string;
@@ -231,6 +239,7 @@ async function world(
   options: {
     line: 'PROJECT_BRANCH' | 'MAIN';
     automatic: boolean;
+    requestPromotions?: boolean;
     capabilities?: string[];
     /** Two worlds sharing one repository and ref are one integration queue (J1). */
     repoUrl?: string;
@@ -315,7 +324,8 @@ async function world(
     settings: { line: options.line },
   }));
   return {
-    label, ownerId, runnerId, workspaceId, projectId, capabilities,
+    label, ownerId, runnerId, workspaceId, projectId, capabilities, coordinatorSessionId,
+    requestPromotions: options.requestPromotions ?? true,
     repoUrl: options.repoUrl ?? `https://git.invalid/orbit/${label}.git`,
   };
 }
@@ -325,11 +335,12 @@ async function world(
  * doors: the work turn answered and completed, the acceptance command queued and passed. Its DONE
  * is what queues its integration (§2.3 J-T1a) — a landing on a project branch, a candidate on main.
  */
-async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ taskId: string; sessionId: string }> {
+async function doneCodeTask(stack: Stack, w: World, label: string, criterionKey?: string): Promise<{ taskId: string; sessionId: string }> {
   const db = stack.db;
   const title = `${label} ${randomUUID().slice(0, 8)}`;
   const declared = await stack.tasks.create(w.ownerId, {
     title,
+    criterionKey,
     assigneeId: w.workspaceId,
     projectId: w.projectId,
     acceptanceCommand: 'exit 0',
@@ -407,12 +418,18 @@ function heartbeat(stack: Stack, w: World, capabilities: string[] = w.capabiliti
 }
 
 /** The result a runner posts for a job it holds, over the route it posts it on. */
-function report(
+async function report(
   stack: Stack,
   w: World,
   job: IntegrationJobCommand,
   result: Omit<IntegrationJobResultRequest, 'claimGeneration' | 'leaseOwner'>,
 ) {
+  // These existing scenarios test M-T11 and its later transitions. Explicitly request each
+  // project-branch candidate under K7, so their original authorization assertions stay intact.
+  if (job.kind === 'LAND_TASK' && w.requestPromotions) {
+    await stack.promotions.requestPromotion(w.ownerId, w.projectId, w.coordinatorSessionId,
+      'Exercise the existing promotion authorization scenario before all project criteria are met.');
+  }
   return stack.api.integrationJobResult({ id: w.runnerId }, job.jobId, {
     claimGeneration: job.claimGeneration,
     leaseOwner: job.leaseOwner,
@@ -1544,3 +1561,96 @@ test('(f) upstreamMovedCommits: outsideQueue for what the queue did not land, th
       await stack.db.$disconnect();
     }
   });
+
+// K7 uses the same landing result door and Automatic state machine as the scenarios above.
+test('K7: no request and unmet criteria leave a terminal landing without a candidate; an explicit request is consumed once', { skip }, async (t) => {
+  const stack = await connect(); t.after(() => stack.db.$disconnect());
+  const w = await world(stack, 'k7-request', { line: 'PROJECT_BRANCH', automatic: true, requestPromotions: false });
+  const projects = new ProjectsService(stack.db as unknown as PrismaService);
+  await projects.update(w.ownerId, w.projectId, { acceptanceCriteriaItems: [{ text: 'Unfinished criterion', verificationMethod: 'Verify the remaining work.' }] } as never);
+  await doneCodeTask(stack, w, 'k7-work');
+  const landing = await onlyClaim(stack, w, 'LAND_TASK');
+  await report(stack, w, landing, { state: 'LANDED', phase: 'VERIFY', sourceSha: TASK_BRANCH_TIP,
+   targetShaBefore: LINE_BEFORE, testedSha: LANDED_ON_LINE, testedTreeSha: LANDED_TREE,
+   landedSha: LANDED_ON_LINE, landedTreeSha: LANDED_TREE, aheadOfUpstream: 1 });
+  assert.equal(await stack.db.projectPromotion.count({ where: { projectId: w.projectId } }), 0);
+  const requested = await stack.promotions.requestPromotion(w.ownerId, w.projectId, w.coordinatorSessionId, '  Ship the baseline repair now.  ');
+  assert.ok(requested.promotionId);
+  const request = await stack.db.projectPromotionRequest.findUniqueOrThrow({ where: { id: requested.promotionRequestId } });
+  assert.equal(request.reason, 'Ship the baseline repair now.');
+  assert.equal(request.consumedByPromotionId, requested.promotionId);
+  assert.equal(await stack.promotions.considerCandidate(w.projectId), null);
+  const check = await onlyClaim(stack, w, 'CHECK_PROMOTION');
+  await report(stack, w, check, cleanCheck());
+  assert.equal((await promotionOf(stack.db, w.projectId)).confirmedAutomatically, true);
+  const automaticLanding = await onlyClaim(stack, w, 'LAND_PROMOTION');
+  await report(stack, w, automaticLanding, { state: 'LANDED', phase: 'VERIFY', sourceSha: LANDED_ON_LINE,
+   targetShaBefore: MAIN_CHECKED, upstreamSha: MAIN_CHECKED, testedSha: MERGE_COMMIT,
+   testedTreeSha: CHECKED_TREE, landedSha: MERGE_COMMIT, landedTreeSha: CHECKED_TREE, aheadOfUpstream: 2 });
+  assert.equal((await promotionOf(stack.db, w.projectId)).state, 'MERGED');
+  // A later terminal landing cannot reuse the consumed request, even after M-F4 runs.
+  await doneCodeTask(stack, w, 'k7-next-work');
+  const next = await onlyClaim(stack, w, 'LAND_TASK');
+  await report(stack, w, next, { state: 'LANDED', phase: 'VERIFY', sourceSha: 'e'.repeat(40),
+   targetShaBefore: LANDED_ON_LINE, testedSha: 'f'.repeat(40), testedTreeSha: LANDED_TREE,
+   landedSha: 'f'.repeat(40), landedTreeSha: LANDED_TREE, aheadOfUpstream: 1 });
+  assert.equal(await stack.db.projectPromotion.count({ where: { projectId: w.projectId } }), 1);
+  assert.deepEqual(await heartbeat(stack, w), []);
+
+  assert.equal(await stack.db.projectPromotionRequest.count({ where: { projectId: w.projectId, consumedByPromotionId: null } }), 0);
+});
+
+test('K7 request runner door: missing or different session is 403; blank or oversized reason is 400', { skip }, async (t) => {
+  const stack = await connect(); t.after(() => stack.db.$disconnect());
+  const w = await world(stack, 'k7-authority', { line: 'PROJECT_BRANCH', automatic: false, requestPromotions: false });
+  const controller = new RunnerProjectsController({} as never, {} as never, {} as never, {} as never,
+   {} as never, undefined, undefined, stack.promotions);
+  for (const [session, reason, status] of [[undefined, 'Ship it', 403], ['', 'Ship it', 403], [randomUUID(), 'Ship it', 403],
+   [w.coordinatorSessionId, '  \n ', 400], [w.coordinatorSessionId, 'x'.repeat(2001), 400]] as const) {
+   await assert.rejects(controller.requestPromotion({ ownerId: w.ownerId } as never, session, w.projectId, { reason }),
+    (error: unknown) => error instanceof HttpException && error.getStatus() === status
+      && (error.getResponse() as { code?: string }).code === (status === 403
+        ? 'INTEGRATION_REQUEST_PROMOTION_COORDINATOR_ONLY' : 'INTEGRATION_REQUEST_PROMOTION_REASON_REQUIRED'));
+  }
+  assert.equal(await stack.db.projectPromotionRequest.count({ where: { projectId: w.projectId } }), 0);
+  const pending = await controller.requestPromotion({ ownerId: w.ownerId } as never, w.coordinatorSessionId, w.projectId, { reason: 'x'.repeat(2000) });
+  assert.equal(pending.promotionId, null);
+  assert.equal(await stack.db.projectPromotionRequest.count({ where: { projectId: w.projectId, consumedByPromotionId: null } }), 1);
+  await doneCodeTask(stack, w, 'k7-pending-request');
+  const landing = await onlyClaim(stack, w, 'LAND_TASK');
+  await report(stack, w, landing, { state: 'LANDED', phase: 'VERIFY', sourceSha: TASK_BRANCH_TIP,
+   targetShaBefore: LINE_BEFORE, testedSha: LANDED_ON_LINE, testedTreeSha: LANDED_TREE,
+   landedSha: LANDED_ON_LINE, landedTreeSha: LANDED_TREE, aheadOfUpstream: 1 });
+  const consumed = await stack.db.projectPromotionRequest.findUniqueOrThrow({ where: { id: pending.promotionRequestId } });
+  assert.equal(consumed.consumedByPromotionId, (await promotionOf(stack.db, w.projectId)).id);
+  assert.equal(await stack.promotions.considerCandidate(w.projectId), null);
+});
+
+test('K7: all criteria satisfied with only CRITERION_UNLANDED creates a candidate and preserves Automatic', { skip }, async (t) => {
+  const stack = await connect(); t.after(() => stack.db.$disconnect());
+  const w = await world(stack, 'k7-criteria', { line: 'PROJECT_BRANCH', automatic: true, requestPromotions: false });
+  const prisma = stack.db as unknown as PrismaService;
+  const acceptance = new ProjectAcceptanceService(prisma);
+  const projects = new ProjectsService(prisma, acceptance);
+  await projects.update(w.ownerId, w.projectId, { acceptanceCriteriaItems: [{ text: 'The change works', verificationMethod: 'Run its executable acceptance command.' }] } as never);
+  const standing = await acceptance.standardSetConfirmation(w.ownerId, w.projectId);
+  await acceptance.confirmStandardSet(w.ownerId, w.projectId, { criteriaDigest: standing.currentVersion.digest });
+  const definition = await stack.db.projectAcceptanceCriterionDefinition.findFirstOrThrow({ where: { projectId: w.projectId } });
+  await doneCodeTask(stack, w, 'k7-satisfied', criterionKeyOf(definition.id));
+  const landing = await onlyClaim(stack, w, 'LAND_TASK');
+  await report(stack, w, landing, { state: 'LANDED', phase: 'VERIFY', sourceSha: TASK_BRANCH_TIP,
+   targetShaBefore: LINE_BEFORE, testedSha: LANDED_ON_LINE, testedTreeSha: LANDED_TREE,
+   landedSha: LANDED_ON_LINE, landedTreeSha: LANDED_TREE, aheadOfUpstream: 1 });
+  const reading = await readDerivedProjectDoneReading(stack.db, w.ownerId, w.projectId);
+  assert.deepEqual(reading.derived.withheld, ['CRITERION_UNLANDED']);
+  assert.ok(reading.derived.criteria.every((criterion) => criterion.satisfied));
+  const check = await onlyClaim(stack, w, 'CHECK_PROMOTION');
+  await report(stack, w, check, cleanCheck());
+  assert.equal((await promotionOf(stack.db, w.projectId)).confirmedAutomatically, true);
+  const automaticLanding = await onlyClaim(stack, w, 'LAND_PROMOTION');
+  await report(stack, w, automaticLanding, { state: 'LANDED', phase: 'VERIFY', sourceSha: LANDED_ON_LINE,
+   targetShaBefore: MAIN_CHECKED, upstreamSha: MAIN_CHECKED, testedSha: MERGE_COMMIT,
+   testedTreeSha: CHECKED_TREE, landedSha: MERGE_COMMIT, landedTreeSha: CHECKED_TREE, aheadOfUpstream: 2 });
+  assert.equal((await promotionOf(stack.db, w.projectId)).state, 'MERGED');
+  assert.equal(await stack.db.projectPromotionRequest.count({ where: { projectId: w.projectId } }), 0);
+});

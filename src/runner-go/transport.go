@@ -107,6 +107,8 @@ func init() {
 		sessionMoveCapabilityV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
+		wikiRepoOpFolderCapabilityV1,
+		wikiRepoOpProbeCapabilityV1,
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
@@ -1944,6 +1946,17 @@ func (t *Transport) observeIntegration(sessionID, id, reason string) (json.RawMe
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/integration/observe",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// requestPromotion records a K7 request as the project's current coordinator conversation.
+func (t *Transport) requestPromotion(sessionID, id, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/promotions/request",
 		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }

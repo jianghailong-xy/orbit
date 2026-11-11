@@ -1,7 +1,7 @@
 import SwiftUI
 import OrbitKit
 
-/// The two turns a confirmation review puts into a conversation, drawn as the cards they are rather
+/// The three turns a confirmation review puts into a conversation, drawn as the cards they are rather
 /// than as the reader's own bubble (docs/owner-confirmation-review-contract.md §2 D7, §8 B6) — web's
 /// `ConfirmationReviewTurnCards.tsx`. Nobody typed either: the words are a block Orbit wrote for the
 /// agent, which rides at the foot as the control plane's note (`attached`).
@@ -10,6 +10,8 @@ import OrbitKit
 ///    by when, and the way onto the run that reported (`Open task session`).
 ///  - In the RUN's conversation, `Sent back by the reviewer`: who sent the report back, why, and each
 ///    problem — the reviewer's words under the reviewer's name, never the owner's.
+///  - In the REVIEWER's conversation again, `You confirmed`: the owner's answers to the reviewer's
+///    questions, handed to it once the owner confirmed (§7 Q5). The block the agent read folds away.
 ///
 /// Built like `ProjectStartedCardView`, which sits in the same place for the same reason.
 struct ReviewRequestedCardView: View {
@@ -153,8 +155,99 @@ struct SentBackByReviewerCardView: View {
     }
 }
 
+struct YouConfirmedCardView: View {
+    let card: ConfirmationAnswersCard
+    /// The block the reviewer was handed — the turn's own words, folded at the foot.
+    let text: String
+    var undelivered: Bool = false
+    var attached: (kind: String, text: String)?
+    var onCancelQueued: (() -> Void)?
+
+    @Environment(\.openURL) private var openURL
+    @State private var showingRaw = false
+
+    private var queued: Bool { onCancelQueued != nil }
+    /// The owner confirmed the work: the green of a thing done.
+    private var tone: Color { .green }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.orbitMeta).foregroundStyle(tone)
+                Text(OwnerConfirmations.youConfirmed)
+                    .font(.orbitLabel.weight(.semibold)).foregroundStyle(tone)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                if let time = OwnerConfirmations.receiptTime(card.decidedAt) {
+                    Text(time).font(.orbitMeta).foregroundStyle(.secondary)
+                }
+            }
+            if let url = ConfirmationReviewTurnLinks.task(card.taskId) {
+                Button { openURL(url) } label: {
+                    Text(card.title)
+                        .font(.orbitProse.weight(.semibold))
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain).foregroundStyle(.tint)
+            } else {
+                Text(card.title)
+                    .font(.orbitProse.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Text(OwnerConfirmations.answersSentToReviewer)
+                .font(.orbitMeta).foregroundStyle(.secondary)
+            ForEach(Array(card.answers.enumerated()), id: \.offset) { _, answer in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(answer.question)
+                        .font(.orbitSubtext).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(answer.shown)
+                        .font(.orbitSubtext.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    if answer.notShown {
+                        Text(OwnerConfirmations.answerNotShown)
+                            .font(.orbitMeta).foregroundStyle(.orange)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if undelivered {
+                Text(SessionMessageCard.undelivered)
+                    .font(.orbitMeta).foregroundStyle(.orange)
+            }
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                DisclosureGroup(isExpanded: $showingRaw) {
+                    Text(text)
+                        .font(.orbitMono)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                } label: {
+                    Text(OwnerConfirmations.reviewerWasTold)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let attached { AttachedNoteEntry(attached: attached) }
+            if let onCancelQueued { ReviewTurnQueuedFoot(cancel: onCancelQueued) }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tone.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8).strokeBorder(
+                tone.opacity(0.30),
+                style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
+        )
+    }
+}
+
 /// The queue's own line at a card's foot, in the words a queued message already uses.
-private struct ReviewTurnQueuedFoot: View {
+struct ReviewTurnQueuedFoot: View {
     let cancel: () -> Void
 
     var body: some View {
@@ -166,31 +259,5 @@ private struct ReviewTurnQueuedFoot: View {
                 .foregroundStyle(.tint)
                 .contentShape(Rectangle())
         }
-    }
-}
-
-struct RunQuestionCardView: View {
-    let card: RunQuestionCard
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Run question").font(.orbitLabel.weight(.semibold))
-            Text(card.taskTitle).font(.orbitProse.weight(.semibold))
-            Text(card.pending ? "Waiting for the coordinator" : "No longer waiting for the coordinator")
-                .font(.orbitLabel).foregroundStyle(.secondary)
-            if card.pending {
-                Text("Reply by \(card.replyBy)").font(.orbitLabel).foregroundStyle(.secondary)
-            }
-            ForEach(Array(card.parsedQuestions.enumerated()), id: \.offset) { _, question in
-                Text(question.question).font(.orbitProse.weight(.semibold))
-                Text(question.multiSelect ? "Choose any that apply" : "Choose one").font(.orbitLabel)
-                ForEach(Array(question.options.enumerated()), id: \.offset) { _, option in
-                    Text("• \(option.label)\(option.description.map { " — \($0)" } ?? "")").font(.orbitProse)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
     }
 }

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider, notifyManager } from '@tanstack/react
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectIntegrationView } from '@orbit/shared';
+import type { ProjectIntegrationView, ProjectPromotionView, PromotionState } from '@orbit/shared';
 import { api, ApiError } from '../api';
 import {
   RUN_APPLIES_FROM_NEXT_TASK,
@@ -11,6 +11,7 @@ import {
   RUN_AUTOMATIC_HINT_PROJECT_BRANCH,
   RUN_ESCALATE_HINT,
   RUN_LINE_MAIN_HINT,
+  RUN_DELIVERY_ANCHOR,
   RUN_MERGE_CHECK_HINT,
   RUN_NO_MERGE_CHECK_WARNING,
   RUN_NOT_SAVED,
@@ -19,6 +20,7 @@ import {
   RUN_RESUME,
   RUN_SAVE,
   START_HOW_IT_RUNS,
+  runAutomaticHintMainNoDelivery,
   runLineLocked,
 } from '../lib/projectStart';
 import { ProjectRunSettings, type RunSettingsProject } from './ProjectRunSettings';
@@ -89,8 +91,10 @@ const projectOf = (over: Partial<RunSettingsProject> = {}): RunSettingsProject =
 
 const server: {
   view: ProjectIntegrationView;
+  /** The merge on offer (`GET /promotions/current`): null while none is. */
+  promotion: ProjectPromotionView | null;
   door: (method: string, path: string, body: unknown) => Promise<unknown>;
-} = { view: viewOf(), door: async () => ({}) };
+} = { view: viewOf(), promotion: null, door: async () => ({}) };
 const writes: Array<{ method: string; path: string; body: unknown }> = [];
 
 let root: Root | null = null;
@@ -99,6 +103,7 @@ let client: QueryClient | null = null;
 
 beforeEach(() => {
   server.view = viewOf();
+  server.promotion = null;
   server.door = async () => ({});
   writes.length = 0;
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -113,6 +118,7 @@ beforeEach(() => {
       return server.door(method, path, init?.body);
     }
     if (path === `/projects/${PROJECT}/integration`) return server.view;
+    if (path === `/projects/${PROJECT}/promotions/current`) return server.promotion;
     throw new Error(`nothing is stubbed at ${path}`);
   }) as unknown as typeof api);
 });
@@ -243,11 +249,24 @@ describe('How it runs — what the block says', () => {
     );
   });
 
-  it('says the merge half is always asked about on a project that lands on main', async () => {
-    server.view = viewOf({ line: 'MAIN', ref: 'main' });
+  it('says the merge half is always asked about on a project that lands on main, and how to skip it', async () => {
+    server.view = viewOf({ line: 'MAIN', ref: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
     const node = await mount();
     expect(settingRow(node, 'Automatic').textContent).toContain(RUN_AUTOMATIC_HINT_MAIN);
+    expect(RUN_AUTOMATIC_HINT_MAIN).toBe(
+      'The coordinator runs it for you: it decides when each task is done and handles conflicts and failed '
+      + 'checks. Merging into main always asks you — to skip that card, choose “The agent pushes it” under '
+      + 'Delivery. The criteria and anything irreversible stay yours.');
     expect(settingRow(node, 'Automatic').textContent).not.toContain(RUN_AUTOMATIC_HINT_PROJECT_BRANCH);
+  });
+
+  it('keeps the older sentence where the server reports no delivery mode: there is no Delivery to point to', async () => {
+    server.view = viewOf({ line: 'MAIN', ref: 'main' });
+    const node = await mount();
+    expect(settingRow(node, 'Automatic').textContent).toContain(
+      'Merging into main always asks you — a project that lands directly on main never merges by itself.');
+    expect(settingRow(node, 'Automatic').textContent).toContain(runAutomaticHintMainNoDelivery('main'));
+    expect(settingRow(node, 'Automatic').textContent).not.toContain(RUN_AUTOMATIC_HINT_MAIN);
   });
 
   it('marks the merge check amber when Automatic would merge the branch unchecked', async () => {
@@ -291,8 +310,9 @@ describe('How it runs — the line', () => {
 
     await press(lineInput(node, 'MAIN'));
     expect(button(node, RUN_SAVE).disabled).toBe(false);
-    // The sentence under Automatic follows the line being chosen.
-    expect(settingRow(node, 'Automatic').textContent).toContain(RUN_AUTOMATIC_HINT_MAIN);
+    // The sentence under Automatic follows the line being chosen (this server reports no delivery
+    // mode, so it is the one that does not point to Delivery).
+    expect(settingRow(node, 'Automatic').textContent).toContain(runAutomaticHintMainNoDelivery('main'));
     await save(node, 1);
 
     expect(writes).toEqual([
@@ -554,12 +574,18 @@ describe('How it runs — how the work reaches main', () => {
     expect(row).toContain('Orbit lands it');
     expect(row).toContain('The agent doesn’t push to main: Orbit lands its branch once the work is accepted.');
     expect(row).toContain('The agent pushes it');
-    expect(row).toContain('The agent pushes to main itself, and Orbit checks the commits are there.');
+    expect(row).toContain(
+      'No merge card. The agent pushes to main itself, and Orbit records each commit once it sees it there.');
+    expect(settingRow(node, 'Merge check').textContent).toContain(RUN_MERGE_CHECK_HINT);
 
     await press(deliveryInput(node, 'AGENT_PUSH'));
     // Automatic no longer says a merge into main asks you: nothing of Orbit's merges there now.
     expect(settingRow(node, 'Automatic').textContent).toContain('The agent pushes each task’s work to main itself.');
     expect(settingRow(node, 'Automatic').textContent).not.toContain(RUN_AUTOMATIC_HINT_MAIN);
+    // …and the merge check is the agent's to run.
+    expect(settingRow(node, 'Merge check').textContent).toContain(
+      'Run by the agent before it pushes, on its work rebased onto main. Orbit doesn’t run it.');
+    expect(settingRow(node, 'Merge check').textContent).not.toContain(RUN_MERGE_CHECK_HINT);
     await save(node, 1);
 
     expect(writes).toEqual([
@@ -574,7 +600,7 @@ describe('How it runs — how the work reaches main', () => {
     expect(deliveryInput(node, 'AGENT_PUSH').disabled).toBe(true);
     expect(settingRow(node, 'Delivery').textContent).toContain(
       'The agent can push only on a project that lands directly into main. On a project branch, Orbit lands the work.');
-    expect(settingRow(node, 'Delivery').textContent).not.toContain('Orbit checks the commits are there');
+    expect(settingRow(node, 'Delivery').textContent).not.toContain('Orbit records each commit');
     await press(deliveryInput(node, 'AGENT_PUSH'));
     expect(button(node, RUN_SAVE).disabled).toBe(true);
   });
@@ -626,9 +652,85 @@ describe('How it runs — how the work reaches main', () => {
     expect(node.textContent).toContain('this project has no repository to integrate into');
   });
 
+  it('draws Delivery straight under Tasks land on, before Main branch', async () => {
+    server.view = viewOf({
+      line: 'MAIN', ref: 'main', repository: 'acme/payments-api', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null,
+    });
+    const node = await mount();
+    expect(labels(node)).toEqual(
+      ['Tasks land on', 'Delivery', 'Main branch', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(settingRow(node, 'Delivery').id).toBe(RUN_DELIVERY_ANCHOR);
+  });
+
   it('draws no Delivery row for a server that predates it', async () => {
     server.view = viewOf({ line: 'MAIN', ref: 'main' });
     const node = await mount();
     expect(labels(node)).not.toContain('Delivery');
   });
+});
+
+describe('How it runs — switching to the agent while a merge is waiting', () => {
+  const promotionIn = (state: PromotionState): ProjectPromotionView =>
+    ({ promotionId: 'p1', state, sourceRef: 'orbit/fix-export', upstreamRef: 'refs/heads/main' }) as unknown as ProjectPromotionView;
+  const onMain = () => viewOf({ line: 'MAIN', ref: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
+  const dialog = (): HTMLElement | null =>
+    document.body.querySelector<HTMLElement>('.orbit-overlay-footer')?.closest<HTMLElement>('[role="dialog"], [role="alertdialog"]')
+    ?? null;
+  const dialogButton = (label: string): HTMLButtonElement =>
+    button(dialog()!, label);
+  /** The candidate read, and the block drawn again from it. */
+  async function candidateRead(): Promise<void> {
+    await until(() => client!.getQueryState(['project', PROJECT, 'promotion'])?.status === 'success', 'the candidate');
+    for (let n = 0; n < 5; n += 1) await turn();
+  }
+
+  for (const state of ['CHECKING', 'READY', 'CONFIRMED', 'RECHECKING'] as const) {
+    it(`asks first while a candidate is ${state}, and keeps the choice once confirmed`, async () => {
+      server.view = onMain();
+      server.promotion = promotionIn(state);
+      const node = await mount();
+      await candidateRead();
+      await press(deliveryInput(node, 'AGENT_PUSH'));
+      await until(() => dialog() !== null, 'the question');
+      expect(dialog()!.textContent).toContain('Let the agent push to main?');
+      expect(dialog()!.textContent).toContain(
+        'Tasks finished from now on are pushed by their agent: no merge card, and Orbit merges nothing into main. '
+        + 'Merges already waiting for you stay until you answer them.');
+      expect(deliveryInput(node, 'AGENT_PUSH').checked).toBe(false);
+      await press(dialogButton('Let the agent push'));
+      await until(() => dialog() === null, 'the question to close');
+      expect(deliveryInput(node, 'AGENT_PUSH').checked).toBe(true);
+      await save(node, 1);
+      expect(writes).toEqual([
+        { method: 'PATCH', path: `/projects/${PROJECT}/integration`, body: { deliveryMode: 'AGENT_PUSH' } },
+      ]);
+    });
+  }
+
+  it('leaves Orbit’s way chosen and writes nothing on Cancel', async () => {
+    server.view = onMain();
+    server.promotion = promotionIn('READY');
+    const node = await mount();
+    await candidateRead();
+    await press(deliveryInput(node, 'AGENT_PUSH'));
+    await until(() => dialog() !== null, 'the question');
+    await press(dialogButton('Cancel'));
+    await until(() => dialog() === null, 'the question to close');
+    expect(deliveryInput(node, 'PLATFORM').checked).toBe(true);
+    expect(button(node, RUN_SAVE).disabled).toBe(true);
+    expect(writes).toEqual([]);
+  });
+
+  for (const promotion of [null, promotionIn('MERGED'), promotionIn('DECLINED'), promotionIn('BLOCKED')]) {
+    it(`does not ask with ${promotion ? `a ${promotion.state} candidate` : 'no candidate'}`, async () => {
+      server.view = onMain();
+      server.promotion = promotion;
+      const node = await mount();
+      await candidateRead();
+      await press(deliveryInput(node, 'AGENT_PUSH'));
+      for (let n = 0; n < 5; n += 1) await turn();
+      expect(dialog()).toBeNull();
+      expect(deliveryInput(node, 'AGENT_PUSH').checked).toBe(true);
+    });
+  }
 });

@@ -442,8 +442,11 @@ struct RunnerDetailView: View {
            let r = runners.runner(id) {
             RunnerDetailContent(runners: runners, runner: r).id(r.id)
         } else {
-            ContentUnavailableView("Select a runner", systemImage: "desktopcomputer",
-                                   description: Text("Status, capacity, and engines appear here."))
+            // A new account with no machine lands here: the welcome card (docs/mocks/new-user-onboarding).
+            NoMachineWelcomeGate {
+                ContentUnavailableView("Select a runner", systemImage: "desktopcomputer",
+                                       description: Text("Status, capacity, and engines appear here."))
+            }
         }
     }
 }

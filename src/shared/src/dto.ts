@@ -77,6 +77,10 @@ export interface SessionMoveTarget {
   conversation: 'continues' | 'rebuilt';
   /** The folders the session can be filed in there. */
   folders: SessionMoveFolder[];
+  /** The session is a project's coordinator and a new coordinator for that project could open here
+   *  (enabled, with a runner) — the coordinator's Change offers "Start a new one there" when the
+   *  conversation itself cannot come along. Always false for any other session. */
+  startsCoordinator: boolean;
 }
 
 /** `GET /sessions/:id/move-targets`: everything the Move panel and its confirmation need. */
@@ -95,6 +99,9 @@ export interface SessionMoveTargets {
   changedFiles: number;
   unmergedFiles: number;
   mergeTarget: string | null;
+  /** The project this session coordinates (`project.coordinator_session_id`), which moves with it:
+   *  the project is coordinated from wherever the session goes. Null for any other session. */
+  coordinates: { projectId: string; title: string } | null;
   targets: SessionMoveTarget[];
 }
 
@@ -3095,8 +3102,8 @@ export type IntegrationJobPhase =
 
 /** One command run on the combined tree before anything is pushed (§2.4 J-S5). */
 export interface IntegrationCheckSpec {
-  /** TASK_ACCEPTANCE is the task's own acceptance command; MERGE_CHECK is the project's. */
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  /** TASK_ACCEPTANCE is the task's own command; LANDING_CHECK and MERGE_CHECK are the project's layers. */
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
   timeoutSeconds: number;
@@ -3104,6 +3111,9 @@ export interface IntegrationCheckSpec {
 
 /** What one check came to. `exitCode` is null when the command never produced one. */
 export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
+  scope?: 'COMBINED' | 'BASELINE';
+  skipped?: 'PATHS_EXEMPT';
+  files?: string[];
   exitCode: number | null;
   timedOut: boolean;
   durationMs: number;
@@ -3225,7 +3235,7 @@ export type IntegrationJobStep = 'WAITING_LOCAL_LOCK' | 'PREPARE';
 /** The check a v2 claim is running, as its progress reports name it (§2.1, §2.2 J-T4). The job
  *  row's `checks` holds FINISHED results in a different shape; this one is the check in flight. */
 export interface IntegrationJobCurrentCheck {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   /** Position of this check in the run, from 1, and how many the run has in all. */
   index: number;
   count: number;
@@ -3276,7 +3286,7 @@ export interface IntegrationJobProgressResponse {
 /** The check a chunk of output belongs to (POST /runner/integration-jobs/:jobId/output, contract
  *  §2.2 J-T4, §2.9 LS2). `index` is the check's position in the run, from 1. */
 export interface IntegrationJobOutputCheck {
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   index: number;
 }
 
@@ -3318,6 +3328,7 @@ export interface IntegrationJobReleaseResponse {
 
 /** Runner → control plane: what the job came to (POST /runner/integration-jobs/:jobId/result). */
 export interface IntegrationJobResultRequest {
+  baselineRed?: boolean;
   claimGeneration: string;
   leaseOwner: string;
   /** A terminal state. QUEUED and RUNNING are refused: a result is a result. */

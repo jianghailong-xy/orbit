@@ -38,6 +38,24 @@ export const AUTO_RETRY_TURN_KEY_PREFIX = 'auto-retry:';
 export const AUTO_RETRY_ORBIT_TURN_KEY_PREFIX = `${AUTO_RETRY_TURN_KEY_PREFIX}orbit:`;
 
 /**
+ * The sweep's key for a re-send of Orbit's words: it names the turn it re-sends (`from:<turnId>:`),
+ * so the re-send is drawn as the card that turn was (sessions/turn-cards.ts) instead of as its block.
+ * The failure card's Retry names it already (`retry-message:<turnId>`, auto-retry.service.ts).
+ */
+export function orbitResendTurnKey(sourceTurnId: string | null, nonce: string): string {
+  return sourceTurnId
+    ? `${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}from:${sourceTurnId}:${nonce}`
+    : `${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}${nonce}`;
+}
+
+/** The turn an Orbit re-send re-sends, by either key that names it; null for every other key. */
+export function orbitResendSourceTurnId(clientTurnId: string | null | undefined): string | null {
+  if (!clientTurnId?.startsWith(AUTO_RETRY_ORBIT_TURN_KEY_PREFIX)) return null;
+  return /^(?:from|retry-message):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::|$)/i
+    .exec(clientTurnId.slice(AUTO_RETRY_ORBIT_TURN_KEY_PREFIX.length))?.[1] ?? null;
+}
+
+/**
  * The three namespaces a confirmation request's review is carried in
  * (docs/owner-confirmation-review-contract.md §10 G6, tasks/owner-confirmation-review-turn.ts): the
  * request handed to its reviewer, the reviewer's return handed to the run, and the owner's answers
