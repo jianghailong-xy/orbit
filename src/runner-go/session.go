@@ -954,9 +954,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// run_event held the message. Keep the last one so finalize can carry it.
 	var lastErrMu sync.Mutex
 	lastErrorMessage := ""
-	// Baseline for the shared-checkout warning below, taken before this session runs anything
-	// so pre-existing dirt is never blamed on it. Nil unless the session is isolated.
-	sharedDirt := watchSharedCheckout(job.WT)
+	// Baseline for the main-checkout card below, taken before this session runs anything so
+	// pre-existing changes are never blamed on it. Nil unless the session is isolated.
+	mainCheckout := watchMainCheckout(job.WT)
 	// The session's background work (newBgTailer below), declared ahead of emitThrough, which
 	// announces its runner-hosted jobs again behind every `resumed` handshake.
 	var bg *bgTailer
@@ -1238,12 +1238,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// terminal are persisted but no longer broadcast — the notice would exist and nobody
 		// would see it. Every runtime's turn ends through this one function, so this covers all
 		// of them; non-isolated sessions have no watch and skip it entirely.
-		if paths := sharedDirt.newlyDirty(); len(paths) > 0 {
-			emit(evSystem, map[string]interface{}{
-				"notice":     sharedCheckoutNotice(job.WT.RepoDir, effectiveBranch(job.WT), paths),
-				"noticeKind": "shared-checkout-dirty",
-				"paths":      paths,
-			})
+		if notice := mainCheckout.changed(); notice != nil {
+			emit(evSystem, notice.payload())
 		}
 		completionCtx := turnAckCtx
 		cancelCompletion := func() {}

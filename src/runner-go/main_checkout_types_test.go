@@ -131,11 +131,8 @@ func TestMainCheckoutFixtureParsesIntoGoTypes(t *testing.T) {
 		}
 	}
 
-	// A heartbeat repos[] entry: today's RepoHealthReport plus the new fields, nothing more.
-	hb := roundTrip[struct {
-		RepoHealthReport
-		MainCheckoutHeartbeatFields
-	}](t, "heartbeatRepo", fx["heartbeatRepo"])
+	// A heartbeat repos[] entry: RepoHealthReport, which inlines the new fields, nothing more.
+	hb := roundTrip[RepoHealthReport](t, "heartbeatRepo", fx["heartbeatRepo"])
 	if hb.Fingerprint != snap.Fingerprint || hb.FileCount == nil || *hb.FileCount != len(snap.Files) {
 		t.Errorf("heartbeat entry: %+v", hb.MainCheckoutHeartbeatFields)
 	}
@@ -145,6 +142,9 @@ func TestMainCheckoutFixtureParsesIntoGoTypes(t *testing.T) {
 	notice := roundTrip[MainCheckoutChangedNotice](t, "changedNotice", fx["changedNotice"])
 	if notice.NoticeKind != noticeMainCheckoutChanged {
 		t.Errorf("changed notice kind %q", notice.NoticeKind)
+	}
+	if got := mainCheckoutCardTitle(notice.FileCount, notice.Truncated) + " " + mainCheckoutCardSubtitle(notice.Root, notice.Branch); got != notice.Notice {
+		t.Errorf("changed notice text:\nfixture %q\nGo      %q", notice.Notice, got)
 	}
 
 	var requests []json.RawMessage
