@@ -90,8 +90,9 @@
 4. 三步上手，第 1 步按部署状态二选一：
    - 托管 runner 开着：Your runner is being prepared — nothing to install.
    - 没开：Connect a computer — install the runner from Settings → Runners.
-5. 客户端下载：macOS / iPhone / Android，链接到本部署的 `/dl`。
-6. 页脚：为什么收到、不是本人就回信给管理员；一次性事务邮件，无退订链接。
+5. 页脚：为什么收到、不是本人就回信给管理员；一次性事务邮件，无退订链接。
+
+原第 5 项「客户端下载（macOS / iPhone / Android → `/dl`）」已删去（2026-11-11）：没有可链的客户端下载地址，`/dl` 只提供 runner 二进制。
 
 模板是 apiserver 内的 TypeScript 纯函数（不引模板引擎），所有插值做 HTML 转义；内联样式、单列 560px；无外链图片。
 
