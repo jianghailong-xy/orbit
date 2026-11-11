@@ -356,6 +356,14 @@ async function fixture(
     wholeFile?: boolean;
     /** The files the snapshot adds, the commits it reaches, and sizes its index gives where they are not the text's. */
     snapshot?: { files: Record<string, string>; commits: string[]; sizes?: Record<string, number> };
+    /** The space's title: the spec's own `app` unless a case names one. */
+    title?: string;
+    /** The space has a repository address and root commit (true, the default), or is a wiki with none. */
+    repoUrl?: boolean;
+    /** The space holds the snapshot an earlier run left (true, the default). */
+    snapshotRow?: boolean;
+    /** The maintenance settings name the workspace (true, the default). */
+    workspace?: boolean;
   } = {},
 ): Promise<Fixture> {
   const runnerId = randomUUID();
@@ -373,9 +381,13 @@ async function fixture(
   const spaceId = randomUUID();
   await h.prisma.wikiSpace.create({
     data: {
-      id: spaceId, ownerId: h.ownerId, slug: `maintain-${spaceId.slice(0, 8)}`, title: 'app',
-      repoUrlNorm: `github.com/example/app-${spaceId.slice(0, 8)}`, rootCommitSha: 'b'.repeat(40),
-      settings: { reviewMode: 'automatic', maintenance: { enabled: true, workspaceId, provider: 'local-vllm' } },
+      id: spaceId, ownerId: h.ownerId, slug: `maintain-${spaceId.slice(0, 8)}`, title: over.title ?? 'app',
+      repoUrlNorm: over.repoUrl === false ? null : `github.com/example/app-${spaceId.slice(0, 8)}`,
+      rootCommitSha: over.repoUrl === false ? null : 'b'.repeat(40),
+      settings: {
+        reviewMode: 'automatic',
+        maintenance: { enabled: true, workspaceId: over.workspace === false ? null : workspaceId, provider: 'local-vllm' },
+      },
     },
   });
   const sessionId = randomUUID();
@@ -406,12 +418,14 @@ async function fixture(
     commits: over.snapshot?.commits ?? REPO.commits,
     readme: REPO.readme,
   });
-  await h.sql.query(
-    `INSERT INTO "wiki_repo_snapshot"("space_id","owner_id","sha","digest","size_bytes","fragment_count")
-     VALUES ($1,$2,$3,$4,$5,1)`,
-    [spaceId, h.ownerId, REPO.sha, 'c'.repeat(64), Buffer.byteLength(index, 'utf8')],
-  );
-  await h.sql.query(`INSERT INTO "wiki_repo_snapshot_fragment"("space_id","ordinal","content") VALUES ($1,0,$2)`, [spaceId, index]);
+  if (over.snapshotRow !== false) {
+    await h.sql.query(
+      `INSERT INTO "wiki_repo_snapshot"("space_id","owner_id","sha","digest","size_bytes","fragment_count")
+       VALUES ($1,$2,$3,$4,$5,1)`,
+      [spaceId, h.ownerId, REPO.sha, 'c'.repeat(64), Buffer.byteLength(index, 'utf8')],
+    );
+    await h.sql.query(`INSERT INTO "wiki_repo_snapshot_fragment"("space_id","ordinal","content") VALUES ($1,0,$2)`, [spaceId, index]);
+  }
   // The cursor: the watermark at the beginning, and the position the page below hands out, issued — the
   // advance the run makes is checked against it, as the real route's would be.
   const position = { at: new Date('2026-09-20T00:00:00.000Z'), kind: 'session_settled', ref: sessionId };
@@ -566,6 +580,8 @@ async function clearWork(h: Harness): Promise<void> {
 /** What the runner this spec plays answers besides its defaults. */
 interface RunnerPlay {
   failSnapshot?: boolean;
+  /** Every snapshot fails with this error, as the runner words it (`wikiRepoOpCheckout` on a folder that is not git). */
+  snapshotError?: string;
   holdReads?: boolean;
   /** An anchors operation stays queued, as on a runner whose fetch hangs. */
   holdAnchors?: boolean;
@@ -601,6 +617,11 @@ async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
     if (over.holdAnchors === true && row.kind === 'anchors') continue;
     if (over.failSnapshot === true && row.kind === 'snapshot') {
       await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"='the machine went away', "ended_at"=now() WHERE "id"=$1`, [row.id]);
+      continue;
+    }
+    if (over.snapshotError !== undefined && row.kind === 'snapshot') {
+      await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"=$2, "ended_at"=now() WHERE "id"=$1`, [row.id, over.snapshotError]);
+      for (const listener of [...settledListeners]) listener(row.id);
       continue;
     }
     if (over.failDiffs === true && row.kind === 'diff') {
@@ -916,6 +937,116 @@ test('a server run reads, checks, proposes, advances, verifies and re-checks the
   const articles = jobs.filter((job) => job.kind === 'articles');
   assert.equal(articles.length, 1);
   assert.equal(articles[0]!.state, 'queued');
+});
+
+// ── A run that cannot read the repository (docs/wiki-repo-tiers-design.md §2–§3, §10 P1) ─────────────────
+
+/** The run row's repository tier and reason (migration 0514), read raw: what the health line and Activity will read. */
+async function runTier(h: Harness, runId: string): Promise<{ repo_tier: string | null; repo_reason: string | null }> {
+  const rows = await h.sql.query<{ repo_tier: string | null; repo_reason: string | null }>(
+    `SELECT "repo_tier", "repo_reason" FROM "wiki_maintenance_run" WHERE "id" = $1`, [runId],
+  );
+  return rows.rows[0]!;
+}
+
+/** An extraction whose entries name no code anchor: what a run with no snapshot keeps as it always did. */
+function sessionsExtractor(fx: Fixture): (hit: Hit) => string {
+  return (hit) => {
+    if (hit.prompt.includes('==== CASE FILE ====')) {
+      if (hit.prompt.includes('狼人杀')) return '{"offTopic": true}';
+      return JSON.stringify([
+        pitfall(fx, 'PORT 在导入时读取，fixture 之后再设无效', { anchors: { paths: [], commits: [] } }),
+        pitfall(fx, 'fixture 不写死端口', { anchors: { paths: [], commits: [] } }),
+      ]);
+    }
+    return '{"verdict":"supported","reason":"the cited turn says exactly this"}';
+  };
+}
+
+/**
+ * One run on the sessions tier (design §2.1 tier 0): it ends succeeded, proposes the case files' entries, moves the
+ * cursor, asks the runner for no anchors, diff or read, writes no document, and says which tier it ran on and why.
+ */
+async function assertSessionsRun(h: Harness, fx: Fixture, reason: string, play: RunnerPlay, title: string): Promise<void> {
+  h.model.answer = sessionsExtractor(fx);
+  const page = pageOf(fx);
+  h.maintenance.dossierPage = (async () => page) as unknown as WikiMaintenance['dossierPage'];
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), play);
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', run.error ?? '');
+  assert.equal(run.failureKind, null);
+  assert.equal(run.attempts, 1, 'a repository that cannot be read is not retried');
+  assert.deepEqual(await runTier(h, fx.runId), { repo_tier: 'sessions', repo_reason: reason });
+  const report = run.report as Record<string, unknown>;
+  assert.deepEqual(report.repo, { tier: 'sessions', reason });
+  assert.equal(report.dossiers, 2);
+  assert.equal(report.offTopic, 1);
+  const ops = report.ops as Record<string, number>;
+  assert.equal(ops.recorded, 2, `the case file's two entries are proposed: ${JSON.stringify(report)}`);
+  assert.equal(ops.refused, 0);
+  assert.equal(report.cursorAdvanced, true);
+  const opRows = await h.prisma.wikiChangesetOp.findMany({ where: { ownerId: h.ownerId, changeset: { spaceId: fx.spaceId } } });
+  assert.equal(opRows.length, 2);
+
+  // The cursor moved to the page's position.
+  const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.equal(cursor.positionRef, fx.position.ref);
+  assert.equal(cursor.consecutiveFailures, 0);
+
+  // The extraction was told what the repository is by the space's title, there being no README to quote.
+  const extraction = h.model.hits.find((hit) => hit.prompt.includes('==== CASE FILE ====') && !hit.prompt.includes('狼人杀'));
+  assert.ok(extraction, 'the extraction asked the model');
+  assert.match(extraction.prompt, new RegExp(`THE REPOSITORY: [^\\n]*${title}`, 'u'));
+
+  // Nothing but the snapshot (or nothing at all) went to the runner; the code anchors and documents wait.
+  const kinds = await h.sql.query<{ kind: string }>(`SELECT "kind" FROM "wiki_repo_op" WHERE "owner_id" = $1 AND "space_id" = $2`, [h.ownerId, fx.spaceId])
+    .then((result) => result.rows.map((row) => row.kind));
+  assert.deepEqual(kinds.filter((kind) => kind !== 'snapshot'), []);
+  assert.equal((report.docs as Record<string, unknown>).skipped, 'no_repository');
+}
+
+test('a workspace that is not a git checkout: the run goes on from the sessions — succeeded, entries proposed, the cursor moved, the run row on tier sessions for not_git', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { title: 'Spec Garden', wholeFile: true });
+  await assertSessionsRun(h, fx, 'not_git', { snapshotError: '/tmp/maintain-spec is not a git checkout: exit status 128' }, 'Spec Garden');
+});
+
+test('a wiki with no repository address, on a folder that is not git: the same run, tier sessions for not_git', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { title: 'Notes Without Git', repoUrl: false, snapshotRow: false, wholeFile: true });
+  await assertSessionsRun(h, fx, 'not_git', { snapshotError: '/tmp/maintain-spec is not a git checkout: exit status 128' }, 'Notes Without Git');
+});
+
+test('a space whose maintenance names no workspace runs on tier sessions for no_workspace, and asks the runner nothing', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { title: 'Nowhere Wiki', workspace: false, wholeFile: true });
+  await assertSessionsRun(h, fx, 'no_workspace', {}, 'Nowhere Wiki');
+  const asked = await h.sql.query(`SELECT 1 FROM "wiki_repo_op" WHERE "space_id" = $1`, [fx.spaceId]);
+  assert.equal(asked.rowCount, 0);
+});
+
+test('a git checkout\'s run is on tier git with no reason, and still checks its anchors through the runner', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { wholeFile: true });
+  h.model.answer = extractor(fx, 1);
+  const page = pageOf(fx);
+  h.maintenance.dossierPage = (async () => page) as unknown as WikiMaintenance['dossierPage'];
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual(await runTier(h, fx.runId), { repo_tier: 'git', repo_reason: null });
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.repo, { tier: 'git', reason: null });
+  assert.equal((report.entries as Record<string, number>).foreign, 1, 'with a snapshot, an entry anchored outside it is still foreign');
+  assert.equal((report.anchors as Record<string, number>).entries, 2);
+  assert.equal((report.docs as Record<string, unknown>).skipped, 'no_confirmed_plan');
 });
 
 test('an op whose first answer is no verdict is asked again under a unit of its own, `<opId>#retry`, told why as the runner tells it, and gets its verdict there', { skip }, async () => {
