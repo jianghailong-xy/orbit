@@ -53,6 +53,15 @@ struct MainView: View {
         .task { model.startPolling() }
         .onAppear { columnVisibility = sidebarVisible ? .all : .doubleColumn }
         .onChange(of: columnVisibility) { _, now in
+            #if os(iOS)
+            // A full-screen image viewer coming or going re-picks the split's columns by itself;
+            // that is not the reader's choice, so put back what they had instead of saving it.
+            if FullScreenCoverHold.shared.holding {
+                let kept: NavigationSplitViewVisibility = sidebarVisible && !foldedForChat ? .all : .doubleColumn
+                if now != kept { columnVisibility = kept }
+                return
+            }
+            #endif
             // Brought back by hand while the chat is open: the reader's again, nothing to restore.
             if now == .all { foldedForChat = false }
             if !foldedForChat { sidebarVisible = (now == .all) }
