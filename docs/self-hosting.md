@@ -1598,7 +1598,7 @@ A machine set up by an earlier release, whose runners are `orbit-runner@<uid>`, 
 Each account registers its own runner, as itself:
 
 ```bash
-orbit register --server https://orbit.example.com --name build-01-alice
+orbit register --server https://orbit.example.com --name test-user-e2e
 ```
 
 `--server` can be left off when the binary came from this deployment, whose origin is then its default. The name
@@ -1630,15 +1630,15 @@ register from the account's own copy there.
 The broker enables and starts the account's instance, nothing asks for a password, and the command ends with:
 
 ```text
-    ✓ Approved — build-01-alice is now a runner.
+    ✓ Approved — test-user-e2e is now a runner.
     ✓ Put this account's own copy of orbit at /home/alice/.orbit/bin/orbit, which its runner runs and updates.
     Waiting for the runner to reach https://orbit.example.com (up to 2m0s)…
     ✓ Background service started as alice (runs at boot).
       Stop or remove it later with `orbit unregister`.
 
-✓ Setup complete — build-01-alice is online.
+✓ Setup complete — test-user-e2e is online.
 
-    Machine  build-01-alice (build-01)
+    Machine  test-user-e2e (build-01)
     Next     Start a session
              https://orbit.example.com/runners/30tWePD4IYjCW1G8zmKpO/new
     orbit status · orbit doctor · orbit unregister
@@ -1694,8 +1694,8 @@ config is removed. Its own copy of orbit stays. Every other account's runner kee
 
 ```text
 ✓ removed the orbit-runner@alice.service runner service
-✓ deleted "build-01-alice" from the control plane
-✓ unregistered "build-01-alice"
+✓ deleted "test-user-e2e" from the control plane
+✓ unregistered "test-user-e2e"
 ```
 
 ### Moving a machine set up by an earlier release
