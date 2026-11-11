@@ -186,9 +186,6 @@ export interface MoveTargetRow {
   target: SessionMoveTarget;
   /** The row opens the workspace's step: the session can leave its workspace, and go to this one. */
   enabled: boolean;
-  /** A project's coordinator whose conversation cannot go here, to a workspace a new coordinator
-   *  could open in: the row offers Start new here… instead. */
-  startsNew: boolean;
   /** The grey line under the name: `<Provider> · <runner>`, or why the session can't go there, in
    *  the server's words. An offline runner keeps the row open and carries its own pill. */
   detail: string;
@@ -204,8 +201,6 @@ export const moveTargetRows = (
   answer.targets.map((target) => ({
     target,
     enabled: answer.reason == null && target.reason == null,
-    startsNew:
-      answer.reason == null && target.reason != null && answer.coordinates != null && target.startsCoordinator === true,
     detail:
       target.reason ?? [providerName(target.provider), target.runnerName].filter(Boolean).join(' · '),
   }));
@@ -262,18 +257,8 @@ export const moveConfirmParagraphs = (
       `${answer.coordinates.title} is coordinated from ${target.name} from now on, and its row moves to ${target.name}’s list. Its tasks keep running where they are.`,
     );
   }
-  if (answer.branch && answer.changedFiles > 0) {
-    const unmerged = answer.unmergedFiles;
-    if (unmerged > 0) {
-      const files = unmerged === 1 ? '1 changed file isn’t' : `${unmerged} changed files aren’t`;
-      const they = unmerged === 1 ? 'It stays' : 'They stay';
-      paragraphs.push(
-        `${files} merged into ${answer.mergeTarget ?? 'main'} yet. ${they} on branch ${answer.branch} in ${fromWorkspace}.`,
-      );
-    } else {
-      paragraphs.push(`Changes made so far stay on branch ${answer.branch} in ${fromWorkspace}.`);
-    }
-  }
+  const files = moveFilesSentence(answer, fromWorkspace);
+  if (files) paragraphs.push(files);
   if (answer.needsEnd) {
     // An ended coordinator is not handed Orbit's updates (it is never revived for them): they wait
     // on the project page until someone messages it again.
@@ -284,6 +269,17 @@ export const moveConfirmParagraphs = (
     );
   }
   return paragraphs;
+};
+
+/** What becomes of the changes the session made: how many aren't merged yet, on which branch, in
+ *  which workspace. Null when the session changed nothing on a branch. */
+export const moveFilesSentence = (answer: SessionMoveTargets, fromWorkspace: string): string | null => {
+  if (!answer.branch || answer.changedFiles <= 0) return null;
+  const unmerged = answer.unmergedFiles;
+  if (unmerged <= 0) return `Changes made so far stay on branch ${answer.branch} in ${fromWorkspace}.`;
+  const files = unmerged === 1 ? '1 changed file isn’t' : `${unmerged} changed files aren’t`;
+  const they = unmerged === 1 ? 'It stays' : 'They stay';
+  return `${files} merged into ${answer.mergeTarget ?? 'main'} yet. ${they} on branch ${answer.branch} in ${fromWorkspace}.`;
 };
 
 /** End and Move for a session that has to be ended first. */

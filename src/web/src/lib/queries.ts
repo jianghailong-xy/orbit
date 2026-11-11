@@ -518,7 +518,14 @@ export const sessionRequestQuery = (requestId: string) =>
   queryOptions({
     queryKey: ['sessions', 'request', requestId] as const,
     queryFn: () => getSessionRequest(requestId),
-    refetchInterval: (q) => (q.state.data?.state === 'OPEN' ? 60_000 : false),
+    // A run's question can still move after its request closes: passed to the owner, it waits for
+    // their answer (OrbitTurnCards `RunQuestionTurnCard`).
+    refetchInterval: (q) => {
+      const view = q.state.data;
+      const moving = view?.state === 'OPEN'
+        || (view?.runQuestion?.answeredBy === null && view.runQuestion.approvalStatus === 'PENDING');
+      return moving ? 60_000 : false;
+    },
   });
 
 /**

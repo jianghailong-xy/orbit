@@ -6296,24 +6296,6 @@ button.toast--pill:focus-visible {
 .move-dialog-option.off .move-dialog-name small {
   color: var(--text-3);
 }
-/* A project's coordinator whose conversation cannot go to this workspace, where a new coordinator
-   could open instead: the row stays greyed and carries Start new here…. */
-.move-dialog-option.has-start-new {
-  cursor: default;
-}
-.move-dialog-start-new {
-  flex: none;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--brand);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.move-dialog-start-new:hover:not(:disabled) {
-  text-decoration: underline;
-}
 .move-dialog-count {
   flex: none;
   font-size: 12.5px;
@@ -6341,6 +6323,22 @@ button.toast--pill:focus-visible {
   margin: -6px 0 6px;
   font-size: 12.5px;
   line-height: 1.5;
+  color: var(--text-3);
+}
+.move-dialog-way {
+  flex: none;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+/* Change: the coordinator conversation comes along to this workspace, or a new one opens there. */
+.move-dialog-way.move {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.move-dialog-way.new {
+  background: var(--fill-inset);
   color: var(--text-3);
 }
 .move-dialog-error {

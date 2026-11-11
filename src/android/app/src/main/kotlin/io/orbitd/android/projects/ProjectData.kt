@@ -115,11 +115,11 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
         if (!writable()) throw FeatureWriteRefused()
         return Wire.decode(auth.request(handle, ApiRequest(listOf("projects", id, "coordinator"), HttpMethod.POST)).body, JsonObject.serializer())
     }
-    /** A [workspaceId] opens the new coordinator there ("Start a new coordinator in…"), and the project is coordinated from there
+    /** A [workspaceId] opens the new coordinator there (Change workspace…), and the project is coordinated from there
      * afterwards; none opens it where the last one ran. */
     suspend fun replaceCoordinator(id: String, revision: String, workspaceId: String? = null) = send(revision, listOf("projects", id, "coordinator", "replace"),
         body = workspaceId?.let { buildJsonObject { put("workspaceId", it) } }) as? JsonObject
-    /** The owner's workspaces and runners, for Start a new coordinator in…'s picker. */
+    /** The owner's workspaces and runners, for Change workspace…'s list. */
     suspend fun workspaces(): List<JsonObject> = (read(listOf("workspaces")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
     suspend fun runners(): List<JsonObject> = (read(listOf("runners")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
 }

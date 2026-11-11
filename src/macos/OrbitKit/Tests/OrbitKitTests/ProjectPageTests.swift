@@ -1133,8 +1133,8 @@ final class ProjectAPIClientTests: XCTestCase {
             "DELETE /api/projects/p1",
         ])
     }
-    /// Start a new coordinator names the workspace only when one was picked (Start a new coordinator
-    /// in…); the plain press still sends no body, as before.
+    /// Start a new coordinator names the workspace only when one was picked (Change workspace's
+    /// Start a new one there); the plain press still sends no body, as before.
     func testReplacingTheCoordinatorNamesTheWorkspaceOnlyWhenOneIsPicked() async throws {
         let log = ProjectRequestLog()
         ProjectAPIURLProtocol.handler = { request in

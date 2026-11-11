@@ -35,14 +35,11 @@ import {
   runWorkspaceMove,
   type MovePhase,
 } from '../lib/sessionFolders';
-import { START_COORDINATOR_COPY } from '../lib/coordinatorWorkspace';
-import { sessionFoldersQuery } from '../lib/queries';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { isSessionTerminal } from '../lib/sessionState';
 import { useToast } from '../lib/toast';
 import { useRefreshSessionLists } from '../lib/useControlPlane';
 import { ProviderTile } from './ProviderGallery';
-import { useStartCoordinatorIn } from './StartCoordinatorIn';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Dialog } from './ui/Dialog';
 import { Spinner } from './ui/Spinner';
@@ -116,14 +113,12 @@ export function SessionMoveModal({
 
   // Read defensively: an older server answers the route with something that isn't this shape.
   const answer = targetsQ.data && Array.isArray(targetsQ.data.targets) ? targetsQ.data : undefined;
-  // The project this session coordinates, when it is one: it moves with the session, and a workspace
-  // its conversation cannot go to may still take a new coordinator (Start new here…).
+  // The project this session coordinates, when it is one: it moves with the session.
   const coordinates = answer?.coordinates ?? null;
-  const startNew = useStartCoordinatorIn(coordinates?.projectId ?? null);
 
   if (!session || !workspace) return null;
 
-  const busy = phase !== null || startNew.pending;
+  const busy = phase !== null;
   const byName = foldersByName(folders);
   // A session whose folder isn't among the workspace's (deleted since the row was read) is in no
   // folder, which is where the list shows it.
@@ -314,41 +309,7 @@ export function SessionMoveModal({
         <>
           <div className="move-dialog-group">{MOVE_COPY.anotherWorkspaceGroup}</div>
           <div className="move-dialog-list">
-            {moveTargetRows(answer, providerName).map((row) =>
-              row.startsNew && coordinates ? (
-                // Its conversation cannot come here, but a new coordinator can open here instead.
-                <div key={row.target.workspaceId} className="move-dialog-option target off has-start-new">
-                  <span className="move-dialog-tile">
-                    <ProviderTile
-                      slug={ENGINE_PRESET[row.target.provider] ?? row.target.provider}
-                      label={providerName(row.target.provider)}
-                      size={22}
-                    />
-                  </span>
-                  <span className="move-dialog-name">
-                    {row.target.name}
-                    <small>{row.detail}</small>
-                  </span>
-                  <button
-                    type="button"
-                    className="move-dialog-start-new"
-                    disabled={busy}
-                    onClick={() =>
-                      startNew.ask({
-                        to: { workspaceId: row.target.workspaceId, name: row.target.name },
-                        project: coordinates.title,
-                        from: workspace.name,
-                        // Completed on the way unless it already was, which a conversation
-                        // still being moved around rarely is; the server decides either way.
-                        outgoing: 'open',
-                        onStarted: onClose,
-                      })
-                    }
-                  >
-                    {START_COORDINATOR_COPY.startNewHere}
-                  </button>
-                </div>
-              ) : (
+            {moveTargetRows(answer, providerName).map((row) => (
               <button
                 key={row.target.workspaceId}
                 type="button"
@@ -376,8 +337,7 @@ export function SessionMoveModal({
                 )}
                 {row.enabled && <RightOutlined className="move-dialog-chev" />}
               </button>
-              ),
-            )}
+            ))}
           </div>
           {answer.reason ? (
             <div className="move-dialog-note">{answer.reason}</div>
@@ -460,7 +420,6 @@ export function SessionMoveModal({
         </div>
       )}
       {confirmation}
-      {startNew.confirmation}
     </Dialog>
   );
 }
@@ -497,30 +456,5 @@ function MoveOption({
       {count !== undefined && <span className="move-dialog-count">{count}</span>}
       {checked && <CheckOutlined className="move-dialog-check" />}
     </button>
-  );
-}
-
-/**
- * The Move panel opened from outside a session list (the project page's coordinator card): it reads
- * the workspace's folders itself, only once it is open.
- */
-export function SessionMoveModalFor({
-  session,
-  workspace,
-  onClose,
-}: {
-  session: MoveDialogSession;
-  workspace: { id: string; name: string };
-  onClose: () => void;
-}) {
-  const foldersQ = useQuery(sessionFoldersQuery());
-  return (
-    <SessionMoveModal
-      open
-      session={session}
-      workspace={workspace}
-      folders={(foldersQ.data ?? []).filter((f) => f.workspaceId === workspace.id)}
-      onClose={onClose}
-    />
   );
 }

@@ -83,7 +83,7 @@ extension ProjectPage {
     public static func startNewCoordinatorDetail(finished: Bool) -> String {
         finished
             ? "Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from."
-            : "Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable."
+            : "Completes this conversation first, then opens an empty one here. Nothing is deleted — it stays readable."
     }
 
     /// Asked before replacing a conversation that is still open: the press ends it.
