@@ -77,6 +77,10 @@ export interface SessionMoveTarget {
   conversation: 'continues' | 'rebuilt';
   /** The folders the session can be filed in there. */
   folders: SessionMoveFolder[];
+  /** The session is a project's coordinator and a new coordinator for that project could open here
+   *  (enabled, with a runner) — the coordinator's Change offers "Start a new one there" when the
+   *  conversation itself cannot come along. Always false for any other session. */
+  startsCoordinator: boolean;
 }
 
 /** `GET /sessions/:id/move-targets`: everything the Move panel and its confirmation need. */
@@ -95,6 +99,9 @@ export interface SessionMoveTargets {
   changedFiles: number;
   unmergedFiles: number;
   mergeTarget: string | null;
+  /** The project this session coordinates (`project.coordinator_session_id`), which moves with it:
+   *  the project is coordinated from wherever the session goes. Null for any other session. */
+  coordinates: { projectId: string; title: string } | null;
   targets: SessionMoveTarget[];
 }
 

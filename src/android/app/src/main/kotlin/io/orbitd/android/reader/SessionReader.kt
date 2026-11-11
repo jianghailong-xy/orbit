@@ -88,6 +88,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
 import io.orbitd.android.management.LocalSessionRecaps
+import io.orbitd.android.tasks.resolvedRunState
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastTone
 import io.orbitd.android.navigation.*
@@ -130,6 +131,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // line does, once the names below are known.
     var wakeNames by remember(handle, route.id) { mutableStateOf<(String, JsonObject) -> String?>({ _, _ -> null }) }
     val shownRows = remember(rows, wakeNames) { ExchangeFold.fold(rows, wakeNames) }
+    // Each turn's head row, under the message that opened it (web `TurnHead`); only the newest may count up.
+    val turnHeads = remember(state.window.events) { TurnHeads.of(state.window.events) }
+    val newestHead = turnHeads.keys.maxOrNull()
     // What the tray holds, off the same events the rows leave them out of — or the live transcript's, while the reader is in history.
     val steerEvents = if (atTail) state.window.events else state.session?.transcript?.events.orEmpty()
     val unreadSteers = remember(steerEvents, listedTurns) { SteerDelivery.place(steerEvents, listedTurns).unread }
@@ -477,6 +481,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val crossingPlaced = remember(displayedRows, crossingBatches) { CrossingCards.place(displayedRows.map { it.event.ts }, crossingBatches) }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
+                // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
+                // merely live: a turn stopped without a `turn_end` would count up for as long as the session waits (iOS reads `.running` too).
+                val sessionLive = live != null && (worktreeState.detail ?: snapshotDetail)?.let(::resolvedRunState) == "RUNNING"
                 val displayedLoading = state.loading
                 val targetSeq = state.targetSeq
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().fadesIntoComposerBand().onSizeChanged {
@@ -529,9 +536,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> if (it.steps.isNotEmpty()) "steps" else it.event.type }) { index, row ->
                         val asked = ownerPlaced[index]
                         val crossings = crossingPlaced[index]
-                        if (asked == null && crossings == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
+                        // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
+                        val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
+                        val drawRow: @Composable () -> Unit = {
+                            if (head == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
+                            else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
+                                TurnHeadLine(head, ticking = sessionLive && row.event.seq == newestHead)
+                            }
+                        }
+                        if (asked == null && crossings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
+                            drawRow()
                             asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
                             crossings?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }

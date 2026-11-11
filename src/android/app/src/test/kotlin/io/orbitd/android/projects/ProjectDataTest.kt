@@ -70,6 +70,7 @@ class ProjectDataTest {
                 path.lastOrNull() == "coordinator" -> ok("""{"sessionId":"s1","created":true,"workspaceId":"w1"}""")
                 path.lastOrNull() == "replace" -> ok("""{"sessionId":"s2","created":true}""")
                 path.lastOrNull() == "handoffs" -> ok("[]")
+                path == listOf("workspaces") || path == listOf("runners") -> ok("[]")
                 else -> ok("{}")
             }
         }
@@ -88,6 +89,8 @@ class ProjectDataTest {
         api.resumeFuse("p1", "f1"); api.resolveBlocker("p1", "b1", "agent added")
         api.run("t1", "press-1", "t1:OPEN:READY"); api.resumeList("l1")
         assertEquals("s2", api.replaceCoordinator("p1", "replace:s1")?.text("sessionId"))
+        assertEquals("s2", api.replaceCoordinator("p1", "replace:s2", "w2")?.text("sessionId"))
+        api.workspaces(); api.runners()
         // A11c: the crossings and their answer, Retry on a landing job, and the owner's done door and its Not yet….
         assertEquals(emptyList<JsonObject>(), api.crossings("p1"))
         api.decideCrossing("p1", obj("""{"id":"h1","publicId":"34bH1","crossingKey":"k1"}"""), approve = true)
@@ -116,6 +119,9 @@ class ProjectDataTest {
             """POST /tasks/t1/execute {"triggerId":"press-1"}""",
             """PATCH /task-lists/l1 {"paused":false,"note":"Resumed from the project Run queue"}""",
             "POST /projects/p1/coordinator/replace",
+            // Change workspace…: the workspace it opens in rides in the body.
+            """POST /projects/p1/coordinator/replace {"workspaceId":"w2"}""",
+            "GET /workspaces", "GET /runners",
             "GET /projects/p1/handoffs", """POST /projects/p1/handoffs/34bH1/decision {"decision":"APPROVE","acknowledgedCrossingKey":"k1"}""",
             "POST /projects/p1/integration/jobs/j1/retry",
             """POST /projects/p1/done {"requestId":"d1","criteriaDigest":"c","acceptedGaps":[]}""",

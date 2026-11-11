@@ -514,7 +514,7 @@ object ProjectPage {
     const val startNewCoordinator = "Start a new coordinator"
     fun startNewCoordinatorDetail(finished: Boolean) = if (finished)
         "Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from."
-        else "Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable."
+        else "Completes this conversation first, then opens an empty one here. Nothing is deleted — it stays readable."
     const val replaceCoordinatorQuestion = "Complete this conversation and start a new coordinator?"
     const val replaceCoordinatorDetail = "The current conversation is completed — a turn in flight finishes first — and this project starts coordinating from a new, empty one. Nothing is deleted: the completed conversation stays readable."
     const val replaceCoordinatorConfirm = "Complete and start a new one"

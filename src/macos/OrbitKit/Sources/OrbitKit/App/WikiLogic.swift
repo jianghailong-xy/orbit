@@ -85,6 +85,7 @@ public enum WikiCopy {
     public static let whereUsed = "Where it's used"                         // WIKI_SECTION_USED
     public static let history = "History"                                   // WIKI_SECTION_HISTORY
     public static let anchorsNote = "Checked again after every commit to main. If the anchored code changes, agents stop getting this entry until someone re-checks it."
+    public static let anchorDeferred = "Not checked yet: the code could not be read when this was learned"  // WIKI_ANCHOR_DEFERRED
     public static func pushedTo(sessions: Int, fetched: Int) -> String {    // wikiPushedTo
         "Pushed to \(sessions) session\(sessions == 1 ? "" : "s") this week · fetched \(fetched)×"
     }
@@ -520,6 +521,11 @@ public enum WikiLogic {
         case .missing?:  return WikiAnchorMark(word: "Missing", tone: .red)
         default:         return WikiAnchorMark(word: "Unchecked", tone: .muted)
         }
+    }
+
+    /// A code anchor marked deferred and not checked on any tree since (`wikiAnchorDeferred`, contract `anchorRules.deferred`).
+    public static func anchorDeferred(_ anchor: WikiAnchor) -> Bool {
+        anchor.deferred == true && anchor.check == nil
     }
 
     /// One anchor's own line (`wikiAnchorLabel`): the path, with its symbol when it has one, or the
@@ -1033,18 +1039,19 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// counts, else the entries read here — the commit the anchors were last verified at, and where the
     /// maintenance run stands (mock 12 ④), as the web's status row carries them. The count waiting for
     /// review is left out — the banner right below says it (mock 12 ①).
-    public func statusParts(now: Date) -> [WikiStatusPart] {
+    public func statusParts(now: Date, narrow: Bool = false) -> [WikiStatusPart] {
         let count = health?.entries ?? entries.count
         var parts = [WikiStatusPart("\(WikiArticleCopy.count(count)) \(WikiCopy.entryNoun(count))")]
         if let sha = space.rootCommitSha, !sha.isEmpty {
             parts.append(WikiStatusPart(WikiCopy.anchorsVerified(ref: String(sha.prefix(7)), ago: "")))
         }
-        if let health { parts += WikiHealthLogic.parts(health, now: now) }
+        if let health { parts += WikiHealthLogic.parts(health, now: now, narrow: narrow) }
         return parts
     }
 
-    /// The same line as one text (`WikiHealthLogic.text`): what VoiceOver reads.
-    public func statusLine(now: Date) -> String { WikiHealthLogic.text(statusParts(now: now)) }
+    /// The same line as one text (`WikiHealthLogic.text`), a phone's — the repository's short words, as the
+    /// fixture's `line` says it.
+    public func statusLine(now: Date) -> String { WikiHealthLogic.text(statusParts(now: now, narrow: true)) }
 
     public var statusLine: String { statusLine(now: Date()) }
 }
