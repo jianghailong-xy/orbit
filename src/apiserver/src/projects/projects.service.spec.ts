@@ -771,7 +771,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     met: 0,
     landed: 0,
     onMain: 0,
-    byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 1, CODELESS: 0 },
+    byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 1, NO_BRANCH: 0, CODELESS: 0 },
   });
 });
 

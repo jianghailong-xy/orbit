@@ -81,13 +81,16 @@ export interface DoneRequest {
  *   is taking it to main.
  * - `NOTHING_TO_LAND` — its work ran a branch and the line found no commit of its own on it.
  * - `NO_RECEIPT` — no receipt puts its work on either branch: merged outside Orbit, or not merged.
- * - `CODELESS` — its work has no branch to land.
+ * - `NO_BRANCH` — its work ran without a branch and no job or receipt names it, so Orbit cannot see
+ *   whether its changes reached main.
+ * - `CODELESS` — its work has nothing to land: declared codeless, or done in another repository.
  */
 export type CriterionLandingReason =
   | 'IN_FLIGHT'
   | 'ON_PROJECT_BRANCH'
   | 'NOTHING_TO_LAND'
   | 'NO_RECEIPT'
+  | 'NO_BRANCH'
   | 'CODELESS';
 
 /**

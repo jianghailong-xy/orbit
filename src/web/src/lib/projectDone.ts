@@ -219,6 +219,7 @@ const REASON_ORDER: readonly CriterionLandingReason[] = [
   'IN_FLIGHT',
   'ON_PROJECT_BRANCH',
   'NO_RECEIPT',
+  'NO_BRANCH',
   'NOTHING_TO_LAND',
   'CODELESS',
 ];
@@ -228,6 +229,7 @@ const REASON_LABELS: Record<CriterionLandingReason, string> = {
   ON_PROJECT_BRANCH: 'on the project branch',
   NOTHING_TO_LAND: PROJECT_DONE_COPY.nothingToLand,
   NO_RECEIPT: 'merged outside Orbit',
+  NO_BRANCH: 'ran without a branch',
   CODELESS: 'no code to land',
 };
 
@@ -241,7 +243,8 @@ function reasonParts(counts: Pick<ProjectDoneCounts, 'byReason'>): string[] {
 function nothingToLandCount(counts: ProjectDoneCounts): number {
   // CODELESS has the same user-facing outcome as a zero-commit task: there is no branch or
   // receipt to land. Keep the server's two reasons distinct in the read model, but present the
-  // three compact card counts from the wording in the effect.
+  // three compact card counts from the wording in the effect. NO_BRANCH is not counted: work that
+  // ran without a branch may have changed code, and Orbit cannot see whether it reached main.
   return (counts.byReason?.NOTHING_TO_LAND ?? 0) + (counts.byReason?.CODELESS ?? 0);
 }
 
@@ -382,6 +385,7 @@ export function landingReasonLabel(reason: CriterionLandingReason | null, main: 
     case 'ON_PROJECT_BRANCH': return PROJECT_DONE_COPY.onProjectBranch;
     case 'NO_RECEIPT': return PROJECT_DONE_COPY.mergedOutsideOrbit;
     case 'NOTHING_TO_LAND': return PROJECT_DONE_COPY.nothingToLand;
+    case 'NO_BRANCH': return 'Ran without a branch';
     case 'CODELESS': return 'No code to land';
     default: return `Landed on ${main}`;
   }

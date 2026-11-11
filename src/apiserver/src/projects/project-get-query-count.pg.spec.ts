@@ -98,7 +98,7 @@ const sha = (nibble: string) => nibble.repeat(40);
  *      serving tasks of the large fixture cost them what the one task of the small one does;
  *   1  the newest work session of each serving task, one more level of that same read, added
  *      2026-10-01 with each criterion's landing reason (`criterion-landing-reason.ts`): whether the
- *      work ever took a worktree branch is what tells CODELESS from NO_RECEIPT, and it is §1.1
+ *      work ever took a worktree branch is what tells NO_BRANCH from NO_RECEIPT, and it is §1.1
  *      `isCodeTask`'s half the landing fold deliberately does not read. A level, like the two
  *      above it, so it is one statement at either size;
  *   3  §1.1's repository condition at that same lane (revision 29, §10.5 O-L7), added 2026-10-29:
