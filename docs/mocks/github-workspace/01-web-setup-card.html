@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>从 GitHub 建 workspace · 01 Web 设置卡与会话第一行</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/ChoiceControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Badge.css">
+<link rel="stylesheet" href="../../../src/web/src/components/MachineSetupCard.css">
+<link rel="stylesheet" href="board.css">
+<body>
+<div class="board">
+<h1>从 GitHub 建 workspace · 01 Web：设置卡的 Folder 步骤和会话第一行</h1>
+<div class="lede">
+今天要在机器上用 GitHub 的代码，只能选「A new folder」，然后在第一条消息里让 agent 去 clone（卡上原话就是
+<i>Ask for a clone … in your first message</i>）。在托管 runner 上，私有仓库这样 clone 不下来，因为机器上没有凭据。
+方案是在 Folder 步骤里加第四个选项 <b>From GitHub</b>：挑仓库 → 发送 → Orbit 先 clone，clone 好了会话才开始。
+界面文案全部是英文；红色编号对应下面的说明。帧用的是 app 自己的样式表（<code>index.css</code>、<code>ui/*.css</code>、<code>MachineSetupCard.css</code>），DOM 是手写的。
+</div>
+
+<!-- ============ today ============ -->
+<div class="section"><span class="sec now">① 今天</span><span class="sec-sub">机器 orbit@austin 上没有 workspace，打开它的新会话页。</span></div>
+<div class="grid2">
+<figure class="tile">
+  <div class="tile-title">Folder 步骤：三个选项</div>
+  <div class="app"><span class="fr-label">today · MachineSetupCard</span>
+  <div class="msc">
+    <div class="msc-head"><span class="msc-head-icon"><i data-ic="desktop"></i></span>
+      <div><div class="msc-title">Set up orbit@austin</div><div class="msc-sub">Pick where it works and sign in a coding CLI. Anything you send waits until both are done.</div></div></div>
+    <div class="msc-step"><span class="msc-num">1</span><div>
+      <div class="msc-step-title">Folder</div>
+      <div class="msc-step-help">Where on orbit@austin should sessions work? They can read and change everything in it.</div>
+      <div class="orbit-radio-group msc-options">
+        <label class="orbit-choice orbit-radio-button msc-option"><span class="orbit-radio"></span><span class="orbit-choice-label">
+          <span class="msc-path">/Users/austin</span><span class="msc-verdict warn">Found · not a git repository — sessions will share it instead of isolating.</span><span class="msc-meta">Where you ran orbit register</span></span></label>
+        <label class="orbit-choice orbit-radio-button msc-option" style="position:relative"><span class="orbit-radio" data-checked></span><span class="orbit-choice-label">
+          <span class="msc-option-title">A new folder</span>
+          <span class="orbit-text-control orbit-input orbit-input-affix msc-input"><span class="orbit-input-prefix"><span class="msc-prefix">/Users/austin/orbit-repos/</span></span><input class="orbit-input-field" value="orbit-web"></span>
+          <span class="msc-meta hl">Starts empty. Ask for a clone or a new project in your first message.</span></span>
+          <span class="num m" style="right:-10px;top:58px">1</span></label>
+        <label class="orbit-choice orbit-radio-button msc-option"><span class="orbit-radio"></span><span class="orbit-choice-label"><span class="msc-option-title">Another folder on orbit@austin</span></span></label>
+      </div>
+      <button class="orbit-button orbit-button-primary orbit-button-middle msc-use" type="button">Use this folder</button>
+    </div></div>
+    <div class="msc-step"><span class="msc-num">2</span><div><div class="msc-step-title">Sign in Claude Code on orbit@austin</div><div class="msc-step-help">Sessions run on the coding CLIs signed in on that machine, and spend its subscription.</div></div></div>
+  </div></div>
+</figure>
+<figure class="tile sumtile">
+  <div class="tile-title">今天的问题</div>
+  <ul class="notes">
+    <li><span class="num">1</span><span class="t">想用 GitHub 上的代码，只能建空文件夹，再让 agent 自己去 clone。agent 用的是<b>机器上的</b> git 凭据：
+      自托管机器上要是配过还行；<b>托管 runner 上根本没有凭据</b>，私有仓库 clone 失败，公开仓库能下来但推不回去。</span></li>
+    <li><span class="num">2</span><span class="t">clone 失败的时候，workspace 和会话都已经建好了，只能看到 agent 在对话里报错。用户不知道是缺凭据，也没有 Retry 可以点。</span></li>
+    <li><span class="num">3</span><span class="t"><code>repoUrl</code> 要等 clone 完、下一次目录探测才会回填。这期间项目的 Codebase 绑定看不到它。</span></li>
+    <li><span class="num">4</span><span class="t">落地时 runner push 到 <code>origin</code>（<code>worktree.go:2064</code>），走的也是机器凭据。托管 runner 上 push 也会失败。</span></li>
+  </ul>
+</figure>
+</div>
+
+<!-- ============ proposal ============ -->
+<div class="section"><span class="sec after">② 方案</span><span class="sec-sub">Folder 步骤加第四个选项 From GitHub。部署没配 GitHub App 时不显示这个选项，其余三个和今天一样。</span></div>
+
+<div class="grid2">
+<figure class="tile">
+  <div class="tile-title">P1 · 还没连接 GitHub</div>
+  <div class="app"><span class="fr-label">proposal · not connected</span>
+  <div class="msc">
+    <div class="msc-step" style="margin-top:0;padding-top:0;border-top:0"><span class="msc-num">1</span><div>
+      <div class="msc-step-title">Folder</div>
+      <div class="msc-step-help">Where on orbit@austin should sessions work? They can read and change everything in it.</div>
+      <div class="orbit-radio-group msc-options">
+        <label class="orbit-choice orbit-radio-button msc-option"><span class="orbit-radio"></span><span class="orbit-choice-label"><span class="msc-option-title">A new folder</span></span></label>
+        <label class="orbit-choice orbit-radio-button msc-option" style="position:relative"><span class="orbit-radio" data-checked></span><span class="orbit-choice-label">
+          <span class="msc-option-title"><i data-ic="github"></i>&nbsp; From GitHub<span class="newtag">NEW</span></span>
+          <span class="msc-meta">Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.</span>
+          <span class="ghp-row"><button class="orbit-button orbit-button-default orbit-button-middle" type="button"><span class="orbit-button-icon"><i data-ic="github"></i></span><span>Connect GitHub</span></button>
+          <span class="msc-meta">Opens GitHub, then comes back here.</span></span></span>
+          <span class="num m" style="right:-10px;top:10px">1</span><span class="num m" style="right:-10px;top:86px">2</span></label>
+        <label class="orbit-choice orbit-radio-button msc-option"><span class="orbit-radio"></span><span class="orbit-choice-label"><span class="msc-option-title">Another folder on orbit@austin</span></span></label>
+      </div>
+    </div></div>
+  </div></div>
+  <ul class="notes">
+    <li><span class="num">1</span><span class="t">排在「A new folder」和「Another folder」之间。注册目录那条建议还在最上面（这一帧省略了）。</span></li>
+    <li><span class="num">2</span><span class="t">点 Connect 会跳到 GitHub 授权，然后在 GitHub 上选要授权给 App 的仓库，最后回到<b>这张卡</b>，From GitHub 保持选中。
+      已经写好、在等的那条消息不会丢（它本来就存在服务端）。</span></li>
+  </ul>
+</figure>
+
+<figure class="tile">
+  <div class="tile-title">P2 · 已连接：搜索仓库</div>
+  <div class="app"><span class="fr-label">proposal · pick a repository</span>
+  <div class="msc">
+    <div class="msc-step" style="margin-top:0;padding-top:0;border-top:0"><span class="msc-num">1</span><div>
+      <div class="msc-step-title">Folder</div>
+      <div class="orbit-radio-group msc-options">
+        <label class="orbit-choice orbit-radio-button msc-option" style="position:relative"><span class="orbit-radio" data-checked></span><span class="orbit-choice-label">
+          <span class="msc-option-title"><i data-ic="github"></i>&nbsp; From GitHub</span>
+          <span class="ghp-acct">Signed in to GitHub as <b>@octo-dev</b> · 14 repositories · <a>Change</a></span>
+          <span class="orbit-text-control orbit-input orbit-input-affix msc-input" style="max-width:460px"><span class="orbit-input-prefix"><i data-ic="search" style="color:var(--text-3)"></i></span><input class="orbit-input-field" value="orbit"></span>
+          <div class="ghp-menu">
+            <div class="ghp-item active"><i data-ic="lock"></i><span class="ghp-name"><span class="owner">orbit-labs/</span>orbit-web</span><span class="ghp-when">pushed 2 hours ago</span></div>
+            <div class="ghp-item"><i data-ic="lock"></i><span class="ghp-name"><span class="owner">orbit-labs/</span>orbit-runner</span><span class="ghp-when">pushed yesterday</span></div>
+            <div class="ghp-item"><i data-ic="github"></i><span class="ghp-name"><span class="owner">octo-dev/</span>orbit-playground</span><span class="ghp-when">pushed Oct 28</span></div>
+            <div class="ghp-foot">Not listed? <a>Add repositories on GitHub <i data-ic="export"></i></a></div>
+          </div></span>
+          <span class="num m" style="right:-10px;top:30px">3</span><span class="num m" style="right:-10px;top:96px">4</span><span class="num m" style="right:-10px;top:210px">5</span></label>
+      </div>
+    </div></div>
+  </div></div>
+  <ul class="notes">
+    <li><span class="num">3</span><span class="t">账号一行：用的是哪个 GitHub 账号、能选几个仓库。Change 打开 Settings → GitHub。</span></li>
+    <li><span class="num">4</span><span class="t">没输入时，按最近 push 列出前 8 个仓库；输入以后在服务端搜（<code>GET /integrations/github/repos?q=</code>）。私有仓库带锁形图标。</span></li>
+    <li><span class="num">5</span><span class="t">只列出<b>装了 App 并且你有权限</b>的仓库。找不到时去 GitHub 把仓库加进安装范围，回来以后列表自动刷新。</span></li>
+  </ul>
+</figure>
+</div>
+
+<div class="grid2">
+<figure class="tile">
+  <div class="tile-title">P3 · 选中一个仓库</div>
+  <div class="app"><span class="fr-label">proposal · repository picked</span>
+  <div class="msc">
+    <div class="msc-step" style="margin-top:0;padding-top:0;border-top:0"><span class="msc-num">1</span><div>
+      <div class="msc-step-title">Folder</div>
+      <div class="orbit-radio-group msc-options">
+        <label class="orbit-choice orbit-radio-button msc-option" style="position:relative"><span class="orbit-radio" data-checked></span><span class="orbit-choice-label">
+          <span class="msc-option-title"><i data-ic="github"></i>&nbsp; From GitHub</span>
+          <span class="ghp-row" style="margin-top:2px"><span class="ghp-repo"><i data-ic="lock" style="color:var(--text-3)"></i>orbit-labs/orbit-web</span>
+            <span class="msc-meta"><i data-ic="branch"></i> main</span><a class="msc-change">Change</a></span>
+          <span class="orbit-text-control orbit-input orbit-input-affix msc-input"><span class="orbit-input-prefix"><span class="msc-prefix">/Users/austin/orbit-repos/</span></span><input class="orbit-input-field" value="orbit-web"></span>
+          <span class="msc-meta">Cloned before the session starts. Work lands back on GitHub. <a class="msc-change">Other branch</a></span></span>
+          <span class="num m" style="right:-10px;top:34px">6</span><span class="num m" style="right:-10px;top:66px">7</span><span class="num m" style="right:-10px;top:98px">8</span></label>
+      </div>
+      <button class="orbit-button orbit-button-primary orbit-button-middle msc-use" type="button">Use this repository</button>
+    </div></div>
+  </div></div>
+  <ul class="notes">
+    <li><span class="num">6</span><span class="t">默认用仓库的默认分支，只显示分支名。点 <i>Other branch</i> 才出分支补全，大多数人不需要选。</span></li>
+    <li><span class="num">7</span><span class="t">文件夹名默认用仓库名，可以改，规则和「A new folder」一样。输入后先用现有的 dir-probe 查一下：如果已经存在，
+      显示 <i>This folder already exists on orbit@austin. Pick another name.</i>，Use 按钮变灰（clone 要求目标是空的）。</span></li>
+    <li><span class="num">8</span><span class="t">这一句告诉用户<b>凭据由 Orbit 负责</b>：clone 和落地推回都不需要在机器上配置。</span></li>
+  </ul>
+</figure>
+
+<figure class="tile">
+  <div class="tile-title">P4 · 两步都做完，可以发送</div>
+  <div class="app"><span class="fr-label">proposal · ready</span>
+  <div class="msc">
+    <div class="msc-head"><span class="msc-head-icon"><i data-ic="desktop"></i></span>
+      <div><div class="msc-title">Set up orbit@austin</div><div class="msc-sub">Pick where it works and sign in a coding CLI. Anything you send waits until both are done.</div></div></div>
+    <div class="msc-step" style="position:relative"><svg class="ic msc-num done" viewBox="64 64 896 896"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm193.5 301.7l-210.6 292a31.8 31.8 0 01-51.7 0L318.5 484.9c-3.8-5.3 0-12.7 6.5-12.7h46.9c10.2 0 19.9 4.9 25.9 13.3l71.2 98.8 157.2-218c6-8.3 15.6-13.3 25.9-13.3H699c6.5 0 10.3 7.4 6.5 12.7z"/></svg>
+      <div class="msc-done-line"><span class="msc-step-title">Folder</span><span class="msc-path">orbit-labs/orbit-web → ~/orbit-repos/orbit-web</span><span class="msc-meta">cloned before the session starts</span><button class="msc-change" type="button">Change</button></div>
+      <span class="num m" style="right:-10px;top:14px">9</span></div>
+    <div class="msc-step"><svg class="ic msc-num done" viewBox="64 64 896 896"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm193.5 301.7l-210.6 292a31.8 31.8 0 01-51.7 0L318.5 484.9c-3.8-5.3 0-12.7 6.5-12.7h46.9c10.2 0 19.9 4.9 25.9 13.3l71.2 98.8 157.2-218c6-8.3 15.6-13.3 25.9-13.3H699c6.5 0 10.3 7.4 6.5 12.7z"/></svg>
+      <div class="msc-done-line"><span class="msc-step-title">Claude Code</span><span class="msc-meta">signed in on orbit@austin</span></div></div>
+    <div class="msc-foot ready" style="position:relative">Ready. Send a task — Orbit clones orbit-labs/orbit-web into ~/orbit-repos/orbit-web and adds the workspace “orbit-web” as it starts.
+      <span class="num m" style="right:-10px;top:8px">10</span></div>
+  </div></div>
+  <ul class="notes">
+    <li><span class="num">9</span><span class="t">完成行写的是「仓库 → 路径」，一行能看清从哪 clone、clone 到哪。</span></li>
+    <li><span class="num">10</span><span class="t">底部的就绪句子提前说明会先 clone，所以发送后要等一会儿是意料之中的。</span></li>
+  </ul>
+</figure>
+</div>
+
+<div class="tile wide">
+  <div class="tile-title">P5 · 发送以后：会话第一行（今天的 <i>Created workspace …</i> 那一行）</div>
+  <div class="frs">
+  <div style="flex:1">
+    <div class="app"><span class="fr-label">cloning</span>
+      <div class="conv-line" style="position:relative"><i data-ic="loading" style="color:var(--brand)"></i>Cloning <b>orbit-labs/orbit-web</b> on <b>orbit@austin</b><span class="conv-bar"><i></i></span>42%
+        <span class="num m" style="right:-6px;top:-8px">11</span></div>
+      <div class="bubble">Fix the flaky login redirect test and land it.</div>
+      <div class="bubble-state" style="position:relative">Starts when the clone is done<span class="num m" style="right:-26px;top:-2px">12</span></div>
+    </div>
+    <div class="app"><span class="fr-label">done</span>
+      <div class="conv-line" style="position:relative"><span class="msc-created-mark"><i data-ic="check"></i></span>Created workspace <b>orbit-web</b> on <b>orbit@austin</b>
+        <span class="msc-created-sep">·</span><code>~/orbit-repos/orbit-web</code><span class="msc-created-sep">·</span><a><i data-ic="github"></i> orbit-labs/orbit-web</a>
+        <span class="msc-created-sep">·</span><a>Rename</a><span class="msc-created-sep">·</span><a>Settings</a>
+        <span class="num m" style="right:-6px;top:-8px">13</span></div>
+    </div>
+  </div>
+  <div style="flex:1">
+    <div class="app"><span class="fr-label">failed · folder taken</span>
+      <div class="conv-line" style="position:relative"><span class="conv-err"><i data-ic="warn"></i></span><span class="conv-err">Couldn’t clone orbit-labs/orbit-web: ~/orbit-repos/orbit-web already exists on orbit@austin.</span>
+        <a>Retry</a><span class="msc-created-sep">·</span><a>Settings</a><span class="num m" style="right:-6px;top:-8px">14</span></div>
+    </div>
+    <div class="app"><span class="fr-label">failed · App removed</span>
+      <div class="conv-line"><span class="conv-err"><i data-ic="warn"></i></span><span class="conv-err">Orbit’s GitHub App is no longer installed on orbit-labs/orbit-web.</span>
+        <a>Install on GitHub <i data-ic="export"></i></a><span class="msc-created-sep">·</span><a>Retry</a></div>
+    </div>
+    <div class="app"><span class="fr-label">failed · sign-in expired</span>
+      <div class="conv-line"><span class="conv-err"><i data-ic="warn"></i></span><span class="conv-err">Your GitHub sign-in expired.</span><a>Reconnect GitHub</a><span class="msc-created-sep">·</span><a>Retry</a></div>
+    </div>
+  </div>
+  </div>
+  <ul class="notes">
+    <li><span class="num">11</span><span class="t">clone 进行中：显示阶段和百分比（git 的 <code>Receiving objects</code>），随心跳更新，大约 30 秒一次。百分比只在线上转发，不存库。</span></li>
+    <li><span class="num">12</span><span class="t">消息已经发出、会话也已经建好，只是还没派发（派发门槛：<code>WORKSPACE_CLONING</code>）。clone 好了自动开始，不用再按一次。</span></li>
+    <li><span class="num">13</span><span class="t">完成后就是今天这一行，后面多一个仓库链接（打开 GitHub）。</span></li>
+    <li><span class="num">14</span><span class="t">失败的原因写成用户能处理的话，带 Retry（<code>POST /workspaces/:id/clone/retry</code>）。会话还在队列里，Retry 成功后照常开始。
+      这三种是 v1 会出现的主要失败；其他失败显示 git 的原文，已脱敏。</span></li>
+  </ul>
+</div>
+
+<div class="section"><span class="sec after">边界</span><span class="sec-sub">没有画成帧的状态</span></div>
+<table class="cmp" style="background:#fff;border-radius:14px">
+<tr><th>状态</th><th>今天</th><th>方案</th></tr>
+<tr><td>部署没配 GitHub App</td><td>—</td><td>不显示 From GitHub，设置卡和今天完全一样。管理员在管理区 Integrations 配好以后才出现（见 02）。</td></tr>
+<tr><td>runner 版本太旧</td><td>—</td><td>选项可以点，但写 <i>orbit@austin updates itself first: this version can’t clone yet.</i>，和今天目录探测的那句同一种说法。不能自动更新的机器写 <i>… can’t clone on this version, and it can’t update itself.</i></td></tr>
+<tr><td>机器离线</td><td>两步都不能做</td><td>一样。仓库列表照样能搜（列表来自服务端），但 Use 按钮不可点。</td></tr>
+<tr><td>自托管机器上本来就有 git 凭据</td><td>agent 用机器凭据</td><td>clone 先用机器凭据，认证失败再用 Orbit 的 token 试一次。Settings 里显示这个 workspace 用的是 <i>This machine’s Git credential</i> 还是 <i>Orbit’s GitHub App</i>。</td></tr>
+<tr><td>agent 在 shell 里自己 <code>git push</code></td><td>用机器凭据</td><td>托管 runner 上失败（没有凭据），提示是 <i>This checkout’s GitHub credential is Orbit’s: land your work to push it.</i>（写进系统提示）。自托管机器和今天一样。</td></tr>
+</table>
+</div>
+<script src="icons.js"></script>
+</body>
+</html>
