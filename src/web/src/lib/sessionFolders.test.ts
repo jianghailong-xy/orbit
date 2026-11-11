@@ -167,7 +167,7 @@ const providerName = (slug: string) => (slug === 'codex' ? 'Codex' : 'Claude');
 describe('moveTargetRows', () => {
   it('opens a workspace the session can go to and names its provider and runner', () => {
     expect(moveTargetRows(answer(), providerName)).toEqual([
-      { target: target(), enabled: true, startsNew: false, detail: 'Codex · wikova' },
+      { target: target(), enabled: true, detail: 'Codex · wikova' },
     ]);
   });
 
@@ -315,26 +315,6 @@ describe('runWorkspaceMove', () => {
 
 describe('a project’s coordinator in the Move panel', () => {
   const coordinates = { projectId: 'p1', title: 'Session list redesign' };
-
-  it('offers Start new here… only where the conversation cannot go and a new coordinator can', () => {
-    const rows = moveTargetRows(
-      answer({
-        coordinates,
-        targets: [
-          target(),
-          target({ workspaceId: 'w3', reason: 'Codex keeps this conversation on wikova', startsCoordinator: true }),
-          target({ workspaceId: 'w4', reason: 'This workspace is disabled.', startsCoordinator: false }),
-        ],
-      }),
-      providerName,
-    );
-    expect(rows.map((r) => [r.enabled, r.startsNew])).toEqual([[true, false], [false, true], [false, false]]);
-    // Never for a session that coordinates nothing, nor when the session itself cannot leave.
-    expect(moveTargetRows(answer({ targets: [target({ reason: 'x', startsCoordinator: true })] }), providerName)[0].startsNew).toBe(false);
-    expect(
-      moveTargetRows(answer({ coordinates, reason: 'Stop the session first.', targets: [target({ reason: 'x', startsCoordinator: true })] }), providerName)[0].startsNew,
-    ).toBe(false);
-  });
 
   it('says the project goes with it, and what an ended coordinator misses', () => {
     const a = answer({ coordinates, needsEnd: true, branch: 'b', changedFiles: 3, unmergedFiles: 3, mergeTarget: 'main' });

@@ -461,7 +461,7 @@ final class ProjectDetailModel {
     }
 
     /// Replace the coordinator conversation with an empty one; the server completes an open one first.
-    /// A workspace named opens the new one there (Start a new coordinator in…).
+    /// A workspace named opens the new one there (Change workspace's Start a new one there).
     func replaceCoordinator(inWorkspace workspaceID: String? = nil) async -> Result<ProjectCoordinatorOpened, ProjectActionError> {
         busy = true
         defer { busy = false }

@@ -1,26 +1,33 @@
+import type { SessionMoveTargets } from '@orbit/shared';
+
 /**
- * Starting a project's next coordinator in a workspace the owner picks
- * (docs/mocks/coordinator-move-workspace/03-final ④–⑥): the picker's rows and the confirmation's
- * words. The server's `POST /projects/:id/coordinator/replace` with `{ workspaceId }` does the work;
- * a workspace it would refuse (`sessions.create`: disabled, or on no runner) is greyed here with the
- * same reason, so the press is not offered where it cannot succeed.
+ * Change: where a project is coordinated from (docs/mocks/coordinator-move-workspace/04-change).
+ * One door for both ways of getting there — the coordinator conversation moves along when it can
+ * (`POST /sessions/:id/move`), or a new, empty one opens there (`POST /projects/:id/coordinator/replace`
+ * with `{ workspaceId }`). Which way each workspace allows is the server's answer: `move-targets`
+ * for a conversation that exists, and for one that does not (in Trash, never opened) the two refusals
+ * `sessions.create` gives a workspace — disabled, or on no runner — read off the workspace list.
  */
 
-export const START_COORDINATOR_COPY = {
-  menuTitle: 'Start a new coordinator in…',
-  menuDetail: 'The same, in a workspace you pick. This project is coordinated from there afterwards.',
-  pickerTitle: 'Start a new coordinator in…',
+export const CHANGE_COPY = {
+  link: 'Change',
+  /** The Unavailable card's button and the phone menus' item. */
+  button: 'Change workspace…',
+  title: 'Change workspace',
+  sub: (project: string, from: string | null) => (from ? `${project} · coordinated from ${from}` : project),
   current: 'Current',
   runnerOffline: 'Runner offline',
-  pickerFoot: "The new coordinator starts empty, on the workspace’s own engine and account.",
+  comesAlong: 'Conversation comes along',
+  newConversation: 'New conversation',
+  foot: 'Tasks keep running where they are. Only where the project is coordinated from changes.',
   disabled: 'This workspace is disabled.',
   noRunner: 'This workspace has no runner.',
-  keep: 'Keep this coordinator',
-  /** The Move panel's way out for a row whose conversation cannot come along. */
-  startNewHere: 'Start new here…',
+  cancel: 'Cancel',
+  move: 'Move conversation',
+  startThere: 'Start a new one there',
 } as const;
 
-/** A workspace as `GET /workspaces` lists it — only what the picker reads. */
+/** A workspace as `GET /workspaces` lists it — only what the list reads. */
 export interface PickerWorkspace {
   id: string;
   name: string;
@@ -30,72 +37,129 @@ export interface PickerWorkspace {
   lastProvider?: string | null;
 }
 
-export interface CoordinatorWorkspaceRow {
+/** How a picked workspace can take the project: the conversation moves along, or a new one opens there. */
+export type ChangeWay = 'move' | 'new';
+
+export interface ChangeRow {
   workspaceId: string;
   name: string;
   provider: string;
-  /** `<Provider> · <runner>`, or why a new coordinator cannot open there. */
+  /** `<Provider> · <runner>` (empty for the current workspace when its runner is not known), or
+   *  why nothing can open there. The Current pill says which one it is. */
   detail: string;
-  /** Null when a new coordinator can open here. */
+  /** Null for the current workspace and for one nothing can open in (greyed). */
+  way: ChangeWay | null;
+  /** Why the conversation cannot come along, for a `new` row (the server's sentence); why nothing
+   *  can open there, for a greyed one. */
   reason: string | null;
   current: boolean;
   runnerOffline: boolean;
 }
 
-/** The picker's rows, in the sidebar's order (the list's own). */
-export function coordinatorWorkspaceRows(
+const currentRow = (id: string, name: string, provider: string, detail: string): ChangeRow => ({
+  workspaceId: id, name, provider, detail, way: null, reason: null, current: true, runnerOffline: false,
+});
+
+/** The rows for a coordinator conversation that exists: its own workspace first, then the server's targets. */
+export function changeRowsFromTargets(
+  answer: SessionMoveTargets,
+  current: { id: string; name: string; provider?: string },
+  providerName: (slug: string) => string,
+): ChangeRow[] {
+  const rows = answer.targets.map((t): ChangeRow => {
+    const comesAlong = answer.reason == null && t.reason == null;
+    const way: ChangeWay | null = comesAlong ? 'move' : t.startsCoordinator ? 'new' : null;
+    return {
+      workspaceId: t.workspaceId,
+      name: t.name,
+      provider: t.provider,
+      detail: way ? [providerName(t.provider), t.runnerName].filter(Boolean).join(' · ') : (t.reason ?? ''),
+      way,
+      reason: comesAlong ? null : (answer.reason ?? t.reason),
+      current: false,
+      runnerOffline: way != null && t.runnerId != null && !t.runnerOnline,
+    };
+  });
+  return [currentRow(current.id, current.name, current.provider ?? 'claude', ''), ...rows];
+}
+
+/** The rows when there is no conversation to bring (in Trash, or never opened): every usable workspace
+ *  takes a new one. */
+export function changeRowsFromWorkspaces(
   workspaces: readonly PickerWorkspace[],
   currentWorkspaceId: string | null,
   onlineRunnerIds: ReadonlySet<string> | null,
   providerName: (slug: string) => string,
-): CoordinatorWorkspaceRow[] {
-  return workspaces.map((w) => {
-    const reason = w.enabled === false
-      ? START_COORDINATOR_COPY.disabled
-      : !w.runnerId
-        ? START_COORDINATOR_COPY.noRunner
-        : null;
+): ChangeRow[] {
+  const rows = workspaces.map((w): ChangeRow => {
     const provider = w.lastProvider || 'claude';
     const runnerName = w.runner?.displayName || w.runner?.name || null;
+    const usual = [providerName(provider), runnerName].filter(Boolean).join(' · ');
+    if (w.id === currentWorkspaceId) return currentRow(w.id, w.name, provider, usual);
+    const reason = w.enabled === false ? CHANGE_COPY.disabled : !w.runnerId ? CHANGE_COPY.noRunner : null;
     return {
       workspaceId: w.id,
       name: w.name,
       provider,
-      detail: reason ?? [providerName(provider), runnerName].filter(Boolean).join(' · '),
+      detail: reason ?? usual,
+      way: reason ? null : 'new',
       reason,
-      current: w.id === currentWorkspaceId,
+      current: false,
       // Unknown liveness (the runner list not read yet) is no pill rather than a wrong one.
       runnerOffline: reason == null && !!w.runnerId && onlineRunnerIds != null && !onlineRunnerIds.has(w.runnerId),
     };
   });
+  // The current workspace leads, as it does when the server lists the targets.
+  return [...rows.filter((r) => r.current), ...rows.filter((r) => !r.current)];
 }
 
-/** What the conversation being left behind is, for the confirmation's first paragraph. */
+/** What the conversation being left behind is. */
 export type OutgoingCoordinator = 'open' | 'completed' | 'none';
 
-export const startCoordinatorTitle = (workspace: string): string =>
-  `Start a new coordinator in ${workspace}?`;
+export const changeTitle = (project: string, to: string): string => `Coordinate ${project} from ${to}?`;
 
-/** The confirmation's paragraphs: where the old conversation stays, and what moves with the new one. */
-export function startCoordinatorParagraphs(args: {
-  project: string;
+const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text}.`);
+
+/** The confirmation when the conversation can come along: both ways, the move first. `files` is the
+ *  sentence about changes left on the branch (Move's own, moveConfirmParagraphs), when there are any. */
+export function changeMoveParagraphs(args: {
+  to: string;
+  from: string;
+  needsEnd: boolean;
+  files: string | null;
+}): string[] {
+  const { to, from, needsEnd, files } = args;
+  const move = [`this conversation goes to ${to} and continues there.`];
+  if (needsEnd) move.push('It ends first.');
+  if (files) move.push(files);
+  return [
+    `Move conversation: ${move.join(' ')}`,
+    `Start a new one there: this conversation is completed and stays readable in ${from}, and a new, empty one opens in ${to}.`,
+    'Either way, its tasks keep running where they are.',
+  ];
+}
+
+/** The confirmation when only a new conversation can open there: why, first, when there is one. */
+export function changeNewParagraphs(args: {
   to: string;
   from: string | null;
   outgoing: OutgoingCoordinator;
+  reason: string | null;
 }): string[] {
-  const { project, to, from, outgoing } = args;
+  const { to, from, outgoing, reason } = args;
   const where = from ? ` in ${from}` : '';
   const paragraphs: string[] = [];
+  if (reason && outgoing !== 'none') paragraphs.push(`This conversation can’t come along: ${sentence(reason)}`);
   if (outgoing === 'open') {
-    paragraphs.push(`The current conversation is completed — a turn in flight finishes first — and stays readable${where}.`);
+    paragraphs.push(`It is completed — a turn in flight finishes first — and stays readable${where}. A new, empty one opens in ${to}.`);
   } else if (outgoing === 'completed') {
-    paragraphs.push(`The current conversation stays completed and readable${where}.`);
+    paragraphs.push(`It stays completed and readable${where}. A new, empty one opens in ${to}.`);
+  } else {
+    paragraphs.push(`A new, empty one opens in ${to}.`);
   }
-  paragraphs.push(
-    `${project} is coordinated from a new, empty conversation in ${to}, and its row moves to ${to}’s list. Its tasks keep running where they are.`,
-  );
+  paragraphs.push('Its tasks keep running where they are.');
   return paragraphs;
 }
 
-export const startCoordinatorAction = (workspace: string, outgoing: OutgoingCoordinator): string =>
-  outgoing === 'open' ? `Complete and start in ${workspace}` : `Start in ${workspace}`;
+export const changeNewAction = (to: string, outgoing: OutgoingCoordinator): string =>
+  outgoing === 'open' ? `Complete and start in ${to}` : `Start in ${to}`;
