@@ -1342,6 +1342,7 @@ export function lastLandingCheck(checks: unknown): 'PASSING' | 'FAILING' | 'UNKN
   let complete = true;
   for (const check of checks) {
     if (!check || typeof check !== 'object') { complete = false; continue; }
+    if (check.name === 'LANDING_CHECK' && check.skipped === 'PATHS_EXEMPT') continue;
     if (check.timedOut === true) return 'FAILING';
     if (typeof check.expectedExitCode !== 'number' || typeof check.exitCode !== 'number'
       || check.timedOut !== false) { complete = false; continue; }

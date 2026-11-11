@@ -236,6 +236,8 @@ export function isRetryableLandingFailure(
 
 /** The checks the runner ran, as it reports them back. `outputTail` is clipped by the runner. */
 export interface IntegrationCheckResult {
+  skipped?: 'PATHS_EXEMPT';
+  files?: string[];
   name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   command: string;
   expectedExitCode: number;
