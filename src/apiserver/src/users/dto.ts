@@ -1,5 +1,5 @@
 import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateBy } from 'class-validator';
-import { PermissionMode } from '@orbit/shared';
+import { PermissionMode, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
 
 export class CreateUserDto {
   @IsEmail()
@@ -142,6 +142,21 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   recaps?: boolean;
+
+  /**
+   * Settings › Translation (@orbit/shared translation.ts): whether the owner's messages are translated
+   * into English before the engine gets them. Default OFF (absent = off). Read on every send, so it
+   * applies from the next message; nothing is backfilled. Without the server's DeepSeek key it does
+   * nothing (`translationAvailable` on `me`).
+   */
+  @IsOptional()
+  @IsBoolean()
+  translationEnabled?: boolean;
+
+  /** The language the owner writes and reads in: one of TRANSLATION_LANGUAGES. Absent = zh-Hans. */
+  @IsOptional()
+  @IsIn([...TRANSLATION_LANGUAGES])
+  translationLanguage?: TranslationLanguage;
 }
 
 /** Set a user's access role (admin area). */

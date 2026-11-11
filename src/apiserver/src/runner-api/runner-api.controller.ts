@@ -1,4 +1,5 @@
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
+import { turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { readMergeRecovery, mergeRecoveryReady, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
@@ -8091,10 +8092,15 @@ export class RunnerApiController {
             select: {
               id: true, content: true, clientTurnId: true, senderSessionId: true,
               externalSenderSource: true, externalSenderName: true,
+              displayPrompt: true, translationState: true, translationLang: true,
             },
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
+      // Settings › Translation: what the owner wrote, for a turn delivered in English. The echo is the
+      // English (and `authoredUserText` stays it, since that is where the delivered words end); the row
+      // previews the owner's own words.
+      const ownerUserText = new Map(userTurns.map((turn) => [turn.id, turn.displayPrompt ?? turn.content]));
       const userTurnById = new Map(userTurns.map((turn) => [turn.id, turn]));
       // The cards those turns are drawn as rather than as the owner's own message — an exception
       // item's delivery, the owner's answer handed to the coordinator, a fact the coordinator is told
@@ -8137,6 +8143,11 @@ export class RunnerApiController {
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);
+        // The owner's original beside the English the engine was given (@orbit/shared TurnTranslation).
+        // Only the turn row says so: whatever a runner put under the key is dropped.
+        delete e.payload.translation;
+        const translation = e.turnId ? turnTranslationOf(userTurnById.get(e.turnId) ?? {}) : undefined;
+        if (translation) e.payload.translation = translation;
       }
       // A move between account-pool members is said on the first engine start after it — the first
       // event from a process holding the new member's key. It rides on the runner's own event
@@ -8329,8 +8340,8 @@ export class RunnerApiController {
             (e.payload as { text?: string; content?: string } | null)?.text
             ?? (e.payload as { content?: string } | null)?.content
             ?? '';
-          const text = e.turnId && authoredUserText.has(e.turnId)
-            ? authoredUserText.get(e.turnId)
+          const text = e.turnId && ownerUserText.has(e.turnId)
+            ? ownerUserText.get(e.turnId)
             : echoed;
           pendingUserText = text?.trim() || null;
           const cards = e.turnId ? turnCards.get(e.turnId) : undefined;

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+:root{--bg:#f6f6f4;--card:#fff;--line:#e6e4df;--text:#1d1d1b;--t2:#55534e;--t3:#8b8882;--acc:#d97757;--accbg:#fbeee8;--blue:#2f6fde;--ok:#2e8b57;--warn:#c4581b;--bub:#efede8}
+*{box-sizing:border-box}
+body{margin:0;background:#e9e7e2;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:var(--text)}
+.board{width:2160px;padding:40px;background:#e9e7e2}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--t2);font-size:16px;margin-bottom:28px;line-height:1.6}
+.row{display:flex;gap:28px;align-items:flex-start;margin-bottom:32px}
+.frame{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.08);overflow:hidden}
+.cap{font-size:15px;font-weight:600;margin:0 0 10px;color:#333}
+.cap small{font-weight:400;color:var(--t2);margin-left:6px}
+.num{display:inline-flex;width:24px;height:24px;border-radius:12px;background:var(--acc);color:#fff;font-size:13px;align-items:center;justify-content:center;margin-right:6px;font-weight:700}
+.mk{display:inline-flex;width:20px;height:20px;border-radius:10px;background:var(--acc);color:#fff;font-size:11px;align-items:center;justify-content:center;font-weight:700;vertical-align:middle;margin-left:6px;box-shadow:0 0 0 2px #fff}
+/* web console */
+.w{background:var(--bg);font-size:14px}
+.w-top{height:44px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:10px;background:#fbfbfa;color:var(--t2);font-size:13px}
+.w-page{padding:22px 0 26px}
+.w-col{max-width:560px;margin:0 auto}
+.w h2.pt{font-size:22px;margin:0 0 16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:16px}
+.card.new{outline:2.5px solid var(--acc);outline-offset:3px}
+.card .ct{font-weight:600;font-size:14px;padding:2px 0 6px;border-bottom:1px solid var(--line);margin-bottom:2px}
+.field{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:10px 0}
+.field .h{color:var(--t3);font-size:12px;line-height:1.45;margin-top:2px}
+.sw{width:34px;height:20px;border-radius:10px;background:#cfccc6;position:relative;flex:none}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:8px;background:#fff}
+.sw.on{background:var(--acc)}.sw.on::after{left:16px}
+.sw.dis{opacity:.45}
+.sel{border:1px solid var(--line);border-radius:7px;padding:5px 10px;width:200px;display:flex;justify-content:space-between;font-size:13px;background:#fff;flex:none}
+.sel.dis{color:var(--t3);background:#f4f3f0}
+.dim{opacity:.38}
+.notice{background:#fff7e8;border:1px solid #f1d9a8;border-radius:8px;padding:8px 10px;font-size:12px;color:#7a5512;margin:8px 0 4px}
+/* web transcript */
+.tr{padding:18px 26px;font-size:14px;line-height:1.6}
+.u{display:flex;flex-direction:column;align-items:flex-end;margin:6px 0 14px}
+.ub{background:var(--bub);border-radius:14px;padding:9px 13px;max-width:78%}
+.foot{font-size:12px;color:var(--t3);margin-top:4px;display:flex;gap:8px;align-items:center}
+.foot a{color:var(--t2);text-decoration:underline;text-underline-offset:2px}
+.foot .tg{display:inline-flex;align-items:center;gap:4px}
+.a{margin:4px 0 12px}
+.a p{margin:0 0 6px}
+.tool{font-family:'SF Mono',monospace;font-size:12.5px;color:var(--t2);background:#f4f3f0;border-radius:7px;padding:6px 10px;margin:8px 0}
+.orig{border-left:3px solid var(--line);padding-left:10px;color:var(--t2)}
+.stream::after{content:'▍';color:var(--acc)}
+.chip{font-size:11.5px;background:#f0eee9;color:var(--t2);border-radius:10px;padding:1px 8px}
+.err{color:var(--warn)}
+.composer{margin:10px 26px 18px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 12px;font-size:14px;color:var(--t3);display:flex;justify-content:space-between;align-items:center}
+.composer .lang{font-size:12px;color:var(--t2);background:#f4f3f0;border-radius:8px;padding:2px 8px}
+.cardq{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;margin:8px 0}
+.opt{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-top:6px;font-size:13px}
+/* phones */
+.ph{width:393px;height:852px;border-radius:44px;background:#000;padding:10px;flex:none}
+.ps{width:373px;height:832px;border-radius:36px;overflow:hidden;background:#f2f2f7;position:relative;font-size:15px}
+.ps.and{background:#fbf8f6;border-radius:28px}
+.stat{height:48px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 6px;font-size:14px;font-weight:600}
+.nav{padding:6px 16px 8px;display:flex;align-items:center;gap:10px}
+.nav .t{font-size:17px;font-weight:600;flex:1;text-align:center}
+.nav .bk{color:var(--blue);font-size:16px}
+.big{font-size:32px;font-weight:700;padding:4px 18px 10px}
+.grp{margin:0 16px 6px;background:#fff;border-radius:12px;overflow:hidden}
+.gh{font-size:12.5px;color:#6d6d72;text-transform:uppercase;padding:14px 32px 6px}
+.gf{font-size:12.5px;color:#6d6d72;padding:6px 32px 10px;line-height:1.4}
+.cell{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid #e5e5ea}
+.cell:last-child{border-bottom:0}
+.cell .v{color:#8e8e93}
+.isw{width:51px;height:31px;border-radius:16px;background:#e9e9eb;position:relative}
+.isw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:14px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.isw.on{background:#34c759}.isw.on::after{left:22px}
+.hl{outline:2.5px solid var(--acc);outline-offset:-2px}
+.pt2{padding:8px 14px;font-size:15px;line-height:1.5}
+.pt2 .ub{background:#e9e9eb;max-width:85%}
+.pcomp{position:absolute;left:12px;right:12px;bottom:26px;background:#fff;border-radius:20px;padding:10px 14px;color:#8e8e93;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.and .cell{border-bottom:0;padding:14px 18px}
+.and .grp{background:transparent;margin:0}
+.and .gh{text-transform:none;color:#8a4b32;font-weight:600;font-size:13.5px;padding:16px 18px 2px}
+.asw{flex:none;width:52px;height:32px;border-radius:16px;background:#e7e0dc;border:2px solid #85736b;position:relative}
+.asw::after{content:'';position:absolute;top:6px;left:6px;width:16px;height:16px;border-radius:8px;background:#85736b}
+.asw.on{background:#8a4b32;border-color:#8a4b32}.asw.on::after{left:24px;top:2px;width:24px;height:24px;border-radius:12px;background:#fff}
+.atop{padding:10px 8px 10px 14px;display:flex;gap:16px;align-items:center;font-size:20px}
+/* notes */
+.notes{background:#fff;border-radius:14px;padding:22px 26px;font-size:14.5px;line-height:1.65;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.notes h3{margin:0 0 10px;font-size:18px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-bottom:1px solid #eee;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#666;font-weight:600;background:#faf9f7}
+code{font-family:'SF Mono',monospace;font-size:12.5px;background:#f3f1ec;padding:1px 5px;border-radius:4px}
+.dec{border:2px dashed var(--acc);background:#fffaf7}
+.dec li{margin-bottom:10px}
+.rec{color:var(--ok);font-weight:600}
+</style>
+</head>
+<body>
+<div class="board">
+<h1>Settings › Translation · 会话自动翻译</h1>
+<div class="sub">你和 Agent 之间隔一层翻译：你用中文写、看中文；引擎收到的和回的都是英文。已定：只翻你的消息和 Agent 的正文回复（工具调用、命令输出、代码、thinking 不翻）· 一律用服务器的 DeepSeek key · 每条消息可切 “Show original” · 账号级一个开关 · Web、iOS/macOS、Android 一起做。<br>界面文字一律英文（CLAUDE.md §5），标注用中文。</div>
+
+<!-- ROW 1: web settings -->
+<div class="row">
+  <div>
+    <div class="cap"><span class="num">1</span>Web · Settings <small>新增 Translation 卡片，放在 Session defaults 之后</small></div>
+    <div class="frame w" style="width:720px">
+      <div class="w-top">Orbit › Settings</div>
+      <div class="w-page"><div class="w-col">
+        <h2 class="pt">Settings</h2>
+        <div class="card dim"><div class="ct">Session defaults</div>
+          <div class="field"><div><div>Default permission mode</div><div class="h">The mode a new session starts in…</div></div><div class="sel">Ask before edits <span>▾</span></div></div>
+          <div class="field"><div><div>Session recaps</div><div class="h">Session lists show the one-line summary…</div></div><div class="sw on"></div></div>
+        </div>
+        <div class="card new"><div class="ct">Translation <span class="mk">A</span></div>
+          <div class="field"><div><div>Translate conversations</div><div class="h">Agents read and write in English; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are.</div></div><div class="sw on"></div></div>
+          <div class="field"><div><div>Your language <span class="mk">B</span></div><div class="h">What you write in, and what replies are shown in.</div></div><div class="sel">Chinese (Simplified) <span>▾</span></div></div>
+          <div class="field"><div><div>Agents work in</div><div class="h">What the agent receives and answers in.</div></div><div class="sel">English <span>▾</span></div></div>
+          <div class="field" style="padding-top:4px"><div class="h" style="margin:0">Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a conversation stays as it was. <span class="mk">C</span></div></div>
+        </div>
+        <div class="card dim"><div class="ct">Session orchestration</div>
+          <div class="field"><div><div>Let sessions orchestrate</div><div class="h">Sessions in every workspace can spawn…</div></div><div class="sw on"></div></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="cap"><span class="num">2</span>Web · 服务器没配 DeepSeek key <small>开关灰掉，说明原因</small></div>
+    <div class="frame w" style="width:620px">
+      <div class="w-page" style="padding:22px 30px"><div>
+        <div class="card"><div class="ct">Translation</div>
+          <div class="field"><div><div>Translate conversations</div><div class="h">Agents read and write in English; you write and read in your language…</div></div><div class="sw dis"></div></div>
+          <div class="notice">This server has no DeepSeek key, so it can't translate. Whoever runs it sets <code>DEEPSEEK_API_KEY</code> and restarts it.</div>
+          <div class="field dim"><div><div>Your language</div></div><div class="sel dis">Chinese (Simplified) <span>▾</span></div></div>
+          <div class="field dim"><div><div>Agents work in</div></div><div class="sel dis">English <span>▾</span></div></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="notes" style="width:620px;margin-top:20px">
+      <h3>卡片规则</h3>
+      <table>
+        <tr><th style="width:34px">#</th><th>规则</th></tr>
+        <tr><td>A</td><td>账号级，所有客户端共享一个答案（同 Session recaps）。缺省 Off，只有打开才写。改动即存，toast “Setting saved”。</td></tr>
+        <tr><td>B</td><td>Your language / Agents work in：两个下拉，两边相同时开关无效并提示 “Pick two different languages”。语言列表见待你定 ⑤。</td></tr>
+        <tr><td>C</td><td>从下一条消息起对所有会话生效（含正在跑的）；已有记录不回补翻译。</td></tr>
+        <tr><td>—</td><td>Session 内不加单独开关（已定：全局）。</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <div class="cap"><span class="num">3</span>Web · 会话 Composer <small>开着时给一个可见提示</small></div>
+    <div class="frame w" style="width:640px">
+      <div class="composer" style="margin:18px"><span>Reply…</span><span class="lang">Chinese → English <span class="mk">D</span></span></div>
+      <div style="padding:0 20px 18px;font-size:13px;color:var(--t2);line-height:1.6">D：composer 右下角一个小标记 “Chinese → English”（写法见待你定 ⑥）。点它跳 Settings › Translation。<br>composer 里的字不做实时翻译：发出时翻。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ROW 2: web transcript -->
+<div class="row">
+  <div>
+    <div class="cap"><span class="num">4</span>Web · 会话里（默认看译文）</div>
+    <div class="frame w" style="width:680px;background:#fff">
+      <div class="tr">
+        <div class="u"><div class="ub">登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好</div>
+          <div class="foot"><span class="tg">Translated</span>·<a>Show original</a><span class="mk">E</span></div></div>
+        <div class="a"><p>我先看一下登录页里 Google 登录按钮的处理逻辑。</p></div>
+        <div class="tool">Read src/web/src/pages/LoginPage.tsx</div>
+        <div class="tool">Bash  grep -rn "signInWithPopup" src/web/src</div>
+        <div class="a"><p>原因找到了：Safari 会拦截不是由点击直接触发的弹窗。按钮在 <code>await loadGoogleScript()</code> 之后才调用 <code>signInWithPopup</code>，这时已经不算用户手势了。</p>
+        <p>修法：页面加载时预先加载脚本，点击时同步打开弹窗。要我直接改吗？</p>
+          <div class="foot"><span class="tg">Translated</span>·<a>Show original</a><span class="mk">F</span></div></div>
+      </div>
+      <div class="composer"><span>Reply…</span><span class="lang">Chinese → English</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">5</span>点了 Show original</div>
+    <div class="frame w" style="width:600px;background:#fff">
+      <div class="tr">
+        <div class="u"><div class="ub">The Google sign-in button on the login page does nothing in Safari. Find out why and fix it.</div>
+          <div class="foot">Sent to the agent in English ·<a>Show translation</a></div></div>
+        <div class="a"><div class="orig"><p>Found it: Safari blocks popups that aren't opened directly by a click. The button calls <code>signInWithPopup</code> only after <code>await loadGoogleScript()</code>, which no longer counts as a user gesture.</p>
+        <p>Fix: load the script on page load and open the popup synchronously on click. Want me to make the change?</p></div>
+          <div class="foot">Original ·<a>Show translation</a></div></div>
+      </div>
+    </div>
+    <div class="notes" style="width:600px;margin-top:18px;font-size:13.5px">
+      E 用户消息：气泡显示你写的中文；original = 引擎收到的英文。<br>
+      F 回复：显示中文；original = 引擎写的英文。工具行、代码块、<code>行内代码</code>、路径、命令原样保留（翻译时要求模型不动 code）。<br>
+      切换只影响这一条，刷新后回到默认（看译文）。Copy 按钮复制当前显示的那一版。
+    </div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">6</span>进行中 / 失败</div>
+    <div class="frame w" style="width:560px;background:#fff">
+      <div class="tr">
+        <div class="u"><div class="ub">好的，改吧，顺便加个测试</div>
+          <div class="foot"><span class="chip">Translating…</span><span class="mk">G</span></div></div>
+        <div style="height:1px;background:var(--line);margin:10px 0 12px"></div>
+        <div class="a"><p class="stream" style="color:var(--t2)">I'll move the script load into a <code>useEffect</code> on mount and call</p>
+          <div class="foot"><span class="chip">Translates when the reply is done</span><span class="mk">H</span></div></div>
+        <div style="height:1px;background:var(--line);margin:10px 0 12px"></div>
+        <div class="a"><p>Done. The popup now opens synchronously on click, and <code>LoginPage.safari.test.tsx</code> covers it.</p>
+          <div class="foot err">Couldn't translate this reply ·<a>Retry</a><span class="mk">I</span></div></div>
+        <div class="u" style="margin-top:14px"><div class="ub">再跑一遍全部测试</div>
+          <div class="foot err">Couldn't translate, so it wasn't sent ·<a>Retry</a>·<a>Send as written</a><span class="mk">J</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ROW 3: phones -->
+<div class="row">
+  <div>
+    <div class="cap"><span class="num">7</span>iOS · Settings › Sessions</div>
+    <div class="ph"><div class="ps">
+      <div class="stat"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav"><span class="bk">‹ Settings</span><span class="t">Sessions</span><span style="width:70px"></span></div>
+      <div class="gh">Session defaults</div>
+      <div class="grp"><div class="cell"><span>Permission mode</span><span class="v">Ask before edits ›</span></div><div class="cell"><span>Session recaps</span><span class="isw on"></span></div></div>
+      <div class="gh">Translation</div>
+      <div class="grp hl"><div class="cell"><span>Translate conversations</span><span class="isw on"></span></div>
+        <div class="cell"><span>Your language</span><span class="v">Chinese (Simplified) ›</span></div>
+        <div class="cell"><span>Agents work in</span><span class="v">English ›</span></div></div>
+      <div class="gf">Agents read and write in English; you write and read in your language. Translated by the server's DeepSeek model. Tool calls, output and code stay as they are.</div>
+      <div class="gh">Orchestration</div>
+      <div class="grp"><div class="cell"><span>Let sessions orchestrate</span><span class="isw on"></span></div></div>
+    </div></div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">8</span>iOS · 会话</div>
+    <div class="ph"><div class="ps" style="background:#fff">
+      <div class="stat"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav"><span class="bk">‹</span><span class="t">Safari Google 登录</span><span class="bk">⋯</span></div>
+      <div class="pt2">
+        <div class="u"><div class="ub">登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好</div><div class="foot">Translated ·<a>Show original</a></div></div>
+        <div class="tool" style="font-size:12px">Read LoginPage.tsx</div>
+        <div class="a"><p>原因找到了：Safari 会拦截不是由点击直接触发的弹窗。按钮在 <code>await loadGoogleScript()</code> 之后才调用 <code>signInWithPopup</code>，这时已经不算用户手势了。</p><p>要我直接改吗？</p>
+        <div class="foot">Translated ·<a>Show original</a></div></div>
+      </div>
+      <div class="pcomp">Message <span style="float:right;font-size:12px;background:#f2f2f7;border-radius:8px;padding:1px 7px;color:#555">Chinese → English</span></div>
+    </div></div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">9</span>Android · Settings › Sessions</div>
+    <div class="ph"><div class="ps and">
+      <div class="stat"><span>9:41</span><span>▾ ▮</span></div>
+      <div class="atop"><span>←</span><span style="font-size:21px">Sessions</span></div>
+      <div class="grp"><div class="gh">Session defaults</div><div class="cell"><span>Permission mode<br><small style="color:#777">Ask before edits</small></span></div><div class="cell"><span>Session recaps</span><span class="asw on"></span></div></div>
+      <div class="grp hl" style="margin:0 6px;border-radius:12px"><div class="gh">Translation</div>
+        <div class="cell"><span>Translate conversations<br><small style="color:#777;line-height:1.35;display:block;margin-top:2px">Agents work in English; you write and read in your language. Server's DeepSeek model.</small></span><span class="asw on"></span></div>
+        <div class="cell"><span>Your language<br><small style="color:#777">Chinese (Simplified)</small></span></div>
+        <div class="cell"><span>Agents work in<br><small style="color:#777">English</small></span></div></div>
+      <div class="grp"><div class="gh">Orchestration</div><div class="cell"><span>Let sessions orchestrate</span><span class="asw on"></span></div></div>
+    </div></div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">10</span>Android · 会话（Show original 后）</div>
+    <div class="ph"><div class="ps and" style="background:#fff">
+      <div class="stat"><span>9:41</span><span>▾ ▮</span></div>
+      <div class="atop"><span>←</span><span style="font-size:18px;flex:1">Safari Google 登录</span><span>⋮</span></div>
+      <div class="pt2">
+        <div class="u"><div class="ub" style="background:#f3e9e4">登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好</div><div class="foot">Translated ·<a>Show original</a></div></div>
+        <div class="a"><div class="orig"><p>Found it: Safari blocks popups that aren't opened directly by a click. The button calls <code>signInWithPopup</code> only after <code>await loadGoogleScript()</code>, which no longer counts as a user gesture.</p><p>Want me to make the change?</p></div>
+        <div class="foot">Original ·<a>Show translation</a></div></div>
+      </div>
+      <div class="pcomp" style="border-radius:26px;background:#f3ece8">Message <span style="float:right;font-size:12px;background:#fff;border-radius:8px;padding:1px 7px;color:#555">Chinese → English</span></div>
+    </div></div>
+  </div>
+  <div class="notes" style="width:430px">
+    <h3>原生端</h3>
+    iOS / macOS：Settings › Sessions 页加 Translation 分组（macOS 在 ⌘, 的 Settings 表单同位置）。语言行点进去是单选列表。<br><br>
+    Android：Settings › Sessions 同位置一个分组，语言行点开 bottom sheet 单选。<br><br>
+    会话里三端一致：气泡下 “Translated · Show original”，进行中 chip，失败行 Retry / Send as written。<br><br>
+    翻译在服务器做，客户端只读字段并画切换——所以三端差别只在 UI。
+  </div>
+</div>
+
+<!-- ROW 4: data flow + decisions -->
+<div class="row">
+  <div class="notes" style="width:1000px">
+    <h3>⑪ 怎么跑（服务器侧，三端共用）</h3>
+    <table>
+      <tr><th style="width:150px">环节</th><th>做法</th></tr>
+      <tr><td>你的消息</td><td>发消息时 apiserver 看到 Translation 开着：先用 DeepSeek 把中文译成英文，turn 存两份——<code>prompt</code>（引擎拿到的英文）+ <code>displayPrompt</code>（你写的中文）。译完才排给 runner；排队、steer、编辑排队消息都走同一处。</td></tr>
+      <tr><td>Agent 回复</td><td>每个 <code>assistant</code> 文本块落库后（流式结束），后台队列（同 recap 的 AsyncWorkQueue 套路）译成中文，写一条 <code>translation</code> 事件 <code>{ of: seq, text, lang }</code>，实时推给在看的客户端；刷新时随事件页一起回放。</td></tr>
+      <tr><td>不翻</td><td>tool_use / tool_result / thinking / 命令输出 / 代码块与行内代码 / 文件路径。Prompt 里要求模型原样保留 code 与 markdown 结构。</td></tr>
+      <tr><td>成本</td><td>一条消息一次 DeepSeek 调用；回复按文本块计。服务器 key 付费，不占会话自己的额度。</td></tr>
+      <tr><td>会话标题、recap</td><td>标题按你的原文（中文）起名，不变；recap 已按会话语言写，不变。</td></tr>
+    </table>
+    <h3 style="margin-top:16px">要动的文件（大致）</h3>
+    shared：<code>dto.ts</code> UserPreferences + turn/事件字段，<code>enums.ts</code> RunEventType.TRANSLATION · apiserver：prisma 迁移（user 三列 + conversation_turn.display_prompt），新 <code>sessions/translation.ts</code>（复用 <code>deepSeekCall</code>），turn 入队处、事件 ingest 处 · web：<code>SettingsPage.tsx</code>、Transcript 气泡脚注、Composer 标记 · iOS/macOS：OrbitKit SessionSettings、会话气泡 · Android：SettingsScreen、会话气泡；三端 copy parity 测试。
+  </div>
+  <div class="notes dec" style="width:1060px">
+    <h3>⑫ 待你定（每项推荐 A）</h3>
+    <ol>
+      <li><b>你的消息翻译失败时</b>（J）<br><span class="rec">A</span> 不发，标红 “Couldn't translate, so it wasn't sent · Retry · Send as written”　/　B 直接发中文原文，脚注标 “Sent untranslated”</li>
+      <li><b>回复还在流式输出时</b>（H）<br><span class="rec">A</span> 先灰显英文实时滚动，结束后换成中文　/　B 隐藏，只显示 “Translating…” 直到中文出来</li>
+      <li><b>Agent 的提问卡片与选项、权限审批的说明、Suggested replies</b><br><span class="rec">A</span> 一起翻（你点中文选项，引擎收到英文）　/　B 保持英文</li>
+      <li><b>翻你的消息时等多久</b>（G）<br><span class="rec">A</span> 发出后气泡显示 “Translating…”，通常 1–3 秒，超时 20 秒按失败处理（同第 1 项）　/　B 发出前在 composer 里先给你看英文预览，再点一次发送</li>
+      <li><b>语言列表</b>（B）<br><span class="rec">A</span> Your language 给常用几种（Chinese Simplified / Traditional、Japanese、Korean、Spanish、French、German），Agents work in 固定 English 不给选　/　B 两边都自由选　/　C 只做 中文↔English</li>
+      <li><b>Composer 标记的写法</b>（D）<br><span class="rec">A</span> “Chinese → English”（纯英文 copy）　/　B “中文 → English”（语言自称，需给 copyLanguage.test 加白名单）　/　C 不加标记</li>
+    </ol>
+  </div>
+</div>
+</div>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"ebcf6121ab9249e6863f238032b499e6","r":1,"spa":2}' crossorigin="anonymous"></script>
+</body>
+</html>

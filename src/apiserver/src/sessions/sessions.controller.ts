@@ -297,7 +297,8 @@ export class SessionsController {
     return this.sessions.create(
       user.userId,
       { ...dto, workspaceId: dto.workspaceId ?? dto.agentId },
-      { credential: user.credential },
+      // The owner's own words: Settings › Translation applies (sessions/turn-translation.ts).
+      { credential: user.credential, translate: true },
     );
   }
 
@@ -601,7 +602,7 @@ export class SessionsController {
     @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
   ) {
     assertClientTurnIdNotReserved(dto.clientTurnId);
-    return this.sessions.createTurn(user.userId, id, dto);
+    return this.sessions.createTurn(user.userId, id, dto, { translate: true });
   }
 
   /** Versioned mutation door for Web. An N-1 API returns 404 before touching a turn, so a new
@@ -614,7 +615,7 @@ export class SessionsController {
     @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
   ) {
     assertClientTurnIdNotReserved(dto.clientTurnId);
-    return this.sessions.createTurn(user.userId, id, dto);
+    return this.sessions.createTurn(user.userId, id, dto, { translate: true });
   }
 
   // Default stays the installed native client's queue-only contract. Web opts into `active` to
@@ -642,6 +643,29 @@ export class SessionsController {
     return this.sessions.cancelQueuedTurn(user.userId, id, turnId);
   }
 
+  // Settings › Translation (@orbit/shared translation.ts): translate a held message again — one whose
+  // translation failed or timed out, so it was not sent. The same raw turnId as the DELETE beside it.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/turns/:turnId/translation/retry')
+  retryTurnTranslation(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ) {
+    return this.sessions.retryTurnTranslation(user.userId, id, turnId);
+  }
+
+  // ...or deliver it as the owner wrote it, untranslated.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/turns/:turnId/translation/send-as-written')
+  sendTurnAsWritten(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ) {
+    return this.sessions.sendTurnAsWritten(user.userId, id, turnId);
+  }
+
   // Send a message queued for the next turn into the one running now (the tray's Steer). The same
   // turnId as the DELETE beside it.
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
@@ -665,7 +689,7 @@ export class SessionsController {
     // The person's door, and the only one that routes a message onto the run that holds this
     // session's task — see SessionsService.resume's `routeToCurrentRun` for why the sweeps and the
     // dispatchers keep the refusal instead.
-    return this.sessions.resume(user.userId, id, dto, { routeToCurrentRun: true, credential: user.credential });
+    return this.sessions.resume(user.userId, id, dto, { routeToCurrentRun: true, credential: user.credential, translate: true });
   }
 
   /** A personal access token reaches this with `sessions:write`, but never changes the permission
@@ -714,7 +738,7 @@ export class SessionsController {
     @Body(PublicIdPipe.forFields('attachmentIds')) dto?: SessionInterruptDto,
   ) {
     assertClientTurnIdNotReserved(dto?.clientTurnId);
-    return this.sessions.interrupt(user.userId, id, dto);
+    return this.sessions.interrupt(user.userId, id, dto, { translate: true });
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })

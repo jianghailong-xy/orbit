@@ -2757,7 +2757,15 @@ model ConversationTurn {
   externalSenderSource String? @map("external_sender_source")
   externalSenderId     String? @map("external_sender_id")
   externalSenderName   String? @map("external_sender_name")
-  status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
+  status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED | HELD (being translated, or its translation failed)
+  /// Session translation (migration 0531, @orbit/shared translation.ts): what the owner wrote, when the turn was
+  /// translated for the engine — `content` is then the English delivered. Null on every turn translation was not
+  /// involved in, and so are the two below.
+  displayPrompt    String?  @map("display_prompt")
+  /// TRANSLATING | FAILED (both with status HELD: not deliverable) | DONE | SENT_AS_WRITTEN.
+  translationState String?  @map("translation_state")
+  /// The language the owner wrote in (TRANSLATION_LANGUAGES).
+  translationLang  String?  @map("translation_lang")
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")
   // Random runner-engine generation that owns the current delivery lease. A
