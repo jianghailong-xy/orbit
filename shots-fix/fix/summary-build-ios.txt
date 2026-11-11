@@ -1,0 +1,12 @@
+    public static func readUnavailable(now: Date, updatedAt: Date?, failed: Bool) -> Bool {
+    public static func readUnavailable(now: Date, updatedAt: Date?, failed: Bool) -> Bool {
+Test Case '-[CfadeProbeUITests.PillShotTests test3Draft]' started.
+/Users/runner/work/orbit/orbit/.cfade-probe/UITests/PillShotTests.swift:66: error: -[CfadeProbeUITests.PillShotTests test3Draft] : failed - draft-dark: no composer field
+Test Case '-[CfadeProbeUITests.PillShotTests test3Draft]' failed (97.629 seconds).
+Test Suite 'PillShotTests' failed at 2026-11-11 14:51:12.314.
+	 Executed 1 test, with 1 failure (0 unexpected) in 97.629 (97.632) seconds
+Test Suite 'CfadeProbeUITests.xctest' failed at 2026-11-11 14:51:12.315.
+	 Executed 1 test, with 1 failure (0 unexpected) in 97.629 (97.634) seconds
+Test Suite 'Selected tests' failed at 2026-11-11 14:51:12.317.
+	 Executed 1 test, with 1 failure (0 unexpected) in 97.629 (97.636) seconds
+** TEST FAILED **

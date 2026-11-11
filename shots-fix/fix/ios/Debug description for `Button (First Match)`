@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.cfadeprobe'
+  ↪︎Find: Descendants matching type Button
+    ↪︎Find: Elements matching predicate 'label == "Jump to your last question"'
+      ↪︎Find: First Match

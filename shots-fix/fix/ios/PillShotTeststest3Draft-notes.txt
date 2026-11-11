@@ -1,0 +1,2 @@
+draft-dark: the transcript's sticky header never showed
+draft-dark: 0 composer field(s)

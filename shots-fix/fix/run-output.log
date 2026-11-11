@@ -1,0 +1,26 @@
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC
+==> stub ready on 127.0.0.1:8765 (pid 4087, after 3s)
+==> ios
+Test Case '-[CfadeProbeUITests.PillShotTests test3Draft]' started.
+/Users/runner/work/orbit/orbit/.cfade-probe/UITests/PillShotTests.swift:66: error: -[CfadeProbeUITests.PillShotTests test3Draft] : failed - draft-dark: no composer field
+Test Case '-[CfadeProbeUITests.PillShotTests test3Draft]' failed (97.629 seconds).
+	 Executed 1 test, with 1 failure (0 unexpected) in 97.629 (97.632) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 97.629 (97.634) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 97.629 (97.636) seconds
+** TEST FAILED **
+/Users/runner/work/orbit/orbit/.cfade-probe/run.sh: line 76:  4087 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+total 1592
+drwxr-xr-x  14 runner  staff     448 Nov 11 14:52 .
+drwxr-xr-x   4 runner  staff     128 Nov 11 14:34 ..
+-rw-r--r--   1 runner  staff   37426 Nov 11 14:52 App UI hierarchy for io.orbitd
+drwxr-xr-x  32 runner  staff    1024 Nov 11 14:52 attachments
+-rw-r--r--   1 runner  staff     226 Nov 11 14:52 Debug description for `Button (First Match)`
+-rw-r--r--   1 runner  staff    1904 Nov 11 14:50 metrics.log
+-rw-r--r--   1 runner  staff   22925 Nov 11 14:52 no-field-draft-dark
+-rw-r--r--@  1 runner  staff   22925 Nov 11 14:51 no-field-draft-dark.txt
+-rw-r--r--   1 runner  staff     662 Nov 11 14:52 not-served.txt
+-rw-r--r--   1 runner  staff      87 Nov 11 14:52 PillShotTeststest3Draft-notes
+-rw-r--r--@  1 runner  staff      87 Nov 11 14:51 PillShotTeststest3Draft-notes.txt
+-rw-r--r--   1 runner  staff    3737 Nov 11 14:51 requests.log
+-rw-r--r--   1 runner  staff      49 Nov 11 14:38 requests.log.out
+-rw-r--r--   1 runner  staff  695080 Nov 11 14:52 xcodebuild-ios.log
