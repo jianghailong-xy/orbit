@@ -1442,6 +1442,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary.',
   },
   {
+    at: 'sessions/sessions.service.ts#updateSettings',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then the session write.',
+    identity: 'The settings body, parsed above the closure.',
+    isolation: '',
+    attempts: 4,
+    replay: 'A locked re-read decides whether the env changed and what the settings now are.',
+    effects: 'The session.updated nudge, once, after commit.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
     at: 'sessions/sessions.service.ts#switchAccount',
     shape: 'TX_RETRIED',
     locks: 'session FOR UPDATE (rank 30), then the session write and, on a live session that moves, the reload turn.',

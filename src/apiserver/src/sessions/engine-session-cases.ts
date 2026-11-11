@@ -137,6 +137,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// Model, permission mode, effort, provider and account are all engine-path settings (§2.9 LS6).',
     note: 'PATCH /config',
   },
+  'SessionsService.updateSettings': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "// A landing's row belongs to the platform (§2.9 LS6), as for rename and config.",
+    note: 'PATCH /settings',
+  },
   'SessionsService.switchAccount': {
     file: 'sessions/sessions.service.ts',
     snippet: '// Switching the runner account a session runs on is an engine door (§2.9 LS6).',
@@ -298,6 +303,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/resume': 'SessionsService.resume',
   'PATCH /sessions/:id/config': 'SessionsService.updateConfig',
   'PATCH /sessions/:id/account': 'SessionsService.switchAccount',
+  'PATCH /sessions/:id/settings': 'SessionsService.updateSettings',
   'POST /sessions/:id/interrupt': 'SessionsService.interrupt',
   'POST /sessions/:id/end': 'SessionsService.getSendable',
   'POST /sessions/:id/merge': 'SessionsService.mergeToMain',

@@ -83,6 +83,36 @@ export interface SessionMoveTarget {
   startsCoordinator: boolean;
 }
 
+/** A per-session notification choice: follow the account preference, or always / never notify. */
+export type SessionNotifyOverride = 'inherit' | 'on' | 'off';
+
+/**
+ * A session's Settings panel (docs/mocks/session-settings): what `GET /sessions/:id` carries as
+ * `settings` and what `PATCH /sessions/:id/settings` answers with.
+ */
+export interface SessionSettings {
+  /** The session's own variables, laid over the workspace's when the engine starts (session wins). */
+  env: Record<string, string>;
+  /** The session workspace's variables, as the workspace form shows them; read-only here. */
+  workspaceEnv: Record<string, string>;
+  notifyTurnFinished: SessionNotifyOverride;
+  /** Approvals and questions. */
+  notifyNeedsYou: SessionNotifyOverride;
+  /** No pushes at all for this session while true. */
+  muted: boolean;
+  /** The engine is live and started before the session's env last changed: a restart is owed. */
+  envPendingRestart: boolean;
+}
+
+/** `PATCH /sessions/:id/settings`. Every field optional; an omitted one is unchanged. */
+export interface SessionSettingsPatch {
+  /** Replaces the whole session map; null clears it. Keys match ^[A-Za-z_][A-Za-z0-9_]*$, no ORBIT_*. */
+  env?: Record<string, string> | null;
+  notifyTurnFinished?: SessionNotifyOverride;
+  notifyNeedsYou?: SessionNotifyOverride;
+  muted?: boolean;
+}
+
 /** `GET /sessions/:id/move-targets`: everything the Move panel and its confirmation need. */
 export interface SessionMoveTargets {
   workspaceId: string | null;

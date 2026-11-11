@@ -22,7 +22,7 @@ import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
 import { Prisma, RunStatus } from '@prisma/client';
 import { concatMap, defer, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
-import { ApprovalDecisionRequest, RunEventType } from '@orbit/shared';
+import { ApprovalDecisionRequest, RunEventType, SessionSettingsPatch } from '@orbit/shared';
 import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -678,6 +678,18 @@ export class SessionsController {
     @Body() dto: SessionConfigDto,
   ) {
     return this.sessions.updateConfig(user.userId, id, dto, user.credential);
+  }
+
+  /** The session's Settings panel: its own env vars and notification overrides — see
+   *  SessionsService.updateSettings. Validated there, field by field. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Patch(':id/settings')
+  updateSettings(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: SessionSettingsPatch,
+  ) {
+    return this.sessions.updateSettings(user.userId, id, body);
   }
 
   /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
