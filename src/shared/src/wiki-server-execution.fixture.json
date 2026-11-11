@@ -1751,6 +1751,70 @@
           "error": null
         }
       }
+    ],
+    "tiers": [
+      {
+        "name": "a run that read git",
+        "repo": {
+          "tier": "git",
+          "reason": null,
+          "detail": null
+        },
+        "tier": "git",
+        "tone": "plain",
+        "reason": null
+      },
+      {
+        "name": "a run that read the folder",
+        "repo": {
+          "tier": "folder",
+          "reason": null,
+          "detail": "~/work/app is not a git checkout"
+        },
+        "tier": "folder",
+        "tone": "muted",
+        "reason": null
+      },
+      {
+        "name": "a run that read the sessions alone, and why",
+        "repo": {
+          "tier": "sessions",
+          "reason": "not_found",
+          "detail": "~/work/app was not found on MacBook"
+        },
+        "tier": "sessions only",
+        "tone": "warn",
+        "reason": "~/work/app was not found on MacBook"
+      },
+      {
+        "name": "a run that found another repository's folder",
+        "repo": {
+          "tier": "wrong_repository",
+          "reason": "wrong_repository",
+          "detail": "~/work/app is a clone of github.com/x/y, not this wiki's repository"
+        },
+        "tier": "sessions only",
+        "tone": "error",
+        "reason": "~/work/app is a clone of github.com/x/y, not this wiki's repository"
+      },
+      {
+        "name": "a run whose remote refused the credentials",
+        "repo": {
+          "tier": "sessions",
+          "reason": "fetch_refused",
+          "detail": "The git remote refused the credentials on MacBook"
+        },
+        "tier": "sessions only",
+        "tone": "error",
+        "reason": "The git remote refused the credentials on MacBook"
+      },
+      {
+        "name": "a run that names no tier: another kind, or before its probe",
+        "repo": null,
+        "tier": null,
+        "tone": null,
+        "reason": null
+      }
     ]
   }
 }

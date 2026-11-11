@@ -104,7 +104,8 @@ const UNDER_HEAD = 10;
  * again). That opening is derived, never written: narrowed past docking it folds away, widened it comes back. Until
  * the chats are read the page is laid out at the panel's width already, so it does not jump when the panel comes.
  *
- * WHERE IT STANDS (§4.1, `wikiChatLayout`): wide windows dock it and push everything under the Wiki's head over,
+ * WHERE IT STANDS (§4.1, `wikiChatLayout`), a third of the window wide between 400 and 720 unless dragged (up to
+ * half the window): wide windows dock it and push everything under the Wiki's head over,
  * leaving the head's buttons where they are (board 42 ①); narrower ones fold the directory into Contents; under
  * 1200 it lies over the page's right with no scrim, under 640 it is a sheet. The entry drawer opens to its left,
  * the button floats above the drawer, and the page's foot keeps 88 clear for the button.
@@ -117,7 +118,8 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
 
   const asked = new URLSearchParams(location.search).get(WIKI_CHAT_PARAM);
   const kept = readWikiChatOpen(space.slug);
-  const layout = wikiChatLayout(useWindowWidth());
+  const windowWidth = useWindowWidth();
+  const layout = wikiChatLayout(windowWidth);
   // Read from storage on every render, as `kept` is: ✕ and the button write it beside a navigation, and a state of its
   // own would render once more with the old address first, which the effect below would then put back.
   const closed = readWikiChatClosed(space.slug);
@@ -154,7 +156,7 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
   }, [asked, kept, space.slug, navigate, location.pathname, location.search, location.hash, location.state]);
 
   const [dragged, setDragged] = useState<number | null>(() => readWikiChatWidth());
-  const width = wikiChatPanelWidth(layout, dragged);
+  const width = wikiChatPanelWidth(layout, dragged, windowWidth);
 
   // The panel's top: under the Wiki's head while the head is on screen, then the top of the page's scroll.
   const hostRef = useRef<HTMLDivElement>(null);
@@ -255,7 +257,7 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
           }}
           onResize={(next, done) => {
             setDragged(next);
-            if (done) writeWikiChatWidth(wikiChatPanelWidth('wide', next) ?? next);
+            if (done) writeWikiChatWidth(wikiChatPanelWidth('wide', next, windowWidth) ?? next);
           }}
         />
       )}

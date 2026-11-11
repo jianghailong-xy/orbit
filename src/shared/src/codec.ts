@@ -219,6 +219,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // `evidenceTaskId` stood here until migration 0233 removed the criterion's pointer at the work
   // that serves it — that edge is now `criterionDefinitionId`, pointing the other way.
   'runId',
+  // The SubAgent run a card asked from (`approval.subagent_run_id`, 0528): the run the subagents door hands out.
+  'subagentRunId',
   'definitionId',
   'criterionId',
   // Migration 0232's declaration on `task`: WHICH stated criterion a piece of work says it serves.

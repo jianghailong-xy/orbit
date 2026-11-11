@@ -118,6 +118,17 @@ func bgGuardAwaitAdvice(reason string, watches bool) string {
 	return reason
 }
 
+// subagentAsksNobodyReason is what a SubAgent is told when it tries to ask the user a question or to have a plan
+// approved (docs/subagent-design.md §5.3): nobody is there to answer it, so its question goes into its result.
+const subagentAsksNobodyReason = "You are a SubAgent, so you cannot ask the user anything or have a plan approved:" +
+	" no person reads your questions. Decide sensibly and carry on, or stop and put your question (or your plan)" +
+	" in your result, so the agent that sent you can answer it or ask the user."
+
+// isSubagentEngine reports whether this process runs inside an engine started as a SubAgent.
+func isSubagentEngine() bool {
+	return strings.TrimSpace(os.Getenv(envSubagentRunID)) != ""
+}
+
 // hookInput is the PreToolUse payload Claude Code writes on the hook's stdin. PermissionMode is the mode
 // the CLI is in at this call, so a change of mode during the session counts from the next call.
 type hookInput struct {
@@ -150,6 +161,14 @@ func bgGuardDecision(in hookInput) map[string]interface{} {
 	decision, reason := "allow", ""
 	watches := watchesEnabledFromEnv()
 	switch in.ToolName {
+	// A SubAgent asks nobody, in every mode: a hook is consulted where the permission prompt is not (Auto,
+	// Bypass). Anywhere else this hook has no say about them — an "allow" would answer a person's question
+	// with nothing.
+	case "AskUserQuestion", "ExitPlanMode":
+		if !isSubagentEngine() {
+			return map[string]interface{}{}
+		}
+		decision, reason = "deny", subagentAsksNobodyReason
 	// Only Bash. run_in_background also appears on sub-agent launches, which are
 	// engine-internal work the runner cannot host — denying those would remove a
 	// working capability to no end.

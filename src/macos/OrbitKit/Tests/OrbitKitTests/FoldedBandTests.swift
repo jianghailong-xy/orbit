@@ -11,6 +11,15 @@ final class FoldedBandTests: XCTestCase {
         XCTAssertEqual(FoldedBand.draftLine("可以，建好后直接启动"), "可以，建好后直接启动")
     }
 
+    /// The pill says one thing: a draft not yet sent, else the cards' marks, and the placeholder only
+    /// where nothing else would show (the owner, 2026-11-11).
+    func testThePillLeadsWithTheDraftThenTheMarksThenThePlaceholder() {
+        XCTAssertEqual(FoldedBand.lead(draft: "Ship it", hasMarks: true), .draft("Ship it"))
+        XCTAssertEqual(FoldedBand.lead(draft: "Ship it", hasMarks: false), .draft("Ship it"))
+        XCTAssertEqual(FoldedBand.lead(draft: nil, hasMarks: true), .marks)
+        XCTAssertEqual(FoldedBand.lead(draft: nil, hasMarks: false), .placeholder)
+    }
+
     private func proc(_ id: String, _ status: String) -> BackgroundProc {
         BackgroundProc(id: id, command: "sleep 1", status: status, outputTail: "")
     }

@@ -52,7 +52,7 @@ class OrbitExchangeFoldTest {
     }
 
     @Test fun badNewsAndWhatSomebodyWroteStayInView() {
-        listOf("TASK_DISPATCH_REFUSED", "PROJECT_BLOCKER_RAISED", "TASK_RUN_STOPPED").forEach { kind ->
+        listOf("TASK_DISPATCH_REFUSED", "PROJECT_BLOCKER_RAISED").forEach { kind ->
             assertNull(kind, OrbitExchangeFold.turnOf(user { put("text", "x"); put("coordinatorDelivery", delivery(kind, null)) }))
         }
         assertNull(OrbitExchangeFold.turnOf(user { put("text", watchText("TASK", b4, "FAILED")) }))
@@ -60,7 +60,7 @@ class OrbitExchangeFoldTest {
         assertNull("unconfirmed", OrbitExchangeFold.turnOf(user {
             put("text", "x"); put("coordinatorDelivery", delivery("EVIDENCE_SUBMITTED")); put("delivery", "unconfirmed")
         }))
-        listOf("sessionMessage", "openItemDelivery", "ownerAnswer", "taskStart", "projectStarted").forEach { card ->
+        listOf("openItemDelivery", "ownerAnswer", "taskStart", "projectStarted").forEach { card ->
             assertNull(card, OrbitExchangeFold.turnOf(user { put("text", "x"); putJsonObject(card) { put("x", 1) } }))
         }
         assertNull("the reader's words", OrbitExchangeFold.turnOf(user { put("text", "Which tasks wait on me?") }))
@@ -83,6 +83,40 @@ class OrbitExchangeFoldTest {
         assertEquals("reply", replied.category)
     }
 
+    @Test fun aStoppedRunARunNoticeAndATaskRunsMessageFoldUnderTheirTasks() {
+        val stopped = OrbitExchangeFold.turnOf(user { put("text", "x"); put("coordinatorDelivery", delivery("TASK_RUN_STOPPED", null)) })!!
+        assertEquals("Run stopped: B1 Targeted hints", stopped.what)
+        assertEquals("project", stopped.category)
+        val note = listOf(
+            "<orbit-run-notice task=\"34vZUH31xayU3ZWjyRWfh\" run-session=\"3y90ooHJ7OgQrKUV8KyqwZ\" from-session=\"3y90ooHJ7OgQrKUV8KyqwZ\" from-mode=\"auto\">",
+            "A run of the task “A task’s delivered_sha can freeze” used notify. It did not reach the account owner.",
+            "Message: Background job bgj_c06ee80b2571 ended (exit code 0)",
+            "Nothing is waiting for your reply. If the owner should know or decide, use ask_owner with your recommendation.",
+            "</orbit-run-notice>",
+        ).joinToString("\n")
+        val notice = OrbitExchangeFold.turnOf(user { put("text", note); put("controlPlaneNote", note) })!!
+        assertEquals("Run notice: A task’s delivered_sha can freeze", notice.what)
+        assertEquals("Run notice", notice.whatInTask)
+        assertEquals("notice", notice.category)
+        assertEquals(OrbitExchangeFold.Target("TASK", "34vZUH31xayU3ZWjyRWfh", "A task’s delivered_sha can freeze"), notice.target)
+        assertNull(OrbitExchangeFold.turnOf(user { val n = note.replace("task=\"34vZUH31xayU3ZWjyRWfh\"", "task=\"\""); put("text", n); put("controlPlaneNote", n) })!!.target)
+        assertNull("a run question asks", OrbitExchangeFold.runNotice("<orbit-run-question task=\"x\" run-session=\"y\">\nA run asked…\n</orbit-run-question>"))
+        assertNull("no closing tag", OrbitExchangeFold.runNotice(note.replace("</orbit-run-notice>", "")))
+        val fromTask = OrbitExchangeFold.turnOf(user {
+            put("text", "B4 scope note")
+            putJsonObject("sessionMessage") { put("fromSessionId", runOfB4); put("fromTitle", "Task: B4 Link gateway"); put("fromAgentName", "orbit"); put("fromTaskId", b4) }
+        })!!
+        assertEquals("Message from B4 Link gateway", fromTask.what)
+        assertEquals("Message", fromTask.whatInTask)
+        assertEquals("message", fromTask.category)
+        assertEquals(OrbitExchangeFold.Target("TASK", b4, "B4 Link gateway"), fromTask.target)
+        val fromChat = OrbitExchangeFold.turnOf(user {
+            put("text", "fixed on main"); putJsonObject("sessionMessage") { put("fromSessionId", runOfB4); put("fromTitle", "Task: wiki chat"); put("fromAgentName", "orbit") }
+        })!!
+        assertEquals("Message from Task: wiki chat", fromChat.what)
+        assertEquals(OrbitExchangeFold.Target("SESSION", runOfB4, "Task: wiki chat"), fromChat.target)
+    }
+
     @Test fun theReplysFirstLineAsPlainText() {
         assertEquals("我确认了 B1（定向提示与 NATS），它正在落地。",
             OrbitExchangeFold.replyGist("我确认了 B1（[定向提示与 NATS](orbit-task:x)），它正在落地。\n\n**确认依据**\n- 第 1 版…"))
@@ -96,6 +130,7 @@ class OrbitExchangeFoldTest {
         assertEquals("3 evidence, 1 can start, 2 watches, 1 background job",
             OrbitExchangeFold.kinds(listOf("watch", "evidence", "evidence", "job", "ready", "watch", "evidence")))
         assertEquals("1 reply", OrbitExchangeFold.kinds(listOf("reply")))
+        assertEquals("1 project update, 2 run notices, 1 message", OrbitExchangeFold.kinds(listOf("message", "notice", "project", "notice")))
         assertEquals("7 Orbit updates handled", OrbitExchangeFold.handled(7))
         assertEquals("1 update", OrbitExchangeFold.updates(1))
     }
@@ -128,12 +163,11 @@ class OrbitExchangeFoldTest {
         assertEquals(listOf("B4b", "B5"), OrbitExchangeFold.tree(listOf(Ex(1, task(b4b)), Ex(2, task(b5))), { it.target }, lookup)!!.map { it.title })
     }
 
-    @Test fun aSessionNoTaskIsKnownToRunIsABranchOfItsOwn() {
-        val run = "0195c0de-0000-7000-8000-0000000000ff"
-        val tree = OrbitExchangeFold.tree(listOf(Ex(1, OrbitExchangeFold.Target("SESSION", run, "Probe the gateway")), Ex(2, task(b1)),
-            Ex(3, OrbitExchangeFold.Target("SESSION", run))), { it.target }, lookup)!!
-        assertEquals(listOf("Probe the gateway" to listOf(1L, 3L), "B1" to listOf(2L)), tree.map { it.title to it.exchanges.map { e -> e.seq } })
-        assertNull(tree.first().taskId)
+    @Test fun aSessionNoTaskIsKnownToRunJoinsEverythingElse() {
+        val landing = "0195c0de-0000-7000-8000-0000000000ff"
+        val tree = OrbitExchangeFold.tree(listOf(Ex(1, OrbitExchangeFold.Target("SESSION", landing, "Land · B1")), Ex(2, task(b1)),
+            Ex(3, OrbitExchangeFold.Target("SESSION", landing))), { it.target }, lookup)!!
+        assertEquals(listOf("B1" to listOf(2L), OrbitExchangeFold.otherBranch to listOf(1L, 3L)), tree.map { it.title to it.exchanges.map { e -> e.seq } })
     }
 
     @Test fun aGroupAboutOneThingIsNoTree() {

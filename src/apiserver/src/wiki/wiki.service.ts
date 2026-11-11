@@ -31,6 +31,7 @@ import {
   type WikiAnchorOutcome,
   type WikiAnchorReportResult,
   type WikiAnchorState,
+  type WikiRepoSnapshotSource,
   type WikiBreakerReading,
   type WikiChallengeAnswer,
   type WikiChangesetOrigin,
@@ -73,6 +74,8 @@ import {
   anchorReportEntry,
   anchorReportShape,
   anchorsChecked,
+  deferredAnchorsAllMissing,
+  WIKI_DEFERRED_NONE_EXIST,
   anchorsWithoutChecks,
   entryAnchorState,
   rebaselinedAnchors,
@@ -253,6 +256,9 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_PLAN_STALE: 409,
   WIKI_PLAN_UNCONFIRMED: 409,
   WIKI_DOC_INVALID: 422,
+  WIKI_MAINTENANCE_RUNNING: 409,
+  WIKI_MAINTENANCE_DAILY_LIMIT: 409,
+  WIKI_MAINTENANCE_WRONG_REPOSITORY: 409,
 };
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */
@@ -3635,7 +3641,7 @@ export class WikiService {
       try {
         const outcome = await withTransactionRetry(
           this.prisma,
-          (tx) => this.applyAnchorCheck(tx, caller, space, shape.ref, at, item, literals),
+          (tx) => this.applyAnchorCheck(tx, caller, space, shape.ref, at, item, literals, shape.source),
           loggedRetry(this.logger, 'wiki.recordAnchorChecks', { transaction: CHANGESET_TRANSACTION }),
         );
         outcomes.push(outcome);
@@ -3659,6 +3665,7 @@ export class WikiService {
     at: string,
     item: AnchorReportEntry,
     literals: readonly string[],
+    source: WikiRepoSnapshotSource = 'git',
   ): Promise<WikiAnchorOutcome> {
     const ownerId = caller.ownerId;
     const entry = await tx.wikiEntry.findFirst({ where: { id: item.entryId, ownerId, spaceId: space.id }, select: ENTRY_SELECT });
@@ -3688,7 +3695,7 @@ export class WikiService {
           : `path ${String(alien.path ?? '')}`;
       return stale(`the check at ${alien.index} names ${named}, and the entry holds ${held.type} there: read the anchors list again`);
     }
-    const checked = anchorsChecked(anchors, item.checks, ref, at);
+    const checked = anchorsChecked(anchors, item.checks, ref, at, source);
     const state = entryAnchorState(checked);
     const auto = state === 'verified' && (await this.tieredPitfallQualifies(tx, ownerId, entry));
     const written = await this.applyOp(tx, ownerId, space.id, {
@@ -3709,10 +3716,14 @@ export class WikiService {
       const open = await tx.wikiChangesetOp.count({ where: { ownerId, entryId: entry.id, op: 'challenge', decision: 'pending' } });
       if (open === 0) {
         const system: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
-        const ops = [{ op: 'challenge', entryId: entry.id, reason: anchorChallengeReason(checked, ref) }];
+        // The first check of an entry learned with no code to read, finding none of its code anchors: another
+        // repository's knowledge, said as such (`anchorRules.deferred`).
+        const reason = deferredAnchorsAllMissing(anchors, checked) ? WIKI_DEFERRED_NONE_EXIST : anchorChallengeReason(checked, ref, source);
+        const ops = [{ op: 'challenge', entryId: entry.id, reason }];
         // Whose run checked it: the challenge names the server's wiki job (P8).
         const who = `the server's maintenance run (job ${uuidToBase62(caller.jobId)})`;
-        const rationale = `Anchor re-verification on origin/main at ${ref.slice(0, 12)}, reported by ${who}: `
+        const where = source === 'folder' ? `the folder at tree ${ref.slice(0, 12)}` : `origin/main at ${ref.slice(0, 12)}`;
+        const rationale = `Anchor re-verification on ${where}, reported by ${who}: `
           + "this entry's anchors no longer hold as recorded.";
         const recorded = await this.recordChangeset(tx, system, space, ops, { ops, rationale }, null, literals);
         const outcome = (recorded.ops as WikiOpOutcome[])[0];

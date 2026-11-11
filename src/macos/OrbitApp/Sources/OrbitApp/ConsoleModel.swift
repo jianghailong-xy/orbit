@@ -1072,6 +1072,13 @@ final class ConsoleModel {
     /// The "Tasks created here" card's own model — see `CreatedTasksModel`. Polled with the stream.
     let createdTasks: CreatedTasksModel
 
+    /// The session's SubAgent runs by `delegate` call (GET /sessions/:id/subagents), which the
+    /// transcript's SubAgent block draws its tier, model, duration and Why from. Re-read when one
+    /// starts or ends (`SubagentRuns.signature`); empty for a session that never delegated.
+    private(set) var subagentRuns: [String: SubagentRunView] = [:]
+    private var subagentRunsSignature = ""
+    private var subagentRunsFetch: Task<Void, Never>?
+
     /// The sticky error line above the composer. Errors only — it's about the message you just tried
     /// to send, so it belongs next to the input and stays until the ✕. Fleeting confirmations must
     /// *not* land here: the line is in-flow, so each one reflowed the composer up and back down
@@ -1679,8 +1686,28 @@ final class ConsoleModel {
         trimWindow()
         stateRevision &+= 1
         state = reducer.state
+        refreshSubagentRunsIfNeeded()
         clearAwaitingReplyIfSatisfied()
         reconcileReplyContext()
+    }
+
+    /// Read the session's SubAgent runs whenever a `delegate` call starts or ends (web parity:
+    /// `useSubagentRuns`). The signature makes this a no-op on the many publishes that move nothing
+    /// about a SubAgent; a failed read is not retried until the transcript moves again.
+    private func refreshSubagentRunsIfNeeded() {
+        let signature = SubagentRuns.signature(items: state.items, background: state.background)
+        guard signature != subagentRunsSignature else { return }
+        subagentRunsSignature = signature
+        guard !signature.isEmpty else {
+            subagentRuns = [:]
+            return
+        }
+        subagentRunsFetch?.cancel()
+        subagentRunsFetch = Task { [weak self] in
+            guard let self, let rows = try? await self.api.sessionSubagents(sessionID: self.sessionID) else { return }
+            guard !Task.isCancelled else { return }
+            self.subagentRuns = Dictionary(rows.map { ($0.toolUseId, $0) }, uniquingKeysWith: { _, last in last })
+        }
     }
 
     /// End the send→first-token bridge (`awaitingReply`) once the stream reports the turn `RUNNING`

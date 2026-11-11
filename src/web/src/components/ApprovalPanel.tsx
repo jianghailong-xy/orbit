@@ -566,8 +566,12 @@ export function ApprovalPanel({
   onChatAbout,
   onDecline,
   rememberable = true,
+  subagent = null,
 }: {
   approval: ApprovalInfo;
+  /** For a card a SubAgent asked: its delegate call's description, '' when unknown. Drawn as a grey line above the
+   *  card (docs/subagent-design.md §5.3). Null for a card the session asked itself. */
+  subagent?: string | null;
   onDecide: OnDecide;
   /** Whether this session's runtime honours remember rules (`approvalRememberOffered`). False
    *  drops "Always allow" and its shortcut: the card is Approve / Reject only. */
@@ -675,6 +679,9 @@ export function ApprovalPanel({
       meta={!answerable ? 'No longer waiting for an answer' : undefined}
       open={reviewOpen} onOpenChange={setReviewOpen}>
     <div ref={anchor} className="approval-card">
+      {subagent !== null && (
+        <div className="approval-subagent">{subagent ? `SubAgent · ${subagent}` : 'SubAgent'}</div>
+      )}
       <div className="approval-head">
         {heading}
       </div>

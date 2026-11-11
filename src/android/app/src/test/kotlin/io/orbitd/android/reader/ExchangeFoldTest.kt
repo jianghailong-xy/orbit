@@ -61,7 +61,7 @@ class ExchangeFoldTest {
 
     @Test fun whatWentWrongWhatAsksTheReaderAndWhatNobodyAnsweredStay() {
         val shown = rows(
-            exchange(delivery("TASK_RUN_STOPPED", b1, "B1 Targeted hints"), "B1 stopped; restarting it."),
+            exchange(delivery("PROJECT_BLOCKER_RAISED", b1, "B1 Targeted hints"), "B1 stopped; restarting it."),
             exchange(delivery("EVIDENCE_SUBMITTED", b4, "B4 Link gateway", 1), "Need your call on B4.", listOf("mcp__orbit__ask_owner")),
             exchange(delivery("EVIDENCE_SUBMITTED", b1, "B1 Targeted hints", 3), null),
             exchange(delivery("EVIDENCE_SUBMITTED", b1, "B1 Targeted hints", 4), "I confirmed B1.", emptyList()),

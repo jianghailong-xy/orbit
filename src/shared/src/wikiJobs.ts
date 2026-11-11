@@ -4,6 +4,7 @@
 // model answers at most ORBIT_WIKI_MODEL_CONCURRENCY requests at once. wikiContract.spec.ts holds every
 // constant below to the contract JSON.
 
+import type { WikiRepoTier, WikiRepoTierReason } from './wikiRepoOps';
 import type { WikiSystemModelErrorKind } from './wikiSystemModel';
 
 /**
@@ -223,6 +224,11 @@ export interface WikiJobView {
   nextCall: { ahead: number; enqueuedAt: string } | null;
   /** Its newest calls, at most `WIKI_JOBS_READ.callsPerJob`, oldest first. */
   requests: WikiJobCallView[];
+  /**
+   * What a maintenance run read of the repository (docs/wiki-repo-tiers-design.md §7.4): its tier, why it read less than
+   * git and that reason's sentence; null for any other kind and before its probe, absent from an older control plane.
+   */
+  repo?: { tier: WikiRepoTier; reason: WikiRepoTierReason | null; detail: string | null } | null;
 }
 
 /** The answer of `GET /api/wiki/spaces/:id/jobs`. */

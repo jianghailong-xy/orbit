@@ -94,6 +94,10 @@ type bgJobService struct {
 	// leases are then revoked rather than just closed.
 	sessionEnded   chan struct{}
 	endSessionOnce sync.Once
+	// The session's claim, which a SubAgent's child engine is launched from (subagent.go), and the SubAgents it
+	// hosts. A nil job hosts none.
+	job       *ClaimedSession
+	subagents subagentRegistry
 }
 
 // startBgJobService listens on socketPath until ctx is cancelled, and writes the
@@ -251,6 +255,9 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 
 	case "owner_wait":
 		return s.startOwnerWait(args)
+
+	case "subagent_start", "subagent_wait", "subagent_detach":
+		return s.handleSubagent(req.Op, args)
 
 	case "output":
 		tail, err := bgOptionalInt(args, "tail")
@@ -443,6 +450,7 @@ func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, j
 		taskID:             publicID(job.TaskID),
 		allowOrchestration: job.AllowOrchestration,
 		secrets:            runnerSecrets(),
+		job:                job,
 	}
 	stop, err := startBgJobService(ctx, svc, bgSocketPath(job.SessionID), bgTokenPath(job.SessionID))
 	if err != nil {

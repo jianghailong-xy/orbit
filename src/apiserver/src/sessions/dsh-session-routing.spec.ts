@@ -331,7 +331,7 @@ test('dsh compatibility: other built-in engine creation and runtime routes remai
 test('dsh admission: Harness history cannot move to a different workspace', () => {
   const verdict = sessionMoveVerdict({
     runtime: AgentProvider.DSH, status: RunStatus.SUCCEEDED, deletedAt: null,
-    completedAt: null, importSourceCwd: null, taskId: null, coordinatesProject: false,
+    completedAt: null, importSourceCwd: null, taskId: null,
     dispatchOrigin: 'USER', cancelRequestedAt: null, engineTurnActive: false,
     runningBgShells: [], liveApprovals: 0, queuedTurns: 0, mergeStatus: null,
     commitStatus: null, mergeRecoveryOpen: false, retryAt: null,

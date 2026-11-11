@@ -35,6 +35,7 @@ import io.orbitd.android.core.cards.QuestionRecords
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
+import io.orbitd.android.cards.isOrbitTurnCard
 import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.directory.ExternalSender
 import io.orbitd.android.text.*
@@ -58,6 +59,11 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         return
     }
     val event = row.event
+    // Orbit's own SubAgent is one folded block of its own (board docs/mocks/subagent/03.png).
+    if (!detailOnly && event.type == "tool_use" && (event.fields.string("name") ?: event.fields.string("toolName")) == SubagentBlock.TOOL_NAME) {
+        SubagentBlockView(row, highlighted) { child -> TranscriptRowView(child, model, live, open) }
+        return
+    }
     val clipboard = LocalClipboardManager.current
     var expanded by rememberSaveable(row.key) { mutableStateOf(false) }
     var childrenOpen by rememberSaveable(row.key) { mutableStateOf(false) }
@@ -76,7 +82,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     // turn: the line first, then their reply cards (web `Transcript.tsx`'s session-replies branch).
     val answerLine = cards.firstOrNull()?.takeIf { line ->
         event.type == "user" && (line.key.endsWith(":ownerAnswer") && cards.size == 1 ||
-            line.key.endsWith(":coordinatorDelivery") && cards.drop(1).all { it.key.contains(":reply:") })
+            line.key.endsWith(":coordinatorDelivery") && cards.drop(1).all { it.key.contains(":reply:") } ||
+            // An Orbit turn drawn as its own card (`OrbitTurnCardView`) carries its block in its own fold: the row is the card alone.
+            isOrbitTurnCard(line) && cards.drop(1).all { it.key.contains(":reply:") })
     }
     /** [reveal]: a failed read opens the card to say so — except for a question card reading itself whole while folded. */
     fun loadFull(copy: Boolean = false, reveal: Boolean = true) { scope.launch {
@@ -254,6 +262,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
             val words = if (shown.type == "user") shown.personWords() else shown.body()
             if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
+            // Another session's words are the turn's point: shown under its card, their first lines when long (SessionMessageBody).
+            else if (shown.type == "user" && shown.fields["sessionMessage"] is JsonObject && words.isNotBlank())
+                SessionMessageBody(words, open, revealed = highlighted)
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"

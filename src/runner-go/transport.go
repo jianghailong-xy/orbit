@@ -107,6 +107,8 @@ func init() {
 		sessionMoveCapabilityV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
+		wikiRepoOpFolderCapabilityV1,
+		wikiRepoOpProbeCapabilityV1,
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
@@ -1093,6 +1095,8 @@ func (t *Transport) createApproval(ctx context.Context, sessionID string, body i
 		ID     string `json:"id"`
 		Status string `json:"status"`
 	}
+	// A SubAgent's engine asks under its parent's session, and its card names the run (subagentApprovalBody).
+	body = subagentApprovalBody(ctx, body)
 	if err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/approvals", body, &r, 20*time.Second); err != nil {
 		return "", err
 	}

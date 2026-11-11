@@ -141,6 +141,16 @@ public struct ResolveProjectBlockerRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// `POST /projects/:id/coordinator/replace` naming where the new coordinator opens ("Start a new
+/// coordinator in…"); the project is coordinated from there afterwards.
+public struct ReplaceProjectCoordinatorRequest: Codable, Equatable, Sendable {
+    public let workspaceId: String
+
+    public init(workspaceId: String) {
+        self.workspaceId = workspaceId
+    }
+}
+
 // MARK: - Run queue
 
 /// `GET /projects/:id/panorama/ready`: the tasks that can run now or are running, the ones that

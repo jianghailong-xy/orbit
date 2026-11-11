@@ -347,6 +347,7 @@ import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-revi
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
 import {
   withConfirmationAnswers,
+  withTurnCard,
   withConfirmationReturn,
   withConfirmationReviewRequest,
   withControlPlaneNote,
@@ -5493,6 +5494,24 @@ export class RunnerApiController {
     return { env: resolved.exec.env ?? {} };
   }
 
+  /** The SubAgent run a card names, when it is one of this session's; 404 for any other id. */
+  private async subagentRunOfSession(sessionId: string, raw: string | undefined): Promise<string | null> {
+    const given = stripNul(raw ?? '').trim();
+    if (given === '') return null;
+    // The route's pipe has decoded a base62 id already; a caller that skips it (a spec) may hand either spelling.
+    let runId: string | null = null;
+    try {
+      runId = toUuid(given);
+    } catch {
+      runId = null;
+    }
+    const run = runId
+      ? await this.prisma.subagentRun.findFirst({ where: { id: runId, sessionId }, select: { id: true } })
+      : null;
+    if (!run) throw new NotFoundException('SubAgent run not found');
+    return run.id;
+  }
+
   /**
    * Register a tool-permission request from claude's --permission-prompt-tool (served
    * by the orbit MCP server) and surface it to the UI. Idempotent on toolUseId so a
@@ -5504,7 +5523,7 @@ export class RunnerApiController {
   async createApproval(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() dto: ApprovalCreateRequest,
+    @Body(PublicIdPipe.forFields('subagentRunId')) dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
     const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     // Stripped before the lookup, not only before the write, so a retry finds the row the first
@@ -5549,6 +5568,10 @@ export class RunnerApiController {
     // and an in-turn MCP call has none (`sessions/abandoned-approvals.ts` reads it back against the
     // jobs the runner says are still up).
     const backgroundJobId = stripNul(dto.backgroundJobId ?? '').trim();
+    // The third reader: a SubAgent's child engine, asking under its parent's session (docs/subagent-design.md
+    // §5.3). It outlives the parent's turn and calls, so the card names its run, which has to be one of this
+    // session's: anything else names nothing here.
+    const subagentRunId = await this.subagentRunOfSession(sessionId, dto.subagentRunId);
     const approvalData = {
       sessionId,
       // Stripped for the same reason the event batch is (see strip-nul): a tool argument is
@@ -5564,6 +5587,7 @@ export class RunnerApiController {
       toolUseId: toolUseId || null,
       turnId: openingTurn?.id ?? null,
       backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
+      subagentRunId,
       ...(allowedMessage
         ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
         : {}),
@@ -8012,7 +8036,13 @@ export class RunnerApiController {
       // the card its echo is stored with. A batch of ordinary messages costs one indexed read.
       const turnCards = await readTurnCards(
         tx,
-        { id: sessionId, ownerId: session.ownerId, taskId: session.taskId, runSource: session.runSource },
+        {
+          id: sessionId,
+          ownerId: session.ownerId,
+          taskId: session.taskId,
+          runSource: session.runSource,
+          promptByOrbit: session.promptByOrbit,
+        },
         userTurns,
       );
       for (const e of durable) {
@@ -8032,6 +8062,9 @@ export class RunnerApiController {
         e.payload = withConfirmationReviewRequest(e.payload, cards?.confirmationReviewRequest ?? null);
         e.payload = withConfirmationReturn(e.payload, cards?.confirmationReturn ?? null);
         e.payload = withConfirmationAnswers(e.payload, cards?.confirmationAnswers ?? null);
+        for (const field of ['runNotice', 'evidenceReview', 'evidenceSendBack', 'sessionOpening'] as const) {
+          e.payload = withTurnCard(e.payload, field, cards?.[field] ?? null);
+        }
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);

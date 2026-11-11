@@ -448,6 +448,9 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     case createdWorkspace(CreatedWorkspaceLine)
     case loadOlder(cursor: Int)
     case item(TranscriptItem)
+    /// How long a turn worked, or has been working: drawn under the message that opened it and over
+    /// everything the turn wrote (`TurnHead`).
+    case turnHead(TurnHeadLine)
     /// A stretch of work between two replies — settled thinking and tool calls — folded into one
     /// steps line (see `TranscriptRows.groupToolRuns`, `StepsSummary`).
     case steps([TranscriptItem])
@@ -476,6 +479,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
         case .createdWorkspace:      return "created-workspace"
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
+        case .turnHead(let line):    return "turn-head-\(line.bubbleID)"
         case .steps(let items):      return items.first?.id ?? "steps-empty"
         // The bare id of the first turn's opening bubble, for `.steps`' reason: it replaces that
         // bubble's own row, and a scroll aimed at it must still land somewhere.
@@ -501,12 +505,16 @@ public enum TranscriptRows {
     /// questions still trailing at the tail, which stay nearest the composer (web parity: the card
     /// is drawn after the transcript and before the cards that ask the owner something).
     ///
+    /// `running` is whether the session's turn is running now, which is when the newest turn's head
+    /// counts up (`TurnHead.label`).
+    ///
     /// `createdWorkspace` is the conversation's first line, so it is above everything — and only once
     /// the first page is loaded: first means first, not the top of a window that starts later.
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
                              showWorkingIndicator: Bool,
+                             running: Bool = false,
                              decisionCards: [DeliveredDecisionCard] = [],
                              clocks known: ReceiptAnchor.Clocks? = nil,
                              recap: RecapCard? = nil,
@@ -575,6 +583,7 @@ public enum TranscriptRows {
         // older than, so a record's moment being above the window must not hide the control that
         // pages the window back to it.
         if canPageOlder { rows.append(.loadOlder(cursor: state.oldestSeq ?? 0)) }
+        let turnHeads = TurnHead.lines(state)
         for item in state.items {
             // An AskUserQuestion / ExitPlanMode tool card duplicates the live interactive approval
             // rendered below while the prompt still awaits an answer — show only the interactive
@@ -582,6 +591,11 @@ public enum TranscriptRows {
             // Transcript.tsx hides the read-only copy while `live && !result`).
             if !Approvals.duplicatesPendingApproval(item, pendingApprovals: state.pendingApprovals) {
                 rows.append(.item(item))
+            }
+            // Only a head with something to say gets a row: an empty one would still hold its insets.
+            if case .user(let bubble) = item, let line = turnHeads[bubble.id],
+               TurnHead.label(line, running: running) != nil {
+                rows.append(.turnHead(line))
             }
             for card in anchored.removeValue(forKey: item.id) ?? [] { rows.append(.statusCard(card)) }
             for card in anchoredDecisions.removeValue(forKey: item.id) ?? [] {
@@ -700,8 +714,11 @@ public enum TranscriptRows {
         switch card.name {
         // Task/Agent/Workflow: Claude Code's names for a sub-agent and a team of them (the 08-14
         // Agent→Workspace rename had rewritten "Agent" here). Their cards carry work of their own —
-        // a nested transcript, progress — and must never fold into a run.
-        case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow":
+        // a nested transcript, progress — and must never fold into a run. So does Orbit's own
+        // SubAgent (`mcp__orbit__delegate`), which draws the child's steps under the same block
+        // (docs/subagent-design.md §6.4).
+        case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow",
+             SubagentBlock.toolName:
             return false
         default:
             return true

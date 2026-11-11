@@ -6296,6 +6296,24 @@ button.toast--pill:focus-visible {
 .move-dialog-option.off .move-dialog-name small {
   color: var(--text-3);
 }
+/* A project's coordinator whose conversation cannot go to this workspace, where a new coordinator
+   could open instead: the row stays greyed and carries Start new here…. */
+.move-dialog-option.has-start-new {
+  cursor: default;
+}
+.move-dialog-start-new {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.move-dialog-start-new:hover:not(:disabled) {
+  text-decoration: underline;
+}
 .move-dialog-count {
   flex: none;
   font-size: 12.5px;
@@ -10504,6 +10522,43 @@ button.chat-jump-start:hover {
   border-radius: 5px;
   padding: 0 6px;
 }
+/* A SubAgent's `Background`, after its summary: the card's own purple, as a pill. */
+.chat-tool-tag {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tone);
+  background: var(--tone-bg);
+  border-radius: 5px;
+  padding: 0 6px;
+}
+/* An opened SubAgent's first line: why it runs where it runs, in grey. */
+/* A SubAgent waiting on a card in its parent's approval area (docs/subagent-design.md §5.3). */
+.chat-subagent-waiting {
+  padding: 2px 10px 6px 58px;
+  font-size: 12px;
+  color: var(--warning-solid);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-subagent .chat-subagent-waiting {
+  padding: 4px 0 2px;
+}
+.chat-subagent-why {
+  padding: 8px 10px 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.chat-subagent-why b {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.chat-subagent-icon {
+  font-size: 13px;
+  line-height: 1;
+}
 .chat-tool-status {
   flex: none;
   font-size: 13px;
@@ -12755,6 +12810,19 @@ button.chat-jump-start:hover {
   background: var(--brand-tint);
   margin: 10px 0;
   overflow: hidden;
+}
+/* Which SubAgent asked (docs/subagent-design.md §5.3): one grey line above the card's own head. */
+.approval-subagent {
+  padding: 8px 14px 0;
+  font-size: 12px;
+  color: var(--text-3);
+  background: var(--brand-tint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.approval-subagent + .approval-head {
+  padding-top: 4px;
 }
 .approval-head {
   padding: 10px 14px;
@@ -20531,6 +20599,26 @@ div.landing-jobs-open {
   font-size: 13px;
   text-align: left;
 }
+/* What queued an attempt: the chat's user bubble (docs/mocks/landings-chat-trigger), its time always shown — it is
+   when the landing started, as the turn foot's is when it ended. */
+.landings-window-trigger {
+  margin: 10px 12px 4px auto;
+}
+.landings-window-trigger .md p {
+  margin: 0;
+}
+.landings-window-trigger .chat-user.is-link {
+  cursor: pointer;
+}
+.landings-window-trigger .chat-user.is-link:focus {
+  outline: none;
+}
+.landings-window-trigger .chat-user.is-link:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--brand);
+}
+.landings-window-trigger-meta > .chat-time {
+  opacity: 1;
+}
 .landings-window-reply {
   margin: 2px 0 0;
   cursor: pointer;
@@ -20577,9 +20665,19 @@ div.landing-jobs-open {
   border: 0;
   background: transparent;
   color: inherit;
-  font: inherit;
+  /* The family only: the size is the chat tool row's own 12.5px, as every tool call's. */
+  font-family: inherit;
   text-align: left;
   cursor: pointer;
+}
+/* No focus box on a press; the keyboard's focus reads as the row's hover. */
+.landing-step-row:focus,
+.landings-window-steps-line:focus {
+  outline: none;
+}
+.landing-step-row:focus-visible,
+.landings-window-steps-line:focus-visible {
+  background: var(--bg-sunken);
 }
 .landing-step-detail {
   padding: 6px 12px 8px;
@@ -23196,13 +23294,15 @@ div.landing-jobs-open {
    card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields
    drawn instead of the paragraph they were rendered into. Amber rather than brand: an exception
    item is something nobody's work is waiting behind, and every one of them is somebody's to decide. */
+/* Orbit's cards sit on the agent's side, in the reply column at its full width: the right side is the
+   owner's own words only (docs/mocks/orbit-cards-left, approved 2026-11-11). Same for .tsc/.psc/.crc/.smc. */
 .oic-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .oic {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -23373,11 +23473,11 @@ div.landing-jobs-open {
    never read as the same thing. */
 .tsc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .tsc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23564,11 +23664,11 @@ div.landing-jobs-open {
    words are another agent's, and the head says whose. */
 .smc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .smc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23605,13 +23705,22 @@ div.landing-jobs-open {
 .smc-body {
   margin-top: 6px;
 }
+/* A long message shows its first 8 lines, fading out, until "Show more" (SessionMessageCard). */
+.smc-body.is-clamped {
+  max-height: 12.4em;
+  max-height: 8lh;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
 .smc-more {
+  margin: 4px 0 2px;
   padding: 0;
   border: 0;
   background: none;
   color: var(--brand);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .smc-meta {
@@ -23769,11 +23878,11 @@ div.landing-jobs-open {
    as a raised list of links. */
 .psc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .psc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23903,11 +24012,11 @@ div.landing-jobs-open {
    handed, the reviewer's return handed to the run, and the owner's answers handed to the reviewer. Orbit's turns, drawn as the started card is. */
 .crc-wrap {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .crc {
-  width: min(560px, 88%);
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23921,6 +24030,13 @@ div.landing-jobs-open {
 .crc.is-confirmed {
   border-color: var(--success-border);
   background: var(--success-bg);
+}
+.crc.is-neutral {
+  border-color: var(--border);
+  background: var(--bg-hover);
+}
+.crc.is-neutral .crc-head {
+  color: var(--text-2);
 }
 .crc.is-queued {
   border-style: dashed;
@@ -24023,6 +24139,116 @@ div.landing-jobs-open {
 .crc-raw pre {
   max-height: 320px;
   margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.crc-state {
+  margin-top: 8px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.crc-state.is-warn {
+  color: var(--warning);
+}
+.crc-state.is-ok {
+  color: var(--success);
+}
+.crc-claim {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.crc-claim-text {
+  white-space: pre-wrap;
+}
+.crc-claim.is-clamped .crc-claim-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.crc-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.crc-question {
+  margin-top: 6px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.crc-question-text {
+  font-weight: 600;
+}
+.crc-question ul {
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.crc-question li {
+  margin-top: 2px;
+  color: var(--text-2);
+}
+.crc-question li.is-picked {
+  color: var(--text-1);
+  font-weight: 600;
+}
+/* The opening of a session Orbit opened (OrbitTurnCards.tsx `SessionOpeningLine`): one line, the brief folded. */
+.session-opening {
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-hover);
+}
+.session-opening-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.session-opening-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.session-opening-text a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.session-opening-toggle {
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.session-opening-quote {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.session-opening-brief {
+  max-height: 320px;
+  margin: 8px 0 0;
   padding: 8px;
   overflow: auto;
   border-radius: 6px;
@@ -24734,6 +24960,11 @@ button.project-open-item-action:disabled {
                  border: 1.6px solid var(--brand-border); border-top-color: var(--brand); animation: runner-spin 0.9s linear infinite; }
 .wk-maint-link { color: var(--brand); text-decoration: none; white-space: nowrap; }
 .wk-maint-link:hover { text-decoration: underline; }
+/* The repository's part of the line (docs/wiki-repo-tiers-design.md §7.2): the folder tier's grey words lead to Settings
+   too, and a phone says the short words only. */
+.wk-maint-link--muted { color: var(--text-3); }
+.wk-maint-wide { display: contents; }
+.wk-maint-narrow { display: none; }
 @media (prefers-reduced-motion: reduce) { .wk-maint-spin { animation: none; } }
 .wk-crumb { font-size: 13px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
 .wk-crumb a { color: var(--brand); text-decoration: none; }
@@ -24761,6 +24992,11 @@ button.project-open-item-action:disabled {
 .wk-job-row .s.warn b { color: var(--warning); }
 .wk-job-row .s.error b { color: var(--error); }
 .wk-job-row .s.muted b { color: var(--text-3); }
+.wk-job-tier { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 4px; font-size: 11.5px; line-height: 17px;
+  color: var(--text-2); background: var(--bg-raised); border: 1px solid var(--border-subtle); }
+.wk-job-tier.muted { color: var(--text-3); }
+.wk-job-tier.warn, .wk-job-tier-why.warn { color: var(--warning); }
+.wk-job-tier.error, .wk-job-tier-why.error { color: var(--error); }
 .wk-job-row .when { font-size: 12px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .wk-job-row .chev { align-self: center; font-size: 11px; color: var(--text-3); transition: transform .15s; }
 .wk-job.open .wk-job-row .chev { transform: rotate(90deg); }
@@ -24948,6 +25184,9 @@ button.project-open-item-action:disabled {
 .wk-anc .p { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
              font-size: 12px; color: var(--text-1); overflow-wrap: anywhere; }
 .wk-anc .ic.aim { color: var(--text-3); font-size: 13px; }
+/* Beside a deferred code anchor (contract anchorRules.deferred): words in the body's face, not the path's. */
+.wk-anc-deferred { display: block; margin-top: 2px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                   font-size: 11.5px; color: var(--text-3); }
 .wk-anc-note { margin-top: 8px; font-size: 12px; color: var(--text-3); line-height: 1.5; }
 .wk-used-h { font-size: 13px; color: var(--text-2); margin-bottom: 4px; }
 .wk-used-h b { color: var(--text-1); font-weight: 600; }
@@ -25105,6 +25344,25 @@ button.project-open-item-action:disabled {
 .wk-setup-limit .orbit-number-input { width: 72px; }
 .wk-setup-days { margin-top: 8px; }
 .wk-setup-refusal { margin: 14px 0 0; }
+/* The settings' probe under the workspace picker (docs/wiki-repo-tiers-design.md §7.3, mock 44 ⑤). */
+.wk-probe { display: flex; gap: 8px; margin-top: 6px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; }
+.wk-probe b { font-weight: 600; }
+.wk-probe .g { flex: none; width: 12px; text-align: center; font-weight: 600; }
+.wk-probe.ok { background: var(--success-bg); color: var(--success); }
+.wk-probe.folder { background: color-mix(in srgb, var(--route-shadow) 10%, transparent); color: var(--route-shadow); }
+.wk-probe.paused { background: var(--warning-bg); color: var(--warning); }
+.wk-probe.wrong { background: var(--error-bg); color: var(--error); }
+.wk-probe.unchecked { background: color-mix(in srgb, var(--text-3) 10%, transparent); color: var(--text-2); }
+/* The maintenance card's repository part: its tag beside the title, the line, and the ways to set it right. */
+.wk-repo-tag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; vertical-align: 1px;
+  border: 1px solid transparent; }
+.wk-repo-tag.muted { color: var(--text-2); background: color-mix(in srgb, var(--text-3) 10%, transparent); border-color: var(--border-subtle); }
+.wk-repo-tag.warn { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
+.wk-repo-tag.error { color: var(--error); background: var(--error-bg); border-color: var(--error-border); }
+.wk-repo-card { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border-subtle); }
+.wk-repo-line { font-size: 13px; line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere; }
+.wk-repo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.wk-repo-blocked { margin-top: 6px; font-size: 12px; color: var(--text-3); }
 /* Maintenance as the server runs the wiki (mock 35 ①②): the System model and its state, read-only, and the line that
    says where the wiki's material goes. */
 .wk-model-line .dim { color: var(--text-3); }
@@ -25444,6 +25702,8 @@ button.project-open-item-action:disabled {
   .wk-page > .wk-search .wk-kbd { display: none; }
   .wk-page > .wk-layout, .wk-page > .wk-body { order: 3; }
   .wk-status-review { display: none; }
+  .wk-maint-wide { display: none; }
+  .wk-maint-narrow { display: contents; }
   .wk-maint-spin { display: none; }
   .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search, .wk-page--reading > .wk-status-row { display: none; }
   /* The head's space sits beside its buttons (mock 30 ③). */
@@ -25465,7 +25725,7 @@ button.project-open-item-action:disabled {
   .wk-act > .wk-status-row { margin-top: 6px; background: none; border: 0; border-radius: 0; }
   .wk-act > .wk-status-row .project-integration-row { padding: 0; cursor: default; }
   .wk-act > .wk-status-row .project-integration-facts { display: block; line-height: 1.6; }
-  .wk-act > .wk-status-row .project-integration-facts > :not(.wk-status-review),
+  .wk-act > .wk-status-row .project-integration-facts > :not(.wk-status-review):not(.wk-maint-wide),
   .wk-act > .wk-status-row .wk-maint { display: inline; white-space: normal; }
   .wk-act > .wk-status-row .wk-sep { margin: 0 6px; }
   .wk-layout { display: block; margin-top: 0; }
@@ -27122,8 +27382,8 @@ button.agent-progress-agent:hover {
 .wk-chat-choice:hover { border-color: var(--brand); background: var(--brand-tint); }
 .wk-chat-choice .m { font-size: 12px; color: var(--text-3); }
 .wk-chat-body { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
-/* A person's meta row runs out to the left of the bubble's column on one line (.chat-user-meta), but the panel is 320–560
-   wide and its body is a scroll box, which cuts off whatever runs past its left edge (C15). Here the attachment line
+/* A person's meta row runs out to the left of the bubble's column on one line (.chat-user-meta), but the panel is 320 wide
+   and up and its body is a scroll box, which cuts off whatever runs past its left edge (C15). Here the attachment line
    takes a line of its own under the bubble and wraps there, whole, as board 42 ① shows it; the copy and the time keep
    their line under it, where the dot that led into the attachment line has nothing left to lead into. */
 .wk-chat-body .chat-user-meta { flex-wrap: wrap; height: auto; min-height: 18px; }

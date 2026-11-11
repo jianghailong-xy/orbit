@@ -730,8 +730,12 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:66), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
   'PATCH /runner/sessions/:id/subagents/:runId':
     'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
-    + '(runner-api/runner-subagents.controller.ts:67), and the run is matched by (id, that session) only '
-    + '(runner-api/runner-subagents.controller.ts:208); subagent-run.pg.spec.ts sends another account\'s session and run',
+    + '(runner-api/runner-subagents.controller.ts:109), and the run is matched by (id, that session) only '
+    + '(runner-api/runner-subagents.controller.ts:353); subagent-run.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/sessions/:id/subagents/:runId/fallback':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:109), and the run is matched by (id, that session) only '
+    + '(runner-api/runner-subagents.controller.ts:272); subagent-fallback.pg.spec.ts sends another account\'s session and run',
   'POST /runner/tasks/:taskId/owner-confirmation':
     'refused 403 to every caller — the owner\'s own machine included — before the task or anything else is read: only '
     + 'the account owner confirms, through the app (task-owner-confirmation.service.ts:205 → '
@@ -1417,6 +1421,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/approvals body backgroundJobId':
     'the id the machine gave one of its own processes, stored on the approval of the session the path names '
     + '(runner-api.controller.ts:3900)',
+  'POST /runner/sessions/:id/approvals body subagentRunId':
+    'a SubAgent run, looked up only among the runs of the session the path names, whose ownership the door checked '
+    + 'first; any other id, another account\'s run included, is 404 (runner-api.controller.ts:5509); '
+    + 'sessions/subagent-approvals.pg.spec.ts sends another session\'s run and another account\'s',
   'POST /runner/sessions/:id/subagents body toolUseId':
     'the engine\'s id for the delegate call, a key only within the session the path names '
     + '(runner-api/runner-subagents.controller.ts:110)',

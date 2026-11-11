@@ -40,8 +40,8 @@ struct ConsoleView: View {
     /// The band was opened where the reader is — its folded bar tapped, or the keyboard put away —
     /// and stays open until their next drag.
     @State private var bandOpened = false
-    /// Bumped by the folded bar's ↓, which the transcript answers with the floating disc's jump.
-    @State private var jumpRequest = 0
+    /// The folded pill comes and goes by fading alone under Reduce Motion.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -85,6 +85,7 @@ struct ConsoleView: View {
             progress: { console.state.taskProgress[$0] },
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
+            subagentRun: { console.subagentRuns[$0] },
             fullPayload: { await console.fullPayload(seq: $0) })
     }
 
@@ -163,7 +164,7 @@ struct ConsoleView: View {
                                         reviewingCard: approvalReview != nil || promotionReview != nil,
                                         questionWidth: navTitleWidth,
                                         readingBack: $readingBack, bandFolded: foldsBand(console),
-                                        bandOpened: $bandOpened, jumpRequest: jumpRequest)
+                                        bandOpened: $bandOpened)
         #if os(iOS)
         if #available(iOS 26.0, *) {
             transcript.safeAreaBar(edge: .bottom, spacing: 0) {
@@ -184,8 +185,9 @@ struct ConsoleView: View {
     }
 
     /// The band under the transcript: its members, or — folded while the reader goes back through the
-    /// history (`foldsBand`) — the one bar they stand behind (`ComposerBandFold`), in the band's gutter
-    /// and on its foot. A tap on the bar opens the band where the reader is.
+    /// history (`foldsBand`) — the one pill they stand behind (`ComposerBandFold`), centred and sunk
+    /// below the band's foot to stand over the home indicator, as Safari's folded address bar does. A
+    /// tap on the pill opens the band where the reader is.
     private func composerBand(_ console: ConsoleModel) -> some View {
         let folded = foldsBand(console)
         return ZStack(alignment: .bottom) {
@@ -193,10 +195,14 @@ struct ConsoleView: View {
                 .modifier(ComposerBandFold(folded: folded))
             #if os(iOS)
             if #available(iOS 26.0, *), folded {
-                FoldedBandBar(console: console, open: { bandOpened = true }, jump: { jumpRequest &+= 1 })
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, .composerBandFoot)
-                    .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .bottom)))
+                FoldedBandBar(console: console, open: { bandOpened = true })
+                    // The pill hugs what it says; this only caps it, and a long draft is what gives way.
+                    .padding(.horizontal, 72)
+                    // Its foot is off the screen's edge, not the safe area's: the band stands on the
+                    // safe area, so the pill reaches down into it by the difference.
+                    .padding(.bottom, .foldedBandPillFoot - windowBottomInset)
+                    .transition(reduceMotion ? .opacity
+                                : .opacity.combined(with: .scale(scale: 0.8, anchor: .bottom)))
             }
             #endif
         }
@@ -209,6 +215,15 @@ struct ConsoleView: View {
             if !editing { bandOpened = true }
         }
     }
+
+    #if os(iOS)
+    /// The screen's own bottom inset — the window's, which no bar or keyboard moves.
+    private var windowBottomInset: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first?.safeAreaInsets.bottom ?? 0
+    }
+    #endif
 
     private func bandMembers(_ console: ConsoleModel) -> some View {
         // Unread messages, error, background tray, git bar, composer — web's order
@@ -676,13 +691,10 @@ struct TranscriptView: View {
     /// Written for `ConsoleView.foldsBand`: whether the reader has gone back far enough through the
     /// history for a phone's composer band to fold to its bar (`TailPinning.foldsBand`).
     var readingBack: Binding<Bool> = .constant(false)
-    /// The band is folded to its bar (`FoldedBandBar`), which carries the jump to the latest in the
-    /// floating disc's place.
+    /// The band is folded to its pill (`FoldedBandBar`): the floating disc stands down until it opens.
     var bandFolded = false
     /// The bar was tapped open; the reader's next drag folds the band again.
     var bandOpened: Binding<Bool> = .constant(false)
-    /// Bumped by the bar's ↓: the floating disc's jump (`jumpToLatest`).
-    var jumpRequest = 0
     @State private var reviewSessionID: String?
     /// Which session's Recap card has stepped aside for this visit. It is set once that conversation
     /// starts a new turn, because the reader is in it now and a card arriving under each answer
@@ -844,6 +856,8 @@ struct TranscriptView: View {
         // The ended questions this conversation holds: a turn handing one's answer to the coordinator
         // is that question's card — in the transcript and on the queue alike (`OwnerAnswerLineView`).
         .environment(\.answeredQuestions, console.answeredQuestions)
+        // The item a record link or a search hit asked for: a long message from another session opens to it.
+        .environment(\.revealedItemID, console.revealedItemID)
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -1010,14 +1024,13 @@ struct TranscriptView: View {
         // Floating jump-to-latest button (web's `.scroll-to-bottom`): shown while scrolled up, and
         // while the tail is out of view for any other reason (`stranded`).
         .overlay(alignment: .bottom) {
-            // While the composer band is folded its bar carries the jump, at its right end.
+            // While the composer band is folded only its pill stands there (the owner, 2026-11-11):
+            // the jump comes back with the band.
             if !bandFolded, !atBottom || console.detached || stranded {
                 scrollToBottomButton(proxy: proxy)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        // The folded band's ↓, pressed: the disc's jump.
-        .onChange(of: jumpRequest) { jumpToLatest(proxy) }
         // One observer for both, so a switch to a session that is already working is decided in one
         // step: the card is back for a newly opened session, and away once it starts a turn.
         .onChange(of: RecapVisit(sessionID: console.sessionID, rests: recapRests), initial: true) { old, new in
@@ -1130,6 +1143,7 @@ struct TranscriptView: View {
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
                              showWorkingIndicator: console.showWorkingIndicator,
+                             running: console.state.status == .running,
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
                              recap: recapCard,
@@ -1198,6 +1212,7 @@ struct TranscriptView: View {
         switch row {
         case .loadOlder: return EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         case .bottom:    return EdgeInsets()
+        case .turnHead:  return EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16)
         default:         return EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)
         }
     }
@@ -1227,6 +1242,9 @@ struct TranscriptView: View {
         case .item(let item):
             TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
                 .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
+        case .turnHead(let line):
+            // No `AnchorRow`: the head belongs to the message above it, which is the anchor.
+            TurnHeadRowView(line: line)
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
@@ -1426,7 +1444,7 @@ struct TranscriptView: View {
         .help(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
     }
 
-    /// The jump to the latest: the floating disc's, and the folded composer band's ↓ (`jumpRequest`).
+    /// The jump to the latest: the floating disc's.
     private func jumpToLatest(_ proxy: ScrollViewProxy) {
         // A window opened at a record ends at a gap: the latest message is past it, so reaching it
         // re-seeds the window from the tail (`jumpToLatest`), after which the follow pins the bottom.
@@ -1908,10 +1926,9 @@ private struct ScrollTracker: ViewModifier {
                     atBottom = pinned
                     tailOutOfView = now.bottomGap > TailPinning.nearBottom
                     #if os(iOS)
-                    // What the folded band keeps over the list: its bar and its foot, over the screen's
-                    // own bottom inset — the window's, which no bar or keyboard moves.
-                    let foldedInset = CGFloat.foldedBandBar + .composerBandFoot
-                        + (scroll.view?.window?.safeAreaInsets.bottom ?? 0)
+                    // What the folded band keeps over the list: its pill and its foot, which is off the
+                    // screen's own edge (`ConsoleView.composerBand`).
+                    let foldedInset = CGFloat.foldedBandPill + .foldedBandPillFoot
                     let back = TailPinning.foldsBand(pinned: pinned, sample: now, foldedInset: Double(foldedInset))
                     if readingBack.wrappedValue != back { readingBack.wrappedValue = back }
                     #endif

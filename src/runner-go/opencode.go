@@ -917,6 +917,14 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			envMCPPermissionPrompt:      "0",
 			envRunnerChild:              "1",
 		}
+		// A SubAgent's `orbit mcp` neither offers nor serves delegate (subagentChildJob).
+		if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
+			environment[envSubagentRunID] = runID
+		}
+		// A SubAgent's `orbit mcp` neither offers nor serves delegate (subagentChildJob).
+		if runID := strings.TrimSpace(job.Agent.Env[envSubagentRunID]); runID != "" {
+			environment[envSubagentRunID] = runID
+		}
 		// Where `orbit mcp` reaches the runner to start a background job the runner
 		// owns. Written here as well as into the OpenCode process env, because this
 		// block is what OpenCode hands its local MCP servers.
