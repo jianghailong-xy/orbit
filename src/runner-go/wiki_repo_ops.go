@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -107,6 +108,44 @@ type wikiRepoOpOutcome struct {
 	payloadKey string
 	sha        string
 	err        string
+	// Why a failure failed, in the contract's words (`repoOps.reasons`): what the server classifies it by.
+	// Empty for a failure that is none of them, which the server reads as one to try again.
+	reason string
+}
+
+// The reasons a failure names (contract `repoOps.reasons`, docs/wiki-repo-tiers-design.md §6). Their apiserver
+// twins are WIKI_REPO_PREMISE_REASONS and WIKI_REPO_TRANSIENT_REASONS in src/shared/src/wikiRepoOps.ts.
+const (
+	wikiRepoReasonNoWorkDir       = "no_work_dir"
+	wikiRepoReasonNotFound        = "not_found"
+	wikiRepoReasonNotGit          = "not_git"
+	wikiRepoReasonWrongRepository = "wrong_repository"
+	wikiRepoReasonRootMismatch    = "root_mismatch"
+	wikiRepoReasonFetchRefused    = "fetch_refused"
+	wikiRepoReasonFetchFailed     = "fetch_failed"
+)
+
+// wikiRepoOpReasonError is a checkout's failure with the reason it is: errors.As reads it back.
+type wikiRepoOpReasonError struct {
+	reason string
+	err    error
+}
+
+func (e *wikiRepoOpReasonError) Error() string { return e.err.Error() }
+func (e *wikiRepoOpReasonError) Unwrap() error { return e.err }
+
+func wikiRepoOpReasonf(reason, format string, args ...interface{}) error {
+	return &wikiRepoOpReasonError{reason: reason, err: fmt.Errorf(format, args...)}
+}
+
+// wikiRepoOpFailedWith is a failed outcome that says why in words and, when the error names one, by its reason.
+func wikiRepoOpFailedWith(err error) wikiRepoOpOutcome {
+	outcome := wikiRepoOpFailed(err.Error())
+	var reasoned *wikiRepoOpReasonError
+	if errors.As(err, &reasoned) {
+		outcome.reason = reasoned.reason
+	}
+	return outcome
 }
 
 type wikiRepoOpReadAnswer struct {
@@ -211,7 +250,7 @@ func runWikiRepoOp(cmd WikiRepoOpCommand, progress func()) wikiRepoOpOutcome {
 	}
 	root, ref, err := wikiRepoOpCheckout(cmd, input)
 	if err != nil {
-		return wikiRepoOpFailed(err.Error())
+		return wikiRepoOpFailedWith(err)
 	}
 	switch cmd.Kind {
 	case "snapshot":
@@ -249,16 +288,22 @@ func wikiRepoOpSucceeded(result map[string]interface{}) wikiRepoOpOutcome {
 func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, string, error) {
 	workDir := expandTilde(strings.TrimSpace(cmd.WorkDir))
 	if workDir == "" {
-		return "", "", fmt.Errorf("the operation names no working directory to read the repository in")
+		return "", "", wikiRepoOpReasonf(wikiRepoReasonNoWorkDir, "the operation names no working directory to read the repository in")
+	}
+	if info, statErr := os.Stat(workDir); statErr != nil || !info.IsDir() {
+		if statErr == nil {
+			statErr = errors.New("not a directory")
+		}
+		return "", "", wikiRepoOpReasonf(wikiRepoReasonNotFound, "%s was not found on this machine: %v", workDir, statErr)
 	}
 	root, err := wikiImportGit(workDir, "rev-parse", "--show-toplevel")
 	if err != nil || root == "" {
-		return "", "", fmt.Errorf("%s is not a git checkout: %v", workDir, err)
+		return "", "", wikiRepoOpReasonf(wikiRepoReasonNotGit, "%s is not a git checkout: %v", workDir, err)
 	}
 	if want := strings.TrimSpace(cmd.RepoURLNorm); want != "" {
 		origin, _ := wikiImportGit(root, "remote", "get-url", "origin")
 		if got := normalizeWikiRepoURL(origin); got != want {
-			return "", "", fmt.Errorf("the checkout %s is a clone of %s, not of the space's repository %s: "+
+			return "", "", wikiRepoOpReasonf(wikiRepoReasonWrongRepository, "the checkout %s is a clone of %s, not of the space's repository %s: "+
 				"nothing was read", root, firstNonEmpty(got, "no origin"), want)
 		}
 	}
@@ -266,7 +311,7 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, s
 	if local := wikiRepoOpLocalCommits(root, cmd.Kind, input); len(local) > 0 {
 		for _, sha := range local {
 			if first != "" && !wikiRepoOpStartsFrom(root, sha, first) {
-				return "", "", fmt.Errorf("the commit %s in the checkout %s does not start from the space's first commit %s: "+
+				return "", "", wikiRepoOpReasonf(wikiRepoReasonRootMismatch, "the commit %s in the checkout %s does not start from the space's first commit %s: "+
 					"it is another repository's, so nothing was read", sha, root, first)
 			}
 		}
@@ -275,7 +320,12 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, s
 	// A failure here is read in the job's error: it says which operation, in which checkout, and what git said.
 	trackingRef, err := fetchWikiOriginRef(root)
 	if err != nil {
-		return "", "", fmt.Errorf("the %s operation could not fetch origin's default branch into the checkout %s, so nothing was read: %v",
+		// The credential refused is the owner's to fix; anything else of the fetch's is the network's, worth another try.
+		reason := wikiRepoReasonFetchFailed
+		if errors.Is(err, errGitAuthFailed) {
+			reason = wikiRepoReasonFetchRefused
+		}
+		return "", "", wikiRepoOpReasonf(reason, "the %s operation could not fetch origin's default branch into the checkout %s, so nothing was read: %v",
 			cmd.Kind, root, err)
 	}
 	out, code, stderr, err := wikiAnchorGit(root, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", trackingRef+"^{commit}")
@@ -285,7 +335,7 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, s
 			"nothing was read: %s", cmd.Kind, trackingRef, root, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
 	}
 	if first != "" && !wikiRepoOpStartsFrom(root, ref, first) {
-		return "", "", fmt.Errorf("the checkout %s does not start from the space's first commit %s: "+
+		return "", "", wikiRepoOpReasonf(wikiRepoReasonRootMismatch, "the checkout %s does not start from the space's first commit %s: "+
 			"it is another repository behind the same URL, so nothing was read", root, first)
 	}
 	return root, ref, nil
@@ -803,6 +853,7 @@ func runWikiRepoOpAndReport(ctx context.Context, t *Transport, cmd WikiRepoOpCom
 		State:           outcome.state,
 		Result:          outcome.result,
 		Error:           outcome.err,
+		Reason:          outcome.reason,
 	}
 	if outcome.state == "succeeded" && outcome.payload != "" {
 		fragments := wikiRepoOpFragments(outcome.payload)

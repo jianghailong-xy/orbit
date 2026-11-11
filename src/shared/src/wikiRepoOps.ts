@@ -159,12 +159,66 @@ export const WIKI_REPO_TIERS = ['git', 'folder', 'sessions', 'wrong_repository']
 export type WikiRepoTier = (typeof WIKI_REPO_TIERS)[number];
 
 /**
- * Why a run is on the sessions tier, as P1 reads it (contract `repoOps.tiers.reasons`): the readiness that is not
- * ready (`WIKI_REPO_LOOKS` but `ready`), and `not_git` — the snapshot answered that the working directory is not a
- * git checkout, in the words of a runner from before the folder tier.
+ * Why a repository could not be read, and what that means (contract `repoOps.reasons`, docs/wiki-repo-tiers-design.md §6).
+ *
+ * A PREMISE is a fact about the space's machine or folder that asking again does not change: the run reads what it can
+ * without the repository at once, tries nothing again, and asks the runner nothing more. The readiness the server reads
+ * itself (`no_workspace`, `runner_*`), and what a runner's failed snapshot names: no working directory, a directory that
+ * is not there, one that is not git (an old runner, or the folder tier not on), too many files to scan, another
+ * repository's checkout (`wrong_repository`, `root_mismatch`, `path_overlap`), or a credential the remote refused.
  */
-export const WIKI_REPO_TIER_REASONS = ['no_workspace', 'runner_missing', 'runner_offline', 'runner_upgrade', 'not_git'] as const;
+export const WIKI_REPO_PREMISE_REASONS = [
+  'no_workspace', 'no_work_dir', 'not_found', 'not_git', 'too_many_files',
+  'wrong_repository', 'root_mismatch', 'path_overlap', 'fetch_refused',
+  'runner_offline', 'runner_missing', 'runner_upgrade',
+] as const;
+
+/**
+ * A TRANSIENT failure is worth another try: the network's fetch (`fetch_failed`), an operation that did not settle within
+ * the run's wait (`op_timeout`), a runner that went silent holding it (`runner_lost`), a folder that changed under a read
+ * (`folder_moved`), and any failure a runner names no reason for (`op_failed`). It is tried again on the infra backoff, at
+ * most `WIKI_REPO_PROBE.maxAttempts` times a run; then the run goes on without the repository, for the last one's reason.
+ */
+export const WIKI_REPO_TRANSIENT_REASONS = ['fetch_failed', 'op_timeout', 'runner_lost', 'folder_moved', 'op_failed'] as const;
+
+/** The premises that say what was read is another repository's: the run is on tier `wrong_repository`, not `sessions`. */
+export const WIKI_REPO_WRONG_REPOSITORY_REASONS = ['wrong_repository', 'root_mismatch', 'path_overlap'] as const;
+
+/** Every reason a run reads less than git for (contract `repoOps.reasons`): the run row's `repo_reason`. */
+export const WIKI_REPO_TIER_REASONS = [...WIKI_REPO_PREMISE_REASONS, ...WIKI_REPO_TRANSIENT_REASONS] as const;
 export type WikiRepoTierReason = (typeof WIKI_REPO_TIER_REASONS)[number];
+
+/** How a maintenance run's probe is tried (contract `repoOps.probe`): a transient failure at most this many attempts. */
+export const WIKI_REPO_PROBE = { maxAttempts: 3 } as const;
+
+/**
+ * The words of a failure from a runner that names no reason — every runner before the reasons, and the server's own
+ * closing of an operation whose runner went silent (`failAbandonedWikiRepoOps`) — read as the reason they say.
+ */
+const WIKI_REPO_REASON_WORDS: ReadonlyArray<readonly [RegExp, WikiRepoTierReason]> = [
+  [/names no working directory/u, 'no_work_dir'],
+  [/ is not a git checkout\b/u, 'not_git'],
+  [/ is a clone of .*, not of the space's repository/u, 'wrong_repository'],
+  [/does not start from the space's first commit/u, 'root_mismatch'],
+  [/git authentication failed/u, 'fetch_refused'],
+  [/could not fetch origin's default branch/u, 'fetch_failed'],
+  [/the runner's claim has been silent since/u, 'runner_lost'],
+];
+
+/**
+ * Why a failed repository operation failed: the reason its runner named when it is one of the contract's, else what its
+ * words say (an old runner's), else `op_failed` — which is transient, so a failure nobody could name is tried again.
+ */
+export function wikiRepoFailureReason(reason: unknown, error: string | null | undefined): WikiRepoTierReason {
+  if (typeof reason === 'string' && (WIKI_REPO_TIER_REASONS as readonly string[]).includes(reason)) return reason as WikiRepoTierReason;
+  for (const [words, named] of WIKI_REPO_REASON_WORDS) if (words.test(error ?? '')) return named;
+  return 'op_failed';
+}
+
+/** A reason is a premise: asking again does not change it (`WIKI_REPO_PREMISE_REASONS`). */
+export function wikiRepoReasonIsPremise(reason: WikiRepoTierReason): boolean {
+  return (WIKI_REPO_PREMISE_REASONS as readonly string[]).includes(reason);
+}
 
 /** What one `read` item asks for (contract `repoOps.kinds.read`). */
 export interface WikiRepoOpReadItem {
@@ -282,6 +336,8 @@ export interface WikiRepoOpResultRequest {
   result?: Record<string, unknown> | null;
   /** Why it failed, in the runner's words — a repository that is not the space's, a git that refused. */
   error?: string | null;
+  /** Why it failed, as the contract names it (`repoOps.reasons`); absent from a runner before the reasons. */
+  reason?: WikiRepoTierReason;
 }
 
 /** Control plane → runner: the result was taken. */

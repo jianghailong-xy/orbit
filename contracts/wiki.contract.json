@@ -1120,7 +1120,7 @@
       "run": {
         "steps": [
           "context: the space and its repository, the maintenance workspace, the topics, the guardrails' numbers, the position the run row expects, and catchUp: how the run was made (maintenance.job.catchUp.state)",
-          "probe (stoppedAt repo): which tier of the repository the run reads (repoOps.tiers), then on the git tier the space's snapshot of the repository's default branch (repoOps.kinds.snapshot), through the maintenance workspace's runner; a checkout that is not the space's repository (its origin URL, its root commit) fails the run. A space whose runner cannot be asked (its readiness: no_workspace, runner_missing, runner_offline, or runner_upgrade with no repository capability at all), and a working directory the snapshot answers is not a git checkout (not_git), run on tier sessions: no snapshot, every step from dossiers through verify as on git, anchors and docs as they say. The tier and its reason are written on the run row (repo_tier, repo_reason) and in the report (repo). Any other failure of the snapshot is still the platform's",
+          "probe (stoppedAt repo): which tier of the repository the run reads (repoOps.tiers), then on the git tier the space's snapshot of the repository's default branch (repoOps.kinds.snapshot), through the maintenance workspace's runner. A space whose runner cannot be asked (its readiness: no_workspace, runner_missing, runner_offline, or runner_upgrade with no repository capability at all) runs on tier sessions: no snapshot, every step from dossiers through verify as on git, anchors and docs as they say. A snapshot that fails is classified by its reason (repoOps.reasons): a premise goes on the same way at once, on tier wrong_repository for another repository's checkout and on tier sessions otherwise, with no retry and nothing more asked of the runner; a transient failure is the platform's and is tried again, as repoOps.probe says, before the run goes on on tier sessions. The tier and its reason are written on the run row (repo_tier, repo_reason) and in the report (repo)",
           "dossiers: pages from the cursor up to the expected position (until), read in process (WikiMaintenance); a dossier unchanged since it was processed is skipped",
           "extract: one request to the System model per dossier through the queue (modelQueue; the demo's A2+6: an 8k dossier, no thinking, at most rules.entriesPerSessionMax entries), told the space's repository — what it is from the README's first paragraph at the snapshot, or with no snapshot (tier sessions) from the space's title — and to answer {\"offTopic\": true} for a session about something else; each entry checked as the demo's extract.py checked it — kind, fields, each source a line of the dossier with its quote copied from that line, anchors that exist at the snapshot's commit — and the rejected ones asked for once more; a quote one of its line's spans holds (read as a quote is compared) is proposed as the record's own words there, with locator {start, end} (maintenance.job.citation), and one no span holds cites the record with neither",
           "claims: after the extraction, the pass that only checks the agent's notes (maintenance.job.server.claims), for each dossier whose session has a file of notes; the extraction's dossiers, prompts and calls are what they are without it",
@@ -2727,17 +2727,49 @@
       "git": "A git checkout of the space's repository, read at origin/main exactly as before the tiers (repoOps.kinds.snapshot, safety).",
       "folder": "A directory that is not a git checkout, scanned as it stands (design section 4). Not read yet: until the folder snapshot lands such a directory is tier sessions, reason not_git.",
       "sessions": "Nothing of the repository could be read: the run learns from the sessions alone. No snapshot; the code anchors keep their last checks and stay due; the documents step is skipped (maintenance.job.docs.skipped no_repository). The run still ends succeeded when nothing else fails: reading less is not the run's failure.",
-      "wrong_repository": "What was read is another repository's (design section 2.3). Not read yet.",
-      "reasons": [
-        "no_workspace",
-        "runner_missing",
-        "runner_offline",
-        "runner_upgrade",
-        "not_git"
-      ],
-      "reasonsNote": "Why a run is on tier sessions: the readiness that is not ready (looks, but runner_upgrade only for a machine with no repository capability at all — one with wiki-repo-op/v1 alone reads git, cut short, as before), and not_git: the snapshot failed with the words every runner before the folder tier answers a working directory that is not a git checkout with (\"<dir> is not a git checkout: …\"). The rest of design section 6 comes with the failure classification.",
+      "wrong_repository": "What was read is another repository's (design section 2.3): the snapshot's reason is wrong_repository, root_mismatch or path_overlap (repoOps.reasons.wrongRepository). The run does only what tier sessions does.",
+      "reasons": "repoOps.reasons: why a run reads less than git, and what each reason does to it.",
       "recorded": "On the run row as repo_tier and repo_reason (migration 0514_wiki_maintenance_run_repo_tier; null before the run's probe, and cleared at each attempt's start) and in the run's report as repo {tier, reason} (maintenance.job.report); reason is null on git.",
       "migration": "src/apiserver/prisma/migrations/0514_wiki_maintenance_run_repo_tier/migration.sql"
+    },
+    "reasons": {
+      "doc": "docs/wiki-repo-tiers-design.md section 6",
+      "premise": [
+        "no_workspace",
+        "no_work_dir",
+        "not_found",
+        "not_git",
+        "too_many_files",
+        "wrong_repository",
+        "root_mismatch",
+        "path_overlap",
+        "fetch_refused",
+        "runner_offline",
+        "runner_missing",
+        "runner_upgrade"
+      ],
+      "premiseNote": "A fact about the space's machine or folder that asking again does not change: no_workspace and runner_* are the readiness the server reads itself (looks); the rest a runner's failed operation names: no working directory, a directory that is not there, one that is not a git checkout (an old runner, or the folder tier not on), too many files to scan, another repository's checkout (its origin URL, its root commit, its paths), or a credential the remote refused (errGitAuthFailed). A premise is never retried: the run goes on at once without the repository, the job is not tried again (jobs.retry.limit is not spent on it), and the runner is asked nothing more that run.",
+      "transient": [
+        "fetch_failed",
+        "op_timeout",
+        "runner_lost",
+        "folder_moved",
+        "op_failed"
+      ],
+      "transientNote": "Worth another try: the network's fetch (fetch_failed), an operation that did not settle within the run's wait (op_timeout), a runner that went silent holding it (runner_lost, the server's own closing of it), a folder that changed under a read (folder_moved, P4), and a failure that names no reason the server knows (op_failed). Tried again as repoOps.probe says.",
+      "wrongRepository": [
+        "wrong_repository",
+        "root_mismatch",
+        "path_overlap"
+      ],
+      "tiers": "A premise in wrongRepository puts the run on tier wrong_repository, every other reason on tier sessions (repoOps.tiers).",
+      "wire": "The runner's failed result carries reason beside error (repoOps.routes.result body {state: 'failed', error, reason}); the server keeps a reason it knows on the failed row as result.reason and leaves out one it does not. A runner from before the reasons sends none, and its words are read instead: 'names no working directory' no_work_dir, ' is not a git checkout' not_git, ' is a clone of …, not of the space's repository' wrong_repository, 'does not start from the space's first commit' root_mismatch, 'git authentication failed' fetch_refused, 'could not fetch origin's default branch' fetch_failed, and the server's 'the runner's claim has been silent since' runner_lost; anything else is op_failed.",
+      "recorded": "The reason is the run row's repo_reason (repoOps.tiers.recorded); every reason here is one it may hold."
+    },
+    "probe": {
+      "maxAttempts": 3,
+      "rule": "A maintenance run's snapshot that fails transiently ends the attempt as infra, and the job is tried again on the infra backoff (jobs.retry); once this job's snapshots have not succeeded maxAttempts times (each attempt's probe asks once), the run goes on without the repository on tier sessions, for the last failure's reason, and ends succeeded when nothing else fails. A premise never comes here.",
+      "operation": "The probe is the snapshot operation today (repoOps.kinds.snapshot); a probe kind that only reads the tier is P3's."
     },
     "safety": "An operation checks its checkout before it reads it: the repository's origin URL must be the space's `repo.urlNorm` and the checkout's root commit must be the space's `rootCommitSha`. Otherwise it fails, says which repository it found, and reads nothing.",
     "waiting": "A job that needs a repository operation is parked (wiki_job state waiting, waiting_for 'repo', no lease) and woken by a NOTIFY on the wiki_repo_op channel when the operation settles. A runner that has not declared `wiki-repo-op/v1` is handed nothing: the operation stays queued, the job stays parked until its wait limit, and the space's health line says the runner has to be upgraded. The import's snapshot (import.server.snapshot) is the exception: it is waited for holding the job's lease, a bounded wait with a fallback, so a runner that is away costs the import its fresh anchors and never the run. The documents' build (docs.build.server.repository) waits for its snapshot and its reads the same way, each bounded by docs.build.server.repoWaitSeconds: they are many and short, and a job parked on each would replay the build each time; one past its limit fails the attempt as infra.",

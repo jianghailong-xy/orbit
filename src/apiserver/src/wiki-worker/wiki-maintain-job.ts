@@ -70,7 +70,17 @@ import {
 } from './wiki-maintain-plan';
 import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
 import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
-import { type WikiAnchorCheckInput, type WikiAnchorDueEntry, type WikiRepoFileRead, type WikiRepoTier, type WikiRepoTierReason } from '@orbit/shared';
+import {
+  WIKI_REPO_PROBE,
+  WIKI_REPO_WRONG_REPOSITORY_REASONS,
+  wikiRepoFailureReason,
+  wikiRepoReasonIsPremise,
+  type WikiAnchorCheckInput,
+  type WikiAnchorDueEntry,
+  type WikiRepoFileRead,
+  type WikiRepoTier,
+  type WikiRepoTierReason,
+} from '@orbit/shared';
 import {
   readWikiRepoFiles,
   readWikiRepoReadiness,
@@ -354,12 +364,6 @@ function extractionMaterial(dossier: WikiDossier): Record<string, unknown> {
   const { unchanged: _unchanged, notes: _notes, ...file } = dossier;
   return file;
 }
-
-/**
- * A snapshot that failed because the working directory is not a git checkout, in the words of every runner before the
- * folder tier (`wikiRepoOpCheckout`: "<dir> is not a git checkout: …"): read as the reason `not_git` (repoOps.tiers).
- */
-const NOT_GIT = / is not a git checkout\b/u;
 
 /** Why a run ends before it succeeded: the step, and what went wrong there. */
 class WikiMaintainStop extends Error {
@@ -797,10 +801,9 @@ class WikiMaintainRun {
    *
    * The repository is not the run's gate: the run learns from the sessions, which the server holds. A space whose
    * runner cannot be asked at all (its readiness: no workspace, no machine, the machine away, or one with no repository
-   * capability), and a working directory the runner answers is not a git checkout — the words of every runner before the
-   * folder tier, read as `not_git` — run on the sessions tier: no snapshot, the dossiers through the advance and the
-   * verification as always, the code anchors and the documents left for a run that can read them. Any other failure of
-   * the snapshot is still the platform's (its classification is the next phase's).
+   * capability) runs on the sessions tier: no snapshot, the dossiers through the advance and the verification as always,
+   * the code anchors and the documents left for a run that can read them. A snapshot that fails is classified by its
+   * reason (`probeFailed`): a premise goes on the same way at once, a transient failure is tried again first.
    */
   private async probe(): Promise<void> {
     const { prisma } = this.deps;
@@ -816,13 +819,17 @@ class WikiMaintainRun {
     // Whether this machine reads whole files (repoOps.cache, 0406): a bounded one is asked with the old limits.
     this.wholeFile = readiness.runner?.wholeFile === true;
     const held = await prisma.wikiRepoSnapshot.findFirst({ where: { spaceId: job.spaceId, ownerId: job.ownerId }, select: { sha: true } });
-    const settled = await this.operation('snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of the default branch');
-    if (settled.state === 'failed' && NOT_GIT.test(settled.error ?? '')) {
-      await this.readTier('sessions', 'not_git');
-      return;
+    let settled: WikiRepoOpWait;
+    try {
+      settled = await this.operation('snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of the default branch');
+    } catch (error) {
+      // An operation that did not settle within the wait is transient (op_timeout): tried again like a failed fetch.
+      if (!(error instanceof WikiJobInfraError) || !error.message.startsWith('REPO_OP_WAIT:')) throw error;
+      settled = { state: 'timed_out', result: null, error: error.message };
     }
     if (settled.state !== 'succeeded') {
-      throw new WikiJobInfraError(`REPO_OP_FAILED: the snapshot of the default branch ${settled.state}: ${settled.error ?? ''}`);
+      await this.probeFailed(settled);
+      return;
     }
     const sha = String(settled.result?.sha ?? '');
     const snapshot = await readWikiRepoSnapshot(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });
@@ -842,6 +849,39 @@ class WikiMaintainRun {
     };
     await this.readTier('git', null);
     this.jobContext.log(`the repository at ${snapshot.sha.slice(0, 12)} (${files.length} files)`);
+  }
+
+  /**
+   * A snapshot that did not succeed, classified by its reason (contract `repoOps.reasons`, docs/wiki-repo-tiers-design.md
+   * §6): the reason the runner named, else what an old runner's words say.
+   *
+   * A premise — the folder is not there, not git, another repository's, a credential the remote refused — is a fact asking
+   * again does not change: the run goes on at once without the repository (tier `wrong_repository` for another
+   * repository's checkout, `sessions` for the rest), never tried again, and the runner is asked nothing more this run.
+   *
+   * A transient failure — the network's fetch, a wait that ran out, a runner gone silent holding it, a failure with no
+   * reason — is the platform's: the attempt ends as infra and the job is tried again on the infra backoff (contract
+   * `jobs.retry`), until this job's snapshots have failed `repoOps.probe.maxAttempts` times. Then the run goes on without
+   * the repository, for the last one's reason, and ends as any run does: reading less is not the run's failure.
+   */
+  private async probeFailed(settled: WikiRepoOpWait): Promise<void> {
+    const { job } = this.jobContext;
+    const reason: WikiRepoTierReason = settled.state === 'timed_out' ? 'op_timeout' : wikiRepoFailureReason(settled.result?.reason, settled.error);
+    if (wikiRepoReasonIsPremise(reason)) {
+      const wrong = (WIKI_REPO_WRONG_REPOSITORY_REASONS as readonly string[]).includes(reason);
+      this.jobContext.log(`the snapshot ${settled.state} (${reason}): ${settled.error ?? ''}`);
+      await this.readTier(wrong ? 'wrong_repository' : 'sessions', reason);
+      return;
+    }
+    // This job's snapshots that did not succeed, this one included: its earlier attempts' probes, each of which failed
+    // transiently (a premise never tries again) or was left unsettled by a wait that ran out.
+    const tried = await this.deps.prisma.wikiRepoOp.count({ where: { jobId: job.id, kind: 'snapshot', state: { not: 'succeeded' } } });
+    if (tried < WIKI_REPO_PROBE.maxAttempts) {
+      throw new WikiJobInfraError(`REPO_OP_FAILED: the snapshot of the default branch ${settled.state} (${reason}, `
+        + `probe ${tried} of ${WIKI_REPO_PROBE.maxAttempts}): ${settled.error ?? ''}`);
+    }
+    this.jobContext.log(`the snapshot ${settled.state} ${tried} times (${reason}): ${settled.error ?? ''}`);
+    await this.readTier('sessions', reason);
   }
 
   /** The tier the probe found, on the report and the run row (migration 0514): what Activity and the health line read. */

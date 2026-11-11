@@ -7,6 +7,7 @@ import {
   WIKI_REPO_OP_KINDS,
   WIKI_REPO_OP_READ_CAPABILITY,
   WIKI_REPO_OP_RESULT_STATES,
+  WIKI_REPO_TIER_REASONS,
   wikiMaintenanceSettings,
   type WikiRepoFileRead,
   type WikiRepoFileState,
@@ -357,6 +358,8 @@ export class WikiRepoOps {
       state?: unknown;
       result?: unknown;
       error?: unknown;
+      /** Why a failure failed (contract `repoOps.reasons`): kept on the failed row's result as `reason`. */
+      reason?: unknown;
     };
   }): Promise<{ accepted: boolean; state: WikiRepoOpState }> {
     try {
@@ -402,7 +405,14 @@ export class WikiRepoOps {
         // the files' text, which the caches hold, and a file with a NUL in it is a text jsonb cannot hold at all
         // (22P05, 2026-10-09). A diff's paths and an anchor's states are the answer itself, and none of them has
         // a NUL or a lone surrogate: one that does is not an answer.
-        const kept = state === 'succeeded' && (row.kind === 'snapshot' || row.kind === 'read') ? null : result;
+        // A failure's reason, when the runner names one of the contract's (`repoOps.reasons`), is kept beside what the
+        // result says, as `reason`: what the job classifies the failure by. One it does not know — a newer runner's — is
+        // left out, and the words still say it.
+        const reason = state === 'failed' && typeof input.body?.reason === 'string'
+          && (WIKI_REPO_TIER_REASONS as readonly string[]).includes(input.body.reason) ? input.body.reason : null;
+        const kept = state === 'succeeded' && (row.kind === 'snapshot' || row.kind === 'read')
+          ? null
+          : reason !== null ? { ...(result as Record<string, unknown> | null ?? {}), reason } : result;
         if (kept != null && !wikiJsonIsStorable(kept)) {
           throw new WikiRepoOpRefused('INVALID_RESULT', `the ${row.kind} result has a U+0000 or a lone surrogate in it, which no ${row.kind} answer has`);
         }
