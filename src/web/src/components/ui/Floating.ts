@@ -121,7 +121,9 @@ export function useDropdownPlacement(open: boolean, anchor: RefObject<Element | 
     // Whichever alignment is being placed, the offset lands its edge on x.
     return data.align === 'end' ? rect.right - width - x : x - rect.left;
   };
-  return { sideOffset, alignOffset, positioner, collisionPadding: 0, collisionAvoidance: { side: 'flip', align: 'none' } as const };
+  // fallbackAxisSide 'none' is Base UI's own dropdown default, which this override would otherwise drop: a list too tall
+  // for either side would be moved beside its trigger, held to the room above it, and scroll there a row or two tall.
+  return { sideOffset, alignOffset, positioner, collisionPadding: 0, collisionAvoidance: { side: 'flip', align: 'none', fallbackAxisSide: 'none' } as const };
 }
 
 /**

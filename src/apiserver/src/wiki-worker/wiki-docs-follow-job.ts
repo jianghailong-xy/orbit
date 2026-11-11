@@ -432,9 +432,9 @@ interface FollowSnapshot {
 async function followSnapshot(context: WikiJobContext, deps: WikiDocsFollowJobDeps, wholeFile: boolean): Promise<FollowSnapshot> {
   const { job } = context;
   const held = await deps.prisma.wikiRepoSnapshot.findFirst({ where: { spaceId: job.spaceId, ownerId: job.ownerId }, select: { sha: true } });
-  const settled = await operation(context, deps, 'snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of origin/main');
+  const settled = await operation(context, deps, 'snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of the default branch');
   if (settled.state !== 'succeeded') {
-    throw new WikiJobInfraError(`REPO_OP_FAILED: the snapshot of origin/main ${settled.state}: ${settled.error ?? ''}`);
+    throw new WikiJobInfraError(`REPO_OP_FAILED: the snapshot of the default branch ${settled.state}: ${settled.error ?? ''}`);
   }
   const sha = String(settled.result?.sha ?? '');
   const snapshot = await readWikiRepoSnapshot(deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId });

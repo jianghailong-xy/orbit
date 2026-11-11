@@ -3104,6 +3104,7 @@ export interface IntegrationCheckSpec {
 
 /** What one check came to. `exitCode` is null when the command never produced one. */
 export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
+  scope?: 'COMBINED' | 'BASELINE';
   skipped?: 'PATHS_EXEMPT';
   files?: string[];
   exitCode: number | null;
@@ -3320,6 +3321,7 @@ export interface IntegrationJobReleaseResponse {
 
 /** Runner → control plane: what the job came to (POST /runner/integration-jobs/:jobId/result). */
 export interface IntegrationJobResultRequest {
+  baselineRed?: boolean;
   claimGeneration: string;
   leaseOwner: string;
   /** A terminal state. QUEUED and RUNNING are refused: a result is a result. */
