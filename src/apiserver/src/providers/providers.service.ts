@@ -681,6 +681,8 @@ export class ProvidersService {
       data.keyCheckState = null;
       data.keyCheckedAt = null;
     }
+    // So is a budget OpenAI said was spent (the /api/gw/anthropic gateway's, migration 0520): a new key's.
+    if (apiKeyEnc) data.spentUntil = null;
     await this.assertPoolMemberEdit(current, {
       ...current,
       runtime: dto.runtime ?? current.runtime,

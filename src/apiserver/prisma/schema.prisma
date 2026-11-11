@@ -6865,6 +6865,11 @@ model ModelProvider {
   // Cursor key is ever checked.
   keyCheckState String?   @map("key_check_state")
   keyCheckedAt  DateTime? @map("key_checked_at")
+  // An OpenAI key's spent budget (migration 0520): until when OpenAI said `insufficient_quota` for it, as
+  // the /api/gw/anthropic gateway read it (docs/claude-engine-openai-gateway-design.md §5.4). The same
+  // gateway sets keyCheckState INVALID when OpenAI refuses the key (401). NULL = not known to be spent;
+  // cleared by the key's next answered request and by a new secret.
+  spentUntil    DateTime? @map("spent_until")
   // NULL = a shared provider (admin-managed): visible in, and dispatchable for, admins' sessions
   // only (usableProviderScope). Set = a personal (BYOK) provider: visible in, and dispatchable for,
   // only its owner's sessions. Slugs stay globally unique either way, so dispatch-by-slug is never

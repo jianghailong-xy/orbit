@@ -263,18 +263,36 @@ followed.
 ### 5.4 Errors and quota
 
 Errors are answered in Anthropic's shape, `{type: "error", error: {type, message}}`, so the CLI's own retries and
-Orbit's auto-retry (`auto-retry.service.ts`, which matches "529 … overloaded_error") keep working.
+Orbit's auto-retry (`auto-retry.service.ts`, which matches "529 … overloaded_error") keep working. The table is
+`gatewayFailure` (`anthropic-gateway.service.ts`). P2 measured how claude 2.1.322 reacts to each answer. It retries
+every one of them up to ten times over about three minutes, a 401 and a 429 included, unless the answer carries
+`x-should-retry: false`. So the gateway sends that header on every row but the overload and the overflow.
 
-| Upstream | Answered | Also |
-|---|---|---|
-| 401 | 401 `authentication_error`, naming the key | marks the key INVALID, as `gw/codex` does |
-| 403 / model not allowed | 403 `permission_error` / 404 `not_found_error` | |
-| 429 `rate_limit_exceeded` | wait it out up to the Codex gateway's bound (`rateLimitWait`), then 429 `rate_limit_error` | |
-| 429 `insufficient_quota` | 429 in the wording Orbit's quota handling reads for a spent key | records the key as spent until reset (`spentUntil`) |
-| 5xx / overload | 529 `overloaded_error` | auto-retry re-sends |
-| `context_length_exceeded` | 400 "prompt is too long: …" | §4.6 |
+| Upstream | Answered | What the CLI does (2.1.322) | Also |
+|---|---|---|---|
+| 401 | 401 `authentication_error` "OpenAI refused the key "<label>": … Orbit marked it invalid: add a new key in Providers to go on." | fails the turn: "Failed to authenticate. API Error: 401 …" | marks the key INVALID (`key_check_state`, as a Cursor key's check records a refusal), only while the row still holds the refused secret. Later turns are refused by the gateway without asking OpenAI, until a new secret clears the mark. Ingestion reads the words as a sign-in failure and arms nothing. |
+| 403 | 403 `permission_error` "The key "<label>" may not use the model "<model>" on OpenAI: …" | fails the turn: "Failed to authenticate. API Error: 403 …" | nothing armed |
+| 404 / `model_not_found` | 404 `not_found_error` "OpenAI has no model "<model>" for the key "<label>": …" | fails the turn in its own words: "There's an issue with the selected model (<model>) …" | nothing armed |
+| 429 `rate_limit_exceeded` | waited out on the same key within `sendUpstream`'s bound (`rateLimitWait`: 4 sends, ≤ 20 s a wait, ≤ 40 s in all); then 429 `rate_limit_error` "OpenAI is rate-limiting the key "<label>", and was still refusing after the Orbit gateway waited: …" | inside the bound it never sees the limit. Past it, it fails the turn once: "API Error: Request rejected (429) · …" | auto-retry arms on the API-error ladder |
+| 429 `insufficient_quota` (and the rest of `SPENT_ERROR_CODES`) | 429 `rate_limit_error` "You hit your usage limit on the OpenAI key "<label>" · resets Dec 1, 12:00am (UTC)" | fails the turn once: "API Error: Request rejected (429) · You hit your usage limit …" | records `model_provider.spent_until` (migration 0520). It is the reset OpenAI names, else the first of next month (`spentUntil`). The next answered request clears it, and so does a new secret. Ingestion reads the words as a spent quota and arms the retry for that reset (below). |
+| 5xx / overload / unreachable | 529 `overloaded_error` "OpenAI could not answer (<status>): …" | retries on its own and usually completes. If it still fails: "API Error: 529 …" | auto-retry re-sends on the API-error ladder |
+| `context_length_exceeded` | 400 `invalid_request_error` "prompt is too long: N tokens > M maximum" | compacts and retries the turn (§4.6) | |
 
-Which wording the quota path reads for a key session is pinned in P2, against `quota-limit-retry-design.md`.
+**The quota wording.** For a key session, Orbit's quota handling reads the reply itself: `isUsageLimitErrorText`,
+then `parseQuotaResetAt` in `quotaRetryAt`. The runner's account snapshot says nothing about a key. The reply must
+open with the quota sentence: the marker may start at character 40 at the latest (`USAGE_LIMIT_MARKER_MAX_OFFSET`;
+the Go, Kotlin and Swift mirrors read the same 40). The CLI prints a 429 as "API Error: Request rejected (429) ·
+<message>", which is 36 characters. "You hit your usage limit" therefore puts the marker at exactly 40, and "You've hit
+…" would be one too far. The reset carries its date and is named in UTC, which `parseQuotaResetAt` reads back to the
+minute. Anthropic's `anthropic-ratelimit-unified-*` headers were tried as well: for a session that is not a claude.ai
+subscriber the CLI ignores them, so they change nothing.
+
+**Failures inside the stream.** OpenAI may report a failure as the stream's first event (`response.failed` or
+`error`, after `response.created`) instead of as an error status. The gateway reads up to that first event before it
+sends its own head (`earlyFailure`), so such a failure is answered exactly like the error status above, with its
+status and side effect. A failure after output has begun can only be an SSE `error` event. On such an event the CLI
+drops the stream and asks again unstreamed. The gateway answers an unstreamed request by reading the response whole,
+so a failure there is answered with its status too, never as a 200. Either way, the key is marked as the table says.
 
 ### 5.5 Cost and usage
 
@@ -310,7 +328,7 @@ Each phase depends on the one before it.
 |---|---|---|
 | **P0 Spike** | Record what Claude Code (the version the runner ships) sends to a fake Anthropic endpoint: paths, headers, effort fields, haiku requests, count_tokens, and the overflow wording. Write the translator against those fixtures. Run it once against OpenAI from a scratch script. | A recorded 10-turn session with parallel tool calls, a subagent, reasoning carried across turns and one compaction completes through the translator against OpenAI. Each P0 question in this document has a recorded answer. |
 | **P1 Wiring** | `gw/anthropic` route, `key_gateway_token` and its migration, dispatch environment, compatibility behind the D6 flag, contract §2.1 and §4.2 updated, tenant-isolation cases. | With the flag on, a session on an OpenAI key and Claude Code runs end to end on a real runner. With it off, the dispatch environment and `engines` of every existing session are unchanged (the `provider-engine-resolution` comparison). |
-| **P2 Production behaviour** | Error and quota mapping (§5.4), rate-limit waits, key marking, usage and cost (§5.5), count_tokens, haiku mapping, load check (§5.6). | Each row of §5.4 has a test that drives the real CLI through the gateway against a fake upstream. 20 concurrent sessions stay within the server's memory budget. |
+| **P2 Production behaviour** | Error and quota mapping (§5.4), rate-limit waits, key marking, usage and cost (§5.5), count_tokens, haiku mapping, load check (§5.6). | Each row of §5.4 has a test that drives the real CLI through the gateway against a fake upstream (`anthropic-gateway-cli.spec.ts`). 20 concurrent sessions stay within the server's memory budget. |
 | **P3 Quality and release** | The same task set on `codex` + GPT and on `claude` + GPT; web search mapping (D5); copy, docs and the connection-form line. | The owner reads the comparison and decides whether to turn the flag on. |
 
 ## 8. What P0 answered
