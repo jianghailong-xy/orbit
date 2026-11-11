@@ -187,6 +187,12 @@ const SCENES = {
   'c-coord-page': { path: at(D.c1, pq(P.search)), closeGlyph: true, boxes: PAGE },
   'c-member': { path: at(D.t7), boxes: { project: proj(P.search) } },
   'c-member-page': { path: at(D.t7, pq(P.search)), closeGlyph: true, boxes: PAGE },
+  // Decisions of 11-11: column at the right, a project button in the coordinator's title bar.
+  'n-wide': { path: at(D.c1, pq(P.search)), closeGlyph: true, button: 'on', boxes: { ...PAGE, pbtn: { k: 'css', css: '#b-pbtn' } } },
+  'n-narrow': { path: at(D.c1), button: 'off', boxes: { project: proj(P.search), pbtn: { k: 'css', css: '#b-pbtn' } } },
+  'n-member': { path: at(D.t7, pq(P.search)), closeGlyph: true, boxes: PAGE },
+  'p-coord': { phone: true, path: at(D.c1), button: 'off', boxes: { pbtn: { k: 'css', css: '#b-pbtn' }, head: { k: 'css', css: '.workspace-header' } } },
+  'p-page': { phone: true, path: `/workspaces/${W.dev.id}${pq(P.search)}`, closeGlyph: true, boxes: PAGE },
 };
 
 const VIEW = { width: 1180, height: 760 };
@@ -195,7 +201,8 @@ const report = {};
 const marks = {};
 for (const [name, scene] of Object.entries(SCENES)) {
   if (ONLY.length && !ONLY.includes(name)) continue;
-  const page = await browser.newPage({ viewport: VIEW, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai' });
+  const vp = scene.phone ? { width: 393, height: 852 } : VIEW;
+  const page = await browser.newPage({ viewport: vp, deviceScaleFactor: 2, timezoneId: 'Asia/Shanghai', isMobile: !!scene.phone, hasTouch: !!scene.phone });
   const errors = [];
   const unhandled = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -247,13 +254,40 @@ for (const [name, scene] of Object.entries(SCENES)) {
       if (b) { b.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>'; b.setAttribute('aria-label', 'Close'); }
     });
   }
+  if (scene.button) {
+    // Drawn into the live header: a project button left of ⋮, the console's own icon button classes and
+    // the project row's glyph. 'on' = the column is open (tinted), 'off' = folded.
+    await page.evaluate((on) => {
+      const head = document.querySelector('.workspace-header');
+      const more = head?.lastElementChild;
+      const glyph = document.querySelector('.session-project-icon svg, .tp-item svg')?.outerHTML ?? '';
+      if (!head || !more) return;
+      const wrap = document.createElement('span');
+      wrap.style.cssText = 'display:flex;align-items:center;gap:2px;flex:none';
+      const b = document.createElement('button');
+      b.id = 'b-pbtn'; b.type = 'button'; b.title = 'Project sessions';
+      b.className = 'orbit-button orbit-button-text orbit-button-middle';
+      b.style.cssText = 'display:inline-flex;align-items:center;gap:5px;padding:0 9px;height:30px;border-radius:8px;font-size:13px;' +
+        (on ? 'background:rgba(51,112,255,.12);color:#2f6bff;' : 'color:#55555c;');
+      b.innerHTML = `<span style="display:inline-flex;width:15px;height:15px">${glyph}</span><span>11</span>`;
+      b.querySelector('svg')?.setAttribute('width', '15'); b.querySelector('svg')?.setAttribute('height', '15');
+      head.insertBefore(wrap, more); wrap.append(b, more);
+    }, scene.button === 'on');
+    await page.waitForTimeout(200);
+  }
   if (!scene.menuOn) {
     // Off the rows, so none of them shows its hover ⋯.
-    await page.mouse.move(1070, 700);
+    await page.mouse.move(vp.width - 10, vp.height - 100);
     await page.waitForTimeout(300);
   }
-  await page.screenshot({ path: `${OUT}/${name}.png`, clip: { x: 0, y: 0, ...VIEW }, animations: 'disabled' });
-  marks[name] = { w: VIEW.width, h: VIEW.height, url: new URL(page.url()).pathname + new URL(page.url()).search,
+  if (process.env.DUMP) report[name+':dump'] = await page.evaluate(() => {
+    let el = document.elementFromPoint(1144, 52); const out = [];
+    for (let i = 0; el && i < 6; i++, el = el.parentElement) out.push(el.tagName + '.' + [...el.classList].join('.') + ' kids=' + el.children.length);
+    const h = document.elementFromPoint(1144, 52)?.closest('header, [class*=head]');
+    return { chain: out, head: h ? h.outerHTML.slice(0, 2500) : null };
+  });
+  await page.screenshot({ path: `${OUT}/${name}.png`, clip: { x: 0, y: 0, ...vp }, animations: 'disabled' });
+  marks[name] = { w: vp.width, h: vp.height, url: new URL(page.url()).pathname + new URL(page.url()).search,
     boxes: { ...(await boxes(page, { ...COMMON, ...scene.boxes })) } };
   report[name] = { errors, unhandled: [...new Set([...unhandled, ...fixtures.unhandled])] };
   await page.close();
