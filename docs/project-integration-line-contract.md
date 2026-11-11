@@ -915,7 +915,7 @@ M-T9（落地失败 → `BLOCKED`）不在这里：它开的是**新**待办，�
 - 最近一条 `LANDED` 作业的 `landed_sha`（记为 P）没有被 `MERGED`、`DECLINED` 或活的候选覆盖；
 - 本项目没有 `CONFIRMED` / `RECHECKING` 的晋升（有的话，等它终态后再判断，见 M-F4）。
 
-条件都成立时插入候选（`source_sha = P`，`included_task_ids` 取 P 之前落地、尚未 `ON_UPSTREAM` 的任务），并取代同一源上活的旧候选。
+条件都成立时插入候选（`source_sha = P`，`included_task_ids` 取 P 之前落地、尚未 `ON_UPSTREAM` 的任务），并取代同一源上活的旧候选。这里的「已 `ON_UPSTREAM`」不算观测回执（`detail.observed`）说的另一个提交：观测回执只有在它的 `source_sha` 等于该任务最新一条集成线回执的 `source_sha` 时才把任务排除（`project-promotion.service.ts#onTheUpstream`）；名字不同的，任务仍在候选里，晋升若发现它其实已在 upstream 上，答 `ALREADY_LANDED`。
 
 **M-F2（`MAIN` 线候选）**：交付方式为 `PLATFORM` 的 `MAIN` 线项目（修订 29，§10.5 O-L2；`AGENT_PUSH` 项目不建候选），代码任务 DONE 时，J-T1a 不入队 `LAND_TASK`，改为在冻结交付身份的那个事务里（通常就是 DONE 的事务，§10.5 O-L4）插入 `project_promotion(source_kind = TASK_BRANCH, state = CHECKING)` 与 `CHECK_PROMOTION`。候选插入时就写 `source_sha = delivered_sha`，按提交指名（§10.5 O-L5）；检查答 `ALREADY_LANDED` 时见 M-T3。
 
@@ -2078,7 +2078,7 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 **O-L4（冻结交付身份）**：J-T1a 写 DONE 的事务里，`isCodeTask` 为真时冻结：
 
 1. 收敛管理下的任务（有 `task_checkpoint`）：取 DONE 所依据的那个 checkpoint 的 `commit_sha`、`base_sha`、`branch`，也就是 `checkpointLandingGate` 认可的那一个：最新一个 `ACCEPTED`，且门认可它的提交（它的 scope revision 仍是任务当前的）；会话取记下它的那条。门一个都不认可时身份不明。
-2. 其余任务：取工作结束所在的那条会话（`workBranchEndedOn`）报的 `branch_sha` 与 `base_sha`；分支取 `worktree_branch`，缺省回落 `branch`。会话结束时 runner 的 finalize 报告带上结束时那条分支的 tip，包括 finalize 自己提交的遗留改动（SR13；暂停检查点不报，恢复时它会被撤销），服务端在写 `finished_at` 的同一事务里先把它写进 `branch_sha` 再冻结；旧 runner 不报这个字段时，沿用最后一次报上来的 tip。
+2. 其余任务：取工作结束所在的那条会话（`workBranchEndedOn`）报的 `branch_sha` 与 `base_sha`；分支取 `worktree_branch`，缺省回落 `branch`。会话结束时 runner 的 finalize 报告带上结束时那条分支的 tip，包括 finalize 自己提交的遗留改动（SR13）；以取消结束的会话（暂停检查点，恢复时它会被撤销；也包括验收让任务 DONE 后平台以 `task_done` 结束的会话）报检查点下面那个提交，不报检查点本身。服务端在写 `finished_at` 的同一事务里先把它写进 `branch_sha` 再冻结；旧 runner（0.1.253 及以前）以取消结束时不报这个字段，沿用最后一次报上来的 tip。心跳带的是上一次心跳之后扫描的结果，runner 不发扫描开始之后同一会话又有 turn-complete、finalize 或 diff 报告的样本（`heartbeat_telemetry.go#worktreeReportClock`）：否则一次提交之前扫到的旧 tip 会在那一轮的 turn-complete 之后把 `branch_sha` 改回去（2026-11-10 的 0.1.253 版本号任务就是这样冻在提交之前的 tip 上）。
 3. 不冻结的情形有两种。一是工作仍在移动（`landingWorkHasSettled` 为假，J-T1e）：等会话结束、写下 `finished_at` 的那个事务里再补冻结，并补做之后的入队。二是身份不明：`branch_sha` 缺失，或 `worktree_branch` 与 `branch` 不同而那条分支的 tip 没报上来。身份不明时按 O-T1 开待办。
 
 `task_reopen` 把五列清空，再次 DONE 时重新冻结。L10 不变：下游的 `requiredContains` 仍从回执里取。
@@ -2175,7 +2175,7 @@ O-L2、O-L5、O-L6 的读法（R29-8）：
 | O-S2 OBSERVE | 逐个任务：`empty = (delivered_sha = base_sha)`；`onUpstream = is-ancestor(delivered_sha, U)`；`PROJECT_BRANCH` 线上另测 `onIntegrationLine = is-ancestor(delivered_sha, T)`。提交不在本机、也不是 U 或 T 的祖先时读作 false：不在线上的提交本来就可能只在别的机器上。本机有 `base..delivered` 这段提交时测 `fullyApplied`（`git cherry U delivered base` 每行都以 `-` 开头） | 不推送、不建 worktree、不跑检查 |
 | O-S3 REPORT | `POST /runner/integration-jobs/:jobId/result { state: 'OBSERVED', upstreamSha: U, targetShaBefore: T, observations }` | — |
 
-**结果（O-R*）**：都在结果事务里，按任务执行。
+**结果（O-R*）**：都在结果事务里，按任务执行。任务自己的 `LAND_TASK` 还在 `QUEUED` / `RUNNING`，或已经给它写了回执时，观测对这个任务什么都不写（`landing-observation-result.ts#landingStillOwesAnswer`）：观测问的是交付身份的提交，落地合入的是分支的 tip，交付身份冻错时两者不同（2026-11-10 的 0.1.253 版本号任务，冻在一个早已进 main 的旧 tip 上，观测写下的 main 回执让它的提交进不了任何晋升候选）。先读作业、再读回执：落地的结果事务同时写作业终态和回执。
 
 - **O-R1（看到了）**：`onUpstream` 为真时写回执，取值如下表；`onUpstream` 为假而 `onIntegrationLine` 为真时写同样的回执，`target_branch` 换成集成线短名，`target_sha_before` 换成 T。
 
