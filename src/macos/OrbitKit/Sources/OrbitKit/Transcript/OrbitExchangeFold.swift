@@ -300,7 +300,7 @@ public enum OrbitExchangeFold {
     /// working indicator, the queue, the tail — ends the turn and is never folded.
     private static func belongsToTurn(_ row: TranscriptRow) -> Bool {
         switch row {
-        case .item, .steps, .statusCard, .decisionCard: return true
+        case .item, .turnHead, .steps, .statusCard, .decisionCard: return true
         default: return false
         }
     }
