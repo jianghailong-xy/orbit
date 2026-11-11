@@ -3157,12 +3157,12 @@ export function WorkspaceView({
   // The project each project row of the list stands for, by its coordinator.
   const listedCoordinatorProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
     entry.kind === 'project' && entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : [])), [folderListing]);
-  // Wider than a phone the column follows the selection (owner 2026-11-11, board 3): a member of the
-  // column's project keeps it, a project row's coordinator brings its own project's column, and any
-  // other session closes it.
+  // Wider than a phone an open column follows the selection (owner 2026-11-11, board 3): a member of
+  // its project keeps it, a project row's coordinator switches it to that project, and any other
+  // session closes it. With no column open, only a project row's own click opens one.
   const searchFor = useCallback((id: string): string => {
-    if (isMobile) return listSearch;
-    if (openProjectId && allProjectMembers.some((s) => s.id === id)) return projectSearch;
+    if (isMobile || !openProjectId) return listSearch;
+    if (allProjectMembers.some((s) => s.id === id)) return projectSearch;
     const rowProjectId = listedCoordinatorProjects.get(id);
     return rowProjectId
       ? `?project=${encodeId(rowProjectId)}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`
