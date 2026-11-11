@@ -8784,7 +8784,16 @@ export class RunnerApiController {
       // one-minute safety read.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
       if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
-      else told = this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated).then(() => null, (error: unknown) => error);
+      else {
+        told = (async () => {
+          try {
+            await this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+            return null;
+          } catch (error) {
+            return error;
+          }
+        })();
+      }
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
