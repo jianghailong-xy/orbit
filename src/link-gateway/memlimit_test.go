@@ -44,22 +44,23 @@ func TestTheMemoryLimitIsTheContainersAllowanceLessATenth(t *testing.T) {
 	if s.MemoryLimit != 2*gib-2*gib/10 || s.LimitFrom != "/sys/fs/cgroup/system.slice/gl-gateway.scope/memory.max" {
 		t.Fatalf("a 2 GiB scope: %+v", s)
 	}
-	if s.GOGC != "200" || debug.SetGCPercent(defaultGOGC) != defaultGOGC {
+	if s.GOGC != "400" || debug.SetGCPercent(limitedGOGC) != limitedGOGC {
 		t.Fatalf("GOGC: %+v", s)
 	}
 	s = applyGCSettings(none, files(map[string]string{"/sys/fs/cgroup/memory/memory.limit_in_bytes": "8589934592"}))
 	if s.MemoryLimit != 8*gib-8*gib/10 || s.LimitFrom != "/sys/fs/cgroup/memory/memory.limit_in_bytes" {
 		t.Fatalf("cgroup v1, 8 GiB: %+v", s)
 	}
-	// No allowance: no limit is set.
+	// No allowance: no limit is set, and GOGC stays Go's 100, with nothing else to bound the heap.
 	debug.SetMemoryLimit(limit)
+	debug.SetGCPercent(100)
 	for _, m := range []map[string]string{
 		{"/proc/self/cgroup": "0::/", "/sys/fs/cgroup/memory.max": "max"},
 		{"/proc/self/cgroup": "0::/user.slice/x.scope"},
 		{"/sys/fs/cgroup/memory/memory.limit_in_bytes": "9223372036854771712"},
 		{},
 	} {
-		if s := applyGCSettings(none, files(m)); s.MemoryLimit != 0 || debug.SetMemoryLimit(-1) != limit {
+		if s := applyGCSettings(none, files(m)); s.MemoryLimit != 0 || debug.SetMemoryLimit(-1) != limit || debug.SetGCPercent(100) != 100 {
 			t.Fatalf("%v: %+v", m, s)
 		}
 	}

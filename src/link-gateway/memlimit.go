@@ -14,13 +14,16 @@ import (
 //   - The memory limit is the container's allowance less a tenth, for what the Go runtime does not count: the kernel's
 //     socket buffers and the like. The GC then collects as often as it must to stay inside it, rather than the
 //     kernel killing the process at the allowance.
-//   - With that limit in place, GOGC is defaultGOGC: collections are rarer than at 100, so fewer requests meet a mark,
-//     and the limit, not GOGC, bounds the heap.
+//   - With that limit in place, GOGC is limitedGOGC: collections are rarer than at 100, so fewer requests meet a mark,
+//     and the limit, not GOGC, bounds the heap. Without one, Go's 100 stays, as nothing else would bound it.
 //
 // GOMEMLIMIT and GOGC in the environment are left as the runtime read them.
 
-// defaultGOGC is GOGC when the environment does not set it.
-const defaultGOGC = 200
+// limitedGOGC is GOGC when a memory limit is set and the environment sets no GOGC. Measured on 28 vCPU and 110 GiB at
+// 300,000 connections at cell traffic (task 34ppd5iIunTRnCBM4cMix, runs A-300k-gogc*): at 100, HeartbeatAck p99 703 ms
+// and EventAck p99 1,016 ms, past the 1 s rule, with 2.9 cores of GC; at 200, 411 and 731 ms; at 400, 323 and 624 ms,
+// with 0.6 cores of GC and a 52 GiB cgroup peak on a 9.7 GB live heap, well inside the limit.
+const limitedGOGC = 400
 
 // cgroupV1MemoryFile is a cgroup v1 container's memory allowance.
 const cgroupV1MemoryFile = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
@@ -41,11 +44,14 @@ func applyGCSettings(getenv func(string) string, readFile func(string) ([]byte, 
 		s.LimitFrom, s.MemoryLimit = file, allowance-allowance/10
 		debug.SetMemoryLimit(s.MemoryLimit)
 	}
-	if v := strings.TrimSpace(getenv("GOGC")); v != "" {
+	switch v := strings.TrimSpace(getenv("GOGC")); {
+	case v != "":
 		s.GOGC = v + " (GOGC)"
-	} else {
-		debug.SetGCPercent(defaultGOGC)
-		s.GOGC = strconv.Itoa(defaultGOGC)
+	case s.MemoryLimit > 0:
+		debug.SetGCPercent(limitedGOGC)
+		s.GOGC = strconv.Itoa(limitedGOGC)
+	default:
+		s.GOGC = "100 (no memory limit)"
 	}
 	return s
 }
