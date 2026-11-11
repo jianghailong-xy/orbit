@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Settings redesign — machines, providers, workspaces</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e9ec; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
+  .b-part { width: 1440px; padding: 36px 40px 44px; background: #f4f4f6; border-bottom: 1px solid #d8d8dc; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .b-part h2 { margin: 0 0 4px; font-size: 26px; }
+  .b-part .b-lead { margin: 0 0 22px; color: #555; max-width: 1180px; }
+  .b-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; margin-top: 22px; max-width: 1360px; }
+  .b-note { display: flex; gap: 10px; align-items: flex-start; }
+  .b-note p { margin: 0; }
+  .b-mk { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border-radius: 50%; background: #e5484d; color: #fff; font: 600 12px/1 Inter, sans-serif; font-style: normal; box-shadow: 0 0 0 2px #fff; vertical-align: middle; }
+  .b-mk.b-abs { position: absolute; z-index: 5; }
+  code { font: 13px "JetBrains Mono", monospace; background: #e6e6ea; padding: 1px 5px; border-radius: 4px; }
+  .b-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .b-box { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 18px 22px; }
+  .b-box h3 { margin: 0 0 8px; font-size: 17px; }
+  .b-box ul { margin: 0; padding-left: 20px; }
+  .b-tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #e8f3ec; color: #1b7a43; font-weight: 600; }
+  .b-tag.b-warn { background: #fdf0e1; color: #9a5b00; }
+  table.b-t { border-collapse: collapse; width: 100%; font-size: 14px; }
+  table.b-t td, table.b-t th { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; vertical-align: top; }
+  table.b-t th { color: #666; font-weight: 600; }
+
+  /* ---------- the window ---------- */
+  .s-win { position: relative; width: 1360px; height: 1120px; background: #fff; border-radius: 12px; overflow: hidden; display: flex; box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 8px 30px rgba(0,0,0,.08); border: 1px solid #dcdcdf; }
+  .s-win.s-short { height: auto; min-height: 560px; }
+  .s-nav { width: 252px; flex: none; background: #fafafa; border-right: 1px solid #ececec; padding: 14px 10px; font-size: 14px; overflow: hidden; }
+  .s-back { display: flex; align-items: center; gap: 6px; color: #6e6e73; font-size: 13px; padding: 2px 8px 8px; }
+  .s-nav-title { font-weight: 600; font-size: 15px; padding: 0 8px 10px; }
+  .s-search { display: flex; align-items: center; gap: 8px; background: #efefef; border-radius: 999px; height: 32px; padding: 0 12px; color: #8e8e93; margin-bottom: 12px; }
+  .s-grp { display: flex; align-items: center; justify-content: space-between; color: #8e8e93; font-size: 13px; padding: 12px 8px 4px; }
+  .s-grp .s-plus { color: #8e8e93; display: inline-flex; }
+  .s-row { position: relative; display: flex; align-items: center; gap: 10px; height: 31px; padding: 0 8px; border-radius: 8px; color: #1d1d1f; white-space: nowrap; }
+  .s-row.on { background: #ececec; }
+  .s-row .s-sub { margin-left: auto; color: #a1a1a6; font-size: 12px; }
+  .s-row .s-dot { width: 7px; height: 7px; border-radius: 50%; background: #34c759; margin-left: auto; flex: none; }
+  .s-row .s-dot.off { background: #c7c7cc; }
+  .s-row .s-dot.warn { background: #ff9f0a; }
+  .s-row.s-more { color: #8e8e93; }
+  .s-ic { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .s-main { flex: 1; overflow: hidden; padding: 30px 0 40px; }
+  .s-col { width: 660px; margin: 0 auto; position: relative; }
+  .s-h1 { font-size: 24px; font-weight: 500; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+  .s-h1sub { color: #8e8e93; font-size: 13px; margin-bottom: 26px; }
+  .s-sec { display: flex; align-items: baseline; justify-content: space-between; font-size: 15px; font-weight: 500; margin: 22px 0 10px; }
+  .s-sec .s-secsub { font-weight: 400; color: #8e8e93; font-size: 13px; }
+  .s-card { border: 1px solid #e3e3e6; border-radius: 12px; padding: 0 14px; background: #fff; }
+  .s-item { display: flex; align-items: center; gap: 16px; padding: 11px 0; border-bottom: 1px solid #efefef; min-height: 54px; position: relative; }
+  .s-item:last-child { border-bottom: 0; }
+  .s-item .s-l { flex: 1; min-width: 0; }
+  .s-item .s-t { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .s-item .s-d { font-size: 12px; color: #6e6e73; line-height: 1.45; margin-top: 1px; max-width: 440px; }
+  .s-item .s-d.warn { color: #b25e00; }
+  .s-pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; background: #f2f2f3; border: 1px solid #e6e6e8; font-size: 13px; white-space: nowrap; color: #1d1d1f; }
+  .s-pill.s-danger { color: #d70015; }
+  .s-pill.s-pri { background: #1d1d1f; color: #fff; border-color: #1d1d1f; }
+  .s-val { color: #6e6e73; font-size: 13px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+  .s-sw { width: 38px; height: 22px; border-radius: 999px; background: #1d1d1f; position: relative; flex: none; }
+  .s-sw::after { content: ""; position: absolute; top: 2px; left: 18px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+  .s-sw.off { background: #d9d9dc; }
+  .s-sw.off::after { left: 2px; }
+  .s-input { height: 30px; border: 1px solid #e3e3e6; border-radius: 8px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; min-width: 260px; background: #fff; }
+  .s-input.mono { font-family: "JetBrains Mono", monospace; font-size: 12px; }
+  .s-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #1b7a43; background: #e8f5ec; padding: 2px 9px; border-radius: 999px; }
+  .s-status.off { color: #6e6e73; background: #f0f0f2; }
+  .s-status.warn { color: #9a5b00; background: #fdf0e1; }
+  .s-bar { width: 140px; height: 6px; background: #ececee; border-radius: 3px; overflow: hidden; }
+  .s-bar span { display: block; height: 100%; background: #1d1d1f; }
+  .s-kv { display: grid; grid-template-columns: 170px 1fr; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #efefef; }
+  .s-kv:last-child { border-bottom: 0; }
+  .s-kv span:first-child { color: #6e6e73; }
+  .s-chev { color: #b0b0b5; }
+  .s-logo { width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font: 600 12px Inter, sans-serif; color: #fff; flex: none; }
+
+  /* narrow */
+  .s-phone { width: 390px; height: 760px; border-radius: 28px; border: 1px solid #d0d0d4; background: #fff; overflow: hidden; position: relative; box-shadow: 0 8px 30px rgba(0,0,0,.08); }
+  .s-phone .s-nav { width: 100%; border: 0; background: #fff; padding: 18px 14px; }
+  .s-phone .s-main { padding: 18px 0; }
+  .s-phone .s-col { width: auto; margin: 0 16px; }
+  .s-phone .s-item .s-d { max-width: 220px; }
+
+  /* today thumbnails */
+  .b-thumb { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 14px; font-size: 12px; color: #444; }
+  .b-thumb .b-tc { border: 1px solid #e3e3e6; border-radius: 8px; padding: 6px 10px; margin: 6px 0; background: #fafafa; }
+  .b-thumb b { color: #1d1d1f; }
+  .b-arrow { font-size: 28px; color: #999; align-self: center; }
+</style>
+</head>
+<body>
+<script>
+// ---------- glyphs ----------
+const P = {
+  back: '<path d="M10 3 5 8l5 5"/>',
+  search: '<circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/>',
+  gear: '<circle cx="8" cy="8" r="2"/><path d="M6.9 1.5h2.2l.4 1.8 1.3.7 1.7-.7 1.1 1.9-1.4 1.2v1.2l1.4 1.2-1.1 1.9-1.7-.7-1.3.7-.4 1.8H6.9l-.4-1.8-1.3-.7-1.7.7-1.1-1.9 1.4-1.2V7.4L2.4 6.2l1.1-1.9 1.7.7 1.3-.7z"/>',
+  bell: '<path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3z"/><path d="M6.5 14h3"/>',
+  sun: '<circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/>',
+  user: '<circle cx="8" cy="5.5" r="2.8"/><path d="M2.5 14c.8-2.6 3-4 5.5-4s4.7 1.4 5.5 4"/>',
+  db: '<ellipse cx="8" cy="3.8" rx="5" ry="2"/><path d="M3 3.8v8.4c0 1.1 2.2 2 5 2s5-.9 5-2V3.8M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>',
+  link: '<path d="M6.5 9.5 9.5 6.5M7 4.5l1.2-1.2a2.6 2.6 0 0 1 3.7 3.7L10.7 8.2M9 11.5l-1.2 1.2a2.6 2.6 0 0 1-3.7-3.7L5.3 7.8"/>',
+  key: '<circle cx="5" cy="10.5" r="2.8"/><path d="m7 8.5 6-6M11 4.5l1.5 1.5"/>',
+  plug: '<path d="M6 1.5v3M10 1.5v3M4 4.5h8v3a4 4 0 0 1-8 0zM8 11.5v3"/>',
+  server: '<rect x="2" y="2.5" width="12" height="4.5" rx="1.2"/><rect x="2" y="9" width="12" height="4.5" rx="1.2"/><path d="M4.5 4.8h.01M4.5 11.3h.01"/>',
+  cloud: '<path d="M4.5 12.5h7a3 3 0 0 0 .3-6A4 4 0 0 0 4 7.3a2.6 2.6 0 0 0 .5 5.2z"/>',
+  stack: '<path d="m8 2 6 3-6 3-6-3zM2 8l6 3 6-3M2 11l6 3 6-3"/>',
+  folder: '<path d="M2 4.5c0-.6.4-1 1-1h3l1.5 1.5H13c.6 0 1 .4 1 1V12c0 .6-.4 1-1 1H3c-.6 0-1-.4-1-1z"/>',
+  plus: '<path d="M8 3v10M3 8h10"/>',
+  chev: '<path d="m6 3.5 4.5 4.5L6 12.5"/>',
+  down: '<path d="m4 6 4 4 4-4"/>',
+  more: '<path d="M3.5 8h.01M8 8h.01M12.5 8h.01" stroke-width="2.4"/>',
+  ext: '<path d="M6 3.5h6.5V10M12.5 3.5 4 12"/>',
+};
+const ic = (k, extra = '') => `<svg class="s-ic" viewBox="0 0 16 16" ${extra}>${P[k]}</svg>`;
+const mk = (n) => `<i class="b-mk">${n}</i>`;
+const pill = (t, cls = '', caret = true) => `<span class="s-pill ${cls}">${t}${caret ? ic('down', 'style="width:12px;height:12px"') : ''}</span>`;
+const btn = (t, cls = '') => pill(t, cls, false);
+const sw = (on = true) => `<span class="s-sw ${on ? '' : 'off'}"></span>`;
+const item = (t, d, ctrl, extra = '') => `<div class="s-item">${extra}<div class="s-l"><div class="s-t">${t}</div>${d ? `<div class="s-d">${d}</div>` : ''}</div>${ctrl}</div>`;
+const sec = (t, right = '') => `<div class="s-sec"><span>${t}</span>${right}</div>`;
+const card = (rows) => `<div class="s-card">${rows.join('')}</div>`;
+
+// ---------- the settings sidebar ----------
+// `on` names the lit row; `marks` puts numbered marks beside a row, by its key.
+function nav({ on, marks = {}, phone = false }) {
+  const row = (key, icon, label, right = '') =>
+    `<div class="s-row ${on === key ? 'on' : ''}">${ic(icon)}<span>${label}</span>${right}${marks[key] ? ` ${mk(marks[key])}` : ''}</div>`;
+  const grp = (label, key) => `<div class="s-grp"><span>${label}${marks[key] ? ` ${mk(marks[key])}` : ''}</span><span class="s-plus">${ic('plus')}</span></div>`;
+  return `<div class="s-nav">
+    <div class="s-back">${ic('back')} Back to Orbit ${marks.back ? mk(marks.back) : ''}</div>
+    <div class="s-nav-title">Settings</div>
+    <div class="s-search">${ic('search')} Search settings ${marks.search ? mk(marks.search) : ''}</div>
+    <div class="s-grp" style="padding-top:4px"><span>Personal</span></div>
+    ${row('general', 'gear', 'General')}
+    ${row('notifications', 'bell', 'Notifications')}
+    ${row('appearance', 'sun', 'Appearance')}
+    ${row('profile', 'user', 'Profile')}
+    ${row('storage', 'db', 'Storage')}
+    ${row('links', 'link', 'Shared links')}
+    ${row('tokens', 'key', 'Access tokens')}
+    ${row('feishu', 'plug', 'Feishu')}
+    ${grp('Machines', 'gm')}
+    ${row('m-gpu', 'server', 'gpu-box', '<span class="s-dot"></span>')}
+    ${row('m-mac', 'server', 'studio-mac', '<span class="s-dot"></span>')}
+    ${row('m-old', 'server', 'old-laptop', '<span class="s-dot warn"></span>')}
+    ${grp('Providers', 'gp')}
+    ${row('p-anthropic', 'cloud', 'Anthropic', '<span class="s-sub">2 keys</span>')}
+    ${row('p-openai', 'cloud', 'OpenAI', '<span class="s-sub">1 key</span>')}
+    ${row('p-deepseek', 'cloud', 'DeepSeek', '<span class="s-sub">1 key</span>')}
+    ${row('p-pools', 'stack', 'Account pools', '<span class="s-sub">2</span>')}
+    ${grp('Workspaces', 'gw')}
+    ${row('w-orbit', 'folder', 'orbit', '<span class="s-sub">gpu-box</span>')}
+    ${row('w-prod', 'folder', 'orbit-prod', '<span class="s-sub">gpu-box</span>')}
+    ${row('w-site', 'folder', 'website', '<span class="s-sub">studio-mac</span>')}
+    ${row('w-ml', 'folder', 'ml-experiments', '<span class="s-sub">gpu-box</span>')}
+    ${phone ? '' : `<div class="s-row s-more"><span style="padding-left:26px">Show all 14</span>${marks.more ? ` ${mk(marks.more)}` : ''}</div>`}
+  </div>`;
+}
+const win = (navOpts, body, cls = '') =>
+  `<div class="s-win ${cls}">${nav(navOpts)}<div class="s-main"><div class="s-col">${body}</div></div></div>`;
+const part = (title, lead, frame, notes) => {
+  const s = document.createElement('section');
+  s.className = 'b-part';
+  s.innerHTML = `<h2>${title}</h2><p class="b-lead">${lead}</p>${frame}${
+    notes ? `<div class="b-notes">${notes.map((n, i) => `<div class="b-note">${mk(i + 1)}<p>${n}</p></div>`).join('')}</div>` : ''}`;
+  document.body.appendChild(s);
+};
+
+// ============ Part 1 — 今天 → 新结构 ============
+{
+  const s = document.createElement('section');
+  s.className = 'b-part';
+  s.innerHTML = `<h2>设置页重做 · 总览：今天 → 新结构</h2>
+  <p class="b-lead">参考图 1 的<b>样式</b>（左侧分组导航 + 右侧居中单栏、圆角卡片里一行一项、右侧是灰色胶囊控件），内容全是 Orbit 自己的。
+  Machines &amp; models 不再是一张独立的页面：它拆成 <b>Machines、Providers、Workspaces</b> 三组，和 <b>Personal</b> 并列放进 Settings 的左侧导航。</p>
+  <div style="display:grid;grid-template-columns:1fr 40px 1.25fr;gap:16px">
+    <div>
+      <div style="font-weight:600;margin-bottom:8px">今天 · 三张页面，各管一块</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div class="b-thumb"><b>/settings</b>（560 宽卡片堆）
+          <div class="b-tc">Session defaults</div><div class="b-tc">Session orchestration</div>
+          <div class="b-tc"><b>Machines &amp; models</b> → Manage</div><div class="b-tc">Notifications</div>
+          <div class="b-tc">Appearance</div><div class="b-tc">Storage</div><div class="b-tc">Sharing / Access tokens / Feishu → Manage</div></div>
+        <div class="b-thumb"><b>/infrastructure</b>（900 宽）
+          <div class="b-tc">‹ Settings · Add ⌄</div><div class="b-tc">Machines（卡片 + 引擎）</div>
+          <div class="b-tc">API keys（按厂商卡片）</div><div class="b-tc">Account pools</div></div>
+        <div class="b-thumb"><b>/runners/:id</b>（两栏）
+          <div class="b-tc">Engines</div><div class="b-tc"><b>Workspaces</b>（行内展开表单：路径、Repo、Worktree、智能选模型、环境变量、Instructions、Always allowed）</div>
+          <div class="b-tc">Capacity · About</div></div>
+      </div>
+      <p style="font-size:13px;color:#666;margin:10px 0 0">问题：Workspace 的设置藏在“某台机器的详情页 → 行内展开表单”里，第三层才找得到；Settings / Machines &amp; models / Runner 三张页面宽度、样式各不一样。</p>
+    </div>
+    <div class="b-arrow">→</div>
+    <div>
+      <div style="font-weight:600;margin-bottom:8px">新 · 一个 Settings，四组导航</div>
+      <table class="b-t" style="background:#fff;border-radius:10px">
+        <tr><th>分组</th><th>一行是什么</th><th>右侧页面装什么（来自今天哪里）</th></tr>
+        <tr><td><b>Personal</b></td><td>固定 8 行</td><td>General / Notifications / Appearance / Storage … ← 今天 /settings 的卡片；Profile、Shared links、Access tokens、Feishu ← 今天的二级页</td></tr>
+        <tr><td><b>Machines</b></td><td>每台机器一行，带在线点</td><td>引擎与登录、容量、该机器上的 workspaces、About、删除 ← /runners/:id</td></tr>
+        <tr><td><b>Providers</b></td><td>每个已连接厂商一行 + Account pools</td><td>该厂商的 keys、每把 key 跑在哪些引擎上、添加/编辑/删除 ← /infrastructure 的 API keys、Account pools</td></tr>
+        <tr><td><b>Workspaces</b></td><td>每个 workspace 一行，灰字标机器</td><td>名称、目录、Repo、Worktree、智能选模型、环境变量、Instructions、Always allowed、删除 ← /runners/:id 里的行内表单</td></tr>
+      </table>
+      <p style="font-size:13px;color:#666;margin:10px 0 0">地址：<code>/settings/general</code> · <code>/settings/machines/:id</code> · <code>/settings/providers/:vendor</code> · <code>/settings/providers/pools</code> · <code>/settings/workspaces/:id</code>。
+      旧的 <code>/infrastructure</code>、<code>/runners/:id</code>、<code>/providers/*</code> 全部重定向过来，书签不坏。</p>
+    </div>
+  </div>`;
+  document.body.appendChild(s);
+}
+
+// ============ Part 2 — Personal › General ============
+part('① Personal › General', '打开 Settings 默认落在这里。Session defaults 与 Session orchestration 合成一页；每行左边“名称 + 一句说明”，右边一个控件，改了即存（今天也是即存，不变）。',
+  win({ on: 'general', marks: { back: 1, search: 2, gm: 3 } }, `
+    <div class="s-h1">General</div>
+    <div class="s-h1sub">How new sessions start, account-wide.</div>
+    ${sec('New sessions')}
+    ${card([
+      item('Default permission mode', 'The mode a new session starts in, unless the composer picks another.', pill('Accept edits')),
+      item(`Smart model selection ${mk(4)}`, 'Coordinators suggest a tier for each task; Agents you turn this on for run on that tier.', sw(false)),
+      item('Suggested replies', 'When a Claude turn ends, the empty message box offers what you’d probably type next.', sw(true)),
+      item('Session recaps', 'Session lists show a one-line summary of each conversation instead of its raw last reply.', sw(true)),
+    ])}
+    ${sec('Orchestration')}
+    ${card([
+      item('Let sessions orchestrate', 'Sessions in every workspace can spawn and manage other sessions via the orbit MCP tools.', sw(true)),
+    ])}
+  `),
+  [
+    'Settings 接管整个窗口（像参考图），左上 <b>Back to Orbit</b> 回到进来前的页面；Esc 同样返回。应用自己的侧栏此时不显示（见 ⑥ 待定 A）。',
+    '搜索框搜<b>所有组</b>：设置项名称、机器名、厂商名、workspace 名、目录路径都能搜，结果直接跳到那一行并高亮。',
+    '<b>Machines / Providers / Workspaces</b> 是三组独立的设置，组标题右侧的 <b>+</b> 分别是：注册机器、连接厂商 key、新建 workspace（替代今天 Machines &amp; models 页头的 Add ⌄ 菜单）。',
+    '文案与今天一致，只把长说明压成一句；完整说明放在控件 hover 的 tooltip 里。所有可见文案仍是英文（CLAUDE.md §5）。',
+  ]);
+
+// ============ Part 3 — Machines › gpu-box ============
+part('② Machines › gpu-box', '一台机器一页。今天 /runners/:id 的两栏内容改成单栏分节，顺序按“最常要处理的在上”：引擎登录 → 容量 → 这台机器上的 workspaces → About → 删除。',
+  win({ on: 'm-gpu' }, `
+    <div class="s-h1">gpu-box <span class="s-status">● Online · 2 of 8 sessions</span> ${mk(1)}<span style="margin-left:auto">${btn(ic('more'))}</span></div>
+    <div class="s-h1sub">Linux · runner 0.1.252 · last check-in 12 s ago</div>
+    ${sec('Engines', `<span class="s-secsub">Subscriptions signed in here are spent only by sessions on this machine ${mk(2)}</span>`)}
+    ${card([
+      item('Claude Code <span class="s-val">2.1.40</span>', 'Signed in · Claude Max · resets in 3 h', btn('Sign out')),
+      item('Codex <span class="s-val">0.161.0</span>', 'Signed in · ChatGPT Pro', btn('Sign out')),
+      item('Gemini CLI <span class="s-val">0.9.2</span>', '<span style="color:#b25e00">Signed out on Nov 9 — sessions here fall back to API keys</span>', btn('Sign in', 's-pri')),
+      item('Cursor', 'Not installed', btn('Install')),
+    ])}
+    ${sec('Capacity')}
+    ${card([
+      item('Max concurrent sessions', 'Sessions beyond this wait in line.', pill('8')),
+      item('Disk', '612 GB of 915 GB used', '<span class="s-bar"><span style="width:67%"></span></span>'),
+      item('Keep free', 'New sessions wait while less than this is free.', pill('20 GB')),
+    ])}
+    ${sec(`Workspaces on this machine ${mk(3)}`, btn(ic('plus') + ' Add workspace'))}
+    ${card([
+      item('orbit', '<span style="font-family:JetBrains Mono,monospace;font-size:11px">~/src/orbit</span>', `<span class="s-chev">${ic('chev')}</span>`),
+      item('orbit-prod', '<span style="font-family:JetBrains Mono,monospace;font-size:11px">~/src/orbit-prod</span>', `<span class="s-chev">${ic('chev')}</span>`),
+    ])}
+  `),
+  [
+    '页头一眼看状态：在线点 + 正在跑几个/上限；<b>⋯</b> 里是 Rename、Update runner now、Delete machine（今天的 Actions 菜单原样搬过来）。左侧导航行的小圆点同一个状态：绿 = 在线，橙 = 需要你（离线 / 引擎掉登录 / 版本落后），灰 = 离线很久。',
+    '引擎一行一个，右边只放<b>当下能做的那个动作</b>（Sign in / Sign out / Install / Update）。今天的 “Update engines / Refresh models” 收进页头 ⋯。',
+    '这台机器上的 workspaces 只<b>列出并链接</b>到 Workspaces 组里那一页，不在这里展开表单 —— 一个 workspace 的设置只有一个家。往下滚还有 About（hostname、版本、run as、repos 目录、注册时间）和 Abandoned checkouts（有才显示），最后是红色的 Delete machine。',
+  ]);
+
+// ============ Part 4 — Providers › Anthropic ============
+part('③ Providers › Anthropic', '一个已连接的厂商一页：它的 keys、每把 key 在哪些引擎上可用。今天 /infrastructure 里按厂商分的卡片，变成导航里的一行。',
+  win({ on: 'p-anthropic', marks: { gp: 1 } }, `
+    <div class="s-h1"><span class="s-logo" style="background:#c96442">A</span> Anthropic</div>
+    <div class="s-h1sub">API keys on your account, usable from every machine and billed per token.</div>
+    ${sec(`Keys ${mk(2)}`, btn(ic('plus') + ' Add key'))}
+    ${card([
+      item('Work key <span class="s-val" style="font-family:JetBrains Mono,monospace;font-size:11px">sk-ant-…a1F3</span>', 'Runs on Claude Code · in pool “Team Claude” · last used 2 h ago', btn('Edit') + btn(ic('more'))),
+      item('Personal key <span class="s-val" style="font-family:JetBrains Mono,monospace;font-size:11px">sk-ant-…9QeZ</span>', 'Runs on Claude Code, Cursor · last used 4 days ago', btn('Edit') + btn(ic('more'))),
+    ])}
+    ${sec('Account pools using these keys')}
+    ${card([
+      item('Team Claude', '2 accounts · dispatches to whichever has quota left', `<span class="s-val">Account pools ${ic('chev')}</span>`),
+    ])}
+    ${sec('Not connected yet')}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${['Google Gemini', 'Moonshot Kimi', 'OpenRouter', 'Zhipu'].map((v) => btn(ic('plus') + ' ' + v)).join('')} ${mk(3)}</div>
+  `),
+  [
+    'Providers 组：每个<b>已连接</b>的厂商一行（右侧灰字 key 数），最后一行 <b>Account pools</b>（今天页面底部那节，单独一页，内容不变：Claude 池、Codex 池、共享池、谁能用）。',
+    'Key 行：名称 + 尾号，下一行说跑在哪些引擎、在哪个池、上次使用。<b>Edit</b> 仍打开今天的 ProviderConnectPage（嵌在右栏里），⋯ 里是 Delete（先展示 KeyImpact）。',
+    '未连接的厂商放页尾一排胶囊；组标题的 + 是同一入口（ProviderPickPage）。没有任何 key 时，Providers 组只剩 “+ Connect a provider” 一行。',
+  ]);
+
+// ============ Part 5 — Workspaces › orbit ============
+part('④ Workspaces › orbit', '今天藏在“机器详情 → workspace 行 → 展开表单 → Save”里的设置，变成一张正常的设置页：每行改完即存（文字框失焦时存），不再有整张表单的 Save。',
+  win({ on: 'w-orbit', marks: { gw: 1, more: 2 } }, `
+    <div class="s-h1">orbit</div>
+    <div class="s-h1sub">On gpu-box · 37 sessions · last used today</div>
+    ${sec('Location')}
+    ${card([
+      item('Name', '', '<span class="s-input">orbit</span>'),
+      item(`Machine ${mk(3)}`, 'A workspace is a folder on one machine.', `<span class="s-val">gpu-box ${ic('chev')}</span>`),
+      item('Working directory', '', '<span class="s-input mono">/home/me/src/orbit</span>'),
+      item('Repository URL', 'Used for project integration. Detected from origin when empty.', '<span class="s-input mono">github.com/acme/orbit</span>'),
+    ])}
+    ${sec('Sessions')}
+    ${card([
+      item('Worktree isolation', 'Each session runs in its own git worktree.', sw(true)),
+      item('Smart model selection for tasks', 'Task runs use the suggested tier’s model and effort.', sw(true)),
+      item('Optimize for', 'For tasks without a suggested tier.', pill('Balance')),
+    ])}
+    ${sec(`Agent environment ${mk(4)}`)}
+    ${card([
+      item('Environment variables', 'GOFLAGS, NODE_OPTIONS, PLAYWRIGHT_BROWSERS_PATH', btn('Edit')),
+      item('Instructions', 'Added to this workspace’s system prompt on every run · 412 characters', btn('Edit')),
+      item('Always allowed', '6 tools you said “don’t ask again” for', btn('Manage')),
+    ])}
+    ${sec('Danger zone')}
+    ${card([
+      item('Disable workspace', 'Park it: no new sessions start here until you turn it back on.', sw(false)),
+      item('Delete workspace', 'Leaves your list; its sessions and tasks are kept and stay linked to it.', btn('Delete', 's-danger')),
+    ])}
+  `),
+  [
+    'Workspaces 组：每个 workspace 一行，右侧灰字是所在机器（同名 workspace 在两台机器上也分得清）。组标题 + 新建 workspace：先选机器，再选目录（今天的创建表单 + Claude history 导入提示）。',
+    '默认列最近用过的 4–6 个，其余折叠成 <b>Show all 14</b>；点开后组内出现过滤框。也可以直接用顶部搜索。（见 ⑥ 待定 B）',
+    '机器只读显示并可点过去；换机器 = 另建 workspace（今天也不能改，保持不变）。',
+    'Environment variables / Instructions / Always allowed 内容长，<b>Edit</b> 打开右侧抽屉编辑（沿用今天的控件），页面上只显示摘要。今天表单里的 “Import Claude Code history” 放在 Sessions 节底部，有可导入的历史才出现。',
+  ]);
+
+// ============ Part 6 — narrow ============
+{
+  const s = document.createElement('section');
+  s.className = 'b-part';
+  const phoneNav = `<div class="s-phone">${nav({ on: '', phone: true })}</div>`;
+  const phoneDetail = `<div class="s-phone"><div class="s-main"><div class="s-col">
+    <div class="s-back" style="padding:0 0 10px">${ic('back')} Settings</div>
+    <div class="s-h1">gpu-box</div><div class="s-h1sub"><span class="s-status">● Online · 2 of 8</span></div>
+    ${sec('Engines')}
+    ${card([
+      item('Claude Code', 'Signed in · Claude Max', btn('Sign out')),
+      item('Codex', 'Signed in · ChatGPT Pro', btn('Sign out')),
+      item('Gemini CLI', '<span style="color:#b25e00">Signed out</span>', btn('Sign in', 's-pri')),
+    ])}
+    ${sec('Capacity')}
+    ${card([item('Max concurrent', '', pill('8')), item('Keep free', '', pill('20 GB'))])}
+  </div></div></div>`;
+  s.innerHTML = `<h2>⑤ 窄窗口（&lt; 760px，手机浏览器 / 分屏）</h2>
+  <p class="b-lead">导航和内容不再并排：先是导航列表，点一行进入该页，左上 ‹ Settings 返回。与 iOS / Android 原生设置的层级一致（原生端不在这次改动里）。</p>
+  <div style="display:flex;gap:40px;align-items:flex-start">${phoneNav}<div class="b-arrow" style="margin-top:300px">→</div>${phoneDetail}</div>`;
+  document.body.appendChild(s);
+}
+
+// ============ Part 7 — 待定 + 落地 ============
+{
+  const s = document.createElement('section');
+  s.className = 'b-part';
+  s.innerHTML = `<h2>⑥ 待定 · 要你拍板</h2>
+  <div class="b-cols">
+    <div class="b-box"><h3>A. Settings 打开时，应用左侧栏怎么办？</h3>
+      <p><b>方案 A1 · 接管整个窗口</b> <span class="b-tag">推荐</span><br>如参考图：Settings 自带侧栏，替换掉应用侧栏；左上 Back to Orbit / Esc 回去。一层导航，内容区宽，和参考图一致。</p>
+      <p><b>方案 A2 · 嵌在内容区</b><br>应用侧栏保留，右边内容区里再放一个设置侧栏 —— 两层侧栏并排，内容区只剩约 60%，在 1280 宽笔记本上 workspace 页会挤。</p>
+    </div>
+    <div class="b-box"><h3>B. Workspaces 组在导航里怎么列？</h3>
+      <p><b>方案 B1 · 逐个列出，最近 4–6 个 + Show all N</b> <span class="b-tag">推荐</span><br>与 Machines、Providers 一样“一行一个对象”，常用的一步到；多了折叠，不撑长侧栏。</p>
+      <p><b>方案 B2 · 只放一行 “Workspaces”</b><br>点进去是一张列表（可搜、按机器分组），再点进单个 workspace。侧栏永远短，但多一次点击，且和另外两组不对称。</p>
+    </div>
+    <div class="b-box"><h3>C. Providers 组按什么分行？</h3>
+      <p><b>方案 C1 · 每个厂商一行 + Account pools 一行</b> <span class="b-tag">推荐</span><br>跟今天 /infrastructure 的“按厂商分卡片”一致，key 多的厂商也只占一行。</p>
+      <p><b>方案 C2 · 两行：API keys / Account pools</b><br>更短，但 API keys 一页里仍是一长串卡片，等于把今天的页面原样塞进来。</p>
+    </div>
+    <div class="b-box"><h3>D. Workspace 设置的保存方式</h3>
+      <p><b>方案 D1 · 每行即存</b> <span class="b-tag">推荐</span><br>与 Personal 页和参考图一致；文字框失焦或回车即存，出 “Setting saved” 提示。</p>
+      <p><b>方案 D2 · 保留整页 Save</b><br>改动少（今天的表单逻辑原样复用），但和同一 Settings 里其他页的行为不一样。</p>
+    </div>
+  </div>
+  <h2 style="margin-top:30px">落地（按代价排，先小后大）</h2>
+  <table class="b-t" style="background:#fff">
+    <tr><th>#</th><th>内容</th><th>代价</th></tr>
+    <tr><td>1</td><td><b>SettingsLayout 外壳</b>：左侧四组导航 + 右栏 660 宽单栏；新样式组件（分节标题、圆角卡片、行、灰胶囊）；Personal 各卡片拆成独立小页，内容不改；旧 <code>/settings/*</code> 子页挂到新外壳里</td><td>小</td></tr>
+    <tr><td>2</td><td><b>Machines</b>：<code>/settings/machines/:id</code>，把 RunnerDetailPage 的各节改成单栏行样式；workspaces 只列表 + 链接；<code>/runners/:id</code>、<code>/infrastructure</code> 重定向</td><td>中</td></tr>
+    <tr><td>3</td><td><b>Providers</b>：ProviderKeyCards 按厂商拆页；Account pools 独立一页；ProviderConnectPage / PickPage 在右栏内打开；<code>/providers/*</code> 重定向</td><td>中</td></tr>
+    <tr><td>4</td><td><b>Workspaces</b>：把 RunnerDetailPage 里的 workspace 表单拆成独立页，逐字段 PATCH 即存；环境变量 / Instructions / Always allowed 改成抽屉；新建流程（先选机器）</td><td>大</td></tr>
+    <tr><td>5</td><td>全局搜索（跨四组的索引）、窄窗口的列表 → 详情切换、测试迁移（InfrastructurePage.* / RunnerDetailPage.* / SettingsPage.* 约 30 个测试文件）</td><td>中</td></tr>
+  </table>
+  <p style="font-size:13px;color:#666">不在这次范围：iOS / Android / macOS 原生设置（它们已经是列表 → 详情的层级，之后可以按同一套分组对齐）。</p>`;
+  document.body.appendChild(s);
+}
+</script>
+</body>
+</html>
