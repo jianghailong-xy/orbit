@@ -421,14 +421,16 @@ describe('the round button (design §3, board 42 ⓪)', () => {
 });
 
 describe('the panel (design §4.1, board 42 ①)', () => {
-  it('docks at 1440 and wider, 400 wide or as dragged up to 560, the directory where it was; ✕ hides it', async () => {
-    storage.local.set('orbit.wikiChat.width', '640');
+  it('docks at 1440 and wider, a third of the window or as dragged up to half of it, the directory where it was; ✕ hides it', async () => {
+    await open('/wiki/orbit/d/session-runtime?chat=new');
+    expect(panel()!.style.width, 'a third of 1500').toBe('500px');
+    storage.local.set('orbit.wikiChat.width', '900');
     await open('/wiki/orbit/d/session-runtime?chat=new');
     expect(host().className).toContain('is-wide');
     expect(host().className).toContain('is-docked');
     expect(host().className).not.toContain('is-fold');
-    expect(panel()!.style.width).toBe('560px');
-    expect(host().style.getPropertyValue('--wk-chat-w')).toBe('560px');
+    expect(panel()!.style.width, 'dragged, held to half of 1500').toBe('750px');
+    expect(host().style.getPropertyValue('--wk-chat-w')).toBe('750px');
     // Head: the title (the chat history), +, ↗ (nothing to open before the first message) and ✕.
     expect(panel()!.querySelector('.wk-chat-title')?.textContent).toBe('New chat');
     expect(byLabel('New chat')).toBeTruthy();
@@ -444,7 +446,7 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     await open('/wiki/orbit/d/session-runtime?chat=new');
     expect(host().className).toMatch(/is-docked/);
     expect(host().className).toMatch(/is-fold/);
-    expect(panel()!.style.width).toBe('400px');
+    expect(panel()!.style.width, 'a third of 1300').toBe('433px');
 
     windowWidth(900);
     await act(async () => window.dispatchEvent(new Event('resize')));

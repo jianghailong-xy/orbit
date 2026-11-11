@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -27,6 +27,7 @@ import {
 import type {
   IntegrationJobKind,
   IntegrationTimelineEntry,
+  IntegrationTimelineTrigger,
   ProjectIntegrationLogPage,
   ProjectIntegrationView,
   ProjectPromotionView,
@@ -75,6 +76,7 @@ import {
   type LandingLogSelectors,
 } from '../lib/queries';
 import { landingSteps, type LandingStep } from '../lib/landingSteps';
+import { triggerMessage, type TriggerMessage } from '../lib/landingTrigger';
 import {
   LANDING_SENTENCE_COPY,
   landingSentence,
@@ -87,7 +89,7 @@ import { encodeId } from '../lib/idCodec';
 import { projectTaskPath } from '../lib/projectTaskRoute';
 import { RERUN_LANDING_CHECK_REASON, promotionOnPassLine } from '../lib/projectMerge';
 import { mainBranchName } from '../lib/projectStart';
-import { landingClock } from './ProjectPanoramaHeader';
+import { landingClock, landingClockTime } from './ProjectPanoramaHeader';
 import {
   ProjectPromotion,
   ProjectPromotionReceipt,
@@ -691,8 +693,8 @@ function LandingWindowRow({
       data-tone={row.tone}
       onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}
     >
-      {/* The sentence first, then the steps under it: the chat says what it is doing before its tool calls (owner 2026-11-11). */}
-      <LandingReply parts={sentence} open={expanded} onToggle={onToggle} />
+      {/* As the chat's turn (owner 2026-11-11, docs/mocks/landings-chat-trigger): what queued it, its steps, then how it
+          ended. */}
       {landing ? (
         <LandingSteps
           landing={landing}
@@ -702,8 +704,13 @@ function LandingWindowRow({
           sessionId={landing.sessionId}
           openLast={expanded}
           onToggleLast={onToggle}
+          task={row.title}
+          tasks={row.promotion?.taskIds.length ?? null}
+          main={row.promotion ? mainBranchName(row.promotion.upstreamRef) : null}
+          onOpenSession={onOpenSession}
         />
       ) : null}
+      <LandingReply parts={sentence} open={expanded} onToggle={onToggle} />
       {expanded ? (
         <div className="landings-window-record">
           {merge ? <LandingReceiptBlock receipt={landingMergeReceipt(row.promotion, landing)} /> : null}
@@ -733,13 +740,51 @@ function LandingReply({ parts, open, onToggle }: { parts: readonly SentencePart[
       onClick={onToggle}
       onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>
       <div className="md">
-        <p>
-          {parts.map((part, index) => part.strong ? <strong key={index}>{part.text}</strong>
-            : part.code ? <code key={index}>{part.text}</code>
-              : <span key={index}>{part.text}</span>)}
-        </p>
+        <p><SentenceRuns parts={parts} /></p>
       </div>
     </div>
+  );
+}
+
+/** What queued an attempt, as the chat draws a message sent into a session: who it came from on the muted line over the
+ *  bubble, what was handed over in it, and when under it. Pressing it opens the conversation it came from. */
+function LandingTrigger({ trigger, message, onOpenSession }: {
+  trigger: IntegrationTimelineTrigger;
+  message: TriggerMessage;
+  onOpenSession: (sessionId: string) => void;
+}): JSX.Element {
+  const open = trigger.sessionId ? () => onOpenSession(trigger.sessionId!) : null;
+  return (
+    <div className="chat-user-wrap landings-window-trigger" data-trigger={trigger.cause}>
+      <div className="chat-user-from">{message.from}</div>
+      <div
+        className={`chat-msg chat-user${open ? ' is-link' : ''}`}
+        {...(open ? {
+          role: 'button', tabIndex: 0, onClick: open,
+          onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+          },
+        } : {})}
+      >
+        <div className="md">
+          <p><SentenceRuns parts={message.parts} /></p>
+        </div>
+      </div>
+      <div className="chat-user-meta landings-window-trigger-meta">
+        <span className="chat-time">{landingClockTime(trigger.at)}</span>
+      </div>
+    </div>
+  );
+}
+
+/** A sentence's runs: plain, the task in bold, a line or a commit as code. */
+function SentenceRuns({ parts }: { parts: readonly SentencePart[] }): JSX.Element {
+  return (
+    <>
+      {parts.map((part, index) => part.strong ? <strong key={index}>{part.text}</strong>
+        : part.code ? <code key={index}>{part.text}</code>
+          : <span key={index}>{part.text}</span>)}
+    </>
   );
 }
 
@@ -882,17 +927,35 @@ function LandingWindowCard({
         : landing ? LANDING_PAGE_COPY.QUEUED : LANDING_PAGE_COPY.LOADING_LANDING;
   const failedHead = !outcome && card != null && (card.stoppedOnFailure || timedOut);
 
+  // A landing that runs is the chat's turn in hand: its Working for head.
+  const workingHead = running && Number.isFinite(started)
+    ? <div className="chat-turn-head">{`${WINDOW_COPY.WORKING_FOR} ${landingClock(Math.max(0, now - started))}`}</div>
+    : null;
   return (
     <div
       className={`landings-window-entry landings-window-turn is-card${stepsOpen ? ' is-open' : ''}${outlined ? ' is-outlined' : ''}`}
       data-landing-entry={sessionId}
       onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}
     >
-      {/* A landing that runs is the chat's turn in hand: its Working for head over it. */}
-      {running && Number.isFinite(started) ? (
-        <div className="chat-turn-head">{`${WINDOW_COPY.WORKING_FOR} ${landingClock(Math.max(0, now - started))}`}</div>
+      {/* As the chat's turn (docs/mocks/landings-chat-trigger): what queued it, a running one's Working for, its steps,
+          then the sentence. Without steps to sit over, the head stands alone. */}
+      {landing ? (
+        <LandingSteps
+          landing={landing}
+          now={now}
+          openLog={log}
+          onOpenLog={setLog}
+          sessionId={sessionId}
+          openLast={stepsOpen}
+          onToggleLast={onToggle}
+          task={entry.title}
+          tasks={currentPromotion?.taskIds.length ?? null}
+          main={landing.subject === 'PROMOTION' ? main : null}
+          onOpenSession={onOpenSession}
+          head={workingHead}
+        />
       ) : null}
-      <LandingReply parts={sentence} open={stepsOpen} onToggle={onToggle} />
+      {(landing?.timeline?.sections.length ?? 0) === 0 ? workingHead : null}
       {running && card ? (
         <div className="landings-window-live">
           {card.detail ? <div className="landings-window-card-detail">{card.detail}</div> : null}
@@ -921,17 +984,7 @@ function LandingWindowCard({
           ) : null}
         </div>
       ) : null}
-      {landing ? (
-        <LandingSteps
-          landing={landing}
-          now={now}
-          openLog={log}
-          onOpenLog={setLog}
-          sessionId={sessionId}
-          openLast={stepsOpen}
-          onToggleLast={onToggle}
-        />
-      ) : null}
+      <LandingReply parts={sentence} open={stepsOpen} onToggle={onToggle} />
       {/* What a landing in hand still carries — what stopped it, its clock, who decides and the doors — on the chat's own
           status card, under its steps. */}
       {running ? null : (
@@ -1100,6 +1153,11 @@ function LandingSteps({
   onOpenLog,
   openLast,
   onToggleLast,
+  task,
+  tasks = null,
+  main = null,
+  onOpenSession,
+  head = null,
 }: {
   landing: SessionLandingView;
   sessionId: string;
@@ -1108,6 +1166,13 @@ function LandingSteps({
   onOpenLog: (log: LandingLogSelectors | null) => void;
   openLast: boolean;
   onToggleLast: () => void;
+  /** The trigger's words: the task's name, a merge round's task count and the line it merges into. */
+  task: string;
+  tasks?: number | null;
+  main?: string | null;
+  onOpenSession: (sessionId: string) => void;
+  /** Drawn between the newest attempt's trigger and its steps: a running turn's `Working for`. */
+  head?: ReactNode;
 }): JSX.Element | null {
   const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
   const timeline = landing.timeline;
@@ -1128,7 +1193,7 @@ function LandingSteps({
       ))}
       {timeline.sections.map((section, sectionIndex) => {
         const current = section.jobId === currentJobId;
-        const steps = landingSteps(section.entries, section.kind);
+        const steps = landingSteps(section.entries, section.kind, section.trigger != null);
         const live = current && attempt?.state === 'RUNNING' && !attempt.timedOut;
         const statuses = steps.map((step, index): StepStatus => {
           const last = index === steps.length - 1;
@@ -1144,9 +1209,23 @@ function LandingSteps({
           if (next.has(section.jobId)) next.delete(section.jobId); else next.add(section.jobId);
           return next;
         });
+        const automatic = section.entries.find((entry) => entry.kind === 'AUTOMATIC_ATTEMPT')?.data;
         return (
+          <Fragment key={section.jobId}>
+          {/* What queued this attempt: the turn's opening message (docs/mocks/landings-chat-trigger). */}
+          {section.trigger ? (
+            <LandingTrigger
+              trigger={section.trigger}
+              message={triggerMessage(section.trigger, {
+                task, tasks, main,
+                attempt: typeof automatic?.attempt === 'number' && typeof automatic.limit === 'number'
+                  ? { attempt: automatic.attempt, limit: automatic.limit } : null,
+              })}
+              onOpenSession={onOpenSession}
+            />
+          ) : null}
+          {isLast ? head : null}
           <section
-            key={section.jobId}
             className={`landing-timeline-section chat-steps${open ? ' is-open' : ''}${current ? ' is-current' : ''}`}
             data-job={section.jobId}
           >
@@ -1188,6 +1267,7 @@ function LandingSteps({
               </div>
             ) : null}
           </section>
+          </Fragment>
         );
       })}
       {timeline.truncated ? (

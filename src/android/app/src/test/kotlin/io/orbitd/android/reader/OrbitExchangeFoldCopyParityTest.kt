@@ -38,6 +38,13 @@ class OrbitExchangeFoldCopyParityTest {
         assertEquals("last: ok", OrbitExchangeFold.last("ok"))
         assertHas(transcript, "Transcript.tsx", "what: `Reply from \${reply.fromTitle}`,")
         assertEquals("Reply from B4", OrbitExchangeFold.replyFrom("B4"))
+        assertHas(transcript, "Transcript.tsx", "what: `Message from \${task ?? card.fromTitle}`,")
+        assertHas(transcript, "Transcript.tsx", "whatInTask: '${OrbitExchangeFold.message}',")
+        assertEquals("Message from B4", OrbitExchangeFold.messageFrom("B4"))
+        assertHas(transcript, "Transcript.tsx", "what: notice.taskTitle ? `Run notice: \${notice.taskTitle}` : '${OrbitExchangeFold.runNotice}',")
+        assertHas(transcript, "Transcript.tsx", "whatInTask: '${OrbitExchangeFold.runNotice}',")
+        assertEquals("Run notice: B4", OrbitExchangeFold.runNoticeFor("B4"))
+        assertHas(lib, "orbitExchangeFold.ts", "A run of the task “([\\s\\S]*?)” used notify\\.")
     }
 
     @Test fun theSameFactsStayInView() {

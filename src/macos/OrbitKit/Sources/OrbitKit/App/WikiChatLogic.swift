@@ -461,6 +461,22 @@ public enum WikiChatLogic {
         !sheet && !settingsOnTop && !hiddenByOwner
     }
 
+    /// The third column's width (the web's `wikiChatPanelWidth`, owner 11-11): a third of the width the Wiki has,
+    /// between 400 and 720, as its ideal; dragged between 320 and half of it.
+    public enum Column {
+        public static let min: Double = 320
+        public static let floor: Double = 400
+        public static let cap: Double = 720
+
+        public static func ideal(_ available: Double) -> Double {
+            Swift.min(cap, Swift.max(floor, (available / 3).rounded()))
+        }
+
+        public static func max(_ available: Double) -> Double {
+            Swift.max(min, (available / 2).rounded(.down))
+        }
+    }
+
     /// The history's two groups (the web's `wikiChatHistoryGroups`, Q4 A): Open — what needs the owner, then what a
     /// turn runs in, then the rest as served, the one last spoken in first — and Completed, as served.
     public static func historyGroups(_ rows: [WikiChatRow]) -> (open: [WikiChatRow], completed: [WikiChatRow]) {
