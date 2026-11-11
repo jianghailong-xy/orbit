@@ -137,7 +137,7 @@ final class OrbitExchangeFoldTests: XCTestCase {
     }
 
     func testWhatWentWrongOrAsksTheReaderStaysInView() throws {
-        exchange(0, delivery(0, "TASK_RUN_STOPPED", Self.b1, "B1"), reply: "B1 stopped; restarting it.")
+        exchange(0, delivery(0, "PROJECT_BLOCKER_RAISED", Self.b1, "B1"), reply: "B1 is blocked; restarting it.")
         exchange(5, ["text": watchText(kind: "TASK", id: Self.b4, status: "FAILED")], reply: "B4 failed.")
         exchange(10, delivery(10, "EVIDENCE_SUBMITTED", Self.b4, "B4", revision: 1), reply: "Need your call on B4.",
                  tools: ["mcp__orbit__ask_owner"])
@@ -145,11 +145,57 @@ final class OrbitExchangeFoldTests: XCTestCase {
         exchange(20, ["text": "ok"], reply: "Done.", tools: [])
         let built = try rows()
         let drawn = texts(built)
-        XCTAssertTrue(drawn.contains("B1 stopped; restarting it."))
+        XCTAssertTrue(drawn.contains("B1 is blocked; restarting it."))
         XCTAssertTrue(drawn.contains("B4 failed."))
         XCTAssertTrue(drawn.contains("Need your call on B4."))
         XCTAssertFalse(drawn.contains("I confirmed B1."))
         XCTAssertEqual(groups(built).map { $0.map(\.reply) }, [["I confirmed B1."]])
+    }
+
+    func testAStoppedRunARunNoticeAndATaskRunsMessageFoldUnderTheirTasks() throws {
+        let note = [
+            "<orbit-run-notice task=\"\(Self.b4)\" run-session=\"\(Self.runOfB1)\" from-session=\"\(Self.runOfB1)\" from-mode=\"auto\">",
+            "A run of the task “B4 Link gateway” used notify. It did not reach the account owner.",
+            "Message: Background job bgj_1 ended (exit code 0)",
+            "Nothing is waiting for your reply. If the owner should know or decide, use ask_owner with your recommendation.",
+            "</orbit-run-notice>",
+        ].joined(separator: "\n")
+        exchange(0, delivery(0, "TASK_RUN_STOPPED", Self.b1, "B1 Targeted hints"), reply: "B1 is waiting on purpose; nothing to do.")
+        exchange(5, ["text": note, "controlPlaneNote": note], reply: "A progress signal from B4; nothing to do.")
+        exchange(10, ["text": "B4 scope note: I will keep the old route until A3 lands.",
+                      "sessionMessage": ["fromSessionId": Self.runOfB1, "fromTitle": "Task: B4 Link gateway",
+                                         "fromAgentName": "orbit", "fromTaskId": Self.b4]],
+                 reply: "Agreed with B4’s scope note.")
+        exchange(20, ["text": "ok"], reply: "Done.", tools: [])
+        let built = try rows()
+        let group = try XCTUnwrap(groups(built).first)
+        XCTAssertEqual(OrbitExchangeFold.groupCount(group.count), "3 Orbit updates handled")
+        XCTAssertEqual(OrbitExchangeFold.kinds(group), "1 project update, 1 run notice, 1 message")
+        XCTAssertEqual(group.map(\.what), ["Run stopped: B1 Targeted hints", "Run notice: B4 Link gateway", "Message from B4 Link gateway"])
+        XCTAssertEqual(group.map(\.whatInTask), ["Run stopped", "Run notice", "Message"])
+        XCTAssertEqual(texts(built).filter { !$0.isEmpty }, ["ok", "Done."])
+        // B4 waits on B1: one root, with the notice and the message under B4.
+        let tree = try XCTUnwrap(OrbitExchangeFold.tree(group, lookup: lookup))
+        XCTAssertEqual(tree.map(\.title), ["B1 Targeted hints"])
+        XCTAssertEqual(tree[0].children.map(\.title), ["B4 Link gateway"])
+        XCTAssertEqual(tree[0].children[0].exchanges.map(\.category), [.notice, .message])
+    }
+
+    func testARunNoticeIsReadOffItsWordsAndNothingElseIs() {
+        let note = [
+            "<orbit-run-notice task=\"34vZUH31xayU3ZWjyRWfh\" run-session=\"3y90ooHJ7OgQrKUV8KyqwZ\" from-session=\"3y90ooHJ7OgQrKUV8KyqwZ\" from-mode=\"auto\">",
+            "A run of the task “A task’s delivered_sha can freeze” used notify. It did not reach the account owner.",
+            "Message: Background job bgj_c06ee80b2571 ended (exit code 0)",
+            "</orbit-run-notice>",
+        ].joined(separator: "\n")
+        let read = OrbitExchangeFold.parseRunNotice(note)
+        XCTAssertEqual(read?.taskId, "34vZUH31xayU3ZWjyRWfh")
+        XCTAssertEqual(read?.taskTitle, "A task’s delivered_sha can freeze")
+        XCTAssertNotNil(OrbitExchangeFold.parseRunNotice(note.replacingOccurrences(of: "task=\"34vZUH31xayU3ZWjyRWfh\"", with: "task=\"\"")))
+        XCTAssertNil(OrbitExchangeFold.parseRunNotice(note.replacingOccurrences(of: "task=\"34vZUH31xayU3ZWjyRWfh\"", with: "task=\"\""))?.taskId)
+        XCTAssertNil(OrbitExchangeFold.parseRunNotice("<orbit-run-question task=\"x\" run-session=\"y\">\nA run asked…\n</orbit-run-question>"))
+        XCTAssertNil(OrbitExchangeFold.parseRunNotice(note.replacingOccurrences(of: "</orbit-run-notice>", with: "")))
+        XCTAssertNil(OrbitExchangeFold.parseRunNotice(nil))
     }
 
     func testATurnTheAgentHasNotAnsweredStaysTheLineItsCardDraws() throws {
@@ -208,15 +254,15 @@ final class OrbitExchangeFoldTests: XCTestCase {
         XCTAssertTrue(tree[1].isOther)
     }
 
-    func testASessionNoTaskIsKnownToRunIsABranchOfItsOwn() throws {
-        let run = "0195c0de-0000-7000-8000-0000000000ff"
+    func testASessionNoTaskIsKnownToRunJoinsEverythingElse() throws {
+        let landing = "0195c0de-0000-7000-8000-0000000000ff"
         let tree = try XCTUnwrap(OrbitExchangeFold.tree([
-            ex("1", .session(id: run, title: "Probe the gateway")), ex("2", .task(id: Self.b1, title: nil)),
-            ex("3", .session(id: run, title: nil)),
+            ex("1", .session(id: landing, title: "Land · B1")), ex("2", .task(id: Self.b1, title: nil)),
+            ex("3", .session(id: landing, title: nil)),
         ], lookup: lookup))
-        XCTAssertEqual(tree.map(\.title), ["Probe the gateway", "B1"])
-        XCTAssertEqual(tree[0].exchanges.map(\.id), ["1", "3"])
-        XCTAssertNil(tree[0].taskId)
+        XCTAssertEqual(tree.map(\.title), ["B1", OrbitExchangeFold.otherBranchTitle])
+        XCTAssertEqual(tree[1].exchanges.map(\.id), ["1", "3"])
+        XCTAssertTrue(tree[1].isOther)
     }
 
     func testNoTreeForAGroupAboutOneThing() {
