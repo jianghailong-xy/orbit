@@ -35,6 +35,7 @@ public enum LandingCheckCopy {
                                      jobID: String) -> [IntegrationTimelineEntry] {
         guard let attempt = landing.currentAttempt, attempt.jobId == jobID else { return entries }
         return entries.map { entry in
+            if entry.data?["scope"]?.stringValue != nil { return entry }
             guard entry.claim == attempt.claim, entry.round == attempt.round,
                   let check = entry.check, check.name == "LANDING_CHECK", check.index > 0,
                   landing.checks.indices.contains(check.index - 1),

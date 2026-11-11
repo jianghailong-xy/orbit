@@ -1359,7 +1359,8 @@ export function OpenItemCard({
       onChat={onChat}
       main={main}
     >
-      <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} />
+      {cardActions(row, currentPromotionId).length > 0 || (row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind))
+        ? <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} /> : null}
     </ItemCard>
   );
 }
@@ -1927,7 +1928,8 @@ export function EscalatedItemCard({
   const heading = escalationHeading(row, now) ?? itemHeading(row);
   return (
     <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat} main={main}>
-      <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} />
+      {cardActions(row, currentPromotionId).length > 0 || (row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind))
+        ? <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} /> : null}
     </ItemCard>
   );
 }
@@ -2034,6 +2036,8 @@ function ItemCard({
   children?: ReactNode;
 }): JSX.Element {
   const tag = handlingTag(row);
+  const requiredAction = row.requiredAction?.trim() || row.detailLine?.trim()
+    || (row.baseline ? null : REQUIRED_ACTION_FALLBACK);
   return (
     <div
       className={`approval-card project-open-item-card is-${tone}`}
@@ -2055,10 +2059,8 @@ function ItemCard({
         </span>
       </div>
       <div className="approval-body is-plan project-open-item-body">
-        <div className="project-open-item-next">
-          <p className="project-open-item-required-action">
-            {row.requiredAction ?? row.detailLine ?? REQUIRED_ACTION_FALLBACK}
-          </p>
+        {requiredAction || row.handledBy?.length || children ? <div className="project-open-item-next">
+          {requiredAction ? <p className="project-open-item-required-action">{requiredAction}</p> : null}
           {row.handledBy?.length ? (
             <p className="project-open-item-handled-by">
               {row.handledBy.map((task, index) => (
@@ -2070,7 +2072,7 @@ function ItemCard({
             </p>
           ) : null}
           {children ? <div className="project-open-item-actions">{children}</div> : null}
-        </div>
+        </div> : null}
         <ItemFactRows row={row} heading={heading} />
         <ItemHandlingRows row={row} now={now} main={main} />
         <ItemChatRow row={row} onChat={onChat} />

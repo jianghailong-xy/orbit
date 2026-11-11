@@ -554,9 +554,9 @@ export function ProjectRunSettings({
                 <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.HINT}</div>
                 {!draft.landingCheckCommand.trim() && <div className="project-integration-setting-hint">{inheritedLandingCommand(draft.mergeCheckCommand || null)}</div>}
                 <label>{LANDING_CHECK_COPY.TIMEOUT}</label>
-                <NumberInput min={1} precision={0} value={draft.landingCheckTimeoutSeconds}
+                <NumberInput className="project-check-timeout" min={1} precision={0} value={draft.landingCheckTimeoutSeconds}
                   aria-label={`${LANDING_CHECK_COPY.LABEL} ${LANDING_CHECK_COPY.TIMEOUT}`}
-                  placeholder={LANDING_CHECK_COPY.TIMEOUT_PLACEHOLDER}
+                  placeholder={LANDING_CHECK_COPY.INHERITS_TIMEOUT}
                   onValueChange={(value) => set({ landingCheckTimeoutSeconds: value })} />
                 <div className="project-integration-setting-hint">{LANDING_CHECK_COPY.TIMEOUT_HINT}</div>
                 {draft.landingCheckTimeoutSeconds === null && <div className="project-integration-setting-hint">{inheritedLandingTimeout(view.mergeCheckTimeoutSeconds)}</div>}

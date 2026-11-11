@@ -414,7 +414,7 @@ object LandingSessionModel {
     fun scopedEntries(entries: List<LandingEntry>, view: LandingView, jobId: String): List<LandingEntry> {
         val attempt = view.currentAttempt?.takeIf { it.jobId == jobId } ?: return entries
         return entries.map { entry ->
-            if (entry.claim != attempt.claim || entry.round != attempt.round || entry.checkName != "LANDING_CHECK"
+            if (entry.data?.text("scope") != null || entry.claim != attempt.claim || entry.round != attempt.round || entry.checkName != "LANDING_CHECK"
                 || view.checks.getOrNull((entry.checkIndex ?: 0) - 1)?.scope != "BASELINE") entry
             else entry.copy(data = buildJsonObject { entry.data?.forEach { (key, value) -> put(key, value) }; put("scope", "BASELINE") })
         }

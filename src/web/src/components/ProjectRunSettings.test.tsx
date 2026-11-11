@@ -740,6 +740,9 @@ describe('Landing check settings', () => {
     server.view = viewOf({ landingCheckCommand: null, landingCheckTimeoutSeconds: null, mergeCheckTimeoutSeconds: 900 });
     const node = await mount();
     const row = settingRow(node, 'Landing check');
+    const timeout = row.querySelector<HTMLInputElement>('input[aria-label="Landing check Timeout (seconds)"]')!;
+    expect(timeout.placeholder).toBe('Uses merge check timeout');
+    expect(timeout.closest('.project-check-timeout')).not.toBeNull();
     expect(row.textContent).toContain('Runs when a task lands on the project branch.');
     expect(row.textContent).toContain('Uses merge check:');
     expect(row.textContent).toContain('Uses merge check timeout: 900 seconds');

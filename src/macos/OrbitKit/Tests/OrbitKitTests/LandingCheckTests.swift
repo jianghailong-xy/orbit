@@ -110,6 +110,14 @@ final class LandingCheckTests: XCTestCase {
         let scoped = LandingCheckCopy.scopedEntries([entry], landing: landing, jobID: "new")
         XCTAssertEqual(LandingCheckCopy.timelineText(scoped[0]), "Checked the project branch with main, without this task · also fails")
         XCTAssertEqual(LandingCheckCopy.scopedEntries([entry], landing: landing, jobID: "old"), [entry])
+        let explicit = IntegrationTimelineEntry(kind: "CHECK_FINISHED", claim: 2, round: 3,
+            check: entry.check, data: ["scope": .string("TASK"), "exitCode": .int(1), "expectedExitCode": .int(0)], text: entry.text)
+        XCTAssertEqual(LandingCheckCopy.scopedEntries([explicit], landing: landing, jobID: "new"), [explicit],
+                       "Event scope wins over a conflicting result-array scope")
+        let server = IntegrationTimelineEntry(kind: "CHECK_FINISHED", claim: 1, round: 1,
+            check: entry.check, data: ["scope": .string("BASELINE"), "exitCode": .int(0), "expectedExitCode": .int(0)],
+            text: "Checked the project branch with main, without this task · passes")
+        XCTAssertEqual(LandingCheckCopy.timelineText(LandingCheckCopy.scopedEntries([server], landing: landing, jobID: "old")[0]), server.text)
         let earlier = SessionLandingView(checks: landing.checks,
             currentAttempt: SessionLandingAttempt(jobId: "new", kind: "LAND_TASK", state: "CHECK_FAILED", round: 3, claim: 3))
         XCTAssertEqual(LandingCheckCopy.scopedEntries([entry], landing: earlier, jobID: "new"), [entry])

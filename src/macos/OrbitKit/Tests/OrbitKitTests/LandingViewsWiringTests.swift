@@ -26,6 +26,13 @@ final class LandingViewsWiringTests: XCTestCase {
             .joined(separator: "\n")
     }
 
+    func testCheckOutputRendersLogTextWithoutApplyingTimelineCopy() throws {
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        let log = try XCTUnwrap(page.components(separatedBy: "private struct LandingCheckLogView: View {").last)
+        XCTAssertTrue(log.contains("Text(entry.text)"), "Check output remains verbatim log text")
+        XCTAssertFalse(log.contains("LandingCheckCopy.timelineText(entry)"), "Log entries are not timeline entries")
+    }
+
     /// A LANDING session draws its project's Landings window, focused on it, in the console frame —
     /// the same `.console` node, so pushes, `orbit-session:` links and `/sessions/<id>` still reach it
     /// (owner 2026-10-27, contract §2.9 LS6 revision 28).
