@@ -130,6 +130,7 @@ export async function readDoneState(
       completionCriterionOverrideReason: true,
       revision: true,
       contentHash: true,
+      satisfiedBy: true,
       servingTasks: {
         where: { ownerId },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],

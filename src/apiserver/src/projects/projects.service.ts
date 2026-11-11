@@ -159,6 +159,7 @@ import {
   type CriterionSatisfaction,
   readCriterionSatisfaction,
 } from './project-criterion-satisfaction';
+import { CRITERION_SATISFIED_BY, type CriterionSatisfiedByValue } from './project-criterion-confirmation';
 import {
   type CriterionLanding,
   landingBranchesFor,
@@ -515,6 +516,7 @@ const ACCEPTANCE_DEFINITIONS_INCLUDE = {
     contentHash: true,
     semanticRevision: true,
     semanticHash: true,
+    satisfiedBy: true,
   },
 };
 
@@ -535,6 +537,7 @@ interface ResolvedAcceptanceEdit {
     completionCriterionOverrideReason: string | null;
     revision: number;
     contentHash: string;
+    satisfiedBy: CriterionSatisfiedByValue;
   }>;
   desired: Array<{
     id: string;
@@ -543,6 +546,8 @@ interface ResolvedAcceptanceEdit {
     text: string;
     verificationMethod: string;
     completionCriterionOverrideReason: string | null;
+    /** Resolved: what the request sent, or the row's own mode when it sent none. */
+    satisfiedBy: CriterionSatisfiedByValue;
   }>;
   direction: CriteriaEditDirection;
 }
@@ -669,6 +674,7 @@ type WithAcceptanceDefinitions = {
     contentHash: string;
     semanticRevision: number;
     semanticHash: string;
+    satisfiedBy?: CriterionSatisfiedByValue;
   }>;
 };
 
@@ -689,6 +695,8 @@ export function acceptanceCriteriaItemsOf(
     text: criterion.text,
     verificationMethod: criterion.verificationMethod,
     completionCriterionOverrideReason: criterion.completionCriterionOverrideReason ?? null,
+    // How it is met (migration 0545): by its tasks, or by a confirmation of its current revision.
+    satisfiedBy: criterion.satisfiedBy ?? 'TASKS',
     // The name `criterionKey` carries, beside the revision that says which wording it names.
     // Two fields rather than one content hash: `criterionKeyOf` has why. `contentHash` stays on
     // the projection — it is still what the row stores — and nothing derives the key from it.
@@ -736,8 +744,10 @@ function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project:
  */
 function criterionAnswer(
   derived: CriterionSatisfaction | undefined,
-): Partial<Pick<CriterionSatisfaction, 'satisfied' | 'unmet'>> {
-  return derived === undefined ? {} : { satisfied: derived.satisfied, unmet: derived.unmet };
+): Partial<Pick<CriterionSatisfaction, 'satisfied' | 'unmet' | 'confirmation'>> {
+  return derived === undefined
+    ? {}
+    : { satisfied: derived.satisfied, unmet: derived.unmet, confirmation: derived.confirmation };
 }
 
 /**
@@ -1289,11 +1299,14 @@ export class ProjectsService {
       text: string;
       verificationMethod: string;
       completionCriterionOverrideReason?: string | null;
+      satisfiedBy?: CriterionSatisfiedByValue;
     }>,
   ): Array<{
     text: string;
     verificationMethod: string;
     completionCriterionOverrideReason: string | null;
+    /** Undefined when the request did not say: a retained criterion keeps its mode. */
+    satisfiedBy: CriterionSatisfiedByValue | undefined;
   }> {
     if (!Array.isArray(items)) {
       throw new BadRequestException('acceptanceCriteriaItems must be an array');
@@ -1366,10 +1379,17 @@ export class ProjectsService {
           `most ${MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS} characters`,
         );
       }
+      const satisfiedBy = item?.satisfiedBy ?? undefined;
+      if (satisfiedBy !== undefined && !CRITERION_SATISFIED_BY.includes(satisfiedBy)) {
+        throw new BadRequestException(
+          `acceptance criterion ${index + 1} satisfiedBy must be one of ${CRITERION_SATISFIED_BY.join(', ')}`,
+        );
+      }
       return {
         text,
         verificationMethod,
         completionCriterionOverrideReason,
+        satisfiedBy,
       };
     });
     const total = normalized.reduce((sum, criterion) => sum + criterion.text.length, 0);
@@ -1446,6 +1466,7 @@ export class ProjectsService {
         completionCriterionOverrideReason: true,
         revision: true,
         contentHash: true,
+        satisfiedBy: true,
       },
     });
     const byId = new Map(existing.map((criterion) => [criterion.id, criterion]));
@@ -1471,7 +1492,15 @@ export class ProjectsService {
         throw new BadRequestException(`acceptance criterion id ${supplied ?? id} is repeated`);
       }
       used.add(id);
-      return { ...criterion, id, retainedId: supplied === undefined ? null : id, ordinal: index + 1 };
+      return {
+        ...criterion,
+        id,
+        retainedId: supplied === undefined ? null : id,
+        ordinal: index + 1,
+        // Not sent keeps what the row has, so a caller that predates the field and restates the
+        // set cannot flip an owner's CONFIRMATION criterion back to TASKS without saying so.
+        satisfiedBy: criterion.satisfiedBy ?? byId.get(id)?.satisfiedBy ?? 'TASKS',
+      };
     });
     // Classified against the rows as they still stand, which is the only state they are ever
     // classified against: nothing below this line writes.
@@ -1522,6 +1551,7 @@ export class ProjectsService {
             text: criterion.text,
             verificationMethod: criterion.verificationMethod,
             completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
+            satisfiedBy: criterion.satisfiedBy,
             contentHash,
             revision:
               previous.text === criterion.text
@@ -1539,6 +1569,7 @@ export class ProjectsService {
             text: criterion.text,
             verificationMethod: criterion.verificationMethod,
             completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
+            satisfiedBy: criterion.satisfiedBy,
             revision: 1,
             contentHash,
           },
@@ -1597,6 +1628,9 @@ export class ProjectsService {
       text: criterion.text,
       verificationMethod: criterion.verificationMethod,
       completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
+      // Only a CONFIRMATION criterion carries the field, so a TASKS-only proposal's digest is the
+      // one it had before migration 0545.
+      ...(criterion.satisfiedBy === 'CONFIRMATION' ? { satisfiedBy: criterion.satisfiedBy } : {}),
     })));
     const actionDigest = criteriaWeakeningActionDigest(request);
     // The seal of the set that stands, computed off the same rows and by the same function the
@@ -2001,6 +2035,9 @@ export class ProjectsService {
             ...(criterion.completionCriterionOverrideReason === null
               ? {}
               : { completionCriterionOverrideReason: criterion.completionCriterionOverrideReason }),
+            // A proposal states every criterion's mode: CONFIRMATION when it carries the field,
+            // TASKS when it does not (a proposal filed before 0545 knew no other mode).
+            satisfiedBy: criterion.satisfiedBy ?? 'TASKS',
           })),
         );
         await ProjectsService.replaceAcceptanceDefinitions(

@@ -139,6 +139,7 @@ function readingOf(confirmed: boolean, satisfied: boolean): DerivedProjectDoneRe
     satisfaction: [{
       definitionId: DEFINITION, ordinal: 1, revision: 1, satisfied,
       unmet: satisfied ? [] : [{ clause: 'DECLARATION_STALE', heldUpBy: [] }],
+      satisfiedBy: 'TASKS', confirmation: null,
     }],
     inFlight: [],
   };

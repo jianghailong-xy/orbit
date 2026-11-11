@@ -1857,6 +1857,31 @@ func (t *Transport) requestProjectDone(sessionID, id string, body map[string]int
 	return out, err
 }
 
+// criterionConfirmationCall is the coordinator's confirm, withdraw or start-a-check on one of its
+// project's CONFIRMATION criteria (migration 0545). The session header is the authority: the server
+// checks it against the project's own coordinator pointer.
+func (t *Transport) criterionConfirmationCall(sessionID, id, criterionID, path string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(criterionID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/criteria/"+
+		url.PathEscape(criterionID)+path, body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// reportCriterionCheck is an Agent check's verdict, from the session running it: the server finds
+// the attempt through that session's task.
+func (t *Transport) reportCriterionCheck(sessionID string, body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/criterion-checks/report", body, &out, taskOpTimeout,
+		sessionHeader(sessionID))
+	return out, err
+}
+
 // resolveOpenItem closes one of the project's exception items, with the reason the assignee gives
 // (contract §4.7's "标记已处理").
 //

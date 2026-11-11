@@ -108,6 +108,7 @@ test('create stores explicit assertions and required methods', async () => {
       text: 'the image boots',
       verificationMethod: 'Run the image smoke test',
       completionCriterionOverrideReason: 'A person judges the visible product behaviour',
+      satisfiedBy: 'TASKS',
       revision: 1,
     },
     {
@@ -115,6 +116,7 @@ test('create stores explicit assertions and required methods', async () => {
       text: 'the full suite passes',
       verificationMethod: 'Run npm test; require exit code 0',
       completionCriterionOverrideReason: 'This fixture exercises structured persistence',
+      satisfiedBy: 'TASKS',
       revision: 1,
     },
   ]);
@@ -713,6 +715,9 @@ test('the detail item is the authored declaration, with no derived verdict besid
   // the criterion says — no work is filed against it, so no work has met it.
   assert.deepEqual(project.acceptanceCriteriaItems[0], {
     ...definition,
+    // Migration 0545: met by its tasks (the default), so it carries no confirmation.
+    satisfiedBy: 'TASKS',
+    confirmation: null,
     key: criterionKeyOf(CRITERION_A_ID),
     satisfied: false,
     unmet: [{ clause: 'NO_WORK_SERVES_IT', heldUpBy: [] }],
@@ -752,6 +757,8 @@ test('the detail item is the authored declaration, with no derived verdict besid
   assert.deepEqual(project.derivedDone.criteria, [{
     definitionId: CRITERION_A_ID,
     satisfied: false,
+    satisfiedBy: 'TASKS',
+    confirmation: null,
     landing: 'UNKNOWN',
     independence: 'INDEPENDENT',
     conflicts: [],
@@ -925,6 +932,7 @@ test('a structured update preserves ids and revisions across reorder, and increm
     text: 'Image boots',
     verificationMethod: 'Smoke the image',
     completionCriterionOverrideReason: 'A person judges the visible product behaviour',
+    satisfiedBy: 'TASKS',
     contentHash: definitionWrites[2][2].contentHash,
     revision: 1,
   }]);
@@ -933,6 +941,7 @@ test('a structured update preserves ids and revisions across reorder, and increm
     text: 'Build succeeds',
     verificationMethod: 'EXECUTABLE',
     completionCriterionOverrideReason: 'This fixture exercises structured persistence',
+    satisfiedBy: 'TASKS',
     contentHash: definitionWrites[3][2].contentHash,
     revision: 3,
   }]);

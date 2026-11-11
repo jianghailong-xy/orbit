@@ -69,6 +69,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'promotionRequestId',
   // `project_integration_job.codebase_id` — the project code binding a job ran against (0281).
   'codebaseId',
+  // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).
+  'checkTaskId',
   'id',
   'ownerId',
   'userId',

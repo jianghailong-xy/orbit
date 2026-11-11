@@ -2920,7 +2920,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0530_wiki_repo_probe',
       // 0535 adds project's non-code mark, who wrote it and when, and one CHECK; no preserved rows, triggers or DONE
       // fence change, and no row is written.
-      '0535_project_non_code_mark'],
+      '0535_project_non_code_mark',
+      // 0545 adds criterion_satisfied_by on the criterion definition and the
+      // project_criterion_confirmation table, and restates 0234's normalize function with the mode
+      // as a third input (a TASKS row's hashes are computed exactly as before). No completion ledger,
+      // DONE fence, preserved trigger or function is changed, and no row is written.
+      '0545_criterion_confirmation'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

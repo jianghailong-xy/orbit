@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
 
+import type {
+  CriterionConfirmationStanding,
+  CriterionSatisfiedByValue,
+} from './project-criterion-confirmation';
 import { Logger } from '@nestjs/common';
 import type { PushService } from '../push/push.service';
 import { Prisma, ProjectStatus } from '@prisma/client';
@@ -159,6 +163,11 @@ export interface DerivedDoneCriterion {
    *  set on every criterion that is not LANDED, and on a LANDED one that had nothing to land. Null
    *  exactly when it is on main by work of its own. A card groups by this and decides nothing. */
   landingReason: CriterionLandingReason | null;
+  /** How it is met (migration 0545), and — for a CONFIRMATION criterion — who confirmed which
+   *  revision, when, with what note, and whether that confirmation has gone stale. Optional for the
+   *  fixtures that build a criterion by hand; `derivedDoneFromLanes` always sets both. */
+  satisfiedBy?: CriterionSatisfiedByValue;
+  confirmation?: CriterionConfirmationStanding | null;
 }
 
 /**
@@ -435,15 +444,23 @@ export interface CriterionLandingWithReason extends CriterionLandingAnswer {
  * two cannot describe different work.
  */
 export function criterionLandingWithReasons(
-  facts: ReadonlyArray<{ id: string; servingTasks: ReadonlyArray<LandingReasonServingTask> }>,
+  facts: ReadonlyArray<{
+    id: string;
+    satisfiedBy?: 'TASKS' | 'CONFIRMATION';
+    servingTasks: ReadonlyArray<LandingReasonServingTask>;
+  }>,
   branches: LandingBranches,
   inFlight: readonly InFlightLandingJob[],
 ): CriterionLandingWithReason[] {
-  const serving = new Map(facts.map((definition) => [definition.id, definition.servingTasks]));
+  const byId = new Map(facts.map((definition) => [definition.id, definition]));
   return criterionLanding(facts, branches).map((answer) => ({
     ...answer,
     landingReason: criterionLandingReason(
-      { landing: answer.landing, servingTasks: serving.get(answer.definitionId) ?? [] },
+      {
+        landing: answer.landing,
+        servingTasks: byId.get(answer.definitionId)?.servingTasks ?? [],
+        satisfiedBy: byId.get(answer.definitionId)?.satisfiedBy,
+      },
       branches,
       inFlight,
     ),
@@ -490,6 +507,8 @@ export function derivedDoneFromLanes(
     landingReason: landed.has(row.definitionId)
       ? landed.get(row.definitionId)!.landingReason
       : ('NO_RECEIPT' satisfies CriterionLandingReason),
+    satisfiedBy: row.satisfiedBy,
+    confirmation: row.confirmation,
   }));
 
   return deriveProjectDone(criteria, confirmation, nonCode);

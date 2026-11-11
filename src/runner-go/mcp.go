@@ -843,6 +843,47 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(projectDoneRequestFiled(raw), false)
 
+	case "criterion_confirm", "criterion_confirmation_withdraw", "criterion_check_start":
+		id := getString(args, "projectId")
+		criterionID := getString(args, "criterionId")
+		if id == "" || criterionID == "" {
+			return toolResult("projectId and criterionId are required", true)
+		}
+		body := map[string]interface{}{}
+		path := "/confirmations"
+		switch name {
+		case "criterion_confirm":
+			copyIfPresent(body, args, "note", "attachmentIds", "revision")
+		case "criterion_confirmation_withdraw":
+			path = "/confirmations/withdraw"
+		case "criterion_check_start":
+			path = "/checks"
+			copyIfPresent(body, args, "workspaceId", "instructions")
+		}
+		// The acting session IS the authority: the server checks it against the project's own
+		// coordinator pointer, so a call from any other conversation writes nothing.
+		raw, err := s.t.criterionConfirmationCall(s.sessionID, id, criterionID, path, body)
+		if err != nil {
+			return toolResult(name+" failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "criterion_check_report":
+		verdict := getString(args, "verdict")
+		if verdict != "PASS" && verdict != "FAIL" {
+			return toolResult("verdict must be PASS or FAIL", true)
+		}
+		if s.sessionID == "" {
+			return toolResult("criterion_check_report requires an Orbit Session: it reports the check that session is running", true)
+		}
+		body := map[string]interface{}{"verdict": verdict}
+		copyIfPresent(body, args, "note", "attachmentIds")
+		raw, err := s.t.reportCriterionCheck(s.sessionID, body)
+		if err != nil {
+			return toolResult("criterion_check_report failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "open_item_resolve":
 		id := getString(args, "projectId")
 		itemID := getString(args, "itemId")
@@ -4171,6 +4212,111 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					}, "criterionKey", "whyNotProven", "coordinatorChecked", "evidenceRefs"),
 				},
 			}, "projectId", "judgment", "gaps"),
+		},
+		{
+			"name": "criterion_confirm",
+			"description": "Confirm that one of this project's acceptance criteria holds, for a " +
+				"criterion met by confirmation (satisfiedBy CONFIRMATION in project_get's " +
+				"acceptanceCriteriaItems; set it with project_update). Only the conversation " +
+				"coordinating this project may call it. The confirmation names the criterion's " +
+				"current revision: it stops counting the moment the criterion's text, method or mode " +
+				"is revised, and the criterion is unmet again until somebody confirms the new one. " +
+				"Pass `revision` (the one you read) so a criterion revised under you is refused " +
+				"(409 CRITERION_REVISION_MOVED) rather than confirmed. A criterion met by its tasks " +
+				"is refused (409 CRITERION_NOT_CONFIRMATION_MODE). To have an agent decide instead, " +
+				"start an Agent check with criterion_check_start.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project, as shown in its web UI URL (/projects/<id>).",
+				},
+				"criterionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The criterion, as project_get spells it in acceptanceCriteriaItems[].id.",
+				},
+				"note": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional: what you checked. Shown beside the confirmation.",
+				},
+				"attachmentIds": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Optional: uploads (file_upload ids) that back it up.",
+				},
+				"revision": map[string]interface{}{
+					"type":        "integer",
+					"description": "Optional: the criterion revision you read; refused if it has moved.",
+				},
+			}, "projectId", "criterionId"),
+		},
+		{
+			"name": "criterion_confirmation_withdraw",
+			"description": "Withdraw the standing confirmation of one of this project's criteria met " +
+				"by confirmation, whoever gave it — the owner, this coordinator or an Agent check. " +
+				"The criterion is unmet again until somebody confirms it. The confirmation stays on " +
+				"record, stamped as withdrawn. Only the conversation coordinating this project may " +
+				"call it; a criterion with nothing standing is refused (409 CRITERION_NOTHING_TO_WITHDRAW).",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project, as shown in its web UI URL (/projects/<id>).",
+				},
+				"criterionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The criterion, as project_get spells it in acceptanceCriteriaItems[].id.",
+				},
+			}, "projectId", "criterionId"),
+		},
+		{
+			"name": "criterion_check_start",
+			"description": "Start an Agent check of one of this project's criteria met by " +
+				"confirmation: a run, dispatched as a codeless task of this project, that reads the " +
+				"criterion and its verification method and reports PASS or FAIL. A PASS confirms the " +
+				"criterion's current revision (confirmer AGENT_CHECK); a FAIL is recorded as a failed " +
+				"attempt and leaves it unmet. Returns at once with the check's task id; the verdict " +
+				"shows in project_get's confirmation. Only the conversation coordinating this project " +
+				"may call it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project, as shown in its web UI URL (/projects/<id>).",
+				},
+				"criterionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The criterion, as project_get spells it in acceptanceCriteriaItems[].id.",
+				},
+				"workspaceId": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional: the workspace whose agent runs the check. Defaults to this project's coordinator workspace.",
+				},
+				"instructions": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional: anything the check should know beyond the criterion and its method.",
+				},
+			}, "projectId", "criterionId"),
+		},
+		{
+			"name": "criterion_check_report",
+			"description": "Report the verdict of the Agent check this session is running: PASS when " +
+				"the criterion it was started for holds by its verification method, FAIL otherwise — " +
+				"including when you could not establish it. Call it once, at the end. Only a session " +
+				"started as an Agent check may call it (404 CRITERION_CHECK_NOT_FOUND otherwise).",
+			"inputSchema": obj(map[string]interface{}{
+				"verdict": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"PASS", "FAIL"},
+					"description": "PASS or FAIL.",
+				},
+				"note": map[string]interface{}{
+					"type":        "string",
+					"description": "What you checked and what you found. Shown beside the verdict.",
+				},
+				"attachmentIds": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Optional: uploads (file_upload ids) that back it up.",
+				},
+			}, "verdict"),
 		},
 		{
 			"name": "open_item_resolve",

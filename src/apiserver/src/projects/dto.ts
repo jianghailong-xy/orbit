@@ -36,6 +36,7 @@ import {
 } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
+import { CRITERION_SATISFIED_BY, type CriterionSatisfiedByValue } from './project-criterion-confirmation';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
 import { MAX_INTEGRATION_ABANDON_REASON } from './project-integration-abandon';
@@ -155,6 +156,13 @@ export class CreateProjectAcceptanceCriterionDto {
    * declaration that no longer exists should be kept is the account owner's call, not this DTO's. */
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
   completionCriterionOverrideReason?: string;
+
+  /** How this criterion is met (migration 0545): `TASKS`, by the work filed under it (the
+   * default), or `CONFIRMATION`, by the owner, the coordinator or an Agent check saying it holds.
+   * Omitted on an update keeps the criterion's current mode. A change of mode is a change of
+   * meaning: it is held for the owner like a rewording, and bumps the criterion's revision. */
+  @IsOptional() @IsIn(CRITERION_SATISFIED_BY)
+  satisfiedBy?: CriterionSatisfiedByValue;
 
   // ── The four wiring fields migration 0233 removed ────────────────────────────────────────────
   // Declared, rather than simply deleted, and that difference is the whole point of declaring
@@ -976,4 +984,50 @@ export class MoveCriterionDto implements MoveCriterionRequestBody {
   @IsOptional() @IsPublicId() toProjectId?: string;
   @IsOptional() @ValidateNested() @Type(() => MoveCriterionNewProjectDto)
   newProject?: MoveCriterionNewProjectDto;
+}
+
+/** The longest note a criterion confirmation or an Agent check's report may carry. */
+export const MAX_CRITERION_CONFIRMATION_NOTE_CHARS = 4000;
+
+/**
+ * Confirming a CONFIRMATION criterion holds (migration 0545): the owner's
+ * `POST /projects/:id/criteria/:criterionId/confirmations`, and the coordinator's
+ * `criterion_confirm`. Every field is optional — "what did you check" included.
+ */
+export class ConfirmCriterionDto {
+  /** What was checked. */
+  @IsOptional() @IsString() @MaxLength(MAX_CRITERION_CONFIRMATION_NOTE_CHARS)
+  note?: string;
+
+  /** Uploads that back it up, already this account's. */
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsPublicId({ each: true })
+  attachmentIds?: string[];
+
+  /** The revision the confirmer read. Sent, it must still be the criterion's: a confirmation of
+   *  wording that moved underneath the reader is refused rather than recorded against the new one. */
+  @IsOptional() @IsInt() @Min(1)
+  revision?: number;
+}
+
+/** Starting an Agent check of one CONFIRMATION criterion. */
+export class StartCriterionCheckDto {
+  /** The workspace whose agent runs the check. Defaults to the project's coordinator workspace. */
+  @IsOptional() @IsPublicId()
+  workspaceId?: string;
+
+  /** Anything the check should know beyond the criterion and its verification method. */
+  @IsOptional() @IsString() @MaxLength(MAX_CRITERION_CONFIRMATION_NOTE_CHARS)
+  instructions?: string;
+}
+
+/** An Agent check's verdict, from the session running it (`criterion_check_report`). */
+export class ReportCriterionCheckDto {
+  @IsIn(['PASS', 'FAIL'])
+  verdict!: 'PASS' | 'FAIL';
+
+  @IsOptional() @IsString() @MaxLength(MAX_CRITERION_CONFIRMATION_NOTE_CHARS)
+  note?: string;
+
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsPublicId({ each: true })
+  attachmentIds?: string[];
 }

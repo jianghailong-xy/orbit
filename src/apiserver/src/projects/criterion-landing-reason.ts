@@ -90,6 +90,8 @@ export interface LandingReasonServingTask extends LandingServingTask {
 export interface CriterionLandingReasonFacts {
   landing: CriterionLanding;
   servingTasks: ReadonlyArray<LandingReasonServingTask>;
+  /** A CONFIRMATION criterion has nothing to land (migration 0545). Absent reads as TASKS. */
+  satisfiedBy?: 'TASKS' | 'CONFIRMATION';
 }
 
 /** Precedence when a criterion's held work disagrees: what is moving, then real work waiting, then
@@ -148,6 +150,7 @@ export function criterionLandingReason(
   branches: LandingBranches,
   inFlight: ReadonlyArray<InFlightLandingJob>,
 ): CriterionLandingReason | null {
+  if (criterion.satisfiedBy === 'CONFIRMATION') return 'NOTHING_TO_LAND';
   const delivery = criterion.servingTasks.filter((task) => !taskHasNothingToLand(task));
   if (criterion.landing === 'LANDED') {
     if (delivery.length > 0) return null;
@@ -185,11 +188,16 @@ export async function readCriterionLandingReasonFacts(
   prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectIntegrationJob' | 'session'>,
   ownerId: string,
   projectId: string,
-): Promise<Array<{ id: string; servingTasks: LandingReasonServingTask[] }>> {
+): Promise<Array<{
+  id: string;
+  satisfiedBy: 'TASKS' | 'CONFIRMATION';
+  servingTasks: LandingReasonServingTask[];
+}>> {
   const definitions = await prisma.projectAcceptanceCriterionDefinition.findMany({
     where: { projectId, project: { ownerId } },
     select: {
       id: true,
+      satisfiedBy: true,
       servingTasks: { where: { ownerId }, select: LANDING_REASON_SERVING_WORK_SELECT },
     },
   });
