@@ -55,7 +55,7 @@ public struct SessionMoveTarget: Codable, Equatable, Hashable, Sendable, Identif
     /// The folders the session can be filed in there.
     public let folders: [SessionMoveFolder]
     /// The session is a project's coordinator and a new coordinator for that project could open here
-    /// (enabled, with a runner): the row's Start new here… when the conversation itself can't come.
+    /// (enabled, with a runner): Change offers Start a new one there when the conversation itself can't come.
     /// False for any other session, and from a server that predates it.
     public let startsCoordinator: Bool
 

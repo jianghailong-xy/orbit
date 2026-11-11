@@ -6,7 +6,7 @@ import {
   SessionLifecycleState,
   SessionRunState,
 } from '@orbit/shared';
-import { START_COORDINATOR_COPY } from '../lib/coordinatorWorkspace';
+import { CHANGE_COPY } from '../lib/coordinatorWorkspace';
 import { CoordinatorProgressRows } from './ProjectProgressStatus';
 import { Button } from './ui/Button';
 import { Menu } from './ui/Menu';
@@ -130,12 +130,10 @@ export type CoordinatorAction =
   | 'enable-workspace'
   | 'restore-workspace'
   | 'bind-workspace'
-  /** Start the next coordinator in a workspace the reader picks (`replace` with a workspace). Also
-   *  the way out of a workspace that broke: no separate rebind. */
-  | 'start-elsewhere'
-  /** Move this conversation to another workspace — the session's own Move panel; the project's
-   *  coordination goes with it. */
-  | 'move';
+  /** Change where the project is coordinated from: the conversation moves along, or a new one opens
+   *  there (docs/mocks/coordinator-move-workspace/04-change). Also the way out of a workspace that
+   *  broke: no separate rebind. */
+  | 'change-coordinator-workspace';
 
 /** The command-centre parent owns width. The layout marker remains part of the presentational
  *  contract so responsive variants can be introduced without making this card read the viewport. */
@@ -603,8 +601,8 @@ function Live({
             name={coordination.workspaceName}
             tone="neutral"
             action={
-              <Button variant="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('move')}>
-                Move…
+              <Button variant="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('change-coordinator-workspace')}>
+                {CHANGE_COPY.link}
               </Button>
             }
           />
@@ -670,22 +668,11 @@ function Live({
                     <div style={{ ...MUTED, whiteSpace: 'normal' }}>
                       {finished
                         ? 'Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from.'
-                        : 'Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable.'}
+                        : 'Completes this conversation first, then opens an empty one here. Nothing is deleted — it stays readable.'}
                     </div>
                   </div>
                 ),
                 onSelect: () => onAction?.('replace'),
-              },
-              {
-                key: 'start-elsewhere',
-                textValue: START_COORDINATOR_COPY.menuTitle,
-                label: (
-                  <div style={{ padding: '3px 0', maxWidth: 300 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{START_COORDINATOR_COPY.menuTitle}</div>
-                    <div style={{ ...MUTED, whiteSpace: 'normal' }}>{START_COORDINATOR_COPY.menuDetail}</div>
-                  </div>
-                ),
-                onSelect: () => onAction?.('start-elsewhere'),
               },
             ]}
             trigger={<Button variant="primary" className="project-coordinator-caret" aria-label="More coordinator actions" icon={<DownOutlined />} />}
@@ -725,8 +712,8 @@ function Trashed({
       {openability.landing.workspaceName ? (
         <p style={{ ...MUTED, margin: '8px 0 0' }}>
           The replacement opens in {openability.landing.workspaceName}.{' '}
-          <Button variant="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('start-elsewhere')}>
-            Change
+          <Button variant="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('change-coordinator-workspace')}>
+            {CHANGE_COPY.link}
           </Button>
         </p>
       ) : null}
@@ -772,8 +759,8 @@ function Unavailable({
             {fix.label}
           </Button>
         ) : null}
-        <Button size="small" onClick={() => onAction?.('start-elsewhere')}>
-          {START_COORDINATOR_COPY.menuTitle}
+        <Button size="small" onClick={() => onAction?.('change-coordinator-workspace')}>
+          {CHANGE_COPY.button}
         </Button>
       </div>
     </>

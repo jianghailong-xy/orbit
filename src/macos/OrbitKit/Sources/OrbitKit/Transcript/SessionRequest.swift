@@ -65,10 +65,14 @@ public struct SessionRequestView: Decodable, Equatable, Sendable {
     public let replyOption: Int?
     public let excerpt: String?
     public let closeReason: String?
+    /// A task run's question to its coordinator (`RUN_QUESTION`): its card as it stands now. The card
+    /// the turn's echo carries was read when the turn was handed out, before anyone answered, so a
+    /// client draws this one over it. Nil for any other request, or a card this client cannot read.
+    public let runQuestion: RunQuestionCard?
 
     private enum CodingKeys: String, CodingKey {
         case requestId, state, fromSessionId, fromTitle, toSessionId, toTitle, requestPreview
-        case replyOptions, replyBy, createdAt, closedAt, replyText, replyOption, excerpt, closeReason
+        case replyOptions, replyBy, createdAt, closedAt, replyText, replyOption, excerpt, closeReason, runQuestion
     }
 
     public init(requestId: String, state: SessionRequestState?, fromSessionId: String = "",
@@ -76,7 +80,7 @@ public struct SessionRequestView: Decodable, Equatable, Sendable {
                 requestPreview: String = "", replyOptions: [SessionReplyOption]? = nil,
                 replyBy: String, createdAt: String? = nil, closedAt: String? = nil,
                 replyText: String? = nil, replyOption: Int? = nil, excerpt: String? = nil,
-                closeReason: String? = nil) {
+                closeReason: String? = nil, runQuestion: RunQuestionCard? = nil) {
         self.requestId = requestId
         self.state = state
         self.fromSessionId = fromSessionId
@@ -92,6 +96,7 @@ public struct SessionRequestView: Decodable, Equatable, Sendable {
         self.replyOption = replyOption
         self.excerpt = excerpt
         self.closeReason = closeReason
+        self.runQuestion = runQuestion
     }
 
     public init(from decoder: Decoder) throws {
@@ -111,6 +116,7 @@ public struct SessionRequestView: Decodable, Equatable, Sendable {
         replyOption = try c.decodeIfPresent(Int.self, forKey: .replyOption)
         excerpt = try c.decodeIfPresent(String.self, forKey: .excerpt)
         closeReason = try c.decodeIfPresent(String.self, forKey: .closeReason)
+        runQuestion = RunQuestionCard.parseCard(try? c.decodeIfPresent(JSONValue.self, forKey: .runQuestion))
     }
 }
 

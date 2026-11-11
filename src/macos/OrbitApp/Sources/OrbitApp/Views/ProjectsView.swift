@@ -376,12 +376,11 @@ struct ProjectDetailView: View {
     @State private var confirmingStatus: ProjectStatus?
     @State private var confirmingDelete = false
     @State private var confirmingReplace = false
-    /// Start a new coordinator in…'s pick of another workspace, while its confirmation is up.
-    @State private var startingIn: CoordinatorWorkspaceRow?
-    #if os(iOS)
-    /// The coordinator conversation the block's Move… opened the Move panel on.
-    @State private var movingCoordinator: Session?
-    #endif
+    /// Change workspace's pick, while its confirmation is up: the row, and the `move-targets` answer
+    /// it was read from (nil when there is no conversation to bring).
+    @State private var changingTo: CoordinatorChangePick?
+    /// Move conversation's step while it runs (an End first can take a while).
+    @State private var changePhase: SessionWorkspaceMove.Phase?
     /// Delivery's press to the agent's way while a merge into main is live: asked first, then
     /// written (owner decision 2026-11-10). Nil while nothing is being asked.
     @State private var confirmingAgentPush: ProjectIntegrationView?
@@ -557,12 +556,16 @@ struct ProjectDetailView: View {
                             pageSheet = nil
                             openTask(taskID)
                         })
-                case .coordinatorWorkspace:
-                    CoordinatorWorkspaceSheet(projectTitle: document.title,
-                                              currentWorkspaceID: store.coordinator?.coordination.workspaceId) { row in
+                case .coordinatorChange:
+                    CoordinatorChangeSheet(projectTitle: document.title,
+                                           sessionID: CoordinatorChangeLogic.conversationID(store.coordinator),
+                                           currentWorkspaceID: store.coordinator?.coordination.workspaceId,
+                                           currentWorkspaceName: store.coordinator?.coordination.workspaceName) { row, targets in
                         pageSheet = nil
                         // The question goes up once the sheet is down: one panel at a time.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { pickCoordinatorWorkspace(row, store) }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            changingTo = CoordinatorChangePick(row: row, targets: targets)
+                        }
                     }
                 }
             }
@@ -583,31 +586,27 @@ struct ProjectDetailView: View {
         } message: { blocker in
             Text(ProjectPage.resolveBlockerMessage(blocker))
         }
-        .orbitConfirmation({ StartCoordinatorCopy.title($0.name) },
-                           isPresented: Binding(get: { startingIn != nil }, set: { if !$0 { startingIn = nil } }),
-                           presenting: startingIn) { row in
-            let outgoing = OutgoingCoordinator(store.coordinator)
-            Button(StartCoordinatorCopy.action(row.name, outgoing: outgoing), role: .destructive) {
-                replaceCoordinator(store, inWorkspace: row.workspaceId)
+        // Change workspace's one question (04-change): Move conversation or Start a new one there
+        // where both work, only the new start — saying why — where the conversation cannot come.
+        .orbitConfirmation({ CoordinatorChangeCopy.title(project: document.title, to: $0.row.name) },
+                           isPresented: Binding(get: { changingTo != nil }, set: { if !$0 { changingTo = nil } }),
+                           presenting: changingTo) { pick in
+            if pick.row.way == .move, let targets = pick.targets {
+                Button(CoordinatorChangeCopy.move) { moveCoordinatorConversation(store, to: pick.row, targets: targets) }
+                    .keyboardShortcut(.defaultAction)
+                Button(CoordinatorChangeCopy.startThere) { replaceCoordinator(store, inWorkspace: pick.row.workspaceId) }
+                Button(CoordinatorChangeCopy.cancel, role: .cancel) {}
+            } else {
+                let outgoing = OutgoingCoordinator(store.coordinator)
+                Button(CoordinatorChangeCopy.newAction(pick.row.name, outgoing: outgoing),
+                       role: outgoing == .open ? .destructive : nil) {
+                    replaceCoordinator(store, inWorkspace: pick.row.workspaceId)
+                }
+                Button(CoordinatorChangeCopy.cancel, role: .cancel) {}
             }
-            Button(StartCoordinatorCopy.keep, role: .cancel) {}
-        } message: { row in
-            Text(StartCoordinatorCopy.paragraphs(project: document.title, to: row.name,
-                                                 from: store.coordinator?.coordination.workspaceName,
-                                                 outgoing: OutgoingCoordinator(store.coordinator))
-                    .joined(separator: "\n\n"))
+        } message: { pick in
+            Text(changeParagraphs(pick, store).joined(separator: "\n\n"))
         }
-        #if os(iOS)
-        // Move… on the coordinator block: the conversation's own Move panel, the project's
-        // coordination going with it. The page is read again once it closes.
-        .sheet(item: $movingCoordinator, onDismiss: { Task { await store.load() } }) { session in
-            if let workspace = model.agents?.agent(session.agent?.id ?? session.agentId
-                                                   ?? store.coordinator?.coordination.workspaceId ?? "") {
-                SessionMoveSheet(session: session, workspace: workspace,
-                                 listed: model.agents?.allSessions ?? []).environment(model)
-            }
-        }
-        #endif
     }
 
     private func header(_ store: ProjectDetailModel, _ document: ProjectDocument, now: Date) -> some View {
@@ -1004,7 +1003,7 @@ struct ProjectDetailView: View {
     }
 
     /// Start the next coordinator and go to it, empty — where the project is coordinated now, or in
-    /// the workspace Start a new coordinator in… picked.
+    /// the workspace Change workspace picked.
     private func replaceCoordinator(_ store: ProjectDetailModel, inWorkspace workspaceID: String? = nil) {
         Task {
             switch await store.replaceCoordinator(inWorkspace: workspaceID) {
@@ -1018,24 +1017,37 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// A workspace picked in Start a new coordinator in…: the current one is the plain Start a new
-    /// coordinator, asked as it always is; another asks Start a new coordinator in <name>?.
-    private func pickCoordinatorWorkspace(_ row: CoordinatorWorkspaceRow, _ store: ProjectDetailModel) {
-        guard row.isCurrent else {
-            startingIn = row
-            return
+    /// The confirmation's words for a pick: both ways when the conversation can come along, else the
+    /// new start with why.
+    private func changeParagraphs(_ pick: CoordinatorChangePick, _ store: ProjectDetailModel) -> [String] {
+        let from = store.coordinator?.coordination.workspaceName
+        if pick.row.way == .move, let targets = pick.targets {
+            return CoordinatorChangeCopy.moveParagraphs(
+                to: pick.row.name, from: from ?? "", needsEnd: targets.needsEnd,
+                files: SessionMoveCopy.filesSentence(targets, from: from ?? ""))
         }
-        if OutgoingCoordinator(store.coordinator) == .open { confirmingReplace = true } else { replaceCoordinator(store) }
+        return CoordinatorChangeCopy.newParagraphs(to: pick.row.name, from: from,
+                                                   outgoing: OutgoingCoordinator(store.coordinator),
+                                                   reason: pick.row.reason)
     }
 
-    #if os(iOS)
-    /// Move…: the Move panel on the coordinator conversation, as the app holds it or the server has it.
-    private func moveCoordinator(_ sessionID: String) {
+    /// Move conversation: End it first when the server says so, then move it into the picked
+    /// workspace's No Folder (the project page files nothing); the project's coordination goes with
+    /// it on the server. The page is read again either way, since a move stopped after the End has
+    /// still ended the conversation.
+    private func moveCoordinatorConversation(_ store: ProjectDetailModel, to row: CoordinatorChangeRow,
+                                             targets: SessionMoveTargets) {
+        guard let sessionID = CoordinatorChangeLogic.conversationID(store.coordinator),
+              let target = targets.targets.first(where: { $0.workspaceId == row.workspaceId }) else { return }
+        changePhase = targets.needsEnd ? .ending : .moving
         Task {
-            if let session = await model.sessionForMove(sessionID) { movingCoordinator = session }
+            let refused = await model.moveSession(sessionID, to: target, folder: nil,
+                                                  endingFirst: targets.needsEnd) { changePhase = $0 }
+            changePhase = nil
+            await store.load()
+            if let refused { notice = refused }
         }
     }
-    #endif
 
     // MARK: work overview
 
@@ -1225,8 +1237,14 @@ struct ProjectDetailView: View {
                 // The way out of a workspace that broke, or of a conversation in Trash: the next
                 // coordinator, somewhere it can open.
                 if status.state == .unavailable || status.state == .trashed {
-                    Button(StartCoordinatorCopy.menuTitle) { pageSheet = .coordinatorWorkspace }
-                        .disabled(store.busy)
+                    Button(CoordinatorChangeCopy.button) { pageSheet = .coordinatorChange }
+                        .disabled(store.busy || changePhase != nil)
+                }
+                if let changePhase {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(SessionMoveCopy.progress(changePhase)).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
                 }
                 if status.state == .live, coordination.session != nil {
                     let note = ProjectPage.dispatchNote(openTaskCount: document.tasksByStatus.map { $0["OPEN"] ?? 0 },
@@ -1242,20 +1260,12 @@ struct ProjectDetailView: View {
                     // coordinator is a one-way door, so it is held behind the press, where it is
                     // chosen rather than hit.
                     Menu {
-                        #if os(iOS)
-                        if let session = coordination.session {
-                            Button(StartCoordinatorCopy.move) { moveCoordinator(session.id) }
-                        }
-                        #endif
+                        Button(CoordinatorChangeCopy.button) { pageSheet = .coordinatorChange }
                         Button {
                             if finished { replaceCoordinator(store) } else { confirmingReplace = true }
                         } label: {
                             Text(ProjectPage.startNewCoordinator)
                             Text(ProjectPage.startNewCoordinatorDetail(finished: finished))
-                        }
-                        Button { pageSheet = .coordinatorWorkspace } label: {
-                            Text(StartCoordinatorCopy.menuTitle)
-                            Text(StartCoordinatorCopy.menuDetail)
                         }
                     } label: {
                         Text(ProjectPage.coordinatorPress(finished: finished,
@@ -1267,7 +1277,7 @@ struct ProjectDetailView: View {
                     .menuStyle(.button)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(store.busy)
+                    .disabled(store.busy || changePhase != nil)
                     // On the menu that asks, so the panel opens against it rather than at the top of
                     // the page.
                     .orbitConfirmation(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace) {
@@ -2369,6 +2379,13 @@ private func projectStatusLabel(_ document: ProjectDocument) -> String {
     return document.status == .done ? "Completed" : document.status.label
 }
 
+/// A workspace picked in Change workspace, and the `move-targets` answer it was read from (nil when
+/// there was no conversation to bring).
+private struct CoordinatorChangePick {
+    let row: CoordinatorChangeRow
+    let targets: SessionMoveTargets?
+}
+
 /// The sheets the project page puts up over itself.
 private enum ProjectPageSheet: String, Identifiable {
     case openItems
@@ -2382,8 +2399,8 @@ private enum ProjectPageSheet: String, Identifiable {
     case mainBranch
     /// The jobs the Work overview's landing row counts, from a press on that row.
     case landingJobs
-    /// Start a new coordinator in…: the owner's workspaces to open the next coordinator in.
-    case coordinatorWorkspace
+    /// Change workspace: where the project is coordinated from.
+    case coordinatorChange
 
     var id: String { rawValue }
 }

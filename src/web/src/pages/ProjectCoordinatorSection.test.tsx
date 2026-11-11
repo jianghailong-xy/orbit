@@ -24,13 +24,20 @@ import { clearToasts } from '../lib/toastStore';
  * A real DOM rather than `react-dom/server`, for the reason the assembly suite uses one: a button
  * has to actually be pressed for what it does to mean anything.
  */
-vi.mock('../api', async (importOriginal) => ({
-  // `ApiError` real, because the refusal branch turns on `instanceof` plus a status and a code:
-  // a stand-in class here would let it pass against a shape the client never throws.
-  ...(await importOriginal<typeof import('../api')>()),
-  api: vi.fn(),
-  restoreSession: vi.fn(),
-}));
+vi.mock('../api', async (importOriginal) => {
+  const api = vi.fn();
+  return {
+    // `ApiError` real, because the refusal branch turns on `instanceof` plus a status and a code:
+    // a stand-in class here would let it pass against a shape the client never throws.
+    ...(await importOriginal<typeof import('../api')>()),
+    api,
+    restoreSession: vi.fn(),
+    // Change's two session doors, through the same mock so a case sees every request in one place.
+    getSessionMoveTargets: (sessionId: string) => api(`/sessions/${sessionId}/move-targets`),
+    moveSession: (sessionId: string, body: { folderId: string | null; workspaceId?: string }) =>
+      api(`/sessions/${sessionId}/move`, { method: 'POST', body: { folderId: body.folderId, ...(body.workspaceId ? { workspaceId: body.workspaceId } : {}) } }),
+  };
+});
 const { api, ApiError } = await import('../api');
 const apiMock = vi.mocked(api);
 
@@ -551,7 +558,7 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
 
     // The server's own sentence, and the write it names...
     expect(container.textContent).toMatch(/rebind this project/i);
-    expect(buttonLabels()).toContain('Start a new coordinator in…');
+    expect(buttonLabels()).toContain('Change workspace…');
     // ...and NOT a Retry. The refusal is a property of committed rows: the same press returns the
     // same 409 forever, so an affordance that only repeats it is an affordance that cannot work.
     expect(buttonLabels().some((l) => /^Retry$/i.test(l))).toBe(false);
@@ -571,50 +578,64 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     expect(buttonLabels().some((l) => /Rebind/i.test(l))).toBe(false);
   });
 
-  // The one test here that drives two dialog portals as well as this section — two more paints.
-  // What it waits on is a loaded machine's render, not a hang, so the case budget is the suite's.
-  it('starts the next coordinator elsewhere rather than retrying, from a read that already says no press can win', async () => {
-    const writes: Array<[string, unknown]> = [];
-    serve(unavailableStatus());
+  // The move-targets answer Change reads for the standing conversation: one workspace the conversation
+  // can go to, one only a new coordinator can open in, one nothing can.
+  const changeTargets = {
+    workspaceId: '3CuIHiSJZBQ7nLVUwc7ekz', folderId: null, folders: [], reason: null, needsEnd: false,
+    branch: null, changedFiles: 0, unmergedFiles: 0, mergeTarget: null,
+    coordinates: { projectId: PROJECT, title: 'Website Revamp' },
+    targets: [
+      { workspaceId: 'w-move', name: 'orbit-prod', provider: 'claude', runnerId: 'r-1', runnerName: 'workstation-gpu',
+        runnerOnline: true, workDir: '/srv/prod', reason: null, conversation: 'continues', folders: [], startsCoordinator: true },
+      { workspaceId: 'w-other', name: 'orbit-spare', provider: 'codex', runnerId: 'r-2', runnerName: 'wikova',
+        runnerOnline: true, workDir: '/srv/spare', reason: 'Codex keeps this conversation on workstation-gpu',
+        conversation: 'rebuilt', folders: [], startsCoordinator: true },
+      { workspaceId: 'w-off', name: 'orbit-off', provider: 'claude', runnerId: 'r-1', runnerName: 'workstation-gpu',
+        runnerOnline: true, workDir: '/srv/off', reason: 'This workspace is disabled.', conversation: 'continues',
+        folders: [], startsCoordinator: false },
+    ],
+  };
+
+  /** Mounts the section over `status`, opens Change and picks the row named `name`. */
+  async function changeTo(status: CoordinatorStatus, press: RegExp, name: string, writes: Array<[string, unknown]>) {
+    serve(status);
     await mount(section());
-
-    // The card says so before anything is pressed, and offers no Retry to press.
-    expect(buttonLabels().some((l) => /^Retry$/i.test(l))).toBe(false);
-
-    // The picker reads the workspace and runner lists, which nothing asked for until now.
     apiMock.mockImplementation((path: string, init?: unknown) => {
-      if (path === '/workspaces') {
-        return Promise.resolve([
-          { id: 'w-other', name: 'orbit-spare', enabled: true, runnerId: 'r-1', lastProvider: 'claude' },
-          { id: 'w-off', name: 'orbit-off', enabled: false, runnerId: 'r-1' },
-          { id: '3CuIHiSJZBQ7nLVUwc7ekz', name: 'orbit-main', enabled: true, runnerId: 'r-1' },
-        ]) as Promise<never>;
-      }
-      if (path === '/runners') return Promise.resolve([{ id: 'r-1', online: true }]) as Promise<never>;
-      if (!init) return read(path, unavailableStatus());
+      if (path === `/sessions/${POINTER}/move-targets`) return Promise.resolve(changeTargets) as Promise<never>;
+      if (!init) return read(path, status);
       writes.push([path, init]);
+      if (path.endsWith('/move')) return Promise.resolve({ id: POINTER, workspaceId: 'w-move', folderId: null }) as Promise<never>;
       return Promise.resolve({ sessionId: SERVED, created: true, workspaceId: 'w-other' }) as Promise<never>;
     });
-
-    await press(/^Start a new coordinator in…$/);
+    await pressAny(press);
     await settle();
-    const rows = () => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button.move-dialog-option')];
-    const spare = rows().find((b) => (b.textContent ?? '').includes('orbit-spare'));
-    const off = rows().find((b) => (b.textContent ?? '').includes('orbit-off'));
-    expect(spare, 'a usable workspace is offered').toBeTruthy();
-    expect(off?.disabled, 'a disabled workspace is greyed').toBe(true);
+    const rows = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button.move-dialog-option')];
+    const off = rows.find((b) => (b.textContent ?? '').includes('orbit-off'));
+    expect(off?.disabled, 'a workspace nothing can open in is greyed').toBe(true);
     expect(off?.textContent).toContain('This workspace is disabled.');
+    const row = rows.find((b) => (b.textContent ?? '').includes(name));
+    expect(row, `${name} is offered`).toBeTruthy();
     await act(async () => {
-      spare!.click();
+      row!.click();
     });
     await settle();
+  }
 
-    // Asked first, in the words of what moves; then the replace door, naming the workspace.
-    expect(document.body.textContent).toContain('Start a new coordinator in orbit-spare?');
-    const ok = [...document.querySelectorAll<HTMLElement>('[role="alertdialog"] button, [role="dialog"] button')].find((b) =>
-      /start in orbit-spare/i.test((b.textContent ?? '').trim()),
+  const dialogButton = (label: RegExp): HTMLElement | undefined =>
+    [...document.querySelectorAll<HTMLElement>('[role="dialog"] button, [role="alertdialog"] button')].find((b) =>
+      label.test((b.textContent ?? '').trim()),
     );
-    expect(ok, 'the question confirms with Start in orbit-spare').toBeTruthy();
+
+  it('starts the next coordinator elsewhere rather than retrying, from a read that already says no press can win', async () => {
+    const writes: Array<[string, unknown]> = [];
+    await changeTo(unavailableStatus(), /^Change workspace…$/, 'orbit-spare', writes);
+
+    // The conversation cannot come along, and the question says why before anything else.
+    expect(document.body.textContent).toContain('Coordinate This project from orbit-spare?');
+    expect(document.body.textContent).toContain('This conversation can’t come along: Codex keeps this conversation on workstation-gpu.');
+    expect(dialogButton(/^Move conversation$/), 'nothing offers to move what cannot go').toBeUndefined();
+    const ok = dialogButton(/^Complete and start in orbit-spare$/);
+    expect(ok, 'the only way there is a new start').toBeTruthy();
     await act(async () => {
       ok!.click();
     });
@@ -624,6 +645,24 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     expect(writes[0][0]).toBe(`/projects/${PROJECT}/coordinator/replace`);
     expect(writes[0][1]).toEqual({ method: 'POST', body: { workspaceId: 'w-other' } });
     expect(landedOn).toBe(`/sessions/${SERVED}`);
+  });
+
+  it('moves the conversation itself where it can come along, into no folder', async () => {
+    const writes: Array<[string, unknown]> = [];
+    await changeTo(liveStatus(), /^Change$/, 'orbit-prod', writes);
+
+    expect(document.body.textContent).toContain('Coordinate This project from orbit-prod?');
+    expect(dialogButton(/^Start a new one there$/), 'a new start is still offered').toBeTruthy();
+    const move = dialogButton(/^Move conversation$/);
+    expect(move).toBeTruthy();
+    await act(async () => {
+      move!.click();
+    });
+    await settle();
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toBe(`/sessions/${POINTER}/move`);
+    expect(writes[0][1]).toEqual({ method: 'POST', body: { folderId: null, workspaceId: 'w-move' } });
   });
 
   // The mirror of the test above, and the one place the two doors onto the landing column must not
