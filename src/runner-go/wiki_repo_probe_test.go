@@ -74,8 +74,9 @@ func TestWikiRepoProbeAnswersTheFourTiers(t *testing.T) {
 		mustGit(t, f.home, "init", "-q", "-b", "main", local)
 		cmd := f.command(t, "probe", nil)
 		cmd.WorkDir, cmd.RepoURLNorm, cmd.RootCommitSha = local, "", ""
-		if outcome := runWikiRepoOp(cmd, nil); outcome.state != "succeeded" || outcome.result["tier"] != "git" || outcome.result["origin"] != "" {
-			t.Fatalf("outcome = %s %v %q, want git with no origin", outcome.state, outcome.result, outcome.err)
+		// No origin to hold it to and nothing to fetch: it is read as a folder (design §2.1).
+		if outcome := runWikiRepoOp(cmd, nil); outcome.state != "succeeded" || outcome.result["tier"] != "folder" {
+			t.Fatalf("outcome = %s %v %q, want folder", outcome.state, outcome.result, outcome.err)
 		}
 	})
 }

@@ -320,6 +320,10 @@ export function wikiRepoDetail(
     case 'not_git': return `${dir} is not a git checkout`;
     case 'too_many_files': return `${dir} has too many files to read`;
     case 'wrong_repository': {
+      // A git checkout with no origin remote (design §2.1): nothing says which repository it is.
+      if (/ has no origin remote, so it cannot be checked against /u.test(where.said ?? '')) {
+        return `${dir} has no origin remote, so it cannot be checked against this wiki's repository`;
+      }
       const clone = /is a clone of (\S+?),? not of/u.exec(where.said ?? '')?.[1];
       return clone
         ? `${dir} is a clone of ${clone}, not this wiki's repository`
@@ -339,6 +343,16 @@ export function wikiRepoDetail(
     default:
       return `Reading ${wikiRepoDirLabel(where.dir) ?? 'the folder'} failed`;
   }
+}
+
+/**
+ * What the health line says of tier folder (contract `maintenance.health.repo.detail`): a folder that is not git, or a git
+ * checkout with no origin remote, which a space with no repository address reads as a folder (design §2.1).
+ */
+export function wikiRepoFolderDetail(where: { dir?: string | null; noOrigin?: boolean } = {}): string {
+  return where.noOrigin === true
+    ? `${wikiRepoDirLabel(where.dir) ?? 'The folder'} has no origin remote, so it is read as a folder`
+    : wikiRepoDetail('not_git', where);
 }
 
 // ── The settings' probe (docs/wiki-repo-tiers-design.md §7.3) ───────────────────────────────────

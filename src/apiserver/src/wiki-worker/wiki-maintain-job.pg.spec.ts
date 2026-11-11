@@ -1338,6 +1338,42 @@ test('a runner that cannot read folders is not allowed one: a folder that is not
   assert.equal(detail.rows[0]!.repo_detail, 'Upgrade the runner to read folders', 'the health line\'s reason is the upgrade');
 });
 
+// A git checkout with no origin remote (docs/wiki-repo-tiers-design.md §2.1): the runner fetches nothing there
+// (wikiRepoOpCheckout). A space with no repository address gets the folder's snapshot, marked noOrigin; a space with an
+// address gets wrong_repository in the runner's words. Either is asked once.
+test('a wiki with no repository address on a git checkout with no origin: tier folder, succeeded, the snapshot asked once, and the health line says it has no origin', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { capabilities: FOLDER_RUNNER, repoUrl: false, snapshotRow: false });
+  noDossiers(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state),
+    { snapshotIndex: { ...folderIndex(TREE_ONE), noOrigin: true } });
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual(await runTier(h, fx.runId), { repo_tier: 'folder', repo_reason: null });
+  const snapshots = await h.sql.query<{ state: string }>(`SELECT "state" FROM "wiki_repo_op" WHERE "job_id" = $1 AND "kind" = 'snapshot'`, [fx.jobId]);
+  assert.deepEqual(snapshots.rows.map((row) => row.state), ['succeeded'], 'the snapshot is asked once');
+  assert.deepEqual(
+    await h.prisma.wikiRepoSnapshot.findFirstOrThrow({ where: { spaceId: fx.spaceId }, select: { sha: true, source: true } }),
+    { sha: TREE_ONE, source: 'folder' },
+  );
+  const detail = await h.sql.query<{ repo_detail: string | null }>(`SELECT "repo_detail" FROM "wiki_maintenance_run" WHERE "id" = $1`, [fx.runId]);
+  assert.equal(detail.rows[0]!.repo_detail, '/tmp/maintain-spec has no origin remote, so it is read as a folder');
+});
+
+test('a wiki with a repository address on a git checkout with no origin: wrong_repository, asked once, not retried, in words that say there is no origin', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { title: 'Local Clone Wiki', capabilities: FOLDER_RUNNER });
+  await assertSessionsRun(h, fx, 'wrong_repository', {
+    snapshotError: '/tmp/maintain-spec has no origin remote, so it cannot be checked against github.com/x/app',
+    snapshotReason: 'wrong_repository',
+  }, 'Local Clone Wiki', {
+    tier: 'wrong_repository',
+    detail: /^\/tmp\/maintain-spec has no origin remote, so it cannot be checked against this wiki's repository$/u,
+  });
+});
+
 test('a space with a repository address whose folder shares less than half of the last snapshot\'s paths: wrong_repository for path_overlap, and the snapshot is not kept; one that shares half is', { skip }, async () => {
   const h = await boot();
   await clearWork(h);

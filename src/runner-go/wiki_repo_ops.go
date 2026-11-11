@@ -205,6 +205,9 @@ type wikiRepoOpIndex struct {
 	// "folder" for a directory that is not a git checkout, whose sha is its tree hash. Absent on git's snapshot, which
 	// is byte for byte what it was before the folder tier (wiki_plan_fixture_test.go): the server reads absent as "git".
 	Source string `json:"source,omitempty"`
+	// On a folder's snapshot of a git checkout that has no origin remote (design §2.1): it is git, but nothing can say
+	// which repository it is, so it is read as a folder. The server words the tier by it.
+	NoOrigin bool `json:"noOrigin,omitempty"`
 	// Every blob of the tree, with its size: `hasPath` answers from this, directories included.
 	Files []wikiRepoOpIndexFile `json:"files"`
 	// Every document: its path, its title and its headings, which `hasDocSection` answers from.
@@ -264,7 +267,8 @@ func runWikiRepoOp(cmd WikiRepoOpCommand, progress func()) wikiRepoOpOutcome {
 	if err != nil {
 		// A directory that is there but is not a git checkout is read as a folder, when the server allows it.
 		var reasoned *wikiRepoOpReasonError
-		if input.AllowFolder && errors.As(err, &reasoned) && reasoned.reason == wikiRepoReasonNotGit {
+		// So is a git checkout with no origin remote, for a space with no repository address: there is nothing to fetch.
+		if input.AllowFolder && (errors.Is(err, errWikiRepoNoOrigin) || errors.As(err, &reasoned) && reasoned.reason == wikiRepoReasonNotGit) {
 			return runWikiRepoOpFolder(cmd, expandTilde(strings.TrimSpace(cmd.WorkDir)), input)
 		}
 		return wikiRepoOpFailedWith(err)
@@ -317,8 +321,18 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, s
 	if err != nil || root == "" {
 		return "", "", wikiRepoOpReasonf(wikiRepoReasonNotGit, "%s is not a git checkout: %v", workDir, err)
 	}
+	origin, _ := wikiImportGit(root, "remote", "get-url", "origin")
+	if strings.TrimSpace(origin) == "" {
+		// No origin remote (design §2.1): no fetch could succeed, so none is tried. A space with an address cannot hold
+		// the checkout to it; one without is read as a folder, when the server allows folders, and as before otherwise.
+		if want := strings.TrimSpace(cmd.RepoURLNorm); want != "" {
+			return "", "", wikiRepoNoOriginError(root, want)
+		}
+		if input.AllowFolder {
+			return "", "", errWikiRepoNoOrigin
+		}
+	}
 	if want := strings.TrimSpace(cmd.RepoURLNorm); want != "" {
-		origin, _ := wikiImportGit(root, "remote", "get-url", "origin")
 		if got := normalizeWikiRepoURL(origin); got != want {
 			return "", "", wikiRepoOpReasonf(wikiRepoReasonWrongRepository, "the checkout %s is a clone of %s, not of the space's repository %s: "+
 				"nothing was read", root, firstNonEmpty(got, "no origin"), want)
@@ -356,6 +370,16 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, s
 			"it is another repository behind the same URL, so nothing was read", root, first)
 	}
 	return root, ref, nil
+}
+
+// errWikiRepoNoOrigin is a checkout with no origin remote, for a space with no repository address, where the server allows
+// folders: runWikiRepoOp reads it as one. It never leaves this runner.
+var errWikiRepoNoOrigin = errors.New("the checkout has no origin remote")
+
+// wikiRepoNoOriginError is a checkout with no origin remote, for a space whose repository is want: wrong_repository, since
+// nothing proves it is that repository. The probe says the same.
+func wikiRepoNoOriginError(root, want string) error {
+	return wikiRepoOpReasonf(wikiRepoReasonWrongRepository, "%s has no origin remote, so it cannot be checked against %s", root, want)
 }
 
 // wikiRepoOpLocalCommits is the commits a read or a diff names, when the checkout already has every one of

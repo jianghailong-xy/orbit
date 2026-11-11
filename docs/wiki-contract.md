@@ -1628,7 +1628,7 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
     `wrong_repository`），即运行行的 `repo_tier`；还没有运行探测过时为 null；
   - `reason`：它读得比 git 少的原因（`repoOps.reasons`，运行行的 `repo_reason`）；`git` 和 `folder` 时为 null；
   - `detail`：这个原因的一句英文（`wikiRepoDetail`，如 `~/work/app was not found on MacBook`），家目录写成 `~`，按失败文字的规则脱敏
-    （owner 的环境变量值也遮掉），由运行写在 `repo_detail` 上；`folder` 时写这个目录是什么（`~/work/app is not a git checkout`）；`git` 时为 null。
+    （owner 的环境变量值也遮掉），由运行写在 `repo_detail` 上；`folder` 时写这个目录是什么（`~/work/app is not a git checkout`；没有 origin 的 git checkout 写 `~/work/app has no origin remote, so it is read as a folder`）；`git` 时为 null。
     0519 之前的运行没有这一列，按 reason 现说。旧 runner 把非 git 目录答成 `not_git` 时，这一句是 `Upgrade the runner to read folders`；
   - `checkedAt`：那次运行的探测时间（`repo_checked_at`），没有就取它最近一次尝试的开始；`tier` 为 null 时也为 null。
   比分档早的控制面没有后四个字段，客户端当作没说，不画仓库部分。
@@ -2991,7 +2991,7 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 
 - **档位**（`repoOps.tiers.names`）：维护运行每次读出来的结果，不是设置。
   - `git`：space 仓库的 git checkout，照分档之前一样读 origin/main（安全检查、fetch 锁、读缓存都不变）；
-  - `folder`：目录在、不是 git checkout，由声明了 `wiki-repo-op-folder/v1` 的 runner 扫描（26.8），快照以树哈希为名。条目、游标、路径与
+  - `folder`：目录在、不是 git checkout（或是没有 origin 的 git checkout，space 没有仓库地址），由声明了 `wiki-repo-op-folder/v1` 的 runner 扫描（26.8），快照以树哈希为名。条目、游标、路径与
     符号锚点、文档都照 git 档；提交锚点不核，保留上一次的检查；
   - `sessions`：仓库什么都读不到，运行只从会话学。没有快照；代码锚点保留上一次的检查、仍然待核；文档一步跳过（`docs.skipped no_repository`）。
     没有别的失败时运行照样 `succeeded`：读得少不是运行的失败；
@@ -3003,7 +3003,7 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
   | 类别 | 原因 | 怎么处理 |
   |---|---|---|
   | 前提（`premise`） | `no_workspace`、`runner_missing`、`runner_offline`、`runner_upgrade`（服务端自己读的 readiness，`looks`）；`no_work_dir`、`not_found`、`not_git`、`too_many_files`、`fetch_refused`（runner 的失败回答） | 不重试：运行当场不带仓库继续，作业不再试（不占 `jobs.retry.limit`），这次运行不再问 runner；档位 `sessions` |
-  | 前提，别的仓库（`wrongRepository`） | `wrong_repository`（origin 不是 space 的地址）、`root_mismatch`（不从 space 的第一个提交开始）、`path_overlap`（26.8） | 同上；档位 `wrong_repository` |
+  | 前提，别的仓库（`wrongRepository`） | `wrong_repository`（origin 不是 space 的地址，或 space 有地址而 checkout 没有 origin）、`root_mismatch`（不从 space 的第一个提交开始）、`path_overlap`（26.8） | 同上；档位 `wrong_repository` |
   | 瞬时（`transient`） | `fetch_failed`（网络）、`op_timeout`（操作没在等待内结算）、`runner_lost`（领着它的 runner 沉默，服务端收尾）、`folder_moved`（读的途中文件夹变了）、`op_failed`（服务端不认识的失败） | 按 `repoOps.probe` 重试（§27.3 第 1 步）：这次尝试按 infra 结束，退避后再试；本作业的快照累计 `maxAttempts`（3）次没成功后，按最后一次的原因走 `sessions` 档 |
 
 - **回写**：runner 的失败结果在 `error` 旁边带 `reason`（`{state: 'failed', error, reason}`）。服务端认识的原因写进失败行的 `result.reason`，
@@ -3011,8 +3011,11 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
   ` is not a git checkout` → `not_git`，` is a clone of …, not of the space's repository` → `wrong_repository`，`does not start from the space's first commit` →
   `root_mismatch`，`git authentication failed` → `fetch_refused`，`could not fetch origin's default branch` → `fetch_failed`，服务端自己的
   `the runner's claim has been silent since` → `runner_lost`；都不是就是 `op_failed`。
-- 有 origin 却 fetch 失败的 git checkout 不降成扫目录：它是 `fetch_failed` 或 `fetch_refused`。没有 origin 这个远端的 git checkout 同样 fetch 失败
-  （`fetch_failed`），重试 3 次后按 `sessions` 档跑：设计 §2.1 的「本地 git」一档没有做。
+- 有 origin 却 fetch 失败的 git checkout 不降成扫目录：它是 `fetch_failed` 或 `fetch_refused`。没有 origin 这个远端的 git checkout 不 fetch
+  （设计 §2.1 的「本地 git」）：space 没有仓库地址、输入带 `allowFolder` 时按 `folder` 档扫工作目录（26.8，索引带 `noOrigin: true`，`repo_detail` 是
+  `<dir> has no origin remote, so it is read as a folder`）；space 有仓库地址时以 `wrong_repository` 失败，错误写
+  `<dir> has no origin remote, so it cannot be checked against <repo>`，`repo_detail` 是 `<dir> has no origin remote, so it cannot be checked against this wiki's repository`，
+  只问一次、不重试。没有 `allowFolder` 的输入照旧 fetch，以 `fetch_failed` 失败。
 
 ### 26.8 文件夹快照（`repoOps.folder`，设计 §2.3、§4、§5）
 
@@ -3023,7 +3026,7 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 - **文件**：前 8 KB 里有 NUL 的是二进制：只记路径、大小和 hash，不读文本。单个文件的文本仍以 `repoOps.read.wholeFileBytes`（2 MB）为上限。
 - **文件数**：`maxFiles`（100,000，按排除之后的数）。超过就不建快照，操作以 `too_many_files` 失败，运行按 `sessions` 档跑。
 - **索引**：和 git 快照的索引相同，另加 `source: 'folder'`（git 快照没有这个字段，读作 git）、每个文件的 `hash`（内容的 sha256，二进制也算），
-  `commits` 是空数组，`date` 是建快照的时间。`wiki_repo_snapshot.source`（0521，`git` 或 `folder`，默认 `git`）记下它是哪一种。
+  `commits` 是空数组，`date` 是建快照的时间；从没有 origin 的 git checkout 读出的另加 `noOrigin: true`。`wiki_repo_snapshot.source`（0521，`git` 或 `folder`，默认 `git`）记下它是哪一种。
 - **树哈希**：每个文件一行 `path NUL size NUL sha256(content) LF`，按路径排序拼起来取 sha1，40 位十六进制。它就是快照的 sha，所以 `skipSha`、
   按 `(space, sha, path)` 的原文缓存和快照换代都照 git 档。
 - **读**：在树哈希上读之前，runner 先重新扫描；树哈希变了就以 `folder_moved` 失败。维护运行为此重建一次快照（每次运行一次），在新的树哈希上
@@ -3041,7 +3044,8 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 
 - **种类 `probe`**：只回答工作目录会按哪一档读，别的都不做：不 fetch、不建快照、不读文件。git checkout 的 origin 是 space 的 `repo.urlNorm`、
   它已有的历史（检出的提交，否则上次 fetch 留下的 origin 默认分支）从 `rootCommitSha` 开始，就答 `{tier: 'git', origin}`；目录在、不是 git，
-  答 `{tier: 'folder'}`；其余以原因失败：`no_work_dir`、`not_found`、`wrong_repository`（文字里写着另一个 origin）、`root_mismatch`。
+  或是没有 origin 的 git checkout 而 space 没有仓库地址，答 `{tier: 'folder'}`；其余以原因失败：`no_work_dir`、`not_found`、`wrong_repository`（文字里写着
+  另一个 origin，或 `<dir> has no origin remote, so it cannot be checked against <repo>`）、`root_mismatch`。
   只交给声明了 `wiki-repo-op-probe/v1` 的 runner；由设置发起，不挂作业（`job_id` 为空，0530）。
 - **路由** `POST /api/wiki/spaces/:id/maintenance/probe`，请求 `{ workspaceId }`（设置表单要选的那个，不必是维护现在用的）。只给 space 的 owner，
   走用户门、不带会话头（`WIKI_OWNER_CHANNEL_ONLY`），不收个人访问令牌；别的账号的 space 或 workspace 是普通的 404。

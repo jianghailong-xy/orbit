@@ -76,6 +76,7 @@ import {
   WIKI_REPO_UPGRADE_TO_READ_FOLDERS,
   WIKI_REPO_WRONG_REPOSITORY_REASONS,
   wikiRepoDetail,
+  wikiRepoFolderDetail,
   wikiRepoFailureReason,
   wikiRepoReasonIsPremise,
   type WikiAnchorCheckInput,
@@ -339,7 +340,7 @@ interface WikiMaintainSnapshot {
   sha: string;
   /** What it was read from: on a folder there are no commits, and no diffs between them. */
   source: WikiRepoSnapshotSource;
-  index: WikiPlanSnapshotIndex & { readme?: string; commits?: string[] | null };
+  index: WikiPlanSnapshotIndex & { readme?: string; commits?: string[] | null; noOrigin?: boolean };
   files: string[];
   sizes: Map<string, number>;
   about: string;
@@ -857,7 +858,8 @@ class WikiMaintainRun {
     const snapshot = this.snapshot!;
     await this.readTier(snapshot.source === 'folder' ? 'folder' : 'git', null);
     this.jobContext.log(snapshot.source === 'folder'
-      ? `the folder at tree ${snapshot.sha.slice(0, 12)} (${snapshot.files.length} files): it is not a git checkout, so commit anchors are not checked`
+      ? `the folder at tree ${snapshot.sha.slice(0, 12)} (${snapshot.files.length} files): ${snapshot.index.noOrigin === true
+        ? 'a git checkout with no origin remote, read as a folder' : 'it is not a git checkout'}, so commit anchors are not checked`
       : `the repository at ${snapshot.sha.slice(0, 12)} (${snapshot.files.length} files)`);
   }
 
@@ -881,7 +883,7 @@ class WikiMaintainRun {
     if (!snapshot || snapshot.sha !== sha) {
       throw new WikiJobInfraError(`REPO_OP_FAILED: the space holds no snapshot of ${sha.slice(0, 12)}, the commit the snapshot named`);
     }
-    const raw = JSON.parse(snapshot.index) as WikiPlanSnapshotIndex & { readme?: string; commits?: string[] | null; source?: string };
+    const raw = JSON.parse(snapshot.index) as WikiPlanSnapshotIndex & { readme?: string; commits?: string[] | null; source?: string; noOrigin?: boolean };
     const files = (raw.files ?? []).map((file) => file.path);
     const sizes = new Map((raw.files ?? []).map((file) => [file.path, Number(file.size) || 0]));
     const source: WikiRepoSnapshotSource = snapshot.source === 'folder' || raw.source === 'folder' ? 'folder' : 'git';
@@ -962,7 +964,9 @@ class WikiMaintainRun {
     // A folder that is not git, on a runner that cannot read folders yet (design §4.3): upgrading the runner is the fix.
     const sentence = reason === 'not_git' && !this.readsFolders
       ? WIKI_REPO_UPGRADE_TO_READ_FOLDERS
-      : reason !== null ? wikiRepoDetail(reason, { ...this.repoWhere, said }) : tier === 'folder' ? wikiRepoDetail('not_git', this.repoWhere) : null;
+      : reason !== null
+        ? wikiRepoDetail(reason, { ...this.repoWhere, said })
+        : tier === 'folder' ? wikiRepoFolderDetail({ ...this.repoWhere, noOrigin: this.snapshot?.index.noOrigin === true }) : null;
     const repoDetail = sentence === null
       ? null
       : redactSecrets(sentence, { literals: await ownerEnvLiterals(this.deps.prisma, this.jobContext.job.ownerId) }).text;

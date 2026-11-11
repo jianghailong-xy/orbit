@@ -457,6 +457,10 @@ func wikiRepoOpFolderSnapshot(root string, input wikiRepoOpInput) wikiRepoOpOutc
 	}
 	index := wikiRepoOpSnapshotIndex(repo, []string{}, wikiMaintainAboutText(scan.texts["README.md"]))
 	index.Source = "folder"
+	// A git checkout is read as a folder only when it has no origin remote (wikiRepoOpCheckout).
+	if _, err := wikiImportGit(root, "rev-parse", "--show-toplevel"); err == nil {
+		index.NoOrigin = true
+	}
 	for i := range index.Files {
 		index.Files[i].Hash = hashes[index.Files[i].Path]
 	}

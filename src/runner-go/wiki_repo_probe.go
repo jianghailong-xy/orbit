@@ -38,13 +38,17 @@ func wikiRepoOpProbe(cmd WikiRepoOpCommand) wikiRepoOpOutcome {
 		return wikiRepoOpSucceeded(map[string]interface{}{"tier": "folder"})
 	}
 	remote, _ := wikiImportGit(root, "remote", "get-url", "origin")
-	origin := ""
-	if strings.TrimSpace(remote) != "" {
-		origin = normalizeWikiRepoURL(remote)
+	if strings.TrimSpace(remote) == "" {
+		// No origin remote: what the operations' checkout says of it (wikiRepoOpCheckout).
+		if want := strings.TrimSpace(cmd.RepoURLNorm); want != "" {
+			return wikiRepoOpFailedWith(wikiRepoNoOriginError(root, want))
+		}
+		return wikiRepoOpSucceeded(map[string]interface{}{"tier": "folder"})
 	}
+	origin := normalizeWikiRepoURL(remote)
 	if want := strings.TrimSpace(cmd.RepoURLNorm); want != "" && origin != want {
 		return wikiRepoOpFailedWith(wikiRepoOpReasonf(wikiRepoReasonWrongRepository, "the checkout %s is a clone of %s, not of the space's repository %s: "+
-			"nothing was read", root, firstNonEmpty(origin, "no origin"), want))
+			"nothing was read", root, origin, want))
 	}
 	if first := strings.ToLower(strings.TrimSpace(cmd.RootCommitSha)); first != "" {
 		// What the checkout already holds: the commit checked out, else origin's default branch as last fetched. A checkout

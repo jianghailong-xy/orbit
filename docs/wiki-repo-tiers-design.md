@@ -19,7 +19,11 @@
 - 2026-11-11（P5 文档同步，按项目分支上落地的代码改；契约 `docs/wiki-contract.md` §20、§26.7–26.9、§27 写的是代码的行为）：
   - §6、§7：红色原因连续 3 次只发一次推送（`PushService.notifyWikiRepositoryAttention`，kind `wiki-maintenance-failing`，标题
     `Wiki code checks paused for <runs> runs`）。Following 的 Needs attention 只列 watch，wiki 的告警在那里没有一行，这一条没有做。
-  - §2.1：「本地 git（没有 origin）」一档没有做。没有 origin 的 git checkout 在 fetch 时失败，原因是瞬时的 `fetch_failed`，重试 3 次后按第 0 档跑。
+  - §2.1：「本地 git（没有 origin）」不读 HEAD，按文件夹档读（任务「没有 origin 的 git checkout 不再重试 fetch」）。runner 看到 git checkout 没有
+    origin 这个远端就不 fetch：space 没有仓库地址、runner 声明了 `wiki-repo-op-folder/v1`（输入带 `allowFolder`）时，照 §4 扫工作目录，快照索引多一个
+    `noOrigin: true`，健康行写 `<dir> has no origin remote, so it is read as a folder`；space 有仓库地址时以 `wrong_repository` 失败，错误写
+    `<dir> has no origin remote, so it cannot be checked against <repo>`，健康行写 `<dir> has no origin remote, so it cannot be checked against this wiki's repository`，
+    不重试。探测给同样的判断（`folder` 或 `wrong_repository`）。服务端没有收到 `allowFolder` 时照旧 fetch，以 `fetch_failed` 失败。没有加新的原因。
   - §3、§5.1：服务端锚点（`criterion`、`record`、`merge_evidence`）今天没有任何检查会写（契约 `anchorRules.verify.typesNote`），所以第 0 档的
     anchors 一步什么都不写，报告的 `anchors` 全是 0；不是「每一档都核」。
   - §4.2：`folder_moved` 之后重建一次快照再读；再变一次，这次尝试按 infra 结束（`REPO_OP_FAILED`），作业按退避重试，不是「推迟这一节」。
@@ -84,15 +88,16 @@
 | 档位 | 怎么认（runner 每次判断） | 快照的 sha | 抽条目、推游标 | 路径 / 符号锚点 | 提交锚点 | 文档重写 |
 |---|---|---|---|---|---|---|
 | `git`（2） | 是 git checkout，origin 等于 space 的仓库，根提交一致 | fetch 后 origin/main 的提交 | ✓ | ✓ | ✓ | ✓ |
-| `git`（2，本地） | 是 git checkout，**没有 origin 这个远端**，space 也没有仓库地址 | HEAD 的提交 | ✓ | ✓ | ✓ | ✓ |
+| `folder`（1，本地 git） | 是 git checkout，**没有 origin 这个远端**，space 也没有仓库地址 | 树哈希（§4.2），不 fetch | ✓ | ✓ | 不核 | ✓ |
 | `folder`（1） | 目录在，不是 git checkout | 树哈希（§4.2） | ✓ | ✓ | 不核 | ✓ |
 | `sessions`（0） | 读不到：没有 workspace、没有工作目录、目录不存在、runner 没有、不在线、要升级、文件太多 | 无 | ✓ | 未核 | 未核 | 推迟 |
 | `wrong_repository` | 读到的是别的仓库（§2.3） | 无 | ✓（照第 0 档） | ✗ | ✗ | ✗ |
 
 - 档位是**读的结果，不是设置**。维护设置里仍然只选一个 workspace（Q3）。owner 修好目录，下一次运行自动回到第 2 档。
 - 第 2 档的行为一个字都不改：仍然只读 origin/main，不读没提交的改动；fetch 锁、根提交校验、读缓存都照旧。
-- 文件夹档**只在目录不是 git checkout 时**启用。是 git、但 fetch 失败的，不降成扫目录（§6）。
-- 本地 git（没有 origin）只给没有仓库地址的 space：有仓库地址的 space 必须有 origin 才能核对身份，否则就是 `wrong_repository`。
+- 文件夹档**只在目录不是 git checkout、或 git checkout 没有 origin 时**启用。有 origin、但 fetch 失败的，不降成扫目录（§6）。
+- 本地 git（没有 origin）只给没有仓库地址的 space，按文件夹档扫工作目录（`.git/` 在排除表里），不读 HEAD、不 fetch：有仓库地址的 space 必须有 origin
+  才能核对身份，否则就是 `wrong_repository`（`<dir> has no origin remote, so it cannot be checked against <repo>`），不重试。
 
 ### 2.2 判断在哪里做
 
