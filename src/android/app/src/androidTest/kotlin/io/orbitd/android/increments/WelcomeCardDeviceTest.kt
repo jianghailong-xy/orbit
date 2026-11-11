@@ -136,7 +136,7 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         await("step 1 done") { says(WelcomeCopy.WELCOME_COMPUTER_DONE) && says(WelcomeCopy.welcomeComputerReady("managed-mia")) }
         verify("step 2 asks for a model", says(WelcomeCopy.WELCOME_MODEL) && says(WelcomeCopy.WELCOME_MODEL_HELP))
         // The runner's sign-in card, the setup card's own (RunnerSignInCard): its button says Sign In.
-        await("the runner's sign-in card") { exists(hasText(RunnerCopy.SIGN_IN) and hasClickAction(), unmerged = true) && !says(WelcomeCopy.WELCOME_AFTER_COMPUTER) }
+        await("the runner's sign-in card") { exists(hasText(RunnerCopy.SIGN_IN) and hasAnyAncestor(hasTestTag("welcome-card")), unmerged = true) && !says(WelcomeCopy.WELCOME_AFTER_COMPUTER) }
         verify("the foot waits for steps 1 and 2", says(WelcomeCopy.WELCOME_FOOT_WAIT))
         verifyPlaceholder()
         capture("2-model")
