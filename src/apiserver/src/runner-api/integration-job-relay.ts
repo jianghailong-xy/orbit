@@ -2077,9 +2077,19 @@ export async function applyIntegrationJobResult(
     if (body.baselineRed === true && job.kind !== 'LAND_TASK') {
       throw new IntegrationJobRefused('INVALID_RESULT', 'only LAND_TASK may report baselineRed');
     }
-    if (body.baselineRed === true && ![body.upstreamSha, body.targetShaBefore, body.checks?.find((check) => check.scope === 'BASELINE')?.treeSha]
-      .every((sha) => typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha))) {
-      throw new IntegrationJobRefused('INVALID_RESULT', 'baselineRed requires upstreamSha, targetShaBefore and the BASELINE check treeSha');
+    if (body.baselineRed === true) {
+      const validSha = (sha: unknown): sha is string => typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha);
+      if (![body.upstreamSha, body.targetShaBefore, body.checks?.find((check) => check.scope === 'BASELINE')?.treeSha]
+        .every(validSha)) {
+        // K3 runners predate treeSha. Without complete provenance, keep their original per-job
+        // failure rather than rejecting the result or opening a hold we cannot reliably identify.
+        body = {
+          ...body,
+          baselineRed: false,
+          upstreamSha: validSha(body.upstreamSha) ? body.upstreamSha : undefined,
+          targetShaBefore: validSha(body.targetShaBefore) ? body.targetShaBefore : undefined,
+        };
+      }
     }
 
     // §10.6: OBSERVED and OBSERVE are an observation's alone, and an observation ends only OBSERVED,

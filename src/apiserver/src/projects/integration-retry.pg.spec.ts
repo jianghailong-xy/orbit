@@ -1810,7 +1810,6 @@ test('baselineRed results are refused at the relay for wrong state, missing scop
       };
       await refuse(landing, { ...RED_MERGE_CHECK, state: 'ERROR', baselineRed: true, checks: [baseline] }, /CHECK_FAILED/);
       await refuse(landing, { ...RED_MERGE_CHECK, baselineRed: true }, /BASELINE check/);
-      await refuse(landing, { ...RED_MERGE_CHECK, baselineRed: true, checks: [baseline] }, /requires upstreamSha/);
       await report(stack, w, landing, LANDED);
       const [promotion] = await claim(stack, w, 'baseline-invalid-promotion');
       assert.equal(promotion?.kind, 'CHECK_PROMOTION');
@@ -1831,6 +1830,47 @@ const BASELINE_RED: Failure = {
     { ...RED_MERGE_CHECK.checks![0]!, name: 'LANDING_CHECK', scope: 'BASELINE', treeSha: '9'.repeat(40) },
   ],
 };
+
+test('K3-shaped and malformed baseline provenance degrades to ordinary CHECK_FAILED without holding or requeueing',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'baseline-rolling-compatibility');
+      let cases = 0;
+      for (const field of ['treeSha', 'upstreamSha', 'targetShaBefore'] as const) {
+        for (const value of [undefined, null, 'not-a-sha', 'f'.repeat(41), 42]) {
+          const failure: Failure = {
+            ...BASELINE_RED,
+            checks: BASELINE_RED.checks!.map((check) => field === 'treeSha' && check.scope === 'BASELINE'
+              ? { ...check, treeSha: value as string | undefined }
+              : { ...check }),
+          };
+          if (field !== 'treeSha') Object.assign(failure, { [field]: value });
+          const failed = await failedLanding(stack, w, `${field}-${cases++}`, failure);
+          const job = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: failed.job.jobId } });
+          assert.equal(job.state, 'CHECK_FAILED');
+          assert.equal(job.baselineRed, false, `${field}: incomplete provenance is not attributed`);
+          assert.equal(landingFailureClass(job), 'CHECK_FAILED');
+          if (field !== 'treeSha') assert.equal(job[field], null, 'malformed tips do not reach SHA columns');
+          const [item] = await stack.db.projectOpenItem.findMany({ where: { taskId: failed.task.taskId } });
+          assert.equal(item?.kind, 'INTEGRATION_CHECK_FAILED');
+          assert.equal(item?.dedupeKey, `ICF:${job.id}`, 'the ordinary per-job failure remains actionable');
+          assert.equal((item?.payload as { failureClass?: string }).failureClass, 'CHECK_FAILED');
+          assert.equal((await landings(stack.db, failed.task.taskId)).length, 1, 'J5: no next generation');
+          const replay = await report(stack, w, failed.job, failure);
+          assert.equal(replay.accepted, false, 'the accepted legacy result is terminal on replay');
+        }
+      }
+      assert.equal(cases, 15);
+      assert.equal(await stack.db.projectOpenItem.count({ where: { projectId: w.projectId, dedupeKey: { startsWith: 'ICB:' } } }), 0);
+      assert.equal(await stack.db.projectIntegrationJob.count({ where: { projectId: w.projectId, state: 'QUEUED' } }), 0);
+      assert.equal(await stack.db.projectIntegrationJobEvent.count({ where: {
+        job: { projectId: w.projectId }, kind: 'ENQUEUED', data: { path: ['cause'], equals: 'BASELINE_HELD' },
+      } }), 0);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
 
 for (const ending of ['fix landed', 'retry', 'resolve'] as const) {
   test(`K4/K5: one baseline item holds two deliveries; ${ending} releases them in queue order`,
