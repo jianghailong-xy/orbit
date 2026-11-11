@@ -238,7 +238,11 @@ class WikiStartCardTest {
         press(button(WikiStartLogic.ActionTo.SET_UP))
         compose.onNodeWithTag("wiki-settings-workspace").assertTextContains("shop-cli @ US · build-01", substring = true)
         press("wiki-settings-form-submit")
-        assertEquals(listOf("""PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"us","dailyRunLimit":8,"lookbackDays":14}}"""), writes())
+        // The chosen workspace's folder is probed first (docs/wiki-repo-tiers-design.md §7.3); then the one write.
+        val probe = "POST /api/wiki/spaces/sp1/maintenance/probe"
+        assertTrue(writes().toString(), writes().any { it.startsWith(probe) && it.contains("\"us\"") })
+        assertEquals(listOf("""PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"us","dailyRunLimit":8,"lookbackDays":14}}"""),
+            writes().filterNot { it.startsWith(probe) })
         gone("wiki-settings-form")
         assertEquals(WikiCopy.settingsSaved, OrbitToasts.feed.value.transient?.message)
         assertMarks("done", "run", "todo")

@@ -752,8 +752,8 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
     /// privacy note after them.
     func testTheSettingsPagesDrawTheSameBlocksInTheSameOrder() throws {
         let page = try web(Self.settingsPage)
-        assertOrder(page, ["title={WIKI_REVIEW_MODE}", "title={WIKI_MAINTENANCE}"], "the web page's cards")
-        let reviewMode = try slice(page, from: "title={WIKI_REVIEW_MODE}", to: "title={WIKI_MAINTENANCE}")
+        assertOrder(page, ["title={WIKI_REVIEW_MODE}", "title={<MaintenanceTitle space={space} />}"], "the web page's cards")
+        let reviewMode = try slice(page, from: "title={WIKI_REVIEW_MODE}", to: "title={<MaintenanceTitle space={space} />}")
         assertSays(page, "const fallback = wikiModeFallback(settings);", in: Self.settingsPage)
         assertOrder(reviewMode, ["{fallback && (", "{WIKI_REVIEW_MODE_LEAD}", "WIKI_MODE_ORDER.map(",
                                  "{WIKI_MODE_DEFAULT}", "{WIKI_MODE_NOTES[value]}", "{WIKI_SPOT_CHECK}",

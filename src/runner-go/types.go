@@ -552,6 +552,8 @@ type WikiRepoOpResultRequest struct {
 	State           string                 `json:"state"`
 	Result          map[string]interface{} `json:"result,omitempty"`
 	Error           string                 `json:"error,omitempty"`
+	// Why a failure failed (contract `repoOps.reasons`), beside the words in Error; absent when it is none of them.
+	Reason string `json:"reason,omitempty"`
 }
 
 // WikiRepoOpResultResponse says whether the result was taken; a 409 means this process's claim had
