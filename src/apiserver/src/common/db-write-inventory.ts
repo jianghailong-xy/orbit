@@ -2425,6 +2425,51 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. A settled subject and its container\'s terminal status commit together or not at all; the next fact-driven compensation point re-runs the unit.',
     answer: 'Typed 503 from the global boundary; the edge that called it runs from the fact it had already committed, and the conditional write makes a second attempt a no-op.',
   },
+  // The main checkout relay (migration 0534, docs/main-checkout-git-contract.md §10): an outcome and its line.
+  {
+    at: 'workspaces/main-checkout.service.ts#act',
+    shape: 'TX_RETRIED',
+    locks: 'An action queued for the runner: first one autocommit INSERT of its main_checkout_request row (workspace (60) FOR KEY SHARE), unique on (owner_id, request_id) and, while unfinished, on (runner_id, root) by the partial index main_checkout_request_in_flight_key — the unique violation the caller answers with the first request or ACTION_IN_FLIGHT (#finishNew). Then, only while its runner is quiet, the RUNNER_OFFLINE waiting line in this unit: writeLine alone. When the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.',
+    identity: "The request row's id, which keys the notice turn (`main-checkout:v1:<row>:waiting`); the direct run_event path is written once per call, and the call is made once, right after the INSERT that created the row.",
+    isolation: '',
+    attempts: 4,
+    replay: "The session's state, runner capability and max(seq) are read inside the closure under the session lock, so a re-run decides the path and the seq afresh.",
+    effects: 'None inside. After commit the event is published, or the runner hinted that a notice waits in the inbox.',
+    answer: 'Typed 503 from the global boundary; the runner resends its result and the person presses again, both answered idempotently by the request row.',
+  },
+  {
+    at: 'workspaces/main-checkout.service.ts#actionResult',
+    shape: 'TX_RETRIED',
+    locks: "A late result (after TIMEOUT or CANCELLED): the request row's result read, then the row (60) by one UPDATE predicated on state = finished and late_result IS NULL — the compare-and-set that keeps one late result. Then, when the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.",
+    identity: 'The request row: late_result is written once, so a late result sent twice is kept and lined once.',
+    isolation: '',
+    attempts: 4,
+    replay: "The row's result and late_result are re-read inside the closure; a re-run after a commit matches nothing and writes no line.",
+    effects: 'None inside. After commit the event is published, or the inbox hinted.',
+    answer: 'Typed 503 from the global boundary; the runner resends its result and the person presses again, both answered idempotently by the request row.',
+  },
+  {
+    at: 'workspaces/main-checkout.service.ts#finish',
+    shape: 'TX_RETRIED',
+    locks: 'The request row (60) first, by one UPDATE predicated on its state still being one of those it may leave (pending/claimed): the compare-and-set that finishes it once. Then, when the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.',
+    identity: "The request row and its state: whoever wins the compare-and-set writes the outcome and the line; every other answer — the runner's twice, the runner's against the timeout — matches nothing.",
+    isolation: '',
+    attempts: 4,
+    replay: "The compare-and-set re-matches inside the closure, and the session's path and seq are read under its lock, so a re-run either finishes it as the first attempt would have or finds it finished and writes nothing.",
+    effects: 'None inside. After commit the event is published, or the inbox hinted.',
+    answer: 'Typed 503 from the global boundary; the runner resends its result and the person presses again, both answered idempotently by the request row.',
+  },
+  {
+    at: 'workspaces/main-checkout.service.ts#finishNew',
+    shape: 'TX_RETRIED',
+    locks: 'A request refused before it was queued (ACTION_IN_FLIGHT): one INSERT of the request row already finished (workspace (60) FOR KEY SHARE through its foreign key), unique on (owner_id, request_id). Then, when the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.',
+    identity: '(owner_id, request_id): a second refusal of the same requestId is a unique violation and answers with the first.',
+    isolation: '',
+    attempts: 4,
+    replay: "Nothing is read before the closure that the writes depend on; the session's path and seq are read under its lock.",
+    effects: 'None inside. After commit the event is published, or the inbox hinted.',
+    answer: 'Typed 503 from the global boundary; the runner resends its result and the person presses again, both answered idempotently by the request row.',
+  },
 ];
 
 export interface TransactionParticipant {
@@ -2777,6 +2822,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // `session_request` has none to the asker.
   { at: 'sessions/session-message.ts#chargeSessionMessage', under: "sessions.createTurn and sessions.resume (its revive) through participateSendTransaction, and sessions.interrupt through participateFollowUpTransaction, for the three session-to-session doors (runnerSessions.sendMessage, runnerSessions.interruptSession, projects.sendToCoordinator) — under the rank-30 Session lock of the RECIPIENT those transactions already hold, before the turn row is written. A DELETE of this pair's session_message_charge rows whose 5-minute window is over, a count of the rest, and one INSERT when the message is admitted (rank 60, its one foreign key that same session row), so it takes no lock outside the one its caller holds; a replay of a committed clientTurnId never reaches it, and a refusal after it rolls it back with the turn" },
   // Test-only, and reachable only from the harness's own transaction.
+  { at: 'workspaces/main-checkout.service.ts#writeLine', under: 'workspaces/main-checkout.service.ts#finish, #finishNew, #actionResult and #act — the initiating session row FOR UPDATE, then its notice turn or its run_event at max(seq)+1, after the request row its caller already wrote' },
 ];
 
 /** The recurring shapes an autocommit write takes. */
@@ -3282,6 +3328,10 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'managed-runners/managed-runner.service.ts#wake', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'An owner\'s explicit wake records demand (recordManagedDemand) and then the request\'s idempotency key on the mapping by id and owner.' },
   // A managed runner's volume as its backend measured it (migration 0480).
   { at: 'managed-runners/managed-runner-manager.ts#recordVolumeMeasurement', class: 'ONE_ROW_CAS', statements: 1, note: 'What the backend measured of the recorded volume, kept for the runner\'s heartbeat: `volume_measurement` on the mapping by id, only while this replica holds its lease, and only when the figures differ from the ones the pass read. A predicate write of its own column: it leaves `revision` alone, so no step\'s compare-and-set misses for it. A lease lost meanwhile matches nothing, and the next pass reads the volume again.' },
+  { at: 'workspaces/main-checkout.service.ts#read', class: 'INSERT', statements: 1, note: 'A snapshot read queued for the runner: one INSERT of a main_checkout_request row (op snapshot), its workspace FOR KEY SHARE through the foreign key. A read asked twice is two reads; each expires on its own.' },
+  { at: 'workspaces/main-checkout.service.ts#dispatch', class: 'MANY_ROWS', statements: 1, note: "The heartbeat's claim: one UPDATE of every pending, unexpired request of the runner to claimed. A row is claimed once — the second replica's UPDATE re-checks state = pending after the first commits and matches nothing." },
+  { at: 'workspaces/main-checkout.service.ts#snapshotAnswer', class: 'ONE_ROW_CAS', statements: 1, note: "A runner's snapshot answer: one UPDATE by (id, runner_id, op) predicated on the read not being finished. Twice is once." },
+  { at: 'workspaces/main-checkout.service.ts#expire', class: 'ONE_ROW_CAS', statements: 1, note: 'A snapshot read past its deadline: one UPDATE by id predicated on it not being finished, so its waiter answers 504 instead of waiting. (Actions past theirs go through #finish.)' },
 ];
 
 export interface TriggerWriteSource {

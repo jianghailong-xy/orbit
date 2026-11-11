@@ -118,6 +118,12 @@ export interface MainCheckoutActionRequest {
   requestId: string;
 }
 
+/** POST /workspaces/:id/main-checkout/actions as the apiserver takes it: the request, plus the session the person
+ *  pressed it in. That session gets the result line (§7); without one the outcome is only on the request. */
+export interface MainCheckoutActionPost extends MainCheckoutActionRequest {
+  initiatedFromSessionId?: string;
+}
+
 /** Control plane → runner: the request, with the deadline after which the runner must not start it. */
 export interface MainCheckoutActionCommand extends MainCheckoutActionRequest {
   /** move: the target session's worktree branch, so the runner needs no lookup. */
@@ -193,6 +199,66 @@ export interface MainCheckoutActionResult {
   /** RUNNER_OFFLINE: minutes since the runner last checked in. TIMEOUT: minutes waited. */
   minutes?: number;
   finishedAt: string;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The relay (contract §10): how a read or an action reaches the runner and how its answer comes back.
+
+/** The code `POST …/main-checkout/actions` refuses with (HTTP 409) when the workspace's runner lacks the capability. */
+export const MAIN_CHECKOUT_UNSUPPORTED_CODE = 'MAIN_CHECKOUT_UNSUPPORTED';
+/** The most files one GET may ask the patch of (`?diff=` repeated). */
+export const MAIN_CHECKOUT_DIFF_PATHS_MAX = 20;
+/** How long `GET /workspaces/:id/main-checkout` waits for the runner's snapshot before answering 504. */
+export const MAIN_CHECKOUT_SNAPSHOT_WAIT_SECONDS = 20;
+
+/** Control plane → runner, on the heartbeat (`RunnerHeartbeatResponse.mainCheckoutRequests`), to a runner that
+ *  declared the capability. Each is handed out once; `id` is what the answer is posted under. */
+export type MainCheckoutRunnerRequest =
+  | {
+      id: string;
+      op: 'snapshot';
+      root: string;
+      /** Files whose patch to read too (≤ MAIN_CHECKOUT_DIFF_PATHS_MAX), each capped at MAIN_CHECKOUT_PATCH_MAX_BYTES. */
+      diffPaths?: string[];
+      requestedAt: string;
+      expiresAt: string;
+    }
+  | { id: string; op: 'action'; command: MainCheckoutActionCommand };
+
+/** Runner → control plane: `POST /runner/main-checkout/:id/snapshot`. `error` (one line) when the read failed. */
+export interface MainCheckoutSnapshotAnswer {
+  snapshot?: MainCheckoutSnapshot;
+  diffs?: MainCheckoutFileDiff[];
+  error?: string;
+}
+// Runner → control plane: `POST /runner/main-checkout/:id/result` with a MainCheckoutActionResult body.
+
+/** A branch the main checkout is on that a project lands on (§5's warning): its integration line, or the target
+ *  that line is promoted into. */
+export interface MainCheckoutManagedBranch {
+  projectId: string;
+  projectTitle: string;
+  role: 'integration-line' | 'landing-target';
+}
+
+/** `GET /workspaces/:id/main-checkout`. */
+export interface MainCheckoutView {
+  snapshot: MainCheckoutSnapshot;
+  diffs?: MainCheckoutFileDiff[];
+  /** The runner declared the capability: clients draw the action buttons. */
+  actionsSupported: boolean;
+  /** Set when the checkout's branch is one a project lands on. */
+  managedBranch: MainCheckoutManagedBranch | null;
+  /** The action on this checkout still waiting for its result, if any. */
+  inFlight: { requestId: string; kind: MainCheckoutActionKind } | null;
+}
+
+/** `POST /workspaces/:id/main-checkout/actions`: `pending` until the runner answers; a repeat of the same
+ *  requestId answers with the first request's state and, once it has one, its result. */
+export interface MainCheckoutActionAnswer {
+  requestId: string;
+  status: 'pending' | 'finished';
+  result?: MainCheckoutActionResult;
 }
 
 /** System-event noticeKinds written into the initiating session. */

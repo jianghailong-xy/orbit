@@ -157,6 +157,9 @@ Lines are written into the session that initiated the action:
 | `main-checkout-changed` | A worktree turn ended and the main checkout has new or content-changed paths (compared by path + contentHash). It replaces `shared-checkout-dirty` and its old copy. A checkout that was already dirty when the session started gets no card, only the bar; one batch of changes produces one card. | `MainCheckoutChangedNotice`: `notice`, `root`, `branch?`, `files[]` (path, status, binary, +/−; same cap and order as the snapshot), `fileCount`, `truncated`, `fingerprint` |
 | `main-checkout-action-result` | Every action outcome, including waiting, timeout and cancel | `MainCheckoutResultNotice`: `notice` (= the line's text), `result` |
 
+Both are stored as a `system` run event whose payload is the notice object. How an action-result line gets into the
+session is in §10.3: the control plane never writes a `run_event` that a live runner might be about to number.
+
 ## 8. Refusal codes and result lines
 
 Each line comes from `mainCheckoutResultLine(result, view)`, which returns
@@ -234,3 +237,102 @@ The same module holds these strings and builders:
 
 All of it is English and passes `src/web/src/copyLanguage.test.ts`. The prompts behind
 "Ask the agent …" are not on the board and are left to the client task that draws them.
+
+## 10. Relay
+
+How a read or an action gets to the runner, and how the answer comes back. This is the repo-cleanup relay made general.
+Each request is a `main_checkout_request` row (migration 0534). The heartbeat hands it out **once**: a
+compare-and-set from `pending` to `claimed`. The row is finished by whichever comes first: the runner's answer or the
+deadline. The TypeScript shapes live in `mainCheckoutGit.ts`, under "The relay".
+
+### 10.1 Heartbeat
+
+`RunnerHeartbeatResponse.mainCheckoutRequests?: MainCheckoutRunnerRequest[]` goes only to a runner that declares
+`main-checkout-git/v1`, and only while the runner is not draining. Each entry has one of two shapes:
+
+- `{ id, op: 'snapshot', root, diffPaths?, requestedAt, expiresAt }` — `diffPaths` holds at most
+  `MAIN_CHECKOUT_DIFF_PATHS_MAX` = 20 entries.
+- `{ id, op: 'action', command: MainCheckoutActionCommand }`.
+
+`id` is the row; the runner posts the answer under it. A runner never starts work after `expiresAt`. A snapshot read
+waits `MAIN_CHECKOUT_SNAPSHOT_WAIT_SECONDS` = 20 s. An action waits `MAIN_CHECKOUT_ACTION_TIMEOUT_SECONDS`.
+
+### 10.2 Answers (runner → control plane)
+
+| Route | Body | Notes |
+|---|---|---|
+| `POST /runner/main-checkout/:id/snapshot` | `MainCheckoutSnapshotAnswer`: `{ snapshot, diffs? }` or `{ error }` | `{accepted:false}` once the read is finished |
+| `POST /runner/main-checkout/:id/result` | `MainCheckoutActionResult` | `requestId` and `kind` must match the row. `status` is `done`, `partial` or `refused`. The runner never sends the four control-plane codes. |
+
+Both routes find the row by `(id, the calling runner)`. Any other row is 404.
+
+When a result arrives:
+
+- **The first result** finishes the request and writes its line.
+- **A second copy of the same result** is accepted with `{accepted:false}` and changes nothing.
+- **A result after the control plane finished the request** (`TIMEOUT`, `CANCELLED`) never replaces that outcome.
+  It is kept as `late_result` and written **once** as a line of its own. This is what the TIMEOUT line promises.
+
+### 10.3 Result lines
+
+The line goes into `initiatedFromSessionId` as a `system` event with no turn id, carrying a `MainCheckoutResultNotice`.
+It is written in the same transaction as the compare-and-set that finished the request, so it is written once. The
+write path depends on the session:
+
+- **The session is live on a runner that declares the capability.** Live means `RUNNING`, `AWAITING_INPUT` or
+  `INTERRUPTED`, with an assigned runner. The runner numbers that session's events itself and keeps the counter in
+  memory. So the control plane queues an inbox turn of kind **`notice`**:
+  - Its `content` is the `MainCheckoutResultNotice` as JSON.
+  - Its `clientTurnId` is `main-checkout:v1:<row>:<result|waiting|late>`.
+  - The inbox hands it out at once, whether or not a turn is running, and answers it as it hands it out.
+  - The runner's inbox poller takes it before any engine sees it (`src/runner-go/main_checkout_notice.go`). It emits
+    the payload through the session's own emitter, so the line takes the next seq like every other event.
+  - It never reaches the agent, opens no turn and changes no session state.
+- **Any other session.** The control plane writes the `run_event` itself at `max(seq)+1`, under the session row's
+  lock. The next claim reads the maximum afresh.
+
+A result line never writes a merge receipt, a session merge status or a project landing.
+
+### 10.4 The person's routes
+
+| Route | Answer |
+|---|---|
+| `GET /workspaces/:id/main-checkout?diff=<path>` (repeat `diff` for each file) | `MainCheckoutView`: `snapshot`, `diffs?`, `actionsSupported`, `managedBranch`, `inFlight` |
+| `POST /workspaces/:id/main-checkout/actions` | `MainCheckoutActionAnswer`: `{ requestId, status: 'pending' }`, or `'finished'` with `result` |
+| `POST /workspaces/:id/main-checkout/actions/:requestId/cancel` | The same, `CANCELLED`. Only before the runner was handed the action; 409 after. |
+
+**GET errors.** 404 for a workspace that is not the caller's, or that has no reported checkout. 503 when its runner
+is offline. 504 when the runner does not answer in time.
+
+**GET without the capability.** The runner is not asked. The snapshot is built from its last heartbeat, with
+`files: []` and `actionsSupported: false`.
+
+**Action body.** The POST takes a `MainCheckoutActionPost`: the request plus `initiatedFromSessionId`.
+
+**Action checks:**
+
+- `initiatedFromSessionId` and a move's `targetSessionId` must be the caller's sessions of this workspace.
+- The target must be on this workspace's runner and must have a worktree. That worktree's branch becomes the
+  command's `targetBranch`.
+- A runner without the capability is refused with HTTP 409 `{ code: 'MAIN_CHECKOUT_UNSUPPORTED' }`, and nothing is
+  queued.
+- A second action on the same runner and root while one is unfinished becomes `ACTION_IN_FLIGHT`. A partial unique
+  index enforces this. The refusal is stored under its `requestId` and written as its line.
+- When the runner has not checked in, a `waiting` `RUNNER_OFFLINE` line is written. The action stays queued until
+  the runner returns, it is cancelled, or it times out.
+
+**Workspace payload.** It carries `repoHealth` with §4's counts and fingerprint, for Shared and Worktree workspaces
+alike. It also carries `mainCheckoutActions`: whether the runner declares the capability.
+
+**`managedBranch`.** Set when an open project tied to the workspace lands on the checkout's branch. A project is tied
+to the workspace when it coordinates there, has the workspace as a member, or has a task assigned there. The result
+is `{ projectId, projectTitle, role }`:
+
+- `role: 'integration-line'` when the branch is the primary codebase's `integrationRef`, on a project branch.
+- `role: 'landing-target'` when the branch is its `upstreamRef`.
+
+### 10.5 The timeout
+
+Every read, action and heartbeat sweeps what is past its deadline, and so does a 30 s timer. A swept action finishes
+`TIMEOUT` with its line, carrying `runnerName` and `minutes`. A swept read answers its waiter with 504. Nothing stays
+`pending` or `claimed` past `expiresAt`.

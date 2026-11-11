@@ -717,6 +717,10 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
 
 /** Runner-gate routes the census cannot stand up, each with why and the reading that proves it. */
 export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /runner/main-checkout/:id/snapshot':
+    'the read is found by (id, the calling runner) only, so another machine\'s id answers 404 and nothing is stored (workspaces/main-checkout.service.ts:330); main-checkout.pg.spec.ts "the read goes through the runner" sends it from another runner',
+  'POST /runner/main-checkout/:id/result':
+    'the action is found by (id, the calling runner) only, 404 for another machine\'s, and every write after is keyed by that row (workspaces/main-checkout.service.ts:347)',
   'GET /runner/owner-requests/:id':
     'read by (id, the runner\'s owner) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /runner/owner-requests/:id/withdraw':
@@ -1340,6 +1344,10 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /runner/main-checkout/:id/result body requestId':
+    'never looked up: compared with the requestId of the row the calling runner\'s own id named, and refused 400 when it differs (workspaces/main-checkout.service.ts:745)',
+  'POST /runner/main-checkout/:id/result body targetSessionId':
+    'never looked up nor written anywhere it names: kept on the result as the runner reported it, and read only to title the line, by id, in the row\'s own initiating session\'s transaction (workspaces/main-checkout.service.ts:483)',
   // ── owner requests (0503) ─────────────────────────────────────────────────────────────────────────
   'POST /runner/owner-requests body blocksTaskIds[]':
     'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',

@@ -77,6 +77,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'rootSessionId',
   'creatorSessionId',
   'authorSessionId',
+  // A main checkout request's initiating session (migration 0534): where its result line is written.
+  'initiatedFromSessionId',
   // An exception item, the work it is about and the rows other tasks of the integration-line contract
   // attach to it (migration 0273). Every one of them addresses a row a caller may be handed and hand
   // back: the item in `GET /projects/:id/open-items`, and the job, promotion or pause behind it.

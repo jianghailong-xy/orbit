@@ -2917,7 +2917,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0521 adds a defaulted wiki_repo_snapshot column and its CHECK only; no preserved rows, triggers or DONE fence change.
       '0521_wiki_repo_snapshot_source',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
-      '0530_wiki_repo_probe'],
+      '0530_wiki_repo_probe',
+      // 0534 creates main_checkout_request only; no preserved rows, triggers or DONE fence change.
+      '0534_main_checkout_request'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -815,6 +815,19 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── main checkout (0534) ──
+  'GET /workspaces/:id/main-checkout':
+    'the workspace is read by (id, the caller, not deleted) before anything else, so another account\'s id answers 404 and nothing is queued (workspaces/main-checkout.service.ts:535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it',
+  'POST /workspaces/:id/main-checkout/actions':
+    'a repeated requestId is looked up by (the caller, requestId) only; otherwise the workspace is read by (id, the caller, not deleted), 404 for another account\'s, before any row is written (workspaces/main-checkout.service.ts:170, :535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it and counts no row written',
+  'POST /workspaces/:id/main-checkout/actions/:requestId/cancel':
+    'the request is read by (the caller, requestId) and must be of this workspace, 404 otherwise; the write is a compare-and-set on that row (workspaces/main-checkout.service.ts:276-280)',
+  'GET /agents/:id/main-checkout':
+    'the workspace is read by (id, the caller, not deleted) before anything else, so another account\'s id answers 404 and nothing is queued (workspaces/main-checkout.service.ts:535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it',
+  'POST /agents/:id/main-checkout/actions':
+    'a repeated requestId is looked up by (the caller, requestId) only; otherwise the workspace is read by (id, the caller, not deleted), 404 for another account\'s, before any row is written (workspaces/main-checkout.service.ts:170, :535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it and counts no row written',
+  'POST /agents/:id/main-checkout/actions/:requestId/cancel':
+    'the request is read by (the caller, requestId) and must be of this workspace, 404 otherwise; the write is a compare-and-set on that row (workspaces/main-checkout.service.ts:276-280)',
   'GET /owner-requests/:id':
     'the request is read by (id, the caller) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /owner-requests/:id/done':
@@ -1298,6 +1311,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 
 /** Ids a request carries that name nothing of an account's to reach, each with why and where that is so. */
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /workspaces/:id/main-checkout/actions body targetSessionId':
+    'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
+  'POST /workspaces/:id/main-checkout/actions body initiatedFromSessionId':
+    'read by (id, the caller, not deleted) and required to be of this workspace before anything is written: another account\'s answers 404 (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "actions are the owner\'s" sends another account\'s and counts no row written',
+  'POST /agents/:id/main-checkout/actions body targetSessionId':
+    'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
+  'POST /agents/:id/main-checkout/actions body initiatedFromSessionId':
+    'read by (id, the caller, not deleted) and required to be of this workspace before anything is written: another account\'s answers 404 (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "actions are the owner\'s" sends another account\'s and counts no row written',
   'POST /owner-requests/:id/secret body savedSecretId':
     'read by (id, the caller) before anything is written, so another account\'s saved secret is the 404 of one that does not exist (owner-requests/owner-secrets.service.ts:217); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'POST /tasks/:id/execute body triggerId':

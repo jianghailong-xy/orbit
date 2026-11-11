@@ -1,4 +1,5 @@
 import type { OwnerConfirmationNotReviewedReason } from './owner-confirmation-review';
+import type { MainCheckoutRunnerRequest } from './mainCheckoutGit';
 // The wire contract shared by the control plane, the Go runner, the web app and the native
 // clients.
 //
@@ -1193,6 +1194,9 @@ export interface RunnerHeartbeatResponse {
   /** A checkout repair the user started after seeing it reported wedged. Absent on older control
    *  planes, and whenever no repair is in flight for this runner. */
   repoCleanupRequest?: RepoCleanupCommand;
+  /** Main checkout reads and actions for a runner that declared `main-checkout-git/v1`
+   *  (docs/main-checkout-git-contract.md §10). Each is handed out once. Absent otherwise. */
+  mainCheckoutRequests?: MainCheckoutRunnerRequest[];
   /** Re-read the runtime CLIs' model lists now, instead of waiting for the runner's own periodic
    *  pass. Set once per user request and cleared as it is handed over, so a runner that misses it
    *  (offline, older build) costs nothing more than the wait it was already in. */
@@ -2374,7 +2378,10 @@ export type ConversationTurnKind =
   | 'shell'
   | 'diff'
   | 'steer'
-  | 'withdraw';
+  | 'withdraw'
+  /** A main checkout result line (docs/main-checkout-git-contract.md §10.3): the runner writes `content` (a
+   *  MainCheckoutResultNotice) as a system event. Never shown to the agent; answered as it is handed out. */
+  | 'notice';
 
 /** What a routing-v1 sender wants a message to do. Omission retains the installed N-1
  * server-side auto-steer/queue protocol; new clients always send one explicit value. */
