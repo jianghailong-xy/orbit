@@ -31,7 +31,9 @@ import {
   spentUntil,
   type Answer,
 } from './pool-gateway.service';
+import { responseCostMicros } from './openai-prices';
 import { decryptSecret } from './provider-crypto';
+import { ResponsesStreamTap, type ResponsesOutcome } from './responses-stream-tap';
 
 /**
  * What a token authenticates (docs/claude-engine-openai-gateway-design.md §5.2): one session, of one person, on
@@ -266,6 +268,10 @@ export class AnthropicGatewayService {
         raw = Buffer.alloc(0);
       }
       const whole = assembleMessage([...converter.push(raw), ...converter.end()]);
+      const tap = new ResponsesStreamTap();
+      tap.push(raw);
+      tap.end();
+      void this.record(caller, tap.outcome, upstreamModel);
       if ('error' in whole) {
         const failed = converter.failure ?? { code: 'server_error', message: whole.error.message };
         await this.fail(res, caller, null, failed.code, failed.message, answer.response.headers, said);
@@ -289,6 +295,7 @@ export class AnthropicGatewayService {
       const usage = outcome.usage
         ? ` in ${outcome.usage.input_tokens ?? 0} out ${outcome.usage.output_tokens ?? 0}`
         : '';
+      void this.record(caller, outcome, upstreamModel);
       const failed = converter.failure;
       if (failed) {
         // Output had begun, so the CLI was told by an `error` event; the key is answered for all the same.
@@ -334,6 +341,44 @@ export class AnthropicGatewayService {
     }
   }
 
+  /**
+   * What one answer used (design §5.5, decision D8), read off the Responses stream as it passed by the same tap
+   * the pool gateway reads (`responses-stream-tap.ts`) and priced with `openai-prices.ts`: a `key_gateway_usage`
+   * row for the session and key, a `usage` row (input counted the way a Claude row counts it, without what came
+   * from the cache), and the cost added to `session.cost_usd`, which turn-complete then leaves alone for such a
+   * session (gatewayBooksSpend). Written after the answer is out, off the stream's path; an answer that names no
+   * usage writes nothing.
+   */
+  private async record(caller: AnthropicGatewayCaller, outcome: ResponsesOutcome, sentModel: string): Promise<void> {
+    const usage = outcome.usage;
+    if (!usage) return;
+    const model = outcome.model ?? sentModel;
+    const input = count(usage.input_tokens);
+    const cached = Math.min(input, count(usage.input_tokens_details?.cached_tokens));
+    const output = count(usage.output_tokens);
+    const costMicros = responseCostMicros(model, outcome.serviceTier, usage);
+    const costUsd = costMicros / 1_000_000;
+    try {
+      await this.prisma.session.update({
+        where: { id: caller.sessionId },
+        data: {
+          costUsd: { increment: costUsd },
+          llmUsage: { create: { model, inputTokens: input - cached, cacheReadInputTokens: cached, outputTokens: output, costUsd } },
+          keyGatewayUsage: {
+            create: {
+              providerId: caller.key.id, model, serviceTier: outcome.serviceTier ?? null,
+              inputTokens: input, cachedInputTokens: cached, outputTokens: output,
+              reasoningTokens: count(usage.output_tokens_details?.reasoning_tokens), costMicros,
+            },
+          },
+        },
+        select: { id: true },
+      });
+    } catch (e) {
+      this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: could not record usage: ${(e as Error).message}`);
+    }
+  }
+
   /** A response OpenAI answered whole: a budget it had said was spent is not any more. */
   private async answered(caller: AnthropicGatewayCaller): Promise<void> {
     if (!caller.key.spentUntil) return;
@@ -372,6 +417,11 @@ export class AnthropicGatewayService {
     }
     if (!res.headersSent) res.status(200).json({ input_tokens: counted ?? estimateInputTokens(message) });
   }
+}
+
+/** A token count as an answer gave it: a whole number, never below zero. */
+function count(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
 /** The refusal a session on a key whose endpoint the gateway may not call gets (design §5.3), naming the key. */

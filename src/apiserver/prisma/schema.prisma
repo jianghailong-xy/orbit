@@ -336,6 +336,7 @@ model User {
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
   avatar           UserAvatar? // the profile photo, when one is set (0335)
+  emailOutbox      EmailOutbox[] // the welcome email of this account, when it was created after 0517
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
@@ -513,6 +514,52 @@ model SignInProvider {
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("sign_in_provider")
+}
+
+/// Outgoing email (docs/welcome-email-design.md §3.1; migration 0516): at most one row, id 1, written by an
+/// administrator on Admin → Email. No row is the same as a row that is off. `email_settings_one_row_chk`
+/// (`id` = 1) lives only in the migration.
+model EmailSettings {
+  id              Int      @id @default(1) @db.SmallInt
+  enabled         Boolean  @default(false)
+  /// AES-256-GCM ciphertext of the Resend API key ("iv:tag:ct", each base64); empty = none saved.
+  resendApiKeyEnc String   @default("") @map("resend_api_key_enc")
+  fromAddress     String   @default("") @map("from_address")
+  /// Empty: the earliest administrator's address.
+  replyTo         String   @default("") @map("reply_to")
+  welcomeEnabled  Boolean  @default(true) @map("welcome_enabled")
+  /// The administrator who saved it last. An id rather than a relation, so deleting them writes nothing here.
+  updatedById     String?  @map("updated_by_id") @db.Uuid
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("email_settings")
+}
+
+/// One email to send (docs/welcome-email-design.md §3.3; migration 0517), written in the transaction that
+/// creates the account. `kind` is only WELCOME; status PENDING | SENT | FAILED | SKIPPED (CHECKs live in
+/// the migration). No body and no secret: the email is rendered when it is sent.
+model EmailOutbox {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  kind              String
+  userId            String    @map("user_id") @db.Uuid
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toAddress         String    @map("to_address")
+  /// The administrator who created the account; null for a Google sign-up. No relation, as updatedById.
+  createdById       String?   @map("created_by_id") @db.Uuid
+  status            String
+  attempts          Int       @default(0)
+  generation        Int       @default(0)
+  keyAttempt        Int       @default(0) @map("key_attempt")
+  nextAttemptAt     DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lastError         String?   @map("last_error")
+  lastAttemptAt     DateTime? @map("last_attempt_at") @db.Timestamptz(3)
+  providerMessageId String?   @map("provider_message_id")
+  sentAt            DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([kind, userId], map: "email_outbox_kind_user_id_key")
+  @@map("email_outbox")
 }
 
 /// The runner dispatch pause (docs/runner-link-design.md §11.1, §11.3, D8; migration 0442): at most one
@@ -2193,6 +2240,7 @@ model Session {
   messageCharges        SessionMessageCharge[] @relation("SessionMessageChargeRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   keyGatewayTokens      KeyGatewayToken[]
+  keyGatewayUsage       KeyGatewayUsage[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
   toolCalls             ToolCall[]
@@ -6883,6 +6931,8 @@ model ModelProvider {
   aliases       ProviderSlugAlias[]
   // The tokens Claude Code sessions on this key run with instead of it (migration 0519).
   gatewayTokens KeyGatewayToken[]
+  // What those sessions' answers used and cost, as the gateway read them (migration 0525).
+  gatewayUsage  KeyGatewayUsage[]
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -7126,6 +7176,35 @@ model KeyGatewayToken {
   @@index([providerId])
   @@index([userId])
   @@map("key_gateway_token")
+}
+
+/// One answer OpenAI gave a Claude Code session on an OpenAI key through /api/gw/anthropic (migration 0525):
+/// its tokens as the Responses stream's final event counted them, read off the stream as it passed, and their
+/// price from openai-prices.ts (design §5.5, decision D8). Per session and key; the same answer is also a
+/// `usage` row and part of `session.cost_usd`, written with it.
+model KeyGatewayUsage {
+  id                String        @id @default(uuid(7)) @db.Uuid
+  sessionId         String        @map("session_id") @db.Uuid
+  session           Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  providerId        String        @map("provider_id") @db.Uuid
+  provider          ModelProvider @relation(fields: [providerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// The model that answered, as the answer names it.
+  model             String
+  /// The tier it was served on, which prices it; null when the answer named none.
+  serviceTier       String?       @map("service_tier")
+  /// All input, cached included.
+  inputTokens       BigInt        @default(0) @map("input_tokens")
+  cachedInputTokens BigInt        @default(0) @map("cached_input_tokens")
+  /// All output, reasoning included.
+  outputTokens      BigInt        @default(0) @map("output_tokens")
+  reasoningTokens   BigInt        @default(0) @map("reasoning_tokens")
+  // US dollars × 1,000,000.
+  costMicros        BigInt        @default(0) @map("cost_micros")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  @@index([sessionId])
+  @@index([providerId])
+  @@map("key_gateway_usage")
 }
 
 /// What one person spent on one key of a shared pool in one calendar month, UTC (migration 0321):
