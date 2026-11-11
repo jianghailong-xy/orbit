@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>44 wiki maintenance without git: repository tiers</title>
+<style>
+  /* Self-contained board: every class carries the x44- prefix. */
+  :root {
+    --ink: #1f2328; --ink2: #59636e; --ink3: #818b98; --line: #d1d9e0; --line2: #e6eaef; --bg: #f6f8fa; --card: #fff;
+    --blue: #0969da; --blue-bg: #ddf4ff; --blue-bd: #9cd1fa;
+    --green: #1a7f37; --green-bg: #dafbe1; --green-bd: #8fd6a2;
+    --red: #cf222e; --red-bg: #ffebe9; --red-bd: #ffb8b0;
+    --amber: #9a6700; --amber-bg: #fff8c5; --amber-bd: #e7cf6c;
+    --purple: #8250df; --purple-bg: #fbefff; --purple-bd: #d8b9ff;
+    --gray-bg: #eef1f4;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; }
+  body { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: var(--ink); }
+  .x44-board { width: 1360px; padding: 32px 40px 40px; background: #fff; }
+  .x44-title { font-size: 26px; font-weight: 750; margin: 0 0 4px; letter-spacing: -.01em; }
+  .x44-sub { color: var(--ink2); margin: 0 0 22px; font-size: 14.5px; }
+  .x44-part { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 20px 24px 24px; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .x44-part + .x44-part { margin-top: 22px; }
+  .x44-h2 { font-size: 18px; font-weight: 750; margin: 0 0 4px; display: flex; gap: 10px; align-items: center; }
+  .x44-no { display: inline-flex; width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 14px; align-items: center; justify-content: center; flex: none; }
+  .x44-lead { color: var(--ink2); font-size: 13.5px; margin: 0 0 16px; }
+  .x44-code { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12px; background: var(--gray-bg); border-radius: 4px; padding: 0 4px; }
+  .x44-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .x44-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .x44-lane { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .x44-lane.new { border: 1.5px solid var(--blue); }
+  .x44-lane h3 { margin: 0 0 10px; font-size: 14.5px; display: flex; gap: 8px; align-items: center; }
+  .x44-tag { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 10px; line-height: 18px; display: inline-block; }
+  .x44-tag.today { background: var(--gray-bg); color: var(--ink2); }
+  .x44-tag.new { background: var(--blue); color: #fff; }
+  .x44-tag.bad { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-bd); }
+  .x44-tag.good { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-bd); }
+  .x44-tag.warn { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-bd); }
+  .x44-step { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 6px 10px; font-size: 13px; background: #fff; }
+  .x44-step small { display: block; color: var(--ink2); font-size: 12px; line-height: 1.5; }
+  .x44-step.repo { border-left-color: var(--purple); }
+  .x44-step.srv { border-left-color: var(--green); }
+  .x44-step.dead { background: #f3f4f6; color: var(--ink3); border-style: dashed; border-left-style: solid; }
+  .x44-step.dead small { color: var(--ink3); }
+  .x44-step.bad { background: var(--red-bg); border-color: var(--red-bd); border-left-color: var(--red); }
+  .x44-step.opt { border-style: dashed; border-left-style: solid; }
+  .x44-arrow { text-align: center; color: var(--ink3); font-size: 13px; line-height: 1; margin: 3px 0; }
+  .x44-facts { margin: 0; padding-left: 18px; font-size: 13.5px; }
+  .x44-facts li + li { margin-top: 4px; }
+  .x44-ref { color: var(--ink3); font-size: 12px; font-family: "JetBrains Mono", monospace; }
+  table.x44-t { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 13px; }
+  table.x44-t th { text-align: left; background: var(--gray-bg); color: var(--ink2); font-weight: 650; font-size: 12.5px; padding: 8px 12px; }
+  table.x44-t td { padding: 9px 12px; border-top: 1px solid var(--line2); vertical-align: top; }
+  table.x44-t td.c { text-align: center; }
+  table.x44-t tr.hl td { background: #f2f8ff; }
+  .y { color: var(--green); font-weight: 700; } .n { color: var(--ink3); } .w { color: var(--amber); font-weight: 700; } .r { color: var(--red); font-weight: 700; }
+  .x44-tier { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+  .x44-tier i { font-style: normal; width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: #fff; }
+  .t0 i { background: #6e7781; } .t1 i { background: var(--purple); } .t2 i { background: var(--blue); }
+
+  /* status line, drawn like the Wiki home's header line (wikiHealth.ts parts) */
+  .x44-win { background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .x44-win-bar { height: 26px; background: #f0f2f5; border-bottom: 1px solid var(--line2); display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+  .x44-win-bar span { width: 9px; height: 9px; border-radius: 50%; background: #d0d4da; }
+  .x44-win-body { padding: 14px 18px 16px; }
+  .x44-wh { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+  .x44-line { font-size: 13px; color: var(--ink); display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; }
+  .x44-line .sep { color: var(--ink3); }
+  .x44-line .m { color: var(--ink2); }
+  .x44-line .wa { color: var(--amber); }
+  .x44-line .er { color: var(--red); }
+  .x44-line .st { font-weight: 650; }
+  .x44-line .lk { color: var(--blue); }
+  .x44-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 2px; vertical-align: 1px; }
+  .x44-dot.a { background: #bf8700; } .x44-dot.r { background: var(--red); }
+  .x44-ok { color: var(--green); }
+  .x44-case { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: start; }
+  .x44-case + .x44-case { margin-top: 12px; }
+  .x44-mk { width: 24px; height: 24px; border-radius: 50%; background: var(--red); color: #fff; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 18px; }
+  .x44-note { font-size: 12.5px; color: var(--ink2); margin-top: 6px; }
+
+  /* settings form */
+  .x44-form { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; font-size: 13.5px; }
+  .x44-form h4 { margin: 0 0 12px; font-size: 15px; }
+  .x44-field { margin-bottom: 12px; }
+  .x44-field label { display: block; font-size: 12.5px; color: var(--ink2); margin-bottom: 4px; font-weight: 600; }
+  .x44-select { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; display: flex; justify-content: space-between; }
+  .x44-probe { border-radius: 8px; padding: 8px 10px; font-size: 12.5px; margin-top: 6px; display: flex; gap: 8px; }
+  .x44-probe.ok { background: var(--green-bg); color: #116329; }
+  .x44-probe.fold { background: var(--purple-bg); color: #6639ba; }
+  .x44-probe.none { background: var(--amber-bg); color: #7d4e00; }
+  .x44-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+  .x44-btn { border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; font-size: 13px; background: #f6f8fa; }
+  .x44-btn.p { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+  /* phone */
+  .x44-phone { width: 300px; border: 8px solid #1f2328; border-radius: 38px; background: #f2f2f7; padding: 34px 12px 18px; margin: 0 auto; }
+  .x44-ph-h { font-size: 24px; font-weight: 750; margin: 6px 4px 2px; }
+  .x44-ph-line { font-size: 12.5px; margin: 0 4px 10px; color: var(--ink); line-height: 1.5; }
+  .x44-ph-card { background: #fff; border-radius: 12px; padding: 10px 12px; font-size: 13px; }
+  .x44-ph-card + .x44-ph-card { margin-top: 8px; }
+  .x44-ph-card .g { color: #8a8a8d; font-size: 12px; }
+
+  .x44-dec { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  .x44-opt { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+  .x44-opt.rec { border: 2px solid var(--green); }
+  .x44-opt h5 { margin: 0 0 4px; font-size: 13.5px; display: flex; gap: 8px; align-items: center; }
+  .x44-q { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .x44-q + .x44-q { margin-top: 12px; }
+  .x44-q > b { font-size: 14.5px; }
+  .x44-land { margin: 0; padding-left: 20px; font-size: 13.5px; }
+  .x44-land li + li { margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="x44-board">
+  <h1 class="x44-title">44 · 没有 git 也能维护 wiki：仓库分三档</h1>
+  <p class="x44-sub">2026-11-11 · 起因：一个 space 的工作目录不再是 git checkout，维护从 11-04 起停了 6 天，健康行只显示「behind」。
+    owner 已定：工作目录可以当事实来源。界面文字是英文（产品文案），注释是中文。</p>
+
+  <!-- ─────────────────────────── part 1 ─────────────────────────── -->
+  <section class="x44-part" id="part-1">
+    <h2 class="x44-h2"><span class="x44-no">1</span>今天：仓库是整次运行的闸门</h2>
+    <p class="x44-lead">wiki 的原料是服务端从会话里抽好的<b>案卷</b>，跟仓库无关；仓库只用来核锚点和写文档。
+      但运行的第一步是 git 快照，这一步一失败，后面全部不跑。</p>
+    <div class="x44-grid2">
+      <div class="x44-lane">
+        <h3><span class="x44-tag today">今天</span><span class="x44-code">steps()</span> 的顺序 <span class="x44-ref">wiki-maintain-job.ts:699</span></h3>
+        <div class="x44-step repo bad">① repo：runner 上 <span class="x44-code">git rev-parse</span> → fetch origin/main → 建快照
+          <small>不是 git → <span class="x44-code">REPO_OP_FAILED: … is not a git checkout</span>，抛 infra 错误，重试 10 次</small></div>
+        <div class="x44-arrow">✕ 下面都不跑</div>
+        <div class="x44-step srv dead">② dossiers：读游标后的案卷 <small>不需要仓库</small></div>
+        <div class="x44-step srv dead">③ extract / claims：每个案卷问一次 System model <small>不需要仓库（只是拿快照来过滤锚点）</small></div>
+        <div class="x44-step srv dead">④ self-check · breaker · propose <small>不需要仓库</small></div>
+        <div class="x44-step srv dead">⑤ advance：推进游标 <small>不需要仓库</small></div>
+        <div class="x44-step srv dead">⑥ verify · anchors <small>路径/符号/提交锚点要读仓库；判据、记录、merge 证据锚点在服务端</small></div>
+        <div class="x44-step srv dead">⑦ docs：按 plan 重写受影响的节 <small>要读原文</small></div>
+      </div>
+      <div>
+        <div class="x44-lane" style="margin-bottom:14px">
+          <h3>为什么没人发现</h3>
+          <ul class="x44-facts">
+            <li>infra 失败<b>不计入连续失败</b>（design §5.5），所以健康行永远停在 <span class="x44-code">behind</span>，不会变成 <span class="x44-code">failing</span>；连续失败 3 次才发的通知也不会发。</li>
+            <li><span class="x44-code">readWikiRepoReadiness</span> 只看 workspace、runner 在线、有没有能力，不看 <span class="x44-code">work_dir_is_git</span>（workspace 行上有这个字段）。</li>
+            <li><span class="x44-code">lastFailure</span> 已经在 health 契约里，三个客户端都没画。</li>
+            <li>恢复只能靠「下一个事实」来触发，owner 没有「立即再跑」的入口。</li>
+          </ul>
+        </div>
+        <div class="x44-lane" style="border-color:var(--red-bd)">
+          <h3><span class="x44-tag bad">产品自相矛盾</span>建得了，维护不了</h3>
+          <ul class="x44-facts">
+            <li>可以建「没有仓库的 wiki」（<span class="x44-ref">wiki.controller.ts:104</span>），也可以手动加入没有仓库的 workspace（design §2.1）。</li>
+            <li>开维护时只要求选一个 workspace（<span class="x44-ref">wiki-maintenance-settings.ts:83</span>）。</li>
+            <li>可这种 space 的每一次运行都会死在 <span class="x44-code">rev-parse</span>：等于永远维护不了。</li>
+            <li>git 只是工作目录的一种可能：项目文件夹、monorepo 的子目录、换了位置的 worktree、别的版本控制，都很常见。</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── part 2 ─────────────────────────── -->
+  <section class="x44-part" id="part-2">
+    <h2 class="x44-h2"><span class="x44-no">2</span>新：仓库按档位读，读不到就降一档，不再拦住整次运行</h2>
+    <p class="x44-lead">每次运行先让 runner 判断能读到哪一档，再用这一档能做的事。只有第 0 档的事是一定要做的，而第 0 档根本不读仓库。</p>
+    <table class="x44-t">
+      <tr><th style="width:150px">档位</th><th style="width:250px">怎么认（runner 每次判断）</th><th>快照的标识</th><th class="c" style="width:96px">抽条目<br>推游标</th><th class="c" style="width:96px">路径 / 符号<br>锚点</th><th class="c" style="width:80px">提交锚点</th><th class="c" style="width:80px">文档重写</th><th style="width:200px">健康行（英文文案）</th></tr>
+      <tr class="hl"><td><span class="x44-tier t2"><i>2</i>git</span></td>
+        <td>是 git checkout，origin 等于 space 的仓库，根提交一致：<b>和今天完全一样</b>。<br><span class="n">没有 origin（纯本地仓库）→ 用 HEAD</span></td>
+        <td>origin/main 的 sha<br><span class="n">本地仓库：HEAD 的 sha</span></td>
+        <td class="c y">✓</td><td class="c y">✓</td><td class="c y">✓</td><td class="c y">✓</td>
+        <td>不变：<br><span class="x44-code">Maintained 2h ago ✓</span></td></tr>
+      <tr><td><span class="x44-tier t1"><i>1</i>文件夹</span></td>
+        <td>目录在，但不是 git checkout：<b>直接扫工作目录</b></td>
+        <td>树哈希：对（路径, 大小, 内容 sha256）排序后取 sha1，仍是 40 位，<span class="x44-code">wiki_repo_snapshot.sha</span> 和读缓存的键都不用改</td>
+        <td class="c y">✓</td><td class="c y">✓<br><span class="n" style="font-weight:400">文件在 / 区域哈希</span></td><td class="c n">—<br>不建也不核</td><td class="c y">✓</td>
+        <td>多一段灰字：<br><span class="x44-code">Reading the folder, not git</span></td></tr>
+      <tr><td><span class="x44-tier t0"><i>0</i>只有会话</span></td>
+        <td>什么都读不到：目录不存在、runner 不在线、没有 workspace、没有能力</td>
+        <td>没有：保留上一份快照（有的话）</td>
+        <td class="c y">✓</td><td class="c w">待核</td><td class="c w">待核</td><td class="c w">推迟</td>
+        <td>琥珀：<br><span class="x44-code">Code checks paused: ~/work/app was not found</span> · <span class="x44-code">Fix in Settings</span></td></tr>
+      <tr><td><span class="r">停</span></td>
+        <td>是 git，但 origin 是<b>别的仓库</b>，或者根提交不一致：读的是别人的代码</td>
+        <td>—</td>
+        <td class="c y">✓<br><span class="n" style="font-weight:400">照第 0 档</span></td><td class="c r">✕</td><td class="c r">✕</td><td class="c r">✕</td>
+        <td>红：<br><span class="x44-code">~/work/app is a clone of github.com/x/y, not this wiki's repository</span></td></tr>
+    </table>
+    <div class="x44-grid3" style="margin-top:14px">
+      <div class="x44-lane"><h3>还是只有一个 workspace</h3><div style="font-size:13px">维护设置里选的那个 workspace 决定在哪台 runner、哪个目录读。档位是读的结果，不是一个设置：owner 修好目录，下一次运行自动回到第 2 档。</div></div>
+      <div class="x44-lane"><h3>git 档不变</h3><div style="font-size:13px">有 git 时仍然只读 origin/main（不读未提交的改动）：今天的信任模型、fetch 锁、根提交校验都不动。文件夹档只在<b>不是 git</b> 时启用。</div></div>
+      <div class="x44-lane"><h3>第 0 档也有锚点可核</h3><div style="font-size:13px"><span class="x44-code">criterion</span>、<span class="x44-code">record</span>、<span class="x44-code">merge_evidence</span> 锚点本来就在服务端核，不需要仓库，第 0 档照样核。</div></div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── part 3 ─────────────────────────── -->
+  <section class="x44-part" id="part-3">
+    <h2 class="x44-h2"><span class="x44-no">3</span>一次运行的步骤：仓库从第一步挪到「用得着的地方」</h2>
+    <p class="x44-lead">第 ②–⑤ 步不再依赖仓库。读仓库失败只影响 ⑥⑦，而且会记在运行行上，不会让整次运行无声地重试 10 次。</p>
+    <div class="x44-grid2">
+      <div class="x44-lane">
+        <h3><span class="x44-tag today">今天</span></h3>
+        <div class="x44-step repo">① repo：git 快照 <small>失败 = 整次运行 infra 失败，重试到上限，游标不动</small></div>
+        <div class="x44-arrow">↓</div>
+        <div class="x44-step srv">② dossiers → ③ extract → ④ propose → ⑤ advance</div>
+        <div class="x44-arrow">↓</div>
+        <div class="x44-step srv">⑥ verify · anchors（runner 的 <span class="x44-code">anchors</span> 操作）</div>
+        <div class="x44-arrow">↓</div>
+        <div class="x44-step srv">⑦ docs</div>
+      </div>
+      <div class="x44-lane new">
+        <h3><span class="x44-tag new">新</span></h3>
+        <div class="x44-step repo opt">① probe：runner 回答档位，并给出快照（第 1/2 档）
+          <small>读不到 → 记下档位 0 和原因，<b>继续往下走</b>；只有「runner 掉线、端点 5xx」这类瞬时故障还按 infra 退避重试</small></div>
+        <div class="x44-arrow">↓</div>
+        <div class="x44-step srv">② dossiers → ③ extract → ④ propose → ⑤ advance
+          <small>prompt 里「这个仓库是什么」：有快照用 README 首段，否则用 space 的 title。没有快照时，条目里写的代码锚点<b>保留为「待核」</b>，不再当成「别的仓库的知识」丢掉（今天 <span class="x44-ref">wiki-maintain.ts:668</span> 会丢）</small></div>
+        <div class="x44-arrow">↓</div>
+        <div class="x44-step srv">⑥ anchors：服务端锚点每档都核；路径/符号锚点第 1/2 档核；提交锚点只有第 2 档核
+          <small>核不了的 → 保留上一次的结果，<span class="x44-code">anchors_due</span> 保持置位，下一次读得到时补核</small></div>
+        <div class="x44-arrow">↓</div>
+        <div class="x44-step srv">⑦ docs：第 1/2 档照常；第 0 档推迟，受影响的节记下来，等能读时一起重写
+          <small>沿用追赶模式「回来后统一重写」的同一套记账</small></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── part 4 ─────────────────────────── -->
+  <section class="x44-part" id="part-4">
+    <h2 class="x44-h2"><span class="x44-no">4</span>文件夹档：runner 怎么读工作目录</h2>
+    <p class="x44-lead">输出和 git 快照<b>格式完全相同</b>（路径和大小、文档标题、符号、README 首段），所以服务端的门检查、读缓存、文档构建都能直接用。
+      不同的只有：读的是磁盘上的文件，而 git 档读的是某个提交。</p>
+    <div class="x44-grid3">
+      <div class="x44-lane"><h3>读什么、不读什么</h3>
+        <ul class="x44-facts">
+          <li>目录里有 <span class="x44-code">.gitignore</span> 就照它排除（没有 .git 也照样读这个文件）。</li>
+          <li>内置排除表，<b>先于</b> .gitignore 生效：<span class="x44-code">.env*</span>、<span class="x44-code">*.pem</span>、<span class="x44-code">*.key</span>、<span class="x44-code">id_*</span>、<span class="x44-code">.ssh/</span>、<span class="x44-code">node_modules/</span>、构建产物目录、二进制文件。</li>
+          <li>不跟随符号链接，不出工作目录。</li>
+          <li>单个文件上限沿用 2 MB（<span class="x44-code">repoOps.read.wholeFileBytes</span>）；文件数设上限，超过就按档位 0 处理并说明原因。</li>
+          <li>上传前照常脱敏：owner 的 <span class="x44-code">workspace.env</span> 真实值逐字遮蔽（design §10.2）。</li>
+        </ul></div>
+      <div class="x44-lane"><h3>快照的标识与 diff</h3>
+        <ul class="x44-facts">
+          <li>标识 = 树哈希（见第 2 部分）。文件没变，哈希就不变：<span class="x44-code">skipSha</span> 照样省掉重传。</li>
+          <li>快照的文件条目多一个 <span class="x44-code">hash</span>（内容 sha256）。两份文件夹快照之间的 diff 由<b>服务端比对两份索引</b>得出，runner 不用存历史。</li>
+          <li>索引多一个 <span class="x44-code">source: "git" | "folder"</span>；<span class="x44-code">commits</span> 为空。</li>
+          <li>读原文：按 (space, 树哈希, path) 缓存，和今天的 (space, sha, path) 是同一张表。</li>
+        </ul></div>
+      <div class="x44-lane"><h3>可信度怎么标</h3>
+        <ul class="x44-facts">
+          <li>锚点复验结果的 <span class="x44-code">ref</span> 记成 <span class="x44-code">folder:&lt;树哈希&gt;</span>，<span class="x44-code">wiki_get</span> 能看出它是在文件夹上核的，不是在某个提交上。</li>
+          <li>文件夹上的内容可能是还没提交的改动：锚点后来不见了，复验时会是 <span class="x44-code">missing</span>，走今天的 challenge 流程，不需要新机制。</li>
+          <li>以后目录变成 git checkout，就自动回到第 2 档；文件夹上核过的锚点下一次在 origin/main 上重核。</li>
+        </ul></div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── part 5 ─────────────────────────── -->
+  <section class="x44-part" id="part-5">
+    <h2 class="x44-h2"><span class="x44-no">5</span>界面：说清楚在读什么，修好后能立刻再跑</h2>
+    <p class="x44-lead">只改健康行的一段和维护设置表单，不新造外观。颜色沿用今天的规则：琥珀 = 会自己好或者还能用，红 = 要有人去修。</p>
+    <div style="display:grid;grid-template-columns:1fr 330px;gap:20px">
+      <div>
+        <div class="x44-case"><div class="x44-mk" style="background:var(--ink3)">今</div>
+          <div class="x44-win"><div class="x44-win-bar"><span></span><span></span><span></span></div><div class="x44-win-body">
+            <div class="x44-wh">app</div>
+            <div class="x44-line"><span class="wa st"><span class="x44-dot a"></span>Maintenance behind</span><span class="sep">·</span><span class="wa">412 to catch up, oldest 6d</span><span class="sep">·</span><span>last run 6d ago</span></div>
+            <div class="x44-note">今天的样子：像是在排队等，其实每次运行都失败了。owner 看不出该去修什么。</div>
+          </div></div></div>
+        <div class="x44-case"><div class="x44-mk" style="background:var(--blue)">2</div>
+          <div class="x44-win"><div class="x44-win-body">
+            <div class="x44-line"><span>Maintained 2h ago</span><span class="x44-ok">✓</span><span class="sep">·</span><span>3 to catch up</span></div>
+            <div class="x44-note">第 2 档：和今天一字不差。</div>
+          </div></div></div>
+        <div class="x44-case"><div class="x44-mk" style="background:var(--purple)">1</div>
+          <div class="x44-win"><div class="x44-win-body">
+            <div class="x44-line"><span>Maintained 2h ago</span><span class="x44-ok">✓</span><span class="sep">·</span><span>3 to catch up</span><span class="sep">·</span><span class="m">Reading the folder, not git</span></div>
+            <div class="x44-note">第 1 档：维护正常，只在行尾加一段灰字；悬停提示 <span class="x44-code">Commit anchors are not checked: ~/work/app is not a git checkout.</span> 点击进 Settings。</div>
+          </div></div></div>
+        <div class="x44-case"><div class="x44-mk" style="background:#bf8700">0</div>
+          <div class="x44-win"><div class="x44-win-body">
+            <div class="x44-line"><span>Maintained 2h ago</span><span class="x44-ok">✓</span><span class="sep">·</span><span class="wa st"><span class="x44-dot a"></span>Code checks paused: ~/work/app was not found</span><span class="sep">·</span><span class="lk">Fix in Settings</span></div>
+            <div class="x44-note">第 0 档：条目照常进来（前半句仍是绿勾），只有代码锚点和文档在等。原因直接写出路径，来自 runner 的回答。</div>
+          </div></div></div>
+        <div class="x44-case"><div class="x44-mk">停</div>
+          <div class="x44-win"><div class="x44-win-body">
+            <div class="x44-line"><span>Maintained 2h ago</span><span class="x44-ok">✓</span><span class="sep">·</span><span class="er st"><span class="x44-dot r"></span>~/work/app is a clone of github.com/x/y, not this wiki's repository</span><span class="sep">·</span><span class="lk">Fix in Settings</span></div>
+            <div class="x44-note">选错目录：红。案卷照样处理（不碰代码），但不读这个目录。持续 3 次运行后发一次通知（今天这条路完全不出声）。</div>
+          </div></div></div>
+      </div>
+      <div>
+        <div class="x44-form">
+          <h4>Set up maintenance</h4>
+          <div class="x44-field"><label>Workspace</label>
+            <div class="x44-select"><span>app · MacBook</span><span class="n">⌄</span></div>
+            <div class="x44-probe fold"><span>▣</span><span><b>Folder, not git</b><br>Entries and code checks work. Commit anchors are not checked.</span></div>
+          </div>
+          <div class="x44-field"><label>其他两种回答（同一个位置）</label>
+            <div class="x44-probe ok"><span>✓</span><span><b>Git checkout of github.com/x/app</b></span></div>
+            <div class="x44-probe none"><span>!</span><span><b>~/work/app was not found on MacBook</b><br>Maintenance can still learn from sessions. Code checks wait until the folder is back.</span></div>
+          </div>
+          <div class="x44-field"><label>Runs per day</label><div class="x44-select"><span>8</span><span class="n">⌄</span></div></div>
+          <div class="x44-btns"><span class="x44-btn">Cancel</span><span class="x44-btn p">Turn on</span></div>
+        </div>
+        <div class="x44-note" style="margin-top:8px">选 workspace 时立刻问一次 runner（复用 <span class="x44-code">work_dir_is_git</span> 探测，加上 origin 比对），把档位写在下拉框下面。三种回答都<b>允许开启</b>，只有「别的仓库」拦下。</div>
+        <div class="x44-form" style="margin-top:12px">
+          <h4>Maintenance <span class="x44-tag warn" style="margin-left:6px">Code checks paused</span></h4>
+          <div style="font-size:13px;color:var(--ink2)">~/work/app was not found on MacBook · checked 2h ago</div>
+          <div class="x44-btns" style="justify-content:flex-start"><span class="x44-btn p">Check again and run now</span><span class="x44-btn">Change workspace…</span></div>
+        </div>
+        <div class="x44-note" style="margin-top:8px">新入口：重新探测，然后马上建一次运行，不用等下一个事实。计入每日次数（daily limit）。</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:330px 1fr;gap:24px;margin-top:20px;align-items:center">
+      <div class="x44-phone">
+        <div class="x44-ph-h">app</div>
+        <div class="x44-ph-line">Maintained 2h ago <span class="x44-ok">✓</span> · <span style="color:var(--amber);font-weight:650"><span class="x44-dot a"></span>Code checks paused</span></div>
+        <div class="x44-ph-card"><b>Settings › Maintenance</b><div class="g">~/work/app was not found on MacBook</div><div style="color:var(--blue);margin-top:6px">Check again and run now</div></div>
+        <div class="x44-ph-card"><b>Reading</b><div class="g">Folder, not git · commit anchors off</div></div>
+      </div>
+      <div class="x44-lane"><h3>iOS / Android</h3>
+        <ul class="x44-facts">
+          <li>健康行在窄屏只放短句（<span class="x44-code">Code checks paused</span> / <span class="x44-code">Reading the folder</span>），完整原因在 Settings 里。三端的句子由同一份 <span class="x44-code">wiki-health.fixture.json</span> 约束，和今天一样。</li>
+          <li>Android 跟 iOS 的写法。</li>
+          <li>Activity 的 Runs 卡每行多一个档位标记（<span class="x44-code">git</span> / <span class="x44-code">folder</span> / <span class="x44-code">sessions only</span>）。</li>
+        </ul></div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── part 6 ─────────────────────────── -->
+  <section class="x44-part" id="part-6">
+    <h2 class="x44-h2"><span class="x44-no">6</span>失败分两类：持久的前提错误不再进重试循环</h2>
+    <table class="x44-t">
+      <tr><th style="width:250px">失败</th><th style="width:150px">归类</th><th>处理</th></tr>
+      <tr><td>目录不存在、不是 git、文件太多</td><td><span class="x44-tag warn">降档</span></td><td>不是失败：按能读到的档位继续，原因写进健康行。不重试。</td></tr>
+      <tr><td>origin 是别的仓库、根提交不一致</td><td><span class="x44-tag bad">前提错误</span></td><td>只跑第 0 档；健康行红；连续 3 次运行发一次通知（复用今天「失败 3 次」那条通知）。不重试。</td></tr>
+      <tr><td>git fetch 被拒（凭据）</td><td><span class="x44-tag bad">前提错误</span></td><td>同上，原因 <span class="x44-code">Git refused the credentials for origin</span>。</td></tr>
+      <tr><td>runner 掉线、端点 5xx / 429、worker 崩溃</td><td><span class="x44-tag today">瞬时 infra</span></td><td>和今天一样：退避重试、不计连续失败。区别是：到了重试上限，这次运行改为<b>只跑第 0 档</b>，不再整体以失败结束。</td></tr>
+      <tr><td>模型给不出可解析的结果、服务端拒绝</td><td><span class="x44-tag today">内容</span></td><td>不变：计入连续失败，3 次通知。</td></tr>
+    </table>
+  </section>
+
+  <!-- ─────────────────────────── part 7 ─────────────────────────── -->
+  <section class="x44-part" id="part-7">
+    <h2 class="x44-h2"><span class="x44-no">7</span>待定 · 要你拍板</h2>
+    <div class="x44-q"><b>Q1　space 有仓库地址，但工作目录不是 git（就是这次的情况）：要不要也走文件夹档？</b>
+      <div class="x44-dec">
+        <div class="x44-opt rec"><h5>方案 A：走文件夹档 <span class="x44-tag good">推荐</span></h5>
+          你已经定了工作目录可以当来源。路径/符号锚点照核，提交锚点等回到 git 再核。防选错目录：和上一份快照比，路径重合不到一半就当作「别的仓库」，按红色那一行处理。</div>
+        <div class="x44-opt"><h5>方案 B：只到第 0 档</h5>
+          有仓库地址的 space 只认 git，文件夹档只给没有仓库的 wiki。更保守，但这次的场景就只剩「条目照收，代码不核」。</div>
+      </div></div>
+    <div class="x44-q"><b>Q2　第 0 档（读不到代码）抽出来的条目怎么处理？</b>
+      <div class="x44-dec">
+        <div class="x44-opt rec"><h5>方案 A：照常进 Review，代码锚点标「待核」 <span class="x44-tag good">推荐</span></h5>
+          owner 能照常确认；但锚点没核过的条目先不进 <span class="x44-code">&lt;orbit_wiki_context&gt;</span> 推送块（今天的规则本来就是「锚点有效」才推）。核过之后自动进。</div>
+        <div class="x44-opt"><h5>方案 B：去掉代码锚点再提交</h5>
+          条目马上能推，但丢了「这条知识依赖哪段代码」，以后代码变了也不会发 challenge。</div>
+      </div></div>
+    <div class="x44-q"><b>Q3　一个 wiki 只读一个 workspace，还是可以列几个备选？</b>
+      <div class="x44-dec">
+        <div class="x44-opt rec"><h5>方案 A：仍然只有一个 <span class="x44-tag good">推荐</span></h5>
+          模型简单；第 0 档已经保证维护不停，剩下的交给「Check again and run now」和「Change workspace…」。</div>
+        <div class="x44-opt"><h5>方案 B：按顺序列几个，取第一个最高档的</h5>
+          同一个仓库在两台机器上都有时更省心，但设置和健康行都要多讲一层。</div>
+      </div></div>
+  </section>
+
+  <!-- ─────────────────────────── part 8 ─────────────────────────── -->
+  <section class="x44-part" id="part-8">
+    <h2 class="x44-h2"><span class="x44-no">8</span>落地（按代价排）</h2>
+    <ol class="x44-land">
+      <li><b>服务端：仓库不再是闸门。</b>调整 <span class="x44-code">steps()</span> 的顺序：probe 的结果是档位，第 0 档也跑 ②–⑤；没有快照时锚点保留为「待核」（改 <span class="x44-ref">wiki-maintain.ts:666-672</span>）；⑥⑦ 按档位跳过，并保留 <span class="x44-code">anchors_due</span> 和推迟的节。<span class="n">只改 wiki-worker，runner 不用升级，马上解决「停 6 天」。</span></li>
+      <li><b>失败分类和健康行。</b>runner 的错误带上类别（降档 / 前提 / 瞬时）；health 契约加 <span class="x44-code">repo.tier</span> 和 <span class="x44-code">repo.reason</span>；web、iOS、Android 三端的句子一起改，由 fixture 约束。</li>
+      <li><b>Settings：开启前的探测，以及「Check again and run now」。</b>新的 owner 路由，建一次运行，计入每日次数。</li>
+      <li><b>runner：文件夹快照。</b>新的能力 <span class="x44-code">wiki-repo-op-folder/v1</span>：扫目录、排除表、树哈希，路径/符号锚点在文件上核；read 操作支持 <span class="x44-code">folder:</span> 引用。旧 runner 不声明这个能力，就停在第 0 档，健康行提示升级 runner。</li>
+      <li><b>服务端：文件夹快照之间的 diff</b>（比对两份索引的 hash），给锚点复验和文档跟进用。</li>
+      <li>设计文档 <span class="x44-code">docs/wiki-design.md</span> §8.2、<span class="x44-code">docs/wiki-server-execution-design.md</span> §5.5 / §7 和 <span class="x44-code">contracts/wiki.contract.json</span> 同步改。</li>
+    </ol>
+  </section>
+</div>
+</body>
+</html>
