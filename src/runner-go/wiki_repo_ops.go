@@ -84,6 +84,9 @@ type wikiRepoOpInput struct {
 	To   string `json:"to,omitempty"`
 	// anchors: what to check, at the commit the snapshot was taken at.
 	Anchors []wikiDueAnchor `json:"anchors,omitempty"`
+	// Any kind: a working directory that is not a git checkout may be read as a folder (wiki_repo_folder.go). The server
+	// writes it only for a runner that declares wikiRepoOpFolderCapabilityV1.
+	AllowFolder bool `json:"allowFolder,omitempty"`
 }
 
 // wikiRepoOpReadItem is one thing to read: the whole file at the commit, or — when a limit is named, as an
@@ -199,6 +202,9 @@ type wikiRepoOpAnchorsAnswer struct {
 type wikiRepoOpIndex struct {
 	Sha  string `json:"sha"`
 	Date string `json:"date"`
+	// "folder" for a directory that is not a git checkout, whose sha is its tree hash. Absent on git's snapshot, which
+	// is byte for byte what it was before the folder tier (wiki_plan_fixture_test.go): the server reads absent as "git".
+	Source string `json:"source,omitempty"`
 	// Every blob of the tree, with its size: `hasPath` answers from this, directories included.
 	Files []wikiRepoOpIndexFile `json:"files"`
 	// Every document: its path, its title and its headings, which `hasDocSection` answers from.
@@ -216,6 +222,8 @@ type wikiRepoOpIndex struct {
 type wikiRepoOpIndexFile struct {
 	Path string `json:"path"`
 	Size int64  `json:"size"`
+	// The content's sha256, on a folder's snapshot only.
+	Hash string `json:"hash,omitempty"`
 }
 
 type wikiRepoOpIndexDoc struct {
@@ -250,6 +258,11 @@ func runWikiRepoOp(cmd WikiRepoOpCommand, progress func()) wikiRepoOpOutcome {
 	}
 	root, ref, err := wikiRepoOpCheckout(cmd, input)
 	if err != nil {
+		// A directory that is there but is not a git checkout is read as a folder, when the server allows it.
+		var reasoned *wikiRepoOpReasonError
+		if input.AllowFolder && errors.As(err, &reasoned) && reasoned.reason == wikiRepoReasonNotGit {
+			return runWikiRepoOpFolder(cmd, expandTilde(strings.TrimSpace(cmd.WorkDir)), input)
+		}
 		return wikiRepoOpFailedWith(err)
 	}
 	switch cmd.Kind {
@@ -413,7 +426,12 @@ func wikiRepoOpSnapshot(cmd WikiRepoOpCommand, root, ref string, input wikiRepoO
 	if err != nil {
 		return wikiRepoOpFailed(err.Error())
 	}
-	index := wikiRepoOpIndex{Sha: ref, Date: repo.date, Commits: commits, Readme: wikiMaintainAbout(root, ref)}
+	return wikiRepoOpIndexOutcome(wikiRepoOpSnapshotIndex(repo, commits, wikiMaintainAbout(root, ref)))
+}
+
+// wikiRepoOpSnapshotIndex is the index of one tree as a snapshot carries it, git's or a folder's.
+func wikiRepoOpSnapshotIndex(repo *wikiPlanRepo, commits []string, readme string) wikiRepoOpIndex {
+	index := wikiRepoOpIndex{Sha: repo.sha, Date: repo.date, Commits: commits, Readme: readme}
 	for _, file := range repo.files {
 		index.Files = append(index.Files, wikiRepoOpIndexFile{Path: file, Size: repo.sizes[file]})
 	}
@@ -448,6 +466,12 @@ func wikiRepoOpSnapshot(cmd WikiRepoOpCommand, root, ref string, input wikiRepoO
 		}
 		index.Contracts = append(index.Contracts, entry)
 	}
+	return index
+}
+
+// wikiRepoOpIndexOutcome is a snapshot's answer: the index inside the result, or as a payload to upload in fragments.
+func wikiRepoOpIndexOutcome(index wikiRepoOpIndex) wikiRepoOpOutcome {
+	ref := index.Sha
 	payload, err := json.Marshal(index)
 	if err != nil {
 		return wikiRepoOpFailed(fmt.Sprintf("the snapshot could not be written: %v", err))
@@ -503,6 +527,11 @@ func wikiMaintainAbout(root, ref string) string {
 	if err != nil {
 		return ""
 	}
+	return wikiMaintainAboutText(readme)
+}
+
+// wikiMaintainAboutText is wikiMaintainAbout of a README's text.
+func wikiMaintainAboutText(readme string) string {
 	for _, paragraph := range strings.Split(readme, "\n\n") {
 		text := wikiMaintainTag.ReplaceAllString(paragraph, " ")
 		text = wikiMaintainMdLink.ReplaceAllString(text, "$1")
@@ -551,12 +580,17 @@ func wikiRepoOpRead(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	if _, err := wikiImportGit(root, "cat-file", "-e", sha+"^{commit}"); err != nil {
 		return wikiRepoOpFailed(fmt.Sprintf("the checkout has no commit %s to read from", sha))
 	}
+	return wikiRepoOpReadAt(sha, input, func(path string) (string, bool, error) { return wikiRepoOpBlob(root, sha, path) })
+}
+
+// wikiRepoOpReadAt answers a read at sha from blob: a path's text, and whether the tree has it at all.
+func wikiRepoOpReadAt(sha string, input wikiRepoOpInput, blob func(path string) (string, bool, error)) wikiRepoOpOutcome {
 	if len(input.Items) == 0 {
 		return wikiRepoOpFailed("a read names what to read")
 	}
 	answer := wikiRepoOpReadAnswer{Sha: sha, Items: []wikiRepoOpReadPiece{}}
 	for _, item := range input.Items {
-		piece, err := wikiRepoOpReadOne(root, sha, item)
+		piece, err := wikiRepoOpReadOne(blob, item)
 		if err != nil {
 			return wikiRepoOpFailed(err.Error())
 		}
@@ -579,13 +613,13 @@ func wikiRepoOpRead(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	return outcome
 }
 
-func wikiRepoOpReadOne(root, sha string, item wikiRepoOpReadItem) (wikiRepoOpReadPiece, error) {
+func wikiRepoOpReadOne(blob func(path string) (string, bool, error), item wikiRepoOpReadItem) (wikiRepoOpReadPiece, error) {
 	path := wikiAnchorPath(item.Path)
 	piece := wikiRepoOpReadPiece{Path: item.Path, Section: item.Section}
 	if path == "" {
 		return piece, fmt.Errorf("a read item names no path")
 	}
-	text, exists, err := wikiRepoOpBlob(root, sha, path)
+	text, exists, err := blob(path)
 	if err != nil {
 		return piece, err
 	}
