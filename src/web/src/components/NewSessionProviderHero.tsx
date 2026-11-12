@@ -95,7 +95,7 @@ export function NewSessionProviderHero({
   // find it among every runner they own. A problem that is not this machine's (an account pool none
   // of whose accounts can run, a DeepSeek key not connected yet) names its own page instead.
   const fixLink = (choice: Pick<EngineChoice, 'slug' | 'fixEngine' | 'fixHref'>) =>
-    choice.fixHref ?? `/infrastructure?runner=${encodeId(runnerId)}&engine=${choice.fixEngine ?? choice.slug}`;
+    choice.fixHref ?? `/settings/machines/${encodeId(runnerId)}?engine=${choice.fixEngine ?? choice.slug}`;
   const onRunner = (choice: Pick<EngineChoice, 'fixHref'>) => (choice.fixHref ? '' : ' on this runner');
   const modelLabel = currentModelLabel ?? current.provider?.modelLabel ?? '';
 
@@ -209,7 +209,7 @@ export function NewSessionProviderHero({
             <span className="np-dot">·</span>
             {modelLabel}
             <span className="np-dot">·</span>
-            <Link to="/infrastructure">Manage</Link>
+            <Link to={`/settings/machines/${encodeId(runnerId)}`}>Manage</Link>
           </div>
         ) : (
           <>

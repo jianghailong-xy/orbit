@@ -5766,7 +5766,7 @@ export function WorkspaceView({
       return;
     }
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`);
+    navigate(a ? `/workspaces/${encodeId(a)}${listSearch}` : `/settings/machines/${encodeId(runner.id)}${listSearch}`);
   };
   // After leaveIfOpen re-scopes to the workspace, the auto-open effect picks that workspace's
   // next session — but it reads the cached list, which still holds the row we just
@@ -7815,7 +7815,7 @@ export function WorkspaceView({
     setView(next);
     if (!selectedId) return;
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+    navigate(a ? `/workspaces/${encodeId(a)}` : `/settings/machines/${encodeId(runner.id)}`);
   };
   const activeTag = tagFilter ? (sessionTags.find((t) => t.id === tagFilter) ?? null) : null;
   // ── The composer's model control ───────────────────────────────────────────────────────────
@@ -7832,7 +7832,7 @@ export function WorkspaceView({
   const pickAccount = (account: string, signedOut: boolean): void => {
     if (!shownAccountEngine) return;
     if (signedOut) {
-      navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
+      navigate(`/settings/machines/${encodeId(runner.id)}?engine=${shownAccountEngine}`);
       return;
     }
     // A draft starts on it: nothing on the server yet, so the pick rides on the create.
@@ -7867,7 +7867,7 @@ export function WorkspaceView({
     if (picked?.unavailable) {
       navigate(
         picked.fixHref ??
-          `/infrastructure?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? shownEngine}`,
+          `/settings/machines/${encodeId(runner.id)}?engine=${picked.fixEngine ?? shownEngine}`,
       );
       return;
     }
@@ -7953,7 +7953,7 @@ export function WorkspaceView({
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
         ? () => pickProvider(geminiChoice.slug)
         : undefined,
-      onOpenProviders: () => navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=antigravity`),
+      onOpenProviders: () => navigate(`/settings/machines/${encodeId(runner.id)}?engine=antigravity`),
       onInstall: runner.online && runner.antigravity?.supported ? () => installAntigravity.mutate() : undefined,
       installDisabled: installAntigravity.isPending || installDsh.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
       onEditDshKey: () => navigate(dshProviderRow ? `/settings/providers/keys/${encodeId(dshProviderRow.id)}` : '/settings/providers'),
@@ -8250,7 +8250,7 @@ export function WorkspaceView({
     const pick = (account: string, signedOut: boolean) => {
       if (here) return pickAccount(account, signedOut);
       if (signedOut) {
-        navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${engine}`);
+        navigate(`/settings/machines/${encodeId(runner.id)}?engine=${engine}`);
         return;
       }
       pickProvider(engine!, account);
@@ -9225,7 +9225,7 @@ export function WorkspaceView({
                   navigate(sessionPath(id), { state: stampFromList() }))}
               onBack={isMobile ? () => {
                 const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`;
+                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/settings/machines/${encodeId(runner.id)}${listSearch}`;
                 navigateWithPaneSlide('pop', () =>
                   arrivedFromList() ? navigate(-1) : navigate(list, { replace: true }),
                 );
@@ -9246,7 +9246,7 @@ export function WorkspaceView({
               aria-label="Back to sessions"
               onClick={() => {
                 const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`;
+                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/settings/machines/${encodeId(runner.id)}${listSearch}`;
                 // A real back when the list is the entry behind this one, so returning unwinds
                 // the push instead of stacking a third entry on top of it. A deep-linked
                 // conversation has no such entry: replace it, which still lands on the list —
