@@ -1,6 +1,6 @@
 # Start an Orbit session from the terminal (`orbit`)
 
-Status: **proposal, round 2**. Board: `docs/mocks/terminal-session/`.
+Status: **decided** (owner, 2026-11-12); being built as an Orbit project. Board: `docs/mocks/terminal-session/`.
 
 Decisions so far (owner, 2026-11-12):
 
@@ -8,7 +8,8 @@ Decisions so far (owner, 2026-11-12):
 - D2–D6 as recommended in round 1.
 - Approval cards are answered **in the terminal**.
 
-D1 = B changes what D2 and D6 were about. Round 2 restates them and adds D7–D9 (see Decisions).
+D1 = B changes what D2 and D6 were about. Round 2 restated them and added D7–D9. Round 2 answers: D2′ = A,
+D7 = **B** (remember the terminal for 30 days), D8 = A, D9 = A.
 
 ## Problem
 
@@ -42,7 +43,7 @@ phone / web ──────────────────────�
 
 ## Flow of `orbit` (bare, on a TTY)
 
-1. **Terminal login** (D7). The CLI asks the account's devices to approve "Terminal on dev-laptop". The
+1. **Terminal login** (D7, first run on a machine, then every 30 days). The CLI asks the account's devices to approve "Terminal on dev-laptop". The
    owner taps Approve in the app, and the CLI receives a terminal credential (below).
 2. **Workspace from the cwd** (D3 = A). The CLI looks for a workspace on this machine's runner that
    contains the cwd. If there is none, it asks `Add ~/x as a workspace? [Y/n]`. The existing
@@ -61,43 +62,45 @@ approval answers among the owner-channel routes that refuse a personal access to
 (`OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`). The reason: agents run on the same machine, and a bearer
 token on disk is one they can read and use to approve their own requests.
 
-A new credential kind, `TERMINAL`, answers approvals. These limits keep that reason intact:
+A new credential kind, `TERMINAL`, answers approvals. The owner chose (D7 = B) to remember a terminal
+for 30 days, accepting that a same-user agent on that machine can read the stored credential. These
+limits are what is left:
 
 | Limit | What it stops |
 |---|---|
 | Minted only by the owner's tap in the app (an owner-channel act), never by a token or a runner | an agent minting its own |
-| Held in the TUI process's memory only; never written to disk or the environment | an agent reading it from a file or from `env` |
-| Dies with the process; at most 12 h | a leaked copy living on |
-| Scoped to the sessions this TUI started or opened | approving another session's requests |
-| An answer needs a keypress on the TUI's own TTY | a script driving it |
+| Bound to one machine (its runner) and to the sessions on that runner; refused on every other session | a copied credential used for sessions elsewhere |
+| Stored in the OS keychain (macOS Keychain, Linux Secret Service); where there is none, a `0600` file under `ORBIT_HOME`; never in the environment | an agent reading it from `env` or from a world-readable file |
+| Expires 30 days after the tap; listed in the app (Settings → Terminals) with Revoke | a leaked copy living on unnoticed |
+| Allowed: create/open sessions, send, interrupt, read events, answer approval cards. Every other owner-channel act stays refused (evidence decisions, criteria, project start/done) | widening a terminal into the owner |
 | Every answer recorded with `credential_kind = TERMINAL` and the machine name | unattributed answers |
 
-What it leaves: an agent running as the same OS user could read the TUI's memory through `ptrace`.
-Linux with `kernel.yama.ptrace_scope ≥ 1` and macOS refuse that to a non-parent. A runner installed
-under its own user (hostd) removes the risk. Launching a new `orbit` needs a new tap (D7 = A), so an
-agent cannot start its own TUI without the owner seeing it.
+**Accepted risk:** an agent running as the same OS user can read the stored credential and call the
+approval route itself, approving its own requests on that machine's sessions. It is visible in the
+activity log, and revocable. A runner installed under its own user (hostd) keeps agents out of the
+person's keychain and home.
 
-`human-only-authority.md` gets a `TERMINAL` row: approval answers are allowed. Every other
-owner-channel act stays refused: evidence decisions, criteria, start, done.
+`human-only-authority.md` gets a `TERMINAL` row: approval answers are allowed, and the owner-accepted
+risk above is recorded there.
 
 ## Decisions
 
 | | Question | A (recommended) | B |
 |---|---|---|---|
 | D1 | What runs in the terminal | ~~Claude Code's TUI + mirror~~ | **Orbit TUI over REST — chosen** |
-| D2′ | Whose credential the TUI uses (was: runner credential) | the terminal credential for everything: the user routes already exist, so no new runner routes | runner credential for create/send/read (new runner routes for the event stream) + terminal credential for approvals only |
+| D2′ | Whose credential the TUI uses (was: runner credential) | **chosen:** the terminal credential for everything: the user routes already exist, so no new runner routes | runner credential for create/send/read (new runner routes for the event stream) + terminal credential for approvals only |
 | D3 | cwd in no workspace | ask `[Y/n]`, then create it — **chosen** | refuse |
 | D4 | Where edits happen | the cwd, no worktree — **chosen** (needs a per-session override) | an Orbit worktree |
 | D5 | Command name | bare `orbit` on a TTY — **chosen** | `orbit chat` |
 | D6 | Phone sends while the terminal is open | ~~queue until the terminal exits~~ — moot: both send, as two app windows do | |
-| D7 | Terminal login lifetime | a tap on the phone at every `orbit` launch; credential in memory only | remember the terminal for 30 days (OS keychain); a tap only the first time |
-| D8 | `orbit resume <id>` | opens the Orbit TUI on that session (all engines); the engine CLI moves to `orbit resume --engine-cli` | unchanged; the TUI opens with `orbit open <id>` |
-| D9 | Leaving the TUI mid-turn | the session keeps running; reopen with `orbit resume <id>` | leaving interrupts the turn, as quitting Claude Code does |
+| D7 | Terminal login lifetime | ~~a tap at every launch, memory only~~ | **remember the terminal for 30 days (OS keychain); a tap only the first time — chosen** |
+| D8 | `orbit resume <id>` | **chosen:** opens the Orbit TUI on that session (all engines); the engine CLI moves to `orbit resume --engine-cli` | unchanged; the TUI opens with `orbit open <id>` |
+| D9 | Leaving the TUI mid-turn | **chosen:** the session keeps running; reopen with `orbit resume <id>` | leaving interrupts the turn, as quitting Claude Code does |
 
 ## Landing (cheapest first)
 
 1. **Terminal credential**: device-login flow (reuse `pat-device-login`) with an approve card in the
-   app that names the machine; `TERMINAL` kind on sessions, turns, interrupt, events and approval
+   app that names the machine; keychain storage; Settings → Terminals with Revoke; `TERMINAL` kind on sessions, turns, interrupt, events and approval
    decisions only; activity rows; `human-only-authority.md` row.
 2. **TUI v1** (Go, in the `orbit` binary, new dependency `charmbracelet/bubbletea`): open or create a
    session, render the transcript (text, folded tool calls, diffs), composer, Esc to interrupt,
