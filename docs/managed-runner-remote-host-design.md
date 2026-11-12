@@ -1,6 +1,6 @@
 # Managed runners on another Docker host (design, 2026-11-12)
 
-Status: proposal. D1–D4 taken as recommended (A) on 2026-11-12; several hosts (D5–D7) waiting on the owner. Board:
+Status: accepted. The owner took A for D1–D7 on 2026-11-12. Board:
 [docs/mocks/managed-runner-remote-host/board.html](mocks/managed-runner-remote-host/board.html).
 
 ## The ask
@@ -119,6 +119,8 @@ What is missing:
 
 Adding a host = run the channel-host kit's `install` there, add its entry to `docker.hosts`, recreate the apiserver.
 Removing one = mark it `draining` (no new placements), move or retire its runners, then drop the entry.
+
+The owner took A for D5–D7 on 2026-11-12.
 
 | | A (recommended) | B |
 | --- | --- | --- |
