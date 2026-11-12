@@ -370,7 +370,12 @@ import {
   taskCodelessHasCommitsBody,
   taskCodelessReasonRequiredBody,
 } from './task-codeless';
-import { assertForkCallerOnRunner, resolveTaskFork, type TaskForkColumns } from './task-fork';
+import {
+  assertForkCallerOnRunner,
+  assertForkPlacement,
+  resolveTaskFork,
+  type TaskForkColumns,
+} from './task-fork';
 import {
   criterionAsksForOwnerConfirmation,
   ownerConfirmationNotDelegatedBody,
@@ -6560,6 +6565,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     const from = asked.fromProjectId;
     const to = asked.toProjectId;
+    // SR55, as on the edit door: a forked task is never moved into a project with a code binding.
+    // Refused before the approval is spent, so the request stays answerable once the fork is resolved.
+    const fork = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId },
+      select: { forkRunnerId: true, forkSessionId: true },
+    });
+    if (fork?.forkRunnerId && fork.forkSessionId && to) {
+      await assertForkPlacement(this.prisma, ownerId,
+        { forkRunnerId: fork.forkRunnerId, forkSessionId: fork.forkSessionId }, { projectId: to });
+    }
     const moved = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
       const projectIds = orderedIds([from, to]);
@@ -9838,6 +9853,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
+    // SR55: an edit may not move a forked task where its next run could only be refused — into a
+    // project with a code binding, or onto a workspace on another machine than its snapshot's. Asked of
+    // what the edit changes only, before the transaction, like every refusal on this path.
+    if ((dto.assigneeId || dto.projectId) && (dto.assigneeId !== before.assigneeId || dto.projectId !== before.projectId)) {
+      const fork = await this.prisma.task.findUnique({
+        where: { id: before.id },
+        select: { forkRunnerId: true, forkSessionId: true },
+      });
+      if (fork?.forkRunnerId && fork.forkSessionId) {
+        await assertForkPlacement(this.prisma, ownerId,
+          { forkRunnerId: fork.forkRunnerId, forkSessionId: fork.forkSessionId },
+          {
+            assigneeId: dto.assigneeId && dto.assigneeId !== before.assigneeId ? dto.assigneeId : null,
+            projectId: dto.projectId && dto.projectId !== before.projectId ? dto.projectId : null,
+          });
+      }
+    }
     // The engine, provider and model pins as this write leaves them — each three-state; a provider
     // alone carries the engine it runs on by default, and an engine alone is checked against the
     // provider pin the task keeps (docs/provider-engine-contract.md §3.5).

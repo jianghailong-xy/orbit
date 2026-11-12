@@ -138,9 +138,37 @@ export async function resolveTaskFork(
     throw new ForbiddenException(`${where}the session making this call runs on no runner, so there is no snapshot to fork`);
   }
   const forkRunnerId = session.assignedRunnerId;
-  if (item.projectId) {
+  await assertForkPlacement(prisma, ownerId, { forkRunnerId, forkSessionId: session.id }, item, where, itemIndex);
+  return {
+    forkSessionId: session.id,
+    forkRunnerId,
+    forkSha: sha,
+    forkBaseHead: baseHead,
+    forkIncludesUncommitted: fork.includesUncommitted,
+  };
+}
+
+/**
+ * SR55's two placement rules, for a forked task as a write would leave it: not in a project with a code
+ * binding (FORK_IN_BOUND_PROJECT, asked first: it is the project's, and another machine would not fix
+ * it), and assigned, if at all, to a workspace on the machine the snapshot is on
+ * (FORK_SOURCE_NOT_REACHABLE). The create doors ask it of the new row; `task_update` asks it of an edit
+ * that moves a forked task to another project or another assignee, so a fork is never left in a state
+ * the next run would only be refused from, with nobody watching (the auto-run sweep logs a refused
+ * start and tries again).
+ */
+export async function assertForkPlacement(
+  prisma: PrismaService,
+  ownerId: string,
+  fork: { forkRunnerId: string; forkSessionId: string },
+  placement: { assigneeId?: string | null; projectId?: string | null },
+  where = '',
+  itemIndex?: number | null,
+): Promise<void> {
+  const { forkRunnerId, forkSessionId } = fork;
+  if (placement.projectId) {
     const binding = await prisma.projectCodebase.findFirst({
-      where: { projectId: item.projectId, slot: 'primary' },
+      where: { projectId: placement.projectId, slot: 'primary' },
       select: { id: true },
     });
     if (binding) {
@@ -149,14 +177,14 @@ export async function resolveTaskFork(
         `${where}this task would land in a project with a code binding, and a task there starts from the project's own `
           + "line, not from a session's snapshot. File the fork outside the project, or land the session's work first "
           + 'and file the task without forkFromSession.',
-        { projectId: item.projectId, codebaseId: binding.id, forkSessionId: session.id },
+        { projectId: placement.projectId, codebaseId: binding.id, forkSessionId },
         itemIndex,
       ));
     }
   }
-  if (item.assigneeId) {
+  if (placement.assigneeId) {
     const workspace = await prisma.workspace.findFirst({
-      where: { id: item.assigneeId, ownerId },
+      where: { id: placement.assigneeId, ownerId },
       select: { id: true, name: true, runnerId: true },
     });
     if (workspace && workspace.runnerId !== forkRunnerId) {
@@ -164,17 +192,10 @@ export async function resolveTaskFork(
         'FORK_SOURCE_NOT_REACHABLE',
         `${where}the snapshot this task starts from exists only on the machine the forking session runs on, and `
           + `workspace ${workspace.name} is ${workspace.runnerId ? 'on another machine' : 'bound to no machine'}. `
-          + 'Assign it to a workspace on the same machine as this session.',
-        { assigneeId: workspace.id, runnerId: workspace.runnerId, forkRunnerId, forkSessionId: session.id },
+          + 'Assign it to a workspace on the same machine as that session.',
+        { assigneeId: workspace.id, runnerId: workspace.runnerId, forkRunnerId, forkSessionId },
         itemIndex,
       ));
     }
   }
-  return {
-    forkSessionId: session.id,
-    forkRunnerId,
-    forkSha: sha,
-    forkBaseHead: baseHead,
-    forkIncludesUncommitted: fork.includesUncommitted,
-  };
 }

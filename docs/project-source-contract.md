@@ -210,8 +210,8 @@ P4 与 P5 的两个取值不是回退（SR19 说的回退是"换一序"），而
 **SR55（从会话 fork 出的任务）**（v1.4，2026-11-11，`docs/task-fork-from-session-design.md` §2.3、§2.4）：一个任务可以在创建时声明"从调用它的那条会话现在的样子开始"。runner 在建任务的调用里给那条会话的检出拍一个快照提交 S（不动它的检出），随任务一起提交；任务把它记成五个创建时事实（§3.3 的 fork 列），此后不可改。
 - **PF 行在 P0' 之前**：P0' 是"没有声明起点"，fork 恰恰是一个声明过的起点。一个不在任何项目里的任务、或 `codeless` 任务，若落到 P0'，就会从 workspace 检出当时的 HEAD 起跑——那正是 fork 要替换掉的东西。PF 的 selector：`sourceKind` 为 `SESSION_FORK`，`sourceRevisionSha` 为 S，`sourceRef` 为空，`sourceRefAuthority` 为 `RUNNER_LOCAL`；`sourceCodebaseId`、`sourceConfigRevision`、`sourceRepoUrl`、`sourceRootCommitSha` 为空（没有绑定，控制面也不掌握那份仓库的身份）；`sourceRequiredContains` 为空集。权威机器（`authorityRunnerId`）是 fork 会话当时的 runner，记在任务上，在 claim 时随快照下发。pin 照 §6.3 的三步握手在首次 claim 冻结。
 - **重试不换基线**（SR12 / SR19）：PF 读的是任务自己的列，所以同一任务的每一次运行（重试也一样）都冻结同一个 S；S 在本机不可得时，结果是 `BASE_SHA_UNAVAILABLE`，不是 workDir 的 HEAD。
-- **只在 fork 会话的那台机器上跑**（设计 D2）：S 只在 fork 会话的仓库里。建任务时，assignee 的 workspace 不在那台 runner 上，拒绝 `FORK_SOURCE_NOT_REACHABLE`；任务之后被改派、或 workspace 换了机器，建运行的那一刻同样拒绝。
-- **不进有 code binding 的 Project**（设计 D4）：Project 任务的基线必须在它自己的线上（SR1），而 fork 的基线是 fork 会话的工作，可能还没落地。建任务时落进这样的 Project，拒绝 `FORK_IN_BOUND_PROJECT`；任务建好之后项目才绑上 codebase 的，解析时同样拒绝——PF 的谓词此时不成立，但答案是拒绝而不是 P1–P5（SR19）：落到 P5 等于悄悄丢掉 fork。两个码同时成立时报后者：它是项目级的因，换一台机器修不好（与 SR24 同理）。
+- **只在 fork 会话的那台机器上跑**（设计 D2）：S 只在 fork 会话的仓库里。建任务时，assignee 的 workspace 不在那台 runner 上，拒绝 `FORK_SOURCE_NOT_REACHABLE`；`task_update` 把它改派到另一台机器上的 workspace，同样拒绝（改到同一台机器上的另一个 workspace 照旧允许）；workspace 自己换了机器的，建运行的那一刻拒绝。
+- **不进有 code binding 的 Project**（设计 D4）：Project 任务的基线必须在它自己的线上（SR1），而 fork 的基线是 fork 会话的工作，可能还没落地。建任务时落进这样的 Project，拒绝 `FORK_IN_BOUND_PROJECT`；`task_update` 或经确认的跨项目移动把它移进这样的 Project，同样拒绝；任务建好之后项目才绑上 codebase 的，解析时同样拒绝——PF 的谓词此时不成立，但答案是拒绝而不是 P1–P5（SR19）：落到 P5 等于悄悄丢掉 fork。两个码同时成立时报后者：它是项目级的因，换一台机器修不好（与 SR24 同理）。
 - **总有自己的 worktree**：fork 任务的运行即使在 `enableWorktree` 关着的 workspace 上也有自己的分支。一个没有分支的 pinned 运行在检出时被拒（`WORKTREE_REQUIRED`），而与它 fork 出来的那条会话共用一个目录，正是这份设计要排除的。
 - **只能 fork 调用者自己**（设计 D6）：fork 载荷里的会话必须是发起这次调用的会话，且就是这张 runner 凭据正在跑的那条；浏览器那扇门没有调用会话，一律拒绝。
 - 这两个码都在建任务或建运行的那一刻同步回答给调用方，从不写到会话的 SOURCE 列上，也不落 blocker（那时还没有运行可记）；runner 也不能经 `/source/pin` 报告它们。
