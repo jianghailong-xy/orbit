@@ -1,3 +1,4 @@
+-- Written as 0536; renumbered to 0605 before landing, main having reached 0595 and 0600 being taken on another branch.
 -- Cross-workspace SubAgents (docs/subagent-design.md §10): a run may go to another workspace of the parent's
 -- repository, on that workspace's runner. `workspace_id` and `target_runner_id` name where; `remote` keeps what the
 -- target runner needs that the parent's machine had locally (the brief, read-only flag, permission mode, needs);
