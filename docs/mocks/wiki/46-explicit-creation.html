@@ -89,14 +89,36 @@
 .b-tr .tool .out { color: #34343c; display: block; margin-top: 4px; }
 .b-tr .tool.red .out { color: #a8281f; }
 .b-tr .who { font-size: 11.5px; font-weight: 700; color: #77777f; }
+
+/* owner request card (OwnerRequestCard.tsx), drawn locally */
+.q-card { width: 520px; flex: none; background: #fff; border: 1px solid var(--warning-border); border-radius: 12px; font-size: 13.5px; color: var(--text-1); overflow: hidden; }
+.q-head { display: flex; align-items: center; gap: 7px; padding: 8px 14px; background: var(--warning-bg); font-size: 12.5px; }
+.q-head .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning-solid); }
+.q-head .w { font-weight: 600; color: var(--warning); }
+.q-head .a { margin-left: auto; color: var(--text-3); }
+.q-body { padding: 12px 16px 14px; }
+.q-tr { display: flex; align-items: center; gap: 8px; }
+.q-tr h3 { margin: 0; font-size: 15px; flex: 1; }
+.q-kind { font-size: 11.5px; font-weight: 600; color: var(--text-2); background: var(--fill-muted); border-radius: 5px; padding: 1px 7px; }
+.q-why { margin: 6px 0 10px; color: var(--text-2); line-height: 1.6; }
+.q-facts { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; margin: 0 0 12px; font-size: 13px; }
+.q-facts dt { color: var(--text-3); }
+.q-facts dd { margin: 0; }
+.q-acts { display: flex; gap: 8px; align-items: center; }
+.q-btn { border: 1px solid var(--border); border-radius: 7px; padding: 4px 13px; font-size: 13.5px; background: #fff; }
+.q-btn.pri { background: var(--brand); border-color: var(--brand); color: #fff; }
+.q-btn.txt { border-color: transparent; color: var(--text-2); margin-left: auto; padding: 4px 4px; }
+.q-user { align-self: flex-end; background: #eef1f6; border-radius: 12px; padding: 8px 12px; max-width: 420px; font-size: 13.5px; }
+.q-conv { width: 560px; flex: none; display: flex; flex-direction: column; gap: 10px; background: #fff; border: 1px solid #d5d6db; border-radius: 12px; padding: 14px 16px; font-size: 13px; line-height: 1.6; }
+.q-turn { font: 12.5px var(--mono); background: #f4f5f7; border-radius: 7px; padding: 7px 10px; color: #34343c; }
 </style>
 </head>
 <body>
 <div class="board">
-<h1 class="b-h1">46 · Wiki 只由你建：agent 搜一下不再建出一个 wiki</h1>
+<h1 class="b-h1">46 · Wiki 只在你点了之后才建：agent 搜一下不再建出一个 wiki</h1>
 <p class="b-sub">你的问题：「<code>github-com-jianghailong-xy-lfs-builder</code> 这个 wiki 出现的逻辑是什么，我并不需要」。答：它是 agent 在改文件前照系统提示调了一次 <code>wiki_search</code>，服务端顺手建出来的。
-这张图讲今天的链路、新的规则、补上的「建第二个 wiki」入口和三个待你定的选择。设计文档：<code>docs/wiki-explicit-creation-design.md</code>。第 1 部分的时间和数字取自生产库（只读）；其余窗口里的 wiki 名、仓库名是示意。</p>
-<div class="b-legend"><span><span class="tag new">新</span>这次要改的</span><span><span class="tag keep">沿用</span>照旧</span><span><span class="tag bad">今天的问题</span></span><span><span class="tag ask">待你定</span>各有推荐</span></div>
+这张图讲今天的链路、新的规则、补上的「建第二个 wiki」入口和待你定的选择。<b>第二版（11-12）：</b>你定了 D1——「agent 建 space 至少要 owner 确认，或者 owner 主动要求才建」，新加第 3 部分的确认卡。设计文档：<code>docs/wiki-explicit-creation-design.md</code>。第 1 部分的时间和数字取自生产库（只读）；其余窗口里的 wiki 名、仓库名是示意。</p>
+<div class="b-legend"><span><span class="tag new">新</span>这次要改的</span><span><span class="tag keep">沿用</span>照旧</span><span><span class="tag bad">今天的问题</span></span><span><span class="tag ask">待你定</span>各有推荐</span><span><span class="tag done">已定</span>owner 11-12 定了</span></div>
 
 <section class="b-part">
 <div class="band"><span class="bn">1</span>今天：lfs-builder 是怎么出现的 <small>· 11-11 UTC，生产库</small></div>
@@ -135,7 +157,7 @@
 <tr><th style="width:250px">在没有 wiki 的 workspace 里</th><th>今天</th><th>新</th><th style="width:420px">agent 读到的（英文）</th></tr>
 <tr><td><code>wiki_search</code></td><td class="bad">有仓库地址：建 wiki，答空结果。没有仓库地址：报 <code>WIKI_SPACE_UNBOUND</code></td><td class="chg"><span class="tag new">新</span>不建；200，<code>hits: []</code>，多一个 <code>unavailable: "no_wiki"</code></td><td><code>No wiki for this repository yet, so there is nothing to look up. Carry on without it.</code></td></tr>
 <tr><td><code>wiki_get</code></td><td class="bad">同上，会建</td><td class="chg"><span class="tag new">新</span>不建；404 <code>WIKI_SPACE_UNBOUND</code></td><td><code>This workspace has no wiki.</code></td></tr>
-<tr><td><code>wiki_propose</code>、<code>wiki_note</code>、<code>wiki_draft</code></td><td class="bad">建 wiki，再写进去</td><td class="chg"><span class="tag ask">D1</span>不建；409 <code>WIKI_SPACE_UNBOUND</code>，什么都不记</td><td><code>No wiki for this repository yet: the owner creates one in Wiki (Create wiki…). Nothing was recorded.</code></td></tr>
+<tr><td><code>wiki_propose</code>、<code>wiki_note</code>、<code>wiki_draft</code></td><td class="bad">建 wiki，再写进去</td><td class="chg"><span class="tag done">D1</span>不建；409 <code>WIKI_SPACE_UNBOUND</code>，什么都不记</td><td><code>No wiki for this repository yet, so nothing was recorded. Only the owner can start one: if they asked for a wiki here, file request_owner_action with kind WIKI_CREATE; otherwise carry on without it.</code></td></tr>
 <tr><td>仓库的 wiki 在 Trash</td><td class="bad">建一个新的空 wiki</td><td class="chg"><span class="tag new">新</span>搜索空结果（<code>wiki_in_trash</code>）；写被拒</td><td><code>The wiki for this repository is in Trash: the owner restores it from Trash.</code></td></tr>
 <tr><td>带会话头调 <code>POST /api/wiki/spaces</code></td><td class="bad">允许（只是不能开维护）</td><td class="chg"><span class="tag new">新</span>403 <code>WIKI_OWNER_CHANNEL_ONLY</code></td><td>同 review mode 的规矩：只认你本人的登录</td></tr>
 <tr><td>仓库<b>已经有</b> wiki</td><td>workspace 自动算在里面</td><td><span class="tag keep">沿用</span>不变，第一次调工具时照旧写一行绑定</td><td>—</td></tr>
@@ -156,8 +178,41 @@
 </div>
 </section>
 
+
 <section class="b-part">
-<div class="band"><span class="bn">3</span>建第二个 wiki 的入口：侧栏 Wiki 组 <small>· web；iOS、macOS、Android 的抽屉加同一行</small></div>
+<div class="band"><span class="bn">3</span>agent 请你建 wiki：一张确认卡，你按了才建 <span class="tag done">已定 D1</span></div>
+<div class="row">
+  <div class="q-conv">
+    <div class="who" style="font-size:11.5px;font-weight:700;color:#77777f">会话里 · workspace lfs，仓库还没有 wiki</div>
+    <div class="q-user">给这个仓库建个 wiki，把刚才排查的结论记下来</div>
+    <div>I can't create a wiki myself — only you can. I've put a card here for it; once you press Create wiki I'll propose what we found.</div>
+    <div class="q-card mk l" data-n="1">
+      <div class="q-head"><span class="dot"></span><span class="w">Waiting on you</span><span class="a">Asked just now</span></div>
+      <div class="q-body">
+        <div class="q-tr"><h3>Create a wiki for lfs-builder?</h3><span class="q-kind">Wiki</span></div>
+        <div class="q-why">You asked for one here. I'd start it with what we found about the WireGuard config, then keep it up to date from this repository's sessions.</div>
+        <dl class="q-facts mk" data-n="2">
+          <dt>Repository</dt><dd>github.com/sample/lfs-builder</dd>
+          <dt>Reads from</dt><dd>lfs</dd>
+          <dt>Maintenance</dt><dd>On · 8 runs a day · last 14 days</dd>
+        </dl>
+        <div class="q-acts"><span class="q-btn pri mk" data-n="3">Create wiki</span><span class="q-btn">Change settings…</span><span class="q-btn txt mk" data-n="4">Not for this repository</span></div>
+      </div>
+    </div>
+    <div class="q-turn mk l" data-n="5">The owner created the wiki lfs-builder. You can propose to it now.</div>
+  </div>
+  <div class="notes" style="padding-top:8px"><ol>
+    <li><span class="n">1</span><span class="tag done">已定</span><b>你要求了、或者 agent 自己想要，都只能发这张卡</b>：服务端读不出「owner 说过要建」是真是假，所以没有不经你按的第二条路。卡就是现有的 owner request（DECISION / SECRET / CONFIRM 那套），闭集加一种 <code>WIKI_CREATE</code>：推送、needs-you 计数、到期、撤回、结果回到会话，全部沿用。</li>
+    <li><span class="n">2</span><span class="tag new">新</span>标题和这三行由服务端从会话的 workspace 读出，agent 只写为什么（<code>why</code>）。维护设置是 Create wiki 表单的默认值；建 wiki 就等于开维护，照你 11-02 定的。</li>
+    <li><span class="n">3</span><span class="tag new">新</span><b>Create wiki</b>：一次建 wiki、开维护、起草 plan，只认你本人的登录。<b>Change settings…</b> 打开第 5 部分的表单，预选这个 workspace。你从侧栏 New wiki… 建了同一个仓库，这张卡也算完成。</li>
+    <li><span class="n">4</span><span class="tag ask">D4</span><b>Not for this repository</b>：这个仓库以后 agent 再发卡一律被拒（<code>WIKI_CREATE_DECLINED</code>）；你改主意就从 New wiki… 自己建。</li>
+    <li><span class="n">5</span><span class="tag keep">沿用</span>结果作为一轮回到会话：建了，agent 接着提议；拒了，它读到 <code>Do not ask again.</code></li>
+    <li><span class="n">·</span><span class="tag new">新</span>同一仓库同一时刻只有一张卡，再发回答同一张、不再推送。<code>wiki_search</code> 永远不发卡。</li>
+  </ol></div>
+</div>
+</section>
+<section class="b-part">
+<div class="band"><span class="bn">4</span>建第二个 wiki 的入口：侧栏 Wiki 组 <small>· web；iOS、macOS、Android 的抽屉加同一行</small></div>
 <div class="row">
   <div>
     <div class="b-cap"><span class="n">①</span>今天 <small>· 只有已有的 wiki 和 Trash</small></div>
@@ -204,14 +259,14 @@
   <div class="notes" style="padding-top:34px"><ol>
     <li><span class="n">1</span><span class="tag new">新</span>侧栏 Wiki 组：各个 wiki 之后、Trash 之前，一行灰字 <b>New wiki…</b>，样式照 Trash 行，不带数字。iOS、macOS、Android 的抽屉 Wiki 组加同一行。</li>
     <li><span class="n">2</span><span class="tag new">新</span>页头切换器：分隔线下面一项 <b>New wiki…</b>。</li>
-    <li><span class="n">·</span><span class="tag keep">沿用</span>两个入口打开的都是<b>现有的</b> Create wiki 表单（第 4 部分）。账号一个 wiki 都没有时，侧栏没有 Wiki 组，入口照旧是 <code>Set up your first wiki</code> 卡。</li>
-    <li><span class="n">·</span><span class="tag ask">D2</span>要不要在 workspace 行的 ⋯ 菜单里也放 <code>Create wiki…</code>，见第 5 部分。</li>
+    <li><span class="n">·</span><span class="tag keep">沿用</span>两个入口打开的都是<b>现有的</b> Create wiki 表单（第 5 部分）。账号一个 wiki 都没有时，侧栏没有 Wiki 组，入口照旧是 <code>Set up your first wiki</code> 卡。</li>
+    <li><span class="n">·</span><span class="tag ask">D2</span>要不要在 workspace 行的 ⋯ 菜单里也放 <code>Create wiki…</code>，见第 6 部分。</li>
   </ol></div>
 </div>
 </section>
 
 <section class="b-part">
-<div class="band"><span class="bn">4</span>Create wiki 表单：已经有 wiki 的仓库灰掉</div>
+<div class="band"><span class="bn">5</span>Create wiki 表单：已经有 wiki 的仓库灰掉</div>
 <div class="row">
   <div class="d-dlg">
     <div class="d-h">Create wiki</div>
@@ -240,14 +295,14 @@
 </section>
 
 <section class="b-part">
-<div class="band"><span class="bn">5</span>待定 · 要你拍板</div>
+<div class="band"><span class="bn">6</span>待定 · 要你拍板</div>
 <div class="b-qs">
-  <div class="b-q"><h3><span class="tag ask">D1</span>没有 wiki 时，agent 的提议怎么办</h3>
-    <div class="opt rec"><b>A（推荐）拒绝，什么都不记。</b>agent 读到「这个仓库还没有 wiki」。规则一句话说得清：wiki 只由你建。</div>
-    <div class="opt"><b>B 照旧建，但藏起来。</b>不起草 plan、不进侧栏，等你打开。要新造一个「隐藏」状态，三端都得认它；而且藏起来的 wiki 一样占着这个仓库。</div>
+  <div class="b-q"><h3><span class="tag ask">D4</span>你按了 Not for this repository 之后</h3>
+    <div class="opt rec"><b>A（推荐）这个仓库再也不问。</b>你说过不要就是不要；改主意从 New wiki… 自己建。</div>
+    <div class="opt"><b>B 30 天后可以再问。</b>仓库用途变了时 agent 还能提醒你，代价是同一个问题隔一阵又来。</div>
   </div>
   <div class="b-q"><h3><span class="tag ask">D2</span>第二个 wiki 的入口</h3>
-    <div class="opt rec"><b>A（推荐）侧栏 New wiki… + 页头切换器。</b>就是第 3 部分那两处，都在 wiki 旁边。</div>
+    <div class="opt rec"><b>A（推荐）侧栏 New wiki… + 页头切换器。</b>就是第 4 部分那两处，都在 wiki 旁边。</div>
     <div class="opt"><b>B 再加 workspace 行 ⋯ 里的 Create wiki…</b>只对有仓库、还没有 wiki 的 workspace 显示。从 workspace 出发更顺手，但 ⋯ 菜单又多一项。</div>
   </div>
   <div class="b-q"><h3><span class="tag ask">D3</span>lfs-builder 这个 wiki</h3>
@@ -259,12 +314,12 @@
 </section>
 
 <section class="b-part">
-<div class="band"><span class="bn">6</span>落地（按代价排）</div>
+<div class="band"><span class="bn">7</span>落地（按代价排）</div>
 <div class="b-land"><ol>
-  <li><b>服务端</b>（apiserver + shared + 契约）：删掉 <code>bindOnFirstUse</code> 里建 wiki 的分支；<code>resolveSpaceForCall</code> 分开读和写；搜索回答加 <code>unavailable</code>；带会话头的 <code>POST /wiki/spaces</code> 拒绝；重复仓库答 409。契约 §2.1 和 <code>plan.jobs.triggers</code> 一起改。<b>只部署这一步，新 wiki 就不会再冒出来。</b></li>
+  <li><b>服务端</b>（apiserver + shared + 契约）：owner request 加 <code>WIKI_CREATE</code> 和它的 Create 按钮；删掉 <code>bindOnFirstUse</code> 里建 wiki 的分支；<code>resolveSpaceForCall</code> 分开读和写；搜索回答加 <code>unavailable</code>；带会话头的 <code>POST /wiki/spaces</code> 拒绝；重复仓库答 409。契约 §2.1 和 <code>plan.jobs.triggers</code> 一起改。<b>只部署这一步，新 wiki 就不会再冒出来。</b></li>
   <li><b>runner-go</b>：把 <code>unavailable</code> 渲染成第 2 部分那两句。旧 runner 读到的也是空结果，不必等 runner 发版。</li>
-  <li><b>web</b>：侧栏 New wiki…、页头切换器、表单里已有 wiki 的仓库灰掉。</li>
-  <li><b>iOS / macOS</b>（OrbitKit 共用）和 <b>Android</b>：同第 3 步，三端对同一份 <code>wiki-start.fixture.json</code>。</li>
+  <li><b>web</b>：<code>WIKI_CREATE</code> 卡、侧栏 New wiki…、页头切换器、表单里已有 wiki 的仓库灰掉。</li>
+  <li><b>iOS / macOS</b>（OrbitKit 共用）和 <b>Android</b>：同第 3 步，外加 <code>WIKI_CREATE</code> 卡，三端对同一份 <code>wiki-start.fixture.json</code>。</li>
   <li>按 D3 处理 <code>lfs-builder</code>。</li>
 </ol></div>
 </section>
