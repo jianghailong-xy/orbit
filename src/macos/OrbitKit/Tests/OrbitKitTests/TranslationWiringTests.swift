@@ -78,5 +78,9 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(mac.contains("Picker(TranslationCopy.yourLanguage, selection: $translationLanguage)"))
         XCTAssertTrue(mac.contains("LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)"))
         XCTAssertTrue(mac.contains(".disabled(SessionTranslation.unavailable(model.user))"))
+        // A Mac Form's switch has no label of its own: UI tests find these two by identifier.
+        XCTAssertTrue(mac.contains(".accessibilityIdentifier(TranslationCopy.toggleIdentifier)"))
+        XCTAssertTrue(mac.contains(".accessibilityIdentifier(TranslationCopy.languageIdentifier)"))
+        XCTAssertTrue(ios.contains(".accessibilityIdentifier(TranslationCopy.toggleIdentifier)"))
     }
 }

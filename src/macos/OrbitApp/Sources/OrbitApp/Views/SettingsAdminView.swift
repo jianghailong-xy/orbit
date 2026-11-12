@@ -135,6 +135,7 @@ struct SettingsView: View {
             // changes. A server without a DeepSeek key draws it disabled with frame 2's notice.
             Section(TranslationCopy.title) {
                 Toggle(TranslationCopy.translateConversations, isOn: $translation)
+                    .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
                 Text(TranslationCopy.translateConversationsHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                 if SessionTranslation.unavailable(model.user) {
@@ -144,6 +145,7 @@ struct SettingsView: View {
                 Picker(TranslationCopy.yourLanguage, selection: $translationLanguage) {
                     ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
                 }
+                .accessibilityIdentifier(TranslationCopy.languageIdentifier)
                 Text(TranslationCopy.yourLanguageHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                 LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)

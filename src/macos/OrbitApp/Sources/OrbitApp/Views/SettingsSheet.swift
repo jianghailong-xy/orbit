@@ -798,6 +798,7 @@ private struct SessionSettingsPage: View {
         let unavailable = SessionTranslation.unavailable(model.user)
         Section {
             Toggle(TranslationCopy.translateConversations, isOn: $translation)
+                .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
             if unavailable {
                 Text(TranslationCopy.unavailable)
                     .font(.orbitLabel)

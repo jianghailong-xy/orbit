@@ -51,6 +51,10 @@ public enum TranslationCopy {
     public static let footnote = "Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a conversation stays as it was."
     /// Board frame 2: the server has no DeepSeek key, so the switch is drawn disabled.
     public static let unavailable = "This server has no DeepSeek key, so it can't translate. Whoever runs it sets DEEPSEEK_API_KEY and restarts it."
+    /// Accessibility identifiers of the switch and the language picker: a Mac Form draws a Toggle's
+    /// switch with no label of its own, so UI tests find them by these.
+    public static let toggleIdentifier = "settings.translation.enabled"
+    public static let languageIdentifier = "settings.translation.language"
 
     // MARK: In a conversation (frames 4–6)
     public static let translated = "Translated"
