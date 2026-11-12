@@ -3203,6 +3203,9 @@ final class AppModel {
         }
     }
 
+    // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
+
+    #if os(iOS)
     /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
     /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
     func openProjectMemberFromSheet(_ session: Session) {
@@ -3227,9 +3230,6 @@ final class AppModel {
                                     agentID: session?.agent?.id ?? session?.agentId ?? selectedAgentID ?? "")
     }
 
-    // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
-
-    #if os(iOS)
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.
     /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and
