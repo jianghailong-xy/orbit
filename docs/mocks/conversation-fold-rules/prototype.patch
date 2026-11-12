@@ -1,0 +1,51 @@
+diff --git a/src/web/src/components/Transcript.tsx b/src/web/src/components/Transcript.tsx
+index f7a8867..a92be4d 100644
+--- a/src/web/src/components/Transcript.tsx
++++ b/src/web/src/components/Transcript.tsx
+@@ -1966,6 +1966,7 @@ function orbitTurnOf(
+   }
+   const background = parseBackgroundWake(node.note);
+   if (background) {
++    if (MOCK_RULES().has('job') && !(window as any).__mockCoordinator) return null;
+     if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
+     const title = backgroundWakeTitle(background);
+     const name = backgroundWakeName(background);
+@@ -1991,6 +1992,15 @@ function turnNeedsReader(items: NodeListItem[]): boolean {
+  * runs of them together. The last turn never folds: it is what the reader opened the conversation
+  * to see, and it may still be running.
+  */
++const MOCK_RULES = (): Set<string> => new Set(((window as any).__foldRules as string[] | undefined) ?? []);
++function mockKeepsReply(text: string): boolean {
++  const rules = MOCK_RULES();
++  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
++  if (rules.has('question') && /[?？]$/.test(lines[lines.length - 1] ?? '')) return true;
++  if (rules.has('long') && (text.length > 600 || /^(#{1,6}\s|\|)/m.test(text))) return true;
++  return false;
++}
++
+ function foldOrbitExchanges(
+   items: NodeListItem[],
+   wakeName: WakeName,
+@@ -2004,6 +2014,13 @@ function foldOrbitExchanges(
+   const out: FoldBlock[] = [];
+   let run: FoldedExchange[] = [];
+   const flush = () => {
++    if (run.length && MOCK_RULES().has('last')) {
++      const last = run.pop()!;
++      if (run.length) out.push({ kind: 'exchanges', exchanges: run });
++      last.items.forEach((item) => out.push({ kind: 'item', item }));
++      run = [];
++      return;
++    }
+     if (run.length) out.push({ kind: 'exchanges', exchanges: run });
+     run = [];
+   };
+@@ -2015,7 +2032,7 @@ function foldOrbitExchanges(
+     );
+     // An exchange is the turn and its answer: one the agent has not answered yet is already the
+     // single line its card draws, and folding it would only take that line away.
+-    if (orbit && replies.length > 0 && !turnNeedsReader(turn)) {
++    if (orbit && replies.length > 0 && !turnNeedsReader(turn) && !mockKeepsReply(replies[replies.length - 1])) {
+       const seqs = turn.flatMap((item) => (item.kind === 'steps' ? item.nodes : [item.node]).map((node) => node.seq));
+       run.push({
+         summary: {
