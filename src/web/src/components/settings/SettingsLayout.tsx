@@ -1,5 +1,5 @@
-import { useEffect, type ReactNode } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useState, type ReactNode } from 'react';
+import { NavLink, Outlet, useMatch, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ApiOutlined,
@@ -57,7 +57,23 @@ const MACHINE_STATE_LABEL: Record<MachineState, string> = {
 type SettingsWorkspace = AttentionWorkspace & {
   runnerId?: string | null;
   runner?: { id: string; name?: string; displayName?: string | null } | null;
+  /** When a conversation last started or took a turn there (null = never). */
+  lastActiveAt?: string | null;
 };
+
+/** How many recently used workspaces the Workspaces group shows before "Show all N" (owner's choice B1:
+ *  the 4-6 most recent). A list of up to one more than this is shown whole: "Show all" for a single
+ *  hidden row would be a row of its own. */
+export const RECENT_WORKSPACES = 5;
+
+/** Most recently used first; never used last, in the list's own order. */
+export function byRecentUse<T extends { lastActiveAt?: string | null }>(workspaces: readonly T[]): T[] {
+  const at = (w: T) => (w.lastActiveAt ? Date.parse(w.lastActiveAt) || 0 : 0);
+  return workspaces
+    .map((w, index) => ({ w, index }))
+    .sort((a, b) => at(b.w) - at(a.w) || a.index - b.index)
+    .map(({ w }) => w);
+}
 
 const runnerName = (runner: Pick<Runner, 'name' | 'displayName'>): string =>
   runner.displayName?.trim() || runner.name;
@@ -133,12 +149,8 @@ function SettingsNav() {
     return runner ? runner.displayName?.trim() || runner.name || null : null;
   };
 
-  // Until Settings has its own new-workspace page, + opens a machine's Add workspace: the first one
-  // online, else the first one; with no machine at all, registering one comes first.
-  const addWorkspace = () => {
-    const runner = runners.find((r) => !runnerIsOffline(r, nowMs)) ?? runners[0];
-    navigate(runner ? `/settings/workspaces/new?machine=${runner.id}` : '/runners/register');
-  };
+  // New workspace starts by picking its machine; with no machine at all, registering one comes first.
+  const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/runners/register');
 
   return (
     <nav className="settings-nav" aria-label="Settings">
@@ -205,21 +217,77 @@ function SettingsNav() {
         )}
       </NavGroup>
 
-      <NavGroup title="Workspaces" add={{ label: 'Add a workspace', onClick: addWorkspace }}>
-        {workspaces.map((workspace) => {
-          const machine = machineOf(workspace);
-          return (
-            <NavRow
-              key={workspace.id}
-              to={`/settings/workspaces/${workspace.id}`}
-              icon={<FolderOutlined />}
-              label={workspace.name}
-              trailing={machine ? <span className="settings-nav-meta">{machine}</span> : undefined}
-            />
-          );
-        })}
+      <NavGroup title="Workspaces" add={{ label: 'New workspace', onClick: addWorkspace }}>
+        <WorkspaceRows workspaces={workspaces} machineOf={machineOf} />
       </NavGroup>
     </nav>
+  );
+}
+
+/**
+ * The Workspaces group's rows (owner's choice B1): the most recently used few, each with its machine in
+ * grey (two workspaces of one name on two machines stay apart), then "Show all N", which opens the
+ * whole list with a filter over names, machines and folders.
+ */
+function WorkspaceRows({
+  workspaces,
+  machineOf,
+}: {
+  workspaces: SettingsWorkspace[];
+  machineOf: (workspace: SettingsWorkspace) => string | null;
+}) {
+  const [all, setAll] = useState(false);
+  const [filter, setFilter] = useState('');
+  const open = useMatch('/settings/workspaces/:id')?.params.id;
+  const ordered = byRecentUse(workspaces);
+  const folded = !all && ordered.length > RECENT_WORKSPACES + 1;
+  let shown = ordered;
+  if (folded) {
+    shown = ordered.slice(0, RECENT_WORKSPACES);
+    // The workspace whose page is open keeps its row, though it is not among the recent ones.
+    const current = ordered.find((w) => w.id === open);
+    if (current && !shown.includes(current)) shown = [...shown, current];
+  } else if (all && filter.trim()) {
+    const words = filter.trim().toLowerCase().split(/\s+/);
+    shown = ordered.filter((w) => {
+      const haystack = [w.name, machineOf(w), (w as { workDir?: string | null }).workDir].join(' ').toLowerCase();
+      return words.every((word) => haystack.includes(word));
+    });
+  }
+  return (
+    <>
+      {all && (
+        <label className="settings-nav-filter">
+          <SearchOutlined />
+          <input
+            type="search"
+            placeholder="Filter workspaces"
+            aria-label="Filter workspaces"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            autoFocus
+          />
+        </label>
+      )}
+      {shown.map((workspace) => {
+        const machine = machineOf(workspace);
+        return (
+          <NavRow
+            key={workspace.id}
+            to={`/settings/workspaces/${workspace.id}`}
+            icon={<FolderOutlined />}
+            label={workspace.name}
+            trailing={machine ? <span className="settings-nav-meta">{machine}</span> : undefined}
+          />
+        );
+      })}
+      {all && filter.trim() && shown.length === 0 && <div className="settings-nav-none">No workspace matches.</div>}
+      {folded && (
+        <button type="button" className="settings-nav-more" onClick={() => setAll(true)}>
+          Show all {ordered.length}
+        </button>
+      )}
+    </>
   );
 }
 

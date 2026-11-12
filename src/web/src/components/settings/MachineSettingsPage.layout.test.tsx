@@ -8,7 +8,7 @@ import type { Runner } from '../TasksSidePanel';
 import type { RunnerAttentionInput } from '../../lib/runnerAttention';
 import cases from '../../lib/runnerAttention.cases.json';
 import { MachineSettingsPage } from './MachineSettingsPage';
-import { SettingsWorkspacePage } from './SettingsInterimPages';
+import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 import { ToastViewport } from '../ToastViewport';
 import { clearToasts } from '../../lib/toastStore';
 
@@ -163,7 +163,7 @@ async function mount(m: Machine, counts: Array<{ workspaceId: string; running: n
         <MemoryRouter initialEntries={[`/settings/machines/${RUNNER_ID}`]}>
           <Routes>
             <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
-            {/* Where a workspace row and Add workspace go: until task s5, the old inline editor. */}
+            {/* Where a workspace row and Add workspace go: the workspace's own Settings page. */}
             <Route path="/settings/workspaces/:id" element={<SettingsWorkspacePage />} />
             <Route path="*" element={<Arrived />} />
           </Routes>
@@ -488,9 +488,11 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(rows.every(([, href]) => href?.startsWith('/settings/workspaces/'))).toBe(true);
     // Listed and linked only: no workspace form on this page.
     expect(document.querySelector('.rd-workspace-form')).toBeNull();
-    // Until task s5, a row opens the old inline editor on that workspace.
+    expect(document.querySelector('input[aria-label="Working directory"]')).toBeNull();
+    // A row opens that workspace's own Settings page.
     await click($('.machine-workspace-row'));
-    expect(text($('.rd-workspace-editing .rd-workspace-name'))).toBe('orbit');
+    expect(text($('.settings-header-title'))).toBe('orbit');
+    expect($$('.settings-section-title').map(text)).toEqual(['Location', 'Sessions', 'Agent environment', 'Danger zone']);
   });
 
   it('the Mac mini, offline: when it was last seen, how to wake it, and the command that updates it', async () => {
@@ -563,13 +565,14 @@ describe('the Workspaces section of a machine with none', () => {
     expect(text($('.rd-empty'))).toContain('No workspaces on Austin box yet.');
   });
 
-  it('Add workspace, a quiet button in the section’s head, opens the create form on this machine', async () => {
+  it('Add workspace, a quiet button in the section’s head, opens New workspace with this machine picked', async () => {
     await mount(machine('no CLI signed in and no workspace'));
     expect(addWorkspace().className).toContain('orbit-button-default');
     expect(button('Start a session').className).toContain('orbit-button-primary');
     await click(addWorkspace());
-    // Until task s5, the old inline editor's create form, at the workspace's Settings address.
-    expect($('.rd-workspace-form-new')).toBeTruthy();
+    expect(text($('.settings-header-title'))).toBe('New workspace');
+    expect(text($('.settings-header-description'))).toBe('On orbit@austin · Change machine');
+    expect($('input[aria-label="Name"]')).toBeTruthy();
   });
 
   it('with workspaces, nothing says Start a session', async () => {
@@ -579,17 +582,12 @@ describe('the Workspaces section of a machine with none', () => {
   });
 });
 
-// The Add workspace form, reached from this page (until task s5, the old inline editor): a workspace
+// The Add workspace form, reached from this page (New workspace with this machine picked): a workspace
 // made here says which folder it runs in (P0 of docs/mocks/first-workspace-in-conversation, 04). A
-// saved one is edited as it was.
+// saved one is edited on its own page, row by row.
 describe('the Add workspace form', () => {
-  const form = () => $('.rd-workspace-form');
-  const field = (label: string) => {
-    const found = $$('.rd-form-field', form()).find((f) => text(f.querySelector('.rd-form-label')) === label);
-    if (!found) throw new Error(`no field labelled ${label}`);
-    return $<HTMLInputElement>('input', found);
-  };
-  const submit = (label: string) => button(label, form()) as HTMLButtonElement;
+  const field = (label: string) => $<HTMLInputElement>(`input[aria-label="${label}"]`);
+  const submit = (label: string) => button(label) as HTMLButtonElement;
   const type = async (input: HTMLInputElement, value: string) => {
     await act(async () => {
       input.focus();
@@ -630,16 +628,16 @@ describe('the Add workspace form', () => {
     });
   });
 
-  it('still saves a workspace being edited with its working directory cleared, as before', async () => {
+  it('a saved workspace’s working directory, emptied on its page, goes back to what is saved and sends nothing', async () => {
     const { sent } = await mount(machine('real wikova'));
     await click($('[data-workspace-id="ws-orbit"]'));
     expect(field('Working directory').value).toBe('/root/orbit');
     await type(field('Working directory'), '');
-    expect(field('Working directory').placeholder).toBe('/path/to/project on the runner (optional)');
-    expect(submit('Save').disabled).toBe(false);
-    await click(submit('Save'));
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ method: 'PATCH', path: '/workspaces/ws-orbit', body: { name: 'orbit' } });
-    expect((sent[0].body as { workDir?: string }).workDir).toBeUndefined();
+    await act(async () => {
+      field('Working directory').dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+    await settle();
+    expect(sent).toEqual([]);
+    expect(field('Working directory').value).toBe('/root/orbit');
   });
 });

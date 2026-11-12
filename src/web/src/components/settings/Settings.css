@@ -457,3 +457,108 @@
   color: var(--warning);
   font-weight: 500;
 }
+
+/* Workspaces (board-5): the nav group's Show all and its filter, and a workspace's own page. */
+.settings-nav-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  margin: 2px 0 4px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+}
+.settings-nav-filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12.5px;
+}
+.settings-nav-filter:focus-within {
+  box-shadow: 0 0 0 2px var(--brand-border);
+}
+.settings-nav-more {
+  display: block;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px 0 34px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-nav-more:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.settings-nav-none {
+  padding: 4px 8px 4px 34px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.settings-row--block {
+  display: block;
+}
+.settings-row--block > .rd-form-field,
+.settings-row--block > .rd-route-engines {
+  margin: 0;
+}
+.workspace-text-setting.orbit-input,
+.settings-row-control .workspace-text-setting {
+  width: 300px;
+}
+.workspace-text-setting--mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+}
+.workspace-machine-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.workspace-machine-link:hover {
+  color: var(--text-1);
+}
+.workspace-machine-choice {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.workspace-machine-choice + .workspace-machine-choice .settings-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.workspace-machine-choice:hover .settings-row-title {
+  color: var(--brand);
+}
+.workspace-change-machine {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  cursor: pointer;
+}
+.workspace-new-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}

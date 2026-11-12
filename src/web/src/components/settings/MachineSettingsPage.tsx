@@ -574,8 +574,7 @@ export function MachineSettingsPage() {
   const runsAs =
     runner.runsAsRoot === true ? RUNNER_RUNS_AS_ROOT : runner.runsAsRoot === false ? RUNNER_RUNS_AS_REGULAR_USER : '—';
 
-  // TODO(s5, task 34vULVKvcdivsOtyXTP72): a workspace's row and Add workspace open Settings' workspace
-  // addresses, which until s5 lands still draw the old inline editor (MachineWorkspacesEditor).
+  // New workspace with this machine already picked.
   const addWorkspace = () => navigate(`/settings/workspaces/new?machine=${runner.id}`);
 
   return (

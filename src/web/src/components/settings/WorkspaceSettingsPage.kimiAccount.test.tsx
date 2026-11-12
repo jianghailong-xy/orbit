@@ -4,14 +4,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
+import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import type { Runner } from '../TasksSidePanel';
-import { MachineWorkspacesEditor } from './MachineWorkspacesEditor';
+import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 
 /**
- * A workspace picks which of its runner's Antigravity (Google) accounts its Antigravity sessions run
- * on, under the workspace form's Advanced — a third field beside Codex's and Claude's, shown once the
- * runner has two accounts. What the save sends is the account's id (`antigravityAccount`).
+ * A workspace picks which of its runner's Kimi Code accounts its Kimi sessions run on, under the
+ * workspace's Settings page (Sessions) — beside Codex's, Claude's and Antigravity's, shown once the runner has
+ * two. What the save sends is the account's id (`kimiAccount`), which dispatch hands the runner as
+ * that account's KIMI_CODE_HOME.
  */
 
 vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
@@ -21,44 +22,53 @@ const apiMock = vi.mocked(api);
 const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
 const WORKSPACE_ID = '33zx0JhRhJo8rd25d3qAN';
 
-const DEFAULT: RunnerEngineAccount = { id: 'default', home: '/root/.orbit/antigravity/google', auth: 'yes' };
+const DEFAULT: RunnerEngineAccount = { id: 'default', home: '/root/.kimi-code', auth: 'yes', kimiRegion: 'global' };
 const WORK: RunnerEngineAccount = {
   id: '5c2e91a0',
   name: 'Work',
-  home: '/root/.orbit/antigravity-accounts/5c2e91a0',
+  home: '/root/.orbit/kimi-accounts/5c2e91a0',
   auth: 'yes',
+  kimiRegion: 'mainland-cn',
 };
 
-/** agy's buckets for Default and Work, on the engine's own health: what is left of each. */
-const antigravity = (accounts: RunnerEngineAccount[], over: Partial<RunnerEngineHealth> = {}): RunnerEngineHealth => ({
-  engine: 'antigravity',
+const kimi = (accounts: RunnerEngineAccount[]): RunnerEngineHealth => ({
+  engine: 'kimi',
   installed: true,
   auth: 'yes',
-  authSource: 'google',
-  version: '1.3.0',
+  version: '2.1.1',
+  kimiRegion: 'global',
   accounts,
-  planUsage: {
-    provider: 'antigravity',
-    buckets: [{ id: 'gemini-weekly', window: 'weekly', remainingFraction: 0.72 }],
-    accounts: { [WORK.id]: { provider: 'antigravity', buckets: [{ id: 'gemini-5h', window: '5h', remainingFraction: 0.04 }] } },
-  },
-  ...over,
 });
+
+/** Default's month is its fullest window; Work's 5-hour one is nearly spent. Default's coding share is
+ *  above its month, which Kimi never reports (the share is part of the month), so that a picker still
+ *  weighing it would name it. */
+const USAGE: PlanUsage = {
+  kimi: {
+    provider: 'kimi',
+    fiveHour: { utilization: 12 },
+    sevenDay: { utilization: 34 },
+    month: { utilization: 41 },
+    monthCode: { utilization: 88 },
+    accounts: { [WORK.id]: { provider: 'kimi', fiveHour: { utilization: 97 }, month: { utilization: 10 } } },
+  },
+};
 
 const runner = (engine: RunnerEngineHealth): Runner => ({
   id: RUNNER_ID,
   name: 'hpc',
   online: true,
   engines: [{ engine: 'claude', installed: true, auth: 'yes' }, engine],
+  planUsage: USAGE,
 });
 
-const workspace = (antigravityAccount: string | null) => ({
+const workspace = (kimiAccount: string | null, env: Record<string, string> = {}) => ({
   id: WORKSPACE_ID,
   name: 'orbit',
   runnerId: RUNNER_ID,
   workDir: '/srv/orbit',
-  env: {},
-  antigravityAccount,
+  env,
+  kimiAccount,
   createdAt: '2026-09-23T08:00:00.000Z',
 });
 
@@ -91,14 +101,16 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-/** The runner's page, over one workspace. Every PATCH the page sends is collected. */
+/** The workspace's Settings page. Every PATCH the page sends is collected. */
 function mount(r: Runner, ws: ReturnType<typeof workspace>) {
   const patches: Array<Record<string, unknown>> = [];
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     const method = options?.method ?? 'GET';
     if (method === 'PATCH' && path === `/workspaces/${WORKSPACE_ID}`) {
       patches.push(options?.body as Record<string, unknown>);
-      return { ...ws, ...(options?.body as object) };
+      // The server keeps what it was sent, as the next read shows.
+      ws = { ...ws, ...(options?.body as object) };
+      return ws;
     }
     if (path === '/runners') return [r];
     if (path === '/workspaces') return [ws];
@@ -119,9 +131,9 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/settings/workspaces']}>
+        <MemoryRouter initialEntries={[`/settings/workspaces/${WORKSPACE_ID}`]}>
           <Routes>
-            <Route path="/settings/workspaces" element={<MachineWorkspacesEditor runnerId={RUNNER_ID} workspaceId="" />} />
+            <Route path="/settings/workspaces/:id" element={<SettingsWorkspacePage />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -158,13 +170,11 @@ const press = async (el: HTMLElement) => {
 
 async function openAdvanced() {
   await settle();
-  await click(byText('.rd-workspace-name', 'orbit'));
-  await click(document.body.querySelector<HTMLElement>('.rd-adv-toggle')!);
 }
 
 const field = () =>
   [...document.body.querySelectorAll<HTMLElement>('.rd-form-field')].find(
-    (el) => el.querySelector('.rd-form-label')?.textContent === 'Antigravity account',
+    (el) => el.querySelector('.rd-form-label')?.textContent === 'Kimi account',
   );
 
 /** The account picker, as its role names it. */
@@ -179,38 +189,37 @@ async function options() {
   });
 }
 
-describe('which Antigravity account a workspace runs on', () => {
-  it('offers each Google account with what is left of its emptiest bucket, and saves the id picked', async () => {
-    const { patches } = mount(runner(antigravity([DEFAULT, WORK])), workspace(null));
+describe('which Kimi account a workspace runs on', () => {
+  it('offers each Kimi account with the window that stops it, and saves the id picked', async () => {
+    const { patches } = mount(runner(kimi([DEFAULT, WORK])), workspace(null));
     await openAdvanced();
     expect(picker()?.textContent).toContain('Automatic');
     const offered = await options();
     expect(offered.map((o) => o.text)).toEqual([
       ['Automatic', 'each new session starts on the account whose quota resets soonest'],
-      ['Default (~/.orbit/antigravity/google)', 'gemini-weekly 72% left · signed in'],
-      ['Work', 'gemini-5h 4% left · signed in'],
+      ['Default (~/.kimi-code)', 'Monthly limit 41% · signed in'],
+      ['Work', '5h limit 97% · signed in'],
     ]);
+    // Neither the coding share's name nor its 88% is anywhere in the list.
+    expect(document.body.querySelector('[role="listbox"]')?.textContent).not.toMatch(/Monthly · code|88%/);
     await press(offered[2].el);
-    await click(byText('button', 'Save'));
-    expect(patches).toHaveLength(1);
-    expect(patches[0].antigravityAccount).toBe(WORK.id);
+    // Saved on the pick: one PATCH, carrying only this field.
+    expect(patches).toEqual([{ kimiAccount: WORK.id }]);
   });
 
-  it('says a Default on the runner’s Gemini key runs on that key', async () => {
-    mount(
-      runner(antigravity([{ ...DEFAULT, auth: 'no' }, WORK], { authSource: 'env_key' })),
-      workspace(null),
-    );
+  it('says the account picked replaces a KIMI_CODE_HOME typed under Environment variables', async () => {
+    mount(runner(kimi([DEFAULT, WORK])), workspace(WORK.id, { KIMI_CODE_HOME: '/root/.kimi-other' }));
     await openAdvanced();
-    const offered = await options();
-    expect(offered[1].text).toEqual(['Default (~/.orbit/antigravity/google)', 'env key · runs on your Gemini key']);
+    expect(field()?.querySelector('.rd-path-warn')?.textContent).toBe(
+      'The account picked here replaces KIMI_CODE_HOME=~/.kimi-other from Environment variables.',
+    );
   });
 
   it('asks nothing of a runner with one account, and keeps the choice it never showed', async () => {
-    const { patches } = mount(runner(antigravity([DEFAULT])), workspace(null));
+    const { patches } = mount(runner(kimi([DEFAULT])), workspace(null));
     await openAdvanced();
     expect(field()).toBeUndefined();
-    await click(byText('button', 'Save'));
-    expect(patches.at(-1)?.antigravityAccount).toBeNull();
+    // Nothing is shown, so nothing is saved.
+    expect(patches).toEqual([]);
   });
 });

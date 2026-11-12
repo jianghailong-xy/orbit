@@ -6,12 +6,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import type { Runner } from '../TasksSidePanel';
-import { MachineWorkspacesEditor } from './MachineWorkspacesEditor';
+import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 import { MachineSettingsPage } from './MachineSettingsPage';
 
 /**
  * A workspace picks which of its runner's Codex accounts its Codex sessions run on, under the
- * workspace form's Advanced. Mounted as the page is, so each claim is about what a person does:
+ * workspace's Settings page (Sessions). Mounted as the page is, so each claim is about what a person does:
  * open the workspace, open Advanced, pick an account, save — and what the save sends is the
  * account's id, which is all the control plane stores.
  */
@@ -114,15 +114,16 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-/** The runner's page, over one workspace. Every PATCH the page sends is collected. */
-/** `at`: the workspace editor (by default), or the machine's own Settings page. */
-function mount(r: Runner, ws: ReturnType<typeof workspace>, at = '/settings/workspaces') {
+/** The workspace's Settings page (by default), or `at` the machine's own. Every PATCH is collected. */
+function mount(r: Runner, ws: ReturnType<typeof workspace>, at = `/settings/workspaces/${WORKSPACE_ID}`) {
   const patches: Array<Record<string, unknown>> = [];
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     const method = options?.method ?? 'GET';
     if (method === 'PATCH' && path === `/workspaces/${WORKSPACE_ID}`) {
       patches.push(options?.body as Record<string, unknown>);
-      return { ...ws, ...(options?.body as object) };
+      // The server keeps what it was sent, as the next read shows.
+      ws = { ...ws, ...(options?.body as object) };
+      return ws;
     }
     if (path === '/runners') return [r];
     if (path === '/workspaces') return [ws];
@@ -146,7 +147,7 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>, at = '/settings/work
       <QueryClientProvider client={qc}>
         <MemoryRouter initialEntries={[at]}>
           <Routes>
-            <Route path="/settings/workspaces" element={<MachineWorkspacesEditor runnerId={RUNNER_ID} workspaceId="" />} />
+            <Route path="/settings/workspaces/:id" element={<SettingsWorkspacePage />} />
             <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
           </Routes>
         </MemoryRouter>
@@ -184,17 +185,11 @@ const press = async (el: HTMLElement) => {
   await settle();
 };
 
-/** Open the workspace's editor. */
+/** The workspace's page, drawn: its account rows show without anything to open. */
 async function openEditor() {
   await settle();
-  await click(byText('.rd-workspace-name', 'orbit'));
 }
-
-/** Open the workspace's editor and its Advanced part. */
-async function openAdvanced() {
-  await openEditor();
-  await click(document.body.querySelector<HTMLElement>('.rd-adv-toggle')!);
-}
+const openAdvanced = openEditor;
 
 const field = () =>
   [...document.body.querySelectorAll<HTMLElement>('.rd-form-field')].find(
@@ -228,9 +223,8 @@ describe('which Codex account a workspace runs on', () => {
       ['Work', 'signed in'],
     ]);
     await press(offered[2].el);
-    await click(byText('button', 'Save'));
-    expect(patches).toHaveLength(1);
-    expect(patches[0].codexAccount).toBe(WORK.id);
+    // Saved on the pick: one PATCH, carrying only this field.
+    expect(patches).toEqual([{ codexAccount: WORK.id }]);
   });
 
   it('offers a renamed Default by its name, saying under it what it is', async () => {
@@ -252,14 +246,10 @@ describe('which Codex account a workspace runs on', () => {
     ] as const) {
       const { patches } = mount(runner([DEFAULT, WORK]), workspace(WORK.id));
       await openEditor();
-      // Folded, the disclosure still says something is set behind it.
-      expect(document.body.querySelector('.rd-adv-badge')?.textContent).toBe('1 configured');
-      await click(document.body.querySelector<HTMLElement>('.rd-adv-toggle')!);
       expect(picker()?.textContent).toContain('Work');
       const offered = await options();
       await press(offered[pick].el);
-      await click(byText('button', 'Save'));
-      expect(patches[0].codexAccount).toBe(saved);
+      expect(patches).toEqual([{ codexAccount: saved }]);
       act(() => root?.unmount());
       host?.remove();
       root = host = null;
@@ -271,8 +261,7 @@ describe('which Codex account a workspace runs on', () => {
       const { patches } = mount(runner(accounts), workspace(null));
       await openAdvanced();
       expect(field()).toBeUndefined();
-      await click(byText('button', 'Save'));
-      expect(patches.at(-1)?.codexAccount).toBeNull();
+      expect(patches).toEqual([]);
       act(() => root?.unmount());
       host?.remove();
       root = host = null;
@@ -288,8 +277,7 @@ describe('which Codex account a workspace runs on', () => {
       ['Account 5e6f7a8b', 'not on this runner — sessions run on Default'],
     ]);
     await press(offered[0].el);
-    await click(byText('button', 'Save'));
-    expect(patches[0].codexAccount).toBeNull();
+    expect(patches).toEqual([{ codexAccount: null }]);
   });
 
   it('does not claim Default, or an automatic pick, while a CODEX_HOME typed into the env points elsewhere', async () => {
@@ -343,8 +331,7 @@ describe('a runner whose Codex Default is removed from Orbit', () => {
       ['Default', 'removed from Orbit — sessions run on Automatic'],
     ]);
     await press(offered[0].el);
-    await click(byText('button', 'Save'));
-    expect(patches[0].codexAccount).toBeNull();
+    expect(patches).toEqual([{ codexAccount: null }]);
   });
 
   it('says an account the runner no longer reports runs on Automatic, not on Default', async () => {

@@ -71,12 +71,10 @@ vi.mock('./MachineSettingsPage', async () => {
     MachineSettingsPage: () => <p data-page={`machine:${useParams().id}:`}>machine</p>,
   };
 });
-// Until task s5, a workspace's row opens the old inline editor, on its machine's workspaces.
-vi.mock('./MachineWorkspacesEditor', () => ({
-  MachineWorkspacesEditor: ({ runnerId, workspaceId }: { runnerId: string; workspaceId: string }) => (
-    <p data-page={`machine:${runnerId}:${workspaceId}`}>machine</p>
-  ),
-}));
+vi.mock('./WorkspaceSettingsPage', async () => {
+  const { useParams } = await import('react-router-dom');
+  return { SettingsWorkspacePage: () => <p data-page={`workspace:${useParams().id}`}>workspace</p> };
+});
 // Home lands in a workspace's console.
 vi.mock('../WorkspaceConsole', () => ({ WorkspaceConsole: () => <p data-page="console">console</p> }));
 vi.mock('../RunnerRegisterGuide', () => ({ RunnerRegisterGuide: () => <p data-page="register">register</p> }));
@@ -105,6 +103,7 @@ const KEYS = [
 let container: HTMLDivElement;
 let root: Root | null = null;
 let keys: unknown[] = KEYS;
+let workspaces: unknown[] = WORKSPACES;
 let pools: unknown[] = [{ id: 'p1', name: 'Team', members: [] }];
 
 beforeEach(() => {
@@ -113,10 +112,11 @@ beforeEach(() => {
   localStorage.setItem('orbit_token', 'access-token');
   resetSettingsReturn();
   keys = KEYS;
+  workspaces = WORKSPACES;
   pools = [{ id: 'p1', name: 'Team', members: [] }];
   apiMock.mockImplementation((async (path: string) => {
     if (path === '/runners') return RUNNERS;
-    if (path === '/workspaces') return WORKSPACES;
+    if (path === '/workspaces') return workspaces;
     if (path === '/providers/mine') return keys;
     if (path === '/providers/pools') return pools;
     return [];
@@ -232,7 +232,7 @@ describe('the Settings window', () => {
     expect(group('Personal').querySelector('.settings-nav-add')).toBeNull();
     expect(group('Machines').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('Register a machine');
     expect(group('Providers').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('Connect a provider');
-    expect(group('Workspaces').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('Add a workspace');
+    expect(group('Workspaces').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('New workspace');
   });
 
   it('lists Personal, each machine with its status dot, each vendor with its keys, and each workspace with its machine', async () => {
@@ -279,8 +279,8 @@ describe('the Settings window', () => {
       '/settings/providers/anthropic': 'vendor:anthropic',
       '/settings/providers/openai': 'vendor:openai',
       '/settings/providers/pools': 'pools',
-      '/settings/workspaces/wsOrbit': 'machine:gpuBox:wsOrbit',
-      '/settings/workspaces/wsSite': 'machine:studioMac:wsSite',
+      '/settings/workspaces/wsOrbit': 'workspace:wsOrbit',
+      '/settings/workspaces/wsSite': 'workspace:wsSite',
     };
     for (const [href, answered] of Object.entries(expected)) {
       await click(nav().querySelector(`a[href="${href}"]`));
@@ -329,11 +329,11 @@ describe('the Settings window', () => {
     expect(addressBar()).toBe('/settings/providers/new');
     expect(page()).toBe('pick-vendor');
 
-    // Until Settings has its own new-workspace page (task s5): the create form, on the first online machine.
+    // New workspace: its page asks for the machine first.
     await go('/settings/general');
     await click(group('Workspaces').querySelector('.settings-nav-add'));
-    expect(addressBar()).toBe('/settings/workspaces/new?machine=gpuBox');
-    expect(page()).toBe('machine:gpuBox:new');
+    expect(addressBar()).toBe('/settings/workspaces/new');
+    expect(page()).toBe('workspace:new');
   });
 
   it('Back to Orbit returns to the page Settings was opened from, across pages inside it', async () => {
@@ -372,6 +372,87 @@ describe('the Settings window', () => {
     dialog.remove();
     await pressEscape();
     expect(addressBar()).toBe('/tasks');
+  });
+});
+
+// Owner's choice B1 (board-5 ① ②): the most recently used workspaces, each with its machine in grey,
+// then Show all N, which opens the whole list with a filter.
+describe('the Workspaces group', () => {
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+  const MANY = [
+    { id: 'w1', name: 'orbit', runnerId: 'gpuBox', lastActiveAt: hoursAgo(1) },
+    { id: 'w2', name: 'orbit', runnerId: 'studioMac', lastActiveAt: hoursAgo(30) },
+    { id: 'w3', name: 'website', runnerId: 'studioMac', lastActiveAt: hoursAgo(2) },
+    { id: 'w4', name: 'ml-experiments', runnerId: 'gpuBox', lastActiveAt: hoursAgo(5) },
+    { id: 'w5', name: 'never-used', runnerId: 'gpuBox', lastActiveAt: null },
+    { id: 'w6', name: 'docs', runnerId: 'oldLaptop', lastActiveAt: hoursAgo(50) },
+    { id: 'w7', name: 'infra', runnerId: 'gpuBox', lastActiveAt: hoursAgo(3) },
+    { id: 'w8', name: 'scratch', runnerId: 'oldLaptop', lastActiveAt: hoursAgo(400) },
+  ];
+  const labels = () => rows('Workspaces').map((r) => [r.label, r.meta]);
+  const filterBox = () => group('Workspaces').querySelector<HTMLInputElement>('input[aria-label="Filter workspaces"]');
+
+  it('lists the five most recently used, each with its machine, then Show all N', async () => {
+    workspaces = MANY;
+    await visit('/settings/general');
+    expect(labels()).toEqual([
+      ['orbit', 'gpu-box'],
+      ['website', 'Studio Mac'],
+      ['infra', 'gpu-box'],
+      ['ml-experiments', 'gpu-box'],
+      // Two of one name stay apart by their machine.
+      ['orbit', 'Studio Mac'],
+    ]);
+    expect(button('Show all 8')).toBeTruthy();
+    expect(filterBox()).toBeNull();
+  });
+
+  it('Show all opens the whole list, never-used last, with a filter over names, machines and folders', async () => {
+    workspaces = MANY;
+    await visit('/settings/general');
+    await click(button('Show all 8'));
+    expect(labels().map(([label]) => label)).toEqual([
+      'orbit',
+      'website',
+      'infra',
+      'ml-experiments',
+      'orbit',
+      'docs',
+      'scratch',
+      'never-used',
+    ]);
+    expect(button('Show all 8')).toBeUndefined();
+    const input = filterBox()!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'old-laptop');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    expect(labels()).toEqual([
+      ['docs', 'old-laptop'],
+      ['scratch', 'old-laptop'],
+    ]);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'nothing like it');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    expect(labels()).toEqual([]);
+    expect(group('Workspaces').textContent).toContain('No workspace matches.');
+  });
+
+  it('keeps the open workspace’s row though it is not a recent one', async () => {
+    workspaces = MANY;
+    await visit('/settings/workspaces/w8');
+    expect(labels().at(-1)).toEqual(['scratch', 'old-laptop']);
+    expect(nav().querySelector('a.active')?.getAttribute('href')).toBe('/settings/workspaces/w8');
+  });
+
+  it('shows six whole, rather than five and a Show all for one', async () => {
+    workspaces = MANY.slice(0, 6);
+    await visit('/settings/general');
+    expect(labels()).toHaveLength(6);
+    expect([...group('Workspaces').querySelectorAll('button')].some((b) => b.textContent?.startsWith('Show all'))).toBe(false);
   });
 });
 

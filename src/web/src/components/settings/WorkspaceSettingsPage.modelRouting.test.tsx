@@ -6,12 +6,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Runner } from '../TasksSidePanel';
 import { meQuery, type UserPreferences } from '../../lib/queries';
-import { MachineWorkspacesEditor } from './MachineWorkspacesEditor';
+import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 
 /**
- * Smart model selection on the Agent's settings (docs/model-routing-design.md §9; the web mock §1):
- * a switch under Worktree isolation, off until the owner turns it on, saved as the workspace's
- * `modelRouting` through the user API — and the read-only Model line saying, once it is on, that
+ * Smart model selection on the workspace's Settings page (docs/model-routing-design.md §9; the web
+ * mock §1): a switch under Worktree isolation, off until the owner turns it on, saved on its own as
+ * the workspace's `modelRouting` — and the read-only Model line saying, once it is on, that
  * the model it names is only what the sessions opened by hand start on. All of it only while the
  * account's switch (`preferences.modelRouting`) is on; off — the default — the Agent has none of it.
  */
@@ -45,7 +45,9 @@ const workspace = (over: Record<string, unknown> = {}) => ({
 });
 
 const SWITCH_LABEL = 'Smart model selection for tasks';
-const SWITCH_DESC =
+// The row says it short (board-5); the whole explanation is the control's tooltip.
+const SWITCH_DESC = 'Task runs use the suggested tier’s model and effort.';
+const SWITCH_TOOLTIP =
   'Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. ' +
   "Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. " +
   'Sessions you open yourself are not affected.';
@@ -130,9 +132,9 @@ function mount(
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/settings/workspaces']}>
+        <MemoryRouter initialEntries={[`/settings/workspaces/${WORKSPACE_ID}`]}>
           <Routes>
-            <Route path="/settings/workspaces" element={<MachineWorkspacesEditor runnerId={RUNNER_ID} workspaceId="" />} />
+            <Route path="/settings/workspaces/:id" element={<SettingsWorkspacePage />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -170,29 +172,37 @@ const press = async (el: HTMLElement) => {
   await settle();
 };
 
-/** Open the workspace's editor, as a person does: by its name in the list. */
+/** The workspace's page, drawn: every row shows without anything to open. */
 async function openEditor() {
   await settle();
-  await click(byText('.rd-workspace-name', 'orbit'));
+  await settle();
 }
 
-const form = () => {
-  const found = document.body.querySelector<HTMLElement>('.rd-workspace-form');
-  if (!found) throw new Error('the workspace editor is not open');
+const page = () => document.body;
+const sessions = () => {
+  const found = [...page().querySelectorAll<HTMLElement>('.settings-section')].find(
+    (el) => el.querySelector('.settings-section-title')?.textContent === 'Sessions',
+  );
+  if (!found) throw new Error('no Sessions section');
   return found;
 };
-/** The editor's settings rows, top to bottom, as their labels. */
+/** The Sessions card's rows, top to bottom, as their titles. */
 const settingLabels = () =>
-  [...form().querySelectorAll<HTMLElement>('.rd-set-row .rd-set-label')].map((el) => el.textContent);
-const smartRow = () => {
-  const row = [...form().querySelectorAll<HTMLElement>('.rd-set-row')].find(
-    (el) => el.querySelector('.rd-set-label')?.textContent === SWITCH_LABEL,
+  [...sessions().querySelectorAll<HTMLElement>('.settings-row-title')]
+    .map((el) => el.textContent)
+    .filter((label) => label !== 'Model');
+const rowOf = (title: string) => {
+  const row = [...page().querySelectorAll<HTMLElement>('.settings-row')].find(
+    (el) => el.querySelector('.settings-row-title')?.textContent === title,
   );
-  if (!row) throw new Error(`no "${SWITCH_LABEL}" row`);
+  if (!row) throw new Error(`no "${title}" row`);
   return row;
 };
+const smartRow = () => rowOf(SWITCH_LABEL);
 const smartSwitch = () => smartRow().querySelector<HTMLElement>('[role="switch"]')!;
-const modelLine = () => squash(form().querySelector('.rd-form-derived')?.textContent);
+const worktreeSwitch = () => rowOf('Worktree isolation').querySelector<HTMLElement>('[role="switch"]')!;
+const optimize = () => page().querySelector<HTMLElement>('[aria-label="Optimize for"]');
+const modelLine = () => squash(rowOf('Model').querySelector('.rd-form-derived')?.textContent);
 
 describe('smart model selection on the Agent', () => {
   it.each([
@@ -203,48 +213,45 @@ describe('smart model selection on the Agent', () => {
   ])('reads optimize mode %s as %s', async (mode, label) => {
     mount(workspace({ modelRoutingOptimizeFor: mode }));
     await openEditor();
-    expect(smartRow().querySelector('[aria-label="Optimize For"]')?.textContent).toContain(label);
+    expect(optimize()?.textContent).toContain(label);
   });
 
-  it.each(['Cost', 'Balance', 'Intelligence'])('saves %s without enabling routing or extra engines', async (label) => {
+  it.each(['Cost', 'Balance', 'Intelligence'])('saves %s on its own, in a PATCH of that field alone', async (label) => {
     const { writes } = mount(workspace({ modelRoutingOptimizeFor: label === 'Balance' ? 'cost' : 'balance' }));
     await openEditor();
-    await click(smartRow().querySelector<HTMLElement>('[aria-label="Optimize For"]')!);
+    await click(optimize()!);
     expect([...document.querySelectorAll('[role="option"]')].map((el) => el.textContent)).toEqual([
       'Cost', 'Balance', 'Intelligence',
     ]);
     await press(byText('[role="option"]', label));
-    await click(byText('button', 'Save'));
-    expect(writes).toHaveLength(1);
-    expect(writes[0]).toMatchObject({
-      path: `/workspaces/${WORKSPACE_ID}`,
-      body: { modelRoutingOptimizeFor: label.toLowerCase(), modelRouting: false, modelRoutingProviders: [] },
-    });
-    await openEditor();
-    expect(smartRow().querySelector('[aria-label="Optimize For"]')?.textContent).toContain(label);
+    expect(writes).toEqual([
+      { method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}`, body: { modelRoutingOptimizeFor: label.toLowerCase() } },
+    ]);
+    expect(optimize()?.textContent).toContain(label);
   });
 
-  it('preserves the saved optimize mode when editing another setting with the account switch off', async () => {
+  it('leaves the saved optimize mode alone when another setting is saved with the account switch off', async () => {
     const { writes } = mount(workspace({ modelRoutingOptimizeFor: 'intelligence' }), { modelRouting: false });
     await openEditor();
-    expect(form().querySelector('[aria-label="Optimize For"]')).toBeNull();
-    await click(form().querySelector<HTMLElement>('.rd-set-row [role="switch"]')!);
-    await click(byText('button', 'Save'));
-    expect(writes[0].body.modelRoutingOptimizeFor).toBe('intelligence');
+    expect(optimize()).toBeNull();
+    await click(worktreeSwitch());
+    expect(writes.map((w) => w.body)).toEqual([{ enableWorktree: false }]);
   });
 
   it('sits under Worktree isolation, off until it is turned on, with the task routing explanation', async () => {
     mount(workspace());
     await openEditor();
 
-    expect(settingLabels()).toEqual(['Worktree isolation', SWITCH_LABEL]);
-    expect(smartRow().querySelector('.rd-set-desc')?.textContent).toBe(SWITCH_DESC);
+    expect(settingLabels()).toEqual(['Worktree isolation', SWITCH_LABEL, 'Optimize for']);
+    expect(smartRow().querySelector('.settings-row-description')?.textContent).toBe(SWITCH_DESC);
+    // The whole explanation, where the row shortens it.
+    expect(smartRow().querySelector('.settings-row-control')?.getAttribute('title')).toBe(SWITCH_TOOLTIP);
     expect(smartSwitch().getAttribute('aria-checked')).toBe('false');
     // Off, the Model line is today's.
     expect(modelLine()).toBe(MODEL_LINE_OFF);
   });
 
-  it('turned on, says task runs pick their own model, and saves modelRouting: true', async () => {
+  it('turned on, says task runs pick their own model, and saves modelRouting: true alone', async () => {
     const { writes } = mount(workspace());
     await openEditor();
 
@@ -252,14 +259,8 @@ describe('smart model selection on the Agent', () => {
     expect(smartSwitch().getAttribute('aria-checked')).toBe('true');
     expect(modelLine()).toBe(MODEL_LINE_ON);
     // The bold model is still the one sessions opened by hand start on.
-    expect(form().querySelector('.rd-form-derived b')?.textContent).toBe('Opus 5.5');
-
-    await click(byText('button', 'Save'));
-    expect(writes).toHaveLength(1);
-    expect(writes[0]).toMatchObject({ method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}` });
-    expect(writes[0].body.modelRouting).toBe(true);
-    // Nothing else the form owns moved with it.
-    expect(writes[0].body.enableWorktree).toBe(true);
+    expect(rowOf('Model').querySelector('.rd-form-derived b')?.textContent).toBe('Opus 5.5');
+    expect(writes).toEqual([{ method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}`, body: { modelRouting: true } }]);
   });
 
   it('opens on for an Agent that has it, and turning it off saves modelRouting: false', async () => {
@@ -272,19 +273,7 @@ describe('smart model selection on the Agent', () => {
     await click(smartSwitch());
     expect(smartSwitch().getAttribute('aria-checked')).toBe('false');
     expect(modelLine()).toBe(MODEL_LINE_OFF);
-
-    await click(byText('button', 'Save'));
-    expect(writes).toHaveLength(1);
-    expect(writes[0].body.modelRouting).toBe(false);
-  });
-
-  it('leaves the switch as it was when the Agent is saved for something else', async () => {
-    const { writes } = mount(workspace({ modelRouting: true }));
-    await openEditor();
-    await click(form().querySelector<HTMLElement>('.rd-set-row [role="switch"]')!); // Worktree isolation
-    await click(byText('button', 'Save'));
-    expect(writes).toHaveLength(1);
-    expect(writes[0].body).toMatchObject({ enableWorktree: false, modelRouting: true });
+    expect(writes.map((w) => w.body)).toEqual([{ modelRouting: false }]);
   });
 });
 
@@ -297,47 +286,44 @@ const engineName = (tick: HTMLElement) => {
   label?.querySelectorAll('.rd-engine-own').forEach((note) => note.remove());
   return label?.textContent;
 };
-/** The engines smart selection may use, inside its row, as each one's tick reads: its CLI's name,
- *  whether it says it is the agent's own, whether it is checked, and whether it is disabled. */
+const engineGroup = () => sessions().querySelector<HTMLElement>('.rd-route-engines');
+/** The engines smart selection may use, as each one's tick reads: its CLI's name, whether it says it
+ *  is the agent's own, whether it is checked, and whether it is disabled. */
 const engines = () =>
-  [...smartRow().querySelectorAll<HTMLElement>('.rd-engines-list [role="checkbox"]')].map((tick) => ({
+  [...(engineGroup()?.querySelectorAll<HTMLElement>('.rd-engines-list [role="checkbox"]') ?? [])].map((tick) => ({
     engine: engineName(tick),
     own: !!tick.closest('label')?.querySelector('.rd-engine-own'),
     ticked: tick.getAttribute('aria-checked') === 'true',
     fixed: tick.getAttribute('aria-disabled') === 'true',
   }));
 const engineInput = (engine: string) =>
-  [...smartRow().querySelectorAll<HTMLElement>('.rd-engines-list [role="checkbox"]')].find(
+  [...engineGroup()!.querySelectorAll<HTMLElement>('.rd-engines-list [role="checkbox"]')].find(
     (tick) => engineName(tick) === engine,
   )!;
 
 describe('the engines smart selection may use', () => {
-  it('sit under the switch, with only the agent\'s own engine ticked, and that one fixed', async () => {
+  it('sit under Optimize for, with only the agent\'s own engine ticked, and that one fixed', async () => {
     mount(workspace());
     await openEditor();
 
-    expect(smartRow().querySelector('.rd-engines-label')?.textContent).toBe('Engines it may use');
+    expect(engineGroup()?.querySelector('.rd-engines-label')?.textContent).toBe('Engines it may use');
     expect(engines()).toEqual([
       { engine: 'Claude Code', own: true, ticked: true, fixed: true },
       { engine: 'Codex', own: false, ticked: false, fixed: false },
     ]);
-    expect(smartRow().querySelector('.rd-engine-own')?.textContent).toBe("this agent's engine");
-    expect(squash(smartRow().querySelector('.rd-engines-note')?.textContent)).toBe(ENGINES_NOTE);
-    // Still one setting row: the group belongs to the switch, not beside it.
-    expect(settingLabels()).toEqual(['Worktree isolation', SWITCH_LABEL]);
+    expect(engineGroup()?.querySelector('.rd-engine-own')?.textContent).toBe("this agent's engine");
+    expect(squash(engineGroup()?.querySelector('.rd-engines-note')?.textContent)).toBe(ENGINES_NOTE);
   });
 
-  it('ticking another engine saves it as modelRoutingProviders', async () => {
+  it('ticking another engine saves it as modelRoutingProviders, and nothing else', async () => {
     const { writes } = mount(workspace());
     await openEditor();
 
     await click(engineInput('Codex'));
     expect(engines()[1]).toEqual({ engine: 'Codex', own: false, ticked: true, fixed: false });
-
-    await click(byText('button', 'Save'));
-    expect(writes).toHaveLength(1);
-    expect(writes[0]).toMatchObject({ method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}` });
-    expect(writes[0].body.modelRoutingProviders).toEqual(['codex']);
+    expect(writes).toEqual([
+      { method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}`, body: { modelRoutingProviders: ['codex'] } },
+    ]);
   });
 
   it('fixes the engine the agent runs on, and unticking the other one takes it off the list', async () => {
@@ -350,18 +336,14 @@ describe('the engines smart selection may use', () => {
       { engine: 'Claude Code', own: false, ticked: true, fixed: false },
     ]);
     await click(engineInput('Claude Code'));
-    await click(byText('button', 'Save'));
-    expect(writes).toHaveLength(1);
-    expect(writes[0].body.modelRoutingProviders).toEqual([]);
+    expect(writes.map((w) => w.body)).toEqual([{ modelRoutingProviders: [] }]);
   });
 
-  it('leaves the list as it was when the Agent is saved for something else', async () => {
+  it('leaves the list as it was when another setting is saved', async () => {
     const { writes } = mount(workspace({ modelRoutingProviders: ['codex'] }));
     await openEditor();
-    await click(form().querySelector<HTMLElement>('.rd-set-row [role="switch"]')!); // Worktree isolation
-    await click(byText('button', 'Save'));
-    expect(writes).toHaveLength(1);
-    expect(writes[0].body).toMatchObject({ enableWorktree: false, modelRoutingProviders: ['codex'] });
+    await click(worktreeSwitch());
+    expect(writes.map((w) => w.body)).toEqual([{ enableWorktree: false }]);
   });
 });
 
@@ -417,22 +399,20 @@ describe('with the account switch off', () => {
     ['modelRouting: false', { modelRouting: false }],
   ];
   for (const [what, preferences] of cases) {
-    it(`(${what}) nothing of smart selection shows, and saving leaves the Agent's own setting as it was`, async () => {
+    it(`(${what}) nothing of smart selection shows, and saving another row leaves the Agent's own setting as it was`, async () => {
       // An Agent that had it on, with another engine ticked, before the account turned it off.
       const { writes } = mount(workspace({ modelRouting: true, modelRoutingProviders: ['codex'] }), preferences);
       await openEditor();
 
       expect(settingLabels()).toEqual(['Worktree isolation']);
-      expect(form().querySelector('.rd-route-engines')).toBeNull();
-      expect(form().textContent).not.toContain(SWITCH_LABEL);
-      expect(form().textContent).not.toContain('Engines it may use');
+      expect(engineGroup()).toBeNull();
+      expect(sessions().textContent).not.toContain(SWITCH_LABEL);
+      expect(sessions().textContent).not.toContain('Engines it may use');
       // The Model line is today's, though the Agent's own switch is on.
       expect(modelLine()).toBe(MODEL_LINE_OFF);
 
-      await click(form().querySelector<HTMLElement>('.rd-set-row [role="switch"]')!); // Worktree isolation
-      await click(byText('button', 'Save'));
-      expect(writes).toHaveLength(1);
-      expect(writes[0].body).toMatchObject({ enableWorktree: false, modelRouting: true, modelRoutingProviders: ['codex'] });
+      await click(worktreeSwitch());
+      expect(writes.map((w) => w.body)).toEqual([{ enableWorktree: false }]);
     });
   }
 });

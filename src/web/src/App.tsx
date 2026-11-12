@@ -8,7 +8,7 @@ import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
 import { SettingsLayout } from './components/settings';
-import { SettingsWorkspacePage } from './components/settings/SettingsInterimPages';
+import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
 import { SettingsPoolsPage, SettingsProvidersHome, SettingsVendorPage } from './components/settings/SettingsProviderPages';
 import { MachineSettingsPage } from './components/settings/MachineSettingsPage';
 import { useRememberOutsideSettings } from './lib/settingsReturn';

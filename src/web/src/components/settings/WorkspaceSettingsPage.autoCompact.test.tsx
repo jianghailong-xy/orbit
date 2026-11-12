@@ -4,16 +4,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import type { Runner } from '../TasksSidePanel';
-import { MachineWorkspacesEditor } from './MachineWorkspacesEditor';
+import { SettingsWorkspacePage } from './WorkspaceSettingsPage';
 
 /**
- * A workspace picks which of its runner's Cursor CLI accounts its Cursor CLI sessions run on, under the
- * workspace form's Advanced — beside the other engines', shown once the runner has two (P4a). What the
- * save sends is the account's id (`cursorAccount`), which dispatch hands the runner as that account's
- * directory (ORBIT_CURSOR_ACCOUNT_DIR). Each account says what Cursor reports of it: a share used only
- * above 0, and no number at all otherwise.
+ * A workspace says how large its Claude Code sessions' conversations get before they are compacted,
+ * under the workspace's Settings page (Sessions). The choice is the CLI's own variable in the workspace's
+ * environment, so the saved env is what each claim here is about.
  */
 
 vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
@@ -22,44 +19,21 @@ const apiMock = vi.mocked(api);
 
 const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
 const WORKSPACE_ID = '33zx0JhRhJo8rd25d3qAN';
+const VARIABLE = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW';
 
-const DEFAULT: RunnerEngineAccount = { id: 'default', home: '/root/.orbit/cursor/default', auth: 'yes' };
-const TEAM: RunnerEngineAccount = { id: '5c2e91a0', name: 'Team', home: '/root/.orbit/cursor-accounts/5c2e91a0', auth: 'yes' };
-
-const cursor = (accounts: RunnerEngineAccount[]): RunnerEngineHealth => ({
-  engine: 'cursor',
-  installed: true,
-  auth: 'yes',
-  version: '2026.10.14-941492e',
-  accounts,
-});
-
-/** Default on the Free plan, which Cursor reports no share of; Team on Pro at 34%. */
-const USAGE: PlanUsage = {
-  cursor: {
-    provider: 'cursor' as never,
-    account: 'default',
-    planName: 'Free',
-    accounts: { [TEAM.id]: { provider: 'cursor' as never, planName: 'Pro', includedUsage: { percentUsed: 34 } } },
-  },
-};
-
-const runner = (engine: RunnerEngineHealth): Runner => ({
+const runner = (engines: Runner['engines'] = [{ engine: 'claude', installed: true, auth: 'yes' }]): Runner => ({
   id: RUNNER_ID,
-  name: 'hpc',
+  name: 'wikova',
   online: true,
-  capabilities: ['provider:cursor', 'cursor-account-login/v1'],
-  engines: [{ engine: 'claude', installed: true, auth: 'yes' }, engine],
-  planUsage: USAGE,
+  engines,
 });
 
-const workspace = (cursorAccount: string | null, env: Record<string, string> = {}) => ({
+const workspace = (env: Record<string, string> = {}) => ({
   id: WORKSPACE_ID,
   name: 'orbit',
   runnerId: RUNNER_ID,
   workDir: '/srv/orbit',
   env,
-  cursorAccount,
   createdAt: '2026-09-23T08:00:00.000Z',
 });
 
@@ -68,7 +42,16 @@ let host: HTMLDivElement | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  // The account picker measures its box, and jsdom ships no layout to measure: nothing asserted
+  // here depends on one.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -92,18 +75,21 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-/** The runner's page, over one workspace. Every PATCH the page sends is collected. */
+/** The workspace's Settings page. Every PATCH the page sends is collected. */
 function mount(r: Runner, ws: ReturnType<typeof workspace>) {
   const patches: Array<Record<string, unknown>> = [];
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     const method = options?.method ?? 'GET';
     if (method === 'PATCH' && path === `/workspaces/${WORKSPACE_ID}`) {
       patches.push(options?.body as Record<string, unknown>);
-      return { ...ws, ...(options?.body as object) };
+      // The server keeps what it was sent, as the next read shows.
+      ws = { ...ws, ...(options?.body as object) };
+      return ws;
     }
     if (path === '/runners') return [r];
     if (path === '/workspaces') return [ws];
     if (path === '/providers') return [];
+    // The workspace rows' "N running" reads the sidebar's per-workspace tallies.
     if (path === '/sessions/counts') return [];
     if (path === '/users/me') return { id: 'u', email: 'u@example.invalid', name: 'u', createdAt: '', preferences: {} };
     if (path.includes('permission-rules')) return [];
@@ -120,9 +106,9 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/settings/workspaces']}>
+        <MemoryRouter initialEntries={[`/settings/workspaces/${WORKSPACE_ID}`]}>
           <Routes>
-            <Route path="/settings/workspaces" element={<MachineWorkspacesEditor runnerId={RUNNER_ID} workspaceId="" />} />
+            <Route path="/settings/workspaces/:id" element={<SettingsWorkspacePage />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -133,7 +119,9 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
 
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 const byText = (selector: string, text: string) => {
-  const found = [...document.body.querySelectorAll<HTMLElement>(selector)].find((el) => el.textContent?.trim() === text);
+  const found = [...document.body.querySelectorAll<HTMLElement>(selector)].find(
+    (el) => el.textContent?.trim() === text,
+  );
   if (!found) throw new Error(`no ${selector} reading "${text}"`);
   return found;
 };
@@ -157,55 +145,79 @@ const press = async (el: HTMLElement) => {
   await settle();
 };
 
-async function openAdvanced() {
+/** Open the workspace's editor. */
+async function openEditor() {
   await settle();
-  await click(byText('.rd-workspace-name', 'orbit'));
-  await click(document.body.querySelector<HTMLElement>('.rd-adv-toggle')!);
+}
+
+/** Open the workspace's editor and its Advanced part. */
+async function openAdvanced() {
+  await openEditor();
 }
 
 const field = () =>
   [...document.body.querySelectorAll<HTMLElement>('.rd-form-field')].find(
-    (el) => el.querySelector('.rd-form-label')?.textContent === 'Cursor CLI account',
+    (el) => el.querySelector('.rd-form-label')?.textContent === 'Compact Claude Code sessions at',
   );
 
-/** The account picker, as its role names it. */
+/** The size picker, as its role names it. */
 const picker = () => field()?.querySelector<HTMLElement>('[role="combobox"]');
 
-/** Open the account dropdown and read its options: each account's name, then its own line. */
+
+/** Open the dropdown and read its options. */
 async function options() {
   await click(picker()!);
-  return [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].map((o) => {
-    const status = o.querySelector('.rd-codex-account-status');
-    return { el: o, text: [status?.previousElementSibling?.textContent, status?.textContent] };
-  });
+  return [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
 }
+const pick = async (label: string) => {
+  const option = (await options()).find((el) => el.textContent?.trim() === label);
+  if (!option) throw new Error(`no option "${label}"`);
+  await press(option);
+};
 
-describe('which Cursor CLI account a workspace runs on', () => {
-  it('offers each account with what Cursor reports of it, and saves the id picked', async () => {
-    const { patches } = mount(runner(cursor([DEFAULT, TEAM])), workspace(null));
+describe('how large a workspace lets its Claude Code conversations get', () => {
+  it('leaves it to Claude Code until somebody picks a size, and saves the pick beside the rest of the env', async () => {
+    const { patches } = mount(runner(), workspace({ TZ: 'Asia/Shanghai' }));
     await openAdvanced();
-    expect(picker()?.textContent).toContain('Automatic');
-    const offered = await options();
-    expect(offered.map((o) => o.text)).toEqual([
-      ['Automatic', 'each new session starts on the account whose quota resets soonest'],
-      ['Default (~/.orbit/cursor/default)', 'Free plan · usage unavailable · signed in'],
-      ['Team', 'Monthly limit 34% · signed in'],
-    ]);
-    // A conversation that has started stays on its account (D5): Automatic promises no move.
-    expect(field()?.querySelector('.rd-path-hint')?.textContent).toBe(
-      'Only applies to sessions that run Cursor CLI on this machine. Automatic starts each new session on the account whose quota resets soonest, so none of it goes unused.',
-    );
-    await press(offered[2].el);
-    await click(byText('button', 'Save'));
-    expect(patches).toHaveLength(1);
-    expect(patches[0].cursorAccount).toBe(TEAM.id);
+    expect(picker()?.textContent).toContain('Default');
+    // An option like any other, not a field left empty: the neighbouring pickers read the same.
+    expect(picker()?.querySelector('[data-placeholder]')).toBeNull();
+    expect((await options()).map((el) => el.textContent?.trim())).toEqual(['Default', '700K tokens', '500K tokens', '300K tokens']);
+    await click(picker()!);
+
+    await pick('500K tokens');
+    expect(picker()?.textContent).toContain('500K tokens');
+    // Saved on the pick, as the env it is part of: one PATCH carrying only `env`.
+    expect(patches).toEqual([{ env: { TZ: 'Asia/Shanghai', [VARIABLE]: '500000' } }]);
   });
 
-  it('asks nothing of a runner with one account, and keeps the choice it never showed', async () => {
-    const { patches } = mount(runner(cursor([DEFAULT])), workspace(null));
+  it('says what a smaller size costs and when it applies', async () => {
+    mount(runner(), workspace());
+    await openAdvanced();
+    const hint = field()?.querySelector('.rd-path-hint')?.textContent;
+    expect(hint).toContain('spends less quota on long sessions, but they can lose detail');
+    expect(hint).toContain('the next time a session starts');
+  });
+
+  it('shows a saved size, and Default takes the variable out again', async () => {
+    const { patches } = mount(runner(), workspace({ TZ: 'Asia/Shanghai', [VARIABLE]: '300000' }));
+    await openAdvanced();
+    expect(picker()?.textContent).toContain('300K tokens');
+    await pick('Default');
+    expect(patches).toEqual([{ env: { TZ: 'Asia/Shanghai' } }]);
+  });
+
+  it('shows a size typed under Environment variables by what it is, and sends nothing for it', async () => {
+    const { patches } = mount(runner(), workspace({ [VARIABLE]: '250k' }));
+    await openAdvanced();
+    expect(picker()?.textContent).toContain('250k');
+    // Shown, and left alone: nothing is saved until somebody picks.
+    expect(patches).toEqual([]);
+  });
+
+  it('is not offered on a machine without Claude Code', async () => {
+    mount(runner([{ engine: 'codex', installed: true, auth: 'yes' }]), workspace());
     await openAdvanced();
     expect(field()).toBeUndefined();
-    await click(byText('button', 'Save'));
-    expect(patches.at(-1)?.cursorAccount).toBeNull();
   });
 });
