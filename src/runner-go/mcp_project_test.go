@@ -281,9 +281,10 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 
 	updateProps := mcpToolProps(tools, "project_update")
-	// Eight: the seven this tool has always carried, and `integration` — where a project's finished
-	// tasks land, which the server refuses from inside a session and accepts at the owner's terminal.
-	if len(updateProps) != 8 {
+	// Ten: the seven this tool has always carried, `integration` — where a project's finished
+	// tasks land, which the server refuses from inside a session and accepts at the owner's terminal —
+	// `nonCode`, the explicit non-code mark (migration 0535), and its optional `nonCodeReason` (0555).
+	if len(updateProps) != 10 {
 		t.Fatalf("project_update properties = %#v", updateProps)
 	}
 	// The compare-and-swap fence is a STRING: configRevision is a bigint

@@ -31,6 +31,8 @@ function makeController({
   const updates: Array<Record<string, unknown>> = [];
   const comments: Array<Record<string, unknown>> = [];
   const tx = {
+    // No Agent check is waiting on these runs (projects/criterion-check-ended.ts).
+    projectCriterionConfirmation: { findMany: async () => [] },
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
     $executeRaw: async () => 1,
     session: {
