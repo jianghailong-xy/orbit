@@ -232,13 +232,16 @@ struct ShareSheet: View {
                             .foregroundStyle(.white)
                             .frame(width: 28, height: 28)
                             .background(Circle().fill(Color.accentColor))
+                        // Name, email and today's messages stacked, one line each: a phone's row has no
+                        // room for the web's columns beside Remove.
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(guest.name)
+                            Text(guest.name).lineLimit(1)
                             Text(guest.email).font(.footnote).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.middle)
+                            Text(SessionGuestsCopy.activity(guest))
+                                .font(.footnote).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer(minLength: 6)
-                        Text(SessionGuestsCopy.activity(guest))
-                            .font(.footnote).monospacedDigit().foregroundStyle(.secondary)
                         Button(SessionGuestsCopy.remove) { Task { await remove(guest) } }
                             .buttonStyle(.bordered)
                             .disabled(removing)
