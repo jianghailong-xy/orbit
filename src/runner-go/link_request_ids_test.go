@@ -437,8 +437,8 @@ func TestTheClaimLoopHoldsItsReconciliationsWhileAClaimWaitsForItsAnswer(t *test
 	}
 	inLoop := body[loop:]
 	for _, want := range []string{
-		"if !reclaimRetryAt.IsZero() && time.Now().After(reclaimRetryAt) && !claims.kept() {",
-		"if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) && !claims.kept() {",
+		"if !reclaimRetryAt.IsZero() && time.Now().After(reclaimRetryAt) && !claims.kept() && startupStarts.finished() {",
+		"if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) && !claims.kept() && startupStarts.finished() {",
 		"job, err := t.claimSession(loopCtx, &claims)",
 	} {
 		if !strings.Contains(inLoop, want) {

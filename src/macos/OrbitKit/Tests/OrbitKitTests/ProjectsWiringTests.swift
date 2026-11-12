@@ -35,6 +35,15 @@ final class ProjectsWiringTests: XCTestCase {
         return String(text[lower.lowerBound..<upper.upperBound])
     }
 
+    private func assertInOrder(_ text: String, _ pieces: [String], _ what: String) throws {
+        var from = text.startIndex
+        for piece in pieces {
+            let found = try XCTUnwrap(text.range(of: piece, range: from..<text.endIndex),
+                                      "\(what): `\(piece)` is missing or out of order")
+            from = found.upperBound
+        }
+    }
+
     private func code(_ text: String) -> String {
         text.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
@@ -76,7 +85,10 @@ final class ProjectsWiringTests: XCTestCase {
 
         let tasks = code(try appSource("Views/TasksView.swift"))
         let line = try slice(tasks, from: "private func projectLine(_ project: TaskProjectRef) -> some View {", to: "label: {")
-        XCTAssertTrue(line.contains("model.openTaskProject(project.id)"))
+        // The page's own press (owner decision 2026-11-12): over a page it first takes the task
+        // sheet down, then goes to the project as it always did; in the Tasks pane nothing is over
+        // the page, so that step is skipped and `model.openTaskProject` is still the line.
+        XCTAssertTrue(line.contains("openTaskProject(project.id)"))
 
         let app = code(try appSource("AppModel.swift"))
         let back = try slice(app, from: "func openTaskProject(_ id: String) {", to: "\n    }")
@@ -222,6 +234,33 @@ final class ProjectsWiringTests: XCTestCase {
     /// In the column the drawer closes nothing, its title and search ride the column's bar beside the
     /// system's sidebar toggle, and a work row only switches section, as the source list did: the list
     /// column is on screen anyway, and the detail keeps the page it had.
+    /// The Mac's source list is the drawer's rail (the owner's picks on docs/mocks/macos-sidebar, 01, 2026-11-12):
+    /// the work first with its amber counts, Waiting on you, the Workspaces one line each with the drawer's
+    /// row and a ⌘ hint, then every open project. No New session in the rail, and no Following, Settings
+    /// or Admin rows: the footer's gear and account menu reach them.
+    func testTheMacSidebarIsTheDrawersRail() throws {
+        let main = code(try appSource("Views/MainView.swift"))
+        let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
+        try assertInOrder(sidebar, ["ForEach(AppSection.workSections) { section in", "OwnerRequestInboxEntry()",
+                                    "Section(AppSection.agents.title, isExpanded: $workspacesExpanded)",
+                                    "ForEach(openProjects) { project in"],
+                          "the drawer's order")
+        XCTAssertTrue(sidebar.contains("model.projects?.drawerProjects(coordinators: model.projectCoordinators)"),
+                      "every open project, as the drawer lists them")
+        XCTAssertTrue(sidebar.contains("WorkspaceNavigationRow("), "the drawer's workspace row")
+        XCTAssertTrue(sidebar.contains("shortcut: shortcutIndex[agent.id]"))
+        for gone in ["newSessionInCurrentAgent", ".following", ".admin", "AppSection.visible"] {
+            XCTAssertFalse(sidebar.contains(gone), "the rail has no \(gone)")
+        }
+        let footer = try slice(main, from: "struct AccountFooter: View {", to: "struct AccountAvatar: View {")
+        try assertInOrder(footer, ["Button { model.selectedSection = .settings }",
+                                   "Button(AppSection.settings.title) { model.selectedSection = .settings }",
+                                   "if isAdmin {", "Button(AppSection.admin.title) { model.selectedSection = .admin }",
+                                   "Button(AppSection.following.title) { model.selectedSection = .following }",
+                                   "Button(\"Sign out\", role: .destructive)"],
+                          "the gear, then the account menu")
+    }
+
     func testTheIPadSidebarIsTheDrawer() throws {
         let main = code(try appSource("Views/MainView.swift"))
         let sidebar = try slice(main, from: "private var sidebar: some View {", to: "\n    }\n")

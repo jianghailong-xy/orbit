@@ -273,9 +273,9 @@ final class OrbitLinkDestinationTests: XCTestCase {
     /// this app, or out to the system for the one that leaves it.
     func testTheOneDoorResolvesThroughTheDestinationRule() throws {
         let cards = try source("src/macos/OrbitApp/Sources/OrbitApp/OrbitLinkCards.swift")
-        let door = code(try slice(cards, from: "func openOrbitLink(_ ref: OrbitLinkRef, overConsole: Bool = false) {",
+        let door = code(try slice(cards, from: "func openOrbitLink(_ ref: OrbitLinkRef, overConsole: Bool = false, overPage: Bool = false) {",
                                   to: "\n    }"))
-        XCTAssertTrue(door.contains("open(OrbitLinkDestination.inApp(for: ref.target), overConsole: overConsole)"),
+        XCTAssertTrue(door.contains("open(OrbitLinkDestination.inApp(for: ref.target), overConsole: overConsole, overPage: overPage)"),
                       "the door spends this rule's answer for every kind, with nothing read first")
         let tap = code(try slice(cards, from: "func destination(for ref: OrbitLinkRef) -> OrbitLinkDestination {",
                                  to: "\n    }"))
@@ -285,9 +285,9 @@ final class OrbitLinkDestinationTests: XCTestCase {
         // A task or a session goes through the conversation's door, which routes exactly as before
         // unless the link is in a phone's conversation — then it is pushed over that console, so the
         // back swipe returns to it (`CreatedTasksWiringTests.testEveryDoorOutOfAConversationPushes…`).
-        let open = code(try slice(cards, from: "func open(_ destination: OrbitLinkDestination, overConsole: Bool = false) {",
+        let open = code(try slice(cards, from: "func open(_ destination: OrbitLinkDestination, overConsole: Bool = false, overPage: Bool = false) {",
                                   to: "\n    }"))
-        let landings = [("case .task(let id):", "openFromConversation(.task(id), overConsole: overConsole)"),
+        let landings = [("case .task(let id):", "openFromConversation(.task(id), overConsole: overConsole, overPage: overPage)"),
                         ("case .session(let id):", "openFromConversation(.session(id), overConsole: overConsole)"),
                         ("case .project(let id):", "openProjectFromConversation(id, overConsole: overConsole)"),
                         ("case .list(let id):", "route(to: .list(id))"),

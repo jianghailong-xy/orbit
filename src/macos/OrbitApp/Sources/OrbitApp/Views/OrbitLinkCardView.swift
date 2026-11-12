@@ -22,6 +22,8 @@ struct OrbitLinkCardView: View {
     @Environment(AppModel.self) private var app: AppModel?
     /// In a phone's conversation, what the card opens is pushed over it (see `opensPagesOverConsole`).
     @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell, a task the card names opens over the page (see `opensTasksOverPage`).
+    @Environment(\.opensTasksOverPage) private var overPage
 
     private var cards: OrbitLinkCards? { app?.linkCards }
     private var content: OrbitLinkCardContent {
@@ -193,7 +195,7 @@ struct OrbitLinkCardView: View {
         // Nothing to route through means nothing drew the card in the first place; a tap there has
         // nowhere to go and no store to ask.
         guard let app, let cards else { return }
-        app.open(cards.destination(for: ref), overConsole: overConsole)
+        app.open(cards.destination(for: ref), overConsole: overConsole, overPage: overPage)
         // A pasted session URL that named one record of it (`?at=`) opens at that record.
         if case .session = cards.destination(for: ref), case .pageURL(let text) = ref.source,
            let url = URL(string: text) {

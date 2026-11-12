@@ -64,7 +64,9 @@ internal object ExchangeFold {
         turns.forEachIndexed { index, turn ->
             val head = if (index < turns.lastIndex) OrbitExchangeFold.turnOf(turn.first().event, wakeName) else null
             val replies = turn.filter { it.event.type == "assistant" && it.event.body().isNotBlank() }
-            if (head != null && replies.isNotEmpty() && !needsReader(turn)) {
+            // An answer long enough to say something stays drawn (OrbitExchangeFold.foldsAtLength), counted as the browser counts it.
+            val answered = replies.sumOf { it.event.body().length }
+            if (head != null && replies.isNotEmpty() && OrbitExchangeFold.foldsAtLength(head.category, answered) && !needsReader(turn)) {
                 run += FoldedExchange(OrbitExchangeFold.Summary(turn.first().event.seq, turn.maxOf { it.newestSeq }, turn.first().event.ts,
                     head.what, head.whatInTask, OrbitExchangeFold.replyGist(replies.last().event.body()), head.category, head.target), turn)
                 return@forEachIndexed

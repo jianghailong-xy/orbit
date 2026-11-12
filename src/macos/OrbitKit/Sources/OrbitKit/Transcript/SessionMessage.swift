@@ -128,17 +128,19 @@ public enum SessionMessageCard {
     public static let from = "From"
     /// What a session with no title is called where its title would be.
     public static let untitled = "Untitled session"
-    /// The foot line: who this is not.
+    /// Who this is not: the help and the accessibility label of the line that names the sender
+    /// (docs/mocks/session-message-bubble, owner 2026-11-12), no longer a sentence on screen.
     public static let notYou = "Sent by another Orbit session, not by you"
     public static let openTask = "Its task ↗"
     public static let undelivered = "The session has not confirmed it received this."
 
     /// A long message folds by its rendered height, not its length (docs/mocks/session-message-clamp,
-    /// approved 2026-11-11): taller than `clampFrom` lines, it shows its first `clampLines` and
-    /// `showMore`; opened, the whole text and `showLess`. Web: `SessionMessageCard.tsx`'s
+    /// approved 2026-11-11; 4 of 6 since docs/mocks/session-message-bubble, 2026-11-12): taller than
+    /// `clampFrom` lines, it shows its first `clampLines` and `showMore`; opened, the whole text and
+    /// `showLess`. Web: `SessionMessageCard.tsx`'s
     /// `SESSION_MESSAGE_CLAMP_*` and `SESSION_MESSAGE_SHOW_*`.
-    public static let clampLines = 8
-    public static let clampFrom = 12
+    public static let clampLines = 4
+    public static let clampFrom = 6
     public static let showMore = "Show more"
     public static let showLess = "Show less"
 
@@ -154,11 +156,11 @@ public enum SessionMessageCard {
         return title.isEmpty ? untitled : title
     }
 
-    /// "Sent by another Orbit session, not by you · 2m ago".
-    public static func meta(ts: String? = nil, now: Date = Date()) -> String {
-        var line = notYou
-        if let ts, let relative = RelativeTime.format(ts, now: now) { line += " · \(relative)" }
-        return line
+    /// The foot line's first item, when the message was sent: "2m ago". Nil with no time to say;
+    /// the task, the request and the attached note follow it on the same line, each after " · ".
+    public static func meta(ts: String? = nil, now: Date = Date()) -> String? {
+        guard let ts else { return nil }
+        return RelativeTime.format(ts, now: now)
     }
 
     /// What the bar pinned to the top of a console says about this turn: who sent it, and what it
@@ -166,6 +168,40 @@ public enum SessionMessageCard {
     /// "Your question" — that above a card reading "not by you" is the screen contradicting itself.
     public static func sticky(_ card: SessionMessage, text: String) -> (label: String, text: String) {
         ("\(from) \(title(card))", text)
+    }
+
+    /// The card's line for a sender that runs narrower than this session, each mode as the mode
+    /// picker names it (web `sessionMessageNarrower`; board session-message-attached-line ③).
+    public static func narrower(from: String, to: String) -> String {
+        "Sender runs in \(modeLabel(from)), narrower than this session's \(modeLabel(to)): not taken as your approval"
+    }
+
+    /// A session message's recorded note without its own block, which only tells the agent what the
+    /// card already shows (owner, 2026-11-12; web `splitSessionMessageNote`). `attached` is whatever
+    /// else delivery appended, still folded under the card — nil when nothing else rode along — and
+    /// `narrower` the card's line when the block says the sender runs narrower than this session.
+    public static func splitNote(_ note: String?) -> (attached: (kind: String, text: String)?, narrower: String?) {
+        guard let note else { return (nil, nil) }
+        let range = NSRange(note.startIndex..., in: note)
+        let blocks = blockPattern.matches(in: note, range: range).compactMap { Range($0.range, in: note).map { String(note[$0]) } }
+        let narrower = blocks.lazy.compactMap { block -> String? in
+            guard let m = narrowerPattern.firstMatch(in: block, range: NSRange(block.startIndex..., in: block)),
+                  let from = Range(m.range(at: 1), in: block), let to = Range(m.range(at: 2), in: block) else { return nil }
+            return Self.narrower(from: String(block[from]), to: String(block[to]))
+        }.first
+        let rest = blockPattern.stringByReplacingMatches(in: note, range: range, withTemplate: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let kind = rest.isEmpty ? "" : describeNote(rest)
+        return (kind.isEmpty ? nil : (kind, rest), narrower)
+    }
+
+    /// The block delivery appends after another session's message (apiserver `sessionMessageBlock`).
+    private static let blockPattern = try! NSRegularExpression(pattern: "<orbit-session-message\\b[^>]*>[\\s\\S]*?</orbit-session-message>")
+    /// The block's sentence for a sender that may do less than this session (apiserver `narrowerSenderNote`).
+    private static let narrowerPattern = try! NSRegularExpression(pattern: "The sender runs in (\\S+), which is narrower than this session's (\\S+)\\.")
+
+    private static func modeLabel(_ mode: String) -> String {
+        PermissionMode(rawValue: mode).map(AgentDefaults.label) ?? mode
     }
 
     /// The session that sent the message, as the app's own `orbit-session:` door.
