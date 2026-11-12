@@ -33,7 +33,7 @@ import org.robolectric.shadows.ShadowDialog
  * The crossing card where the owner meets it (task 34vT0PEhdlq1lILqsg2WG): in the production shell, Launch's coordinator conversation
  * — the owner's message, the agent's answer, and the eight moves it asked for placed right after that answer — its review opened over
  * the conversation in the sheet's own window, Approve pressed there, and the card answered in place; and, seen waiting, answered at
- * another end. NATIVE frames and semantics are written under `$ORBIT_CROSSING_SHOTS` (default: the JVM's tmpdir), `conversation-*`.
+ * another end. A move batch is answered with ONE body through the session's batch door (owner 11-12). NATIVE frames and semantics are written under `$ORBIT_CROSSING_SHOTS` (default: the JVM's tmpdir), `conversation-*`.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ProjectShellApplication::class, qualifiers = "w393dp-h852dp")
@@ -52,6 +52,7 @@ class ConversationCrossingShotsTest {
     private val batch = "crossing-batch-34vMoveRow01"
     private val rows = CopyOnWriteArrayList<JsonObject>()
     private val decisions = CopyOnWriteArrayList<Pair<String, String>>()
+    private val batches = CopyOnWriteArrayList<String>()
     private val output: File by lazy {
         File(System.getenv("ORBIT_CROSSING_SHOTS") ?: File(System.getProperty("java.io.tmpdir"), "crossing-cards-android").path).also { it.mkdirs() }
     }
@@ -85,11 +86,14 @@ class ConversationCrossingShotsTest {
             }
         }
         publish()
-        ProjectShell.onDecision = { door, body ->
-            decisions += door to body
-            val approve = Json.parseToJsonElement(body).jsonObject["decision"]?.jsonPrimitive?.content == "APPROVE"
-            answer(door, if (approve) "APPLIED" else "DENIED")
-            ApiResponse(200, "{}".encodeToByteArray())
+        // A move batch is ONE answer through the session's batch door; a per-crossing answer would be recorded here too, and is not.
+        ProjectShell.onDecision = { door, body -> decisions += door to body; ApiResponse(500, "{}".encodeToByteArray()) }
+        ProjectShell.onMoveBatch = { body ->
+            batches += body
+            val sent = Json.parseToJsonElement(body).jsonObject
+            val approve = sent["decision"]?.jsonPrimitive?.content == "APPROVE"
+            sent["moves"]!!.jsonArray.forEach { answer(it.jsonObject["handoffId"]!!.jsonPrimitive.content, if (approve) "APPLIED" else "DENIED") }
+            ApiResponse(200, "[]".encodeToByteArray())
         }
     }
 
@@ -117,8 +121,10 @@ class ConversationCrossingShotsTest {
         sheetShot("conversation-review-sheet")
 
         node("$batch:review:approve").performClick()
-        await { shows("Approved by you") && decisions.size == 8 }
-        assertEquals((4..11).map { """{"decision":"APPROVE","acknowledgedCrossingKey":"key-$it"}""" }, decisions.map { it.second })
+        await { shows("Approved by you") && batches.size == 1 }
+        assertEquals("""{"decision":"APPROVE","moves":[""" + (1..8).joinToString(",") { """{"handoffId":"34vMoveRow%02d","crossingKey":"key-${it + 3}"}""".format(it) } + "]}",
+            batches.single())
+        assertTrue("no per-crossing answer", decisions.isEmpty())
         // The review leaves on its own after the record, and the card in the conversation keeps the receipt.
         await { compose.onAllNodesWithTag("$batch:review", useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
         await { shows("Decision recorded") }
@@ -134,7 +140,7 @@ class ConversationCrossingShotsTest {
         ProjectShell.event("session.updated", coord)
         await { shows("Refused at another end") }
         assertEquals("refused", text("$batch:badge"))
-        assertTrue(decisions.isEmpty())
+        assertTrue(decisions.isEmpty() && batches.isEmpty())
         shot("conversation-refused-elsewhere")
     }
 

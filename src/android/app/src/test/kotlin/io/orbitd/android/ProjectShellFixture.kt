@@ -164,6 +164,9 @@ internal object ProjectShell {
     @Volatile var coordEvents: String? = null
     /** A crossing decision's answer by its door id and body, when a test answers each row itself; null answers as [decide] does. */
     @Volatile var onDecision: ((String, String) -> ApiResponse)? = null
+    /** A move batch's one answer (`sessions/:id/task-moves/decision`) by its body, when a test answers it itself; null answers every
+     * waiting crossing as the body says. */
+    @Volatile var onMoveBatch: ((String) -> ApiResponse)? = null
 
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
@@ -179,7 +182,7 @@ internal object ProjectShell {
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
-        configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null; coordEvents = null; onDecision = null
+        configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null; coordEvents = null; onDecision = null; onMoveBatch = null
         lineIdle = false
         while (accountEvents.tryReceive().isSuccess) Unit
     }
@@ -374,6 +377,12 @@ internal object ProjectShell {
             path == "projects/$LAUNCH/tasks/page" && tasks != null -> ok("""{"items":$tasks,"nextCursor":null}""")
             method == "POST" && crossings != null && path.startsWith("projects/$LAUNCH/handoffs/") && path.endsWith("/decision") ->
                 onDecision?.invoke(api.path[3], api.body?.decodeToString().orEmpty()) ?: decide(api.path[3])
+            method == "POST" && crossings != null && path.startsWith("sessions/") && path.endsWith("/task-moves/decision") ->
+                onMoveBatch?.invoke(api.body?.decodeToString().orEmpty()) ?: run {
+                    val deny = api.body?.decodeToString().orEmpty().contains("\"DENY\"")
+                    crossings = crossings!!.replace("\"state\":\"PENDING\"", "\"state\":\"${if (deny) "DENIED" else "APPLIED"}\"")
+                    ok("[]")
+                }
             path == "projects/$LAUNCH/integration" -> ok(integration)
             path == "projects/$LAUNCH/coordinator/status" -> ok(coordinatorStatus)
             path == "projects/$LAUNCH/open-items" -> ok(openItems)
