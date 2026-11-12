@@ -950,13 +950,6 @@ button.toast--pill:focus-visible {
 .tp-project-mark .tp-list-dot {
   margin-right: 0;
 }
-/* The quiet projects' row closes the group in the meta voice: grey, with no dot. */
-.tp-project-quiet {
-  color: var(--text-3);
-}
-.tp-project-quiet .tp-project-mark {
-  font-size: 13px;
-}
 .tp-list-dot.running {
   background: var(--brand);
   animation: tp-list-dot-pulse 1.4s ease-in-out infinite;
@@ -2272,6 +2265,96 @@ button.toast--pill:focus-visible {
 }
 .rd-attention-action {
   margin-top: 9px;
+}
+/* The Update card (board 4): a release this runner is behind, across both columns. Amber while it
+   holds work back or restarts, plain while work goes on as usual. */
+.rd-update-card {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+.rd-update-card.warn {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.rd-update-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rd-update-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.rd-update-tag {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rd-update-card.warn .rd-update-tag {
+  color: var(--warning);
+  font-weight: 500;
+}
+.rd-update-body {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.rd-update-progress-label {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rd-update-progress {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill-muted);
+  overflow: hidden;
+}
+.rd-update-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--warning);
+}
+/* The turns a drain waits for (board 4): one bordered list, a row each — the session, and how long
+   it has run. */
+.rd-update-turns {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.rd-update-turns > li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+}
+.rd-update-turns > li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.rd-update-turns a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.rd-update-turns a:hover {
+  text-decoration: underline;
+}
+.rd-update-turns span {
+  flex: none;
+  color: var(--text-3);
 }
 /* The machine's contents on the left, its settings and facts in a narrower column on the right. */
 .rd-cols {
@@ -8074,6 +8157,36 @@ button.chat-jump-start:hover {
   line-height: 1;
   color: var(--text-3);
 }
+/* A message its runner's update holds (board 2 ⑤): `Queued · runner updating` in the meta voice,
+   always shown. No colour and no border — the bubble stays the visual centre; the reason is only
+   dotted-underlined, because a press opens why. */
+.chat-runner-updating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-3);
+}
+.chat-runner-updating-reason {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.runner-updating-pop {
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.runner-updating-pop p {
+  margin: 0;
+}
 /* A message the engine never received, at the end of the meta row. Always visible (unlike the
    copy button and time before it): the whole point is that nobody has to hover to find out their
    message did not land. */
@@ -9115,6 +9228,19 @@ button.chat-jump-start:hover {
   line-height: 1.5;
   color: var(--text-3);
   max-width: 320px;
+}
+
+/* A runner draining for its update (board 2 ②–③): a longer sentence, naming the turns it waits for
+   as links, then how long it has waited. */
+.chat-queued-desc.chat-runner-updating-desc {
+  max-width: 560px;
+}
+.chat-runner-updating-desc a {
+  color: var(--brand);
+}
+.chat-queued-waited {
+  font-size: 13px;
+  color: var(--text-3);
 }
 
 /* An existing conversation can return to PENDING while it waits to reacquire a turn
@@ -23249,6 +23375,7 @@ div.landing-jobs-open {
 }
 .oic {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -23424,6 +23551,7 @@ div.landing-jobs-open {
 }
 .tsc {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23614,53 +23742,77 @@ div.landing-jobs-open {
   margin: 8px 0;
 }
 .smc {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--brand-border);
-  border-radius: 12px;
-  background: var(--bg-raised);
-  color: var(--text-1);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: fit-content;
+  max-width: min(720px, 100%);
+  min-width: 0;
 }
 .smc-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  margin-bottom: 3px;
   color: var(--text-2);
   font-size: 12px;
+  line-height: 1.4;
 }
-.smc-mark {
-  flex: none;
-  color: var(--brand);
+.smc-head > .smc-mark {
+  margin-right: 4px;
+  color: var(--text-3);
+}
+.smc-head > .smc-from {
+  margin-left: 4px;
+}
+/* Said by the side the message sits on and the "From" line; the sentence is for a screen reader. */
+.smc-not-you {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 .smc-from {
-  color: var(--brand);
+  color: var(--text-2);
   font-weight: 600;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
+a.smc-from:hover {
+  color: var(--brand);
+}
 .smc-agent {
-  flex: none;
-  padding: 0 8px;
-  border: 1px solid var(--brand-border);
-  border-radius: 9px;
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 18px;
+  color: var(--text-3);
 }
-.smc-body {
-  margin-top: 6px;
+.smc-agent::before {
+  content: ' · ';
+  white-space: pre;
 }
-/* A long message shows its first 8 lines, fading out, until "Show more" (SessionMessageCard). */
+.smc-bubble {
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--bg-hover-strong);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.smc-body > :first-child {
+  margin-top: 0;
+}
+.smc-body > :last-child {
+  margin-bottom: 0;
+}
+/* A long message shows its first 4 lines, fading out, until "Show more" (SessionMessageCard). */
 .smc-body.is-clamped {
-  max-height: 12.4em;
-  max-height: 8lh;
+  max-height: 6.2em;
+  max-height: 4lh;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
-  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
 }
 .smc-more {
-  margin: 4px 0 2px;
+  margin: 2px 0 0;
   padding: 0;
   border: 0;
   background: none;
@@ -23669,22 +23821,41 @@ div.landing-jobs-open {
   font-size: 13px;
   cursor: pointer;
 }
+/* One grey foot row: time · its task · the request and where it stands · what Orbit attached. Items
+   keep whole and the row wraps between them. */
 .smc-meta {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--bg-hover-strong);
+  margin-top: 3px;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.smc-meta > * {
+  white-space: nowrap;
+}
+.smc-meta > :not(:last-child)::after {
+  content: '\00a0· ';
+  white-space: normal;
 }
 .smc-meta a {
-  color: var(--brand);
+  color: var(--text-3);
   text-decoration: none;
 }
-/* A sender that runs narrower than this session: in the foot line's voice, under it. */
+.smc-meta a:hover {
+  color: var(--brand);
+}
+.smc-meta > .chat-injected {
+  display: inline;
+  margin: 0;
+}
+.smc-meta > .chat-injected > .chat-injected-panel {
+  white-space: normal;
+}
+/* A sender that runs narrower than this session: in the foot row's voice, under it. */
 .smc-narrower {
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 18px;
 }
 .smc-undelivered {
   margin-top: 4px;
@@ -23693,7 +23864,7 @@ div.landing-jobs-open {
 }
 /* Still waiting to be delivered (WorkspaceView's queued tail): dashed like a queued message, with the
    queue's status line at its foot — the same shape the delivery and project-start cards take. */
-.smc.is-queued {
+.smc.is-queued > .smc-bubble {
   border-style: dashed;
 }
 .smc-queued {
@@ -23711,32 +23882,13 @@ div.landing-jobs-open {
 }
 /* A message that asks for a reply (session requests): what it asks, by when, and where it stands —
    read live, so the state word moves while the card does not. */
-.smc-request {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 6px;
-  color: var(--text-2);
-  font-size: 12px;
-}
-.smc-request-asks {
-  font-weight: 600;
-}
-.smc-request-state {
-  padding: 0 8px;
-  border: 1px solid var(--bg-hover-strong);
-  border-radius: 9px;
-  line-height: 18px;
-  font-size: 11px;
+.smc-request > :not(:last-child)::after {
+  content: '\00a0· ';
+  white-space: normal;
+  color: var(--text-3);
 }
 .smc-request-state-open {
-  border-color: var(--brand-border);
   color: var(--brand);
-}
-.smc-request-state-replied {
-  border-color: var(--success);
-  color: var(--success);
 }
 .smc-request-state-no_reply,
 .smc-request-state-recipient_ended,
@@ -23835,6 +23987,7 @@ div.landing-jobs-open {
 }
 .psc {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23969,6 +24122,7 @@ div.landing-jobs-open {
 }
 .crc {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -25265,7 +25419,6 @@ button.project-open-item-action:disabled {
   .wk-trash-acts { grid-column: 2; }
   .wk-trash-row .wk-trash-error { grid-column: 2; }
 }
-.tp-group-wiki .tp-wiki-trash { color: var(--text-3); }
 .wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .wk-maint-t { font-size: 14px; color: var(--text-1); }
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }

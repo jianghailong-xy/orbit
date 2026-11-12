@@ -1444,6 +1444,9 @@ type kimiTurnOutcome struct {
 	ran bool
 	// failure is the sentence the turn failed with, "" when it did not fail.
 	failure string
+	// compactionDropped is true when the turn failed because Kimi dropped the compaction it was
+	// waiting on, before its model was asked anything (kimiTurnRecord.compactionDropped).
+	compactionDropped bool
 }
 
 // readKimiTurnOutcome reads the outcome of the turn this prompt opened, waiting up to
@@ -1459,7 +1462,7 @@ func readKimiTurnOutcome(ctx context.Context, wire string, from int64) kimiTurnO
 			if ended.Reason != "failed" {
 				return kimiTurnOutcome{read: true, ran: true}
 			}
-			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error)}
+			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error), compactionDropped: ended.compactionDropped}
 		}
 		if !time.Now().Before(deadline) {
 			// Answered `end_turn` with no turn on the wire behind it: the engine's agent was not idle
@@ -1498,8 +1501,10 @@ func kimiFailureSentence(err *kimiTurnError) string {
 		return sentence
 	}
 	sentence := "Kimi Code failed this turn"
-	if err.Name != "" {
-		sentence += " (" + err.Name + ")"
+	// An error Kimi raises itself has no name, only a code ("internal"): the code is the only word
+	// that says what kind of failure it was.
+	if label := firstNonEmpty(err.Name, err.Code); label != "" {
+		sentence += " (" + label + ")"
 	}
 	if message != "" {
 		sentence += ": " + clip(message, kimiRPCErrorDataMax)
@@ -1511,6 +1516,7 @@ func kimiFailureSentence(err *kimiTurnError) string {
 // name for it and the provider's sentence.
 type kimiTurnError struct {
 	Name    string `json:"name"`
+	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
@@ -1533,6 +1539,14 @@ type kimiTurnRecord struct {
 	TurnID  json.RawMessage `json:"turnId"`
 	Reason  string          `json:"reason"`
 	Error   *kimiTurnError  `json:"error"`
+	Kind    string          `json:"kind"`
+	// compactionDropped: a full compaction of the main agent was cancelled in this turn and no model
+	// request of the turn's own (an llm.request of kind "loop") came after it. Kimi 2.5.3 starts an
+	// automatic compaction as a turn opens and makes the turn wait on it; when a message lands in the
+	// history meanwhile (an MCP tool-update reminder), it throws the finished summary away and the
+	// cancellation fails the waiting turn as `internal: [object Object]` — a turn that never ran,
+	// which the same prompt sent again runs (session 34tldRMFzXMU1CBLQ1GFZ, 2026-11-12).
+	compactionDropped bool
 }
 
 // kimiTurnEnded reads, from the whole lines of wire past from, the turn.ended of the main agent's turn
@@ -1555,18 +1569,26 @@ func kimiTurnEnded(wire string, from int64) (kimiTurnRecord, bool) {
 		return kimiTurnRecord{}, false
 	}
 	var turn json.RawMessage
+	dropped := false
 	for _, line := range bytes.Split(data[:end], []byte{'\n'}) {
-		if !bytes.Contains(line, []byte(`"turn.`)) {
+		if !bytes.Contains(line, []byte(`"turn.`)) && !bytes.Contains(line, []byte(`"full_compaction.cancel"`)) &&
+			!bytes.Contains(line, []byte(`"llm.request"`)) {
 			continue
 		}
 		var rec kimiTurnRecord
-		if json.Unmarshal(line, &rec) != nil || rec.AgentID != "main" || len(rec.TurnID) == 0 {
+		if json.Unmarshal(line, &rec) != nil || rec.AgentID != "main" {
 			continue
 		}
 		switch {
+		case rec.Type == "full_compaction.cancel" && turn != nil:
+			dropped = true
+		case rec.Type == "llm.request" && rec.Kind == "loop" && turn != nil:
+			dropped = false
+		case len(rec.TurnID) == 0:
 		case rec.Type == "turn.prompt" && turn == nil:
 			turn = rec.TurnID
 		case rec.Type == "turn.ended" && turn != nil && bytes.Equal(rec.TurnID, turn):
+			rec.compactionDropped = dropped && rec.Reason == "failed"
 			return rec, true
 		}
 	}
@@ -1917,11 +1939,12 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				turnID := resp.TurnID
 				interruptRequested = false
 				app.beginPermissionTurn()
-				wire, wireFrom := kimiTurnWire(realHome, sessionID)
-				pending, writeAck, promptErr := app.queueRequest("session/prompt", map[string]interface{}{
+				prompt := map[string]interface{}{
 					"sessionId": sessionID,
 					"prompt":    prepared.blocks,
-				})
+				}
+				wire, wireFrom := kimiTurnWire(realHome, sessionID)
+				pending, writeAck, promptErr := app.queueRequest("session/prompt", prompt)
 				if promptErr != nil {
 					promptDone <- kimiPromptResult{turnID: turnID, err: promptErr}
 					continue
@@ -1931,24 +1954,40 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					defer app.wg.Done()
 					var result map[string]interface{}
 					var waitErr error
-					select {
-					case waitErr = <-writeAck:
-						if waitErr == nil {
-							result, waitErr = app.waitRequest(ctx, pending)
-						} else {
-							app.forget(pending.id)
-						}
-					case <-app.done:
-						app.forget(pending.id)
-						waitErr = fmt.Errorf("kimi acp closed")
-					case <-ctx.Done():
-						app.forget(pending.id)
-						waitErr = ctx.Err()
-					}
-					// A failed turn is answered as end_turn, and only then is its record read.
 					var outcome kimiTurnOutcome
-					if waitErr == nil && strings.EqualFold(firstString(result, "stopReason", "stop_reason"), "end_turn") {
-						outcome = readKimiTurnOutcome(ctx, wire, wireFrom)
+					for attempt := 0; ; attempt++ {
+						result, waitErr, outcome = nil, nil, kimiTurnOutcome{}
+						select {
+						case waitErr = <-writeAck:
+							if waitErr == nil {
+								result, waitErr = app.waitRequest(ctx, pending)
+							} else {
+								app.forget(pending.id)
+							}
+						case <-app.done:
+							app.forget(pending.id)
+							waitErr = fmt.Errorf("kimi acp closed")
+						case <-ctx.Done():
+							app.forget(pending.id)
+							waitErr = ctx.Err()
+						}
+						// A failed turn is answered as end_turn, and only then is its record read.
+						if waitErr == nil && strings.EqualFold(firstString(result, "stopReason", "stop_reason"), "end_turn") {
+							outcome = readKimiTurnOutcome(ctx, wire, wireFrom)
+						}
+						// A turn failed only by the compaction Kimi dropped never reached its model: the
+						// same prompt is sent once more, as part of the same Orbit turn, and it is that
+						// attempt that answers the turn (kimiTurnRecord.compactionDropped).
+						if !outcome.compactionDropped || attempt > 0 || ctx.Err() != nil {
+							break
+						}
+						logln("kimi dropped the compaction turn", turnID, "waited on; sending its prompt again for", job.SessionID)
+						var resendErr error
+						wire, wireFrom = kimiTurnWire(realHome, sessionID)
+						pending, writeAck, resendErr = app.queueRequest("session/prompt", prompt)
+						if resendErr != nil {
+							break
+						}
 					}
 					select {
 					case promptDone <- kimiPromptResult{turnID: turnID, result: result, err: waitErr, outcome: outcome}:

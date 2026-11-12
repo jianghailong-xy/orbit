@@ -841,7 +841,8 @@ final class WikiDocsCopyParityTests: XCTestCase {
         let shell = try native("Views/CompactShell.swift")
         let stack = try slice(shell, from: "case .wiki:\n            NavigationStack(path: $model.nav.path) {",
                               to: "default:                      EmptyView()")
-        for arm in ["case .wikiDoc(let slug, let section):", "WikiDocScreen(address: WikiDocAddress(slug: slug, section: section))",
+        for arm in ["case .wikiDoc(let slug, let section):",
+                    "WikiDocScreen(address: WikiDocAddress(slug: slug, section: section), rowNavigation: .push)",
                     "case .wikiPlan(let version):", "WikiPlanScreen(address: WikiPlanAddress(version: version))",
                     "case .wikiPlanDoc(let slug, let version):", "WikiPlanScreen(address: WikiPlanAddress(version: version, doc: slug))",
                     "case .wikiPlanSection(let slug, let index, let version):",
