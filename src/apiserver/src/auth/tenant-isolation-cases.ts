@@ -335,6 +335,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'POST /projects/:id/pause': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/resume': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/criteria/:criterionKey/move': {
+    request: (of) => ({
+      params: { id: of.projectId, criterionKey: of.projectCriterionId },
+      body: { newProject: { title: 'census follow-up' } },
+    }),
+  },
   'POST /projects/:id/sessions/complete': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/acceptance/criteria-decisions/pending': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/acceptance/criteria-decisions/:intentId': {
@@ -828,6 +834,10 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'a repeated requestId is looked up by (the caller, requestId) only; otherwise the workspace is read by (id, the caller, not deleted), 404 for another account\'s, before any row is written (workspaces/main-checkout.service.ts:170, :535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it and counts no row written',
   'POST /agents/:id/main-checkout/actions/:requestId/cancel':
     'the request is read by (the caller, requestId) and must be of this workspace, 404 otherwise; the write is a compare-and-set on that row (workspaces/main-checkout.service.ts:276-280)',
+  // ── criteria met by confirmation (0545) ────────────────────────────────────────────────────────
+  'POST /projects/:id/criteria/:criterionId/confirmations': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); project-criterion-confirmation.spec.ts reads the door',
+  'POST /projects/:id/criteria/:criterionId/confirmations/withdraw': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the UPDATE is keyed by that definition id',
+  'POST /projects/:id/criteria/:criterionId/checks': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); the check task is then filed through TasksService.create under the same owner',
   'GET /owner-requests/:id':
     'the request is read by (id, the caller) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /owner-requests/:id/done':
@@ -1009,6 +1019,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
           { id: of.projectCriterionId, text: 'the census holds elsewhere', verificationMethod: 'the census' },
         ],
       },
+    }),
+  },
+  // The destination is read under the owner's own key: another account's project is one that names
+  // nothing (404), before anything is moved.
+  'POST /projects/:id/criteria/:criterionKey/move body toProjectId': {
+    request: (of, mine) => ({
+      params: { id: mine.projectId, criterionKey: mine.projectCriterionId },
+      body: { toProjectId: of.projectId },
     }),
   },
   'POST /projects/:id/coordinator body workspaceId': {
@@ -1319,6 +1337,10 @@ export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
   'POST /agents/:id/main-checkout/actions body initiatedFromSessionId':
     'read by (id, the caller, not deleted) and required to be of this workspace before anything is written: another account\'s answers 404 (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "actions are the owner\'s" sends another account\'s and counts no row written',
+  'POST /projects/:id/criteria/:criterionId/confirmations body attachmentIds[]':
+    'counted among the caller\'s own uploads (attachment by id and owner) before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
+  'POST /projects/:id/criteria/:criterionId/checks body workspaceId':
+    'handed to TasksService.create as the check task\'s assignee, which reads the workspace by (id, the caller) and refuses another account\'s 403 before any row is written (tasks/tasks.service.ts:2606)',
   'POST /owner-requests/:id/secret body savedSecretId':
     'read by (id, the caller) before anything is written, so another account\'s saved secret is the 404 of one that does not exist (owner-requests/owner-secrets.service.ts:217); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'POST /tasks/:id/execute body triggerId':

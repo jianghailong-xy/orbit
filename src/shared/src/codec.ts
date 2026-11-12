@@ -69,6 +69,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'promotionRequestId',
   // `project_integration_job.codebase_id` — the project code binding a job ran against (0281).
   'codebaseId',
+  // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).
+  'checkTaskId',
   'id',
   'ownerId',
   'userId',
@@ -146,6 +148,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // beside the event and names the user row exactly as ownerId/userId do.
   'signedById',
   'coordinatorSessionId',
+  // The coordinator conversation that last wrote a project's non-code mark (migration 0535): an address.
+  'nonCodeSetBySessionId',
   'workspaceId',
   // The workspaces a personal access token is confined to (migration 0383): addresses its owner
   // picks when issuing it and reads back in the token list — never a fence.
@@ -460,6 +464,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // `owner_request.blocks_task_ids` (0503): the tasks an owner request blocks — task addresses like `taskIds`.
   'blocksTaskIds',
   'dependsOnTaskIds',
+  // `POST /projects/:id/criteria/:criterionKey/move`: the tasks that went with the criterion, the
+  // ones that stayed, and the open items that went with them — and, on a refusal, the items in the way.
+  'movedTaskIds',
+  'keptTaskIds',
+  'movedOpenItemIds',
+  'itemIds',
   'anchorTaskId',
   'attachmentIds',
   // An account pool's membership (migration 0265): the pool and the provider a member row names, and

@@ -721,6 +721,10 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'the read is found by (id, the calling runner) only, so another machine\'s id answers 404 and nothing is stored (workspaces/main-checkout.service.ts:330); main-checkout.pg.spec.ts "the read goes through the runner" sends it from another runner',
   'POST /runner/main-checkout/:id/result':
     'the action is found by (id, the calling runner) only, 404 for another machine\'s, and every write after is keyed by that row (workspaces/main-checkout.service.ts:347)',
+  // ── criteria met by confirmation (0545) ────────────────────────────────────────────────────────
+  'POST /runner/projects/:id/criteria/:criterionId/confirmations': 'the criterion is read by (id, the project, the runner\'s owner as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the acting session must be that project\'s coordinator (403 otherwise)',
+  'POST /runner/projects/:id/criteria/:criterionId/confirmations/withdraw': 'the criterion is read by (id, the project, the runner\'s owner as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the acting session must be that project\'s coordinator (403 otherwise)',
+  'POST /runner/projects/:id/criteria/:criterionId/checks': 'the criterion is read by (id, the project, the runner\'s owner as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the acting session must be that project\'s coordinator (403 otherwise)',
   'GET /runner/owner-requests/:id':
     'read by (id, the runner\'s owner) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /runner/owner-requests/:id/withdraw':
@@ -1348,6 +1352,18 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'never looked up: compared with the requestId of the row the calling runner\'s own id named, and refused 400 when it differs (workspaces/main-checkout.service.ts:745)',
   'POST /runner/main-checkout/:id/result body targetSessionId':
     'never looked up nor written anywhere it names: kept on the result as the runner reported it, and read only to title the line, by id, in the row\'s own initiating session\'s transaction (workspaces/main-checkout.service.ts:483)',
+  // ── criteria met by confirmation (0545) ────────────────────────────────────────────────────────
+  'POST /runner/projects/:id/criteria/:criterionId/confirmations header x-orbit-session-id': 'compared with the coordinator pointer of a project read by (id, the runner\'s owner): a session of another account is never that pointer, so it is refused 403 (projects/project-criterion-confirmation.service.ts:259)',
+  'POST /runner/projects/:id/criteria/:criterionId/confirmations/withdraw header x-orbit-session-id': 'compared with the coordinator pointer of a project read by (id, the runner\'s owner): a session of another account is never that pointer, so it is refused 403 (projects/project-criterion-confirmation.service.ts:259)',
+  'POST /runner/projects/:id/criteria/:criterionId/checks header x-orbit-session-id': 'compared with the coordinator pointer of a project read by (id, the runner\'s owner): a session of another account is never that pointer, so it is refused 403 (projects/project-criterion-confirmation.service.ts:259)',
+  'POST /runner/projects/:id/criteria/:criterionId/confirmations body attachmentIds[]':
+    'counted among the runner owner\'s own uploads before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
+  'POST /runner/projects/:id/criteria/:criterionId/checks body workspaceId':
+    'handed to TasksService.create as the check task\'s assignee, which reads the workspace by (id, the runner\'s owner) and refuses another account\'s 403 (tasks/tasks.service.ts:2606)',
+  'POST /runner/criterion-checks/report header x-orbit-session-id':
+    'the session is read by (id, the runner\'s owner), and the attempt it settles by (its task, that owner); another account\'s session finds nothing and answers 404 (projects/project-criterion-confirmation.service.ts:197)',
+  'POST /runner/criterion-checks/report body attachmentIds[]':
+    'counted among the runner owner\'s own uploads before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
   // ── owner requests (0503) ─────────────────────────────────────────────────────────────────────────
   'POST /runner/owner-requests body blocksTaskIds[]':
     'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',

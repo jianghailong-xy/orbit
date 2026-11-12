@@ -653,7 +653,7 @@ test('(1) derivedDone gives every criterion that is not on main its reason, and 
   assert.deepEqual(answer(NOTHING), [true, 'ON_INTEGRATION_LINE', 'NOTHING_TO_LAND'],
     'a branch with nothing on it is "nothing to land", not "on the project branch"');
   assert.deepEqual(answer(NO_RECEIPT), [true, 'UNKNOWN', 'NO_RECEIPT']);
-  assert.deepEqual(answer(LOOKS_CODELESS), [true, 'UNKNOWN', 'CODELESS']);
+  assert.deepEqual(answer(LOOKS_CODELESS), [true, 'UNKNOWN', 'NO_BRANCH']);
   assert.deepEqual(answer(DECLARED), [true, 'LANDED', 'CODELESS'],
     'declared codeless is LANDED, and the reason says it had nothing to land');
 
@@ -664,7 +664,7 @@ test('(1) derivedDone gives every criterion that is not on main its reason, and 
     met: 7,
     landed: 2,
     onMain: 1,
-    byReason: { IN_FLIGHT: 1, ON_PROJECT_BRANCH: 1, NOTHING_TO_LAND: 1, NO_RECEIPT: 1, CODELESS: 2 },
+    byReason: { IN_FLIGHT: 1, ON_PROJECT_BRANCH: 1, NOTHING_TO_LAND: 1, NO_RECEIPT: 1, NO_BRANCH: 1, CODELESS: 1 },
   });
   assert.equal(
     derived.counts.onMain + Object.values(derived.counts.byReason).reduce((sum, n) => sum + n, 0),

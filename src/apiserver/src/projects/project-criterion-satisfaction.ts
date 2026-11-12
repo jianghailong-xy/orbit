@@ -11,6 +11,13 @@ import {
   type CriterionServingTask,
 } from './project-criterion-declaration-staleness';
 import type { TaskVerdictValue } from './task-aggregation';
+import {
+  CRITERION_CONFIRMATION_SELECT,
+  criterionConfirmationStanding,
+  type CriterionConfirmationFacts,
+  type CriterionConfirmationStanding,
+  type CriterionSatisfiedByValue,
+} from './project-criterion-confirmation';
 
 /**
  * T3: "is criterion C satisfied?", answered entirely from the WORK side.
@@ -57,7 +64,12 @@ import type { TaskVerdictValue } from './task-aggregation';
 export type CriterionUnmetClause =
   | 'NO_WORK_SERVES_IT'
   | 'SERVING_WORK_UNSETTLED'
-  | 'DECLARATION_STALE';
+  | 'DECLARATION_STALE'
+  /** A CONFIRMATION criterion (migration 0545) with no standing confirmation of its current
+   *  revision: never confirmed, confirmed on an earlier revision, withdrawn, or its newest Agent
+   *  check failed. `confirmation.state` says which. The three clauses above are TASKS clauses and
+   *  a CONFIRMATION criterion trips none of them. */
+  | 'NOT_CONFIRMED';
 
 /** One piece of work standing between a criterion and being satisfied, and why it is. */
 export interface CriterionBlockingTask {
@@ -89,6 +101,10 @@ export interface CriterionSatisfaction {
   satisfied: boolean;
   /** Empty exactly when `satisfied`. Every clause that does not hold, in clause order. */
   unmet: CriterionUnmetReason[];
+  /** How this criterion is met. */
+  satisfiedBy: CriterionSatisfiedByValue;
+  /** Where its confirmation stands — null for a TASKS criterion, whose work answers for it. */
+  confirmation: CriterionConfirmationStanding | null;
 }
 
 /** One check pointed at a task: what picks the newest live one, and what it concluded. */
@@ -135,6 +151,10 @@ export interface CriterionWithSettlementFacts {
   ordinal: number;
   revision: number;
   servingTasks: ReadonlyArray<ServingTaskFacts>;
+  /** Absent reads as TASKS: every row before migration 0545, and every fixture that predates it. */
+  satisfiedBy?: CriterionSatisfiedByValue;
+  /** Its confirmation rows; read only for a CONFIRMATION criterion. */
+  confirmations?: ReadonlyArray<CriterionConfirmationFacts>;
 }
 
 /**
@@ -275,6 +295,23 @@ export function criterionSatisfaction(
 ): CriterionSatisfaction[] {
   const declared = criterionDeclarations(definitions);
   return definitions.map((definition, index) => {
+    // A CONFIRMATION criterion is met by its confirmation alone: the work filed under it is not
+    // asked, so none of the three TASKS clauses below — NO_WORK_SERVES_IT included — applies to it.
+    if (definition.satisfiedBy === 'CONFIRMATION') {
+      const confirmation = criterionConfirmationStanding(
+        definition.revision, definition.confirmations ?? [],
+      );
+      const met = confirmation.state === 'CONFIRMED';
+      return {
+        definitionId: definition.id,
+        ordinal: definition.ordinal,
+        revision: definition.revision,
+        satisfied: met,
+        unmet: met ? [] : [{ clause: 'NOT_CONFIRMED', heldUpBy: [] }],
+        satisfiedBy: 'CONFIRMATION',
+        confirmation,
+      };
+    }
     const unsettled: CriterionBlockingTask[] = [];
     const stale: CriterionBlockingTask[] = [];
     for (const [position, task] of definition.servingTasks.entries()) {
@@ -303,6 +340,8 @@ export function criterionSatisfaction(
       // the list above it: it IS the list being empty.
       satisfied: unmet.length === 0,
       unmet,
+      satisfiedBy: 'TASKS',
+      confirmation: null,
     };
   });
 }
@@ -353,6 +392,8 @@ export async function readCriterionSatisfaction(
       id: true,
       ordinal: true,
       revision: true,
+      satisfiedBy: true,
+      confirmations: CRITERION_CONFIRMATION_SELECT,
       servingTasks: {
         where: { ownerId },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
