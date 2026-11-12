@@ -12,6 +12,10 @@
  *       continuation, opening with "[Orbit] The runner update interrupted this turn; continue." and naming the release;
  *       its echo is stored with the continuation, so the clients draw it as one Orbit line. A turn a plain restart cut
  *       keeps the restart's continuation.
+ *   (5) A turn a runner stop cut before its engine said anything is handed back with the run's wait restarted:
+ *       run_claimed_at, the clock the clients' Starting notice counts from, moves to the re-delivery and the session
+ *       is published, so the runner's downtime is not read as a start that took minutes. An ordinary first delivery,
+ *       and the re-delivery of a turn whose engine had started, leave it at the claim (task 34wNtnf94bNWNz0bmcieV).
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runners/runner-self-update-now.pg.spec.ts
  *
@@ -60,7 +64,9 @@ test('Update Now: owner only, audited, old runner refused, handed to one heartbe
 
   const wakes: string[] = [];
   const runners = new RunnersService(db as never, { notifyRunnerWake: (id: string) => wakes.push(id) } as never);
+  const published: string[] = [];
   const realtime = new Proxy({
+    publishSessionUpdated: (sessionId: string) => { published.push(sessionId); },
     drainCancellations: async () => [],
     drainMergeRequests: async () => [],
     drainCommitRequests: async () => [],
@@ -220,5 +226,49 @@ test('Update Now: owner only, audited, old runner refused, handed to one heartbe
     const restart = await cutAndReclaimed({ reason: 'runner_restart' });
     assert.ok(restart.handed?.content?.startsWith('[Orbit] The last message you were working on was interrupted because its runner restarted'),
       `a plain restart's turn lost its own continuation: ${restart.handed?.content}`);
+  });
+
+  const claimedAt = async (sessionId: string) =>
+    (await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { runClaimedAt: true } })).runClaimedAt!.getTime();
+
+  await t.test('(5) a turn cut before its engine spoke restarts its run’s wait at the re-delivery; an ordinary one keeps its claim', async () => {
+    for (const reason of ['runner_update', 'runner_restart']) {
+      const f = await fixture();
+      const sessionId = await runningSession(f, 'Starting when the runner stopped');
+      const before = await claimedAt(sessionId);
+      const turn = await db.conversationTurn.create({
+        data: { sessionId, seq: 1, clientTurnId: randomUUID(), kind: 'message', content: 'add the shard index', status: 'PENDING' },
+        select: { id: true },
+      });
+      const runner = { id: f.runnerId };
+      const p1 = randomUUID(), g1 = randomUUID();
+      await api.takeoverLeases(runner, sessionId, { leaseOwner: p1, expectedLeaseOwner: null } as never);
+      await api.activateLeases(runner, sessionId, { leaseGeneration: g1, leaseOwner: p1 } as never);
+      assert.equal((await fetchTurn(f.runnerId, sessionId, g1))?.turnId, turn.id);
+      // The ordinary first delivery: the wait still counts from the claim, 47 minutes back in this fixture.
+      assert.equal(await claimedAt(sessionId), before, 'a first delivery moved the claim clock');
+      assert.equal(published.includes(sessionId), false);
+      // The stop cuts it while the engine is still starting: nothing but the interrupt was recorded.
+      await api.events(runner, sessionId, { leaseOwner: p1, events: [
+        { seq: 1, type: RunEventType.INTERRUPT, ts: new Date().toISOString(), turnId: turn.id, payload: { reason } },
+      ] } as never);
+      const stamped = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { engineStartedAt: true, runClaimedAt: true } });
+      assert.equal(stamped.engineStartedAt, null, 'the interrupt alone said the engine had started');
+      assert.equal(stamped.runClaimedAt!.getTime(), before, 'the cut itself moved the claim clock');
+      const p2 = randomUUID(), g2 = randomUUID();
+      await api.takeoverLeases(runner, sessionId, { leaseOwner: p2, expectedLeaseOwner: p1 } as never);
+      await api.activateLeases(runner, sessionId, { leaseGeneration: g2, leaseOwner: p2 } as never);
+      const redeliveredFrom = Date.now();
+      const handed = await fetchTurn(f.runnerId, sessionId, g2);
+      assert.equal(handed?.turnId, turn.id, `${reason}: the cut turn was not handed back`);
+      assert.equal(handed?.content, 'add the shard index', 'a turn the engine never started on is handed as it was sent');
+      const after = await claimedAt(sessionId);
+      assert.ok(after >= redeliveredFrom - 5_000, `${reason}: the wait still counts from the first claim (${new Date(after).toISOString()})`);
+      assert.ok(published.includes(sessionId), `${reason}: the moved clock was not published`);
+    }
+
+    // A turn whose engine had started (test 4's shape): its run is not starting, so its claim stays.
+    const started = await cutAndReclaimed({ reason: 'runner_update', targetVersion: '0.1.254' });
+    assert.ok(Date.now() - (await claimedAt(started.sessionId)) > 40 * 60_000, 'a started turn’s re-delivery moved the claim clock');
   });
 });

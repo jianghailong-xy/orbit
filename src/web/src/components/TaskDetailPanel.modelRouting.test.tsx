@@ -477,7 +477,7 @@ describe('the task pin: an engine, then a credential it runs (board 6)', { timeo
     expect(words(field('Provider'))).toContain('env key');
   });
 
-  it('links a Gemini key that needs a runner update to Infrastructure rather than pinning it', async () => {
+  it('links a Gemini key that needs a runner update to its machine’s page rather than pinning it', async () => {
     const gemini: ConfiguredProvider = {
       slug: 'gemini', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [], engines: ['antigravity', 'opencode'],
     };
@@ -488,7 +488,7 @@ describe('the task pin: an engine, then a credential it runs (board 6)', { timeo
     const row = options.find((option) => words(option).startsWith('Gemini'))!;
     expect(words(row)).toContain('Update runner');
     await press(row, 'Gemini needing a runner update');
-    expect(where).toBe('/infrastructure');
+    expect(where).toBe(`/settings/machines/${RUNNER}`);
     expect(patches()).toEqual([]);
   });
 });

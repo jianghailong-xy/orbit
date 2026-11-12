@@ -1374,6 +1374,9 @@ export interface RunnerSelfUpdateNowResponse {
 /** The interrupt event's reason for a turn the owner's Update Now stopped (beside `runner_restart`). */
 export const RUNNER_UPDATE_INTERRUPT_REASON = 'runner_update';
 
+/** The interrupt event's reason for a turn a runner stop cut once its drain ran out (runner-go selfupdate_now.go). */
+export const RUNNER_RESTART_INTERRUPT_REASON = 'runner_restart';
+
 /** The first sentence of the turn Orbit sends a session whose turn Update Now interrupted (D4). The
  *  clients draw a user turn that opens with it as one Orbit line, not as the owner's bubble. */
 export const RUNNER_UPDATE_RESUME_NOTE = 'The runner update interrupted this turn; continue.';

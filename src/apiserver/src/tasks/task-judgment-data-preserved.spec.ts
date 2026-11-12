@@ -2930,9 +2930,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (backfilled only on rows whose revision is still the criterion's) and two partial indexes on
       // activity. No completion ledger, DONE fence, preserved trigger or function is changed.
       '0555_project_done_card_records',
+      // 0560 adds the session_guest table and widens three CHECKs (external sender, its session-row preview, the
+      // activity credential kind); no preserved rows, triggers or DONE fence change.
+      '0560_session_guest',
       // 0571 adds one nullable TIMESTAMP(3) `self_update_postpone_until` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0571_runner_self_update_postpone',
+      // 0572 adds session_guest's daily message count (two columns); no preserved rows, triggers or DONE fence change.
+      '0572_session_guest_daily_turns',
       // 0590 adds one nullable TIMESTAMP(3) `self_update_now_requested_at` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0590_runner_self_update_now'],

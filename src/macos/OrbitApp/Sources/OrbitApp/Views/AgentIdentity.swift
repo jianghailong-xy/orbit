@@ -201,11 +201,13 @@ extension Font {
 }
 
 extension View {
-    /// The soft iOS 26 scroll-edge effect at the top of a list whose title is drawn bare on the bar
-    /// (the Sessions and Tasks lists): rows blur and fade into white as they pass under the bar, with
-    /// no frosted strip and no hairline. Left alone, iOS 26 picks the hard style there. The owner's
-    /// pick on 2026-11-12 (docs/mocks/ios-header-soft-edge/01-board.html, ② and D1/D3); the
-    /// transcript keeps its own rule, no effect at all (`ConsoleView.noTopEdgeEffect`).
+    /// The soft iOS 26 scroll-edge effect at the top of a list: rows blur and fade into the page as
+    /// they pass under the bar, with no frosted strip and no hairline. Left alone, iOS 26 picks the
+    /// hard style for a plain list whose section headers pin. The app's one rule (the owner,
+    /// 2026-11-12, docs/mocks/ios-header-soft-edge 01, 04 and 05): every plain list asks for this,
+    /// except the transcript, which has no effect at all (`ConsoleView.noTopEdgeEffect`), and the
+    /// phone drawer, which draws its own (`SoftEdgeLayer`). `ListHeaderEdgeWiringTests` holds every
+    /// list to it.
     @ViewBuilder func softTopEdgeEffect() -> some View {
         #if os(iOS)
         if #available(iOS 26.0, *) { scrollEdgeEffectStyle(.soft, for: .top) } else { self }

@@ -477,7 +477,9 @@ export class QueueService {
           -- previous run's engine happened to be doing when it stopped.
           "engine_phase" = NULL,
           -- The wait this claim starts is measured from here (0254). Unlike last_turn_at, which
-          -- ingest moves on every event carrying a turn id, nothing else writes it.
+          -- ingest moves on every event carrying a turn id, nothing else writes it, save the
+          -- re-delivery of a turn a runner stop cut before its engine spoke (dequeueTurn), where the
+          -- run's wait starts again.
           "run_claimed_at" = now(),
           -- Which link request made this claim (the replay above); NULL for one made over HTTPS, so a
           -- request id an earlier claim of this session recorded can never answer for this one.
