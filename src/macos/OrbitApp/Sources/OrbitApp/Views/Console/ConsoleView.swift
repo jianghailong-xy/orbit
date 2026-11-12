@@ -1348,7 +1348,7 @@ struct TranscriptView: View {
         // control plane draws — is still the turn the bar points back at, but it is not the person's
         // question: it gets its card's own title and line (`StickySummary`), so the bar can't say
         // "your question" above a card reading otherwise. A wake is no such turn (`isAnchor`).
-        let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
+        let summary = StickySummary.of(text: SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: false), note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard,
                                        sessionMessage: bubble.sessionMessage,
