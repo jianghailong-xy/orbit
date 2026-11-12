@@ -9298,6 +9298,10 @@ model SessionGuest {
   removedAt     DateTime? @map("removed_at") @db.Timestamptz(3)
   /// REMOVED (the owner took them out) | LEFT (they left); set exactly when removedAt is.
   removedReason String?   @map("removed_reason")
+  /// The UTC day turnsOnDay counts (0572); null until the guest's first message.
+  turnDay       DateTime? @map("turn_day") @db.Date
+  /// Messages the guest sent on turnDay: the daily cap's count, taken by one conditional UPDATE.
+  turnsOnDay    Int       @default(0) @map("turns_on_day")
 
   @@map("session_guest")
 }

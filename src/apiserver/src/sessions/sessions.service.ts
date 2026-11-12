@@ -7381,6 +7381,13 @@ export class SessionsService {
     return { ok: true };
   }
 
+  /** Tell the runner and the session's readers that its queue changed: what a withdrawal outside cancelQueuedTurn
+   *  (a session guest's turns going with their invitation, session-guests.service.ts) announces after its commit. */
+  announceQueuedTurnsChanged(id: string) {
+    this.realtime.notifyInbox(id);
+    this.realtime.publishQueuedTurnsChanged(id);
+  }
+
   /**
    * Wait for the runner to say what came of a `withdraw` turn, and answer the person with it. The
    * steer is gone only when the engine said it dropped it; everything else is a refusal naming why.

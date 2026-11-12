@@ -2932,7 +2932,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0555_project_done_card_records',
       // 0560 adds the session_guest table and widens three CHECKs (external sender, its session-row preview, the
       // activity credential kind); no preserved rows, triggers or DONE fence change.
-      '0560_session_guest'],
+      '0560_session_guest',
+      // 0572 adds session_guest's daily message count (two columns); no preserved rows, triggers or DONE fence change.
+      '0572_session_guest_daily_turns'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

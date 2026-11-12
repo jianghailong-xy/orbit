@@ -1,6 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException,
+} from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import type { GuestSessionSummary, SessionGuestPerson } from '@orbit/shared';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
@@ -24,6 +27,23 @@ const num = (s?: string): number | undefined => {
   return s !== undefined && s !== '' && Number.isFinite(n) ? n : undefined;
 };
 
+/** How many messages a guest may send to one session in a UTC day (§6 rule 5): a constant, not a setting. */
+export const GUEST_DAILY_TURNS = 50;
+/** What the message past the day's last answers, 429. */
+export const GUEST_DAILY_CAP_REACHED =
+  `You’ve sent ${GUEST_DAILY_TURNS} messages to this session today, the most a guest can. Try again after midnight UTC.`;
+
+/**
+ * The fields a guest's turn may carry: the key, the words, and the routing an owner's composer leaves to the server.
+ * Anything else — `kind` (a shell turn), `attachmentIds`, and every override a resume would apply (model,
+ * permissionMode, effort, provider, fastMode, engine, account, ...) — is refused by name, 400, before anything is
+ * written. A whitelist, so a field SessionTurnDto or SessionResumeDto gains later is refused here too.
+ */
+const GUEST_TURN_FIELDS: ReadonlySet<string> = new Set(['clientTurnId', 'content', 'intent']);
+/** The only `intent` a guest may name: a message queued for the next turn, which is also what omitting it may route to. */
+const GUEST_TURN_INTENTS: ReadonlySet<unknown> = new Set([undefined, 'NEXT_TURN']);
+export const guestFieldRefused = (field: string) => `A guest can't set ${field} on a message.`;
+
 /** Midnight UTC of today: a guest's day (§6 rule 5). */
 const utcMidnight = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
@@ -36,7 +56,7 @@ interface LiveInvitation {
   openedAt: Date | null;
 }
 
-/** The body of `POST /guest-sessions/:id/turns`. Only these two are read; G1b refuses everything else by name. */
+/** The body of `POST /guest-sessions/:id/turns`: `clientTurnId`, `content` and `intent`; anything else is refused by name. */
 export interface GuestTurnBody {
   clientTurnId?: unknown;
   content?: unknown;
@@ -52,6 +72,8 @@ export interface GuestTurnBody {
  */
 @Injectable()
 export class SessionGuestsService {
+  private readonly logger = new Logger(SessionGuestsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
@@ -123,15 +145,76 @@ export class SessionGuestsService {
     return this.list(ownerId, sessionId);
   }
 
-  /** Take a guest out: their door answers 404 from now on. */
+  /**
+   * Take a guest out: their door answers 404 from now on, and every message of theirs still queued, undelivered, is
+   * withdrawn with it (§6 rule 6), in the one transaction.
+   */
   async remove(ownerId: string, sessionId: string, userId: string) {
     await this.ownedSession(ownerId, sessionId, { live: false, write: true });
-    const { count } = await this.prisma.sessionGuest.updateMany({
-      where: { sessionId, userId, removedAt: null },
-      data: { removedAt: new Date(), removedReason: 'REMOVED' },
-    });
-    if (count === 0) throw new NotFoundException('guest not found');
+    const ended = await this.endInvitation(sessionId, userId, 'REMOVED');
+    if (!ended) throw new NotFoundException('guest not found');
     return this.list(ownerId, sessionId);
+  }
+
+  /**
+   * Stamp the guest's live invitation removed (REMOVED by the owner, or LEFT), and withdraw in the same transaction
+   * the guest's turns still queued and undelivered on the session, matched on `external_sender_id`: PENDING messages
+   * and PENDING steers no runner holds yet. Taken under the session lock createTurn and the runner's claim take, so a
+   * turn is either withdrawn here or already on its way, never both. False when there was no live invitation.
+   */
+  private async endInvitation(sessionId: string, guestId: string, reason: 'REMOVED' | 'LEFT'): Promise<boolean> {
+    const withdrawn = await withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
+      const { count } = await tx.sessionGuest.updateMany({
+        where: { sessionId, userId: guestId, removedAt: null },
+        data: { removedAt: new Date(), removedReason: reason },
+      });
+      if (count === 0) return null;
+      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true } });
+      const queued = await tx.conversationTurn.findMany({
+        where: {
+          sessionId,
+          externalSenderSource: 'ORBIT_GUEST',
+          externalSenderId: guestId,
+          kind: { in: ['message', 'steer'] },
+          status: 'PENDING',
+        },
+        orderBy: { seq: 'asc' },
+        select: { id: true, kind: true },
+      });
+      let take = queued;
+      // A RUNNING session whose runner has claimed it but not yet leased a turn holds a runner permit only a
+      // /turn-complete releases (cancelQueuedTurn's own rule): its next message has crossed the "started" line,
+      // so when the guest's is the only one left, that one stays and the rest go.
+      if (session.status === RunStatus.RUNNING) {
+        const others = await tx.conversationTurn.count({
+          where: {
+            sessionId,
+            kind: { in: ['message', 'shell'] },
+            status: { in: ['PENDING', 'IN_FLIGHT'] },
+            id: { notIn: queued.map((t) => t.id) },
+          },
+        });
+        const firstMessage = queued.find((t) => t.kind === 'message');
+        if (others === 0 && firstMessage) take = queued.filter((t) => t.id !== firstMessage.id);
+      }
+      if (take.length > 0) {
+        await tx.conversationTurn.deleteMany({ where: { id: { in: take.map((t) => t.id) }, sessionId, status: 'PENDING' } });
+      }
+      // The last queued message gone from a session that was only waiting for it: back to waiting for the next.
+      if (session.status === RunStatus.PENDING) {
+        const executable = await tx.conversationTurn.count({
+          where: { sessionId, kind: { in: ['message', 'shell'] }, status: { in: ['PENDING', 'IN_FLIGHT'] } },
+        });
+        if (executable === 0) {
+          await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, lastTurnAt: new Date() } });
+        }
+      }
+      return take.length;
+    }, loggedRetry(this.logger, 'sessionGuests.endInvitation'));
+    if (withdrawn === null) return false;
+    if (withdrawn > 0) this.sessions.announceQueuedTurnsChanged(sessionId);
+    return true;
   }
 
   // ── The guest's side ─────────────────────────────────────────────────────────────────────────
@@ -233,7 +316,13 @@ export class SessionGuestsService {
    */
   async turn(guestId: string, sessionId: string, body: GuestTurnBody) {
     const invitation = await this.invitation(guestId, sessionId);
-    const { clientTurnId, content } = body ?? {};
+    const fields = body !== null && typeof body === 'object' ? body : {};
+    for (const field of Object.keys(fields)) {
+      if (!GUEST_TURN_FIELDS.has(field)) throw new BadRequestException(guestFieldRefused(field));
+    }
+    if (!GUEST_TURN_INTENTS.has(fields.intent)) throw new BadRequestException(guestFieldRefused('intent'));
+    const { clientTurnId, content } = fields;
+    const intent = fields.intent as 'NEXT_TURN' | undefined;
     if (typeof clientTurnId !== 'string' || clientTurnId.trim() === '') throw new BadRequestException('clientTurnId is required');
     if (typeof content !== 'string' || content.trim() === '') throw new BadRequestException('content is required');
     // A key is the session's, whoever chose it: one the owner (or another guest) already used is not this guest's
@@ -246,10 +335,12 @@ export class SessionGuestsService {
       throw new ConflictException('clientTurnId was already used in this session');
     }
     const externalSender: ExternalTurnSender = { source: 'ORBIT_GUEST', id: guestId, name: invitation.guestName };
-    const dto = { clientTurnId, content };
-    // Written with the turn, so a replay of this clientTurnId records nothing again.
-    const onTurnWritten = (tx: Prisma.TransactionClient, turn: { id: string }) =>
-      this.recordGuestTurn(tx, invitation.ownerId, sessionId, turn.id, guestId);
+    const dto = { clientTurnId, content, ...(intent ? { intent } : {}) };
+    // Written with the turn, so a replay of this clientTurnId neither counts nor records anything again.
+    const onTurnWritten = async (tx: Prisma.TransactionClient, turn: { id: string }) => {
+      await this.countGuestTurn(tx, invitation.guestRowId);
+      await this.recordGuestTurn(tx, invitation.ownerId, sessionId, turn.id, guestId);
+    };
     const ended = await this.hasEnded(sessionId);
     if (!ended) {
       try {
@@ -262,6 +353,27 @@ export class SessionGuestsService {
     }
     const resumed = await this.sessions.resume(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten });
     return { ...answerOf(resumed), revived: resumed.revived };
+  }
+
+  /**
+   * Count one message against the guest's day (§6 rule 5), in the transaction that writes the turn: one conditional
+   * UPDATE of the guest's live session_guest row, which moves to today and adds one only while today's count is under
+   * the cap. Two requests at 49 meet on that row — the second waits for the first to commit, then re-reads it at 50
+   * and matches nothing — so only one of them passes. Matching nothing refuses the message, and the turn written just
+   * before rolls back with it: 404 if the invitation ended meanwhile, else 429.
+   */
+  private async countGuestTurn(tx: Prisma.TransactionClient, guestRowId: string) {
+    const counted = await tx.$executeRaw`
+      UPDATE "session_guest"
+      SET "turns_on_day" = CASE WHEN "turn_day" = (now() AT TIME ZONE 'UTC')::date THEN "turns_on_day" + 1 ELSE 1 END,
+          "turn_day" = (now() AT TIME ZONE 'UTC')::date
+      WHERE "id" = ${guestRowId}::uuid
+        AND "removed_at" IS NULL
+        AND ("turn_day" IS DISTINCT FROM (now() AT TIME ZONE 'UTC')::date OR "turns_on_day" < ${GUEST_DAILY_TURNS})`;
+    if (counted === 1) return;
+    const live = await tx.sessionGuest.count({ where: { id: guestRowId, removedAt: null } });
+    if (live === 0) throw notShared();
+    throw new HttpException(GUEST_DAILY_CAP_REACHED, HttpStatus.TOO_MANY_REQUESTS);
   }
 
   /** The one `session.guest.turn` activity row of a guest turn (§5 step 6), the owner's, naming the guest. */
@@ -310,11 +422,9 @@ export class SessionGuestsService {
 
   /** The guest leaves: the session leaves their Shared with me, and their door answers 404. */
   async leave(guestId: string, sessionId: string) {
-    const invitation = await this.invitation(guestId, sessionId);
-    await this.prisma.sessionGuest.updateMany({
-      where: { id: invitation.guestRowId, removedAt: null },
-      data: { removedAt: new Date(), removedReason: 'LEFT' },
-    });
+    await this.invitation(guestId, sessionId);
+    // Their messages still queued go with them, as a removal's do (§6 rule 6).
+    if (!(await this.endInvitation(sessionId, guestId, 'LEFT'))) throw notShared();
     return { ok: true };
   }
 }
