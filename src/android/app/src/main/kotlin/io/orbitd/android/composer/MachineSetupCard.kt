@@ -512,12 +512,16 @@ private fun FolderOptionsSection(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
+                            // The folder it goes in shares the row with the name: on a phone a long one is cut from its start, so the
+                            // field keeps room to type in (it was measured first and left the field a sliver).
                             Text(
                                 MachineSetup.newFolderPath(reposRoot, ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
+                                overflow = TextOverflow.StartEllipsis,
+                                modifier = Modifier.weight(1f, fill = false),
                             )
                             OutlinedTextField(
                                 value = newName,
