@@ -301,6 +301,8 @@ beforeEach(() => {
     }
     if (path === `/projects/${PROJECT_ID}/promotions/current`) return reply(currentPromotion);
     if (path === `/projects/${PROJECT_ID}/promotions/merged`) return reply(merges);
+    // No cross-project request is waiting on this project: the crossing card reads this door.
+    if (path === `/projects/${PROJECT_ID}/handoffs`) return reply([]);
     if (path === `/projects/${PROJECT_ID}/open-items`) {
       openItemsCalls += 1;
       return reply({ needsYou: [], withCoordinator: withCoordinatorItems, startRequest });
