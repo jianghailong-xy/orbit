@@ -162,6 +162,13 @@ async function mount(
     );
   });
   await settle();
+  // The fields sit behind Runs with → Edit since the page leads with the run.
+  const edit = [...container.querySelectorAll<HTMLButtonElement>('button.tdp-link-button')].find((b) => b.textContent === 'Edit');
+  expect(edit, 'Runs with → Edit is on screen').toBeTruthy();
+  await act(async () => {
+    edit!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  await settle();
 }
 
 /** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which
