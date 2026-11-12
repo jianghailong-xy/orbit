@@ -643,6 +643,52 @@ export function mainCheckoutResultLine(
   }
 }
 
+// Board 01 B, after the fact: a card whose changes were moved, saved or are gone keeps its text and loses its actions.
+
+/** The muted line a handled card shows in place of its actions. */
+export const MAIN_CHECKOUT_CARD_HANDLED_COPY = {
+  result: 'Handled — see the result below',
+  gone: 'These changes are no longer in the main checkout',
+} as const;
+export type MainCheckoutCardHandled = keyof typeof MAIN_CHECKOUT_CARD_HANDLED_COPY;
+
+/** The main checkout as a client knows it now: a snapshot (`files`) or the heartbeat's repo (`paths`). */
+export interface MainCheckoutCurrent {
+  root: string;
+  fileCount?: number;
+  truncated?: boolean;
+  /** Snapshot: every changed file, up to the limit. */
+  files?: ReadonlyArray<{ path: string }>;
+  /** Heartbeat: tracked paths only, capped by the runner, so it settles nothing unless it holds fileCount of them. */
+  paths?: readonly string[];
+}
+
+/**
+ * Whether a main-checkout-changed card is done with, and why: 'result' when a Move or Save to a rescue branch
+ * written after it in the same session succeeded for all its files, 'gone' when the current checkout provably holds
+ * none of its paths, null when it is still live. A refusal, a partial move or a move of fewer files than the card
+ * lists keeps it live, and so does a checkout Orbit can't see whole.
+ */
+export function mainCheckoutCardHandled(
+  notice: Pick<MainCheckoutChangedNotice, 'root' | 'files'>,
+  laterResults: readonly MainCheckoutActionResult[],
+  current?: MainCheckoutCurrent | null,
+): MainCheckoutCardHandled | null {
+  const took = laterResults.some(
+    (r) =>
+      r.root === notice.root &&
+      r.status === 'done' &&
+      (r.kind === 'rescue' || (r.kind === 'move' && (r.fileCount ?? 0) >= notice.files.length)),
+  );
+  if (took) return 'result';
+  if (!current || current.root !== notice.root || typeof current.fileCount !== 'number') return null;
+  if (current.fileCount === 0) return 'gone';
+  const listed = current.files ? current.files.map((f) => f.path) : current.paths;
+  if (!listed || current.truncated || listed.length < current.fileCount) return null;
+  const now = new Set(listed);
+  return notice.files.some((f) => now.has(f.path)) ? null : 'gone';
+}
+
 // Board 04: switching worktree isolation.
 
 export const WORKTREE_ISOLATION_DIALOG_COPY = {

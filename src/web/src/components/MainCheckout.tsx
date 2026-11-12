@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from 'react';
 import { CheckOutlined, ExclamationOutlined } from '@ant-design/icons';
 import {
+  MAIN_CHECKOUT_CARD_HANDLED_COPY,
   MAIN_CHECKOUT_CARD_VISIBLE_FILES,
   MAIN_CHECKOUT_COPY,
   mainCheckoutBarStatus,
+  mainCheckoutCardHandled,
   mainCheckoutCardSubtitle,
   mainCheckoutCardTitle,
   mainCheckoutMoreFiles,
@@ -25,6 +27,7 @@ import {
   rescueSessionPrompt,
   askRebasePushPrompt,
   useMainCheckoutHost,
+  useMainCheckoutResults,
   type MainCheckoutHost,
 } from '../lib/mainCheckout';
 import { Menu } from './ui/Menu';
@@ -32,9 +35,16 @@ import { Menu } from './ui/Menu';
 const LEFT_KEY = 'mck-card-left:';
 
 /** Board 01 B: the end of a worktree turn found new or changed files in the main checkout. The person decides whose
- *  they are — this session's (Move), main's (Review and commit), or nobody's yet (⋯). */
+ *  they are — this session's (Move), main's (Review and commit), or nobody's yet (⋯). Once a later result line took
+ *  them, or the checkout no longer holds them, the card stays as history with one muted line and no actions. */
 export function MainCheckoutCard({ notice, seq }: { notice: MainCheckoutChangedNotice; seq?: number }) {
   const host = useMainCheckoutHost();
+  const results = useMainCheckoutResults();
+  const handled = mainCheckoutCardHandled(
+    notice,
+    results.filter((r) => seq === undefined || r.seq > seq).map((r) => r.result),
+    host?.health,
+  );
   const leftKey = `${LEFT_KEY}${host?.sessionId ?? ''}:${notice.fingerprint}`;
   const [left, setLeft] = useState(() => {
     try {
@@ -55,7 +65,8 @@ export function MainCheckoutCard({ notice, seq }: { notice: MainCheckoutChangedN
   const hidden = notice.fileCount - shown.length;
   const branch = notice.branch ?? 'HEAD';
   const actions = !!host?.actionsSupported;
-  const busy = !!host?.inFlight;
+  // A handled card keeps its buttons where they were, unpressable.
+  const busy = !!host?.inFlight || !!handled;
   const canMove = actions && !!host?.sessionId && !!host?.sessionBranch;
   const sub = mainCheckoutCardSubtitle(notice.root, notice.branch);
   // The subtitle's path and branch read as code, as on the board.
@@ -87,9 +98,9 @@ export function MainCheckoutCard({ notice, seq }: { notice: MainCheckoutChangedN
             key={f.path}
             type="button"
             className="mck-file"
-            disabled={!actions}
+            disabled={!actions || !!handled}
             onClick={() => host?.openReview(f.path)}
-            title={actions ? `Review ${f.path}` : f.path}
+            title={actions && !handled ? `Review ${f.path}` : f.path}
           >
             <span className={`mck-file-st st-${f.status.toLowerCase()}`}>{f.status}</span>
             <span className="mck-file-path">{f.path}</span>
@@ -125,6 +136,7 @@ export function MainCheckoutCard({ notice, seq }: { notice: MainCheckoutChangedN
             <Menu
               side="bottom"
               align="end"
+              disabled={!!handled}
               popupClassName="mck-menu"
               items={[
                 {
@@ -153,8 +165,12 @@ export function MainCheckoutCard({ notice, seq }: { notice: MainCheckoutChangedN
               }
             />
           </div>
-          {canMove && <div className="mck-card-hint">{moveHint(host!.sessionBranch!)}</div>}
+          {canMove && !handled && <div className="mck-card-hint">{moveHint(host!.sessionBranch!)}</div>}
+          {handled && <div className="mck-card-hint mck-card-handled">{MAIN_CHECKOUT_CARD_HANDLED_COPY[handled]}</div>}
         </div>
+      )}
+      {handled && (!actions || left) && (
+        <div className="mck-card-actions mck-card-handled">{MAIN_CHECKOUT_CARD_HANDLED_COPY[handled]}</div>
       )}
     </div>
   );

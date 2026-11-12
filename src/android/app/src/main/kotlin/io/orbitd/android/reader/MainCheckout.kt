@@ -171,6 +171,9 @@ internal object MainCheckout {
     const val COPY_TARGET_OPENED_FROM = "The session you opened this from"
     const val COPY_TARGET_BUSY = "Working now — available when this turn ends"
     const val COPY_CLEAN_UP_CHECKOUT = "Clean up checkout"
+    /** A handled card's muted line, in place of its Move hint (shared `MAIN_CHECKOUT_CARD_HANDLED_COPY`). */
+    const val COPY_CARD_HANDLED_RESULT = "Handled — see the result below"
+    const val COPY_CARD_HANDLED_GONE = "These changes are no longer in the main checkout"
 
     fun filesCount(n: Int) = "$n ${if (n == 1) "file" else "files"}"
     private fun uncommittedFiles(n: Int, other: Boolean = false) = "$n ${if (other) "other " else ""}uncommitted ${if (n == 1) "file" else "files"}"
@@ -308,6 +311,31 @@ internal object MainCheckout {
             "CANCELLED" -> line(Tone.REFUSED, "Cancelled:", " nothing was changed.")
             else -> line(Tone.REFUSED, "$nothing.", "")
         }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------
+    // A handled card (shared `mainCheckoutCardHandled`): kept as history, its buttons held, one muted line saying why.
+
+    enum class Handled(val line: String) { RESULT(COPY_CARD_HANDLED_RESULT), GONE(COPY_CARD_HANDLED_GONE) }
+
+    /** RESULT when a Move or Save to a rescue branch written after the card in the same session succeeded for all its files, GONE
+     *  when the checkout provably holds none of its paths, null while it is live. A refusal, a partial move or a move of fewer files
+     *  keeps it live, and so does a checkout Orbit can't see whole. [current] is a snapshot (`files`) or the heartbeat's repo
+     *  (`paths`: tracked only and capped, so they settle nothing unless they number `fileCount`). */
+    fun handled(notice: ChangedNotice, laterResults: List<Result>, current: JsonObject?): Handled? {
+        val took = laterResults.any { r ->
+            r.root == notice.root && r.status == "done" && (r.kind == "rescue" || (r.kind == "move" && (r.fileCount ?: 0) >= notice.files.size))
+        }
+        if (took) return Handled.RESULT
+        current ?: return null
+        if (current.str("root") != notice.root) return null
+        val fileCount = current.int("fileCount") ?: return null
+        if (fileCount == 0) return Handled.GONE
+        val listed = (current["files"] as? JsonArray)?.let { a -> a.filterIsInstance<JsonObject>().mapNotNull { it.str("path") } }
+            ?: (current["paths"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?: return null
+        if (current.bool("truncated") || listed.size < fileCount) return null
+        val now = listed.toSet()
+        return if (notice.files.any { it.path in now }) null else Handled.GONE
     }
 
     // -----------------------------------------------------------------------------------------------------------

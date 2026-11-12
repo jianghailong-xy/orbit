@@ -237,4 +237,24 @@ class MainCheckoutTest {
         assertEquals(fixture["noticeKinds"]!!.jsonObject.let { listOf(it["changed"]!!.jsonPrimitive.content, it["result"]!!.jsonPrimitive.content) },
             listOf(MainCheckout.NOTICE_CHANGED, MainCheckout.NOTICE_RESULT))
     }
+
+    // ---- A handled card --------------------------------------------------------------------------------------
+
+    @Test fun aCardIsHandledAsTheSharedFixtureSays() {
+        val block = fixture["cardHandled"]!!.jsonObject
+        val copy = block["copy"]!!.jsonObject
+        assertEquals(copy["result"]!!.jsonPrimitive.content, MainCheckout.Handled.RESULT.line)
+        assertEquals(copy["gone"]!!.jsonPrimitive.content, MainCheckout.Handled.GONE.line)
+        // The same words sit in the shared module verbatim.
+        assertTrue(source.contains("'${MainCheckout.COPY_CARD_HANDLED_RESULT}'"))
+        assertTrue(source.contains("'${MainCheckout.COPY_CARD_HANDLED_GONE}'"))
+        val notice = MainCheckout.changedNotice(fixture["changedNotice"]!!.jsonObject)!!
+        val cases = block["cases"]!!.jsonArray.map { it.jsonObject }
+        assertTrue(cases.isNotEmpty())
+        cases.forEach { c ->
+            val results = c["results"]!!.jsonArray.mapNotNull { MainCheckout.result(it.jsonObject) }
+            val got = MainCheckout.handled(notice, results, c["current"] as? JsonObject)
+            assertEquals(c["name"]!!.jsonPrimitive.content, (c["handled"] as? JsonPrimitive)?.contentOrNull, got?.name?.lowercase())
+        }
+    }
 }

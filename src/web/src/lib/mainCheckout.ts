@@ -57,6 +57,14 @@ export function useMainCheckoutHost(): MainCheckoutHost | null {
   return useContext(MainCheckoutCtx);
 }
 
+/** Every main-checkout result line of the conversation on screen, with its seq: a card reads the ones after it to
+ *  learn whether it was handled. Provided by Transcript. */
+export const MainCheckoutResultsCtx = createContext<ReadonlyArray<{ seq: number; result: MainCheckoutActionResult }>>([]);
+
+export function useMainCheckoutResults(): ReadonlyArray<{ seq: number; result: MainCheckoutActionResult }> {
+  return useContext(MainCheckoutResultsCtx);
+}
+
 export function isMainCheckoutChanged(p: unknown): p is MainCheckoutChangedNotice {
   const n = p as Partial<MainCheckoutChangedNotice> | null;
   return !!n && n.noticeKind === MAIN_CHECKOUT_NOTICE_KINDS.changed && Array.isArray(n.files) && typeof n.root === 'string';

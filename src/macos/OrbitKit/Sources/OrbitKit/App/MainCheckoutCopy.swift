@@ -26,6 +26,9 @@ public enum MainCheckoutCopy {
     public static let targetOpenedFrom = "The session you opened this from"
     public static let targetBusy = "Working now — available when this turn ends"
     public static let cleanUpCheckout = "Clean up checkout"
+    /// A handled card's muted line, in place of its Move hint (`MAIN_CHECKOUT_CARD_HANDLED_COPY`).
+    public static let cardHandledResult = "Handled — see the result below"
+    public static let cardHandledGone = "These changes are no longer in the main checkout"
     /// The sheet's own words, which the board leaves to the client.
     public static let loading = "Reading the main checkout…"
     public static let readFailed = "Couldn't read the main checkout"
@@ -386,13 +389,61 @@ public struct MainCheckoutCard: Equatable, Sendable {
         truncatedNote = notice.truncated ? MainCheckoutCopy.truncatedNote() : nil
     }
 
-    /// Whether the card's buttons are drawn: the runner can act, the person hasn't chosen Leave as is,
-    /// and the checkout still holds uncommitted files as far as the heartbeat knows (an older count
-    /// of nil is unknown, so the buttons stay; a 0 means someone already dealt with them).
-    public static func showsActions(actionsSupported: Bool, dismissed: Bool, health: RunnerRepoHealth?) -> Bool {
-        guard actionsSupported, !dismissed else { return false }
-        if let count = health?.fileCount, count == 0 { return false }
-        return true
+    /// Whether the card's buttons are drawn: the runner can act and the person hasn't chosen Leave as is.
+    /// A handled card (`handled`) still draws them, disabled, with its line under them.
+    public static func showsActions(actionsSupported: Bool, dismissed: Bool) -> Bool {
+        actionsSupported && !dismissed
+    }
+
+    /// Whether the card is done with (shared `mainCheckoutCardHandled`): `.result` when a Move or Save to a
+    /// rescue branch written after it in the same session succeeded for all its files, `.gone` when the
+    /// checkout provably holds none of its paths, nil while it is live. A refusal, a partial move or a move of
+    /// fewer files keeps it live, and so does a checkout Orbit can't see whole. `listed` is every changed
+    /// path the client knows of: a snapshot's files, or the heartbeat's paths (tracked only and capped, so
+    /// they settle nothing unless they number `fileCount`).
+    public static func handled(_ notice: MainCheckoutChangedNotice, laterResults: [MainCheckoutActionResult],
+                               root: String?, fileCount: Int?, truncated: Bool?, listed: [String]?) -> MainCheckoutCardHandled? {
+        let took = laterResults.contains { r in
+            r.root == notice.root && r.status == "done"
+                && (r.kind == .rescue || (r.kind == .move && (r.fileCount ?? 0) >= notice.files.count))
+        }
+        if took { return .result }
+        guard root == notice.root, let fileCount else { return nil }
+        if fileCount == 0 { return .gone }
+        guard let listed, truncated != true, listed.count >= fileCount else { return nil }
+        let now = Set(listed)
+        return notice.files.contains { now.contains($0.path) } ? nil : .gone
+    }
+
+    public static func handled(_ notice: MainCheckoutChangedNotice, laterResults: [MainCheckoutActionResult],
+                               health: RunnerRepoHealth?) -> MainCheckoutCardHandled? {
+        handled(notice, laterResults: laterResults, root: health?.root, fileCount: health?.fileCount,
+                truncated: health?.truncated, listed: health?.paths)
+    }
+
+    /// The card at `seq` of `items`, against the result lines after it.
+    public static func handled(_ notice: MainCheckoutChangedNotice, seq: Int, in items: [TranscriptItem],
+                               health: RunnerRepoHealth?) -> MainCheckoutCardHandled? {
+        let later = items.compactMap { item -> MainCheckoutActionResult? in
+            guard case .mainCheckout(let m) = item, m.seq > seq else { return nil }
+            return m.result
+        }
+        return handled(notice, laterResults: later, health: health)
+    }
+}
+
+/// Why a main checkout card no longer offers its actions.
+public enum MainCheckoutCardHandled: String, Equatable, Sendable {
+    /// A result line after it took its files.
+    case result
+    /// The checkout no longer holds any of them.
+    case gone
+
+    public var line: String {
+        switch self {
+        case .result: return MainCheckoutCopy.cardHandledResult
+        case .gone: return MainCheckoutCopy.cardHandledGone
+        }
     }
 }
 

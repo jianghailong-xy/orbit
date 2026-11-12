@@ -38,17 +38,58 @@ class MainCheckoutViewTest {
         override suspend fun send(path: List<String>, method: HttpMethod, body: JsonObject?): JsonElement? { sent += path to body; return null }
     }
 
-    private fun model(actions: Boolean): Pair<MainCheckoutModel, Fake> {
+    private fun model(actions: Boolean, repoHealth: JsonObject = fixture["heartbeatRepo"]!!.jsonObject): Pair<MainCheckoutModel, Fake> {
         val workspace = buildJsonObject {
-            put("id", "ws-1"); put("mainCheckoutActions", actions); put("repoHealth", fixture["heartbeatRepo"]!!)
+            put("id", "ws-1"); put("mainCheckoutActions", actions); put("repoHealth", repoHealth)
         }
         val fake = Fake(workspace)
         return MainCheckoutModel(fake, "sess-1", CoroutineScope(Dispatchers.Unconfined)).also { it.bind("ws-1"); it.adoptWorkspace(workspace) } to fake
     }
 
-    private fun show(model: MainCheckoutModel, content: @androidx.compose.runtime.Composable () -> Unit) {
-        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { CompositionLocalProvider(LocalMainCheckout provides model) { content() } } } }
+    private fun show(model: MainCheckoutModel, results: List<Pair<Long, MainCheckout.Result>> = emptyList(),
+        content: @androidx.compose.runtime.Composable () -> Unit) {
+        compose.runOnUiThread {
+            compose.activity.setContent {
+                MaterialTheme { CompositionLocalProvider(LocalMainCheckout provides model, LocalMainCheckoutResults provides results) { content() } }
+            }
+        }
         compose.waitForIdle()
+    }
+
+    private fun fixtureResult(name: String) =
+        MainCheckout.result(fixture["results"]!!.jsonArray.map { it.jsonObject }.first { it["name"]!!.jsonPrimitive.content == name }["result"]!!.jsonObject)!!
+
+    private fun assertCardActions(enabled: Boolean) {
+        listOf(compose.onNodeWithText("Move to this worktree"), compose.onNodeWithText("Review and commit to main…"),
+            compose.onNodeWithContentDescription("More actions")).forEach { if (enabled) it.assertIsEnabled() else it.assertIsNotEnabled() }
+    }
+
+    @Test fun aMoveAfterTheCardThatTookItsFilesHoldsItsActions() {
+        val (model, fake) = model(actions = true)
+        show(model, listOf(4L to fixtureResult("move done"))) { MainCheckoutCard(notice, "event:3", 3L) }
+        assertCardActions(enabled = false)
+        compose.onNodeWithTag("main-checkout-card-handled").assertTextEquals("Handled — see the result below")
+        compose.onNodeWithText("Move to this worktree").performClick()
+        compose.waitForIdle()
+        assertTrue(fake.sent.isEmpty())
+        // History: the title and files stay.
+        compose.onNodeWithText("3 files changed in the main checkout during this turn").assertExists()
+        compose.onNodeWithText("src/api/client.ts").assertExists()
+    }
+
+    @Test fun aCheckoutWithoutItsPathsSaysTheyAreGone() {
+        val clean = buildJsonObject { put("root", "/root/orbit"); put("state", "clean"); put("branch", "main"); put("fileCount", 0) }
+        val (model, _) = model(actions = true, repoHealth = clean)
+        show(model) { MainCheckoutCard(notice, "event:3", 3L) }
+        assertCardActions(enabled = false)
+        compose.onNodeWithTag("main-checkout-card-handled").assertTextEquals("These changes are no longer in the main checkout")
+    }
+
+    @Test fun aRefusalOrAResultBeforeTheCardLeavesItLive() {
+        val (model, _) = model(actions = true)
+        show(model, listOf(4L to fixtureResult("MOVE_CONFLICT"), 2L to fixtureResult("move done"))) { MainCheckoutCard(notice, "event:3", 3L) }
+        assertCardActions(enabled = true)
+        compose.onNodeWithTag("main-checkout-card-handled").assertDoesNotExist()
     }
 
     private val notice get() = MainCheckout.changedNotice(fixture["changedNotice"]!!.jsonObject)!!

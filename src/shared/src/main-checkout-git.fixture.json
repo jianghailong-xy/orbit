@@ -745,5 +745,250 @@
       "lead": "Cancelled:",
       "text": "Cancelled: nothing was changed."
     }
-  ]
+  ],
+  "cardHandled": {
+    "_comment": "Whether the changedNotice card above is handled: results are the ones written after it in the same session, current the checkout as the client knows it now (a snapshot with files, or the heartbeat repo with paths). handled is the MAIN_CHECKOUT_CARD_HANDLED_COPY key, or null for a live card.",
+    "copy": {
+      "result": "Handled — see the result below",
+      "gone": "These changes are no longer in the main checkout"
+    },
+    "cases": [
+      {
+        "name": "move done for all its files",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 3,
+            "remaining": 0,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "targetSessionId": "sess-1",
+            "targetBranch": "orbit/fix-retry-backoff"
+          }
+        ],
+        "current": null,
+        "handled": "result"
+      },
+      {
+        "name": "saved to a rescue branch",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "rescue",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 7,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "head": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7"
+          }
+        ],
+        "current": null,
+        "handled": "result"
+      },
+      {
+        "name": "MOVE_CONFLICT keeps it live",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "refused",
+            "code": "MOVE_CONFLICT",
+            "branch": "main",
+            "paths": [
+              "src/api/client.ts"
+            ]
+          }
+        ],
+        "current": {
+          "root": "/root/orbit",
+          "branch": "main",
+          "state": "dirty",
+          "paths": [
+            "src/api/client.ts"
+          ],
+          "agentIds": [
+            "agent-1"
+          ],
+          "head": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7",
+          "upstream": "origin/main",
+          "ahead": 1,
+          "behind": 0,
+          "fileCount": 7,
+          "truncated": false,
+          "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:27a2714bb42c00aee96da70da7154696ed3f0e90e9fa66183614c6e8fdc54ba8"
+        },
+        "handled": null
+      },
+      {
+        "name": "MOVE_SOURCE_CHANGED keeps it live",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "partial",
+            "code": "MOVE_SOURCE_CHANGED",
+            "branch": "main",
+            "fileCount": 3,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "paths": [
+              "src/api/retry.ts"
+            ]
+          }
+        ],
+        "current": null,
+        "handled": null
+      },
+      {
+        "name": "a move of fewer files than the card lists keeps it live",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 1,
+            "remaining": 2,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "targetSessionId": "sess-1",
+            "targetBranch": "orbit/fix-retry-backoff"
+          }
+        ],
+        "current": null,
+        "handled": null
+      },
+      {
+        "name": "another checkout's move does not count",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/other",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "done",
+            "branch": "main",
+            "fileCount": 3,
+            "remaining": 0,
+            "rescueBranch": "orbit/rescue-5f2c1a9",
+            "targetSessionId": "sess-1",
+            "targetBranch": "orbit/fix-retry-backoff"
+          }
+        ],
+        "current": null,
+        "handled": null
+      },
+      {
+        "name": "a clean checkout",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "handled": "gone"
+      },
+      {
+        "name": "a snapshot without its paths",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "dirty",
+          "fileCount": 1,
+          "truncated": false,
+          "files": [
+            {
+              "path": "README.md",
+              "status": "M"
+            }
+          ]
+        },
+        "handled": "gone"
+      },
+      {
+        "name": "a snapshot still holding one of its paths keeps it live",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "dirty",
+          "fileCount": 2,
+          "truncated": false,
+          "files": [
+            {
+              "path": "README.md",
+              "status": "M"
+            },
+            {
+              "path": "src/api/retry.ts",
+              "status": "A"
+            }
+          ]
+        },
+        "handled": null
+      },
+      {
+        "name": "heartbeat paths that may be cut short settle nothing",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "dirty",
+          "fileCount": 7,
+          "truncated": false,
+          "paths": [
+            "README.md"
+          ]
+        },
+        "handled": null
+      },
+      {
+        "name": "heartbeat paths that hold every changed file",
+        "results": [],
+        "current": {
+          "root": "/root/orbit",
+          "state": "dirty",
+          "fileCount": 1,
+          "truncated": false,
+          "paths": [
+            "README.md"
+          ]
+        },
+        "handled": "gone"
+      },
+      {
+        "name": "a refusal, then a clean checkout",
+        "results": [
+          {
+            "requestId": "req-1",
+            "root": "/root/orbit",
+            "finishedAt": "2026-11-12T08:00:00.000Z",
+            "kind": "move",
+            "status": "refused",
+            "code": "MOVE_CONFLICT",
+            "branch": "main",
+            "paths": [
+              "src/api/client.ts"
+            ]
+          }
+        ],
+        "current": {
+          "root": "/root/orbit",
+          "state": "clean",
+          "fileCount": 0,
+          "truncated": false
+        },
+        "handled": "gone"
+      }
+    ]
+  }
 }

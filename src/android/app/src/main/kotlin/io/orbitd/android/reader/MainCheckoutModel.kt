@@ -185,3 +185,6 @@ internal class MainCheckoutModel(private val api: MainCheckoutTransport, val ses
 }
 
 internal val LocalMainCheckout = staticCompositionLocalOf<MainCheckoutModel?> { null }
+
+/** Every main checkout result line of the conversation on screen, by seq: a card reads the ones after it ([MainCheckout.handled]). */
+internal val LocalMainCheckoutResults = staticCompositionLocalOf<List<Pair<Long, MainCheckout.Result>>> { emptyList() }

@@ -79,8 +79,10 @@ struct MainCheckoutCardView: View {
         let ctx = MainCheckoutContext(app: app, console: console)
         let card = MainCheckoutCard(notice)
         let actions = MainCheckoutCard.showsActions(actionsSupported: ctx.actionsSupported,
-                                                    dismissed: console.mainCheckout.dismissedCards.contains(item.id),
-                                                    health: ctx.workspace?.repoHealth)
+                                                    dismissed: console.mainCheckout.dismissedCards.contains(item.id))
+        // Moved, saved or gone: the card stays as history, its buttons held and one muted line saying why.
+        let handled = MainCheckoutCard.handled(notice, seq: item.seq, in: console.state.items,
+                                               health: ctx.workspace?.repoHealth)
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "exclamationmark.circle")
@@ -98,6 +100,7 @@ struct MainCheckoutCardView: View {
                 ForEach(card.visibleFiles) { file in
                     Button { openReview(ctx) } label: { MainCheckoutFileLine(file: file).contentShape(Rectangle()) }
                         .buttonStyle(.plain)
+                        .disabled(handled != nil)
                 }
                 if let more = card.moreFiles { Text(more).font(.orbitLabel).foregroundStyle(.secondary) }
                 if let note = card.truncatedNote { Text(note).font(.orbitLabel).foregroundStyle(.secondary) }
@@ -106,7 +109,10 @@ struct MainCheckoutCardView: View {
             .background(Color.primary.opacity(0.03))
             if actions {
                 Divider()
-                buttons(ctx)
+                buttons(ctx, handled: handled)
+            } else if let handled {
+                Divider()
+                handledLine(handled).padding(12)
             }
         }
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.02)))
@@ -122,8 +128,14 @@ struct MainCheckoutCardView: View {
         return text + Text(tail)
     }
 
+    private func handledLine(_ handled: MainCheckoutCardHandled) -> some View {
+        Text(handled.line).font(.orbitLabel).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("main-checkout-card-handled")
+    }
+
     @ViewBuilder
-    private func buttons(_ ctx: MainCheckoutContext) -> some View {
+    private func buttons(_ ctx: MainCheckoutContext, handled: MainCheckoutCardHandled?) -> some View {
         let model = console.mainCheckout
         VStack(alignment: .leading, spacing: 6) {
             ViewThatFits(in: .horizontal) {
@@ -133,7 +145,10 @@ struct MainCheckoutCardView: View {
                     HStack(spacing: 8) { review(ctx); more(ctx) }
                 }
             }
-            if ctx.isolated, let branch = ctx.sessionBranch {
+            .disabled(handled != nil)
+            if let handled {
+                handledLine(handled)
+            } else if ctx.isolated, let branch = ctx.sessionBranch {
                 (Text("Copies them onto ") + Text(branch).font(.orbitMono)
                     + Text(", then clears them from the main checkout. A recovery branch is saved first."))
                     .font(.orbitLabel).foregroundStyle(.secondary)

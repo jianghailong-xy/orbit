@@ -134,16 +134,72 @@ final class MainCheckoutTests: XCTestCase {
                        "/r, outside this session's worktree. Orbit saw them appear; it can't tell who wrote them.")
     }
 
-    func testCardButtonsNeedTheCapabilityAndAStillDirtyCheckout() {
-        let dirty = RunnerRepoHealth(root: "/r", state: "dirty", branch: "main", paths: nil, fileCount: 3)
-        let clean = RunnerRepoHealth(root: "/r", state: "clean", branch: "main", paths: nil, fileCount: 0)
-        let older = RunnerRepoHealth(root: "/r", state: "dirty", branch: "main", paths: nil)
-        XCTAssertTrue(MainCheckoutCard.showsActions(actionsSupported: true, dismissed: false, health: dirty))
-        XCTAssertTrue(MainCheckoutCard.showsActions(actionsSupported: true, dismissed: false, health: older))
-        XCTAssertTrue(MainCheckoutCard.showsActions(actionsSupported: true, dismissed: false, health: nil))
-        XCTAssertFalse(MainCheckoutCard.showsActions(actionsSupported: false, dismissed: false, health: dirty))
-        XCTAssertFalse(MainCheckoutCard.showsActions(actionsSupported: true, dismissed: true, health: dirty))
-        XCTAssertFalse(MainCheckoutCard.showsActions(actionsSupported: true, dismissed: false, health: clean))
+    func testCardButtonsNeedTheCapabilityAndNoLeaveAsIs() {
+        XCTAssertTrue(MainCheckoutCard.showsActions(actionsSupported: true, dismissed: false))
+        XCTAssertFalse(MainCheckoutCard.showsActions(actionsSupported: false, dismissed: false))
+        XCTAssertFalse(MainCheckoutCard.showsActions(actionsSupported: true, dismissed: true))
+    }
+
+    // MARK: a handled card
+
+    /// Every case the shared fixture holds reads as `mainCheckoutCardHandled` reads it, with its words.
+    func testCardHandledFollowsTheSharedFixture() throws {
+        let fx = try Self.fixture()
+        let notice = try Self.decode(MainCheckoutChangedNotice.self, try XCTUnwrap(fx["changedNotice"]))
+        let block = try XCTUnwrap(fx["cardHandled"] as? [String: Any])
+        let copy = try XCTUnwrap(block["copy"] as? [String: String])
+        XCTAssertEqual(copy["result"], MainCheckoutCopy.cardHandledResult)
+        XCTAssertEqual(copy["gone"], MainCheckoutCopy.cardHandledGone)
+        XCTAssertEqual(MainCheckoutCardHandled.result.line, MainCheckoutCopy.cardHandledResult)
+        XCTAssertEqual(MainCheckoutCardHandled.gone.line, MainCheckoutCopy.cardHandledGone)
+        let cases = try XCTUnwrap(block["cases"] as? [[String: Any]])
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            let name = c["name"] as? String ?? "?"
+            let results = try Self.decode([MainCheckoutActionResult].self, try XCTUnwrap(c["results"]))
+            let current = c["current"] as? [String: Any]
+            let listed = (current?["files"] as? [[String: Any]])?.compactMap { $0["path"] as? String }
+                ?? current?["paths"] as? [String]
+            let got = MainCheckoutCard.handled(notice, laterResults: results, root: current?["root"] as? String,
+                                               fileCount: current?["fileCount"] as? Int,
+                                               truncated: current?["truncated"] as? Bool, listed: listed)
+            XCTAssertEqual(got?.rawValue, c["handled"] as? String, name)
+            if current?["files"] == nil {
+                let health = try current.map { try Self.decode(RunnerRepoHealth.self, $0) }
+                XCTAssertEqual(MainCheckoutCard.handled(notice, laterResults: results, health: health)?.rawValue,
+                               c["handled"] as? String, name)
+            }
+        }
+    }
+
+    /// The card reads the result lines after it in the transcript: a Move that took its files holds its
+    /// actions, a refusal or a result before it leaves them live, and a clean checkout says they're gone.
+    func testCardHandledReadsTheResultsAfterItInTheTranscript() throws {
+        let fx = try Self.fixture()
+        let changed = try XCTUnwrap(fx["changedNotice"])
+        let notice = try Self.decode(MainCheckoutChangedNotice.self, changed)
+        let results = try XCTUnwrap(fx["results"] as? [[String: Any]])
+        func payload(_ name: String) throws -> [String: Any] {
+            let r = try XCTUnwrap(results.first { $0["name"] as? String == name }, name)
+            return ["noticeKind": "main-checkout-action-result", "notice": r["text"] as Any, "result": r["result"] as Any]
+        }
+        let dirty = RunnerRepoHealth(root: "/root/orbit", state: "dirty", branch: "main", paths: ["src/api/client.ts"],
+                                     fileCount: 3)
+        func items(_ events: [RunEvent]) -> [TranscriptItem] {
+            var r = TranscriptReducer()
+            for e in events { r.apply(e) }
+            return r.state.items
+        }
+        let moved = items([try Self.systemEvent(seq: 1, changed), try Self.systemEvent(seq: 2, try payload("move done"))])
+        XCTAssertEqual(MainCheckoutCard.handled(notice, seq: 1, in: moved, health: dirty), .result)
+        let refused = items([try Self.systemEvent(seq: 1, changed), try Self.systemEvent(seq: 2, try payload("MOVE_CONFLICT"))])
+        XCTAssertNil(MainCheckoutCard.handled(notice, seq: 1, in: refused, health: dirty))
+        let before = items([try Self.systemEvent(seq: 1, try payload("move done")), try Self.systemEvent(seq: 2, changed)])
+        XCTAssertNil(MainCheckoutCard.handled(notice, seq: 2, in: before, health: dirty))
+        let clean = RunnerRepoHealth(root: "/root/orbit", state: "clean", branch: "main", paths: nil, fileCount: 0)
+        XCTAssertEqual(MainCheckoutCard.handled(notice, seq: 1, in: refused, health: clean), .gone)
+        XCTAssertNil(MainCheckoutCard.handled(notice, seq: 1, in: refused,
+                                              health: RunnerRepoHealth(root: "/root/orbit", state: "dirty", branch: "main", paths: nil)))
     }
 
     // MARK: reducer

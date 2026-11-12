@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   MAIN_CHECKOUT_ACTION_KINDS,
+  MAIN_CHECKOUT_CARD_HANDLED_COPY,
   MAIN_CHECKOUT_FILE_LIMIT,
   MAIN_CHECKOUT_GIT_CAPABILITY,
   MAIN_CHECKOUT_LINK_ACTIONS,
@@ -11,6 +12,7 @@ import {
   MAIN_CHECKOUT_REFUSAL_CODES,
   WORKTREE_ISOLATION_DIALOG_COPY,
   mainCheckoutBarStatus,
+  mainCheckoutCardHandled,
   mainCheckoutCardSubtitle,
   mainCheckoutCardTitle,
   mainCheckoutCommitButton,
@@ -24,7 +26,9 @@ import {
   type MainCheckoutActionCommand,
   type MainCheckoutActionRequest,
   type MainCheckoutActionResult,
+  type MainCheckoutCardHandled,
   type MainCheckoutChangedNotice,
+  type MainCheckoutCurrent,
   type MainCheckoutFile,
   type MainCheckoutLineView,
   type MainCheckoutRepoHealth,
@@ -62,6 +66,15 @@ const fixture = JSON.parse(readFileSync(path.join(__dirname, 'main-checkout-git.
   command: MainCheckoutActionCommand;
   changedNotice: MainCheckoutChangedNotice;
   results: FixtureResult[];
+  cardHandled: {
+    copy: Record<string, string>;
+    cases: Array<{
+      name: string;
+      results: MainCheckoutActionResult[];
+      current: MainCheckoutCurrent | null;
+      handled: MainCheckoutCardHandled | null;
+    }>;
+  };
 };
 
 /** The fingerprint definition, written out here and in the Go test — never in product code, which is the
@@ -194,5 +207,14 @@ describe('main checkout Git contract', () => {
     expect(WORKTREE_ISOLATION_DIALOG_COPY.unchanged).toBe(
       'Nothing in the checkout is changed. Sessions already running keep working in the main checkout until they end.',
     );
+  });
+
+  it('retires a card once its changes were moved, saved or are gone, and only then', () => {
+    expect(fixture.cardHandled.copy).toEqual(MAIN_CHECKOUT_CARD_HANDLED_COPY);
+    for (const c of fixture.cardHandled.cases) {
+      expect(mainCheckoutCardHandled(fixture.changedNotice, c.results, c.current), c.name).toBe(c.handled);
+    }
+    expect(mainCheckoutCardHandled(fixture.changedNotice, [], fixture.heartbeatRepo)).toBeNull();
+    expect(mainCheckoutCardHandled(fixture.changedNotice, [], fixture.snapshot)).toBeNull();
   });
 });

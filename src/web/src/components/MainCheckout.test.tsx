@@ -206,6 +206,97 @@ describe('the main checkout card (board 01 B)', () => {
   });
 });
 
+describe('a handled main checkout card', () => {
+  const MOVED: MainCheckoutActionResult = {
+    requestId: 'req-1',
+    kind: 'move',
+    root: '/root/orbit',
+    status: 'done',
+    branch: 'main',
+    fileCount: 3,
+    remaining: 0,
+    rescueBranch: 'orbit/rescue-5f2c1a9',
+    targetSessionId: 'sess-1',
+    targetBranch: 'orbit/fix-retry-backoff',
+    finishedAt: '2026-11-12T08:00:00.000Z',
+  };
+  const CONFLICT: MainCheckoutActionResult = {
+    requestId: 'req-2',
+    kind: 'move',
+    root: '/root/orbit',
+    status: 'refused',
+    code: 'MOVE_CONFLICT',
+    branch: 'main',
+    paths: ['src/api/client.ts'],
+    finishedAt: '2026-11-12T08:00:00.000Z',
+  };
+  const event = (seq: number, payload: unknown) => ({ seq, type: 'system', payload: payload as Record<string, unknown> });
+  const resultEvent = (seq: number, result: MainCheckoutActionResult) =>
+    event(seq, { noticeKind: 'main-checkout-action-result', notice: mainCheckoutResultLine(result).text, result });
+  const actionButtons = (view: HTMLElement) => [...view.querySelectorAll<HTMLButtonElement>('.mck-card-buttons > button')];
+  const HEALTH_DIRTY = { root: '/root/orbit', state: 'dirty', branch: 'main', paths: [], fileCount: 3 };
+
+  it('holds its buttons and says so once a Move after it in the same session succeeded', async () => {
+    const host = makeHost({ health: HEALTH_DIRTY });
+    const view = await mount(<Transcript events={[event(1, NOTICE), resultEvent(2, MOVED)]} />, host);
+    const card = view.querySelector<HTMLElement>('.mck-card')!;
+    expect(actionButtons(card).map((b) => [b.textContent, b.disabled])).toEqual([
+      ['Move to this worktree', true],
+      ['Review and commit to main…', true],
+      ['⋯', true],
+    ]);
+    expect(card.querySelector<HTMLButtonElement>('.mck-file')?.disabled).toBe(true);
+    expect(card.querySelector('.mck-card-handled')?.textContent).toBe('Handled — see the result below');
+    expect(card.textContent).not.toContain('Copies them onto');
+    // The card is still history: its title and files stay, and the result line follows it.
+    expect(card.querySelectorAll('.mck-file')).toHaveLength(3);
+    expect(view.querySelector('.mck-result')?.textContent).toContain('Moved 3 files into this worktree.');
+    await click(button(card, 'Move to this worktree'));
+    expect(host.move).not.toHaveBeenCalled();
+  });
+
+  it('is handled by a Save to a rescue branch too', async () => {
+    const saved: MainCheckoutActionResult = { ...MOVED, kind: 'rescue', fileCount: 3, head: '62325fb4a1c0' };
+    const view = await mount(<Transcript events={[event(1, NOTICE), resultEvent(2, saved)]} />, makeHost({ health: HEALTH_DIRTY }));
+    expect(actionButtons(view).every((b) => b.disabled)).toBe(true);
+    expect(view.querySelector('.mck-card-handled')?.textContent).toBe('Handled — see the result below');
+  });
+
+  it('says its changes are gone once the checkout no longer holds any of its paths', async () => {
+    const view = await mount(
+      <Transcript events={[event(1, NOTICE)]} />,
+      makeHost({ health: { ...HEALTH_DIRTY, state: 'clean', fileCount: 0 } }),
+    );
+    expect(actionButtons(view).every((b) => b.disabled)).toBe(true);
+    expect(view.querySelector('.mck-card-handled')?.textContent).toBe('These changes are no longer in the main checkout');
+  });
+
+  it('stays live after a refusal, after a move of only some of its files, and for a result written before it', async () => {
+    for (const events of [
+      [event(1, NOTICE), resultEvent(2, CONFLICT)],
+      [event(1, NOTICE), resultEvent(2, { ...MOVED, fileCount: 1, remaining: 2 })],
+      [resultEvent(1, MOVED), event(2, NOTICE)],
+    ]) {
+      const view = await mount(<Transcript events={events} />, makeHost({ health: HEALTH_DIRTY }));
+      expect(actionButtons(view).map((b) => b.disabled)).toEqual([false, false, false]);
+      expect(view.querySelector('.mck-card-handled')).toBeNull();
+      expect(view.querySelector('.mck-card-hint')?.textContent).toContain('Copies them onto');
+      await act(async () => root!.unmount());
+      root = null;
+      container?.remove();
+    }
+  });
+
+  it('keeps the line when its buttons were left or the runner offers none', async () => {
+    const view = await mount(
+      <Transcript events={[event(1, NOTICE), resultEvent(2, MOVED)]} />,
+      makeHost({ actionsSupported: false }),
+    );
+    expect(view.querySelector('.mck-card-buttons')).toBeNull();
+    expect(view.querySelector('.mck-card-handled')?.textContent).toBe('Handled — see the result below');
+  });
+});
+
 const HEALTH = { root: '/root/orbit', state: 'dirty', branch: 'main', paths: [], fileCount: 3, ahead: 0, upstream: 'origin/main' };
 
 describe('the main checkout bar (board 01⑤ / 02④)', () => {

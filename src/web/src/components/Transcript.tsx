@@ -86,7 +86,7 @@ import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import { MainCheckoutCard, MainCheckoutResultRow } from './MainCheckout';
-import { isMainCheckoutChanged, isMainCheckoutResult } from '../lib/mainCheckout';
+import { MainCheckoutResultsCtx, isMainCheckoutChanged, isMainCheckoutResult } from '../lib/mainCheckout';
 import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit/shared';
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
@@ -1815,17 +1815,27 @@ export const Transcript = memo(function Transcript({
     for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'turn_end') return events[i].seq;
     return 0;
   }, [events]);
+  // The main-checkout cards read the result lines written after them (MainCheckoutCard's handled state).
+  const mainCheckoutResults = useMemo(
+    () =>
+      events.flatMap((ev) =>
+        ev.type === 'system' && isMainCheckoutResult(ev.payload) ? [{ seq: ev.seq, result: ev.payload.result }] : [],
+      ),
+    [events],
+  );
   const body = (
-    <TaskLookupCtx.Provider value={taskLookup}>
-      <ImagePreviewProvider>
-        {head.map((insert) => (
-          <Fragment key={insert.key}>{insert.element}</Fragment>
-        ))}
-        <NodeList nodes={before} live={live} placed={placed} />
-        <StreamingDrafts lastTurnEnd={lastTurnEnd} />
-        {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
-      </ImagePreviewProvider>
-    </TaskLookupCtx.Provider>
+    <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
+      <TaskLookupCtx.Provider value={taskLookup}>
+        <ImagePreviewProvider>
+          {head.map((insert) => (
+            <Fragment key={insert.key}>{insert.element}</Fragment>
+          ))}
+          <NodeList nodes={before} live={live} placed={placed} />
+          <StreamingDrafts lastTurnEnd={lastTurnEnd} />
+          {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
+        </ImagePreviewProvider>
+      </TaskLookupCtx.Provider>
+    </MainCheckoutResultsCtx.Provider>
   );
   return artifactResolve ? (
     <ArtifactResolverContext.Provider value={artifactResolve}>{body}</ArtifactResolverContext.Provider>

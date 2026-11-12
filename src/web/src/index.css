@@ -27522,6 +27522,12 @@ button.agent-progress-agent:hover {
 .mck-card-actions {
   padding: 10px 14px 12px 42px;
 }
+/* A handled card: history, its buttons unpressable and this line under them. */
+.mck-card-handled {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .mck-card-buttons {
   display: flex;
   flex-wrap: wrap;

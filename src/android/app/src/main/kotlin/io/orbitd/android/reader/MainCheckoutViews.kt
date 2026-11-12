@@ -69,12 +69,17 @@ private fun FileLine(file: MainCheckout.File, modifier: Modifier = Modifier, lea
  * recommended action (Move to this worktree), the review, and the rest under ⋯. Without the runner's capability it is the text alone.
  */
 @Composable
-internal fun MainCheckoutCard(notice: MainCheckout.ChangedNotice, key: String) {
+internal fun MainCheckoutCard(notice: MainCheckout.ChangedNotice, key: String, seq: Long? = null) {
     val model = LocalMainCheckout.current
     val console = LocalSessionConsole.current
     val detail = console?.detail
     val mc = model?.state?.collectAsState()?.value
     val actions = model != null && mc?.workspace != null && model.actionsSupported
+    // Moved, saved or gone: the card stays as history, its buttons held and one muted line saying why.
+    val results = LocalMainCheckoutResults.current
+    val handled = MainCheckout.handled(notice, results.filter { seq == null || it.first > seq }.map { it.second },
+        mc?.workspace?.get("repoHealth") as? JsonObject)
+    val busy = mc?.busy == true || handled != null
     val isolated = detail.isolated()
     val sessionBranch = detail?.string("branch")
     val branch = notice.branch ?: "HEAD"
@@ -100,7 +105,7 @@ internal fun MainCheckoutCard(notice: MainCheckout.ChangedNotice, key: String) {
         Column(Modifier.padding(top = 10.dp).fillMaxWidth().background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f))
             .padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             notice.files.take(MainCheckout.CARD_VISIBLE_FILES).forEach { f ->
-                FileLine(f, Modifier.clickable(enabled = actions, onClickLabel = MainCheckout.COPY_REVIEW_MAIN_CHECKOUT) {
+                FileLine(f, Modifier.clickable(enabled = actions && handled == null, onClickLabel = MainCheckout.COPY_REVIEW_MAIN_CHECKOUT) {
                     model?.open(MainCheckoutState.Sheet.REVIEW)
                 }.padding(start = 30.dp))
             }
@@ -111,16 +116,16 @@ internal fun MainCheckoutCard(notice: MainCheckout.ChangedNotice, key: String) {
         if (actions && !left) Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
                 itemVerticalAlignment = Alignment.CenterVertically) {
-                if (isolated && model?.sessionId != null) Button(enabled = mc?.busy != true, onClick = {
+                if (isolated && model?.sessionId != null) Button(enabled = !busy, onClick = {
                     model.request({ MainCheckout.move(notice.root, notice.fingerprint, notice.files.map { it.path }, model.sessionId, it, model.sessionId) })
                 }, contentPadding = PaddingValues(horizontal = 14.dp)) { Text(MainCheckout.COPY_MOVE_TO_THIS_WORKTREE) }
-                OutlinedButton(onClick = { model?.open(MainCheckoutState.Sheet.REVIEW) }, contentPadding = PaddingValues(horizontal = 14.dp)) {
+                OutlinedButton(enabled = handled == null, onClick = { model?.open(MainCheckoutState.Sheet.REVIEW) }, contentPadding = PaddingValues(horizontal = 14.dp)) {
                     Text(MainCheckout.reviewAndCommit(branch), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Box {
-                    TextButton(onClick = { menu = true }, Modifier.semantics { contentDescription = "More actions" }) { Text("⋯", fontWeight = FontWeight.Bold) }
+                    TextButton(enabled = handled == null, onClick = { menu = true }, modifier = Modifier.semantics { contentDescription = "More actions" }) { Text("⋯", fontWeight = FontWeight.Bold) }
                     DropdownMenu(menu, { menu = false }) {
-                        HintedItem(MainCheckout.COPY_SAVE_AND_CLEAN, MainCheckout.COPY_SAVE_AND_CLEAN_HINT, enabled = mc?.busy != true) {
+                        HintedItem(MainCheckout.COPY_SAVE_AND_CLEAN, MainCheckout.COPY_SAVE_AND_CLEAN_HINT, enabled = !busy) {
                             menu = false
                             model?.request({ MainCheckout.rescue(notice.root, notice.fingerprint, it, model.sessionId) })
                         }
@@ -132,14 +137,22 @@ internal fun MainCheckoutCard(notice: MainCheckout.ChangedNotice, key: String) {
                     }
                 }
             }
-            if (isolated && sessionBranch != null) Text(buildAnnotatedString {
+            if (handled != null) HandledLine(handled)
+            else if (isolated && sessionBranch != null) Text(buildAnnotatedString {
                 val hint = MainCheckout.moveHint(sessionBranch)
                 append(hint.substringBefore(sessionBranch))
                 withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(sessionBranch) }
                 append(hint.substringAfter(sessionBranch))
             }, color = secondary, style = MaterialTheme.typography.bodySmall)
-        } else Spacer(Modifier.height(10.dp))
+        } else if (handled != null) Box(Modifier.padding(12.dp)) { HandledLine(handled) }
+        else Spacer(Modifier.height(10.dp))
     }
+}
+
+@Composable
+private fun HandledLine(handled: MainCheckout.Handled) {
+    Text(handled.line, Modifier.testTag("main-checkout-card-handled"), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable
