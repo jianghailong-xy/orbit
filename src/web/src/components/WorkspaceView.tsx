@@ -37,6 +37,7 @@ import {
   PushpinOutlined,
   RightOutlined,
   SearchOutlined,
+  TeamOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
@@ -1311,6 +1312,16 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
   );
 }
 
+/** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
+ *  runner and permission mode, or the workspace's machine when the session names none. */
+const guestContextOf = (s: any, fallbackRunner: string) => ({
+  runnerName: s.assignedRunner?.displayName || s.assignedRunner?.name || fallbackRunner,
+  permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
+});
+
+/** What the two-person icon beside a row's time says: people the owner invited can reply here. */
+export const SESSION_GUESTS_TIP = 'People you invited can reply';
+
 /** What the globe beside a row's time says: a public link opens this session right now. */
 export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
 
@@ -1336,6 +1347,11 @@ export function SessionTitleRow({
       {s.shared === true && (
         <span className="session-shared" title={SESSION_SHARED_TIP} aria-label={SESSION_SHARED_TIP}>
           <GlobalOutlined />
+        </span>
+      )}
+      {s.hasGuests === true && (
+        <span className="session-guests" title={SESSION_GUESTS_TIP} aria-label={SESSION_GUESTS_TIP}>
+          <TeamOutlined />
         </span>
       )}
       <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
@@ -2393,7 +2409,7 @@ export function WorkspaceView({
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
   // A row's Share action opens the share dialog for that row rather than for the open session.
-  const [shareRowId, setShareRowId] = useState<string | null>(null);
+  const [shareRow, setShareRow] = useState<any>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
   const [moveTarget, setMoveTarget] = useState<(MoveDialogSession & {
     workspace?: { id: string; name: string };
@@ -6204,7 +6220,7 @@ export function WorkspaceView({
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
     else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt, projectId: s.projectMembership?.projectId });
-    else if (action === 'share') setShareRowId(s.id);
+    else if (action === 'share') setShareRow(s);
     else if (action === 'move') openMove(s);
     else if (action === 'delete') requestTrash(s, returnFocus);
     else confirmPurge({ id: s.id, title: s.title }, returnFocus);
@@ -9746,10 +9762,17 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
+            guests={guestContextOf(selected, machineName(runner))}
           />
         )}
-        {shareRowId && (
-          <ShareModal open onClose={() => setShareRowId(null)} kind="SESSION" rootId={shareRowId} />
+        {shareRow && (
+          <ShareModal
+            open
+            onClose={() => setShareRow(null)}
+            kind="SESSION"
+            rootId={shareRow.id}
+            guests={guestContextOf(shareRow, machineName(runner))}
+          />
         )}
         <SessionMoveModal
           open={!!moveTarget}

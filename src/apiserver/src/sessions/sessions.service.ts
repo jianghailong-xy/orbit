@@ -3867,6 +3867,7 @@ export class SessionsService {
       pinnedAt: Date | null;
       folderId: string | null;
       shared: boolean;
+      hasGuests: boolean;
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
       runningBgShells: string[];
@@ -3985,6 +3986,12 @@ export class SessionsService {
              AND sl.revoked_at IS NULL
              AND (sl.expires_at IS NULL OR sl.expires_at > now())
         )) AS "shared",
+        -- Whether anyone the owner invited can reply here now (session_guest, 0560): the list's
+        -- two-person icon beside the globe (docs/session-guests-design.md §3).
+        EXISTS (
+          SELECT 1 FROM session_guest sg
+           WHERE sg.session_id = s.id AND sg.removed_at IS NULL
+        ) AS "hasGuests",
         COALESCE((
           SELECT json_agg(json_build_object(
                    'id', st.id, 'name', st.name, 'color', st.color,
@@ -4215,6 +4222,7 @@ export class SessionsService {
         pinnedAt: r.pinnedAt,
         folderId: r.folderId,
         shared: r.shared === true,
+        hasGuests: r.hasGuests === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
@@ -7768,6 +7776,13 @@ export class SessionsService {
     return { ok: true };
   }
 
+  /** Tell the runner and the session's readers that its queue changed: what a withdrawal outside cancelQueuedTurn
+   *  (a session guest's turns going with their invitation, session-guests.service.ts) announces after its commit. */
+  announceQueuedTurnsChanged(id: string) {
+    this.realtime.notifyInbox(id);
+    this.realtime.publishQueuedTurnsChanged(id);
+  }
+
   /**
    * Wait for the runner to say what came of a `withdraw` turn, and answer the person with it. The
    * steer is gone only when the engine said it dropped it; everything else is a refusal naming why.
@@ -9532,6 +9547,12 @@ export class SessionsService {
        */
       senderSessionId?: string;
       /**
+       * Who outside Orbit sent the turn — see `createTurn`'s own. Carried onto both branches: a
+       * guest's message to an ended session revives it (docs/session-guests-design.md §5, D5) and is
+       * no less the guest's for that.
+       */
+      externalSender?: ExternalTurnSender;
+      /**
        * What rides on the turn — see `createTurn`'s own. Carried onto both branches for the reason
        * `senderSessionId` is: a request is no less a request for having woken its recipient up.
        */
@@ -9669,6 +9690,7 @@ export class SessionsService {
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
         senderSessionId: opts?.senderSessionId,
+        externalSender: opts?.externalSender,
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
         translate: opts?.translate,
@@ -9966,6 +9988,7 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
         ...(reviveHeldFrom && dto.content ? heldTurnColumns(dto.content, reviveHeldFrom) : {}),
       });
@@ -10019,7 +10042,9 @@ export class SessionsService {
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
           // turn, and until the runner reports it the row would show the reply from before. With
           // its sender, as there.
-          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
+          ...(dto.content
+            ? pendingMessageColumns(dto.content, sentBy, sentByOrbit, externalSenderOf(externalSenderColumns(opts?.externalSender)))
+            : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,

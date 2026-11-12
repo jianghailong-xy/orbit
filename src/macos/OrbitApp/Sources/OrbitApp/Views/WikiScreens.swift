@@ -412,6 +412,7 @@ struct WikiTopicEntriesPage: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: actions.openContents) { Image(systemName: "list.bullet") }

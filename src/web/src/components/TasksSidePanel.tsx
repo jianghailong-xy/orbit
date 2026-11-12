@@ -52,6 +52,7 @@ import type {
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
+import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
 import {
   avatarQuery,
@@ -1135,6 +1136,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 ))}
             </div>
           )}
+
+          {/* Sessions other people invited you to reply in: the rail's last group (session guests §4). */}
+          <SharedWithMeGroup
+            onOpen={(path) => {
+              onNavigate?.();
+              navigate(path);
+            }}
+          />
         </div>
       </div>
 

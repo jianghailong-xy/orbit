@@ -18,6 +18,11 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /tasks/:taskId/owner-confirmation',
   'POST /tasks/:taskId/evidence/decision',
   'POST /sessions/:id/approvals/:approvalId/decision',
+  // Session guests (docs/session-guests-design.md §3): who may drive the agent on the owner's machine, with the
+  // owner's accounts, is the owner's to decide and to see.
+  'GET /sessions/:id/guests',
+  'POST /sessions/:id/guests',
+  'DELETE /sessions/:id/guests/:userId',
   'POST /projects/:id/acceptance/confirmation',
   'POST /projects/:id/acceptance/criteria-decisions/:intentId',
   'POST /projects/:projectId/promotions/:promotionId/confirm',

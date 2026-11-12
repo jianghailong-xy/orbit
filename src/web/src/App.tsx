@@ -34,6 +34,7 @@ import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
+import { GuestSessionPage } from './pages/GuestSessionPage';
 import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
@@ -137,6 +138,18 @@ export function App() {
       <Route path="/s/:token/c/:sessionId" element={<SharedSessionPage />} />
       <Route path="/s/:token/t/:taskId" element={<SharedProjectTaskRoute />} />
       <Route path="/s/:token/d/:slug" element={<SharedWikiDocRoute />} />
+      {/* A session someone invited you to reply in (docs/session-guests-design.md §4): signed in, in the public
+          page's frame rather than the app's, since none of it is yours. */}
+      <Route
+        path="/g/:sessionId"
+        element={
+          authed ? (
+            <GuestSessionPage />
+          ) : (
+            <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname)}`} replace />
+          )
+        }
+      />
       {/* The privacy policy, which Google's consent screen and the login page link to: public, and the
           same page signed out or in. */}
       <Route path="/privacy" element={<PrivacyPage />} />

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>iOS 项目会话页：顶部也用软边</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #eef0f3; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1c1c1e; }
+  .b-part { padding: 28px 32px 32px; width: 1100px; }
+  .b-part h1 { font-size: 26px; margin-bottom: 4px; }
+  .b-part h2 { font-size: 20px; margin: 22px 0 10px; }
+  .b-sub { color: #6b6b70; margin-bottom: 18px; }
+  .b-row { display: flex; gap: 40px; align-items: flex-start; }
+  .b-col { width: 480px; }
+  .b-cap { font-weight: 600; font-size: 17px; margin: 0 0 8px; }
+  .b-cap small { font-weight: 400; color: #6b6b70; font-size: 14px; margin-left: 6px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-left: 6px; vertical-align: 2px; }
+  .b-tag.now { background: #e5e5ea; color: #48484a; }
+  .b-tag.rec { background: #d6f0dc; color: #1a7f37; }
+  .b-notes { margin-top: 12px; font-size: 14px; color: #3a3a3c; }
+  .b-notes li { margin: 0 0 4px 18px; }
+  table.b-t { border-collapse: collapse; font-size: 14px; }
+  table.b-t td, table.b-t th { border: 1px solid #d1d1d6; padding: 6px 10px; text-align: left; vertical-align: top; background: #fff; }
+  table.b-t th { background: #f2f2f7; }
+  code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: #e9e9ee; padding: 0 4px; border-radius: 4px; }
+
+  .ph { width: 440px; height: 470px; border-radius: 44px 44px 0 0; overflow: hidden; position: relative; background: #000; color: #fff;
+        box-shadow: 0 0 0 1px #c7c7cc, 0 8px 24px rgba(0,0,0,.12); }
+  .list { position: absolute; left: 0; right: 0; }
+  .sec { padding: 14px 20px 6px; font-size: 19px; font-weight: 600; color: #8e8e93; }
+  .row { margin-left: 20px; padding: 14px 20px 14px 0; border-bottom: .5px solid #38383a; }
+  .row .t { display: flex; font-size: 18px; white-space: nowrap; }
+  .row .t span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; padding-right: 12px; }
+  .row .t span:last-child { color: #8e8e93; font-size: 14px; }
+  .row .s { color: #8e8e93; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .hard { position: absolute; z-index: 4; left: 0; right: 0; top: 0; height: 156px; background: rgba(28,28,30,.86); backdrop-filter: blur(18px);
+          border-bottom: .5px solid rgba(255,255,255,.18); }
+  .pin { position: absolute; z-index: 5; left: 0; right: 0; top: 116px; padding: 6px 20px; font-size: 19px; font-weight: 600; color: #8e8e93; }
+  .soft { position: absolute; z-index: 4; left: 0; right: 0; top: 0; height: 190px; pointer-events: none; }
+  .soft > div { position: absolute; inset: 0; }
+  .soft .b1 { backdrop-filter: blur(2px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 60%, transparent 100%); }
+  .soft .b2 { backdrop-filter: blur(8px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 80%); }
+  .soft .b3 { backdrop-filter: blur(16px); -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 40%, transparent 65%); }
+  .soft .w { background: linear-gradient(to bottom, rgba(0,0,0,.95) 0, rgba(0,0,0,.85) 55%, rgba(0,0,0,.4) 82%, rgba(0,0,0,0) 100%); }
+
+  .sb { position: absolute; z-index: 7; left: 0; right: 0; top: 0; height: 50px; font-weight: 600; font-size: 17px; }
+  .sb .tm { position: absolute; left: 52px; top: 12px; }
+  .sb .tf { position: absolute; left: 12px; top: 34px; font-size: 12px; font-weight: 500; }
+  .sb .rt { position: absolute; right: 36px; top: 14px; font-size: 14px; }
+  .disc { position: absolute; z-index: 6; top: 62px; width: 44px; height: 44px; border-radius: 50%; background: rgba(60,60,64,.75);
+          border: .5px solid rgba(255,255,255,.12); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .ttl { position: absolute; z-index: 6; left: 80px; right: 80px; top: 62px; text-align: center; line-height: 22px; }
+  .ttl .a { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ttl .b { font-size: 12.5px; color: #8e8e93; }
+
+  .mk { position: absolute; z-index: 9; width: 22px; height: 22px; border-radius: 50%; background: #ff3b30; color: #fff;
+        font-size: 13px; font-weight: 700; text-align: center; line-height: 22px; box-shadow: 0 0 0 2px #fff; }
+  .ring { position: absolute; z-index: 8; border: 2px dashed #ff453a; border-radius: 8px; }
+</style>
+</head>
+<body>
+<section class="b-part" id="part-1">
+  <h1>iOS 项目会话页：顶部也用软边</h1>
+  <p class="b-sub">440 pt 宽、深色，列表已上滚，“Today”分组头吸在标题下。和会话列表同一种处理：不画磨砂条和线，越往上越糊、越淡。分组文件夹页（同样的结构）一起改。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <p class="b-cap">① 今天<span class="b-tag now">beta.239</span><small>iOS 26 自选的 hard 边</small></p>
+      <div class="ph" id="p1"></div>
+      <ul class="b-notes">
+        <li><b>1</b> 一块不透明的磨砂条连同吸顶的“Today”一起盖到 156 pt，下沿一根发丝线；会话在线下被一刀切开，线上还透着一行糊字。</li>
+      </ul>
+    </div>
+    <div class="b-col">
+      <p class="b-cap">② 建议<span class="b-tag rec">推荐</span><small>soft 边，同会话列表</small></p>
+      <div class="ph" id="p2"></div>
+      <ul class="b-notes">
+        <li><b>1</b> 没有线、没有色块：吸顶的“Today”直接浮在软边上，下面的会话淡出到它后面。</li>
+        <li>返回、标题、右上按钮原样不动；标题字重见 D2。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>待定 · 要你拍板</h2>
+  <table class="b-t">
+    <tr><th></th><th>方案 A（推荐）</th><th>方案 B</th></tr>
+    <tr><td>D1 顶部边</td><td>soft（②）</td><td>保持今天</td></tr>
+    <tr><td>D2 标题字重</td><td>保持 semibold：这是带副标题的两行页面标题，和会话页的标题同一种；只改这一页会和会话页对不上</td><td>改 medium，和会话列表的工作区名一样</td></tr>
+    <tr><td>D3 范围</td><td>项目会话页 + 分组文件夹页</td><td>只改项目会话页</td></tr>
+  </table>
+  <h2>落地（按代价排）</h2>
+  <table class="b-t">
+    <tr><th>改动</th><th>位置</th><th>代价</th></tr>
+    <tr><td>列表加 <code>.softTopEdgeEffect()</code>（beta.236 加的同一个，系统画）</td><td>SessionProjectPage.swift、SessionFolderPage.swift</td><td>各 1 行</td></tr>
+    <tr><td>真机核对吸顶分组头在软边上是否清楚</td><td>—</td><td>一次 beta</td></tr>
+  </table>
+</section>
+<script>
+const rows = [
+  ['Task: Evidence P5 clients · copy-parity te…','Background process running…','just now'],
+  ['Task: Evidence X · staging drill with a real…','Background process running…','just now'],
+];
+const yest = [
+  ['Task: Evidence P4 · addressee read model…','Revision 2 submitted after fixing Android p…','1h ago'],
+  ['Task: Evidence P3 Android · Restart the tas…','Android evidence card now shows Restart t…','2h ago'],
+  ['Task: Evidence P3 iOS/macOS · Restart the…','CI run: iOS build and iPhone shots pass…','2h ago'],
+  ['Task: Evidence P3 web · Restart the task o…','Web owner evidence row now offers Restart…','3h ago'],
+];
+const r = a => a.map(x => `<div class="row"><div class="t"><span>${x[0]}</span><span>${x[2]}</span></div><div class="s">${x[1]}</div></div>`).join('');
+function phone(id, soft, marks) {
+  document.getElementById(id).innerHTML = `
+    <div class="list" style="top:${118 - 50}px">${r(rows)}<div class="sec" style="padding-top:44px">Yesterday</div>${r(yest)}</div>
+    ${soft ? '<div class="soft"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="w"></div></div>' : '<div class="hard"></div>'}
+    <div class="pin">Today</div>
+    <div class="sb"><span class="tm">12:04</span><span class="tf">◀ TestFlight</span><span class="rt">▂▄▆█ ◠ 81</span></div>
+    <div class="disc" style="left:20px">‹</div>
+    <div class="ttl"><div class="a" style="font-weight:600">Evidence always has an add…</div><div class="b">Project · 11 sessions</div></div>
+    <div class="disc" style="left:376px">▦</div>
+    ${marks}`;
+}
+phone('p1', false, '<div class="ring" style="left:6px;top:148px;width:428px;height:24px"></div><div class="mk" style="left:404px;top:166px">1</div>');
+phone('p2', true, '<div class="ring" style="left:6px;top:110px;width:428px;height:80px;border-radius:12px"></div><div class="mk" style="left:404px;top:180px">1</div>');
+</script>
+</body>
+</html>

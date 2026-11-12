@@ -86,9 +86,9 @@ final class SharePanelWiringTests: XCTestCase {
         // (`ShareEntriesWiringTests` holds the rows to that).
         let opened: [(String, String, String, [String])] = [
             ("Views/Console/ConsoleView.swift", ".sheet(isPresented: $showShare)",
-             "ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)", []),
+             "ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore,", []),
             ("Views/AgentsView.swift", ".sheet(item: $sharingSession)",
-             "ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)", ["os(iOS)"]),
+             "ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,", ["os(iOS)"]),
             ("Views/TasksView.swift", ".sheet(isPresented: $sharing)",
              "ShareSheet(kind: .task, rootID: taskID, baseURL: baseURL, tokenStore: model.tokenStore)", []),
             ("Views/ProjectsView.swift", ".sheet(isPresented: $sharing)",
