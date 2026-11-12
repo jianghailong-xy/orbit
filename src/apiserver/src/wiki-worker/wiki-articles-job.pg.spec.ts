@@ -292,7 +292,11 @@ function config(h: Harness): WikiSystemModelConfig {
   });
 }
 
-/** The workers a case started: stopped after it, so a case that fails halfway leaves nothing claiming. */
+/**
+ * The workers a case started: stopped after it, so a case that fails halfway leaves nothing claiming. Its jobs end with
+ * it too: the next case's worker claims for every owner, so a job a case left queued or running (a failed assertion,
+ * or a job taken again after its hand-back) would run there and answer that case's model calls.
+ */
 const live: Array<{ queue: WikiModelRequestQueue; executor: WikiJobExecutor }> = [];
 
 afterEach(async () => {
@@ -300,6 +304,8 @@ afterEach(async () => {
     await one.executor.onModuleDestroy().catch(() => undefined);
     await one.queue.onModuleDestroy().catch(() => undefined);
   }
+  const h = await harness?.catch(() => undefined);
+  if (h && h.owners.length > 0) await h.sql.query('DELETE FROM "wiki_job" WHERE "owner_id" = ANY($1::uuid[])', [h.owners]);
 });
 
 function worker(h: Harness, extra: { snapshotWaitMs?: number } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
