@@ -86,8 +86,8 @@ class RunnerUpdateNowTest {
             assertTrue("runnerCopy.ts does not say \"$words\"", copy.contains(words))
         }
         assertTrue(copy.contains("`Interrupt \${turns} Turns and Update`"))
-        assertTrue(copy.contains("`\${turns} interrupted turns continue once it is back. \${RUNNER_UPDATE_RESTARTING_BODY}`"))
-        assertTrue(copy.contains("`\${interruptedTurns} interrupted turns resumed.`"))
+        assertTrue(copy.contains("`\${turns} interrupted turns continue once it is back. Usually under a minute.`"))
+        assertTrue(copy.contains("`\${turns} interrupted turns resumed.`"))
         // Android titles its interrupt rows (`Interrupted — the runner restarted`, as iOS does); the web's `⊘ interrupted — …` line says the same.
         assertTrue(copy.contains("`⊘ interrupted — the runner updated to \${version}`") && copy.contains("'⊘ interrupted — the runner updated'"))
     }

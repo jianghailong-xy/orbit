@@ -79,3 +79,52 @@ public enum RunnerUpdateNow {
         isResume(text) ? resumeNote : nil
     }
 }
+
+/// The choices between the sentences RunnerPageCopy declares one by one (as web's runnerCopy.ts does, which
+/// RunnerPageCopyParityTests reads sentence by sentence): kept out of RunnerPageCopy.swift, as the web
+/// keeps them out of runnerCopy.ts (runnerUpdateNow.ts, runnerUpdateCard.ts).
+extension RunnerPageCopy {
+    /// How long the Updated card stays: a day, then About's Last Update says it (board 4).
+    public static let RUNNER_UPDATE_TAG_UPDATED_HOURS = 24
+
+    /// Restarting for the owner's Update Now: `2 interrupted turns continue once it is back. Usually under a minute.`
+    public static func runnerUpdateRestartingBodyInterrupted(turns: Int) -> String {
+        turns == 1 ? RUNNER_UPDATE_RESTARTING_BODY_ONE : runnerUpdateRestartingBodyMany(turns: turns)
+    }
+
+    /// `34 s`, `1 min 12 s`, `2 min`.
+    public static func runnerUpdateTook(seconds: Int) -> String {
+        if seconds < 60 { return runnerUpdateTookSeconds(seconds: seconds) }
+        let rest = seconds % 60
+        return rest > 0 ? runnerUpdateTookMinutesSeconds(minutes: seconds / 60, seconds: rest) : runnerUpdateTookMinutes(minutes: seconds / 60)
+    }
+
+    /// `Took 34 s. 2 interrupted turns resumed.`; either half alone when the runner measured only that.
+    public static func runnerUpdateUpdatedBody(took: String?, interruptedTurns: Int) -> String {
+        var parts: [String] = []
+        if let took { parts.append(runnerUpdateUpdatedTook(took: took)) }
+        if interruptedTurns == 1 {
+            parts.append(RUNNER_UPDATE_RESUMED_ONE)
+        } else if interruptedTurns > 1 {
+            parts.append(runnerUpdateResumedMany(turns: interruptedTurns))
+        }
+        return parts.joined(separator: " ")
+    }
+
+    /// The confirmation's first paragraph, by how many turns it interrupts.
+    public static func runnerUpdateNowBody(version: String, turns: Int) -> String {
+        if turns == 0 { return runnerUpdateNowBodyNone(version: version) }
+        return turns == 1 ? runnerUpdateNowBodyOne(version: version) : runnerUpdateNowBodyMany(version: version)
+    }
+
+    /// The red button: `Interrupt 2 Turns and Update`; with nothing running, `Update Now`.
+    public static func runnerUpdateNowConfirm(turns: Int) -> String {
+        if turns == 0 { return RUNNER_UPDATE_NOW_CONFIRM }
+        return turns == 1 ? RUNNER_UPDATE_NOW_CONFIRM_ONE : runnerUpdateNowConfirmMany(turns: turns)
+    }
+
+    /// The transcript's line for an interrupt the owner's Update Now made.
+    public static func runnerUpdateInterruptedLine(version: String?) -> String {
+        version.map { runnerUpdateInterruptedTo(version: $0) } ?? RUNNER_UPDATE_INTERRUPTED
+    }
+}

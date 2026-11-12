@@ -538,31 +538,34 @@ export function runnerUpdateRestartingTitle(version: string): string {
   return `Restarting into ${version}…`;
 }
 export const RUNNER_UPDATE_RESTARTING_BODY = 'Usually under a minute.';
-/** Restarting for the owner's Update Now: `2 interrupted turns continue once it is back. Usually under a minute.` */
-export function runnerUpdateRestartingBodyInterrupted(turns: number): string {
-  return turns === 1
-    ? `1 interrupted turn continues once it is back. ${RUNNER_UPDATE_RESTARTING_BODY}`
-    : `${turns} interrupted turns continue once it is back. ${RUNNER_UPDATE_RESTARTING_BODY}`;
+/** Restarting for the owner's Update Now, which interrupted one turn. */
+export const RUNNER_UPDATE_RESTARTING_BODY_ONE = '1 interrupted turn continues once it is back. Usually under a minute.';
+/** ...or several: `2 interrupted turns continue once it is back. Usually under a minute.` */
+export function runnerUpdateRestartingBodyMany(turns: number): string {
+  return `${turns} interrupted turns continue once it is back. Usually under a minute.`;
 }
 
-// The Updated card (board 4): shown for a day after the update, then About's Last Update says it.
-export const RUNNER_UPDATE_TAG_UPDATED_HOURS = 24;
+// The Updated card (board 4): shown for a day after the update (runnerUpdateCard), then About's Last Update says it.
 export function runnerUpdateUpdatedTitle(version: string): string {
   return `Updated to ${version}`;
 }
-/** `34 s`, `1 min 12 s`. */
-export function runnerUpdateTook(seconds: number): string {
-  if (seconds < 60) return `${seconds} s`;
-  const rest = seconds % 60;
-  return rest ? `${Math.floor(seconds / 60)} min ${rest} s` : `${Math.floor(seconds / 60)} min`;
+/** How long the restart took: `34 s`, `1 min 12 s`, `2 min`. */
+export function runnerUpdateTookSeconds(seconds: number): string {
+  return `${seconds} s`;
 }
-/** `Took 34 s. 2 interrupted turns resumed.`; either half alone when the runner measured only that. */
-export function runnerUpdateUpdatedBody(took: string | null, interruptedTurns: number): string {
-  const parts: string[] = [];
-  if (took) parts.push(`Took ${took}.`);
-  if (interruptedTurns === 1) parts.push('1 interrupted turn resumed.');
-  else if (interruptedTurns > 1) parts.push(`${interruptedTurns} interrupted turns resumed.`);
-  return parts.join(' ');
+export function runnerUpdateTookMinutesSeconds(minutes: number, seconds: number): string {
+  return `${minutes} min ${seconds} s`;
+}
+export function runnerUpdateTookMinutes(minutes: number): string {
+  return `${minutes} min`;
+}
+/** The Updated card's body: `Took 34 s.`, then what became of the turns Update Now interrupted. */
+export function runnerUpdateUpdatedTook(took: string): string {
+  return `Took ${took}.`;
+}
+export const RUNNER_UPDATE_RESUMED_ONE = '1 interrupted turn resumed.';
+export function runnerUpdateResumedMany(turns: number): string {
+  return `${turns} interrupted turns resumed.`;
 }
 
 // Update Now… (board 3 ⑧ on the web; board 5's confirmation on iOS and Android): install the waiting
@@ -570,21 +573,23 @@ export function runnerUpdateUpdatedBody(took: string | null, interruptedTurns: n
 export function runnerUpdateNowTitle(runner: string): string {
   return `Update ${runner} now?`;
 }
-/** The confirmation's first paragraph, by how many turns it interrupts. */
-export function runnerUpdateNowBody(version: string, turns: number): string {
-  if (turns === 0) return `No turn is running. It installs ${version} and restarts — usually under a minute.`;
-  if (turns === 1) {
-    return `It stops this turn, installs ${version} and restarts — usually under a minute. It then continues where it stopped, with a note that the update interrupted it.`;
-  }
+/** The confirmation's first paragraph, by how many turns it interrupts: none, one, several. */
+export function runnerUpdateNowBodyNone(version: string): string {
+  return `No turn is running. It installs ${version} and restarts — usually under a minute.`;
+}
+export function runnerUpdateNowBodyOne(version: string): string {
+  return `It stops this turn, installs ${version} and restarts — usually under a minute. It then continues where it stopped, with a note that the update interrupted it.`;
+}
+export function runnerUpdateNowBodyMany(version: string): string {
   return `It stops these turns, installs ${version} and restarts — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it.`;
 }
 /** Below the turns. A self-update re-execs the runner, which hands background jobs on; services stop. */
 export const RUNNER_UPDATE_NOW_JOBS_NOTE =
   'Background jobs in those sessions keep running; services they started are stopped. Waiting work starts once it is back.';
-/** The red button: `Interrupt 2 Turns and Update`; with nothing running, `Update Now`. */
-export function runnerUpdateNowConfirm(turns: number): string {
-  if (turns === 0) return 'Update Now';
-  return turns === 1 ? 'Interrupt 1 Turn and Update' : `Interrupt ${turns} Turns and Update`;
+/** The red button: `Interrupt 1 Turn and Update`, `Interrupt 2 Turns and Update`; with nothing running, RUNNER_UPDATE_NOW_CONFIRM. */
+export const RUNNER_UPDATE_NOW_CONFIRM_ONE = 'Interrupt 1 Turn and Update';
+export function runnerUpdateNowConfirmMany(turns: number): string {
+  return `Interrupt ${turns} Turns and Update`;
 }
 export const RUNNER_UPDATE_NOW_FAILED = 'Couldn’t update the runner';
 /** The toast once the server took it. */
@@ -592,10 +597,12 @@ export function runnerUpdateNowToast(version: string): string {
   return `Restarting into ${version}…`;
 }
 
-// The transcript (D4): the interrupt the update made, and the turn Orbit sent to continue.
-export function runnerUpdateInterruptedLine(version: string | null): string {
-  return version ? `⊘ interrupted — the runner updated to ${version}` : '⊘ interrupted — the runner updated';
+// The transcript (D4): the interrupt the update made.
+export function runnerUpdateInterruptedTo(version: string): string {
+  return `⊘ interrupted — the runner updated to ${version}`;
 }
+/** From a runner that did not name the release. */
+export const RUNNER_UPDATE_INTERRUPTED = '⊘ interrupted — the runner updated';
 
 export function runnerUpdatePostponedTitle(version: string, until: string): string {
   return `${version} postponed until ${until}`;

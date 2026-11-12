@@ -219,54 +219,19 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_UPDATE_UNTITLED_TURN", RunnerPageCopy.RUNNER_UPDATE_UNTITLED_TURN),
         ("RUNNER_UPDATE_NOW_JOBS_NOTE", RunnerPageCopy.RUNNER_UPDATE_NOW_JOBS_NOTE),
         ("RUNNER_UPDATE_NOW_FAILED", RunnerPageCopy.RUNNER_UPDATE_NOW_FAILED),
+        ("RUNNER_UPDATE_RESTARTING_BODY_ONE", RunnerPageCopy.RUNNER_UPDATE_RESTARTING_BODY_ONE),
+        ("RUNNER_UPDATE_RESUMED_ONE", RunnerPageCopy.RUNNER_UPDATE_RESUMED_ONE),
+        ("RUNNER_UPDATE_NOW_CONFIRM_ONE", RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM_ONE),
+        ("RUNNER_UPDATE_INTERRUPTED", RunnerPageCopy.RUNNER_UPDATE_INTERRUPTED),
     ]
 
     /// The numbers the copy declares beside its sentences (`export const NAME = 24;`).
-    private static let numbers: [(name: String, value: Int)] = [
-        ("RUNNER_UPDATE_TAG_UPDATED_HOURS", RunnerPageCopy.RUNNER_UPDATE_TAG_UPDATED_HOURS),
-    ]
+    private static let numbers: [(name: String, value: Int)] = []
 
-    /// The functions that choose between sentences — by a count, or by whether a value is there — so
-    /// their body is more than one template. Each case is one of those sentences: the literal as the
-    /// web writes it (`` `…` `` or `'…'`), what this end says for the inputs given, and the values the
-    /// literal's interpolations take for them (a web constant's are filled in by itself).
-    private static let branching: [(name: String, literal: String, rendered: String, values: [String: String])] = [
-        ("runnerUpdateRestartingBodyInterrupted",
-         "1 interrupted turn continues once it is back. ${RUNNER_UPDATE_RESTARTING_BODY}",
-         RunnerPageCopy.runnerUpdateRestartingBodyInterrupted(turns: 1), [:]),
-        ("runnerUpdateRestartingBodyInterrupted",
-         "${turns} interrupted turns continue once it is back. ${RUNNER_UPDATE_RESTARTING_BODY}",
-         RunnerPageCopy.runnerUpdateRestartingBodyInterrupted(turns: 3), ["turns": "3"]),
-        ("runnerUpdateTook", "${seconds} s", RunnerPageCopy.runnerUpdateTook(seconds: 34), ["seconds": "34"]),
-        ("runnerUpdateTook", "${Math.floor(seconds / 60)} min ${rest} s", RunnerPageCopy.runnerUpdateTook(seconds: 72),
-         ["Math.floor(seconds / 60)": "1", "rest": "12"]),
-        ("runnerUpdateTook", "${Math.floor(seconds / 60)} min", RunnerPageCopy.runnerUpdateTook(seconds: 120),
-         ["Math.floor(seconds / 60)": "2"]),
-        ("runnerUpdateUpdatedBody", "Took ${took}.",
-         RunnerPageCopy.runnerUpdateUpdatedBody(took: "34 s", interruptedTurns: 0), ["took": "34 s"]),
-        ("runnerUpdateUpdatedBody", "1 interrupted turn resumed.",
-         RunnerPageCopy.runnerUpdateUpdatedBody(took: nil, interruptedTurns: 1), [:]),
-        ("runnerUpdateUpdatedBody", "${interruptedTurns} interrupted turns resumed.",
-         RunnerPageCopy.runnerUpdateUpdatedBody(took: nil, interruptedTurns: 2), ["interruptedTurns": "2"]),
-        ("runnerUpdateNowBody", "No turn is running. It installs ${version} and restarts — usually under a minute.",
-         RunnerPageCopy.runnerUpdateNowBody(version: "0.1.254", turns: 0), ["version": "0.1.254"]),
-        ("runnerUpdateNowBody",
-         "It stops this turn, installs ${version} and restarts — usually under a minute. It then continues where it "
-             + "stopped, with a note that the update interrupted it.",
-         RunnerPageCopy.runnerUpdateNowBody(version: "0.1.254", turns: 1), ["version": "0.1.254"]),
-        ("runnerUpdateNowBody",
-         "It stops these turns, installs ${version} and restarts — usually under a minute. Each one then continues "
-             + "where it stopped, with a note that the update interrupted it.",
-         RunnerPageCopy.runnerUpdateNowBody(version: "0.1.254", turns: 2), ["version": "0.1.254"]),
-        ("runnerUpdateNowConfirm", "Update Now", RunnerPageCopy.runnerUpdateNowConfirm(turns: 0), [:]),
-        ("runnerUpdateNowConfirm", "Interrupt 1 Turn and Update", RunnerPageCopy.runnerUpdateNowConfirm(turns: 1), [:]),
-        ("runnerUpdateNowConfirm", "Interrupt ${turns} Turns and Update", RunnerPageCopy.runnerUpdateNowConfirm(turns: 2),
-         ["turns": "2"]),
-        ("runnerUpdateInterruptedLine", "⊘ interrupted — the runner updated to ${version}",
-         RunnerPageCopy.runnerUpdateInterruptedLine(version: "0.1.254"), ["version": "0.1.254"]),
-        ("runnerUpdateInterruptedLine", "⊘ interrupted — the runner updated",
-         RunnerPageCopy.runnerUpdateInterruptedLine(version: nil), [:]),
-    ]
+    /// The functions that choose between sentences, so their body is more than one template. None: the
+    /// choosing lives outside runnerCopy.ts and RunnerPageCopy.swift (runnerUpdateNow.ts, RunnerUpdateNow.swift),
+    /// and each sentence it picks is a constant or a template of its own, listed above and below.
+    private static let branching: [(name: String, literal: String, rendered: String, values: [String: String])] = []
 
     /// Every `export function name(…) … { … }` the web file declares, by name: its whole body.
     private func webFunctionBodies() throws -> [String: String] {
@@ -390,6 +355,18 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("runnerUpdateUpdatedTitle", RunnerPageCopy.runnerUpdateUpdatedTitle(version: "${version}")),
         ("runnerUpdateNowTitle", RunnerPageCopy.runnerUpdateNowTitle(runner: "${runner}")),
         ("runnerUpdateNowToast", RunnerPageCopy.runnerUpdateNowToast(version: "${version}")),
+        ("runnerUpdateRestartingBodyMany", put(RunnerPageCopy.runnerUpdateRestartingBodyMany(turns: 90_001), [90_001: "turns"])),
+        ("runnerUpdateTookSeconds", put(RunnerPageCopy.runnerUpdateTookSeconds(seconds: 90_001), [90_001: "seconds"])),
+        ("runnerUpdateTookMinutesSeconds", put(RunnerPageCopy.runnerUpdateTookMinutesSeconds(minutes: 90_001, seconds: 90_002),
+                                               [90_001: "minutes", 90_002: "seconds"])),
+        ("runnerUpdateTookMinutes", put(RunnerPageCopy.runnerUpdateTookMinutes(minutes: 90_001), [90_001: "minutes"])),
+        ("runnerUpdateUpdatedTook", RunnerPageCopy.runnerUpdateUpdatedTook(took: "${took}")),
+        ("runnerUpdateResumedMany", put(RunnerPageCopy.runnerUpdateResumedMany(turns: 90_001), [90_001: "turns"])),
+        ("runnerUpdateNowBodyNone", RunnerPageCopy.runnerUpdateNowBodyNone(version: "${version}")),
+        ("runnerUpdateNowBodyOne", RunnerPageCopy.runnerUpdateNowBodyOne(version: "${version}")),
+        ("runnerUpdateNowBodyMany", RunnerPageCopy.runnerUpdateNowBodyMany(version: "${version}")),
+        ("runnerUpdateNowConfirmMany", put(RunnerPageCopy.runnerUpdateNowConfirmMany(turns: 90_001), [90_001: "turns"])),
+        ("runnerUpdateInterruptedTo", RunnerPageCopy.runnerUpdateInterruptedTo(version: "${version}")),
         ("attentionInstallFolderNotWritableDetail",
          RunnerPageCopy.attentionInstallFolderNotWritableDetail(folder: "${folder}", version: "${version}",
                                                                 latest: "${latest}", command: "${command}")),

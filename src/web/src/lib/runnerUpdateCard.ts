@@ -19,11 +19,15 @@ import {
   runnerUpdateDrainingTitle,
   runnerUpdatePostponedBody,
   runnerUpdatePostponedTitle,
-  runnerUpdateRestartingBodyInterrupted,
+  RUNNER_UPDATE_RESTARTING_BODY_ONE,
+  RUNNER_UPDATE_RESUMED_ONE,
+  runnerUpdateRestartingBodyMany,
   runnerUpdateRestartingTitle,
-  RUNNER_UPDATE_TAG_UPDATED_HOURS,
-  runnerUpdateTook,
-  runnerUpdateUpdatedBody,
+  runnerUpdateResumedMany,
+  runnerUpdateTookMinutes,
+  runnerUpdateTookMinutesSeconds,
+  runnerUpdateTookSeconds,
+  runnerUpdateUpdatedTook,
   runnerUpdateUpdatedTitle,
   runnerUpdateTurnRunning,
   runnerUpdateWaitedHours,
@@ -133,7 +137,9 @@ export function runnerUpdateCard(
         title: runnerUpdateRestartingTitle(version),
         tag: RUNNER_UPDATE_TAG_RESTARTING,
         // After the owner's Update Now, the turns it interrupted continue once it is back.
-        body: report.interruptedTurns ? runnerUpdateRestartingBodyInterrupted(report.interruptedTurns) : RUNNER_UPDATE_RESTARTING_BODY,
+        body: !report.interruptedTurns
+          ? RUNNER_UPDATE_RESTARTING_BODY
+          : report.interruptedTurns === 1 ? RUNNER_UPDATE_RESTARTING_BODY_ONE : runnerUpdateRestartingBodyMany(report.interruptedTurns),
       };
     case 'postponed': {
       if (!report.postponedUntil) return null;
@@ -149,6 +155,25 @@ export function runnerUpdateCard(
   }
 }
 
+/** How long the Updated card stays: a day, then About's Last Update says it (board 4). */
+export const RUNNER_UPDATE_UPDATED_HOURS = 24;
+
+/** How long the restart took: `34 s`, `1 min 12 s`, `2 min`. */
+export function runnerUpdateTook(seconds: number): string {
+  if (seconds < 60) return runnerUpdateTookSeconds(seconds);
+  const rest = seconds % 60;
+  return rest ? runnerUpdateTookMinutesSeconds(Math.floor(seconds / 60), rest) : runnerUpdateTookMinutes(Math.floor(seconds / 60));
+}
+
+/** `Took 34 s. 2 interrupted turns resumed.`; either half alone when the runner measured only that. */
+export function runnerUpdateUpdatedBody(took: string | null, interruptedTurns: number): string {
+  const parts: string[] = [];
+  if (took) parts.push(runnerUpdateUpdatedTook(took));
+  if (interruptedTurns === 1) parts.push(RUNNER_UPDATE_RESUMED_ONE);
+  else if (interruptedTurns > 1) parts.push(runnerUpdateResumedMany(interruptedTurns));
+  return parts.join(' ');
+}
+
 /**
  * The Updated card (board 4): the last update, for a day after it was installed — how long the
  * restart took and how many turns an Update Now interrupted for it, as far as the runner measured
@@ -157,7 +182,7 @@ export function runnerUpdateCard(
 function updatedCard(report: RunnerSelfUpdate, nowMs: number): RunnerUpdateCard | null {
   const at = report.lastUpdatedAt ? Date.parse(report.lastUpdatedAt) : NaN;
   if (!report.lastUpdatedTo || Number.isNaN(at)) return null;
-  if (nowMs - at > RUNNER_UPDATE_TAG_UPDATED_HOURS * 3_600_000 || at - nowMs > 60_000) return null;
+  if (nowMs - at > RUNNER_UPDATE_UPDATED_HOURS * 3_600_000 || at - nowMs > 60_000) return null;
   return {
     phase: 'updated',
     tone: 'quiet',

@@ -4,12 +4,10 @@ import {
   RUNNER_UPDATE_NOW,
   RUNNER_UPDATE_NOW_FAILED,
   RUNNER_UPDATE_NOW_JOBS_NOTE,
-  runnerUpdateNowBody,
-  runnerUpdateNowConfirm,
   runnerUpdateNowTitle,
   runnerUpdateNowToast,
 } from '../lib/runnerCopy';
-import { runnerUpdateNowTurns, updateRunnerNow } from '../lib/runnerUpdateNow';
+import { runnerUpdateNowBody, runnerUpdateNowConfirm, runnerUpdateNowTurns, updateRunnerNow } from '../lib/runnerUpdateNow';
 import { useToast } from '../lib/toast';
 import { Button } from './ui/Button';
 import { useConfirm } from './ui/ConfirmDialog';
