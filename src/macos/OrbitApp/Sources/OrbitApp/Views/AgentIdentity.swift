@@ -215,6 +215,35 @@ extension View {
     }
 }
 
+/// A soft edge drawn by hand, where the system's scroll-edge effect cannot reach: a material blur
+/// and a wash of `color`, full at `solidAt` and fading to nothing at the other end, so rows passing
+/// under it blur and fade rather than end at a line. Used under the needs-you bar over the Sessions
+/// list and under the iPhone drawer's header and action bar (the owner, 2026-11-12;
+/// docs/mocks/ios-header-soft-edge 02 and 03). The caller sizes it, extends it into the safe area
+/// and turns its hit testing off.
+struct SoftEdgeLayer: View {
+    var solidAt: VerticalEdge
+    var color: Color
+
+    var body: some View {
+        let from: UnitPoint = solidAt == .top ? .top : .bottom
+        let to: UnitPoint = solidAt == .top ? .bottom : .top
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+                .mask(LinearGradient(stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: 0.6),
+                    .init(color: .clear, location: 1),
+                ], startPoint: from, endPoint: to))
+            LinearGradient(stops: [
+                .init(color: color.opacity(0.92), location: 0),
+                .init(color: color.opacity(0.7), location: 0.6),
+                .init(color: color.opacity(0), location: 1),
+            ], startPoint: from, endPoint: to)
+        }
+    }
+}
+
 /// Static workspace name for the iOS session list and new-session navigation bars.
 /// `.fixedSize()` keeps iOS 26's leading toolbar slot from compressing even short names. The list
 /// also hides this item's shared background so the drawer button keeps its own glass circle.
