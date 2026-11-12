@@ -1,3 +1,5 @@
+import { RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
+
 /**
  * run_event.type values that mean a runtime actually produced output for a turn — it received the
  * message and started working, so the message is part of the conversation a `claude --resume`
@@ -24,13 +26,47 @@ const MAX_QUOTED = 1000;
  * repeating completed side effects. The original is quoted (capped) only for orientation.
  */
 export function buildResumeContinuation(original: string | null | undefined): string {
-  const head =
+  return withQuote(RESTART_HEAD, original);
+}
+
+const RESTART_HEAD =
     '[Orbit] The last message you were working on was interrupted because its runner restarted; the ' +
     'conversation so far has been restored. First check the actual current state, then carry on and finish ' +
     'it — never repeat any operation with side effects that has already completed ' +
     '(for example a deploy, commit, push or send, or creating or deleting a resource).';
+
+function withQuote(head: string, original: string | null | undefined): string {
   const quoted = (original ?? '').trim();
   if (!quoted) return head;
   const preview = quoted.length > MAX_QUOTED ? quoted.slice(0, MAX_QUOTED) + '…' : quoted;
   return `${head}\n\nThe interrupted message:\n${preview}`;
+}
+
+/**
+ * The same continuation for a turn the owner's Update Now interrupted (docs/runner-update-drain-design.md
+ * D4): the runner marked the cut with `interrupt {reason: runner_update, targetVersion}`, so the
+ * engine is told what stopped it — Orbit updated its runner, on the owner's word — rather than that
+ * the runner restarted. It opens with RUNNER_UPDATE_RESUME_NOTE, which is also how every client
+ * knows to draw the turn as one Orbit line rather than as the owner's message.
+ */
+export function buildUpdateResumeContinuation(original: string | null | undefined, targetVersion: string | null): string {
+  return withQuote(updateHead(targetVersion), original);
+}
+
+function updateHead(targetVersion: string | null): string {
+  const updated = targetVersion ? `Orbit updated its runner to ${targetVersion}` : 'Orbit updated its runner';
+  return (
+    `[Orbit] ${RUNNER_UPDATE_RESUME_NOTE} ${updated} at the owner's request, which stopped this turn; the ` +
+    'conversation so far has been restored. First check the actual current state, then carry on and finish ' +
+    'it — never repeat any operation with side effects that has already completed ' +
+    '(for example a deploy, commit, push or send, or creating or deleting a resource).'
+  );
+}
+
+/** The version an update continuation names, read back from the echo; undefined when `echoed` is none. */
+export function updateContinuationVersion(echoed: string): string | null | undefined {
+  const prefix = `[Orbit] ${RUNNER_UPDATE_RESUME_NOTE} `;
+  if (!echoed.startsWith(prefix)) return undefined;
+  const named = /^Orbit updated its runner to (\S+) at the owner's request/.exec(echoed.slice(prefix.length));
+  return named ? named[1] : null;
 }

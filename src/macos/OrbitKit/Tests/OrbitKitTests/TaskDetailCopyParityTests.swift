@@ -28,7 +28,8 @@ final class TaskDetailCopyParityTests: XCTestCase {
     private static let watchEditor = "src/web/src/components/WatchEditor.tsx"
     private static let dependencyList = "src/web/src/components/TaskDependencyList.tsx"
     private static let sharedTask = "src/web/src/pages/SharedTaskPage.tsx"
-    private static let runnerDetail = "src/web/src/pages/RunnerDetailPage.tsx"
+    /// The Agent's settings: RunnerDetailPage.tsx is gone, and its switch is a row of the workspace's Settings page.
+    private static let workspaceSettings = "src/web/src/components/settings/WorkspaceSettingsPage.tsx"
     private static let workspace = "src/web/src/components/WorkspaceView.tsx"
 
     private struct Missing: Error, CustomStringConvertible {
@@ -68,25 +69,23 @@ final class TaskDetailCopyParityTests: XCTestCase {
 
     func testTheSectionHeadingsAndTheDetailsLabels() throws {
         let web = try source(Self.panel)
-        for heading in [TaskDetailCopy.detailsHeading, TaskDetailCopy.dependenciesHeading,
-                        TaskDetailCopy.descriptionHeading, TaskDetailCopy.acceptanceHeading] {
+        // 2026-11-12 (docs/mocks/task-detail-agent-first): the web panel leads with the run, under its
+        // own headings. The native pages keep Details / Dependencies / Description / Acceptance /
+        // Runs / Comments until their own board; these are the web's words, pinned here so the two
+        // are told apart on purpose rather than drift.
+        for heading in ["Now", "Done means", "In the plan", "Runs with", "Activity"] {
             assertSays(web, "<div className=\"tdp-section-title\">\(heading)</div>", in: Self.panel)
         }
-        assertSays(web, "<div className=\"tdp-section-title\">\(TaskDetailCopy.runsHeading) ({sessions.length})</div>",
-                   in: Self.panel)
-        assertSays(web, "<div className=\"tdp-section-title\">\(TaskDetailCopy.commentsHeading) ({comments.length})</div>",
-                   in: Self.panel)
+        assertSays(web, "{q.data?.status === 'DONE' ? 'Delivered' : 'Evidence'}", in: Self.panel)
+        // Behind Runs with → Edit, the same field labels as the native Details.
         for label in [TaskDetailCopy.assigneeLabel, TaskDetailCopy.providerLabel, TaskDetailCopy.modelLabel,
-                      TaskDetailCopy.listLabel, TaskDetailCopy.createdByLabel, TaskDetailCopy.createdFromLabel,
-                      TaskDetailCopy.createdLabel] {
+                      TaskDetailCopy.listLabel] {
             assertSays(web, "<span className=\"tdp-field-label\">\(label)</span>", in: Self.panel)
         }
         assertSays(web, ": '\(TaskDetailCopy.runNow)'", in: Self.panel)
         // The Run's hint on the task nothing else starts: the panel's `runNowHint`, the rule with the words.
         assertSays(web, "if (status === 'OPEN' && !projectId && prerequisites === 0) { return '"
                     + TaskDetailCopy.nothingStartsThisTask + "'; }", in: Self.panel)
-        assertSays(web, "<div className=\"tdp-muted\">\(TaskDetailCopy.noRuns)</div>", in: Self.panel)
-        assertSays(web, "<div className=\"tdp-muted\">\(TaskDetailCopy.noComments)</div>", in: Self.panel)
     }
 
     /// The run pins, engine first (board 6): the Engine field's label and its unpinned choice, the
@@ -356,9 +355,10 @@ final class TaskDetailCopyParityTests: XCTestCase {
     }
 
     func testTheAgentsSwitchSaysWhatTheWebSwitchSays() throws {
-        let web = try source(Self.runnerDetail)
-        assertSays(web, "label=\"\(TaskDetailCopy.smartSelectionSwitch)\" desc=\"\(TaskDetailCopy.smartSelectionSwitchDetail)\"",
-                   in: Self.runnerDetail)
+        let web = try source(Self.workspaceSettings)
+        // The web row puts the long sentence in its tooltip, under a shorter description of its own.
+        assertSays(web, "title=\"\(TaskDetailCopy.smartSelectionSwitch)\"", in: Self.workspaceSettings)
+        assertSays(web, "tooltip=\"\(TaskDetailCopy.smartSelectionSwitchDetail)\"", in: Self.workspaceSettings)
     }
 
     func testTheComposersModelMenuSaysWhyItIsThisModel() throws {

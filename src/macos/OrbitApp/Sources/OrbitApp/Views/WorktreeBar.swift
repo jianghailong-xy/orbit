@@ -537,6 +537,7 @@ private struct MergeTargetPickerSheet: View {
                 .buttonStyle(.plain)
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             .searchable(text: $query, prompt: "Search branches")
             .overlay { if filtered.isEmpty { ContentUnavailableView.search } }
             .navigationTitle("Merge into")

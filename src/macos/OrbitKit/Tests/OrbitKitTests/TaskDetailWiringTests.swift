@@ -74,12 +74,15 @@ final class TaskDetailWiringTests: XCTestCase {
     func testTheWebPanelStillDrawsTheBlocksInThisOrder() throws {
         let web = try source(Self.webPanel)
         let body = try section(web, from: "<div className=\"tdp-body\">", to: "<div className=\"tdp-compose\">")
+        // 2026-11-12, docs/mocks/task-detail-agent-first: the web panel leads with the run — Now and
+        // the evidence, then the contract, the plan, the envelope folded to one line, one timeline.
+        // The phone has not followed yet.
         let order = try positions([
-            "showVerifierCard &&", ">Details<", ">Dependencies<", ">Description<", ">Acceptance<", "<TaskInputs ",
-            "<TaskAttributionCard ", "<TaskFollowedBy ", ">Runs (", ">Comments (",
+            "showVerifierCard &&", ">Now<", "{latestEvidence && (", ">Done means<", ">Brief for the agent<",
+            ">In the plan<", ">Runs with<", "<TaskInputs ", "<TaskAttributionNotice ", "<TaskFollowedBy ", ">Activity<",
         ], in: body)
         XCTAssertEqual(order, order.sorted(), "the web panel's blocks moved — decide whether the phone follows")
-        let head = try section(web, from: "<div className=\"tdp-head-actions\">", to: "<Popconfirm")
+        let head = try section(web, from: "<div className=\"tdp-head-actions\">", to: "<Menu")
         XCTAssertFalse(head.contains("Mark done"), "the browser offers no Mark done beside its presses either")
     }
 

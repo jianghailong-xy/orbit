@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
+import { lastActiveByWorkspace, workspaceSessionCount } from './workspace-usage';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { usedRunnerEngines } from '../common/runner-engines';
 import {
@@ -199,8 +200,13 @@ export class WorkspacesService {
       include: WorkspacesService.RUNNER_INCLUDE,
     });
     // One indexed query for the whole list — the provider each project last ran on.
-    const seeded = withProviderSeed(workspaces, await lastProviderByWorkspace(this.prisma, workspaces.map((a) => a.id)));
-    return this.withAntigravityKeys(ownerId, seeded.map((workspace) => this.withRepoHealth(workspace)));
+    const ids = workspaces.map((a) => a.id);
+    const seeded = withProviderSeed(workspaces, await lastProviderByWorkspace(this.prisma, ids));
+    const lastActive = await lastActiveByWorkspace(this.prisma, ids);
+    return this.withAntigravityKeys(
+      ownerId,
+      seeded.map((workspace) => ({ ...this.withRepoHealth(workspace), lastActiveAt: lastActive.get(workspace.id) ?? null })),
+    );
   }
 
   /**
@@ -262,6 +268,20 @@ export class WorkspacesService {
     if (!workspace) throw new NotFoundException('workspace not found');
     const seeded = withProviderSeed([workspace], await lastProviderByWorkspace(this.prisma, [workspace.id]))[0];
     return (await this.withAntigravityKeys(ownerId, [this.withRepoHealth(seeded)]))[0];
+  }
+
+  /**
+   * GET /workspaces/:id: the workspace with when it was last used and how many conversations it holds,
+   * which its Settings page's header says. Apart from `get`, which update and remove read back
+   * through, so a per-row save never pays for the count.
+   */
+  async getWithUsage(ownerId: string, id: string) {
+    const workspace = await this.get(ownerId, id);
+    const [lastActive, sessionCount] = await Promise.all([
+      lastActiveByWorkspace(this.prisma, [workspace.id]),
+      workspaceSessionCount(this.prisma, workspace.id),
+    ]);
+    return { ...workspace, lastActiveAt: lastActive.get(workspace.id) ?? null, sessionCount };
   }
 
   /**

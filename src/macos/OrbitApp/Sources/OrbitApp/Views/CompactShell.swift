@@ -742,21 +742,6 @@ struct NavigationDrawer: View {
 
     var body: some View {
         return VStack(alignment: .leading, spacing: 0) {
-            if !inSidebarColumn {
-                HStack {
-                    drawerTitle
-                    Spacer()
-                    searchButton {
-                        DrawerCircleGlyph(systemName: "magnifyingglass")
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.leading, DrawerMetrics.textLeading)
-                .padding(.trailing, DrawerMetrics.hInset)
-                .padding(.top, 14)
-                .padding(.bottom, 8)
-            }
-
             List {
                 // The work leads the rail — projects and tasks — ABOVE the Workspaces and set apart
                 // from them by a rule; the open projects themselves close it, where the task lists
@@ -802,10 +787,26 @@ struct NavigationDrawer: View {
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
             .contentMargins(.bottom, 60, for: .scrollContent)
+            // The header floats over the rail rather than sitting above it, so the rows run on up to
+            // the top of the screen and fade under it instead of being cut at its lower edge (the
+            // owner, 2026-11-12, board docs/mocks/ios-header-soft-edge/03-board.html).
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !inSidebarColumn { drawerHeader }
+            }
             .overlay(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 8) {
                     newSessionBlockedNote
                     actionBar
+                }
+                // The same soft edge under the action bar, from the bottom of the screen up: rows
+                // fade out behind the buttons rather than reading through around them.
+                .background {
+                    if !inSidebarColumn {
+                        SoftEdgeLayer(solidAt: .bottom, color: drawerSurface)
+                            .padding(.top, -16)
+                            .ignoresSafeArea(edges: .bottom)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
         }
@@ -828,6 +829,30 @@ struct NavigationDrawer: View {
         }
         // Only the iPad column has a bar for this to set: one row, carrying `columnBar`'s title.
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The phone drawer's header: title and search, standing on a soft edge of the drawer's own
+    /// colour that runs up behind the status bar and fades out just past the header, over the rows
+    /// scrolled under it. The iPad column has none: its title rides the column's bar (`columnBar`).
+    private var drawerHeader: some View {
+        HStack {
+            drawerTitle
+            Spacer()
+            searchButton {
+                DrawerCircleGlyph(systemName: "magnifyingglass")
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, DrawerMetrics.textLeading)
+        .padding(.trailing, DrawerMetrics.hInset)
+        .padding(.top, 14)
+        .padding(.bottom, 8)
+        .background {
+            SoftEdgeLayer(solidAt: .top, color: drawerSurface)
+                .padding(.bottom, -12)
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+        }
     }
 
     private var drawerTitle: some View {

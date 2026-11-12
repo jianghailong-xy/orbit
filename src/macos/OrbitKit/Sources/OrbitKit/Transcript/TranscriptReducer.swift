@@ -250,13 +250,22 @@ public struct TranscriptReducer: Sendable, Codable {
     /// `watchShutdownDrain`): nobody asked for that one, and the control plane goes on to deliver the
     /// turn it cut short and every turn queued behind it.
     public static func dropsQueue(_ ev: RunEvent) -> Bool {
-        ev.type == .interrupt && !cutByRunnerRestart(ev)
+        ev.type == .interrupt && !cutByRunnerRestart(ev) && cutByRunnerUpdate(ev) == nil
     }
 
     /// Whether this interrupt is that one of the runner's own: its row names the restart instead of
     /// reading as a Stop nobody pressed (web parity).
     static func cutByRunnerRestart(_ ev: RunEvent) -> Bool {
         ev.payload["reason"]?.stringValue == "runner_restart"
+    }
+
+    /// The interrupt the owner's Update Now made (`reason: runner_update`), with the release it named:
+    /// nobody pressed Stop either, and the control plane continues the turn once the runner is back,
+    /// so it drops no queue and its row says the runner updated. Nil for every other interrupt.
+    static func cutByRunnerUpdate(_ ev: RunEvent) -> RunnerUpdateCut? {
+        guard ev.payload["reason"]?.stringValue == RunnerUpdateNow.interruptReason else { return nil }
+        let version = ev.payload["targetVersion"]?.stringValue
+        return RunnerUpdateCut(targetVersion: version?.isEmpty == false ? version : nil)
     }
 
     public mutating func apply(_ ev: RunEvent) {
@@ -309,7 +318,8 @@ public struct TranscriptReducer: Sendable, Codable {
         case .user:           state.promptSuggestion = nil; appendUser(ev)
         case .promptSuggestion: state.promptSuggestion = nonEmpty(str(ev, "text")?.trimmingCharacters(in: .whitespacesAndNewlines))
         case .userDelivery:   applyUserDelivery(ev)
-        case .interrupt:      appendInterrupt(seq: ev.seq, runnerRestart: Self.cutByRunnerRestart(ev))
+        case .interrupt:      appendInterrupt(seq: ev.seq, runnerRestart: Self.cutByRunnerRestart(ev),
+                                              runnerUpdate: Self.cutByRunnerUpdate(ev))
         case .error:          appendError(ev)
         case .approvalRequest:  upsertApproval(ev)
         case .approvalResolved: resolveApproval(ev)
@@ -640,7 +650,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .assistant(let b):         seq = b.seq
         case .thinking(let b):          seq = b.seq
         case .toolCall(let c):          seq = c.inputSeq
-        case .interrupt(_, let s, _):   seq = s
+        case .interrupt(_, let s, _, _): seq = s
         case .autoRetry(let n):         seq = n.seq
         case .user, .error, .authError: seq = nil
         case .notice, .diagnostic:      seq = nil
@@ -1590,15 +1600,15 @@ public struct TranscriptReducer: Sendable, Codable {
         }
     }
 
-    private mutating func appendInterrupt(seq: Int, runnerRestart: Bool) {
+    private mutating func appendInterrupt(seq: Int, runnerRestart: Bool, runnerUpdate: RunnerUpdateCut? = nil) {
         turnAccountedFor = true
         flushStreaming()
-        state.items.append(.interrupt(id: nextID(), seq: seq, runnerRestart: runnerRestart))
+        state.items.append(.interrupt(id: nextID(), seq: seq, runnerRestart: runnerRestart, runnerUpdate: runnerUpdate))
         state.status = .interrupted
         // A Stop drops still-queued follow-ups server-side — they never get a durable `user` event
         // to reconcile them — so clear the local queue to match (web parity). A runner restart drops
         // nothing, and its queue reconciles as each turn in it is delivered.
-        if !runnerRestart { state.queued.removeAll() }
+        if !runnerRestart && runnerUpdate == nil { state.queued.removeAll() }
     }
 
     private mutating func appendError(_ ev: RunEvent) {

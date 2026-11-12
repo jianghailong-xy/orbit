@@ -13,7 +13,9 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     case toolCall(ToolCard)
     /// A turn stopped short. `runnerRestart`: nobody pressed Stop — the runner restarted under the
     /// turn and cut it off (`TranscriptReducer.cutByRunnerRestart`), so the row says that instead.
-    case interrupt(id: String, seq: Int, runnerRestart: Bool = false)
+    /// `runnerUpdate`: the owner's Update Now cut it (`reason: runner_update`), and the row names the
+    /// release it updated to (`TranscriptReducer.cutByRunnerUpdate`).
+    case interrupt(id: String, seq: Int, runnerRestart: Bool = false, runnerUpdate: RunnerUpdateCut? = nil)
     case error(id: String, message: String)
     /// A sign-in failure, rendered as a remedy card rather than an error line: the runtime reports
     /// it as ordinary assistant text (or an `error` event, when the engine never got to spawn), but
@@ -43,7 +45,7 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .assistant(let b): return b.id
         case .thinking(let b): return b.id
         case .toolCall(let c): return c.id
-        case .interrupt(let id, _, _): return id
+        case .interrupt(let id, _, _, _): return id
         case .error(let id, _): return id
         case .authError(let id, _): return id
         case .autoRetry(let n): return n.id
@@ -76,6 +78,13 @@ public struct MainCheckoutNoticeItem: Equatable, Sendable, Codable, Identifiable
         self.changed = changed
         self.result = result
     }
+}
+
+/// What an interrupt row knows of the owner's Update Now that cut its turn: the release the runner
+/// updated to, nil when the runner did not name it.
+public struct RunnerUpdateCut: Equatable, Sendable, Codable {
+    public let targetVersion: String?
+    public init(targetVersion: String?) { self.targetVersion = targetVersion }
 }
 
 /// One recoverable diagnostic, with the repeats of it folded into its row (web parity: `DiagnosticNode`).

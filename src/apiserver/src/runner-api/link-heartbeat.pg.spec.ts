@@ -16,6 +16,7 @@
  *   8. a presence table a crash or a failover emptied: the next beat reconciles in full;
  *   9. an HTTPS heartbeat is answered as it always was, and a link heartbeat after it reconciles in full;
  *  10. a managed runner is admitted with its instance and reconciles in full on every beat.
+ *  13. a draining beat asks for the drain's one push even when quiet, so work queuing behind a drain is told once.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/link-heartbeat.pg.spec.ts
  *
@@ -99,7 +100,11 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
   };
   const hints = new RunnerHints(prisma as never, 'nats://nats.invalid:4222', () => bus, Date.now, true);
   hints.onModuleInit();
-  const push = { notifyEngineSignedOut: () => undefined };
+  const drainPushes: Array<{ runnerId: string; waiting: unknown }> = [];
+  const push = {
+    notifyEngineSignedOut: () => undefined,
+    notifyRunnerDrainWaiting: async (p: { runnerId: string; waiting: unknown }) => { drainPushes.push(p); },
+  };
   const realtime = new RealtimeService(prisma as unknown as PrismaService, push as never, hints);
   await realtime.onModuleInit();
   const db = counting.prisma as unknown as PrismaService;
@@ -809,6 +814,33 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.equal(readFactsHash((await presence()).factsHash)?.agentDirProbes, undefined, 'which no longer holds them');
     assert.deepEqual(await probed(), before, 'and the workspace keeps what the last probe wrote, as a full reconcile would');
     assert.equal((await beat(without)).statements.length, 1, 'the next beat is quiet');
+  });
+
+  // ── 13 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('13. work queuing behind a drain is pushed on the next quiet beat, once per drain (D3)', async () => {
+    const draining = { draining: true, selfUpdate: { state: 'waitingForIdle', phase: 'draining', targetVersion: '0.1.254', turnsInFlight: 1 } } as
+      Partial<RunnerHeartbeatRequest>;
+    for (let i = 0; i < 4 && isFull((await beat(draining)).answer); i += 1);
+    const idleDrain = await beat(draining);
+    assert.equal(isFull(idleDrain.answer), false, 'a draining beat with nothing changed is quiet');
+    assert.equal(idleDrain.statements.length, 2, idleDrain.statements.join('\n---\n'));
+    assert.match(idleDrain.statements[1], /UPDATE "runner" r SET "drain_waiting_pushed_at"/, 'and asks for the drain push in one more statement');
+    assert.equal(drainPushes.length, 0, 'nothing of the owner\'s waits yet');
+
+    const waiting = await session(RunStatus.PENDING, { numTurns: 0, inboxLeaseOwner: null });
+    const queued = await beat(draining);
+    assert.equal(isFull(queued.answer), false, 'the work queued moved nothing a quiet beat reads');
+    assert.deepEqual(drainPushes.map((p) => [p.runnerId, p.waiting]), [[runnerId, { sessions: 1, messages: 0 }]]);
+    await beat(draining);
+    await beat(draining);
+    assert.equal(drainPushes.length, 1, 'one push per drain');
+
+    // The drain ends: the work no longer waits on it, and the record of its push goes with it.
+    await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED } });
+    for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
+    const after = await sql.query(`SELECT drain_waiting_pushed_at FROM "runner" WHERE id = $1`, [runnerId]);
+    assert.equal(after.rows[0].drain_waiting_pushed_at, null);
+    await settle();
   });
 
   // The open statuses the lease check reads are the leaseLostSessionIds rule's (common/session-scheduling.ts).

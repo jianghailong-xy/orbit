@@ -19,7 +19,7 @@ export interface MainCheckoutTarget {
 }
 
 /** What one console offers the main checkout's card, bar, result lines and drawer. Provided by the page that owns
- *  the session (WorkspaceView) or the workspace (RunnerDetailPage); absent (null) on the shared page and the export,
+ *  the session (WorkspaceView) or the workspace (WorkspaceSettingsPage); absent (null) on the shared page and the export,
  *  which then draw the text and no actions. */
 export interface MainCheckoutHost {
   workspaceId: string;

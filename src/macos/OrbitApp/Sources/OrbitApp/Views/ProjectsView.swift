@@ -153,6 +153,7 @@ struct ProjectsListView: View {
                 // Plain, like the sessions list: light section headers over full-width rows, not
                 // boxed inset-grouped cards.
                 .listStyle(.plain)
+                .softTopEdgeEffect()
                 #endif
             }
             #if os(iOS)

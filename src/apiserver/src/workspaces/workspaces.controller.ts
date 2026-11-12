@@ -53,7 +53,7 @@ export class WorkspacesController {
   @PatScope('workspaces:read', { workspaceConfinable: { params: { id: 'workspace' } } })
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.workspaces.get(user.userId, id);
+    return this.workspaces.getWithUsage(user.userId, id);
   }
 
   @PatScope('workspaces:write', { workspaceConfinable: { params: { id: 'workspace' } } })

@@ -956,12 +956,12 @@ final class AppModel {
         runningWorkspaceIDs = []
         jobWorkspaceIDs = []
         projectCoordinators = [:]
-        #if os(iOS)
-        sessionFolders = []
         projectSessions = []
         projectSessionsAddress = nil
         projectSessionsError = nil
         projectCompletedSessions = [:]
+        #if os(iOS)
+        sessionFolders = []
         #endif
         sessionDetails.removeAll()
         resetNavigation()
@@ -2405,13 +2405,11 @@ final class AppModel {
         if sessions.contains(where: { $0.id == id }) {
             applySessionSnapshot(SessionFilter.removing(id, from: sessions), notify: false)
         }
-        #if os(iOS)
         if projectSessions.contains(where: { $0.id == id }) {
             projectSessions = SessionFilter.removing(id, from: projectSessions)
         }
         // A poll draws the Completed members from here, so a Completed row has to leave it too.
         projectCompletedSessions = projectCompletedSessions.mapValues { SessionFilter.removing(id, from: $0) }
-        #endif
     }
 
     /// The lists may show the session again. The Open list in hand may lack a row the server still
@@ -2444,9 +2442,7 @@ final class AppModel {
         await loadSessions()
         await agents?.reloadCurrentSessions()
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
-        #if os(iOS)
         if let address = nav.projectSessionsColumn { await loadProjectSessions(address) }
-        #endif
     }
 
     /// Float a result as a toast. What it asks of you decides how long it stays (`ToastItem.dwell`),
@@ -2913,9 +2909,8 @@ final class AppModel {
         }
     }
 
-    // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
+    // MARK: a project's sessions page (iPhone, iPad, and the Mac's session column)
 
-    #if os(iOS)
     private(set) var projectSessions: [Session] = []
     private(set) var projectSessionsLoading = false
     private(set) var projectSessionsError: String?
@@ -2950,6 +2945,7 @@ final class AppModel {
         nav.enterProjectSessions(address)
     }
 
+    #if os(iOS)
     /// Every drawer row's tap. The row of the destination already showing only closes the drawer;
     /// any other lands on its destination's root — another workspace's, on the folder page its list
     /// was left on (`NavState.switchWorkspace`). On a phone that is the destination's whole stack;
@@ -2982,10 +2978,12 @@ final class AppModel {
         }
     }
 
+    #endif
+
     /// A project's sessions page over its coordinator's workspace (or the one already showing).
     /// Without any workspace it opens the project's page. On a phone it is the stack's whole content,
     /// the project's own page, rather than a page pushed over that workspace's list.
-    private func openProjectSessions(_ projectID: String, inColumn: Bool) {
+    func openProjectSessions(_ projectID: String, inColumn: Bool) {
         let key = PublicID.storageKey(projectID)
         let coordinator = (sessions + (agents?.allSessions ?? [])).first {
             $0.projectMembership?.role == .coordinator
@@ -3236,6 +3234,9 @@ final class AppModel {
         }
     }
 
+    // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
+
+    #if os(iOS)
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.
     /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and

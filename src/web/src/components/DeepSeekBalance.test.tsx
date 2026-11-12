@@ -7,11 +7,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderBalance } from '@orbit/shared';
 import { api } from '../api';
-import { InfrastructurePage } from '../pages/InfrastructurePage';
 import { ProviderConnectPage } from '../pages/ProviderConnectPage';
 import { deepseekBalanceKey } from '../lib/deepseekBalance';
 import { PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { DeepSeekBalanceLine, DeepSeekBalanceSection } from './DeepSeekBalance';
+import { SettingsVendorPage } from './settings/SettingsProviderPages';
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
 const apiMock = vi.mocked(api);
@@ -306,7 +306,7 @@ describe('the DeepSeek account balance', () => {
       row({ id: 'proxy', slug: 'proxy', label: 'Proxy', presetSlug: null, baseUrl: 'https://llm-proxy.example.com/v1' }),
     ];
 
-    it('Infrastructure’s API keys give every DeepSeek key a balance line — and the same balance to keys that share it', async () => {
+    it('a vendor’s keys in Settings give every DeepSeek key a balance line — and the same balance to keys that share it', async () => {
       const shared = ok();
       answers.ds = async () => shared;
       answers.dsh = async () => shared;
@@ -315,13 +315,36 @@ describe('the DeepSeek account balance', () => {
       client.setQueryData(PROVIDERS_LIST_KEY, [row(), harness, ...others]);
       client.setQueryData(['providers', 'pools'], []);
       client.setQueryData(['providers', 'shared-pools'], []);
-      await show(<InfrastructurePage />);
-      const lineOf = (name: string) =>
-        [...container.querySelectorAll('.vk-row')]
-          .find((key) => key.querySelector('.vk-name')?.textContent === name)
-          ?.querySelector('[data-testid="deepseek-balance-line"]')
-          ?.textContent?.replace(/\s+/g, ' ')
-          .trim();
+      // DeepSeek's page holds both DeepSeek keys (one from the retired Harness preset); the custom
+      // endpoints, one of them DeepSeek's own, are Custom's.
+      const lines: Record<string, string | undefined> = {};
+      for (const vendor of ['deepseek', 'custom', 'anthropic']) {
+        await act(async () => {
+          root.render(
+            <QueryClientProvider client={client}>
+              <MemoryRouter key={vendor} initialEntries={[`/settings/providers/${vendor}`]}>
+                <Routes>
+                  <Route path="/settings/providers/:vendor" element={<SettingsVendorPage />} />
+                </Routes>
+              </MemoryRouter>
+            </QueryClientProvider>,
+          );
+        });
+        await flush();
+        for (const key of container.querySelectorAll('.settings-row')) {
+          const name = key.querySelector('.vk-name')?.textContent;
+          if (name) {
+            lines[name] = key
+              .querySelector('[data-testid="deepseek-balance-line"]')
+              ?.textContent?.replace(/\s+/g, ' ')
+              .trim();
+          }
+        }
+      }
+      const lineOf = (name: string) => {
+        expect(name in lines, `${name} is listed`).toBe(true);
+        return lines[name];
+      };
       expect(lineOf('DeepSeek')).toBe('Account balance ¥110.00 · updated 2 min ago');
       expect(lineOf('DeepSeek Harness')).toBe('Account balance ¥110.00 · updated 2 min ago');
       expect(lineOf('My DeepSeek')).toBe('Balance unavailable: API key rejected · Retry');
@@ -340,9 +363,9 @@ describe('the DeepSeek account balance', () => {
       await act(async () => {
         root.render(
           <QueryClientProvider client={client}>
-            <MemoryRouter initialEntries={[`/providers/${id}`]}>
+            <MemoryRouter initialEntries={[`/settings/providers/keys/${id}`]}>
               <Routes>
-                <Route path="/providers/:id" element={<ProviderConnectPage />} />
+                <Route path="/settings/providers/keys/:id" element={<ProviderConnectPage />} />
               </Routes>
             </MemoryRouter>
           </QueryClientProvider>,
@@ -368,9 +391,9 @@ describe('the DeepSeek account balance', () => {
       await act(async () => {
         root.render(
           <QueryClientProvider client={client}>
-            <MemoryRouter initialEntries={['/providers/new/deepseek']}>
+            <MemoryRouter initialEntries={['/settings/providers/new/deepseek']}>
               <Routes>
-                <Route path="/providers/new/:slug" element={<ProviderConnectPage />} />
+                <Route path="/settings/providers/new/:slug" element={<ProviderConnectPage />} />
               </Routes>
             </MemoryRouter>
           </QueryClientProvider>,

@@ -1,4 +1,12 @@
-import type { MainCheckoutActionAnswer, MainCheckoutActionPost, MainCheckoutView, MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
+import type {
+  GuestSessionSummary,
+  MainCheckoutActionAnswer,
+  MainCheckoutActionPost,
+  MainCheckoutView,
+  MergeRecovery,
+  MergeRecoveryAction,
+  SessionGuestPerson,
+} from '@orbit/shared';
 import type {
   BgShell,
   ConfirmationAnswersCard,
@@ -1703,6 +1711,43 @@ export const getSharedEventsAfter = (
 /** One shared event's untrimmed payload, for a card that arrived `truncated` and was opened. */
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
   sharedGet<SharedEvent>(token, `${sharedConversation(sessionId)}/events/${seq}`);
+
+// ── Session guests (docs/session-guests-design.md §3–§7) ──
+
+/** The people who can reply in one of the owner's sessions. */
+export const getSessionGuests = (sessionId: string) =>
+  api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests`);
+/** Invite the account that signs in with `email`: answers the list as it stands after, or 404
+ *  `No Orbit account uses this email.` */
+export const inviteSessionGuest = (sessionId: string, email: string) =>
+  api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests`, { method: 'POST', body: { email } });
+export const removeSessionGuest = (sessionId: string, userId: string) =>
+  api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests/${userId}`, { method: 'DELETE' });
+
+/** Shared with me: the sessions the caller is a guest of. */
+export const listGuestSessions = () => api<{ sessions: GuestSessionSummary[] }>('/guest-sessions');
+
+/** What the guest door adds to the public page's reads: who shared it, and whether its agent waits on them. */
+export interface GuestSession extends SharedSession {
+  ownerName: string;
+  waitingOnOwner?: boolean;
+}
+export type GuestSessionNow = SharedSessionNow & { waitingOnOwner?: boolean };
+
+const guestPath = (id: string) => `/guest-sessions/${encodeURIComponent(id)}`;
+/** The guest page's root: the header and the newest `limit` events, as a session link's page reads them. */
+export const getGuestSession = (id: string, limit: number) =>
+  api<GuestSession>(`${guestPath(id)}?limit=${limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
+export const getGuestEventPage = (id: string, opts: { before: number; limit: number }) =>
+  api<{ events: SharedEvent[]; hasMore: boolean }>(
+    `${guestPath(id)}/events?before=${opts.before}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`,
+  );
+export const getGuestEventsAfter = (id: string, opts: { after: number; limit: number }) =>
+  api<GuestSessionNow>(`${guestPath(id)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
+export const getGuestEventFull = (id: string, seq: number) => api<SharedEvent>(`${guestPath(id)}/events/${seq}`);
+/** A guest's message: text only, a turn of the owner's session (resumed when it has ended). */
+export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string }) =>
+  api<{ turnId: string; revived: boolean }>(`${guestPath(id)}/turns`, { method: 'POST', body });
 
 /** The public attachment route: no bearer, so a browser can be sent straight to it. */
 export const sharedAttachmentUrl = (token: string, id: string): string =>
