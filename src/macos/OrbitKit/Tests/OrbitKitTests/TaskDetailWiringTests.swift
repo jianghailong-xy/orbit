@@ -188,7 +188,9 @@ final class TaskDetailWiringTests: XCTestCase {
         let view = try source(Self.tasksView)
         let runs = try section(view, from: "private func runsSection(_ task: TaskItem) -> some View {",
                                to: "private func runTime(")
-        XCTAssertTrue(runs.contains("Button { model.route(to: .session(session.id)) } label: { runRow(session, task) }"),
+        // `openRoute` keeps this press's routing where there is no page over the task and closes
+        // the wide shells' sheet first where there is (owner decision 2026-11-12).
+        XCTAssertTrue(runs.contains("Button { openRoute(.session(session.id)) } label: { runRow(session, task) }"),
                       "the row is still the way into the run")
         XCTAssertTrue(runs.contains("if let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection) {"))
         XCTAssertTrue(runs.contains("routeWhy = TaskRouteWhy(id: session.id, title: TaskDetailCopy.why(pick),"))
@@ -229,8 +231,10 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(menu.contains("ComposerLogic.menuLines("), "a Mac menu item does not wrap")
         XCTAssertTrue(menu.contains("ComposerLogic.sentences(TaskDetailCopy.modelChangeAppliesToThisRun)"),
                       "an iOS menu item stops at three lines")
-        // On the phone the task opens over the conversation, so back returns to the run.
-        XCTAssertTrue(menu.contains("app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)"))
+        // On the phone the task opens over the conversation, so back returns to the run; on a
+        // wide shell it opens over the conversation as a sheet (owner decision 2026-11-12).
+        XCTAssertTrue(menu.contains("app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole,"))
+        XCTAssertTrue(menu.contains("overPage: opensTasksOverPage)"))
         XCTAssertTrue(menu.contains(".accessibilityLabel(chipAccessibilityLabel)"))
         XCTAssertTrue(menu.contains("TaskDetailCopy.chipPickedBySmartSelection"))
         let chip = try section(composer, from: "private var modelChipLabel: some View {", to: "private var chipEffortLabel")

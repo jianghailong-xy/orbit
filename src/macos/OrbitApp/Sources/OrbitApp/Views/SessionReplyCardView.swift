@@ -28,18 +28,18 @@ struct SessionRequestStatusView: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        // Items of the card's grey foot line, no capsule (docs/mocks/session-message-bubble): only the
+        // state word that needs the eye is coloured.
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(SessionRequestCopy.statusLine(request))
-                .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
             if let state = request?.state {
+                Text(" · ")
                 Text(SessionRequestCopy.stateLabel(state))
-                    .font(.orbitMeta)
                     .foregroundStyle(tint(state))
-                    .padding(.horizontal, 7).padding(.vertical, 2)
-                    .overlay(Capsule().strokeBorder(tint(state).opacity(0.45), lineWidth: 1))
             }
-            Spacer(minLength: 0)
         }
+        .font(.orbitMeta)
+        .foregroundStyle(.tertiary)
         .task(id: refreshKey) { await load() }
         .task(id: requestId) {
             // While it waits, look again now and then: the deadline passing is an event only once
@@ -58,11 +58,11 @@ struct SessionRequestStatusView: View {
         if let fresh = try? await api.sessionRequest(requestId) { request = fresh }
     }
 
-    private func tint(_ state: SessionRequestState) -> Color {
+    private func tint(_ state: SessionRequestState) -> AnyShapeStyle {
         switch state {
-        case .open: return .accentColor
-        case .closed(.replied): return .green
-        case .closed: return .orange
+        case .open: return AnyShapeStyle(Color.accentColor)
+        case .closed(.replied): return AnyShapeStyle(.tertiary)
+        case .closed: return AnyShapeStyle(Color.orange)
         }
     }
 }

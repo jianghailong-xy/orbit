@@ -3,7 +3,7 @@ import OrbitKit
 
 /// The app shell: a three-column split mirroring the web AppShell — navigation/Workspaces, the
 /// selected section's list, and a detail pane. On iPad the first column is the iPhone's navigation
-/// drawer itself; macOS preserves its disclosure-style source list.
+/// drawer itself; macOS draws the same rail as a source list (`SectionSidebar`).
 struct MainView: View {
     @Environment(AppModel.self) private var model
     /// Whether the first column is on screen. It routes — app sections plus a workspace picker —
@@ -51,10 +51,24 @@ struct MainView: View {
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
                 #endif
         } detail: {
-            SectionDetail(section: model.selectedSection)
-                .orbitPaneBackground()
+            // The page is kept mounted under the task, so the conversation's scroll position and
+            // its live transcript are exactly what closing returns to.
+            ZStack {
+                SectionDetail(section: model.selectedSection)
+                    .orbitPaneBackground()
+                    .accessibilityHidden(model.taskOverPageID != nil)
+                if model.taskOverPageID != nil { TaskOverPagePanel() }
+            }
         }
         .task { model.startPolling() }
+        // The wide shells' pages all open a pressed task over themselves (owner decision
+        // 2026-11-12): said once here, so a conversation, a wiki entry and every card in them give
+        // the same answer. The phone's shell never sets it.
+        .environment(\.opensTasksOverPage, true)
+        // A task opened over a page belongs to that page: choosing another page from the sidebar
+        // takes it down with it (owner decision 2026-11-12). The shell's own write, so the model's
+        // section setter stays a plain section switch.
+        .onChange(of: model.selectedSection) { _, _ in model.closeTaskOverPage() }
         #if os(iOS)
         .onGeometryChange(for: Bool.self) { $0.size.width < $0.size.height } action: { now in
             portrait = now
@@ -122,31 +136,39 @@ struct MainView: View {
 }
 
 #if os(macOS)
-/// UI-only selection for the macOS source list: a top-level section or a specific Workspace, which
-/// sits inside the historical Workspaces disclosure row.
+/// UI-only selection for the macOS source list: a section, a Workspace, a machine's Set up row, or
+/// one open project.
 enum SidebarSelection: Hashable {
     case section(AppSection)
     case agent(String)
     /// A machine with no workspace: its Set up row, and the new session page it opens.
     case machine(String)
+    /// An open project in the Projects group: its page, in the Projects section.
+    case project(String)
 }
 
-/// macOS's leftmost rail, a source list: the sections in order, with an expandable, runner-grouped
-/// Workspaces section among them. Admin is role-gated, and the Wiki is drawn only for an account the
-/// server has the wiki on for, as the iPhone's drawer and the iPad's sidebar draw it.
+/// macOS's leftmost rail (docs/mocks/macos-sidebar, 01): the iPad's sidebar — the iPhone's drawer —
+/// in a Mac source list. The work leads (Projects, Tasks, Wiki, Waiting on you, with the drawer's
+/// amber counts), then the Workspaces one line each with the drawer's state slot, then every open
+/// project. Mac-sized rows, the system's selection and foldable groups; no New session here (⌘N and
+/// File ▸ New Session start one), and no Following, Settings or Admin rows: the footer's gear opens
+/// Settings, and its account menu carries all three. The Wiki row is drawn only for an account the
+/// server has the wiki on for, as the drawer draws it.
 struct SectionSidebar: View {
     @Environment(AppModel.self) private var model
     let isAdmin: Bool
-    @State private var agentsExpanded = true
+    @AppStorage("sidebar.workspacesExpanded") private var workspacesExpanded = true
+    @AppStorage("sidebar.projectsExpanded") private var projectsExpanded = true
 
-    /// Bridge the two model fields (`selectedSection` + `selectedAgentID`) to the List's single
-    /// selection. A Workspace is the only `.agents` destination that carries a detail; the
-    /// disclosure parent remains untagged.
+    /// Bridge the model's fields to the List's single selection.
     private var selection: Binding<SidebarSelection?> {
         Binding(
             get: {
                 if let runnerID = model.machineDraftRunnerID { return .machine(runnerID) }
                 if model.selectedSection == .agents, let id = model.selectedAgentID { return .agent(id) }
+                if model.selectedSection == .projects, case .projectDetail(let id, _)? = model.nav.path.first {
+                    return .project(id)
+                }
                 return .section(model.selectedSection)
             },
             set: { value in
@@ -157,6 +179,8 @@ struct SectionSidebar: View {
                     model.openAgent(id)
                 case .machine(let runnerID):
                     model.openMachineDraft(runnerID)
+                case .project(let id):
+                    model.openProject(id)
                 case nil:
                     break
                 }
@@ -167,31 +191,81 @@ struct SectionSidebar: View {
     var body: some View {
         // Touch the driving fields so Observation re-renders the rail (and re-reads `selection`)
         // when the section/agent changes from outside the sidebar, e.g. a deep-link route.
-        _ = (model.selectedSection, model.selectedAgentID, model.machineDraftRunnerID)
+        _ = (model.selectedSection, model.selectedAgentID, model.machineDraftRunnerID, model.nav.path)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
+        let openProjects = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
         return List(selection: selection) {
-            ForEach(AppSection.visible(isAdmin: isAdmin, wiki: model.wiki?.shown == true)) { section in
-                if section == .agents {
-                    agentsDisclosure(shortcutIndex: shortcutIndex)
-                } else {
-                    Label(section.title, systemImage: section.systemImage)
-                        .tag(SidebarSelection.section(section))
+            ForEach(AppSection.workSections) { section in
+                if section != .wiki || model.wiki?.shown == true {
+                    sectionRow(section)
                 }
             }
             // "Waiting on you", raised as a sheet over whatever is selected.
             OwnerRequestInboxEntry()
+
+            Section(AppSection.agents.title, isExpanded: $workspacesExpanded) {
+                workspaceRows(shortcutIndex: shortcutIndex)
+            }
+
+            if !openProjects.isEmpty {
+                Section(isExpanded: $projectsExpanded) {
+                    ForEach(openProjects) { project in
+                        projectRow(project)
+                            .tag(SidebarSelection.project(project.id))
+                    }
+                } header: {
+                    HStack(spacing: 6) {
+                        Text(AppSection.projects.title)
+                        Text("\(openProjects.count)").fontWeight(.regular)
+                    }
+                }
+            }
         }
+        .listStyle(.sidebar)
         .navigationTitle("Orbit")
+        .toolbar {
+            ToolbarItem {
+                Button { model.searchOpen = true } label: {
+                    Label("Search Sessions", systemImage: "magnifyingglass")
+                }
+                .help("Search Sessions (⌘K)")
+                .disabled(!model.signedIn)
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 Divider()
-                AccountFooter()
+                AccountFooter(isAdmin: isAdmin)
             }
             .background(.bar)
         }
         .task { await model.loadAgentsThenLand() }
         // Whether the Wiki row is drawn at all is the spaces read's answer (WIKI_DISABLED, `WikiLogic.shown`).
         .task { await model.wiki?.loadSpaces() }
+        // The Projects row counts the projects waiting on you, and the last group lists the open ones.
+        .task { await model.projects?.load() }
+    }
+
+    /// Projects, Tasks or the Wiki, with the drawer's amber count of what waits on you there.
+    private func sectionRow(_ section: AppSection) -> some View {
+        let waiting: Int
+        switch section {
+        case .projects: waiting = model.projects?.needsYouCount ?? 0
+        case .wiki:     waiting = model.wiki?.waiting ?? 0
+        default:        waiting = 0
+        }
+        return HStack {
+            Label(section.title, systemImage: section.systemImage)
+            Spacer(minLength: 6)
+            if waiting > 0 {
+                Text("\(waiting)")
+                    .font(.orbitMeta.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.orange)
+                    .accessibilityLabel("\(waiting) waiting on you")
+            }
+        }
+        .tag(SidebarSelection.section(section))
     }
 
     /// The line standing in for an empty workspace list. It says there are none only after a fetch
@@ -201,6 +275,40 @@ struct SectionSidebar: View {
         case .failed?: return "Couldn't load workspaces"
         case .empty?: return none
         default: return "Loading…"
+        }
+    }
+
+    /// The Workspaces one line each, in the drawer's runner-stable order, then a Set up row per machine
+    /// with no workspace.
+    @ViewBuilder
+    private func workspaceRows(shortcutIndex: [String: Int]) -> some View {
+        if let agents = model.agents, !agents.orderedItems.isEmpty || !agents.machinesToSetUp.isEmpty {
+            ForEach(agents.orderedItems) { agent in
+                WorkspaceNavigationRow(
+                    agent: agent,
+                    runnerLabel: agents.runnerLabel(agent.runnerId),
+                    // The system draws the selection, so the folder keeps one colour.
+                    selected: false,
+                    offline: agents.runnerIsOffline(agent.runnerId),
+                    running: model.runningWorkspaceIDs.contains(agent.id),
+                    jobs: model.jobWorkspaceIDs.contains(agent.id),
+                    waiting: model.agentNeedsYou[agent.id] ?? 0,
+                    shortcut: shortcutIndex[agent.id]
+                )
+                // What the two-line row used to say under the name: what its next session starts on, and where.
+                .help(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: agents.configuredProviders),
+                                                       provider: agent.defaultProvider,
+                                                       configured: agents.configuredProviders)
+                      + (agent.workDir.map { " · \($0)" } ?? ""))
+                .tag(SidebarSelection.agent(agent.id))
+            }
+            ForEach(agents.machinesToSetUp) { machine in
+                setUpRow(machine)
+                    .tag(SidebarSelection.machine(machine.id))
+            }
+        } else {
+            Text(emptyWorkspacesText("No workspaces"))
+                .font(.orbitLabel).foregroundStyle(.secondary)
         }
     }
 
@@ -215,70 +323,88 @@ struct SectionSidebar: View {
         }
     }
 
-    private func agentsDisclosure(shortcutIndex: [String: Int]) -> some View {
-        DisclosureGroup(isExpanded: $agentsExpanded) {
-            if let agents = model.agents, !agents.groups.isEmpty {
-                ForEach(agents.groups) { group in
-                    Text(agents.runnerLabel(group.runnerId))
-                        .font(.orbitLabel).foregroundStyle(.secondary)
-                    ForEach(group.agents) { a in
-                        AgentRowView(agent: a, shortcutIndex: shortcutIndex[a.id],
-                                     configuredProviders: agents.configuredProviders)
-                            .tag(SidebarSelection.agent(a.id))
-                    }
-                    // A machine with no workspace: its header and this one row (board 03, Mac).
-                    if let machine = group.setUp {
-                        setUpRow(machine)
-                            .tag(SidebarSelection.machine(machine.id))
-                    }
-                }
-            } else {
-                Text(emptyWorkspacesText("No agents"))
-                    .font(.orbitLabel).foregroundStyle(.secondary)
+    /// An open project: its title, and the drawer's one trailing mark — what waits on you, or its work in flight.
+    private func projectRow(_ project: ProjectSummary) -> some View {
+        HStack(spacing: 8) {
+            Label {
+                Text(project.title).lineLimit(1)
+            } icon: {
+                Image(systemName: AppSection.projects.systemImage).foregroundStyle(.secondary)
             }
-        } label: {
-            Label(AppSection.agents.title, systemImage: AppSection.agents.systemImage)
+            Spacer(minLength: 6)
+            switch ProjectAttention.drawerMark(
+                project, coordinator: model.projectCoordinators[PublicID.storageKey(project.id)]) {
+            case .needsYou(let count):
+                NeedsYouCountCapsule(count: count)
+            case .running:
+                SpinnerGlyph(color: .secondary)
+                    .accessibilityLabel("Running")
+            case .idle:
+                EmptyView()
+            }
         }
     }
 }
 
 /// Pinned to the bottom of the sidebar, mirroring the web's `tp-user` footer: a monogram avatar
-/// plus the signed-in user's name. Clicking opens the account menu (email + Sign out) that used to
-/// live in the window toolbar.
+/// plus the signed-in user's name, and the drawer's Settings gear beside it. Clicking the name opens
+/// the account menu, which also holds the places the rail has no row for: Settings, Admin, Following.
 struct AccountFooter: View {
     @Environment(AppModel.self) private var model
+    let isAdmin: Bool
 
     var body: some View {
         let display = model.user?.name ?? model.user?.email
-        Menu {
-            // Menu items must be real controls — a bare `Text` gets dropped by AppKit, so the email
-            // rides along as a Section header above the one action.
-            if let email = model.user?.email {
-                Section(email) {
-                    Button("Sign out", role: .destructive) { model.logout() }
+        HStack(spacing: 4) {
+            Menu {
+                // Menu items must be real controls — a bare `Text` gets dropped by AppKit, so the email
+                // rides along as a Section header above the actions.
+                if let email = model.user?.email {
+                    Section(email) { accountActions }
+                } else {
+                    accountActions
                 }
-            } else {
-                Button("Sign out", role: .destructive) { model.logout() }
+            } label: {
+                HStack(spacing: 10) {
+                    AccountAvatar(name: display)
+                    Text(display ?? "Account")
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-        } label: {
-            HStack(spacing: 10) {
-                AccountAvatar(name: display)
-                Text(display ?? "Account")
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 0)
+            // `.button` style + plain button + hidden indicator renders the custom label as-is (no
+            // chevron, no swallowed label) — unlike `.borderlessButton`, which dropped the whole row.
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+
+            Button { model.selectedSection = .settings } label: {
+                Image(systemName: AppSection.settings.systemImage)
+                    .font(.orbitGlyph)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .buttonStyle(.borderless)
+            .help(AppSection.settings.title)
+            .accessibilityLabel(AppSection.settings.title)
         }
-        // `.button` style + plain button + hidden indicator renders the custom label as-is (no
-        // chevron, no swallowed label) — unlike `.borderlessButton`, which dropped the whole row.
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var accountActions: some View {
+        Button(AppSection.settings.title) { model.selectedSection = .settings }
+        if isAdmin {
+            Button(AppSection.admin.title) { model.selectedSection = .admin }
+        }
+        Button(AppSection.following.title) { model.selectedSection = .following }
+        Divider()
+        Button("Sign out", role: .destructive) { model.logout() }
     }
 }
 #endif
@@ -432,5 +558,54 @@ struct ComingSoon: View {
     var body: some View {
         ContentUnavailableView(section.title, systemImage: section.systemImage, description: Text(note))
             .navigationTitle(section.title)
+    }
+}
+
+/// A task opened over the page it was pressed on — the wide shells' answer to a task link in a
+/// conversation, a wiki page or a watch card (owner decision 2026-11-12). It is the very same
+/// `TaskDetailPage` the Tasks section draws, laid over the detail column: the sidebar and the
+/// session list keep the conversation's place, and the page under it stays mounted, so Close puts
+/// the reader back exactly where they were.
+struct TaskOverPagePanel: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let taskID = model.taskOverPageID {
+            #if os(iOS)
+            // The task page's own actions (⋯, Share, Delete) are toolbar items, so the phone's
+            // panel gives them the bar they live in, with Close beside them.
+            NavigationStack {
+                TaskDetailPage(taskID: taskID, overPage: true)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { closeButton }
+                    }
+            }
+            .background(.background)
+            #else
+            // On the Mac those actions ride the window's toolbar, as they do in the Tasks pane;
+            // the panel's own bar carries the one control the page does not: Close.
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    closeButton
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.bar)
+                Divider()
+                TaskDetailPage(taskID: taskID, overPage: true)
+            }
+            .background(.background)
+            #endif
+        }
+    }
+
+    private var closeButton: some View {
+        Button { model.closeTaskOverPage() } label: {
+            Label("Close", systemImage: "xmark")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .keyboardShortcut(.cancelAction)
     }
 }

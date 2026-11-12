@@ -18,6 +18,8 @@ struct WatchingCardStack: View {
     @Environment(AppModel.self) private var model
     /// In a phone's conversation, the pages this card opens are pushed over it (see `opensPagesOverConsole`).
     @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell, a task this card opens opens over the page (see `opensTasksOverPage`).
+    @Environment(\.opensTasksOverPage) private var overPage
     let sessionID: String
     @State private var open = false
 
@@ -182,7 +184,7 @@ struct WatchingCardStack: View {
 
     private func openTarget(_ target: WatchTarget) {
         guard let destination = route(for: target) else { return }
-        model.openFromConversation(destination, overConsole: overConsole)
+        model.openFromConversation(destination, overConsole: overConsole, overPage: overPage)
     }
 
     private func route(for target: WatchTarget) -> Route? {
