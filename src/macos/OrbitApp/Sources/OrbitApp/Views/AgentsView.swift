@@ -518,6 +518,7 @@ struct AgentPanes: View {
         // Plain style so the sections read as light headers over full-width rows (matching the
         // current list), not boxed inset-grouped cards.
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .rowSwipeList(rowSwipe)
         // The phone's search field, in the bottom toolbar, gets out of the way while the list is read
         // downward (see the column's `sessionListSearch`).
