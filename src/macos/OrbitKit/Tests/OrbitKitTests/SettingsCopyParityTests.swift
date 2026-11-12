@@ -28,6 +28,9 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let accessTokenTable = "src/web/src/components/AccessTokenTable.tsx"
     private static let accessTokenWords = "src/web/src/lib/accessTokens.ts"
     private static let settingsNav = "src/web/src/components/settings/SettingsLayout.tsx"
+    /// Since Settings search (s6), the Personal pages' nav labels and every row's title and description
+    /// live here; the pages and the nav draw them from it (`S.<anchor>.title`, `PERSONAL_PAGES`).
+    private static let settingsIndex = "src/web/src/pages/settings/settingsIndex.ts"
     private static let keyCards = "src/web/src/components/ProviderKeyCards.tsx"
     private static let pools = "src/web/src/components/AccountPools.tsx"
     private static let engineNames = "src/shared/src/providerEngines.ts"
@@ -75,9 +78,13 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(try web(Self.appearance), "<SettingsHeader title=\"\(SettingsHome.title(.appearance))\"",
                    in: Self.appearance)
         XCTAssertEqual(SessionSettings.title(.orchestration), "Session orchestration")
-        let nav = try web(Self.settingsNav)
-        assertSays(nav, "label: '\(SettingsHome.title(.sharedLinks))'", in: Self.settingsNav)
-        assertSays(nav, "label: '\(SettingsHome.title(.accessTokens))'", in: Self.settingsNav)
+        // The nav draws the Personal rows from PERSONAL_PAGES, which names them.
+        assertSays(try web(Self.settingsNav), "{PERSONAL_PAGES.map((page) => (", in: Self.settingsNav)
+        let index = try web(Self.settingsIndex)
+        assertSays(index, "{ path: '/settings/shared-links', label: '\(SettingsHome.title(.sharedLinks))' },",
+                   in: Self.settingsIndex)
+        assertSays(index, "{ path: '/settings/access-tokens', label: '\(SettingsHome.title(.accessTokens))' },",
+                   in: Self.settingsIndex)
         assertSays(try web(Self.profile), "<Card title=\"\(SettingsHome.title(.changePassword))\">",
                    in: Self.profile)
     }
@@ -85,11 +92,16 @@ final class SettingsCopyParityTests: XCTestCase {
     /// The account's two alert switches, with the web Notifications page's titles and its
     /// descriptions as their footers.
     func testTheAlertSwitchesSayWhatTheWebPageSays() throws {
+        // The page draws both rows from settingsIndex.ts, which says their words.
         let page = try web(Self.notifications)
-        assertSays(page, "title=\"\(SettingsCopy.sessionFinished)\"", in: Self.notifications)
-        assertSays(page, "description=\"\(SettingsCopy.sessionFinishedHint)\"", in: Self.notifications)
-        assertSays(page, "title=\"\(SettingsCopy.agentMessage)\"", in: Self.notifications)
-        assertSays(page, "description=\"\(SettingsCopy.agentMessageHint)\"", in: Self.notifications)
+        for anchor in ["notifySessionFinished", "notifyAgentMessage"] {
+            assertSays(page, "title={S.\(anchor).title} description={S.\(anchor).description}", in: Self.notifications)
+        }
+        let index = try web(Self.settingsIndex)
+        assertSays(index, "'notifySessionFinished', '/settings/notifications', '\(SettingsCopy.sessionFinished)', '\(SettingsCopy.sessionFinishedHint)',",
+                   in: Self.settingsIndex)
+        assertSays(index, "'notifyAgentMessage', '/settings/notifications', '\(SettingsCopy.agentMessage)', '\(SettingsCopy.agentMessageHint)',",
+                   in: Self.settingsIndex)
     }
 
     /// Default permission: the web General page's mode, whose full hint (the row's tooltip there; the
@@ -101,14 +113,18 @@ final class SettingsCopyParityTests: XCTestCase {
     /// Session orchestration: the web General page's Orchestration switch, with its title and full hint.
     func testOrchestrationSaysWhatTheWebPageSays() throws {
         let page = try web(Self.general)
-        assertSays(page, "title=\"\(SettingsCopy.letSessionsOrchestrate)\"", in: Self.general)
+        // The title is settingsIndex.ts's, which the page draws; the full hint stays on the page.
+        assertSays(page, "title={S.enableOrchestration.title}", in: Self.general)
+        assertSays(try web(Self.settingsIndex), "'enableOrchestration', '/settings/general', '\(SettingsCopy.letSessionsOrchestrate)',", in: Self.settingsIndex)
         assertSays(page, "full: '\(SettingsCopy.letSessionsOrchestrateHint)',", in: Self.general)
     }
 
     /// Smart model selection: the web General page's switch, with its title and full hint.
     func testSmartModelSelectionSaysWhatTheWebPageSays() throws {
         let page = try web(Self.general)
-        assertSays(page, "title=\"\(SettingsCopy.smartModelSelection)\"", in: Self.general)
+        // The title is settingsIndex.ts's, which the page draws; the full hint stays on the page.
+        assertSays(page, "title={S.modelRouting.title}", in: Self.general)
+        assertSays(try web(Self.settingsIndex), "'modelRouting', '/settings/general', '\(SettingsCopy.smartModelSelection)',", in: Self.settingsIndex)
         assertSays(page, "full: \"\(SettingsCopy.smartModelSelectionHint)\",", in: Self.general)
         assertSays(page, "checked={prefs.modelRouting === true}", in: Self.general)
         assertSays(page, "save.mutate({ modelRouting: v })", in: Self.general)
@@ -119,7 +135,9 @@ final class SettingsCopyParityTests: XCTestCase {
     /// three words on the web page, the phone and (via `SettingsCopyParityTest`) the Android list.
     func testSessionRecapsSaysWhatTheWebPageSays() throws {
         let page = try web(Self.general)
-        assertSays(page, "title=\"\(SettingsCopy.sessionRecaps)\"", in: Self.general)
+        // The title is settingsIndex.ts's, which the page draws; the full hint stays on the page.
+        assertSays(page, "title={S.recaps.title}", in: Self.general)
+        assertSays(try web(Self.settingsIndex), "'recaps', '/settings/general', '\(SettingsCopy.sessionRecaps)',", in: Self.settingsIndex)
         assertSays(page, "full: '\(SettingsCopy.sessionRecapsHint)',", in: Self.general)
         assertSays(page, "checked={prefs.recaps ?? true}", in: Self.general)
         assertSays(page, "save.mutate({ recaps: v })", in: Self.general)
@@ -128,8 +146,10 @@ final class SettingsCopyParityTests: XCTestCase {
 
     /// The edit-profile card's field is called what the web Profile page calls the same value.
     func testTheNameFieldSaysWhatTheProfilePageSays() throws {
-        assertSays(try web(Self.profile), "<SettingsRow title=\"\(SettingsCopy.nameLabel)\" description={NAME_CAPTION}",
-                   in: Self.profile)
+        // The row's title is settingsIndex.ts's; its caption stays NAME_CAPTION on the Profile page.
+        assertSays(try web(Self.profile), "title={S.name.title} description={NAME_CAPTION}", in: Self.profile)
+        assertSays(try web(Self.settingsIndex), "name: setting('name', '/settings/profile', '\(SettingsCopy.nameLabel)'),",
+                   in: Self.settingsIndex)
     }
 
     /// The photo's two actions and the line under the name read the same on the web Profile page.

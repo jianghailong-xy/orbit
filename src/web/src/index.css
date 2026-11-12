@@ -22883,6 +22883,12 @@ div.landing-jobs-open {
   color: var(--brand);
   text-decoration: none;
 }
+/* A sender that runs narrower than this session: in the foot line's voice, under it. */
+.smc-narrower {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+}
 .smc-undelivered {
   margin-top: 4px;
   color: var(--warning);
