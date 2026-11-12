@@ -203,7 +203,7 @@ class ProjectDoneFollowUpsDeviceTest : IncrementDeviceTest() {
         await("the move was sent") { bodies.any { it.first == "POST projects/$cbai/criteria/k4/move" } }
         verify("it creates the follow-up", bodies.first { it.first.endsWith("/move") }.second.contains("\"newProject\":{\"title\":\"$title · follow-up\""))
         await("the card after the move") { exists(hasTestTag("project-done-moved-out"), unmerged = true) }
-        await("Record as done, not anyway") { exists(hasTestTag("project-done-record") and hasText("Record as done"), unmerged = true) }
+        await("Record as done, not anyway") { exists(hasTestTag("project-done-record") and hasText("Record as done")) }
         verify("the source keeps three criteria, all met", textOf("project-done-tally") == "3 of 3 met")
         capture("07-done-card-after-move")
     }
