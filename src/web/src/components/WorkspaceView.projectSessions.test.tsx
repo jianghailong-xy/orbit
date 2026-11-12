@@ -385,8 +385,12 @@ const remote = (n: number, title: string, extra: Record<string, unknown> = {}) =
   ...extra,
 });
 
+// A phone's project row opens the coordinator (board 5), so there the page comes from the row's Sessions item.
 async function openSessions(): Promise<void> {
-  await click(projectRow(), 'the project entry');
+  if (mobile) {
+    await hoverProjectMenu();
+    await click(menuItem('Sessions'), 'the project menu’s Sessions');
+  } else await click(projectRow(), 'the project entry');
   await until(() => expect(page()).not.toBeNull());
 }
 
@@ -586,7 +590,9 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     expect(location).toBe(`/sessions/${LOOSE.id}`);
     expect(entry.querySelector<HTMLElement>('.session-swipe')?.style.transform).toBe('');
     await click(progress, 'the progress tag after the swipe closes');
-    await until(() => expect(page()).not.toBeNull());
+    // A phone's project row opens its coordinator directly (owner 2026-11-11, board 5).
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
+    expect(page()).toBeNull();
   });
 });
 
@@ -870,6 +876,117 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     await click(button(), 'the Project sessions button');
     await until(() => expect(column()).not.toBeNull());
     expect(stored.get('orbit.projectColumnFolded')).toBe('0');
+  });
+});
+
+// Owner decisions of 2026-11-11 (docs/mocks/project-sessions-column, board 5): at phone width a project row
+// opens the coordinator's conversation itself, and the title bar's button brings the project's sessions up
+// in a bottom sheet over it.
+describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
+  const sheet = (): HTMLElement | null => document.querySelector<HTMLElement>('.project-sessions-sheet');
+  const sheetTitles = (): string[] => [...(sheet()?.querySelectorAll('.session-row .session-title') ?? [])].map((el) => el.textContent ?? '');
+  const conversationName = (): string | null | undefined => mounted().querySelector('.workspace-header .workspace-name')?.textContent;
+  const button = (): HTMLButtonElement => {
+    const found = projectSessionsButton();
+    if (!found) throw new Error('no Project sessions button');
+    return found;
+  };
+  const openCoordinator = async (): Promise<void> => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(conversationName()).toBe(COORDINATOR.title));
+  };
+  const openSheet = async (): Promise<void> => {
+    await openCoordinator();
+    await until(() => expect(button().textContent).toBe('2'));
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(sheetTitles()).toEqual([COORDINATOR.title, TASK.title]));
+  };
+  /** A drag of the grabber from y=`from` to y=`to`, with the sheet `height` px tall in an 852px-tall viewport. */
+  const drag = async (from: number, to: number, height: number): Promise<void> => {
+    vi.stubGlobal('innerHeight', 852);
+    const drawer = sheet()!;
+    Object.defineProperty(drawer, 'getBoundingClientRect', { configurable: true, value: () => ({ height }) });
+    const grabber = drawer.querySelector('.project-sessions-sheet-grabber')!;
+    const pointer = (type: string, clientY: number) => new MouseEvent(type, { bubbles: true, clientY });
+    await act(async () => grabber.dispatchEvent(pointer('pointerdown', from)));
+    await act(async () => grabber.dispatchEvent(pointer('pointermove', to)));
+    await act(async () => grabber.dispatchEvent(pointer('pointerup', to)));
+    await settle();
+  };
+
+  beforeEach(() => { mobile = true; });
+
+  it('opens the coordinator’s conversation from a project row, with no project sessions page', async () => {
+    await openCoordinator();
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(page()).toBeNull();
+    expect(mounted().querySelector('.workspace-split')?.classList.contains('show-conversation')).toBe(true);
+    // The title bar carries the button, left of ⋮, unpressed, with no sheet up yet.
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    expect(sheet()).toBeNull();
+  });
+
+  it('opens the project’s sessions in a bottom sheet at medium height from the title bar’s button', async () => {
+    await openSheet();
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    expect(sheet()!.dataset.placement).toBe('bottom');
+    expect(sheet()!.style.height).toBe('62%');
+    expect(sheet()!.querySelector('.project-sessions-sheet-grabber')).not.toBeNull();
+    expect(document.querySelector('.orbit-overlay-backdrop')).not.toBeNull();
+    // Today's page, as the column has it: the head with ✕, the progress card, Coordinator selected.
+    const head = sheet()!.querySelector('.session-project-page-header')!;
+    expect(head.textContent).toContain('Project Alpha');
+    expect(head.textContent).toContain('Project · 2 sessions');
+    expect(head.querySelector('.session-folder-back')?.getAttribute('aria-label')).toBe('Hide project sessions');
+    expect(sheet()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
+    expect(sheet()!.querySelector('.session-project-coordinator .session-row.active .session-title')?.textContent).toBe(COORDINATOR.title);
+    // The list behind keeps the workspace's rows: no page took its place.
+    expect(page()).toBeNull();
+    expect(titles()).toContain(LOOSE.title);
+  });
+
+  it('closes the sheet and opens a member tapped in it, and Back returns to the session list', async () => {
+    await openSheet();
+    const member = [...sheet()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title);
+    await click(member, 'the member row in the sheet');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(sheet()).toBeNull());
+    await until(() => expect(conversationName()).toBe(TASK.title));
+    // The member's title bar carries the same button, unpressed.
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(mounted().querySelector('.workspace-back-mobile'), 'the conversation’s Back');
+    await until(() => expect(location.startsWith('/sessions/')).toBe(false));
+    expect(mounted().querySelector('.workspace-split')?.classList.contains('show-conversation')).toBe(false);
+    expect(page()).toBeNull();
+    expect(projectRows()).toHaveLength(1);
+  });
+
+  it('closes on its ✕ and on Esc, leaving the conversation as it was', async () => {
+    await openSheet();
+    await click(sheet()!.querySelector('.session-project-page-header .session-folder-back'), 'the sheet’s ✕');
+    await until(() => expect(sheet()).toBeNull());
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(sheet()).not.toBeNull());
+    await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await until(() => expect(sheet()).toBeNull());
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+  });
+
+  it('drags up to full height, back to medium, and closes on a drag down', async () => {
+    await openSheet();
+    await drag(330, 30, 528);
+    await until(() => expect(sheet()!.style.height).toBe('94%'));
+    await drag(50, 300, 800);
+    await until(() => expect(sheet()!.style.height).toBe('62%'));
+    await drag(330, 700, 528);
+    await until(() => expect(sheet()).toBeNull());
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
   });
 });
 

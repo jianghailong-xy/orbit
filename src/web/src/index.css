@@ -3183,6 +3183,53 @@ button.toast--pill:focus-visible {
   border-left: 1px solid var(--border-subtle);
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
 }
+/* At phone width the project's sessions page comes up as a bottom sheet over the conversation
+   (owner 2026-11-11, board 5): the shared bottom drawer, rounded on top, its title kept for the
+   reader only (the page head inside draws it), and a grabber that drags it between medium and full. */
+.project-sessions-sheet {
+  border-radius: 14px 14px 0 0;
+  background: var(--bg-raised);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .project-sessions-sheet:not(.dragging) { transition: translate .3s, height .25s; }
+}
+.project-sessions-sheet > .orbit-overlay-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+}
+.project-sessions-sheet > .orbit-overlay-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.project-sessions-sheet-grabber {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 6px;
+  cursor: grab;
+  touch-action: none;
+}
+.project-sessions-sheet-grabber > span {
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--text-4);
+  opacity: 0.6;
+}
+/* Portalled out of .workspace-split, so it sets the phone's pane gutter itself. */
+.project-sessions-sheet-page {
+  --pane-gutter: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--pane-gutter);
+}
 /* Draggable divider between the session list and the conversation. The visible
    1px line matches the old column border; ::before widens the grab area. */
 .session-resizer {

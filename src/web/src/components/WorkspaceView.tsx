@@ -442,6 +442,7 @@ import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
 import { Button } from './ui/Button';
+import { ProjectSessionsSheet } from './ProjectSessionsSheet';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Image } from './ui/Image';
 import { Menu, type MenuItem } from './ui/Menu';
@@ -2101,7 +2102,16 @@ export function WorkspaceView({
   // whichever list the left one is on. A landing session's own `/sessions/<id>` opens the same window
   // on that landing.
   const landingsProjectId = routeId(useMatch('/projects/:id/landings')?.params.id);
-  const openProjectId = routeId(searchParams.get('project'));
+  // Below the mobile breakpoint the two panes stack one-at-a-time; a couple of layout
+  // choices (the auto-open redirect, the in-pane back button) key off this.
+  const isMobile = useIsMobile();
+  // The project whose sessions the phone's bottom sheet shows over the conversation (owner 2026-11-11,
+  // docs/mocks/project-sessions-column board 5), or null while it is closed. The sheet draws the same
+  // page the column does, from the same reads, so while it is open it is the page's project.
+  const [sheetProjectId, setSheetProjectId] = useState<string | null>(null);
+  const addressProjectId = routeId(searchParams.get('project'));
+  useEffect(() => { setSheetProjectId(null); }, [selectedId, isMobile]);
+  const openProjectId = (isMobile ? sheetProjectId : null) ?? addressProjectId;
   // Latest selectedId, readable from async callbacks (loadOlder) to bail if the user has
   // switched sessions since the request was issued — so a late page never lands in the wrong
   // transcript. Assigning during render is safe for a "current value" ref.
@@ -2153,13 +2163,10 @@ export function WorkspaceView({
     showsConversation(window.location.pathname) ? undefined : { paneFromList: true };
   const arrivedFromList = (): boolean =>
     (window.history.state?.usr as { paneFromList?: boolean } | null)?.paneFromList === true;
-  // Below the mobile breakpoint the two panes stack one-at-a-time; a couple of layout
-  // choices (the auto-open redirect, the in-pane back button) key off this.
-  const isMobile = useIsMobile();
   // Where `?project=` draws the project's sessions page (owner 2026-11-11,
   // docs/mocks/project-sessions-column): at phone width it still takes the list's place; wider, the
   // list stays the workspace's and the page is a column at the conversation's right edge.
-  const listProjectId = isMobile ? openProjectId : null;
+  const listProjectId = isMobile ? addressProjectId : null;
   const columnProjectId = isMobile ? null : openProjectId;
   const projectView = listProjectId ? (searchParams.get('view') === 'completed' ? 'completed' : 'open') : null;
   // Installed-PWA / standalone is the only mode where ⌘N actually reaches the page
@@ -3073,7 +3080,7 @@ export function WorkspaceView({
   // The project of the open conversation, when it is the coordinator or a member of one: its title bar
   // carries the Project sessions button (owner 2026-11-11, boards 2-4). At phone width the button is
   // the bottom sheet's, not the column's.
-  const titleBarProjectId = isMobile ? null : (selectedSession?.projectMembership?.projectId ?? null);
+  const titleBarProjectId = selectedSession?.projectMembership?.projectId ?? null;
   // The button's count is the column header's "Project · N sessions". Where the column shows another
   // project or none, the same two reads (one cache entry with the column's) count it.
   const titleBarOwnRead = !!titleBarProjectId && titleBarProjectId !== openProjectId;
@@ -8968,7 +8975,11 @@ export function WorkspaceView({
                 if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
                 if (swipeOpen) { setSwipeOpen(null); return; }
                 setMenuOpenId(null);
-                enterProjectSessions(s.projectId, coordinator?.id);
+                // A phone opens the coordinator's conversation itself, with no push into the project's
+                // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
+                if (isMobile && coordinator) navigateWithPaneSlide('push', () =>
+                  navigate(sessionPath(coordinator.id), { state: stampFromList() }));
+                else enterProjectSessions(s.projectId, coordinator?.id);
               }}
               menuOpen={menuOpenId === s.id}
               onMenuOpenChange={(open) => { setMenuOpenId(open ? s.id : null); if (open) setSwipeOpen(null); }}
@@ -9105,10 +9116,17 @@ export function WorkspaceView({
                 return;
               }
               setMenuOpenId(null);
-              if (openable)
-                navigateWithPaneSlide('push', () =>
-                  navigate(sessionItemPath(actionSession, pageProjectId ? projectSearch : undefined), { state: stampFromList() }),
-                );
+              if (!openable) return;
+              // Picked in the phone's sheet: the sheet closes and the conversation turns into the member,
+              // in the open conversation's place, so ← still returns to the list behind it (board 5).
+              if (pageProjectId && sheetProjectId) {
+                setSheetProjectId(null);
+                navigate(sessionItemPath(actionSession, listSearch), { replace: true, state: window.history.state?.usr });
+                return;
+              }
+              navigateWithPaneSlide('push', () =>
+                navigate(sessionItemPath(actionSession, pageProjectId ? projectSearch : undefined), { state: stampFromList() }),
+              );
             }}
             onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe, undefined, movable); }}
             onTouchMove={onRowTouchMove}
@@ -9573,8 +9591,9 @@ export function WorkspaceView({
                 <Button variant="text" className="workspace-header-project"
                   icon={<SidebarNavIcon name="projects" />}
                   title={PROJECT_COLUMN_COPY.label} aria-label={PROJECT_COLUMN_COPY.label}
-                  aria-pressed={titleBarProjectId === columnProjectId && projectColumnOpen}
-                  onClick={toggleProjectColumn}>
+                  aria-pressed={isMobile ? sheetProjectId === titleBarProjectId
+                    : titleBarProjectId === columnProjectId && projectColumnOpen}
+                  onClick={isMobile ? () => setSheetProjectId(titleBarProjectId) : toggleProjectColumn}>
                   {titleBarSessionCount ?? undefined}
                 </Button>
               )}
@@ -10641,6 +10660,26 @@ export function WorkspaceView({
             </div>
           </aside>
         </>
+      )}
+      {isMobile && (
+        <ProjectSessionsSheet open={!!sheetProjectId && sheetProjectId === openProjectId}
+          onClose={() => setSheetProjectId(null)} title={pageProjectTitle}>
+          {sheetProjectId && (
+            <div className="session-col project-sessions-sheet-page">
+              {projectPageHead(() => setSheetProjectId(null), PROJECT_COLUMN_COPY.close, <CloseOutlined />)}
+              <div className="workspace-sessions session-col-list autohide-scrollbar">
+                {projectPageTop(sheetProjectId)}
+                {projectPageEmpty}
+                {projectSections.map((sec) => renderSection(sec, sheetProjectId))}
+                {loadingProjectSessions && (
+                  <div className="session-list-more">
+                    <Spinner size="small" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </ProjectSessionsSheet>
       )}
       {confirmation}
     </div>
