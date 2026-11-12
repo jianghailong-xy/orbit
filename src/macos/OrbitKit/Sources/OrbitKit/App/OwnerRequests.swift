@@ -1,9 +1,8 @@
 import Foundation
 
 /// Owner requests: what a session asked the account owner to do, as a card in the conversation that
-/// asked, in the "Waiting on you" inbox, and behind a push's actions. Every word and rule the views
-/// draw is here, pure and tested; the web says the same things (`lib/ownerRequests.ts`,
-/// `components/OwnerRequestCard.tsx`, `pages/WaitingOnYouPage.tsx`).
+/// asked, and behind a push's actions. Every word and rule the views draw is here, pure and tested;
+/// the web says the same things (`lib/ownerRequests.ts`, `components/OwnerRequestCard.tsx`).
 public enum OwnerRequests {
     public static let waitingOnYou = "Waiting on you"
 
@@ -32,26 +31,6 @@ public enum OwnerRequests {
     /// The way out of doing it, which always asks why.
     public static func declineLabel(_ kind: OwnerRequestKind) -> String {
         kind == .manualStep ? "Can’t do this…" : "Decline…"
-    }
-
-    /// The button on an inbox row, which opens the card under it.
-    public static func inboxAction(_ kind: OwnerRequestKind) -> String {
-        switch kind {
-        case .decision:   return "Answer"
-        case .secret:     return "Provide"
-        case .manualStep: return "Open steps"
-        case .confirm:    return "Review"
-        }
-    }
-
-    /// An inbox row's SF Symbol.
-    public static func symbol(_ kind: OwnerRequestKind) -> String {
-        switch kind {
-        case .decision:   return "questionmark"
-        case .secret:     return "key.fill"
-        case .manualStep: return "list.number"
-        case .confirm:    return "checkmark.shield"
-        }
     }
 
     // MARK: the pending card
@@ -263,56 +242,7 @@ public enum OwnerRequests {
         return request.state == .done || removalToTell(grant) ? grant : nil
     }
 
-    // MARK: the inbox
-
-    public enum InboxTab: String, CaseIterable, Sendable, Identifiable {
-        case open, done, declined
-        public var id: String { rawValue }
-        public var label: String {
-            switch self {
-            case .open: return "Open"
-            case .done: return "Done"
-            case .declined: return "Declined"
-            }
-        }
-        public var empty: String {
-            switch self {
-            case .open: return "Nothing is waiting on you."
-            case .done: return "Nothing has been done yet."
-            case .declined: return "Nothing has been declined."
-            }
-        }
-        /// The list door's `state`.
-        public var filter: String { rawValue }
-    }
-
-    /// "3 steps", "decision · recommended: auth", "confirmation" — the row's first detail.
-    public static func inboxDetail(_ request: OwnerRequest) -> String? {
-        switch request.kind {
-        case .manualStep:
-            let steps = request.steps?.count ?? 0
-            return "\(steps) \(steps == 1 ? "step" : "steps")"
-        case .decision:
-            let label = request.recommendedOption.flatMap { index in
-                request.options.flatMap { $0.indices.contains(index) ? $0[index].label : nil }
-            }
-            return label.map { "decision · recommended: \($0)" } ?? "decision"
-        case .confirm:
-            return "confirmation"
-        case .secret:
-            return nil
-        }
-    }
-
-    /// "holds 2 tasks", and for how long once that has passed a day: the part of the row that is overdue.
-    public static func holdsText(_ request: OwnerRequest, now: Date = Date()) -> String? {
-        let count = request.blocksTaskIds.count
-        guard count > 0 else { return nil }
-        let base = "holds \(count) \(count == 1 ? "task" : "tasks")"
-        guard let asked = RelativeTime.parse(request.createdAt) else { return base }
-        let waited = now.timeIntervalSince(asked)
-        return waited >= 86_400 ? "\(base) for \(RelativeTime.span(waited))" : base
-    }
+    // MARK: the account's reads
 
     /// One session's requests, oldest first: the order they were asked in its conversation.
     public static func forSession(_ requests: [OwnerRequest], sessionID: String) -> [OwnerRequest] {
@@ -340,15 +270,6 @@ public enum OwnerRequests {
     public static func find(_ id: String, in requests: [OwnerRequest]) -> OwnerRequest? {
         let key = PublicID.storageKey(id)
         return requests.first { PublicID.storageKey($0.id) == key }
-    }
-
-    /// The count beside "Waiting on you": open requests, less those put off until later.
-    public static func waitingCount(_ open: [OwnerRequest], snoozes: [String: Date], now: Date = Date()) -> Int {
-        open.filter { $0.state == .pending && !isSnoozed($0.id, snoozes: snoozes, now: now) }.count
-    }
-
-    public static func isSnoozed(_ id: String, snoozes: [String: Date], now: Date = Date()) -> Bool {
-        (snoozes[PublicID.storageKey(id)] ?? .distantPast) > now
     }
 
     /// "Remind me later" choices that come back before the deadline.
@@ -379,8 +300,8 @@ public enum OwnerRequests {
 }
 
 /// Reminders the owner set with "Remind me later" or a push's Later. The server has no snooze, so a
-/// reminder belongs to this device, as the web's belongs to its browser: it folds the card and takes
-/// the request out of the count, and changes nothing about the request itself.
+/// reminder belongs to this device, as the web's belongs to its browser: it folds the card until it
+/// comes back, and changes nothing about the request itself.
 public struct OwnerRequestSnoozes: Sendable {
     public static let defaultsKey = "orbit.ownerRequestSnoozes"
     private let defaults: UserDefaults
@@ -406,10 +327,10 @@ public struct OwnerRequestSnoozes: Sendable {
     }
 }
 
-/// `orbit://owner-request/<id>`: the "Waiting on you" inbox with that request's card open and its
-/// input focused — where a push's "Provide key", "Answer" or "Mark done" lands. It rides beside
-/// `Route` rather than in it, as `SessionRecordLink` does: `Route` is switched over exhaustively in
-/// the app shells, and this names no page of its own.
+/// `orbit://owner-request/<id>`: the conversation that asked, landed on that request's card — where
+/// a push's "Provide key", "Answer" or "Mark done" leads. It names the request only; the app reads
+/// it for `askedBySessionId`. It rides beside `Route` rather than in it, as `SessionRecordLink`
+/// does: this names no page of its own.
 public enum OwnerRequestLink {
     public static let host = "owner-request"
 
@@ -424,114 +345,4 @@ public enum OwnerRequestLink {
               PublicID.toUUID(id) != nil else { return nil }
         return PublicID.toPublic(id)
     }
-
-    /// What the card puts the cursor on when a link opens it: the key, the answer, or the button.
-    public enum Focus: Equatable, Sendable { case secret, answer, primary }
-
-    public static func focus(_ kind: OwnerRequestKind) -> Focus {
-        switch kind {
-        case .secret: return .secret
-        case .decision: return .answer
-        case .manualStep, .confirm: return .primary
-        }
-    }
-}
-
-// MARK: one inbox — owner requests and the coordinators' questions
-
-/// An open question a project's coordinator put to the owner (`ask_owner`, a COORDINATOR_QUESTION open
-/// item). It stays on its own table, but to the owner it is one more thing waiting, listed and counted
-/// beside the owner requests (owner decision: one "Waiting on you" inbox; web `WaitingOnYouPage`).
-public struct OwnerInboxQuestion: Equatable, Sendable, Identifiable {
-    public let projectID: String
-    public let projectTitle: String
-    /// The conversation the question's card is drawn in, which Answer opens. Nil while unknown.
-    public let coordinatorSessionID: String?
-    public let coordinatorWorkspaceID: String?
-    public let row: ProjectOpenItemRow
-    public var id: String { row.itemId }
-
-    public init(projectID: String, projectTitle: String, coordinatorSessionID: String? = nil,
-                coordinatorWorkspaceID: String? = nil, row: ProjectOpenItemRow) {
-        self.projectID = projectID
-        self.projectTitle = projectTitle
-        self.coordinatorSessionID = coordinatorSessionID
-        self.coordinatorWorkspaceID = coordinatorWorkspaceID
-        self.row = row
-    }
-}
-
-/// One row of the inbox's Open tab.
-public enum OwnerInboxEntry: Equatable, Sendable, Identifiable {
-    case request(OwnerRequest)
-    case question(OwnerInboxQuestion)
-
-    public var id: String {
-        switch self {
-        case .request(let request): return "request-\(PublicID.storageKey(request.id))"
-        case .question(let question): return "question-\(question.row.itemId)"
-        }
-    }
-
-    /// When it started waiting: a request's `createdAt`, a question's `waitingSince`.
-    public var at: String {
-        switch self {
-        case .request(let request): return request.createdAt
-        case .question(let question): return question.row.waitingSince
-        }
-    }
-}
-
-public extension OwnerRequests {
-    /// The open projects whose coordinator has a question waiting on the owner: the only ones whose
-    /// open items are read, as the web reads them (`projectsWithQuestions`).
-    static func projectsAsking(_ projects: [ProjectSummary]) -> [ProjectSummary] {
-        projects.filter { project in
-            project.status == .open
-                && (project.attention?.ownerItems ?? []).contains { $0.kind == .coordinatorQuestion && $0.count > 0 }
-        }
-    }
-
-    /// One project's open questions, from its open-items read.
-    static func questions(project: ProjectSummary, items: ProjectOpenItemsView?, coordinatorSessionID: String?,
-                          coordinatorWorkspaceID: String?) -> [OwnerInboxQuestion] {
-        CoordinatorQuestions.open(items).map {
-            OwnerInboxQuestion(projectID: project.id, projectTitle: project.title,
-                               coordinatorSessionID: coordinatorSessionID,
-                               coordinatorWorkspaceID: coordinatorWorkspaceID, row: $0)
-        }
-    }
-
-    /// The Open tab: pending requests and open questions, newest first.
-    static func openEntries(_ requests: [OwnerRequest], questions: [OwnerInboxQuestion]) -> [OwnerInboxEntry] {
-        let entries = requests.filter { $0.state == .pending }.map(OwnerInboxEntry.request)
-            + questions.map(OwnerInboxEntry.question)
-        return entries.enumerated().sorted { a, b in
-            let x = RelativeTime.parse(a.element.at) ?? .distantPast
-            let y = RelativeTime.parse(b.element.at) ?? .distantPast
-            return x != y ? x > y : a.offset < b.offset
-        }.map(\.element)
-    }
-
-    /// The one count: requests not put off until later, plus every open coordinator question.
-    static func waitingCount(_ open: [OwnerRequest], questions: [OwnerInboxQuestion], snoozes: [String: Date],
-                             now: Date = Date()) -> Int {
-        waitingCount(open, snoozes: snoozes, now: now) + questions.count
-    }
-
-    /// A question row's title: its opening as plain text.
-    static func questionTitle(_ question: OwnerInboxQuestion) -> String {
-        question.row.question.map(CoordinatorQuestions.lead) ?? question.row.title
-    }
-
-    /// "Payments · decision · recommended: auth" — the web row's detail, word for word.
-    static func questionDetail(_ question: OwnerInboxQuestion) -> String {
-        let asked = question.row.question
-        let label = asked?.recommendedOption.flatMap { index in
-            asked.flatMap { $0.options.indices.contains(index) ? $0.options[index].label : nil }
-        }
-        return "\(question.projectTitle) · \(label.map { "decision · recommended: \($0)" } ?? "decision")"
-    }
-
-    static let answer = "Answer"
 }

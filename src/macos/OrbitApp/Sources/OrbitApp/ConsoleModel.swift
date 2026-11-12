@@ -4955,6 +4955,13 @@ final class ConsoleModel {
         for request in requests {
             deliver(.ownerRequest(requestID: request.id), placement: .at(request.createdAt))
         }
+        // The press that named one of these waited for exactly this read; re-issue it now that
+        // its row is drawn, so the transcript that is listening scrolls.
+        if let request = ownerRequestRequest,
+           decisionCards.contains(where: { $0.id == request.rowID }) {
+            scrollTick += 1
+            ownerRequestRequest = ScrollRequest(rowID: request.rowID, tick: scrollTick)
+        }
     }
 
     /// The owner requests of this conversation still pending, by storage key.
@@ -5673,6 +5680,25 @@ final class ConsoleModel {
     /// read says the card is not here, because a scroll to a row nothing draws is a silent no-op
     /// that would leave the reader looking at wherever they happened to be.
     private var pendingOwnerItem: SessionOwnerItem?
+
+    /// The owner request a link, a push's action or a reminder is on its way to, by its row. Its own
+    /// request, like `recordRequest`, so a console the press creates still follows it: the row is
+    /// drawn from the account's request read (`adoptOwnerRequests`), which lands after the press.
+    private(set) var ownerRequestRequest: ScrollRequest?
+
+    /// Point this conversation at one owner request's row. The door holds only the request's id;
+    /// the row is `owner-request-<key>`, the same address the transcript draws.
+    func focus(ownerRequestID: String) {
+        scrollTick += 1
+        ownerRequestRequest = ScrollRequest(
+            rowID: DeliveredDecisionCard(kind: .ownerRequest(requestID: PublicID.toPublic(ownerRequestID))).id,
+            tick: scrollTick)
+    }
+
+    /// The transcript followed (or dropped) the pending owner-request press.
+    func ownerRequestRequestFollowed() {
+        ownerRequestRequest = nil
+    }
 
     /// Point this conversation at one of the four owner items (§7.6 V13). Called by the banner's
     /// press, which knows which item it named.

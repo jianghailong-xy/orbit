@@ -1,9 +1,9 @@
 import SwiftUI
 import OrbitKit
 
-// What a session asked the owner to do, drawn the same way in the conversation that asked and in the
-// "Waiting on you" inbox: pending it is the whole request, ended it is one line saying how, who and
-// when. Every word comes from OrbitKit's `OwnerRequests`; web parity: `components/OwnerRequestCard.tsx`.
+// What a session asked the owner to do, drawn in the conversation that asked: pending it is the
+// whole request, ended it is one line saying how, who and when. Every word comes from OrbitKit's
+// `OwnerRequests`; web parity: `components/OwnerRequestCard.tsx`.
 
 private extension Color {
     static let ownerRequestAccent = Color.orange
@@ -13,29 +13,26 @@ private extension Color {
 struct OwnerRequestView: View {
     @Environment(AppModel.self) private var appModel
     let requestID: String
-    /// The input a push or a link asked for: the card puts the cursor there when it appears.
-    var focus: OwnerRequestLink.Focus? = nil
 
     var body: some View {
         if let model = appModel.ownerRequests, let request = model.request(requestID) {
-            OwnerRequestContent(model: model, request: request, focus: focus)
+            OwnerRequestContent(model: model, request: request)
         }
     }
 }
 
-/// The same, given the model and the request: what the inbox and the probe draw directly.
+/// The same, given the model and the request: what a probe draws directly.
 struct OwnerRequestContent: View {
     let model: OwnerRequestsModel
     let request: OwnerRequest
-    var focus: OwnerRequestLink.Focus? = nil
 
     var body: some View {
         if request.state != .pending {
             OwnerRequestResolvedLine(model: model, request: request)
-        } else if focus == nil, let until = model.snoozedUntil(request.id) {
+        } else if let until = model.snoozedUntil(request.id) {
             OwnerRequestSnoozedLine(model: model, request: request, until: until)
         } else {
-            OwnerRequestCard(model: model, request: request, focus: focus)
+            OwnerRequestCard(model: model, request: request)
         }
     }
 }
@@ -44,7 +41,6 @@ struct OwnerRequestContent: View {
 struct OwnerRequestCard: View {
     let model: OwnerRequestsModel
     let request: OwnerRequest
-    var focus: OwnerRequestLink.Focus? = nil
 
     private enum Field: Hashable { case secret, answer, reason }
 
@@ -59,10 +55,9 @@ struct OwnerRequestCard: View {
     @State private var failure: String?
     @FocusState private var field: Field?
 
-    init(model: OwnerRequestsModel, request: OwnerRequest, focus: OwnerRequestLink.Focus? = nil) {
+    init(model: OwnerRequestsModel, request: OwnerRequest) {
         self.model = model
         self.request = request
-        self.focus = focus
         _draft = State(initialValue: OwnerRequests.SecretDraft(spec: request.secretSpec))
         _chosen = State(initialValue: request.recommendedOption)
     }
@@ -108,16 +103,6 @@ struct OwnerRequestCard: View {
         .background(Color.ownerRequestAccent.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.ownerRequestAccent.opacity(0.45)))
         .accessibilityIdentifier("owner-request-\(request.id)")
-        .task(id: focus) {
-            guard let focus else { return }
-            // Let the card land on screen before the cursor goes in, or the field is not there yet.
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            switch focus {
-            case .secret: field = .secret
-            case .answer: field = .answer
-            case .primary: field = nil
-            }
-        }
         .task(id: request.id) {
             if request.kind == .secret { await model.loadSavedSecrets() }
             await model.loadTaskTitles(request.blocksTaskIds)
@@ -510,189 +495,3 @@ struct OwnerRequestSnoozedLine: View {
     }
 }
 
-/// "Waiting on you": everything agents have asked the owner to do, with Open, Done and Declined (panel 3).
-struct OwnerRequestInboxView: View {
-    let model: OwnerRequestsModel
-    var onClose: (() -> Void)? = nil
-    @State private var expanded: Set<String> = []
-
-    var body: some View {
-        @Bindable var model = model
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text(OwnerRequests.waitingOnYou).font(.title3.weight(.semibold))
-                if model.waitingCount > 0 {
-                    Text("\(model.waitingCount)")
-                        .font(.orbitLabel.weight(.bold)).foregroundStyle(.white)
-                        .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background(Color.ownerRequestAccent, in: Capsule())
-                }
-                Spacer()
-                if let onClose {
-                    Button { onClose() } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Close")
-                }
-            }
-            .padding([.horizontal, .top], 16)
-            Picker(OwnerRequests.waitingOnYou, selection: $model.tab) {
-                ForEach(OwnerRequests.InboxTab.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(16)
-            Divider()
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        let rows = model.rows(model.tab)
-                        let entries = model.openEntries
-                        if model.tab == .open ? entries.isEmpty : rows.isEmpty {
-                            Text(model.tab.empty).font(.orbitSubtext).foregroundStyle(.secondary).padding(16)
-                        }
-                        if model.tab == .open {
-                            ForEach(entries) { entry in
-                                switch entry {
-                                case .request(let request): row(request).id(request.id)
-                                case .question(let question): questionRow(question)
-                                }
-                                Divider()
-                            }
-                        }
-                        ForEach(model.tab == .open ? [] : rows) { request in
-                            OwnerRequestResolvedLine(model: model, request: request)
-                                .padding(.horizontal, 16).padding(.vertical, 6)
-                        }
-                    }
-                }
-                .onChange(of: model.focusedRequestID, initial: true) { _, id in
-                    guard let id, let request = model.request(id) else { return }
-                    expanded.insert(request.id)
-                    withAnimation { proxy.scrollTo(request.id, anchor: .top) }
-                }
-                .onChange(of: model.open.count) { _, _ in
-                    guard let id = model.focusedRequestID, let request = model.request(id) else { return }
-                    expanded.insert(request.id)
-                    proxy.scrollTo(request.id, anchor: .top)
-                }
-            }
-        }
-        .task(id: model.tab) { await model.loadTab(model.tab) }
-        .accessibilityIdentifier("owner-request-inbox")
-    }
-
-    /// A coordinator's question: Answer opens its card in the conversation it was asked in.
-    private func questionRow(_ question: OwnerInboxQuestion) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "questionmark")
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 32, height: 32)
-                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(OwnerRequests.questionTitle(question)).font(.orbitSubtext.weight(.semibold)).lineLimit(2)
-                Text(OwnerRequests.questionDetail(question)).font(.orbitLabel).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(RelativeTime.ago(question.row.waitingSince) ?? "").font(.orbitLabel).foregroundStyle(.secondary)
-                Button(OwnerRequests.answer) { model.onAnswerQuestion(question) }
-                    .buttonStyle(.bordered).controlSize(.small)
-                    .accessibilityIdentifier("owner-question-row-\(question.id)")
-            }
-        }
-        .padding(16)
-    }
-
-    private func row(_ request: OwnerRequest) -> some View {
-        let open = expanded.contains(request.id)
-        let detail = [OwnerRequests.inboxDetail(request)].compactMap { $0 }.joined(separator: " · ")
-        let holds = OwnerRequests.holdsText(request)
-        let age = model.snoozedUntil(request.id).map { OwnerRequests.reminderLine($0) }
-            ?? RelativeTime.ago(request.createdAt) ?? ""
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: OwnerRequests.symbol(request.kind))
-                    .foregroundStyle(request.kind == .secret ? Color.ownerRequestAccent : .accentColor)
-                    .frame(width: 32, height: 32)
-                    .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(request.title).font(.orbitSubtext.weight(.semibold))
-                    if !detail.isEmpty || holds != nil {
-                        Text("\(detail)\(detail.isEmpty || holds == nil ? "" : " · ")\(Text(holds ?? "").foregroundColor(.orange).bold())")
-                            .font(.orbitLabel).foregroundStyle(.secondary)
-                    }
-                }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(age).font(.orbitLabel).foregroundStyle(.secondary)
-                    Button(open ? "Close" : OwnerRequests.inboxAction(request.kind)) {
-                        if open { expanded.remove(request.id) } else { expanded.insert(request.id) }
-                    }
-                    .buttonStyle(.bordered).controlSize(.small)
-                    .accessibilityIdentifier("owner-request-row-\(request.id)")
-                }
-            }
-            if open {
-                let focused = model.focusedRequestID.map { PublicID.storageKey($0) == PublicID.storageKey(request.id) } ?? false
-                OwnerRequestContent(model: model, request: request,
-                                    focus: focused ? OwnerRequestLink.focus(request.kind) : nil)
-            }
-        }
-        .padding(16)
-    }
-}
-
-/// The inbox as a sheet over whichever shell is showing, raised by a push action, a link or its entry.
-struct OwnerRequestInboxSheet: ViewModifier {
-    let model: AppModel
-    func body(content: Content) -> some View {
-        content.sheet(isPresented: Binding(
-            get: { model.ownerRequests?.inboxPresented ?? false },
-            set: { shown in
-                model.ownerRequests?.inboxPresented = shown
-                if !shown { model.ownerRequests?.focusedRequestID = nil }
-            })) {
-            if let requests = model.ownerRequests {
-                OwnerRequestInboxView(model: requests, onClose: {
-                    requests.inboxPresented = false
-                    requests.focusedRequestID = nil
-                })
-                #if os(macOS)
-                .frame(minWidth: 620, minHeight: 560)
-                #endif
-            }
-        }
-    }
-}
-
-extension View {
-    func ownerRequestInboxSheet(_ model: AppModel) -> some View { modifier(OwnerRequestInboxSheet(model: model)) }
-}
-
-/// The entry to the inbox, with its count: in the drawer and the sidebar.
-struct OwnerRequestInboxEntry: View {
-    @Environment(AppModel.self) private var appModel
-
-    var body: some View {
-        if let requests = appModel.ownerRequests, !requests.unsupported {
-            Button {
-                requests.tab = .open
-                requests.inboxPresented = true
-            } label: {
-                HStack {
-                    Label(OwnerRequests.waitingOnYou, systemImage: "hand.raised")
-                    Spacer()
-                    if requests.waitingCount > 0 {
-                        Text("\(requests.waitingCount)")
-                            .font(.orbitLabel.weight(.bold)).foregroundStyle(.white)
-                            .padding(.horizontal, 7).padding(.vertical, 1)
-                            .background(Color.ownerRequestAccent, in: Capsule())
-                    }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("owner-request-inbox-entry")
-        }
-    }
-}

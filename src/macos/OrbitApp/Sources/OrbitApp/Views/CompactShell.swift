@@ -771,8 +771,6 @@ struct NavigationDrawer: View {
                         sectionRow(section)
                     }
                 }
-                // What agents have asked the owner to do: the inbox, with how many are waiting.
-                if let requests = model.ownerRequests, !requests.unsupported { waitingOnYouRow(requests) }
                 workspacesHeader
                 agentsRows
                 projectRows
@@ -1004,31 +1002,6 @@ struct NavigationDrawer: View {
     /// Projects row writes and says its own, and nothing at all at zero. Opening the Wiki never clears
     /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
     /// drawer has no rows below it for the Wiki's pages.
-    /// "Waiting on you": a sheet rather than a page, so a push's action can raise it over anything.
-    private func waitingOnYouRow(_ requests: OwnerRequestsModel) -> some View {
-        let waiting = requests.waitingCount
-        return Button {
-            requests.tab = .open
-            requests.inboxPresented = true
-        } label: {
-            pill(selected: false) {
-                HStack(spacing: 12) {
-                    Image(systemName: "hand.raised").frame(width: 24).foregroundStyle(.primary)
-                    Text(OwnerRequests.waitingOnYou).foregroundStyle(.primary)
-                    Spacer(minLength: 0)
-                    if waiting > 0 {
-                        Text("\(waiting)")
-                            .font(.orbitMeta.weight(.semibold))
-                            .foregroundStyle(.orange)
-                    }
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
-        .accessibilityIdentifier("owner-request-inbox-entry")
-    }
-
     private var wikiRow: some View {
         let selected = model.drawerDestination == .section(.wiki)
         let waiting = model.wiki?.waiting ?? 0

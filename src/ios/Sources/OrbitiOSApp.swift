@@ -38,7 +38,7 @@ struct OrbitiOSApp: App {
                 // with a window-level UIKit recognizer instead.
                 .dismissesKeyboardOnBackgroundTap()
                 .onOpenURL { url in
-                    // `orbit://owner-request/<id>`: the inbox, with that request's card open on its input.
+                    // `orbit://owner-request/<id>`: the conversation that asked, on that request's card.
                     if let request = OwnerRequestLink.parse(url) { model.openOwnerRequest(request); return }
                     if let route = DeepLink.parse(url) { model.route(to: route) }
                     // `orbit://session/<id>?at=<record>`: the session, at that record.
@@ -107,8 +107,6 @@ private struct RootView: View {
             // Settings is a sheet over whichever shell is showing — raised by the drawer's gear, which
             // the iPad's sidebar carries too.
             .settingsSheet(model)
-            // "Waiting on you", raised by its drawer row, a push's action or an `orbit://owner-request/` link.
-            .ownerRequestInboxSheet(model)
         } else {
             LoginView()
         }
