@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApprovalTranslation } from '@orbit/shared';
-import type { ApprovalInfo } from '../api';
+import { ApiError, decideApproval, listApprovals, type ApprovalInfo } from '../api';
+import { useApprovalDecisions } from '../lib/approvalDecisions';
 import { ApprovalPanel } from './ApprovalPanel';
+
+vi.mock('../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api')>()),
+  decideApproval: vi.fn(),
+  listApprovals: vi.fn(),
+}));
 
 /**
  * Settings › Translation (3A): the agent's question cards and options, approval descriptions and plans
@@ -134,5 +141,144 @@ describe('a translated approval', () => {
     );
     expect(container.textContent).toContain('把脚本加载挪到挂载时。');
     expect(container.textContent).not.toContain('Move the script load.');
+  });
+});
+
+/**
+ * Settings › Translation (1A, 3A): an answer whose own words the server could not translate is
+ * refused 422 TRANSLATION_FAILED and nothing is recorded. The card comes back keeping the answer,
+ * with the held message's foot; Retry posts the same decision, Send as written posts it with
+ * sendAsWritten. The same as iOS/macOS (`untranslatedDecisions`) and Android (`card-translation-failed`).
+ */
+describe('an answer refused because it could not be translated', () => {
+  const decideMock = vi.mocked(decideApproval);
+  const listMock = vi.mocked(listApprovals);
+  const QUESTION = card('AskUserQuestion', { questions: QUESTIONS }, TRANSLATED);
+  const FOOT = "Couldn't translate, so it wasn't sent·Retry·Send as written";
+  const untranslated = () => new ApiError("Couldn't translate the answer", 422, 'TRANSLATION_FAILED');
+
+  function Cards({ initial }: { initial: ApprovalInfo }) {
+    const [approvals, setApprovals] = useState<ApprovalInfo[]>([initial]);
+    const { decide, untranslated: held } = useApprovalDecisions('s1', setApprovals);
+    return (
+      <>
+        {approvals.map((a) => (
+          <ApprovalPanel key={a.id} approval={a} onDecide={decide} untranslated={held[a.id]} answerable />
+        ))}
+      </>
+    );
+  }
+
+  const foot = () => container.querySelector('.approval-untranslated');
+  const flush = async () => {
+    for (let i = 0; i < 5; i += 1) await act(async () => Promise.resolve());
+  };
+
+  beforeEach(() => {
+    decideMock.mockReset();
+    listMock.mockReset();
+    listMock.mockResolvedValue([QUESTION]);
+  });
+
+  async function answerThenRefuse(): Promise<void> {
+    decideMock.mockRejectedValueOnce(untranslated());
+    await act(async () => root.render(<Cards initial={QUESTION} />));
+    await act(async () => button('预加载脚本').click());
+    const typed = container.querySelector('.chat-q-custom') as HTMLInputElement;
+    expect(typed.value).toBe('');
+    await act(async () => button('Submit').click());
+    await flush();
+  }
+
+  it('keeps the answer on the card with the foot of a held message', async () => {
+    await answerThenRefuse();
+    expect(decideMock).toHaveBeenCalledTimes(1);
+    expect(decideMock).toHaveBeenCalledWith('s1', 'ap1', 'allow', undefined, { '要用哪种修法？': ['预加载脚本'] }, undefined, undefined, undefined);
+    expect(foot()?.textContent).toBe(FOOT);
+    expect(button('预加载脚本').className).toContain('is-picked');
+    expect(button('Submit').disabled).toBe(false);
+  });
+
+  it('keeps a typed answer too', async () => {
+    decideMock.mockRejectedValueOnce(untranslated());
+    await act(async () => root.render(<Cards initial={QUESTION} />));
+    const typed = container.querySelector('.chat-q-custom') as HTMLInputElement;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setValue.call(typed, '先别改，我想想');
+      typed.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => button('Submit').click());
+    await flush();
+    expect(foot()?.textContent).toBe(FOOT);
+    expect((container.querySelector('.chat-q-custom') as HTMLInputElement).value).toBe('先别改，我想想');
+  });
+
+  it('Retry posts the same decision again', async () => {
+    await answerThenRefuse();
+    decideMock.mockResolvedValueOnce(QUESTION);
+    await act(async () => button('Retry').click());
+    await flush();
+    expect(decideMock).toHaveBeenCalledTimes(2);
+    expect(decideMock.mock.calls[1]).toEqual(['s1', 'ap1', 'allow', undefined, { '要用哪种修法？': ['预加载脚本'] }, undefined, undefined, undefined]);
+  });
+
+  it('Send as written posts it again with sendAsWritten', async () => {
+    await answerThenRefuse();
+    decideMock.mockResolvedValueOnce(QUESTION);
+    await act(async () => button('Send as written').click());
+    await flush();
+    expect(decideMock).toHaveBeenCalledTimes(2);
+    expect(decideMock.mock.calls[1]).toEqual(['s1', 'ap1', 'allow', undefined, { '要用哪种修法？': ['预加载脚本'] }, undefined, undefined, true]);
+  });
+
+  it('a refused Retry keeps the foot; an accepted one clears it', async () => {
+    await answerThenRefuse();
+    decideMock.mockRejectedValueOnce(untranslated());
+    await act(async () => button('Retry').click());
+    await flush();
+    expect(foot()?.textContent).toBe(FOOT);
+    decideMock.mockResolvedValueOnce(QUESTION);
+    listMock.mockResolvedValue([]);
+    await act(async () => button('Retry').click());
+    await flush();
+    expect(foot()).toBeNull();
+  });
+
+  it("an approval's deny message is posted again the same way", async () => {
+    const tool = card('Bash', { command: 'npm test', description: 'Run the web tests' });
+    listMock.mockResolvedValue([tool]);
+    decideMock.mockRejectedValueOnce(untranslated());
+    await act(async () => root.render(<Cards initial={tool} />));
+    await act(async () => button('Approve').click());
+    await flush();
+    expect(foot()?.textContent).toBe(FOOT);
+    decideMock.mockResolvedValueOnce(tool);
+    await act(async () => button('Send as written').click());
+    await flush();
+    expect(decideMock.mock.calls[1]).toEqual(['s1', 'ap1', 'allow', undefined, undefined, undefined, undefined, true]);
+  });
+
+  it('any other refusal is what it was: the card comes back fresh, with no foot', async () => {
+    decideMock.mockRejectedValueOnce(new ApiError('Internal server error', 500));
+    await act(async () => root.render(<Cards initial={QUESTION} />));
+    await act(async () => button('预加载脚本').click());
+    await act(async () => button('Submit').click());
+    await flush();
+    expect(listMock).toHaveBeenCalledWith('s1');
+    expect(container.textContent).toContain('要用哪种修法？');
+    expect(foot()).toBeNull();
+    expect(container.textContent).not.toContain("Couldn't translate");
+    expect(button('预加载脚本').className).not.toContain('is-picked');
+    expect(button('Submit').disabled).toBe(true);
+  });
+
+  it('a 422 with another code is not a translation refusal', async () => {
+    decideMock.mockRejectedValueOnce(new ApiError('Unprocessable', 422, 'SOMETHING_ELSE'));
+    await act(async () => root.render(<Cards initial={QUESTION} />));
+    await act(async () => button('预加载脚本').click());
+    await act(async () => button('Submit').click());
+    await flush();
+    expect(foot()).toBeNull();
   });
 });

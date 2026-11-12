@@ -35,14 +35,11 @@ import {
 import {
   api,
   completeSession,
-  decideApproval,
   deleteSession,
   interruptSession,
-  listApprovals,
   renameSession,
   restoreSession,
   updateSessionConfig,
-  type PermissionRule,
 } from '../api';
 import { Menu } from './ui/Menu';
 import { ApprovalPanel } from './ApprovalPanel';
@@ -159,6 +156,7 @@ import {
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
 import { wikiEntryPath, type WikiSpaceRow } from '../lib/wiki';
+import { useApprovalDecisions } from '../lib/approvalDecisions';
 import { wikiDocSectionPath } from '../lib/wikiDocs';
 import { wikiPlanDocPath, wikiPlanPath } from '../lib/wikiPlan';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
@@ -1454,23 +1452,7 @@ function WikiChatSession({
     }, 0);
   };
 
-  const decide = async (
-    approvalId: string,
-    behavior: 'allow' | 'deny',
-    answers?: Record<string, string[]>,
-    note?: string,
-    rememberRules?: PermissionRule[],
-    startAfterCreate?: boolean,
-  ): Promise<void> => {
-    setApprovals((previous) => previous.filter((approval) => approval.id !== approvalId));
-    try {
-      await decideApproval(sessionId, approvalId, behavior, note, answers, rememberRules, startAfterCreate);
-    } catch {
-      listApprovals(sessionId)
-        .then(setApprovals)
-        .catch(() => undefined);
-    }
-  };
+  const { decide, untranslated } = useApprovalDecisions(sessionId, setApprovals);
 
   // The card the chat was opened at: one named, or the first that needs the owner (design §3).
   const focusCard = useMemo(() => {
@@ -1544,6 +1526,7 @@ function WikiChatSession({
               key={approval.id}
               approval={approval}
               onDecide={decide}
+              untranslated={untranslated[approval.id]}
               rememberable={approvalRememberOffered(engine ?? '')}
             />
           ))}
