@@ -1272,6 +1272,9 @@ public final class APIClient: @unchecked Sendable {
     /// `GET /tasks/:id/attribution`: where this work counts, where it was noticed, which crossing
     /// touches it and what blocks it — the detail page's Attribution block.
     public func taskAttribution(_ id: String) async throws -> TaskAttribution { try await get("tasks/\(id)/attribution") }
+    /// `GET /tasks/:id/evidence`: every version of the task's completion evidence, oldest first,
+    /// each with its decision once it has one.
+    public func taskEvidence(_ id: String) async throws -> [TaskEvidenceRevision] { try await get("tasks/\(id)/evidence") }
     /// `GET /tasks/:id/dependency-graph`, asked the way the browser's panel asks it: both directions,
     /// up to 500 tasks, unary chains paired.
     public func taskDependencyGraph(_ id: String) async throws -> TaskDependencyGraph {

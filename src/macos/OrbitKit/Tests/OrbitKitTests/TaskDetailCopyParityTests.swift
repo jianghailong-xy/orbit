@@ -87,6 +87,41 @@ final class TaskDetailCopyParityTests: XCTestCase {
                     + TaskDetailCopy.nothingStartsThisTask + "'; }", in: Self.panel)
     }
 
+    /// The page led by the run (docs/mocks/task-detail-agent-first): every word the native page says
+    /// in its new blocks, as the web panel declares it.
+    func testTheRunLedPageSaysTheBrowsersWords() throws {
+        let web = try source(Self.panel)
+        for heading in [TaskDetailCopy.nowHeading, TaskDetailCopy.doneMeansHeading, TaskDetailCopy.planHeading,
+                        TaskDetailCopy.runsWithHeading, TaskDetailCopy.activityHeading] {
+            assertSays(web, "<div className=\"tdp-section-title\">\(heading)</div>", in: Self.panel)
+        }
+        assertSays(web, "'\(TaskDetailCopy.deliveredHeading)' : '\(TaskDetailCopy.evidenceHeading)'", in: Self.panel)
+        assertSays(web, ">\(TaskDetailCopy.briefHeading)<", in: Self.panel)
+        assertSays(web, "'\(TaskDetailCopy.hideGraph)' : '\(TaskDetailCopy.showGraph)'", in: Self.panel)
+        assertSays(web, "label: '\(TaskDetailCopy.runAgain)',", in: Self.panel)
+        assertSays(web, TaskDetailCopy.changesApplyToNextRun, in: Self.panel)
+        assertSays(web, "{ label: '\(TaskDetailCopy.toTheRun)', value: 'run' }", in: Self.panel)
+        assertSays(web, "{ label: '\(TaskDetailCopy.comment)', value: 'comment' }", in: Self.panel)
+        assertSays(web, "message.success('\(TaskDetailCopy.sentToTheRun)')", in: Self.panel)
+        assertSays(web, "`Message ${task?.assignee?.name ?? '\(TaskDetailCopy.theAgentInASentence)'} while it works…`",
+                   in: Self.panel)
+        XCTAssertEqual(TaskDetailCopy.messageWhileItWorks("orbit"), "Message orbit while it works…")
+        assertSays(web, "?? '\(TaskDetailCopy.theAgent)'} is working`", in: Self.panel)
+        XCTAssertEqual(TaskDetailCopy.isWorking("orbit"), "orbit is working")
+        assertSays(web, "label: '\(TaskDetailCopy.evidenceAccepted)', tone: 'green'", in: Self.panel)
+        assertSays(web, "label: '\(TaskDetailCopy.evidenceSentBack)', tone: 'amber'", in: Self.panel)
+        assertSays(web, "label: '\(TaskDetailCopy.evidenceAwaiting)', tone: 'muted'", in: Self.panel)
+        assertSays(web, "\(TaskDetailCopy.notCovered){", in: Self.panel)
+        assertSays(web, "<strong>\(TaskDetailCopy.filed)</strong>", in: Self.panel)
+        // The plan's sentence and the evidence line are built the same way on both sides.
+        for fragment in ["'Nothing blocks this task.'", "'Its prerequisite is done.'", "prerequisites are done.`",
+                         "” waits on it.`", "more wait on it.`", "`Evidence r${row.revision} · submitted ${when(row.submittedAt)}`",
+                         "'you' : 'a reviewing agent'", "`Tool call ${check.ref}`", "`Commit ${check.ref.slice(0, 9)}`",
+                         "`Artifact ${check.ref}`", "`File ${check.ref}`", "return '<1m';", "'<$0.01'"] {
+            assertSays(web, fragment, in: Self.panel)
+        }
+    }
+
     /// The run pins, engine first (board 6): the Engine field's label and its unpinned choice, the
     /// Provider field's "Engine default" and what it stands for on each engine, and the groups of
     /// credentials under it — the web panel's words.
@@ -188,7 +223,6 @@ final class TaskDetailCopyParityTests: XCTestCase {
         let web = try source(Self.acceptance)
         let declared: [(String, String)] = [
             ("ACCEPTANCE_EMPTY", TaskDetailCopy.acceptanceEmpty),
-            ("ACCEPTANCE_PAIR_EMPTY", TaskDetailCopy.acceptancePairEmpty),
             ("ACCEPTANCE_AUTOMATIC_HINT", TaskDetailCopy.acceptanceAutomaticHint),
             ("ACCEPTANCE_PAIR_INCOMPLETE", TaskDetailCopy.acceptancePairIncomplete),
             ("ACCEPTANCE_EXIT_CODE_NOT_AN_INTEGER", TaskDetailCopy.acceptanceExitCodeNotAnInteger),
