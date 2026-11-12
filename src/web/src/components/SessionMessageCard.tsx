@@ -29,8 +29,8 @@ import { ExportCtx, MD, REVEAL_EVENT, relTime } from './Transcript';
  * The words are the sending agent's and are drawn as they were sent; what the card adds is who sent
  * them: the session's title, which opens it, the agent it runs as, and the task it runs, from the
  * payload the control plane recorded beside the echo (`sessionMessage`, lib/sessionMessage). The
- * block delivery appended to tell the recipient the same thing rides inside, folded, with anything
- * else delivery appended.
+ * block delivery appended to tell the recipient the same thing is not shown again; anything else
+ * delivery appended rides inside, folded.
  *
  * Every word is shared with the native card (OrbitKit `SessionMessageCard`), and
  * `SessionMessageCopyParityTests.swift` reads lib/sessionMessage.ts to hold the two to it.
@@ -41,6 +41,7 @@ export function SessionMessageCard({
   seq,
   ts,
   undelivered,
+  narrower,
   attached,
   queued,
 }: {
@@ -50,6 +51,8 @@ export function SessionMessageCard({
   seq?: number;
   ts?: string;
   undelivered?: boolean;
+  /** The line for a sender that runs narrower than this session (`splitSessionMessageNote`). */
+  narrower?: string | null;
   /** What delivery appended to the same turn, as its own folded entry. */
   attached?: ReactNode;
   /** The queue's own line, while the message still waits to be delivered (WorkspaceView's queued
@@ -122,6 +125,7 @@ export function SessionMessageCard({
             </>
           )}
         </div>
+        {narrower && <div className="smc-narrower">{narrower}</div>}
         {card.requestId && (exporting
           ? <div className="smc-request"><span className="smc-request-asks">{SESSION_REQUEST_ASKS}</span></div>
           : <SessionRequestStatus requestId={card.requestId} />)}

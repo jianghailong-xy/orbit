@@ -90,13 +90,13 @@ afterEach(() => {
   container.remove();
 });
 
-function mount(events: RunEvent[], { exporting = false } = {}) {
+function mount(events: RunEvent[], { exporting = false, coordinator = true } = {}) {
   const transcript = <Transcript events={events} />;
   act(() =>
     root.render(
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
-          <ExchangeTreeCtx.Provider value={{ lookup, want: () => {} }}>
+          <ExchangeTreeCtx.Provider value={{ lookup, want: () => {}, coordinator }}>
             {exporting ? <ExportCtx.Provider value={{ images: new Map() }}>{transcript}</ExportCtx.Provider> : transcript}
           </ExchangeTreeCtx.Provider>
         </MemoryRouter>
@@ -207,6 +207,43 @@ describe('turns Orbit opened, folded', () => {
     expect(text('.orbit-branch .orbit-branch .orbit-exchange-what')).toEqual(['Run notice', 'Message']);
     act(() => all('.orbit-branch .orbit-branch .orbit-exchange-line')[1].click());
     expect(q('.orbit-exchange.is-open .smc')).not.toBeNull();
+  });
+
+  it('folds a background job only in a coordinator: anywhere else its turns are the answer', () => {
+    const wake = (id: string, name: string) => [
+      '<background-job-wake>',
+      '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
+      `    ${id}｜query｜bash q.sh｜${name}`,
+      '      ended｜completed｜exit code 0',
+      `      output /root/.orbit/runs/x/${id}.output｜this covers bytes 0–20`,
+      '  The control plane recorded this for you; the user did not write it. Read the whole output with mcp__orbit__bg_output by id.',
+      '</background-job-wake>',
+    ].join('\n');
+    const job = (min: number, id: string, name: string, reply: string) =>
+      exchange(min, { text: wake(id, name), controlPlaneNote: wake(id, name) }, reply, ['mcp__orbit__bg_output']);
+    const events = () => {
+      seq = 0;
+      turn = 0;
+      return [
+        ...exchange(0, { text: 'Why is 11-10 not ready?' }, 'I started a query.', []),
+        ...job(5, 'bgj_1', 'Ledger split by lane', 'Waiting on one more reading.'),
+        ...job(10, 'bgj_2', 'Read the ready script', 'Found it: the job waits on lane 7, which never arrives.'),
+        ...exchange(15, delivery(15, 'EVIDENCE_SUBMITTED', B1, 'B1 Targeted hints', 1), 'I confirmed B1.'),
+        ...job(20, 'bgj_3', 'Clean up', 'Done.'),
+      ];
+    };
+
+    mount(events(), { coordinator: false });
+    expect(container.textContent).toContain('Waiting on one more reading.');
+    expect(container.textContent).toContain('Found it: the job waits on lane 7, which never arrives.');
+    // What is not a job still folds, there too.
+    expect(text('.orbit-exchange-root .orbit-exchange-reply')).toEqual(['I confirmed B1.']);
+    expect(q('.orbit-exchanges')).toBeNull();
+
+    mount(events(), { coordinator: true });
+    expect(q('.orbit-exchanges-count')!.textContent).toBe('3 Orbit updates handled');
+    expect(q('.orbit-exchanges-kinds')!.textContent).toBe('1 evidence, 2 background jobs');
+    expect(container.textContent).not.toContain('Found it');
   });
 
   it('leaves a turn the agent has not answered as the line its card draws', () => {

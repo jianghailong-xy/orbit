@@ -695,10 +695,8 @@ button.toast--pill:focus-visible {
   font-weight: 600;
   color: var(--text-1);
 }
-/* The rail's middle: the fixed entries stay put, and under them the groups scroll as one
-   (.tp-lists), unless every workspace and wiki fits with the Projects head still showing under them:
-   then those stay put too and only Projects scrolls (.pin-workspaces, which TasksSidePanel sets from
-   its measurements). */
+/* The rail's middle: the fixed entries stay put, and under them the groups scroll as one (.tp-lists),
+   each group's head held at the top while its rows pass under it. */
 .tp-scroll {
   flex: 1;
   min-height: 0;
@@ -722,30 +720,7 @@ button.toast--pill:focus-visible {
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
-.tp-lists.pin-workspaces {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  scrollbar-gutter: auto;
-}
-.tp-lists.pin-workspaces > * {
-  flex: none;
-}
-.tp-lists.pin-workspaces > .tp-group-workspaces {
-  overflow: hidden;
-  scrollbar-gutter: stable;
-}
-.tp-lists.pin-workspaces > .tp-group-wiki {
-  overflow: hidden;
-  scrollbar-gutter: stable;
-}
-.tp-lists.pin-workspaces > .tp-group-projects {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-}
-.tp-lists.pin-workspaces > .tp-group-projects .tp-group-head {
+.tp-lists .tp-group-head {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -974,6 +949,13 @@ button.toast--pill:focus-visible {
 }
 .tp-project-mark .tp-list-dot {
   margin-right: 0;
+}
+/* The quiet projects' row closes the group in the meta voice: grey, with no dot. */
+.tp-project-quiet {
+  color: var(--text-3);
+}
+.tp-project-quiet .tp-project-mark {
+  font-size: 13px;
 }
 .tp-list-dot.running {
   background: var(--brand);
@@ -23697,6 +23679,12 @@ div.landing-jobs-open {
 .smc-meta a {
   color: var(--brand);
   text-decoration: none;
+}
+/* A sender that runs narrower than this session: in the foot line's voice, under it. */
+.smc-narrower {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 11px;
 }
 .smc-undelivered {
   margin-top: 4px;
