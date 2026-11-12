@@ -40,7 +40,7 @@ extension View {
 /// iOS 26 ends search by itself once an empty field loses focus — the list's scroll, the app's
 /// tap-to-lower-the-keyboard (`KeyboardDismissInstaller`), a row's push — and reports that the same
 /// way as the X: `isPresented` turns false. What tells them apart is the tap just before it:
-/// `SearchCloseTap` remembers whether the last tap landed on the search field's own chrome. Any other
+/// `SearchCloseTap` remembers when the X was last pressed. Any other
 /// ending is undone: search mode comes back without the keyboard, at once if the list is the page on
 /// screen, or when it is again (a pushed conversation, Settings).
 @available(iOS 26.0, *)
@@ -66,13 +66,11 @@ private struct BottomSearchMode: ViewModifier {
     }
 
     private func setPresented(_ on: Bool) {
-        // iOS reports one ending more than once (the X: probe round 3). Only a change counts, or
-        // the repeat — its tap used up — would read as iOS ending search and put it back.
+        // iOS reports one ending more than once, and the X with the keyboard up is more than one
+        // step (probe rounds 3–4): only a change counts, and every ending close to an X tap is the X.
         guard on != presented else { return }
         presented = on
-        // Used up on every change, so the tap that opened the field can't pass for a close later.
-        let closed = SearchCloseTap.consume()
-        if on || closed {
+        if on || SearchCloseTap.recent() {
             restoreOnReturn = false
             return
         }
@@ -84,38 +82,41 @@ private struct BottomSearchMode: ViewModifier {
         }
     }
 
-    /// Search mode back on, the keyboard down.
+    /// Search mode back on, the keyboard down — unless the X was pressed in the meantime.
     private func restore() {
         restoreOnReturn = false
+        guard !presented, !SearchCloseTap.recent() else { return }
         presented = true
         focused = false
     }
 }
 
-/// Whether the last tap in the app landed on the search field's own chrome — the X beside the
-/// bottom field above all, in the floating bar it shares with the field — so `BottomSearchMode` can tell the reader closing search from iOS ending
-/// it. Fed by the window's tap recognizer (`KeyboardDismissInstaller`), which sees every tap.
+/// Whether the reader just pressed the X beside the bottom search field, so `BottomSearchMode`
+/// can tell them closing search from iOS ending it. Fed by the window's tap recognizer
+/// (`KeyboardDismissInstaller`), which sees every tap.
+///
+/// On iOS 26.5 the X is a `_UIButtonBarButton` in the bottom bar's `FloatingBarHostingView`, the
+/// bar it shares with the field and nothing else; a tap in that bar outside the text field is the X.
 enum SearchCloseTap {
-    private static var last: (at: Date, onSearch: Bool)?
+    private static var lastClose: Date?
 
     static func record(_ touch: UITouch) {
         var view = touch.view
-        var onSearch = false
-        while let current = view, !onSearch {
-            // The X is not a search view: on iOS 26.5 it is a `_UIButtonBarButton` in the bottom
-            // bar's `FloatingBarHostingView`, the same bar as the field (and nothing else there).
+        var inBar = false
+        var inField = false
+        while let current = view {
+            inField = inField || current is UITextField
             let name = String(describing: type(of: current))
-            onSearch = current is UISearchBar || name.contains("Search") || name.contains("FloatingBar")
+            inBar = inBar || current is UISearchBar || name.contains("FloatingBar")
             view = current.superview
         }
-        last = (Date(), onSearch)
+        if inBar && !inField { lastClose = Date() }
     }
 
-    /// True once for a search-chrome tap in the last moment; the answer is used up either way.
-    static func consume() -> Bool {
-        defer { last = nil }
-        guard let last else { return false }
-        return last.onSearch && Date().timeIntervalSince(last.at) < 1
+    /// The X was pressed in the last moment: endings that follow it are the reader's.
+    static func recent() -> Bool {
+        guard let lastClose else { return false }
+        return Date().timeIntervalSince(lastClose) < 1.5
     }
 }
 
