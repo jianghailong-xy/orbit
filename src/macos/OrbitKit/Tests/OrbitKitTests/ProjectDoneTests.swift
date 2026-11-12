@@ -33,7 +33,7 @@ final class ProjectDoneTests: XCTestCase {
         """#
         let check = try JSONDecoder().decode(ProjectDoneCheck.self, from: Data(json.utf8))
         XCTAssertEqual(check.findings.map { $0.line(main: "main") }, [
-            "2 tasks are still running", "Criterion 5 is not met", "Criterion 6 is not on main"
+            "2 tasks are still running", "Criterion 5 is not met — no task serves it", "Criterion 6 is not on main"
         ])
         let empty = try JSONDecoder().decode(ProjectDoneCheck.self, from: Data(#"{"findings":[]}"#.utf8))
         XCTAssertTrue(empty.findings.isEmpty)
@@ -504,7 +504,8 @@ final class ProjectDoneTests: XCTestCase {
         XCTAssertEqual(subject.main, "master")
         XCTAssertEqual(ProjectDone.tally(counts, main: subject.main),
                        "2 criteria · 2 met · 1 landed on master · 1 merged outside Orbit")
-        XCTAssertEqual(ProjectDone.cardTally(counts, main: subject.main), "2 met · 1 landed on master · 0 nothing to land")
+        // Nothing to land is said only when some criterion has nothing to land (board ③).
+        XCTAssertEqual(ProjectDone.cardTally(counts, main: subject.main), "2 met · 1 landed on master")
         XCTAssertEqual(ProjectDone.receiptTally(subject, record: nil),
                        "2 criteria met · 1 landed on master · 0 nothing to land · 0 gaps accepted")
         XCTAssertEqual(ProjectDone.whyNotDoneTally(subject.derivedDone, main: subject.main),
