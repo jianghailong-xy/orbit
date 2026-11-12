@@ -172,7 +172,7 @@ async function open(path = '/wiki/github-com-acme-shop-cli'): Promise<void> {
             <Route path="/wiki" element={<WikiPage route="home" />} />
             <Route path="/wiki/:space" element={<WikiPage route="home" />} />
             <Route path="/wiki/:space/plan" element={<span data-page="plan" />} />
-            <Route path="/infrastructure" element={<span data-page="runners" />} />
+            <Route path="/settings/machines/:id" element={<span data-page="runners" />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,

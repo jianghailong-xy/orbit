@@ -670,7 +670,8 @@ struct AgentPanes: View {
         // list-owned like the tag picker above. iOS only, as the rows' Share is.
         .sheet(item: $sharingSession) { s in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(s, agents: app.agents))
             }
         }
         // The Move panel for the row whose Move was tapped: the folders of this workspace, counted

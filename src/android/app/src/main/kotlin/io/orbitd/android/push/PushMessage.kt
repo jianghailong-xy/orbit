@@ -45,8 +45,9 @@ data class PushPayload(
         // A terminal asking to be approved: the Waiting on you inbox, whose Open tab heads with its card (iOS `.openTerminalRequests`).
         kind == TERMINAL_LOGIN -> terminalLoginId?.let { "orbit://terminal-login/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
-        // About a machine: its sign-in lapsed, or its Claude connection to Anthropic is in a region Anthropic does not offer Claude in.
-        kind == "engine-signed-out" || kind == "claude-region-blocked" -> runnerId?.let { "orbit://runner/$it" }
+        // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
+        // or it drains for an update with the owner's work waiting on it.
+        kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" -> runnerId?.let { "orbit://runner/$it" }
         // A merge into main waiting on the owner opens its project's sessions page, where its card is, as that project's root
         // (iOS 6b4bef713 `Notifications.intent`). Every other owner item opens the conversation, and so does a merge naming no project.
         kind == "approve-merge-to-main" && projectId != null -> "orbit://project/$projectId"
@@ -85,7 +86,7 @@ data class PushMessage(
         private val kinds = PushPayload.ownerItemKinds + setOf("project-done", "approval", "finished", "failed", "agent-message",
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
             "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
-            PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN)
+            "runner-updating", PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN)
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -134,6 +135,8 @@ data class PushMessage(
                     "confirmation-problems" -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
                     // A confirmed region flip is about its runner's Claude Code, as a sign-out is about its runner's engine.
                     "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())
+                    // A runner draining for its update with the owner's work waiting: about the machine, no engine.
+                    "runner-updating" -> require(payload.runnerId != null)
                     "watch-matched" -> require(payload.watchId != null && (payload.generation ?: 0) > 0)
                     in PushPayload.ownerItemKinds -> require(payload.projectId != null && payload.openItemId != null)
                     else -> require(payload.wikiSpaceId != null)

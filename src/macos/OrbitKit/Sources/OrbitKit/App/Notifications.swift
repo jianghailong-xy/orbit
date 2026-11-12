@@ -204,6 +204,11 @@ public enum Notifications {
     /// `userInfo` key naming the project an owner-item alert is about (apiserver
     /// `PushService.notifyOwnerItem`).
     public static let keyProject = "projectID"
+    /// `userInfo` key naming the runner a machine alert is about (apiserver `PushService.notifyRunnerDrainWaiting`).
+    public static let keyRunner = "runnerID"
+    /// A runner draining for its update with the owner's work waiting on it (D3): a tap opens its page,
+    /// where Later and Update Now are.
+    public static let runnerUpdatingKind = "runner-updating"
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"
 
@@ -257,6 +262,9 @@ public enum Notifications {
             if actionId == actionOwnerRequestLater { return .snoozeOwnerRequest(requestID: request) }
         }
         guard let sid = userInfo[keySession] else {
+            if userInfo[keyKind] == runnerUpdatingKind, let runner = userInfo[keyRunner] {
+                return .open(.runner(PublicID.toPublic(runner)))
+            }
             // A watch's alert names no session and carries no actions: tapping it opens the watch.
             return userInfo[keyWatch].map { .open(.watch($0)) }
         }

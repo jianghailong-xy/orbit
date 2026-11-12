@@ -320,6 +320,39 @@ class PushAuthorityTest {
         }
     }
 
+    /** The server's one push per drain with the owner's work waiting (docs/runner-update-drain-design.md D3): it parses exactly as the
+     * server sends it (the shared fixture's sample), names no engine, opens the runner, and stands while GET /runners lists the runner's
+     * drainWaiting. Without its runner it is no notification. */
+    @Test fun aRunnerUpdatingPushOpensItsRunnerAndStandsWhileWorkWaits() = runBlocking {
+        val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+            .single { it["name"]!!.jsonPrimitive.content == "runner-updating" }
+        val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val push = PushMessage.parse(data) ?: throw AssertionError("the server's runner-updating push is dropped")
+        val machine = sample["source"]!!.jsonObject["runnerID"]!!.jsonPrimitive.content
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("runner-updating", push.payload.kind)
+        assertEquals("studio-mac is updating to 0.1.254 — 1 session and 1 message are waiting for 2 turns to finish.", push.payload.body)
+        assertTrue(ObjectId.same(push.payload.runnerId, machine))
+        assertNull(push.payload.engine)
+        assertFalse(push.payload.isReminder)
+        assertEquals(Destination.RUNNER, push.link?.let { OrbitLinks.parse(it) }?.destination)
+        assertNull("it names its runner", PushMessage.parse(data + ("payload" to
+            """{"title":"studio-mac","body":"studio-mac is updating.","kind":"runner-updating"}""")))
+        authorityFixture { authority, server, _ ->
+            var waiting = """{"sessions":1,"messages":1}"""
+            var listed = true
+            server.respond = { request ->
+                assertEquals("/api/runners", request.path)
+                response(if (listed) """[{"id":"$machine","drainWaiting":$waiting}]""" else "[]")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            waiting = "null"
+            assertEquals(PushCheck.STALE, authority.check(push))
+            listed = false
+            assertEquals(PushCheck.MISSING, authority.check(push))
+        }
+    }
+
     @Test fun headlessMessageHasNoInventedRouteAndChecksCurrentAccountPreference() = runBlocking {
         authorityFixture { authority, server, _ ->
             val push = message("agent-message")
