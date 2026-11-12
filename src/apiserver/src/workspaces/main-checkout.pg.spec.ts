@@ -247,6 +247,46 @@ test('one action in flight per checkout: the second is ACTION_IN_FLIGHT, with it
   assert.ok(handed[0].op === 'action' && handed[0].command.requestId === first.requestId);
 });
 
+test('a checkout the runner has not reported yet: the action is CHECKOUT_NOT_REPORTED, written as a line, never queued', { skip }, async (t) => {
+  // A workspace made after its runner started: the runner's heartbeat carries no entry for it yet, but the turn that
+  // just ended put a card with Move in front of the person.
+  const w = await world(t);
+  await w.prisma.runner.update({ where: { id: w.runnerId }, data: { repoHealth: [] as never } });
+  const requestId = randomUUID();
+  const move = () =>
+    w.service.act(w.ownerId, w.workspaceId, {
+      kind: 'move', root: ROOT, fingerprint: FINGERPRINT, files: ['src/a.ts'], targetSessionId: w.targetId,
+      requestId, initiatedFromSessionId: w.sessionId,
+    } as never);
+  const answer = await move();
+  assert.equal(answer.status, 'finished');
+  assert.equal(answer.result?.code, 'CHECKOUT_NOT_REPORTED');
+  assert.equal(answer.result?.status, 'refused');
+  assert.equal(answer.result?.root, ROOT);
+  assert.equal(answer.result?.runnerName, 'orbit-hpc');
+  const written = await lines(w);
+  assert.equal(written.length, 1);
+  assert.equal(written[0].notice, "Nothing moved: orbit-hpc hasn't reported this main checkout yet. Try again in a minute.");
+  // The same requestId again answers the same and writes nothing more; nothing is handed to the runner.
+  assert.equal((await move()).result?.code, 'CHECKOUT_NOT_REPORTED');
+  assert.equal((await lines(w)).length, 1);
+  assert.equal((await handOut(w)).length, 0);
+  // Once a heartbeat reports it, the same press goes to the runner.
+  await w.prisma.runner.update({
+    where: { id: w.runnerId },
+    data: {
+      repoHealth: sanitizeRunnerRepoHealth([
+        { root: ROOT, state: 'dirty', branch: 'main', agentIds: [w.workspaceId], head: HEAD, fileCount: 1, truncated: false, fingerprint: FINGERPRINT },
+      ]) as never,
+    },
+  });
+  assert.equal((await commit(w)).status, 'pending');
+  // The read still has nothing to show before then: a 404 in a sentence, not raw server text.
+  await w.prisma.runner.update({ where: { id: w.runnerId }, data: { repoHealth: [] as never } });
+  await assert.rejects(w.service.read(w.ownerId, w.workspaceId), (e: unknown) =>
+    e instanceof NotFoundException && /hasn't reported its main checkout yet/.test(e.message));
+});
+
 test('a repeated requestId answers the first request, before and after its result', { skip }, async (t) => {
   const w = await world(t);
   const requestId = randomUUID();

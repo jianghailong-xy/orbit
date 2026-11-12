@@ -50,6 +50,7 @@ const (
 	mainCheckoutRescueFailed      = "RESCUE_FAILED"
 	mainCheckoutActionFailed      = "ACTION_FAILED"
 	mainCheckoutActionInFlight    = "ACTION_IN_FLIGHT"
+	mainCheckoutNotReported       = "CHECKOUT_NOT_REPORTED"
 	mainCheckoutRunnerOffline     = "RUNNER_OFFLINE"
 	mainCheckoutTimeout           = "TIMEOUT"
 	mainCheckoutCancelled         = "CANCELLED"
@@ -60,7 +61,7 @@ var mainCheckoutRefusalCodes = []string{
 	mainCheckoutFingerprintStale, mainCheckoutHeadMoved, mainCheckoutMoveConflict, mainCheckoutMoveSourceChanged,
 	mainCheckoutTargetBusy, mainCheckoutCheckoutBlocked, mainCheckoutDetached, mainCheckoutNoHead,
 	mainCheckoutNothingToPush, mainCheckoutNoRemote, mainCheckoutPushRejected, mainCheckoutPushAuthFailed,
-	mainCheckoutPushFailed, mainCheckoutRescueFailed, mainCheckoutActionFailed, mainCheckoutActionInFlight, mainCheckoutRunnerOffline,
+	mainCheckoutPushFailed, mainCheckoutRescueFailed, mainCheckoutActionFailed, mainCheckoutActionInFlight, mainCheckoutNotReported, mainCheckoutRunnerOffline,
 	mainCheckoutTimeout, mainCheckoutCancelled,
 }
 

@@ -149,6 +149,7 @@ export const MAIN_CHECKOUT_REFUSAL_CODES = [
   'RESCUE_FAILED',
   'ACTION_FAILED',
   'ACTION_IN_FLIGHT',
+  'CHECKOUT_NOT_REPORTED',
   'RUNNER_OFFLINE',
   'TIMEOUT',
   'CANCELLED',
@@ -197,7 +198,7 @@ export interface MainCheckoutActionResult {
   behind?: number;
   /** PUSH_*, RESCUE_FAILED, ACTION_FAILED: git's own reason, one line, with credentials and URLs' userinfo removed. */
   gitMessage?: string;
-  /** RUNNER_OFFLINE, TIMEOUT. */
+  /** RUNNER_OFFLINE, TIMEOUT, CHECKOUT_NOT_REPORTED. */
   runnerName?: string;
   /** RUNNER_OFFLINE: minutes since the runner last checked in. TIMEOUT: minutes waited. */
   minutes?: number;
@@ -613,6 +614,12 @@ export function mainCheckoutResultLine(
         'refused',
         `${nothing}:`,
         ' another action on this main checkout is still running. Try again when it finishes.',
+      );
+    case 'CHECKOUT_NOT_REPORTED':
+      return line(
+        'refused',
+        `${nothing}:`,
+        ` ${r.runnerName ?? 'the runner'} hasn't reported this main checkout yet. Try again in a minute.`,
       );
     case 'RUNNER_OFFLINE':
       return line(

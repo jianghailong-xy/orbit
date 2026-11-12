@@ -19,9 +19,8 @@ vi.mock('../api', async (importOriginal) => ({
   postMainCheckoutAction: vi.fn(),
   cancelMainCheckoutAction: vi.fn(),
 }));
-vi.mock('../lib/toast', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
-}));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }));
+vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 
 const getMock = vi.mocked(getMainCheckout);
 const postMock = vi.mocked(postMainCheckoutAction);
@@ -34,6 +33,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   getMock.mockReset();
   postMock.mockReset();
+  for (const fn of Object.values(toast)) fn.mockReset();
 });
 
 afterEach(async () => {
@@ -281,6 +281,38 @@ describe('the main checkout review drawer (board 02)', () => {
     );
     // The drawer stayed open with the message kept, so a second look and a press is all it takes.
     expect(document.querySelector<HTMLInputElement>('input[aria-label="Commit message"]')?.value).toBe('Add retry backoff');
+  });
+
+  it('a card’s Move on a checkout the runner hasn’t reported yet is answered by the line, not a toast', async () => {
+    // The apiserver writes CHECKOUT_NOT_REPORTED into the session the press came from and answers it finished.
+    postMock.mockImplementation(async (_ws, body) => ({
+      requestId: body.requestId,
+      status: 'finished',
+      result: {
+        requestId: body.requestId, kind: 'move', root: '/root/orbit', status: 'refused', code: 'CHECKOUT_NOT_REPORTED',
+        runnerName: 'orbit-hpc', finishedAt: new Date().toISOString(),
+      },
+    }));
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => {
+      root!.render(
+        <QueryClientProvider client={client}>
+          <Harness workspaceId="ws-1" sessionId="sess-1" sessionBranch="orbit/fix-retry-backoff" actionsSupported health={null} targets={TARGETS} />
+        </QueryClientProvider>,
+      );
+    });
+    await act(async () =>
+      host!.move({ root: '/root/orbit', fingerprint: 'mc1:62325fb:a', files: ['src/api/retry.ts'], targetSessionId: 'sess-1' }),
+    );
+    await waitFor(() => postMock.mock.calls.length === 1, 'the action');
+    await settle();
+    expect(postMock.mock.calls[0][1]).toMatchObject({ kind: 'move', initiatedFromSessionId: 'sess-1' });
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.info).not.toHaveBeenCalled();
   });
 
   it('has no Commit, Move or Save without the capability', async () => {

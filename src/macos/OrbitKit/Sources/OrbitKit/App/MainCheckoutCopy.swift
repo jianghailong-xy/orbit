@@ -276,6 +276,8 @@ public enum MainCheckoutCopy {
                         " git couldn't \(gitVerb(r.kind))\(quoted(r.gitMessage)). The main checkout was left as it was.")
         case "ACTION_IN_FLIGHT":
             return line(.refused, "\(none):", " another action on this main checkout is still running. Try again when it finishes.")
+        case "CHECKOUT_NOT_REPORTED":
+            return line(.refused, "\(none):", " \(r.runnerName ?? "the runner") hasn't reported this main checkout yet. Try again in a minute.")
         case "RUNNER_OFFLINE":
             return line(.waiting, "Waiting for the runner",
                         " — \(r.runnerName ?? "the runner") hasn't checked in for \(r.minutes ?? 0) min. "

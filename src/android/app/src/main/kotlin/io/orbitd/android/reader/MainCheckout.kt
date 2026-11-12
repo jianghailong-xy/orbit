@@ -297,6 +297,8 @@ internal object MainCheckout {
             "ACTION_FAILED" -> line(Tone.REFUSED, "$nothing:",
                 " git couldn't ${GIT_VERB[r.kind] ?: r.kind}${quoted(r.gitMessage)}. The main checkout was left as it was.")
             "ACTION_IN_FLIGHT" -> line(Tone.REFUSED, "$nothing:", " another action on this main checkout is still running. Try again when it finishes.")
+            "CHECKOUT_NOT_REPORTED" -> line(Tone.REFUSED, "$nothing:",
+                " ${r.runnerName ?: "the runner"} hasn't reported this main checkout yet. Try again in a minute.")
             "RUNNER_OFFLINE" -> line(Tone.WAITING, "Waiting for the runner",
                 " — ${r.runnerName ?: "the runner"} hasn't checked in for ${r.minutes ?: 0} min. " +
                     "Nothing has been changed; this runs when it's back, or you can cancel.", Link("cancel", "Cancel"))

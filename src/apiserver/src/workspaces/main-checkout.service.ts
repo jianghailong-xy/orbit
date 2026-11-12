@@ -58,7 +58,7 @@ import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runne
  */
 
 /** The control plane's own codes: a runner never reports them. */
-const CONTROL_PLANE_CODES: ReadonlySet<string> = new Set(['ACTION_IN_FLIGHT', 'RUNNER_OFFLINE', 'TIMEOUT', 'CANCELLED']);
+const CONTROL_PLANE_CODES: ReadonlySet<string> = new Set(['ACTION_IN_FLIGHT', 'CHECKOUT_NOT_REPORTED', 'RUNNER_OFFLINE', 'TIMEOUT', 'CANCELLED']);
 const PATH_MAX = 4096;
 const MESSAGE_MAX = 64 * 1024;
 const REQUEST_ID_MAX = 200;
@@ -125,6 +125,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
   async read(ownerId: string, workspaceId: string, diffPaths: string[] = []): Promise<MainCheckoutView> {
     const paths = validDiffPaths(diffPaths);
     const { workspace, health, actionsSupported } = await this.checkout(ownerId, workspaceId);
+    if (!health) throw new NotFoundException(NOT_REPORTED);
     const runner = workspace.runner!;
     const managedBranch = await this.managedBranch(ownerId, workspaceId, health.branch);
     await this.expire({ runnerId: runner.id });
@@ -175,6 +176,8 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     });
     if (first) return answerFor(first, workspaceId);
 
+    // A checkout the runner has not reported yet is not a 404 here: the card that asked comes from a turn that just
+    // ended, so the person gets a refusal line in the conversation (board 03), not a toast.
     const { workspace, health, actionsSupported } = await this.checkout(ownerId, workspaceId);
     const runner = workspace.runner!;
     if (!actionsSupported) {
@@ -183,7 +186,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
         message: `${runner.displayName ?? runner.name} runs an Orbit runner too old to change the main checkout. Update it, then try again.`,
       });
     }
-    if (request.root !== health.root) {
+    if (health && request.root !== health.root) {
       throw new BadRequestException(`root ${request.root} is not this workspace's main checkout (${health.root})`);
     }
     const initiatedFrom = request.initiatedFromSessionId
@@ -201,6 +204,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
       targetBranch = target.branch;
     }
 
+    const root = health?.root ?? request.root;
     await this.expire({ runnerId: runner.id });
     const requestedAt = new Date();
     const expiresAt = new Date(requestedAt.getTime() + MAIN_CHECKOUT_ACTION_TIMEOUT_SECONDS * 1000);
@@ -220,7 +224,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
       ownerId,
       workspaceId,
       runnerId: runner.id,
-      root: health.root,
+      root,
       op: 'action',
       requestId: request.requestId,
       kind: request.kind,
@@ -228,6 +232,18 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
       initiatedFromSessionId: initiatedFrom?.id ?? null,
       expiresAt,
     };
+    if (!health) {
+      const refusal: MainCheckoutActionResult = {
+        ...this.controlPlaneResult(request.kind, request.requestId, root, 'CHECKOUT_NOT_REPORTED'),
+        runnerName: runner.displayName ?? runner.name,
+      };
+      if (await this.finishNew(data, refusal)) return { requestId: request.requestId, status: 'finished', result: refusal };
+      // Only its requestId can collide (the row is born finished, outside the in-flight index): answer the first.
+      const raced = await this.prisma.mainCheckoutRequest.findUniqueOrThrow({
+        where: { ownerId_requestId: { ownerId, requestId: request.requestId } },
+      });
+      return answerFor(raced, workspaceId);
+    }
     let created: { id: string };
     try {
       created = await this.prisma.mainCheckoutRequest.create({ data, select: { id: true } });
@@ -428,7 +444,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     return won;
   }
 
-  /** Record a request that is refused before it was ever queued (ACTION_IN_FLIGHT), with its line. Null when its
+  /** Record a request that is refused before it was ever queued (ACTION_IN_FLIGHT, CHECKOUT_NOT_REPORTED), with its line. Null when its
    *  requestId was taken meanwhile. */
   private async finishNew(
     data: Omit<Prisma.MainCheckoutRequestUncheckedCreateInput, 'state' | 'result' | 'finishedAt'>,
@@ -529,7 +545,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
 
   // ── reads ─────────────────────────────────────────────────────────────────────────────────────────
 
-  /** The workspace (the owner's), its runner and the checkout the runner reported for it. */
+  /** The workspace (the owner's), its runner and the checkout the runner reported for it: null until it has. */
   private async checkout(ownerId: string, workspaceId: string) {
     const workspace = await this.prisma.workspace.findFirst({
       where: { id: workspaceId, ownerId, deletedAt: null },
@@ -544,7 +560,6 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     if (!workspace) throw new NotFoundException('workspace not found');
     if (!workspace.runner) throw new BadRequestException('this workspace is not bound to a runner');
     const health = repoHealthForWorkspace(readRunnerRepoHealth(workspace.runner.repoHealth), workspace.id);
-    if (!health) throw new NotFoundException('this workspace has no reported main checkout');
     const actionsSupported = workspace.runner.capabilities.includes(MAIN_CHECKOUT_GIT_CAPABILITY);
     return { workspace, health, actionsSupported };
   }
@@ -634,6 +649,8 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     return { requestId, kind, root, status: 'refused', code, ...(branch ? { branch } : {}), finishedAt: at.toISOString() };
   }
 }
+
+const NOT_REPORTED = "This workspace's runner hasn't reported its main checkout yet. Try again in a minute.";
 
 const LIVE_STATUSES: ReadonlySet<string> = new Set(['RUNNING', 'AWAITING_INPUT', 'INTERRUPTED']);
 

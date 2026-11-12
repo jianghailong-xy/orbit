@@ -62,6 +62,18 @@ func (p *repoHealthProbe) refresh() {
 		return // a previous scan is still running (slow or wedged git) — let it finish
 	}
 	defer p.refreshMu.Unlock()
+	p.scanLocked()
+}
+
+// refreshNow scans now for a checkout just added to dirs, waiting out a scan already running rather
+// than skipping it: that one may have read dirs before the addition. Never on the heartbeat goroutine.
+func (p *repoHealthProbe) refreshNow() {
+	p.refreshMu.Lock()
+	defer p.refreshMu.Unlock()
+	p.scanLocked()
+}
+
+func (p *repoHealthProbe) scanLocked() {
 	next := scanRepoHealth(p.dirs())
 	p.mu.Lock()
 	p.snapshot = next

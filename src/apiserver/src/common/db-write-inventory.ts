@@ -2462,7 +2462,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'workspaces/main-checkout.service.ts#finishNew',
     shape: 'TX_RETRIED',
-    locks: 'A request refused before it was queued (ACTION_IN_FLIGHT): one INSERT of the request row already finished (workspace (60) FOR KEY SHARE through its foreign key), unique on (owner_id, request_id). Then, when the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.',
+    locks: 'A request refused before it was queued (ACTION_IN_FLIGHT, CHECKOUT_NOT_REPORTED): one INSERT of the request row already finished (workspace (60) FOR KEY SHARE through its foreign key), unique on (owner_id, request_id). Then, when the request names an initiating session, that session row (60) by SELECT … FOR UPDATE — the request row before the session, the one order every writer of the line takes them in — and then either one conversation_turn INSERT (the `notice` turn, seq max+1 read under that lock, unique on (session_id, client_turn_id)) or one run_event INSERT at max(seq)+1 read under the same lock.',
     identity: '(owner_id, request_id): a second refusal of the same requestId is a unique violation and answers with the first.',
     isolation: '',
     attempts: 4,

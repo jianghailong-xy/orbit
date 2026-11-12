@@ -99,6 +99,10 @@ The bar reads these fields; the drawer fetches the full snapshot.
   writes no line.
 - Only one request per main checkout may be in flight at a time; a second gets
   `ACTION_IN_FLIGHT`.
+- A request for a workspace whose runner has not reported its main checkout on a heartbeat yet
+  is refused as `CHECKOUT_NOT_REPORTED` (with `runnerName`), and its line is written into the
+  initiating session like any other result. The runner scans a workspace's checkout as soon as a
+  session of it starts, so this is a short window.
 - The apiserver relays a `MainCheckoutActionCommand` to the runner: the request plus
   `targetBranch?`, `requestedAt` and `expiresAt`. The runner never starts a command after
   `expiresAt`.
@@ -211,6 +215,7 @@ Variants of the success lines:
 | `RESCUE_FAILED` | refused | runner | Nothing saved: Orbit couldn't save the main checkout to a rescue branch first (“…”). The main checkout was left as it was. | — |
 | `ACTION_FAILED` | refused | runner | Nothing committed: git couldn't commit (“unable to auto-detect email address”). The main checkout was left as it was. | — |
 | `ACTION_IN_FLIGHT` | refused | apiserver | Nothing moved: another action on this main checkout is still running. Try again when it finishes. | — |
+| `CHECKOUT_NOT_REPORTED` | refused | apiserver | Nothing moved: orbit-hpc hasn't reported this main checkout yet. Try again in a minute. | — |
 | `RUNNER_OFFLINE` | waiting | apiserver | **board** Waiting for the runner — orbit-hpc hasn't checked in for 3 min. Nothing has been changed; this runs when it's back, or you can cancel. | Cancel |
 | `TIMEOUT` | refused | apiserver | Timed out: orbit-hpc didn't answer within 5 min, so Orbit stopped waiting. If it ran the action anyway, its result will appear here. | — |
 | `CANCELLED` | refused | apiserver | Cancelled: nothing was changed. | — |

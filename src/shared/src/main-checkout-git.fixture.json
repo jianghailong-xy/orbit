@@ -25,6 +25,7 @@
     "RESCUE_FAILED",
     "ACTION_FAILED",
     "ACTION_IN_FLIGHT",
+    "CHECKOUT_NOT_REPORTED",
     "RUNNER_OFFLINE",
     "TIMEOUT",
     "CANCELLED"
@@ -695,6 +696,22 @@
       "view": {},
       "lead": "Nothing moved:",
       "text": "Nothing moved: another action on this main checkout is still running. Try again when it finishes."
+    },
+    {
+      "name": "CHECKOUT_NOT_REPORTED",
+      "onBoard": false,
+      "result": {
+        "requestId": "req-1",
+        "root": "/root/orbit",
+        "finishedAt": "2026-11-12T08:00:00.000Z",
+        "kind": "move",
+        "status": "refused",
+        "code": "CHECKOUT_NOT_REPORTED",
+        "runnerName": "orbit-hpc"
+      },
+      "view": {},
+      "lead": "Nothing moved:",
+      "text": "Nothing moved: orbit-hpc hasn't reported this main checkout yet. Try again in a minute."
     },
     {
       "name": "TIMEOUT",
