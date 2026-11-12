@@ -107,7 +107,7 @@
       </ul>
     </div>
     <div class="b-col">
-      <p class="b-cap">② 方案 A<span class="b-tag rec">推荐</span><small>白底 + 下沿 20 pt 渐隐</small></p>
+      <p class="b-cap">② 方案 A<span class="b-tag now">未选</span><small>白底 + 下沿 20 pt 渐隐</small></p>
       <div class="ph" id="p2"></div>
       <ul class="b-notes">
         <li><b>1</b> 带子下面接一段 20 pt 白 → 透明：会话是淡进带子里的，和无审批条时同一种观感。</li>
@@ -116,15 +116,15 @@
       </ul>
     </div>
     <div class="b-col">
-      <p class="b-cap">③ 方案 B<span class="b-tag alt">不推荐</span><small>带子透明，软边一直延到条下</small></p>
+      <p class="b-cap">③ 方案 B<span class="b-tag rec">选定 11-12</span><small>带子透明，软边一直延到条下</small></p>
       <div class="ph" id="p3"></div>
       <ul class="b-notes">
         <li><b>1</b> 理想效果最像 Gemini：胶囊像导航按钮一样浮着。</li>
-        <li>但要系统把软边延到带子下，只有 <code>.safeAreaBar</code> 能做，列表试过它，下拉刷新就坏了；只改透明的话，系统软边不跟下来，会话会从胶囊两边清楚地透出来。</li>
+        <li>做法：不用 <code>.safeAreaBar</code>（列表用它下拉刷新会坏），带子自己画一层：材质模糊 + 页面色淡白，从屏幕顶到条下 20 pt 渐隐，接上系统的软边；不吃点按。</li>
       </ul>
     </div>
   </div>
-  <p class="b-sub" style="margin-top:18px">待定 · 要你拍板：A（推荐）还是 B。没有审批条时三张一样，即 01 板的 ②。</p>
+  <p class="b-sub" style="margin-top:18px">已定：B（11-12）。没有审批条时三张一样，即 01 板的 ②。</p>
 </section>
 
 <script>
