@@ -62,7 +62,7 @@ internal object ExchangeFold {
             run = mutableListOf()
         }
         turns.forEachIndexed { index, turn ->
-            val head = if (index < turns.lastIndex) OrbitExchangeFold.turnOf(turn.first().event, wakeName, coordinator) else null
+            val head = if (index < turns.lastIndex) OrbitExchangeFold.turnOf(turn.first().event, coordinator, wakeName) else null
             val replies = turn.filter { it.event.type == "assistant" && it.event.body().isNotBlank() }
             if (head != null && replies.isNotEmpty() && !needsReader(turn)) {
                 run += FoldedExchange(OrbitExchangeFold.Summary(turn.first().event.seq, turn.maxOf { it.newestSeq }, turn.first().event.ts,

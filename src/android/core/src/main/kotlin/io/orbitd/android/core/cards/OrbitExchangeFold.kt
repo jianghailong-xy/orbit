@@ -68,7 +68,7 @@ object OrbitExchangeFold {
      * session's reply. Null for everything else, and for those that went wrong — a refused start, a blocker, a failed target or job, a delivery nobody confirmed — which stay drawn
      * (web `orbitTurnOf`). [wakeName] names a watch's target the way the wake's own line does.
      */
-    fun turnOf(event: RunEvent, wakeName: (String, JsonObject) -> String? = { _, _ -> null }, coordinator: Boolean = false): Head? {
+    fun turnOf(event: RunEvent, coordinator: Boolean = false, wakeName: (String, JsonObject) -> String? = { _, _ -> null }): Head? {
         if (event.type != "user") return null
         val payload = event.fields
         if (payload["steer"] == JsonPrimitive(true)) return null
