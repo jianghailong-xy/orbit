@@ -404,7 +404,7 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
 // ─────────────────────────── SubAgent routing (docs/subagent-design.md §4.1, §4.2) ───────────────────────────
 
 /** What a recorded SubAgent decision was made under: bump when a rule below changes what it picks. */
-export const SUBAGENT_ROUTING_POLICY_VERSION = 'p2-shadow-1';
+export const SUBAGENT_ROUTING_POLICY_VERSION = 'p3-applied-1';
 
 /** Which row of §4.1 set the tier — or, for the first two, the model. */
 export type SubagentTierSource = 'named-model' | 'definition-model' | 'size' | 'definition-size' | 'type-default';
@@ -505,6 +505,10 @@ export interface SubagentRoutingDecision {
   fallbacks: SubagentFallback[];
   /** SUBAGENT_ROUTING_POLICY_VERSION. */
   policyVersion: string;
+  /** Where the tier or model came from, in a few words: the Why line's first clause. */
+  tierNote: string;
+  /** Why the pick, in a few words (its billing and headroom); absent for a model that was named. */
+  note?: string;
 }
 
 /** One candidate a SubAgent may move to after a usage-limit or capacity failure (§4.3). */
@@ -513,6 +517,8 @@ export interface SubagentFallback {
   provider: string;
   model: string;
   effort: string | null;
+  /** Its billing and headroom in a few words, as the Why line says it once it runs there. */
+  note?: string;
 }
 
 const levelIndex = (level: ModelRoutingLevel): number => MODEL_ROUTING_LEVELS.indexOf(level);
@@ -588,8 +594,16 @@ function compareCandidates(mode: ModelRoutingOptimizeFor, a: SubagentCandidate, 
   return (Number.isNaN(order) ? 0 : order) || a.providerIndex - b.providerIndex || a.engineIndex - b.engineIndex;
 }
 
+/** A candidate's billing and headroom, in the few words the Why line gives it. */
+function candidateNote(c: SubagentCandidate): string {
+  if (c.poolMember) return `subscription pool, ${c.poolMember} with ${headroom(c)}% quota left`;
+  if (c.provider.billing === 'subscription') return `subscription with ${headroom(c)}% quota left`;
+  return c.outputPricePerMTok != null ? `key at $${c.outputPricePerMTok}/M output tokens` : 'key, price unknown';
+}
+
 function pickLine(mode: ModelRoutingOptimizeFor, c: SubagentCandidate, level: ModelRoutingLevel): string {
-  const what = `${c.model}${c.effort ? ` · ${c.effort}` : ''} on ${c.provider.slug} (${c.engine})`;
+  // The provider once, and the engine only when it is another name.
+  const what = `${c.model}${c.effort ? ` · ${c.effort}` : ''} on ${c.provider.slug}${c.engine === c.provider.slug ? '' : ` (${c.engine})`}`;
   const price = c.outputPricePerMTok != null ? `$${c.outputPricePerMTok} per million output tokens` : 'an unknown price';
   const why = c.poolMember
     ? `a subscription pool whose account ${c.poolMember} has ${headroom(c)}% of its quota left`
@@ -658,7 +672,7 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   if (caller.model) {
     const found = named(caller.model);
     return {
-      ...base, level: null, tierSource: 'named-model',
+      ...base, level: null, tierSource: 'named-model', tierNote: 'Model named by the caller',
       ...(found ?? { ...parentPick, model: caller.model }),
       reasons: [
         `Model named by the caller: ${caller.model}`,
@@ -669,13 +683,13 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   const definitionModel = definition.model?.trim() || null;
   const autoNotes: string[] = [];
   if (definitionModel === 'inherit') {
-    return { ...base, level: null, tierSource: 'definition-model', ...parentPick,
+    return { ...base, level: null, tierSource: 'definition-model', tierNote: `Model set by ${input.definitionName}: inherit`, ...parentPick,
       reasons: [`Model set by ${input.definitionName}: inherit, the parent's ${input.parent.model}`] };
   }
   if (definitionModel && definitionModel !== 'auto') {
     const found = named(definitionModel);
     if (found) {
-      return { ...base, level: null, tierSource: 'definition-model', ...found,
+      return { ...base, level: null, tierSource: 'definition-model', tierNote: `Model set by ${input.definitionName}`, ...found,
         reasons: [`Model set by ${input.definitionName}: ${definitionModel}`] };
     }
     autoNotes.push(`${input.definitionName} names ${definitionModel}, which no enabled provider lists — routed as auto`);
@@ -684,22 +698,27 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   // Rows 3 to 5: the tier.
   let level: ModelRoutingLevel;
   let tierSource: SubagentTierSource;
+  let tierNote: string;
   const reasons: string[] = [...autoNotes];
   if (caller.size) {
     level = caller.size;
     tierSource = 'size';
-    reasons.push(`Tier ${level}, set by the caller${caller.sizeReason ? `: ${caller.sizeReason}` : ''}`);
+    tierNote = `Tier ${level}, set by the caller`;
+    reasons.push(`${tierNote}${caller.sizeReason ? `: ${caller.sizeReason}` : ''}`);
   } else if (definition.size) {
     level = definition.size;
     tierSource = 'definition-size';
-    reasons.push(`Tier ${level}, set by ${input.definitionName}`);
+    tierNote = `Tier ${level}, set by ${input.definitionName}`;
+    reasons.push(tierNote);
   } else {
     level = input.type === 'explore' ? 'S' : 'M';
     tierSource = 'type-default';
-    reasons.push(`Tier ${level}: default for ${input.type}`);
+    tierNote = `Tier ${level}: default for ${input.type}`;
+    reasons.push(tierNote);
     const floor = mode === 'balance' ? 'M' : mode === 'intelligence' ? 'L' : null;
     if (floor && levelIndex(level) < levelIndex(floor)) {
       level = floor;
+      tierNote = `Tier ${floor}: ${OPTIMIZE_LABEL[mode]} minimum`;
       reasons.push(`Tier ${floor}: ${OPTIMIZE_LABEL[mode]} minimum for a SubAgent without a size`);
     }
   }
@@ -756,10 +775,10 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
     });
   });
 
-  const decision = { ...base, level, tierSource, candidates: removed };
+  const decision = { ...base, level, tierSource, tierNote, candidates: removed };
   if (pool.length === 0) {
     return { ...decision, engine: null, provider: null, model: null, effort: null,
-      reasons: [...reasons, `No provider can run tier ${level}: a routed SubAgent would be refused with NO_SUBAGENT_PROVIDER`] };
+      reasons: [...reasons, `No provider can run tier ${level}: the SubAgent is refused with NO_SUBAGENT_PROVIDER`] };
   }
   const [best, ...rest] = [...pool].sort((a, b) => compareCandidates(mode, a, b));
   reasons.push(pickLine(mode, best, level));
@@ -769,6 +788,9 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   reasons.push(...priceless);
   if (pool.length > 1) reasons.push(`${pool.length} candidates in tier ${level}; ties go by the owner's provider order`);
   if (removed.length > 0) reasons.push(`${removed.length} candidate${removed.length === 1 ? '' : 's'} removed, each with its reason`);
-  const fallbacks = rest.map((c) => ({ engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort }));
-  return { ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort, reasons, fallbacks };
+  const fallbacks = rest.map((c) => ({ engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort, note: candidateNote(c) }));
+  return {
+    ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort,
+    note: candidateNote(best), reasons, fallbacks,
+  };
 }

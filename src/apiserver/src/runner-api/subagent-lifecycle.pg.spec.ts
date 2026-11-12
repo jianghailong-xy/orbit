@@ -78,7 +78,11 @@ test('SubAgent lifecycle: turn end, runner restart, the wake and its wording', {
     data: { id: ownerId, email: `subagent-life-${ownerId}@runner-door.invalid`, name: 'The account owner', passwordHash: 'x' },
   });
   const runner = (await prisma.runner.create({
-    data: { id: runnerId, name: 'the machine the parent runs on', ownerId, tokenHash: sha256(`subagent-life-${runnerId}`) },
+    data: {
+      id: runnerId, name: 'the machine the parent runs on', ownerId, tokenHash: sha256(`subagent-life-${runnerId}`),
+      // What routing picks a SubAgent's model from (§4.2).
+      modelCatalog: { claude: [{ value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 }, { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 }] },
+    },
   })) as Runner;
 
   const sessions = new SessionsService(

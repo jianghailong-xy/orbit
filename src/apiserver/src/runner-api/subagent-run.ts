@@ -164,9 +164,14 @@ export function attemptsOf(value: unknown): SubagentAttempt[] {
 }
 
 /** The candidates a run may move to, in rank order, from the decision it opened with: the pick, then the rest of its tier. */
-export function fallbackCandidates(decision: Pick<SubagentDecision, 'engine' | 'provider' | 'model' | 'effort' | 'fallbacks'>): SubagentCandidateTarget[] {
+export function fallbackCandidates(
+  decision: Pick<SubagentDecision, 'engine' | 'provider' | 'model' | 'effort' | 'fallbacks' | 'note'>,
+): SubagentCandidateTarget[] {
   const pick = decision.engine && decision.provider && decision.model
-    ? [{ engine: decision.engine, provider: decision.provider, model: decision.model, effort: decision.effort }]
+    ? [{
+      engine: decision.engine, provider: decision.provider, model: decision.model, effort: decision.effort,
+      ...(decision.note ? { note: decision.note } : {}),
+    }]
     : [];
   return [...pick, ...(decision.fallbacks ?? [])];
 }
@@ -195,21 +200,65 @@ export function noProviderMessage(
 export const SUBAGENT_RESULT_SUMMARY_MAX = 20_000;
 
 /**
- * The router's decision as `subagent_run.decision` stores it while routing is in shadow (§8 P2): what it
- * would pick, `applied: false`, and a last reason naming the parent's model, which the SubAgent runs on.
+ * The router's decision as `subagent_run.decision` stores it now routing applies (§8 P3): the SubAgent runs on
+ * the candidate it opened on — the pick, or, when the pick could not be started on this runner, the first of
+ * the tier's next candidates that could. Each candidate passed over is recorded as removed with its reason and
+ * leaves the fallbacks, which keep only what ranks after the one it runs on.
  */
-export function shadowDecision(
+export function appliedDecision(
   route: SubagentRoutingDecision,
-  parentModel: string,
-  parentEffort: string | null = null,
+  runsOn: SubagentCandidateTarget,
+  passedOver: ReadonlyArray<{ target: SubagentCandidateTarget; reason: string }> = [],
 ): SubagentDecision {
+  const ranked = fallbackCandidates(route);
+  const at = ranked.findIndex((c) => c.engine === runsOn.engine && c.provider === runsOn.provider && c.model === runsOn.model);
+  const fallbacks = at >= 0 ? ranked.slice(at + 1) : route.fallbacks;
   return {
     ...route,
-    reasons: [...route.reasons, `Shadow decision: this SubAgent runs on the parent's model, ${parentModel}`],
-    applied: false,
-    runModel: parentModel,
-    runEffort: parentEffort,
+    engine: runsOn.engine,
+    provider: runsOn.provider,
+    model: runsOn.model,
+    effort: runsOn.effort,
+    ...(at > 0 ? { note: runsOn.note } : {}),
+    reasons: [
+      ...route.reasons,
+      ...passedOver.map((p) => `Passed over ${p.target.model} on ${p.target.provider}: ${p.reason}`),
+    ],
+    candidates: [
+      ...route.candidates,
+      ...passedOver.map((p) => ({
+        provider: p.target.provider, engine: p.target.engine, model: p.target.model, effort: p.target.effort, reason: p.reason,
+      })),
+    ],
+    fallbacks,
+    applied: true,
   };
+}
+
+const OPTIMIZE_LABEL: Record<string, string> = { cost: 'Cost', balance: 'Balance', intelligence: 'Intelligence' };
+
+/**
+ * The Why line of a SubAgent block: where the tier or model came from, the model it runs on with its provider
+ * named once and why it, each move after a limit, and how many candidates were removed — e.g.
+ * `Tier S, set by the caller · Cost: claude-sonnet-5-5 · low on claude, subscription with 64% quota left · 11
+ * others removed`. The full reasons and every removed candidate stay in the decision. Null for a row from before
+ * the decision kept its notes.
+ */
+export function subagentWhyLine(decision: Partial<SubagentDecision>): string | null {
+  if (typeof decision.tierNote !== 'string') return null;
+  const parts = [decision.tierNote];
+  if (decision.model) {
+    const engine = decision.engine && decision.engine !== decision.provider ? ` (${decision.engine})` : '';
+    const where = `${decision.model}${decision.effort ? ` · ${decision.effort}` : ''} on ${decision.provider}${engine}`;
+    const routed = decision.tierSource !== 'named-model' && decision.tierSource !== 'definition-model';
+    const mode = routed && decision.optimizeFor ? OPTIMIZE_LABEL[decision.optimizeFor] : undefined;
+    const lead = mode ? `${mode}: ${where}` : where;
+    parts.push(decision.note ? `${lead}, ${decision.note}` : lead);
+  }
+  parts.push(...(Array.isArray(decision.moves) ? decision.moves : []));
+  const removed = Array.isArray(decision.candidates) ? decision.candidates.length : 0;
+  if (removed > 0) parts.push(`${removed} other${removed === 1 ? '' : 's'} removed`);
+  return parts.join(' · ');
 }
 
 /**
@@ -234,7 +283,8 @@ export function modelLabels(
 
 /**
  * A `subagent_run` row as `GET /sessions/:id/subagents` answers it. The model is the one the SubAgent runs
- * on: the router's pick once applied, the parent's while the decision is a shadow, named by `modelLabels`.
+ * on: the router's pick, else what it runs on instead (`runModel`: the candidate a limit moved it to, or the
+ * parent's on a shadow row), named by `modelLabels`.
  */
 export function subagentRunView(
   row: {
@@ -251,9 +301,9 @@ export function subagentRunView(
   labels?: ReadonlyMap<string, string>,
 ): SubagentRunView {
   const decision = (row.decision ?? {}) as Partial<SubagentDecision>;
-  const shadow = decision.applied === false && decision.runModel !== undefined;
-  const model = (shadow ? decision.runModel : decision.model) ?? null;
-  const effort = (shadow ? decision.runEffort : decision.effort) ?? null;
+  const instead = decision.runModel !== undefined;
+  const model = (instead ? decision.runModel : decision.model) ?? null;
+  const effort = (instead ? decision.runEffort : decision.effort) ?? null;
   return {
     toolUseId: row.toolUseId,
     type: row.type,
@@ -264,6 +314,8 @@ export function subagentRunView(
     modelLabel: model ? labels?.get(model) ?? model : null,
     effort,
     reasons: Array.isArray(decision.reasons) ? decision.reasons.filter((r) => typeof r === 'string') : [],
+    why: subagentWhyLine(decision),
+    removed: Array.isArray(decision.candidates) ? decision.candidates : [],
     costUsd: row.costUsd,
     resultSummary: row.resultSummary,
     createdAt: row.createdAt.toISOString(),

@@ -10553,6 +10553,23 @@ button.chat-jump-start:hover {
   font-weight: 600;
   color: var(--text-2);
 }
+.chat-subagent-why-more {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-2);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.chat-subagent-why-list {
+  margin: 0;
+  padding: 0 10px 4px 26px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
 .chat-subagent-icon {
   font-size: 13px;
   line-height: 1;

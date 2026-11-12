@@ -515,6 +515,28 @@ func (c *subagentFileCollector) touched() []string {
 	return paths
 }
 
+// addTreeChanges adds paths the working tree says changed while the child ran (absolute, from
+// subagentTreeSnapshot.changedSince) to changedFiles, after those its edit tools named.
+func (c *subagentFileCollector) addTreeChanges(paths []string) {
+	// git names the tree by its resolved path (/private/var on macOS for /var), which cwd may not be.
+	resolved := c.cwd
+	if real, err := filepath.EvalSymlinks(c.cwd); err == nil {
+		resolved = real
+	}
+	for _, p := range paths {
+		rel := c.relative(p)
+		if filepath.IsAbs(filepath.FromSlash(rel)) && resolved != c.cwd {
+			if r, err := filepath.Rel(resolved, p); err == nil && !strings.HasPrefix(r, "..") {
+				rel = filepath.ToSlash(r)
+			}
+		}
+		if !c.seen[rel] {
+			c.seen[rel] = true
+			c.changed = append(c.changed, rel)
+		}
+	}
+}
+
 // expect records the files a call of an edit tool writes, from its input.
 func (c *subagentFileCollector) expect(id string, rawInput interface{}) {
 	tool, ok := subagentEditTools[c.names[id]]
@@ -864,6 +886,14 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		holdSubagentPaths(s.sessionID, s.execDir, paths)
 		if note := subagentHeldNote(run.id, root, paths); note != "" {
 			result = strings.TrimSpace(result + "\n\n" + note)
+		}
+	}
+
+	if status != subagentStatusStopped && status != subagentStatusInterrupted && treeKnown {
+		// changedFiles also names what the child wrote through a shell rather than an edit tool (a Codex child's
+		// printf, a codegen run): every path of the tree that changed while it ran, less the parent's own edits.
+		if after, ok := takeSubagentTreeSnapshot(s.execDir); ok {
+			files.addTreeChanges(after.changedSince(before, s.bg.parentEdits.since(run.startedAt)))
 		}
 	}
 
