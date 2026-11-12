@@ -73,7 +73,9 @@ class OrbitExchangeFoldTest {
         assertEquals("Watch triggered", watched.whatInTask)
         assertEquals(OrbitExchangeFold.Target("SESSION", runOfB4, "B4 run"), watched.target)
         val ended = job.replace("STATUS", "completed")
-        val woke = OrbitExchangeFold.turnOf(user { put("text", ended); put("controlPlaneNote", ended) })!!
+        // A job folds only in a coordinator: anywhere else its turns are the agent's answer to the reader (owner, 2026-11-12).
+        assertNull(OrbitExchangeFold.turnOf(user { put("text", ended); put("controlPlaneNote", ended) }))
+        val woke = OrbitExchangeFold.turnOf(user { put("text", ended); put("controlPlaneNote", ended) }, coordinator = true)!!
         assertEquals("Background job finished: Wait for runner 0.1.237 to reach main", woke.what)
         assertNull(woke.target)
         val replied = OrbitExchangeFold.turnOf(user {

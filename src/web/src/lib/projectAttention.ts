@@ -738,6 +738,19 @@ function oldestWait(project: SidebarProject): string | null {
   return oldest;
 }
 
+/** How long a project with nothing waiting and nothing in flight stays named in the rail. */
+export const SIDEBAR_RECENT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether the rail names this open project in its Projects group (docs/mocks/sidebar-projects-scroll,
+ * 03): it waits on the reader, has work in flight, or saw activity within SIDEBAR_RECENT_MS of `now`.
+ * The quiet rest fold into the group's last row, which opens the Projects page.
+ */
+export function projectIsLive(project: SidebarProject, now: number): boolean {
+  if (projectNeedsYouCount(project) > 0 || projectIsWorking(project)) return true;
+  return now - Date.parse(latestActivity(project) ?? project.createdAt) < SIDEBAR_RECENT_MS;
+}
+
 /**
  * The group's rows: open projects only; the ones waiting on the reader first, longest wait first;
  * then by the newest activity; then the newest project. Returns a new array.
