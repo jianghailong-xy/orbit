@@ -1,6 +1,6 @@
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
-import { readMergeRecovery, mergeRecoveryReady, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import {
   BadRequestException,
@@ -4798,6 +4798,8 @@ export class RunnerApiController {
     // A reload answered without being handed out, its environment one nothing can build any more: the
     // poll goes on to what was queued behind it.
     let reloadRefused = false;
+    // A turn a runner stop cut before its engine spoke, handed out again: its run's wait restarts here.
+    let restartRedelivered = false;
     // Retried whole. This is the inbox claim: it selects a queued turn under the Session row lock
     // and marks it in flight. A deadlock victim's claim never happened — the row is still queued —
     // so a re-run claims from the state that actually exists rather than reporting a turn it does
@@ -4808,6 +4810,7 @@ export class RunnerApiController {
       defaultRequeued = false;
       dispatchRequeued = false;
       reloadRefused = false;
+      restartRedelivered = false;
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
       // cannot both lease different messages from the same snapshot.
@@ -5252,6 +5255,30 @@ export class RunnerApiController {
             content = buildResumeContinuation(t.content);
           }
         } else {
+          // A runner restart or the owner's Update Now cut this turn before its engine said anything
+          // (interrupt runner_restart / runner_update), and this is the new process taking it again.
+          // The Starting notice counts from run_claimed_at, which the reclaim leaves at the first
+          // claim: counted from there, the runner's downtime would read as a start that takes minutes.
+          // The run's wait starts again from this delivery (task 34wNtnf94bNWNz0bmcieV); only while
+          // the engine has still not spoken, which is what the notice shows.
+          if (t.kind === 'message') {
+            const cut = await tx.runEvent.findFirst({
+              where: {
+                turnId: t.id,
+                type: 'interrupt',
+                OR: [RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON].map((reason) => ({
+                  payload: { path: ['reason'], equals: reason },
+                })),
+              },
+              select: { id: true },
+            });
+            if (cut) {
+              restartRedelivered = (await tx.$executeRaw`
+                UPDATE "session" SET "run_claimed_at" = now()
+                WHERE id = ${sessionId}::uuid AND status = 'RUNNING' AND "engine_started_at" IS NULL
+              `) > 0;
+            }
+          }
           externalSender = externalSenderOf(t) ?? undefined;
           const atts = await tx.attachment.findMany({
             where: { turnId: t.id },
@@ -5519,6 +5546,8 @@ export class RunnerApiController {
       // to this generation, so the poll is not answered with it again as a resend.
       return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery, resend);
     }
+    // The run's wait moved (restartRedelivered): the clients read it off the session.
+    if (restartRedelivered) this.realtime.publishSessionUpdated(sessionId);
     return outcome ?? null;
   }
 
