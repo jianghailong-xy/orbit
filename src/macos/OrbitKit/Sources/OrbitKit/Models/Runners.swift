@@ -217,7 +217,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
 }
 
 /// PATCH /runners/:id — `displayName` empty string clears the alias (falls back to machine name);
-/// nil omits. `maxConcurrent` 1…64. `minFreeDiskMb` is three-state because omitting it leaves the
+/// nil omits. `maxConcurrent` 1 or more. `minFreeDiskMb` is three-state because omitting it leaves the
 /// reserve alone while an explicit JSON null turns the reserve off.
 public struct UpdateRunnerRequest: Encodable, Sendable {
     public var displayName: String?
@@ -480,6 +480,25 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
     public let lastUpdatedAt: String?
     public let lastUpdatedFrom: String?
     public let lastUpdatedTo: String?
+    /// Where a release the runner is behind stands, for the runner page's Update card: `available`,
+    /// `draining`, `restarting` or `postponed`, raw like `state`. Nil when none is waiting, and from a
+    /// runner too old to say, which keeps the page's wording from before it.
+    public var phase: String? = nil
+    public var targetVersion: String? = nil
+    public var availableSince: String? = nil
+    public var drainingSince: String? = nil
+    public var postponedUntil: String? = nil
+    /// While draining: the turns still in flight, and how many there were when the drain began.
+    public var turnsInFlight: Int? = nil
+    public var turnsAtDrain: Int? = nil
+}
+
+/// One of the reader's turns a draining runner waits for (shared `RunnerUpdateTurn`): its session,
+/// title, and when the current run was claimed.
+public struct RunnerUpdateTurn: Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String?
+    public let startedAt: String?
 }
 
 /// POST /runners/:id/self-update (Update Runner Now) acknowledges when the check was requested.

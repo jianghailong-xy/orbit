@@ -53,10 +53,14 @@ data class DirectorySession(
      *  Null for anybody else's words, and from an older server. Kept as the JSON it came as, so a shape this build cannot read is no
      *  mark rather than a list that fails to decode. */
     val lastUserFromOrbit: JsonElement? = null,
-    /** Who sent [lastUserText] when somebody outside Orbit did — a connected Feishu group's member (docs/feishu-bot-design.md §8.2):
-     *  the row says `From Feishu · <name>` instead of "You" ([SessionLine.externalLine], read by [ExternalSender.parse]). Null for anybody
+    /** Who sent [lastUserText] when somebody other than the owner did — a connected Feishu group's member (docs/feishu-bot-design.md
+     *  §8.2) or a guest the owner invited (docs/session-guests-design.md §3): the row says `From Feishu · <name>` or `From <name>` instead
+     *  of "You" ([SessionLine.externalLine], read by [ExternalSender.parse]). Null for anybody
      *  else, and from an older server. Kept as the JSON it came as, so a source this build does not know is no sender. */
     val lastUserFromExternal: JsonElement? = null,
+    /** The session's permission mode (`default`, `auto`, `bypassPermissions`…), which Share's People who can reply says a guest's
+     *  message runs in. Null from an older server. */
+    val permissionMode: String? = null,
     /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
      *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
      *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
@@ -74,6 +78,11 @@ data class DirectorySession(
     val sessionKind: String? = null,
     /** What a LANDING row says about its subject, on `GET /sessions?projectId=&includeLanding=1` only; absent everywhere else. */
     val landing: SessionLandingSummary? = null,
+    /** Which gate the server found holding a queued row (web `QueuedGate`): `runner_updating` is the one this build words for itself
+     *  ([RunnerUpdating]). [queuedActive] is the turns in flight that gate judged on. All absent from an older server. */
+    val queuedReason: String? = null, val queuedActive: Int? = null, val queuedLimit: Int? = null,
+    /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
+    val queuedRunnerUpdate: JsonElement? = null,
 ) {
     /** Whether this row is a landing session (platform work), not a conversation. */
     val isLanding get() = sessionKind == "LANDING"

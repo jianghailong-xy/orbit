@@ -28,6 +28,13 @@ final class OrbitExchangeFoldCopyParityTests: XCTestCase {
         try String(contentsOf: repoRoot().appendingPathComponent(relative), encoding: .utf8)
     }
 
+    func testTheLengthAShortAnswerFoldsAtIsTheWebs() throws {
+        let lib = try source(Self.webLib)
+        XCTAssertTrue(lib.contains("export const WATCH_FOLDS_BELOW = \(OrbitExchangeFold.watchFoldsBelow);"))
+        XCTAssertTrue(lib.contains("export const OTHER_FOLDS_BELOW = \(OrbitExchangeFold.otherFoldsBelow);"))
+        XCTAssertTrue(lib.contains("if (category === 'reply') return false;"), "a reply folds by length on the web")
+    }
+
     func testTheGroupAndBranchWordsAreTheWebs() throws {
         let fold = try source(Self.webFold)
         let lib = try source(Self.webLib)

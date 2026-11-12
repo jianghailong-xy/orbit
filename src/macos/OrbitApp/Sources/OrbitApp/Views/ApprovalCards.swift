@@ -2912,8 +2912,35 @@ private struct StartProjectCardView: View {
 /// is what puts `ApprovalReviewLayout` on its whole-card path.
 private struct ProjectDoneCardView: View {
     let console: ConsoleModel
+    @Environment(AppModel.self) private var model
+    @Environment(\.opensPagesOverConsole) private var overConsole
     @State private var doneCheck: ProjectDoneCheck?
     @State private var checkError: String?
+
+    /// Open, Change, Move to a follow-up… and Confirm…, at this conversation's doors; a write reads
+    /// the check again, so the card says where things stand after it.
+    private var followUps: ProjectDoneFollowUpActions {
+        ProjectDoneFollowUpActions(
+            openTask: { model.openFromConversation(.task($0), overConsole: overConsole) },
+            openDelivers: console.projectID.map { id in { model.openProjectFromConversation(id, overConsole: overConsole) } },
+            move: { key, body in
+                let refused = await console.moveCriterion(key, body)
+                await rereadCheck()
+                return refused
+            },
+            openProjects: { await console.openProjectsForMove() },
+            confirm: { id, body in
+                let refused = await console.confirmCriterion(id, body)
+                await rereadCheck()
+                return refused
+            },
+            upload: { data, name, mime in try await console.uploadConfirmationShot(data, filename: name, mimeType: mime) })
+    }
+
+    private func rereadCheck() async {
+        do { doneCheck = try await console.readProjectDoneCheck(); checkError = nil }
+        catch { checkError = APIClient.failureReason(error) }
+    }
 
     var body: some View {
         if let subject = console.projectDone {
@@ -2932,12 +2959,12 @@ private struct ProjectDoneCardView: View {
                 doneCheck: doneCheck,
                 onRecord: { await console.recordProjectDone() },
                 onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },
-                onReopen: { await console.reopenProject() })
+                onReopen: { await console.reopenProject() },
+                followUps: followUps)
                 .environment(\.approvalReviewTarget, nil)
                 .task(id: row?.itemId) {
                     guard row == nil else { return }
-                    do { doneCheck = try await console.readProjectDoneCheck(); checkError = nil }
-                    catch { checkError = APIClient.failureReason(error) }
+                    await rereadCheck()
                 }
         }
     }

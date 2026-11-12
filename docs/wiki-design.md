@@ -100,7 +100,8 @@ owner 明确要求内容覆盖「用户开发的东西」本身。落法如下�
   - 仓库和 space 相同的 workspace 自动在这个 space 里：读取时按 repo_url 判定，不靠写入，所以不需要等 agent 调 wiki 工具；
   - 没有 repo_url 的，由 owner 在 Wiki 设置里手动加入；别的仓库的不能加入，它们有自己的 space；
   - owner 可以把 workspace 留在外面：它的会话不再进维护，调 wiki 工具被拒，已写进 wiki 的内容保留，也不会自己回来；
-  - 不在任何 space 里或被留在外面时，工具返回 `WIKI_SPACE_UNBOUND` 并附一句人话说明。
+  - 会话的 wiki 工具从不建 space（`docs/wiki-explicit-creation-design.md` §3.1）：第一次调用只把 workspace 绑到这个仓库已有的、在用的 space；
+  - 没有 wiki 时，`wiki_search` 回空结果并带 `unavailable`（`no_wiki` / `wiki_in_trash`），`wiki_get` 回 404、写入回 409，都是 `WIKI_SPACE_UNBOUND` 附一句人话说明（§3.3）；被留在外面时照旧拒绝。
   - 项目通过其 codebase 的 URL 推导所属 space，不另外建表。
 - **为什么按代码库而不是按项目**：43% 的活跃会话既不挂任务，也不是协调会话，大量「为什么」恰恰在这些自由会话里。项目页只作为二级索引。
 

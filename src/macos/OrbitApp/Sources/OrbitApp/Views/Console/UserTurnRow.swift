@@ -80,9 +80,11 @@ struct UserTurnRow: View {
         // not from the moment a runner takes it, so the queue draws the same card. With no payload the
         // turn keeps its old reading — this is checked before the wakes, as the browser checks it.
         if let card = b.sessionMessage {
+            // Its own block only tells the agent what the card shows: not folded under it again.
+            let note = SessionMessageCard.splitNote(b.note)
             SessionMessageCardView(card: card, text: b.text, ts: b.ts,
-                                   undelivered: undelivered,
-                                   attached: b.attached, onCancelQueued: cancel,
+                                   undelivered: undelivered, narrower: note.narrower,
+                                   attached: note.attached, onCancelQueued: cancel,
                                    revealed: revealedItemID == b.id)
         } else if let card = b.itemCard {
             // The note the same turn carried rides inside the card (`b.attached`): nobody typed
@@ -226,8 +228,9 @@ struct UserTurnRow: View {
                 }
             }
         } else if let sender = b.externalSender {
-            // Somebody outside Orbit — a connected Feishu group's member — sent it (`externalSender`,
-            // `ExternalSender.parse`): still their words in a bubble, headed `From Feishu · <name>` so it
+            // Somebody other than the owner — a connected Feishu group's member, or a guest the owner
+            // invited — sent it (`externalSender`, `ExternalSender.parse`): still their words in a bubble,
+            // headed `From Feishu · <name>` or `From <name>` so it
             // does not read as the owner's own (web parity: `UserBubble`'s `.chat-user-from`).
             UserBubbleView(bubble: b, sender: sender, onCancelQueued: cancel, steer: steer, onPutBack: putBack)
         } else {

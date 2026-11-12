@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>macOS menu bar icon · board 03 · AI / agent, same size as the neighbours</title>
+<style>
+  body { margin: 0; background: #f2f3f5; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; background: #fff;
+    width: 1000px; padding: 28px 32px 32px; box-sizing: border-box; margin: 0 0 16px; }
+  .b-part h2 { font-size: 20px; margin: 0 0 4px; }
+  .b-sub { color: #646a73; margin: 0 0 18px; }
+  .b-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .b-card { border: 1.5px solid #dee0e3; border-radius: 12px; padding: 14px 16px 16px; }
+  .b-card.rec { border-color: #3370ff; }
+  .b-card h3 { margin: 0; font-size: 17px; }
+  .b-card h3 b { display: inline-block; min-width: 26px; height: 26px; line-height: 26px; text-align: center;
+    border-radius: 13px; background: #1f2329; color: #fff; font-size: 14px; margin-right: 8px; vertical-align: 1px; padding: 0 4px; box-sizing: border-box; }
+  .b-card p { margin: 2px 0 10px; color: #646a73; font-size: 13.5px; line-height: 1.5; min-height: 40px; }
+  .b-real { position: relative; flex: none; border-radius: 8px; overflow: hidden; }
+  .b-real svg { position: absolute; }
+  .b-line { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+  .b-bar { height: 24px; display: flex; align-items: center; gap: 12px; padding: 0 10px; border-radius: 6px; }
+  .b-bar.light { background: #ececec; color: #1d1d1f; }
+  .b-bar.dark { background: #2a2a2c; color: #f5f5f7; }
+  .b-bar svg { display: block; }
+  .b-px { text-align: center; font-size: 11px; color: #8f959e; line-height: 1.2; }
+  .b-px canvas { image-rendering: pixelated; display: block; border-radius: 4px; width: 48px; height: 48px; }
+  .b-m { margin-top: 8px; font-size: 12.5px; color: #646a73; font-variant-numeric: tabular-nums; }
+  .b-m em { font-style: normal; font-weight: 600; color: #1f2329; }
+  .b-v { margin-top: 8px; font-size: 13.5px; padding: 6px 10px; border-radius: 6px; background: #f5f6f7; }
+  .b-v.bad { color: #b42318; background: #fef3f2; }
+  .b-v.good { color: #1a56db; background: #f0f4ff; }
+  code { font: 12.5px "JetBrains Mono", monospace; }
+</style>
+</head>
+<body>
+<script>
+// Template glyphs in a 64-unit box whose ink fills the box (rendered at 33 px on the 2x shot,
+// the size of the neighbours' ink: Claude 32 px, OpenAI 34 px). One colour, alpha only.
+let uid = 0;
+const M = () => 'm' + (uid++);
+const deg = a => a * Math.PI / 180;
+const onCircle = (cx, cy, r, a) => [cx + r * Math.cos(deg(a)), cy - r * Math.sin(deg(a))];
+// Four-point sparkle, the common "AI" sign. k = how far the curves bow out from the centre.
+const spark = (c, d, R, k, fill = 'currentColor', extra = '') =>
+  `<path d="M${c} ${d - R} Q${c + k} ${d - k} ${c + R} ${d} Q${c + k} ${d + k} ${c} ${d + R} Q${c - k} ${d + k} ${c - R} ${d} Q${c - k} ${d - k} ${c} ${d - R}Z" fill="${fill}" ${extra}/>`;
+
+const spark2 = (c, d, Rx, Ry, k, fill = 'currentColor', extra = '') =>
+  `<path d="M${c} ${d - Ry} Q${c + k} ${d - k} ${c + Rx} ${d} Q${c + k} ${d + k} ${c} ${d + Ry} Q${c - k} ${d + k} ${c - Rx} ${d} Q${c - k} ${d - k} ${c} ${d - Ry}Z" fill="${fill}" ${extra}/>`;
+
+const ICONS = [
+  { key: '7', name: '轨道 + 星芒', verdict: ['good', '建议：星芒一眼是 AI，倾斜的轨道是 Orbit 自己的记号，和 App 图标的外圈同源。尺寸和两边一样大；墨量还略轻一点，但截图里两边的图标有模糊，测出来偏重，放进菜单栏看已经差不多。'],
+    note: 'AI 的星芒当中心，外面套一条倾斜轨道：“AI 在轨道上运行”。',
+    svg() { const id = M();
+      return `<svg viewBox="0 0 64 64" fill="none"><defs><mask id="${id}"><rect width="64" height="64" fill="#fff"/>
+        ${spark2(32, 32, 20, 30, 7.4, '#000', 'stroke="#000" stroke-width="7.5" stroke-linejoin="round"')}</mask></defs>
+        <g mask="url(#${id})"><g transform="rotate(-24 32 32)"><ellipse cx="32" cy="32" rx="30.5" ry="12.5" stroke="currentColor" stroke-width="6.4"/></g></g>
+        ${spark2(32, 32, 20, 30, 7.4)}</svg>`; } },
+  { key: '8', name: '星芒 + 卫星', verdict: ['', '最像“AI”，但轨道只剩一小段弧，Orbit 的辨识度弱；星芒加小星在别的 AI 应用里也常见。'],
+    note: '大星芒偏左下，右上一段轨道弧和一颗卫星。',
+    svg() { const [sx, sy] = onCircle(25, 39, 33, 72), [ax, ay] = onCircle(25, 39, 33, 8);
+      return `<svg viewBox="0 0 64 64" fill="none">${spark(25, 39, 25, 6)}
+        <path d="M${ax} ${ay} A33 33 0 0 0 ${sx} ${sy}" stroke="currentColor" stroke-width="5.6" stroke-linecap="round"/>
+        <circle cx="${sx}" cy="${sy}" r="7.6" fill="currentColor"/></svg>`; } },
+  { key: '9', name: '>✦ 终端里的 AI', verdict: ['', '最能说清“agent 在终端里干活”，和 App 图标的 >_ 呼应；但横向两个符号，像一段文字而不像标志。'],
+    note: '命令行提示符 > 后面跟着一颗星芒：AI 在终端里执行。',
+    svg() {
+      return `<svg viewBox="0 0 64 64" fill="none">
+        <path d="M5 10 L25 32 L5 54" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+        ${spark(44.5, 32, 19.5, 5.5)}</svg>`; } },
+  { key: '10', name: 'Agent 头像 · 星芒天线', verdict: ['good', '备选：最直白的“这是一个 agent”，有个性，在一排抽象标志里最好找；风格比 7 更卡通。'],
+    note: '圆角方头、两只眼睛镂空，天线顶端是一颗星芒。',
+    svg() { const id = M();
+      return `<svg viewBox="0 0 64 64" fill="none"><defs><mask id="${id}"><rect width="64" height="64" fill="#fff"/>
+          <rect x="17.5" y="31" width="10" height="17" rx="5" fill="#000"/><rect x="36.5" y="31" width="10" height="17" rx="5" fill="#000"/></mask></defs>
+        <rect x="5" y="20" width="54" height="43" rx="15" fill="currentColor" mask="url(#${id})"/>
+        <line x1="32" y1="21" x2="32" y2="13" stroke="currentColor" stroke-width="4.4"/>
+        ${spark(32, 9, 9.5, 1.6)}</svg>`; } },
+  { key: '11', name: '多个 agent 绕一颗 AI', verdict: ['bad', '意思最全（一个核心、多个 agent），但实际大小下像原子/科学图标，不像 AI 产品。'],
+    note: '正圆轨道上两颗卫星，中心一颗星芒：Orbit 协调多个 agent。',
+    svg() { const id = M(); const [ax, ay] = onCircle(32, 32, 27.5, 40), [bx, by] = onCircle(32, 32, 27.5, 220);
+      return `<svg viewBox="0 0 64 64" fill="none"><defs><mask id="${id}"><rect width="64" height="64" fill="#fff"/>
+        <circle cx="${ax}" cy="${ay}" r="10" fill="#000"/><circle cx="${bx}" cy="${by}" r="10" fill="#000"/></mask></defs>
+        <circle cx="32" cy="32" r="27.5" stroke="currentColor" stroke-width="5.4" mask="url(#${id})"/>
+        ${spark(32, 32, 17, 4.6)}
+        <circle cx="${ax}" cy="${ay}" r="7" fill="currentColor"/><circle cx="${bx}" cy="${by}" r="7" fill="currentColor"/></svg>`; } },
+];
+
+const sized = (svg, px, extra = '') => svg.replace('<svg ', `<svg width="${px}" height="${px}" ${extra} `);
+const WIFI = `<svg width="17" height="13" viewBox="0 0 17 13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+  <path d="M1.5 4.6a10 10 0 0 1 14 0"/><path d="M4 7.3a6.3 6.3 0 0 1 9 0"/><circle cx="8.5" cy="10.6" r="1.2" fill="currentColor" stroke="none"/></svg>`;
+const BOX = 33; // glyph box on the 2x shot, px
+
+function realBar(svg, k, today) {
+  const w = 240 * k, h = 108 * k, s = BOX * k;
+  const inner = today ? '' : sized(svg, s, `style="left:${120.5 * k - s / 2}px;top:${42.5 * k - s / 2}px;color:#fff"`);
+  return `<div class="b-real" style="width:${w}px;height:${h}px;background:url(${today ? 'menubar-today.png' : 'menubar-erased.png'}) 0 0/${w}px ${h}px">${inner}</div>`;
+}
+const bar = (theme, svg) => `<div class="b-bar ${theme}">${sized(svg, BOX / 2)}${WIFI}</div>`;
+const pxSpecs = [], meters = [];
+function px(svg) {
+  const id = 'cv' + pxSpecs.length; pxSpecs.push({ id, svg });
+  return `<div class="b-px"><canvas id="${id}" width="17" height="17"></canvas>1x 屏</div>`;
+}
+async function raster(svg, n, fg) {
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  const s = svg.replaceAll('currentColor', fg).replace('<svg ', `<svg xmlns="http://www.w3.org/2000/svg" width="${n}" height="${n}" `);
+  const img = new Image();
+  await new Promise(r => { img.onload = r; img.onerror = () => { console.log('SVGERR', s.slice(0, 300)); r(); }; img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s); });
+  c.getContext('2d').drawImage(img, 0, 0, n, n);
+  return c;
+}
+window.drawCanvases = async () => {
+  for (const s of pxSpecs) {
+    const g = document.getElementById(s.id).getContext('2d');
+    g.fillStyle = '#2a2a2c'; g.fillRect(0, 0, 17, 17);
+    g.drawImage(await raster(s.svg, 17, '#f5f5f7'), 0, 0);
+  }
+  // Same measurement as on the screenshot: ink bbox (alpha > 0.3) and summed alpha, at 2x.
+  for (const m of meters) {
+    const c = await raster(m.svg, BOX, '#fff'), d = c.getContext('2d').getImageData(0, 0, BOX, BOX).data;
+    let ink = 0, x0 = BOX, x1 = -1, y0 = BOX, y1 = -1;
+    for (let y = 0; y < BOX; y++) for (let x = 0; x < BOX; x++) {
+      const a = d[(y * BOX + x) * 4 + 3] / 255; ink += a;
+      if (a > 0.3) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    }
+    document.getElementById(m.id).innerHTML =
+      `实测：<em>${x1 - x0 + 1}×${y1 - y0 + 1} px</em>，墨量 <em>${Math.round(ink)}</em> · 对照 Claude 32×32 / 456，OpenAI 34×34 / 423`;
+  }
+};
+function card(ic, today) {
+  const svg = today ? '' : ic.svg();
+  const mid = 'mt' + meters.length;
+  if (!today) meters.push({ id: mid, svg });
+  const v = ic.verdict ? `<div class="b-v ${ic.verdict[0]}">${ic.verdict[1]}</div>` : '';
+  const line = today ? '' : `<div class="b-line">${realBar(svg, 0.5)}${bar('light', svg)}${bar('dark', svg)}${px(svg)}</div><div class="b-m" id="${mid}"></div>`;
+  return `<div class="b-card${ic.verdict && ic.verdict[0] === 'good' ? ' rec' : ''}"><h3><b>${ic.key}</b>${ic.name}</h3><p>${ic.note}</p>
+    ${realBar(svg, 1.75, today)}${line}${today ? '<div class="b-m">实测：<em>28×26 px</em>，墨量 <em>426</em> · 比两边小一圈</div>' : ''}${v}</div>`;
+}
+</script>
+
+<section class="b-part" id="part-1">
+  <h2>第三轮：要像一个 AI / Agent 产品，且和 Claude、ChatGPT 一样大</h2>
+  <p class="b-sub">尺寸先量过：你的截图里 Claude 的图标墨迹是 32×32 px，OpenAI 是 34×34 px（2 倍屏，约 16–17 pt）；今天的 Orbit 只有 28×26 px，前两轮画的也只有约 26 px，所以显小。这一轮每个图标都撑满 33 px，卡片下方是同一把尺子的实测数字。
+  表达上用 AI 产品通用的星芒，再加 Orbit 自己的记号（轨道）或 agent 的形象。</p>
+  <div class="b-cards">
+    <script>
+      document.write(card({ key: '今', name: '今天', note: 'SF Symbol <code>circle.hexagongrid</code>，作对照。' }, true));
+      for (const ic of ICONS) document.write(card(ic));
+    </script>
+  </div>
+</section>
+</body>
+</html>
