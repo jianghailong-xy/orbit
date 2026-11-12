@@ -1367,7 +1367,7 @@ private struct AccessTokensSettingsPage: View {
 
 /// Settings → Terminals (docs/terminal-session-design.md, "The terminal credential"): every live terminal — its
 /// machine, when it was approved, last used and when it expires — each with Revoke, which asks first. A revoked
-/// terminal leaves the list. Web parity: `TerminalsCard.tsx`; the words are OrbitKit's `Terminals`.
+/// terminal leaves the list. Web parity: `TerminalsPage.tsx`; the words are OrbitKit's `Terminals`.
 private struct TerminalsSettingsPage: View {
     @Environment(AppModel.self) private var model
 

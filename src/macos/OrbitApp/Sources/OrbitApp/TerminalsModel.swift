@@ -4,7 +4,7 @@ import OrbitKit
 
 /// Settings → Terminals: the terminals approved on this account (docs/terminal-session-design.md, "The terminal
 /// credential"), and the one press on them — Revoke. Owned by `AppModel`, like Access tokens, so Settings' row and the
-/// page it opens read the same answer. Web parity: `TerminalsCard.tsx`.
+/// page it opens read the same answer. Web parity: `TerminalsPage.tsx`.
 @MainActor
 @Observable
 final class TerminalsModel {

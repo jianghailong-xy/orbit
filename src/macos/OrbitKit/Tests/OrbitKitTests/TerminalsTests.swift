@@ -157,7 +157,7 @@ final class TerminalsTests: XCTestCase {
                          "'Never used'", "`Expires ${fullDate(terminal.expiresAt)} · ${untilLine(terminal.expiresAt, now)}`"] {
             XCTAssertTrue(web.contains(template), "the web no longer says \(template)")
         }
-        let card = try webSource("src/web/src/components/TerminalsCard.tsx")
+        let card = try webSource("src/web/src/pages/TerminalsPage.tsx")
         XCTAssertTrue(card.contains("message.success('Terminal revoked')"))
         XCTAssertEqual(Terminals.revoked, "Terminal revoked")
     }
