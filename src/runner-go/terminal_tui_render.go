@@ -27,6 +27,8 @@ const tuiDiffLines = 6
 
 // tuiSessionInfo is what the status line names: workspace · machine · engine · model · permission mode.
 type tuiSessionInfo struct {
+	// EngineID is the engine as the server names it ("claude", "kimi"), which picks the slash commands.
+	EngineID       string
 	Workspace      string
 	Machine        string
 	Engine         string
@@ -65,6 +67,7 @@ func parseTUISessionInfo(data []byte) tuiSessionInfo {
 		engine = s.Provider
 	}
 	if engine != "" {
+		info.EngineID = engine
 		info.Engine = engineDisplayName(engine)
 	}
 	if s.Model != nil {
@@ -353,8 +356,8 @@ func (a tuiApproval) titleAndDetail() (string, string) {
 	return "Use " + a.ToolName, detail
 }
 
-// answerable says whether [y] can allow the card here. A question needs its answers picked, which
-// v1 leaves to the app.
+// answerable says whether [y] can allow the card here. A question needs its answers picked: by
+// number when its questions can be read (terminal_tui_v2.go), else in the app.
 func (a tuiApproval) answerable() bool { return a.ToolName != "AskUserQuestion" }
 
 // rememberRules is what [a] Always allow remembers, as web's ApprovalPanel derives it: one rule per

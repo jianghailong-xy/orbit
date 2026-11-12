@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -72,6 +73,7 @@ func runSessionTUI(opts tuiOptions) error {
 	}
 
 	m := newTUIModel(client, opts.SessionID, info)
+	m.slashItems = tuiSlashItemsFor(slashReg, info.EngineID)
 	// The transcript so far goes to the scrollback before the live area is drawn.
 	fmt.Fprintln(opts.Out, info.statusLine())
 	for _, ev := range events {
@@ -113,6 +115,7 @@ func followSession(ctx context.Context, client *tuiClient, id string, sinceSeq i
 	backoff := time.Second
 	for first := true; ctx.Err() == nil; first = false {
 		if !first {
+			send(tuiStreamRestartMsg{})
 			if list, err := client.pendingApprovals(ctx, id); err == nil {
 				send(tuiApprovalsMsg(list))
 			}
@@ -153,10 +156,18 @@ type (
 	tuiApprovalsMsg []json.RawMessage
 	tuiNoticeMsg    string
 	tuiSentMsg      struct {
-		content, turnID string
-		err             error
+		content, clientTurnID string
+		answer                tuiTurnAnswer
+		err                   error
 	}
-	tuiDecidedMsg struct {
+	tuiUploadedMsg struct {
+		path, id string
+		err      error
+	}
+	// tuiStreamRestartMsg says the stream is about to reconnect: a reply streaming in starts over
+	// from its whole prefix, so the draft so far is dropped.
+	tuiStreamRestartMsg struct{}
+	tuiDecidedMsg       struct {
 		approvalID string
 		err        error
 	}
@@ -176,9 +187,20 @@ type tuiModel struct {
 	deciding map[string]bool
 	composer []rune
 	notice   string
-	// Whether a turn is running, for the "Working…" line: the text streaming in is not drawn
-	// until each message is whole.
+	// Whether a turn is running, for the "Working…" line, and the reply streaming in so far: drawn
+	// in the live area until the whole message arrives and goes to the scrollback.
 	working bool
+	draft   string
+	// The '/' menu: every command this session's engine offers, and the highlighted match.
+	slashItems  []tuiSlashItem
+	slashCursor int
+	// Files pasted into the message being written, uploaded as they are pasted.
+	attachments []tuiAttachment
+	cwd         string
+	// Messages sent mid-turn whose delivery has not settled.
+	steers []tuiSteer
+	// The picking in progress on an AskUserQuestion card at the head of the queue.
+	qa *tuiQuestionAnswer
 	// Lines waiting for the scrollback, and whether a print is on its way. bubbletea runs every
 	// command on its own goroutine, so two prints in flight could land in either order: one goes
 	// at a time, and the next waits for tuiPrintedMsg.
@@ -192,6 +214,7 @@ func newTUIModel(client *tuiClient, sessionID string, info tuiSessionInfo) *tuiM
 	return &tuiModel{
 		client: client, sessionID: sessionID, info: info,
 		transcript: newTUITranscript(), deciding: map[string]bool{}, newID: randomUUID,
+		slashItems: append([]tuiSlashItem(nil), tuiLocalSlashItems...), cwd: tuiWorkingDir(),
 	}
 }
 
@@ -224,9 +247,26 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.notice = "Not sent: " + msg.err.Error()
 			m.dropPending(msg.content)
-		} else if msg.turnID != "" {
-			m.transcript.ownTurns[msg.turnID] = true
+			m.dropSteer(msg.clientTurnID)
+		} else {
+			if msg.answer.TurnID != "" {
+				m.transcript.ownTurns[msg.answer.TurnID] = true
+			}
+			m.placed(msg.clientTurnID, msg.answer)
 		}
+	case tuiUploadedMsg:
+		for i := range m.attachments {
+			if m.attachments[i].Path == msg.path && m.attachments[i].ID == "" && m.attachments[i].Err == "" {
+				if msg.err != nil {
+					m.attachments[i].Err = msg.err.Error()
+				} else {
+					m.attachments[i].ID = msg.id
+				}
+				break
+			}
+		}
+	case tuiStreamRestartMsg:
+		m.draft = ""
 	case tuiDecidedMsg:
 		delete(m.deciding, msg.approvalID)
 		if msg.err != nil {
@@ -258,7 +298,36 @@ func (m *tuiModel) event(ev tuiEvent) tea.Cmd {
 		}
 		return nil
 	case "resync":
+		m.draft = ""
 		return m.resync()
+	case "text_delta":
+		var p struct {
+			Text string `json:"text"`
+		}
+		_ = json.Unmarshal(ev.Payload, &p)
+		m.draft += p.Text
+		m.working = true
+		m.transcript.render(ev) // keeps the seq in step; a delta prints nothing
+		return nil
+	case "user_delivery":
+		var p struct {
+			TurnID   string `json:"turnId"`
+			Delivery string `json:"delivery"`
+			Code     string `json:"code"`
+			Reason   string `json:"reason"`
+		}
+		_ = json.Unmarshal(ev.Payload, &p)
+		if p.TurnID == "" {
+			p.TurnID = ev.TurnID
+		}
+		m.transcript.render(ev)
+		m.steerDelivery(p.TurnID, "", p.Delivery, p.Code, p.Reason)
+		return m.flush()
+	}
+	if supersedesDraft(ev) {
+		m.draft = ""
+	}
+	switch ev.Type {
 	case "turn_end", "interrupt", "error":
 		m.notice = ""
 		m.working = false
@@ -266,7 +335,77 @@ func (m *tuiModel) event(ev tuiEvent) tea.Cmd {
 		m.working = true
 	}
 	m.outbox = append(m.outbox, m.transcript.render(ev)...)
+	if ev.Type == "user" {
+		var p struct {
+			Text     string `json:"text"`
+			Steer    bool   `json:"steer"`
+			Delivery string `json:"delivery"`
+		}
+		if json.Unmarshal(ev.Payload, &p) == nil && p.Steer {
+			m.steerDelivery(ev.TurnID, p.Text, p.Delivery, "", "")
+		}
+	}
 	return m.flush()
+}
+
+// placed records where the server put a message: one written into the running turn is followed
+// until its delivery settles; any other placement ends the following.
+func (m *tuiModel) placed(clientTurnID string, answer tuiTurnAnswer) {
+	for i := range m.steers {
+		if m.steers[i].clientTurnID != clientTurnID {
+			continue
+		}
+		if answer.Placement != "steer" {
+			m.steers = append(m.steers[:i], m.steers[i+1:]...)
+			return
+		}
+		m.steers[i].turnID = answer.TurnID
+		return
+	}
+}
+
+func (m *tuiModel) dropSteer(clientTurnID string) {
+	for i := range m.steers {
+		if m.steers[i].clientTurnID == clientTurnID {
+			m.steers = append(m.steers[:i], m.steers[i+1:]...)
+			return
+		}
+	}
+}
+
+// steerDelivery moves a followed steer to the state an event reports. It is found by its turn, or —
+// before the send's answer has named the turn — by its text. A settled steer leaves the live area
+// with one line in the scrollback saying how it ended; a withdrawn one leaves without a word.
+func (m *tuiModel) steerDelivery(turnID, text, delivery, code, reason string) {
+	idx := -1
+	for i, st := range m.steers {
+		if turnID != "" && st.turnID == turnID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 && text != "" {
+		for i, st := range m.steers {
+			if st.turnID == "" && strings.TrimSpace(st.text) == strings.TrimSpace(text) {
+				idx = i
+				m.steers[i].turnID = turnID
+				break
+			}
+		}
+	}
+	if idx < 0 || delivery == "" {
+		return
+	}
+	st := &m.steers[idx]
+	st.delivery, st.code, st.reason = delivery, code, reason
+	if delivery == "withdrawn" {
+		m.steers = append(m.steers[:idx], m.steers[idx+1:]...)
+		return
+	}
+	if steerSettled(delivery) {
+		m.outbox = append(m.outbox, st.line())
+		m.steers = append(m.steers[:idx], m.steers[idx+1:]...)
+	}
 }
 
 // flush prints what is waiting, unless a print is already on its way. tea.Sequence delivers the
@@ -326,26 +465,67 @@ func (m *tuiModel) dropPending(content string) {
 }
 
 func (m *tuiModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	menu := m.slashMenu()
 	switch k.Type {
 	case tea.KeyCtrlD, tea.KeyCtrlC:
 		return m.leave()
 	case tea.KeyEsc:
+		if len(menu) > 0 {
+			m.composer = nil // Esc closes the menu before it interrupts anything
+			return m, nil
+		}
 		m.notice = "Interrupting…"
 		client, id := m.client, m.sessionID
 		return m, func() tea.Msg { return tuiInterruptedMsg{client.interrupt(context.Background(), id)} }
+	case tea.KeyUp, tea.KeyDown:
+		if len(menu) > 0 {
+			if k.Type == tea.KeyUp {
+				m.slashCursor = (m.slashCursor + len(menu) - 1) % len(menu)
+			} else {
+				m.slashCursor = (m.slashCursor + 1) % len(menu)
+			}
+		}
+		return m, nil
+	case tea.KeyTab:
+		if len(menu) > 0 {
+			m.composer = []rune("/" + menu[m.slashCursor].Name + " ")
+			m.slashCursor = 0
+		}
+		return m, nil
 	case tea.KeyEnter:
+		if len(menu) > 0 {
+			m.composer = []rune("/" + menu[m.slashCursor].Name)
+			m.slashCursor = 0
+		}
 		text := strings.TrimSpace(string(m.composer))
-		if text == "" {
+		if text == "" && len(m.attachments) == 0 {
+			if a, questions, ok := m.questionHead(); ok && questions[m.qa.current].MultiSelect {
+				return m, m.nextQuestion(a, questions)
+			}
 			return m, nil
 		}
-		if text == "/exit" {
+		switch text {
+		case "/exit":
 			return m.leave()
+		case "/status":
+			m.composer = nil
+			m.notice = tuiPlainText(m.info.statusLine())
+			return m, nil
+		}
+		for _, a := range m.attachments {
+			if a.ID == "" && a.Err == "" {
+				m.notice = "Waiting for " + a.Name + " to upload…"
+				return m, nil
+			}
 		}
 		m.composer = nil
 		return m, m.send(text)
 	case tea.KeyBackspace:
 		if n := len(m.composer); n > 0 {
 			m.composer = m.composer[:n-1]
+			m.slashCursor = 0
+		} else if n := len(m.attachments); n > 0 {
+			m.attachments = m.attachments[:n-1]
 		}
 		return m, nil
 	case tea.KeyCtrlU:
@@ -355,17 +535,125 @@ func (m *tuiModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.composer = append(m.composer, ' ')
 		return m, nil
 	case tea.KeyRunes:
-		// With a card waiting and nothing typed, y / a / n answer the card (board-1 marker 4).
+		if k.Paste {
+			if paths := pastedFilePaths(string(k.Runes), m.cwd); len(paths) > 0 {
+				return m, m.attach(paths)
+			}
+		}
+		// With a card waiting and nothing typed, keys answer the card (board-1 marker 4): y / a / n,
+		// or an option's number on a question.
 		if len(m.composer) == 0 && len(m.approvals) > 0 && !k.Paste && len(k.Runes) == 1 {
-			switch k.Runes[0] {
+			r := k.Runes[0]
+			if a, questions, ok := m.questionHead(); ok && r >= '1' && r <= '9' {
+				return m, m.pick(a, questions, int(r-'1'))
+			}
+			switch r {
 			case 'y', 'a', 'n':
-				return m, m.decide(k.Runes[0])
+				return m, m.decide(r)
 			}
 		}
 		m.composer = append(m.composer, k.Runes...)
+		m.slashCursor = 0
 		return m, nil
 	}
 	return m, nil
+}
+
+// slashMenu is the '/' menu's matches while a command name is being typed, or none.
+func (m *tuiModel) slashMenu() []tuiSlashItem {
+	token, ok := tuiSlashToken(string(m.composer))
+	if !ok {
+		return nil
+	}
+	matches := tuiSlashMatches(m.slashItems, token)
+	if len(matches) == 1 && matches[0].Name == token {
+		return nil // typed out in full: Enter sends it as it stands
+	}
+	if m.slashCursor >= len(matches) {
+		m.slashCursor = 0
+	}
+	return matches
+}
+
+// attach uploads pasted files, each as it is pasted, so the message is ready when Enter is pressed.
+func (m *tuiModel) attach(paths []string) tea.Cmd {
+	var cmds []tea.Cmd
+	for _, path := range paths {
+		a := tuiAttachment{Path: path, Name: filepath.Base(path)}
+		if st, err := os.Stat(path); err == nil && st.Size() > tuiMaxUploadBytes {
+			m.notice = a.Name + " is larger than 25 MB, the most one attachment can be."
+			continue
+		}
+		m.attachments = append(m.attachments, a)
+		client, id := m.client, m.sessionID
+		cmds = append(cmds, func() tea.Msg {
+			uploaded, err := client.upload(context.Background(), id, path)
+			return tuiUploadedMsg{path: path, id: uploaded, err: err}
+		})
+	}
+	return tea.Batch(cmds...)
+}
+
+func tuiWorkingDir() string {
+	dir, _ := os.Getwd()
+	return dir
+}
+
+// tuiPlainText drops the colour codes from a line the TUI drew.
+func tuiPlainText(s string) string {
+	for _, c := range []string{tuiReset, tuiBold, tuiGrey, tuiRed, tuiGreen, tuiYellow, tuiBlue, tuiCyan} {
+		s = strings.ReplaceAll(s, c, "")
+	}
+	return s
+}
+
+// questionHead is the AskUserQuestion card at the head of the queue, its questions, and the picking
+// in progress on it (started here when it is new).
+func (m *tuiModel) questionHead() (tuiApproval, []tuiQuestion, bool) {
+	if len(m.approvals) == 0 || m.approvals[0].ToolName != "AskUserQuestion" {
+		return tuiApproval{}, nil, false
+	}
+	a := m.approvals[0]
+	questions := a.questions()
+	if len(questions) == 0 {
+		return tuiApproval{}, nil, false
+	}
+	if m.qa == nil || m.qa.approvalID != a.ID {
+		m.qa = &tuiQuestionAnswer{approvalID: a.ID, picks: map[int][]int{}}
+	}
+	return a, questions, true
+}
+
+// pick answers the current question with option i: a single-select question takes it and moves on,
+// a multi-select one toggles it and waits for Enter.
+func (m *tuiModel) pick(a tuiApproval, questions []tuiQuestion, i int) tea.Cmd {
+	q := questions[m.qa.current]
+	if i >= len(q.Options) {
+		return nil
+	}
+	if q.MultiSelect {
+		m.qa.toggle(m.qa.current, i)
+		return nil
+	}
+	m.qa.picks[m.qa.current] = []int{i}
+	return m.nextQuestion(a, questions)
+}
+
+// nextQuestion moves to the next question, or sends the answers once every question has one: the
+// body web's ApprovalPanel sends, behavior allow with answers keyed by each question's text.
+func (m *tuiModel) nextQuestion(a tuiApproval, questions []tuiQuestion) tea.Cmd {
+	if len(m.qa.picks[m.qa.current]) == 0 {
+		m.notice = "Pick at least one option, or press n to decline."
+		return nil
+	}
+	m.notice = ""
+	if m.qa.current+1 < len(questions) {
+		m.qa.current++
+		return nil
+	}
+	body := map[string]any{"behavior": "allow", "answers": m.qa.answers(questions)}
+	m.qa = nil
+	return m.sendDecision(a, body)
 }
 
 // leave closes the TUI. It never calls /interrupt: the session keeps running (D9).
@@ -374,19 +662,30 @@ func (m *tuiModel) leave() (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
-// send files a message through POST /sessions/:id/turns with a fresh clientTurnId.
+// send files a message through POST /sessions/:id/turns with a fresh clientTurnId and the
+// attachments uploaded for it. One sent while a turn runs is followed until its delivery settles.
 func (m *tuiModel) send(text string) tea.Cmd {
 	clientTurnID, err := m.newID()
 	if err != nil {
 		m.notice = "Not sent: " + err.Error()
 		return nil
 	}
+	var ids []string
+	for _, a := range m.attachments {
+		if a.ID != "" {
+			ids = append(ids, a.ID)
+		}
+	}
+	m.attachments = nil
 	m.notice = ""
 	m.transcript.pendingOwn = append(m.transcript.pendingOwn, text)
+	if m.working {
+		m.steers = append(m.steers, tuiSteer{clientTurnID: clientTurnID, text: text})
+	}
 	client, id := m.client, m.sessionID
 	return func() tea.Msg {
-		turnID, err := client.sendTurn(context.Background(), id, clientTurnID, text)
-		return tuiSentMsg{content: text, turnID: turnID, err: err}
+		answer, err := client.sendTurn(context.Background(), id, clientTurnID, text, ids)
+		return tuiSentMsg{content: text, clientTurnID: clientTurnID, answer: answer, err: err}
 	}
 }
 
@@ -396,6 +695,10 @@ func (m *tuiModel) decide(key rune) tea.Cmd {
 	body := map[string]any{}
 	switch key {
 	case 'y':
+		if _, _, ok := m.questionHead(); ok {
+			m.notice = "Pick an option with its number, or press n to decline."
+			return nil
+		}
 		if !a.answerable() {
 			m.notice = "Answer this question in the Orbit app, or press n to decline it."
 			return nil
@@ -411,8 +714,14 @@ func (m *tuiModel) decide(key rune) tea.Cmd {
 		body["rememberRules"] = rules
 	case 'n':
 		body["behavior"] = "deny"
+		m.qa = nil
 	}
-	m.approvals = m.approvals[1:]
+	return m.sendDecision(a, body)
+}
+
+// sendDecision takes the card off the queue and posts its answer.
+func (m *tuiModel) sendDecision(a tuiApproval, body map[string]any) tea.Cmd {
+	m.removeApproval(a.ID)
 	m.deciding[a.ID] = true
 	client, id := m.client, m.sessionID
 	return func() tea.Msg {
@@ -425,11 +734,26 @@ func (m *tuiModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	for _, a := range m.approvals {
+	if m.draft != "" {
 		b.WriteString("\n")
-		for _, line := range renderApprovalCard(a) {
+		for _, line := range draftView(m.draft) {
 			b.WriteString(line + "\n")
 		}
+	}
+	for i, a := range m.approvals {
+		b.WriteString("\n")
+		lines := renderApprovalCard(a)
+		if i == 0 {
+			if _, _, ok := m.questionHead(); ok {
+				lines = renderQuestionCard(a, m.qa)
+			}
+		}
+		for _, line := range lines {
+			b.WriteString(line + "\n")
+		}
+	}
+	for _, st := range m.steers {
+		b.WriteString(st.line() + "\n")
 	}
 	if m.notice != "" {
 		b.WriteString(tuiGrey + m.notice + tuiReset + "\n")
@@ -437,13 +761,43 @@ func (m *tuiModel) View() string {
 		b.WriteString(tuiGrey + "● Working…" + tuiReset + "\n")
 	}
 	b.WriteString("\n")
+	if len(m.attachments) > 0 {
+		var chips []string
+		for _, a := range m.attachments {
+			switch {
+			case a.Err != "":
+				chips = append(chips, tuiRed+"⊘ "+a.Name+" (not uploaded: "+firstLine(a.Err)+")"+tuiReset)
+			case a.ID == "":
+				chips = append(chips, tuiGrey+"⇡ "+a.Name+" (uploading…)"+tuiReset)
+			default:
+				chips = append(chips, tuiCyan+"＋ "+a.Name+tuiReset)
+			}
+		}
+		b.WriteString(strings.Join(chips, "  ") + "\n")
+	}
 	composer := string(m.composer)
 	if composer == "" {
-		composer = tuiGrey + "Message…" + tuiReset
+		composer = tuiGrey + "Message… (/ for commands, paste a file path to attach it)" + tuiReset
 	}
 	b.WriteString(tuiGrey + "› " + tuiReset + composer + "\n")
+	if menu := m.slashMenu(); len(menu) > 0 {
+		for i, it := range menu {
+			line := "  /" + it.Name
+			if it.Description != "" {
+				line += tuiGrey + "  " + it.Description + tuiReset
+			}
+			if i == m.slashCursor {
+				line = tuiCyan + "›" + tuiReset + line[1:]
+			}
+			b.WriteString(line + "\n")
+		}
+		b.WriteString(tuiGrey + "↑/↓ choose · tab complete · enter run · esc close" + tuiReset)
+		return b.String()
+	}
 	hints := "esc interrupt · ctrl-d leave (session keeps running)"
-	if len(m.approvals) > 0 {
+	if _, _, ok := m.questionHead(); ok {
+		hints = "1-9 pick · n decline · " + hints
+	} else if len(m.approvals) > 0 {
 		hints = "y/a/n answer the card · " + hints
 	}
 	b.WriteString(tuiGrey + hints + tuiReset)

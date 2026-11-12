@@ -7,8 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -119,17 +124,113 @@ func (c *tuiClient) pendingApprovals(ctx context.Context, id string) ([]json.Raw
 	return list, nil
 }
 
-// sendTurn files a message and answers the turn the server made of it.
-func (c *tuiClient) sendTurn(ctx context.Context, id, clientTurnID, content string) (string, error) {
-	data, err := c.do(ctx, http.MethodPost, tuiSessionPath(id, "/turns"), map[string]string{"clientTurnId": clientTurnID, "content": content})
+// tuiTurnAnswer is what POST /sessions/:id/turns answers: the turn it made and where the server put
+// it — "steer" for a message written into the running turn, "queued" or "accepted" otherwise.
+type tuiTurnAnswer struct {
+	TurnID    string `json:"turnId"`
+	Placement string `json:"placement"`
+}
+
+// sendTurn files a message, with the attachments already uploaded for it.
+func (c *tuiClient) sendTurn(ctx context.Context, id, clientTurnID, content string, attachmentIDs []string) (tuiTurnAnswer, error) {
+	body := map[string]any{"clientTurnId": clientTurnID, "content": content}
+	if len(attachmentIDs) > 0 {
+		body["attachmentIds"] = attachmentIDs
+	}
+	var answer tuiTurnAnswer
+	data, err := c.do(ctx, http.MethodPost, tuiSessionPath(id, "/turns"), body)
+	if err != nil {
+		return answer, err
+	}
+	_ = json.Unmarshal(data, &answer)
+	return answer, nil
+}
+
+// upload sends one file to POST /attachments?sessionId=, as the apps do (web api.ts uploadAttachment):
+// multipart, one field named "file", typed by its content so an image reaches the engine as one.
+// sessionID empty uploads it unscoped, for a session about to be created.
+func (c *tuiClient) upload(ctx context.Context, sessionID, path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	head := make([]byte, 512)
+	n, _ := io.ReadFull(f, head)
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	contentType := mime.TypeByExtension(filepath.Ext(path))
+	if contentType == "" {
+		contentType = http.DetectContentType(head[:n])
+	}
+	var buf bytes.Buffer
+	form := multipart.NewWriter(&buf)
+	part, err := form.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {mime.FormatMediaType("form-data", map[string]string{"name": "file", "filename": filepath.Base(path)})},
+		"Content-Type":        {contentType},
+	})
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(part, f); err != nil {
+		return "", err
+	}
+	if err := form.Close(); err != nil {
+		return "", err
+	}
+	target := c.server + "/api/attachments"
+	if sessionID != "" {
+		target += "?sessionId=" + url.QueryEscape(sessionID)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "orbit-cli/"+version)
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	res, err := c.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	data, _ := io.ReadAll(res.Body)
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return "", fmt.Errorf("POST /attachments: %d %s", res.StatusCode, answerMessage(data))
+	}
+	var answer struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(data, &answer) != nil || answer.ID == "" {
+		return "", fmt.Errorf("POST /attachments answered no id")
+	}
+	return answer.ID, nil
+}
+
+// runners is GET /runners and providers GET /providers: what the engine picker offers.
+func (c *tuiClient) runners(ctx context.Context) ([]byte, error) {
+	return c.do(ctx, http.MethodGet, "/runners", nil)
+}
+
+func (c *tuiClient) providers(ctx context.Context) ([]byte, error) {
+	return c.do(ctx, http.MethodGet, "/providers", nil)
+}
+
+// createSession is POST /sessions; it answers the new session's id.
+func (c *tuiClient) createSession(ctx context.Context, body map[string]any) (string, error) {
+	data, err := c.do(ctx, http.MethodPost, "/sessions", body)
 	if err != nil {
 		return "", err
 	}
 	var answer struct {
-		TurnID string `json:"turnId"`
+		ID string `json:"id"`
 	}
-	_ = json.Unmarshal(data, &answer)
-	return answer.TurnID, nil
+	if json.Unmarshal(data, &answer) != nil || answer.ID == "" {
+		return "", fmt.Errorf("POST /sessions answered no id")
+	}
+	return answer.ID, nil
 }
 
 func (c *tuiClient) interrupt(ctx context.Context, id string) error {

@@ -207,12 +207,20 @@ type tuiFakeServer struct {
 	mu       sync.Mutex
 	requests []string // "METHOD /path"
 	bodies   map[string][]map[string]any
-	stream   []byte
-	sent     chan string
+	raw      map[string][]byte // the last raw body and Content-Type per request, for multipart
+	rawType  map[string]string
+	query    map[string]string
+	// sessionJSON is what GET /sessions/:id answers; runnersJSON and providersJSON the picker's reads.
+	sessionJSON   string
+	runnersJSON   string
+	providersJSON string
+	stream        []byte
+	sent          chan string
 }
 
 func newTUIFakeServer(t *testing.T) *tuiFakeServer {
-	f := &tuiFakeServer{bodies: map[string][]map[string]any{}, sent: make(chan string, 16)}
+	f := &tuiFakeServer{bodies: map[string][]map[string]any{}, raw: map[string][]byte{}, rawType: map[string]string{},
+		query: map[string]string{}, sessionJSON: tuiTestSessionJSON, sent: make(chan string, 16)}
 	f.stream = readFixture(t, "stream.sse")
 	base := "/api/sessions/" + tuiTestSession
 	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -222,16 +230,26 @@ func newTUIFakeServer(t *testing.T) *tuiFakeServer {
 		}
 		key := r.Method + " " + r.URL.Path
 		var body map[string]any
-		if data, _ := io.ReadAll(r.Body); len(data) > 0 {
+		data, _ := io.ReadAll(r.Body)
+		if len(data) > 0 {
 			_ = json.Unmarshal(data, &body)
 		}
 		f.mu.Lock()
+		f.raw[key], f.rawType[key], f.query[key] = data, r.Header.Get("Content-Type"), r.URL.RawQuery
 		f.requests = append(f.requests, key)
 		f.bodies[key] = append(f.bodies[key], body)
 		f.mu.Unlock()
 		switch {
 		case key == "GET "+base:
-			io.WriteString(w, tuiTestSessionJSON)
+			io.WriteString(w, f.sessionJSON)
+		case key == "POST /api/attachments":
+			io.WriteString(w, `{"id":"att-1"}`)
+		case key == "POST /api/sessions":
+			io.WriteString(w, `{"id":"new-session-1","workspaceId":"w1"}`)
+		case key == "GET /api/runners":
+			io.WriteString(w, f.runnersJSON)
+		case key == "GET /api/providers":
+			io.WriteString(w, f.providersJSON)
 		case key == "GET "+base+"/events/page":
 			w.Write(readFixture(t, "page.json"))
 		case key == "GET "+base+"/approvals":
