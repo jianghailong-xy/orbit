@@ -1953,7 +1953,9 @@ export class RunnerApiController {
     if (verdict.answer !== 'FULL') {
       // Whichever apiserver process holds them (cursor-key-check-relay.ts): the gateway forwards a beat to any.
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
-      return quietHeartbeatAnswer(row, { cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised) });
+      return quietHeartbeatAnswer(row, {
+        cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised), draining: dto?.draining === true,
+      });
     }
     // The full reconcile reads the runner row the guard would have read; the beat statement admitted it.
     const current = await this.prisma.runner.findUnique({ where: { id: runnerId } });
@@ -2563,6 +2565,9 @@ export class RunnerApiController {
       repoCleanupRequest,
       refreshModelCatalog,
       checkSelfUpdate,
+      // To a draining beat: this server takes a claim scoped to named sessions (GET sessions/claim?drainScope=),
+      // which is what a runner draining for an update claims with. A runner that sees no such word sends none.
+      ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -3643,7 +3648,15 @@ export class RunnerApiController {
     /** A managed runner's authorized instance: the claim re-checks it where work is handed out. */
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
     @CurrentRunnerLink() link?: RunnerLinkContext,
+    /**
+     * A runner draining for an update names the only sessions it claims for, comma-separated: those whose
+     * engine is running a turn on it (runner-go drainClaimScope). It sends one only to a server whose
+     * heartbeat answer says `drainScopedClaims`. Ids that are not UUIDs are dropped; none left claims none.
+     */
+    @Query('drainScope') drainScope?: string,
   ): Promise<ClaimedSession | null> {
+    const onlySessionIds = drainScope === undefined ? undefined : parseDrainScope(drainScope);
+    if (onlySessionIds?.length === 0) return null;
     // The claim outlives the request otherwise: a runner that stopped — a self-update re-exec, a
     // restart, its own claim timeout — leaves it going here, and the session it claims is answered
     // to nobody (see claimSessionForRunner). The response closing before anything was written to
@@ -3689,6 +3702,7 @@ export class RunnerApiController {
         ...(dshUnavailable ? { dshUnavailable } : {}),
         ...(managedInstance ? { managedInstance } : {}),
         ...(link?.requestId ? { claimRequestId: link.requestId } : {}),
+        ...(onlySessionIds ? { onlySessionIds } : {}),
       },
       hungUp,
     );
@@ -10662,4 +10676,13 @@ export class RunnerApiController {
     });
     return false;
   }
+}
+
+/** At most this many sessions in one drain-scoped claim: one runner's engines at work. */
+const DRAIN_SCOPE_MAX = 256;
+const DRAIN_SCOPE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The session ids of a `drainScope` claim parameter: the UUIDs in it, at most DRAIN_SCOPE_MAX. */
+export function parseDrainScope(raw: string): string[] {
+  return raw.split(',').map((id) => id.trim()).filter((id) => DRAIN_SCOPE_ID.test(id)).slice(0, DRAIN_SCOPE_MAX);
 }

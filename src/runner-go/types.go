@@ -439,6 +439,11 @@ type HeartbeatResponse struct {
 	// RefreshModelCatalog: the outcome is what later heartbeats report. False/absent on older
 	// control planes.
 	CheckSelfUpdate bool `json:"checkSelfUpdate,omitempty"`
+	// The control plane takes a claim scoped to named sessions (GET /runner/sessions/claim?drainScope=):
+	// a pool draining for an update claims only for sessions whose engine is running a turn here
+	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
+	// runner claims nothing while it drains, as before.
+	DrainScopedClaims bool `json:"drainScopedClaims,omitempty"`
 	// A working directory to report local Claude Code history for, answered by POSTing
 	// /runner/claude-history-result. Handed over once rather than redelivered: the form that asked
 	// is waiting on a person, and a retype asks again. Nil on older control planes and whenever

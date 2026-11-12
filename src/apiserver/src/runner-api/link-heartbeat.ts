@@ -177,6 +177,10 @@ export const HEARTBEAT_DELIVERIES = {
   repoCleanupRequest: { how: 'MARKED', writers: ['workspaces/workspaces.service.ts#requestRepoCleanup'], pending: 'a clean-up pending' },
   refreshModelCatalog: { how: 'MARKED', writers: ['runners/runners.service.ts#requestModelCatalogRefresh'], pending: 'until a beat claims it' },
   checkSelfUpdate: { how: 'MARKED', writers: ['runners/runners.service.ts#requestSelfUpdate'], pending: 'until a beat claims it' },
+  drainScopedClaims: {
+    how: 'EVERY_BEAT',
+    reads: "the beat's own draining flag: a word about this server, which the quiet answer to a draining beat carries as the full one does",
+  },
   codexRateLimitResetRequest: {
     how: 'MARKED',
     writers: ['runners/codex-rate-limit-reset.service.ts#create'],
@@ -495,7 +499,7 @@ export function linkBeatVerdict(
  */
 export function quietHeartbeatAnswer(
   row: Pick<LinkBeatRow, 'maxConcurrent' | 'minFreeDiskMb'>,
-  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints },
+  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints; draining?: boolean },
 ): RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } {
   return {
     cancelSessionIds: [],
@@ -505,6 +509,9 @@ export function quietHeartbeatAnswer(
     mergeRequests: [],
     commitRequests: [],
     artifactRequests: [],
+    // As the full answer says it, to a draining beat: a runner draining for an update reads its absence as an
+    // older server (runner-go drainClaimScope).
+    ...(extra.draining ? { drainScopedClaims: true } : {}),
     ...(extra.cursorKeyChecks && extra.cursorKeyChecks.length > 0 ? { cursorKeyChecks: extra.cursorKeyChecks } : {}),
     ...(extra.linkHints ? { linkHints: extra.linkHints } : {}),
   };

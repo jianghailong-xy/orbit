@@ -475,14 +475,21 @@ var fetchCallTimeout = 35 * time.Second
 // claimSession is the session the control plane hands this runner, nil for none. It is asked once a hint says a session
 // waits (link_hints.go), and nil is the hint not coming as well. ids is the claim loop's request id over the link
 // (linkRequestIDs): a claim that got no answer goes again under it, as soon as the loop asks again.
-func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs) (*ClaimedSession, error) {
+//
+// scope, when given, names the only sessions the claim may take (drainClaimScope); only a control
+// plane that says it honours it (HeartbeatResponse.DrainScopedClaims) is sent one.
+func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs, scope ...string) (*ClaimedSession, error) {
 	if t.link != nil {
 		if due, err := t.link.gates.takeClaim(ctx, linkHintWait); !due {
 			return nil, err
 		}
 	}
 	var r ClaimedSession
-	err := t.do(ids.with(ctx), "GET", "/runner/sessions/claim", nil, &r, fetchCallTimeout)
+	path := "/runner/sessions/claim"
+	if len(scope) > 0 {
+		path = linkWithQuery(path, "drainScope", strings.Join(scope, ","))
+	}
+	err := t.do(ids.with(ctx), "GET", path, nil, &r, fetchCallTimeout)
 	ids.settle(err)
 	if ids.kept() {
 		t.link.gates.markClaim() // the question the claim asked is still open, which no hint may say

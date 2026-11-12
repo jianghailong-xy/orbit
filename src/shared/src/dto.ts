@@ -1251,6 +1251,10 @@ export interface RunnerHeartbeatResponse {
    *  runner then reports as `waitingForIdle`. Set once per request and cleared as it is handed
    *  over, like `refreshModelCatalog`. */
   checkSelfUpdate?: boolean;
+  /** This server takes a session claim scoped to named sessions (`GET /runner/sessions/claim?drainScope=`),
+   *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
+   *  Absent from an older server, to which such a runner sends no claim while it drains. */
+  drainScopedClaims?: boolean;
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.

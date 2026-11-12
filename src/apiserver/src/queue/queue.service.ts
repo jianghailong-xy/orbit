@@ -135,6 +135,12 @@ export interface ClaimingRunner {
    * claims no other (trySessionClaim).
    */
   claimRequestId?: string;
+  /**
+   * The only sessions this claim may take: a runner draining for an update claims for the sessions whose
+   * engine is running a turn on it right now, and for nothing new (runner-go drainClaimScope). Absent, the
+   * claim takes any session as it always has; an empty list takes none.
+   */
+  onlySessionIds?: readonly string[];
 }
 
 /**
@@ -486,6 +492,11 @@ export class QueueService {
             -- been answered is one every later claim sees.
             AND NOT ${DISPATCH_PAUSED}
             AND NOT (s.id = ANY(${paused}::uuid[]))
+            -- A runner draining for an update names the sessions whose engine it is running a turn for
+            -- (ClaimingRunner.onlySessionIds): a message queued to one of those moved its row to PENDING,
+            -- and this claim makes it RUNNING again. No other session is claimed while it drains.
+            AND (${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[] IS NULL
+              OR s.id = ANY(${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
             -- An unresolved/disabled configured identity must never become a Claude job. A shared

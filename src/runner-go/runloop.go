@@ -223,6 +223,25 @@ func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operat
 	}
 }
 
+// drainClaimScope is what a pool with no capacity to admit work may still claim: while it drains for an
+// update, a claim for the sessions whose engine is running a turn here (liveEngineTurnSessionIDs), and
+// nothing else. Such a session's row read AWAITING_INPUT while its engine ran a turn Orbit did not
+// hand it — a <task-notification>, a Monitor event — and a message queued to it moved the row to
+// PENDING. Unclaimed, the row stayed PENDING for as long as the drain lasted, while its engine was
+// visibly at work. The claim makes it RUNNING; activate holds the message it brings for the update
+// (heldForUpdate), so the drain still waits only for the turns already running, and the updated runner
+// reclaims the RUNNING row and delivers it.
+//
+// Nil when the pool is not draining (it is full, and claims nothing), when no engine is at work, or when
+// the control plane does not take a scoped claim (serverScopes false: an older one would ignore the
+// scope and hand over any session), so the pool claims nothing, as before.
+func drainClaimScope(pool *sessionPool, serverScopes bool) []string {
+	if !serverScopes || !pool.isDrainingForUpdate() {
+		return nil
+	}
+	return pool.liveEngineTurnSessionIDs()
+}
+
 // nudgeWhileDrainingForUpdate asks for an update check every interval while the pool drains for an
 // update, so the update follows the last turn in flight within interval rather than within a whole
 // check interval. A check already owed is not asked for twice.
@@ -1207,6 +1226,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// The owner's "Update Runner Now" (HeartbeatResponse.CheckSelfUpdate) runs the release check
 	// below without waiting for its next tick. Buffered by one, like hbNow.
 	checkSelfUpdateNow := make(chan struct{}, 1)
+	// Whether the control plane said, on its last heartbeat answer, that it takes a claim scoped to
+	// named sessions (HeartbeatResponse.DrainScopedClaims, drainClaimScope).
+	var drainScopedClaims atomic.Bool
 	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
 	// goroutine itself. Stop dispatching it as soon as drain begins; what is already running is
 	// waited for, within the stop's budget (shutdownSequence), before this process exits or a
@@ -1596,6 +1618,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				return
 			}
 			beatTaken = true
+			// Whether the control plane takes a claim scoped to named sessions (drainClaimScope).
+			drainScopedClaims.Store(resp.DrainScopedClaims)
 			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
 			// once the control plane confirms that acceptance — never on the request alone, which the
 			// manager may still withdraw. A process already draining for another reason accepts nothing.
@@ -2443,14 +2467,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// still going holds no permit and no engine, and claiming another session on
 		// top of it is how a host with a global-OOM history ends up running three
 		// builds it never counted.
+		//
+		// Draining for an update, the pool admits nothing, with one exception (drainClaimScope): a session
+		// whose engine is running a turn here and whose queued message moved its row to PENDING.
+		var scope []string
 		if pool.admissionIdleCapacity() <= 0 {
-			select {
-			case <-loopCtx.Done():
-			case <-time.After(500 * time.Millisecond):
+			if scope = drainClaimScope(pool, drainScopedClaims.Load()); len(scope) == 0 {
+				select {
+				case <-loopCtx.Done():
+				case <-time.After(500 * time.Millisecond):
+				}
+				continue
 			}
-			continue
 		}
-		job, err := t.claimSession(loopCtx, &claims)
+		job, err := t.claimSession(loopCtx, &claims, scope...)
 		if err != nil {
 			if loopCtx.Err() != nil {
 				break
@@ -2513,6 +2543,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// failure starts its wait over.
 		claimFailures = 0
 		if job == nil {
+			if len(scope) > 0 {
+				// A drain-scoped claim that found nothing: the queue may hold other sessions for this runner,
+				// which it is not taking, so it waits as a pool with no capacity does rather than ask again at once.
+				select {
+				case <-loopCtx.Done():
+				case <-time.After(500 * time.Millisecond):
+				}
+			}
 			continue
 		}
 		// A session the startup reclaim has not started yet starts first, or its start is waited for:

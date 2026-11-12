@@ -1312,7 +1312,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				// AWAITING_INPUT, a new send/claim may reach pool.activate before this
 				// response returns; generation matching prevents this old ack from
 				// releasing the new claim's permit.
-				permitGeneration = pool.permitGeneration(live)
+				permitGeneration = pool.beginTurnCompletion(live)
 				// What the turn wrote — the engine's transcript, its Git work — is on the volume
 				// before the control plane hears the turn is over.
 				syncManagedVolume("a turn", execDir)
@@ -1331,6 +1331,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			// The permit went straight to a queued follow-up; a drain for an update holds it back.
 			pool.holdFollowUpForUpdate(live, permitGeneration)
 		}
+		pool.endTurnCompletion(live)
 		return err
 	}
 	// The server changes PENDING -> RUNNING before returning a claim and may wake

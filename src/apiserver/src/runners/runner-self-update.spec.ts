@@ -139,6 +139,14 @@ test('a runner nobody asked is told nothing', async () => {
   assert.equal((await h.beat()).checkSelfUpdate, undefined);
 });
 
+// A runner draining for an update claims for the sessions whose engine is at work on it only when this
+// word is on the answer (runner-go drainClaimScope): an older server would ignore the scope.
+test('the answer to a draining beat says the claim takes a drain scope, and no other answer changes', async () => {
+  const h = heartbeatHarness();
+  assert.equal((await h.beat({ draining: true })).drainScopedClaims, true);
+  assert.equal((await h.beat()).drainScopedClaims, undefined);
+});
+
 // ── Update Runner Now, as the owner asks for it ───────────────────────────────────────────────
 
 function serviceHarness(runner: Record<string, unknown> | null) {

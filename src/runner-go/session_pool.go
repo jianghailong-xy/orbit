@@ -89,6 +89,13 @@ type liveSession struct {
 	// follow-up does not start here (waitActive) and is not a turn in flight: it stays RUNNING for
 	// the updated runner to reclaim, as a claim that races closeForUpdate does.
 	heldForUpdate bool
+	// completingTurn: this permit's turn has ended and its /turn-complete is out
+	// (beginTurnCompletion), so the control plane may already have handed the permit to a queued
+	// follow-up and woken the inbox before its answer arrives. startedWhileCompleting: in that window
+	// the follow-up passed waitActive and went to the engine, so it is a turn in flight and is not
+	// held for an update (holdFollowUpForUpdate).
+	completingTurn         bool
+	startedWhileCompleting bool
 
 	resident         bool // an engine is starting/running/being reaped
 	engineGeneration uint64
@@ -819,13 +826,62 @@ func (p *sessionPool) drainForUpdate() {
 // the follow-up is held back (heldForUpdate), so that a session with a message queued at the end of
 // every turn cannot keep the drain going for ever. Otherwise, and for any permit but the one the
 // turn ran under, it changes nothing.
+//
+// A follow-up the engine already took is not held: the control plane wakes the inbox before it
+// answers the /turn-complete, so the follow-up can pass waitActive while that answer is still on its
+// way (startedWhileCompleting). Held, it would be a turn the engine runs that the update does not
+// count, and closeForUpdate could stop the runner in the middle of it.
 func (p *sessionPool) holdFollowUpForUpdate(s *liveSession, expectedPermit uint64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !p.drainingForUpdate || p.sessions[s.id] != s || !s.active || s.permitGeneration != expectedPermit {
 		return
 	}
+	if s.completingTurn && s.startedWhileCompleting {
+		return
+	}
 	s.heldForUpdate = true
+}
+
+// beginTurnCompletion is permitGeneration for a turn whose /turn-complete is about to be sent: it
+// also marks the window in which the answer may hand the permit to a follow-up that has already
+// started (holdFollowUpForUpdate). endTurnCompletion closes it once the answer has been acted on.
+func (p *sessionPool) beginTurnCompletion(s *liveSession) uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.sessions[s.id] != s || !s.active || s.detaching {
+		return 0
+	}
+	s.completingTurn = true
+	s.startedWhileCompleting = false
+	return s.permitGeneration
+}
+
+// endTurnCompletion closes the window beginTurnCompletion opened, whatever the answer was.
+func (p *sessionPool) endTurnCompletion(s *liveSession) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s.completingTurn = false
+	s.startedWhileCompleting = false
+}
+
+// liveEngineTurnSessionIDs are the sessions whose engine is running a turn in this process right now:
+// one Orbit handed it (a permit not held for an update) or one the engine started by itself
+// (selfDrivenTurn). While the pool drains for an update these are the only sessions it claims
+// (drainClaimScope): such a session's queued message moved its row to PENDING although its engine is
+// at work, and a claim is what makes the row RUNNING again. A session with no engine at work is new
+// work, and the drain takes none.
+func (p *sessionPool) liveEngineTurnSessionIDs() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var ids []string
+	for id, s := range p.sessions {
+		if s.resident && !s.detaching && (s.selfDrivenTurn || (s.active && !s.heldForUpdate)) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // isDrainingForUpdate is whether drainForUpdate is in force, for the heartbeat's draining flag.
@@ -1186,6 +1242,10 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 	}
 	s.active = true
 	p.markActivityLocked()
+	// A claim taken while the pool drains for an update is one for a session whose engine is already
+	// running a turn here (drainClaimScope): its message waits for the update, as a held follow-up
+	// does, and the row stays RUNNING for the updated runner to reclaim.
+	s.heldForUpdate = p.drainingForUpdate
 	p.fenceWorktreeOperationLocked(s.id)
 	s.permitGeneration++
 	s.idleGeneration++
@@ -1226,6 +1286,7 @@ func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 		return
 	}
 	s.active = false
+	s.heldForUpdate = false // the mark belongs to the permit that just ended
 	s.lastOrbitTurnAt = p.clock.Now()
 	p.markActivityLocked()
 	p.releaseWorktreeFenceLocked(s.id, s)
@@ -1371,6 +1432,9 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			return false
 		}
 		if s.active && !p.closedForUpdate && !s.heldForUpdate {
+			if s.completingTurn {
+				s.startedWhileCompleting = true
+			}
 			p.mu.Unlock()
 			return true
 		}
