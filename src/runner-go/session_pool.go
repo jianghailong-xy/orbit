@@ -126,6 +126,10 @@ type heartbeatSupervisorSnapshot struct {
 	supervisor       *liveSession
 	permitGeneration uint64
 	cancel           context.CancelFunc
+	// reclaiming says a reclaim's background start of this session had not ended when the request
+	// was made (reclaimStarter): its takeover fence may still be up, and its supervisor may not exist
+	// yet (supervisor nil). A merge or commit the answer delivers for it is left for a later beat.
+	reclaiming bool
 }
 
 // worktreeOperationState serializes heartbeat-delivered Commit/Merge work with
@@ -198,7 +202,13 @@ type sessionPool struct {
 	// records before any supervisor started (background_job_handoff.go). The pool keeps them because it
 	// outlives supervisors, and a session that stays cold has none.
 	hostless map[string][]*bgJob
-	changed  chan struct{}
+	// reclaiming is sessionID → whether its reclaim starts it active: the sessions a reclaim has taken
+	// over whose supervisor its background start (reclaimStarter) has not made yet. Such a session has
+	// no supervisor to advertise, and its takeover's fence keeps every merge and commit out of its
+	// checkout until the start ends; what this map adds is that a RUNNING one already holds its slot
+	// (admissionIdleCapacity) and that its checkout is live (ids).
+	reclaiming map[string]bool
+	changed    chan struct{}
 	// closedForUpdate is set once, by closeForUpdate, when this runner has decided to re-execute
 	// into a newer release; from then on no turn begins here (waitActive).
 	closedForUpdate bool
@@ -222,8 +232,31 @@ func newSessionPoolWithClock(max int, clock poolClock) *sessionPool {
 		sessions:    map[string]*liveSession{},
 		worktreeOps: map[string]*worktreeOperationState{},
 		bgJobs:      map[string]map[string]bgHold{},
+		reclaiming:  map[string]bool{},
 		changed:     make(chan struct{}),
 	}
+}
+
+// markReclaiming records a session a reclaim has taken over and not started yet (reclaiming).
+func (p *sessionPool) markReclaiming(id string, active bool) {
+	p.mu.Lock()
+	p.reclaiming[id] = active
+	p.mu.Unlock()
+}
+
+// unmarkReclaiming ends that record once the session's start has ended, started or not.
+func (p *sessionPool) unmarkReclaiming(id string) {
+	p.mu.Lock()
+	delete(p.reclaiming, id)
+	p.mu.Unlock()
+}
+
+// isReclaiming reports whether a reclaim's start of id has yet to end.
+func (p *sessionPool) isReclaiming(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.reclaiming[id]
+	return ok
 }
 
 // sessionIDs is every session this process supervises right now, in whatever state: a cold
@@ -337,6 +370,12 @@ func (p *sessionPool) admissionIdleCapacity() int {
 	}
 	for id, s := range p.sessions {
 		if s.active {
+			occupied[id] = true
+		}
+	}
+	// A RUNNING session still being reclaimed takes its slot the moment it starts.
+	for id, active := range p.reclaiming {
+		if active {
 			occupied[id] = true
 		}
 	}
@@ -1534,6 +1573,13 @@ func (p *sessionPool) heartbeatSnapshot() (map[string]heartbeatSupervisorSnapsho
 			})
 		}
 	}
+	// A session still being reclaimed is in the snapshot too, flagged, under the same lock as the
+	// supervisors: what the answer hands out for it is judged by what was true when it was asked for.
+	for id := range p.reclaiming {
+		snap := supervisors[id]
+		snap.reclaiming = true
+		supervisors[id] = snap
+	}
 	return supervisors, targets
 }
 
@@ -1548,6 +1594,10 @@ func (p *sessionPool) ids() map[string]bool {
 	// directory. A checkout with a live writer is never a candidate, supervisor
 	// or no supervisor.
 	for id := range p.bgJobs {
+		ids[id] = true
+	}
+	// Nor is the checkout of a session whose reclaimed supervisor is still being started.
+	for id := range p.reclaiming {
 		ids[id] = true
 	}
 	return ids

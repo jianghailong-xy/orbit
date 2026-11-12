@@ -40,7 +40,6 @@ struct WikiHomeView: View {
                                      start: startCard(wiki, space: space, now: context.date), busy: wiki.busy,
                                      seen: seen, failed: loading && wiki.homeState.lastLoadFailed, waiting: wiki.waiting,
                                      shareLive: shareRead?.link.map { $0.state != .ended } ?? false,
-                                     trashed: wiki.trash.count,
                                      besideContents: rowNavigation == .selection, actions: actions(wiki))
                     }
                 } else {
@@ -159,7 +158,6 @@ struct WikiHomeView: View {
             pickSpace: { slug in wiki.selectedSlug = slug },
             search: { query in await wiki.search(query) },
             openSettings: { open(.wikiSettings) },
-            openTrash: { open(.wikiTrash) },
             openContents: { contentsShown = true },
             openActivity: { open(.wikiActivity) },
             openShare: { sharing = true },

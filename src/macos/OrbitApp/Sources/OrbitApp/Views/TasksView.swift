@@ -342,6 +342,7 @@ struct TasksListView: View {
         .orbitRevealSurface()
         // Sessions use a calm, full-width plain list on iPhone; Tasks share that surface.
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .overlay { emptyOverlay(tasks) }
         #else
         List(selection: selection) {

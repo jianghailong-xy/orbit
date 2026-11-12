@@ -2025,8 +2025,8 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'wiki/wiki.service.ts#bindOnFirstUse',
     shape: 'TX_RETRIED',
-    locks: 'wiki_space and wiki_space_workspace, the space under the user foreign key FOR KEY SHARE (rank 10) and the binding under both of its own; the workspace row is read unlocked first and is not written. Then one conditional UPDATE of the same binding, moving it off a wiki in Trash (contract `space.trash`): the row the upsert already holds, and the new space FOR KEY SHARE.',
-    identity: 'The workspace id (`workspace_id` is unique over the binding) and the owner plus repository URL for the space. A workspace that already has a binding finds its own row; a space that already exists is found rather than made.',
+    locks: 'wiki_space_workspace, the binding under both of its own foreign keys, after an unlocked read of the space in use for the repository (no space is written); the workspace row is read unlocked first and is not written. Then one conditional UPDATE of the same binding, moving it off a wiki in Trash (contract `space.trash`): the row the upsert already holds, and the new space FOR KEY SHARE.',
+    identity: 'The workspace id (`workspace_id` is unique over the binding) and the owner plus repository URL for the space. A workspace that already has a binding finds its own row; only a space in use for the repository is bound, and none is ever made here (docs/wiki-explicit-creation-design.md §3.1): with no such space the closure writes nothing.',
     isolation: '',
     attempts: 4,
     replay: 'Both lookups happen inside the closure, so a re-run after a conflict finds what the winner committed rather than making a second space or a second binding.',
@@ -2777,12 +2777,12 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/project-integration-line.ts#startOnFirstIntegration', under: 'the transaction that queues a project’s first integration — it takes the same binding lock and writes only that row' },
   { at: 'realtime/runner-wake.ts#notifyRunnerWakeOnCommit', under: 'projects/project-integration-job.ts#queueLandTask and #queuePromotionJob — the transaction that writes the job row (the DONE write, an integration retry, a promotion decision) — one pg_notify on the runner-wake channel, taking no lock and writing no row, which Postgres delivers at COMMIT' },
   // Orbit Wiki (0307). Every one of these runs inside `submitChangeset`, `decide`,
-  // `createSpace`, `bindOnFirstUse` or `recordAnchorChecks` above, in the order that unit states, and takes no lock its
+  // `createSpace` or `recordAnchorChecks` above, in the order that unit states, and takes no lock its
   // caller did not already take. `applyOp` and `recomputeFlags` are the ONLY two that write
   // `wiki_entry.status`, `trust`, `challenged` and `unsupported` — contracts/wiki.contract.json
   // `storage.singleWriter` — which is why they are listed as participants with their caller named
   // rather than left to the scan's own reading.
-  { at: 'wiki/wiki.service.ts#createSpaceRow', under: 'wiki.createSpace and wiki.bindOnFirstUse — it is the one statement pair that makes a space, and it does it under the same user-key read both of those units argue for' },
+  { at: 'wiki/wiki.service.ts#createSpaceRow', under: 'wiki.createSpace — it is the one statement pair that makes a space, and it does it under the user-key read that unit argues for' },
   { at: 'wiki/wiki.service.ts#recordChangeset', under: 'wiki.submitChangeset and wiki.revertChangeset — one transaction per submission, so the changeset and every op of it are written under the idempotency identity that unit states or not at all; and inside wiki.decide (a Retire answering a challenge is the owner\'s own retire) and wiki.recordAnchorChecks (the system challenge a broken anchor files), in the order those units state' },
   { at: 'wiki/wiki.service.ts#recordOp', under: 'wiki.submitChangeset, wiki.revertChangeset, wiki.decide and wiki.recordAnchorChecks, through recordChangeset — one op\'s row and the effect the contract\'s policy and the space\'s review mode give it, decided against the reads the same closure made' },
   { at: 'wiki/wiki.service.ts#applyOp', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry, wiki.confirmEntry, wiki.recordVerifications, wiki.reopenVerifications and wiki.recordAnchorChecks — THE writer of an entry\'s status, trust, challenged and unsupported (storage.singleWriter), reached identically by an agent\'s proposal that applies at once, what a review mode applies, what a verdict applies, the owner\'s own write, the owner\'s answer to any of them, and what an anchor re-verification found (its anchors\' checks and anchor state, and a Tiered pitfall made auto)' },

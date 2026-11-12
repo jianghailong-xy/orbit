@@ -1704,14 +1704,13 @@ export function RunnerDetailPage() {
               <div className="rd-kv">
                 <span className="rd-kv-label">{RUNNER_MAX_CONCURRENT}</span>
                 {/* Saved on blur from around the field, so it runs after the field has settled what
-                    was typed (1–64, whole) — and on Enter, which the field settles first as well. */}
+                    was typed (1 or more, whole) — and on Enter, which the field settles first as well. */}
                 <span onBlur={commitMaxConcurrent}>
                   <NumberInput
                     className="rd-max-concurrent"
                     aria-label={RUNNER_MAX_CONCURRENT}
                     size="small"
                     min={1}
-                    max={64}
                     precision={0}
                     value={maxDraft ?? runner.maxConcurrent ?? null}
                     onValueChange={(v) => {
