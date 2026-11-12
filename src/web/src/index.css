@@ -950,13 +950,6 @@ button.toast--pill:focus-visible {
 .tp-project-mark .tp-list-dot {
   margin-right: 0;
 }
-/* The quiet projects' row closes the group in the meta voice: grey, with no dot. */
-.tp-project-quiet {
-  color: var(--text-3);
-}
-.tp-project-quiet .tp-project-mark {
-  font-size: 13px;
-}
 .tp-list-dot.running {
   background: var(--brand);
   animation: tp-list-dot-pulse 1.4s ease-in-out infinite;
