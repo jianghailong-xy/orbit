@@ -27,7 +27,7 @@ export interface TaskForkInput {
   includesUncommitted: boolean;
 }
 
-/** The five columns migration 0540 adds, as the task's INSERT writes them. */
+/** The five columns migration 0605 adds, as the task's INSERT writes them. */
 export interface TaskForkColumns {
   forkSessionId: string;
   forkRunnerId: string;
