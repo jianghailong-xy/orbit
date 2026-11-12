@@ -454,7 +454,8 @@ struct SessionProjectPage: View {
         .sheet(item: $taggingSession) { SessionTagSheet(session: $0).environment(app) }
         .sheet(item: $sharingSession) { session in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(session, agents: app.agents))
             }
         }
         #if os(iOS)

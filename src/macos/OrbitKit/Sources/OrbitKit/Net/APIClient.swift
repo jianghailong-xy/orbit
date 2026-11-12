@@ -558,6 +558,28 @@ public final class APIClient: @unchecked Sendable {
         return result.count
     }
 
+    // MARK: People who can reply — a session's guests (docs/session-guests-design.md §3, §7)
+
+    /// The people the owner invited to reply in this session. Web parity: `getSessionGuests`.
+    public func sessionGuests(_ sessionID: String) async throws -> [SessionGuestPerson] {
+        let list: SessionGuestList = try await get("sessions/\(sessionID)/guests")
+        return list.guests
+    }
+
+    /// Invite an Orbit account by the email it signs in with; answers the people as they now stand.
+    /// Web parity: `inviteSessionGuest`.
+    public func inviteSessionGuest(_ sessionID: String, email: String) async throws -> [SessionGuestPerson] {
+        let list: SessionGuestList = try await post("sessions/\(sessionID)/guests",
+                                                    body: InviteSessionGuestRequest(email: email))
+        return list.guests
+    }
+
+    /// Take a guest out at once; answers the people who are left. Web parity: `removeSessionGuest`.
+    public func removeSessionGuest(_ sessionID: String, userID: String) async throws -> [SessionGuestPerson] {
+        let list: SessionGuestList = try await delete("sessions/\(sessionID)/guests/\(userID)")
+        return list.guests
+    }
+
     // MARK: personal access tokens — listed and revoked here, issued only on the web
     // (docs/personal-access-token-design.md §6.5, §9)
 

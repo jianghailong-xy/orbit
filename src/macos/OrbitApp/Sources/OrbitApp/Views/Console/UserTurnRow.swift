@@ -228,8 +228,9 @@ struct UserTurnRow: View {
                 }
             }
         } else if let sender = b.externalSender {
-            // Somebody outside Orbit — a connected Feishu group's member — sent it (`externalSender`,
-            // `ExternalSender.parse`): still their words in a bubble, headed `From Feishu · <name>` so it
+            // Somebody other than the owner — a connected Feishu group's member, or a guest the owner
+            // invited — sent it (`externalSender`, `ExternalSender.parse`): still their words in a bubble,
+            // headed `From Feishu · <name>` or `From <name>` so it
             // does not read as the owner's own (web parity: `UserBubble`'s `.chat-user-from`).
             UserBubbleView(bubble: b, sender: sender, onCancelQueued: cancel, steer: steer, onPutBack: putBack)
         } else {
