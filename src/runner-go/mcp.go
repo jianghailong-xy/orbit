@@ -3897,19 +3897,24 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"Kinds: DECISION for a choice only the owner can make (options and recommendedOption); " +
 				"SECRET for a credential (secretSpec); MANUAL_STEP for something only a person can do, " +
 				"such as a sign-in, a purchase or a change on their own device (steps); CONFIRM for a " +
-				"yes or no on something you are about to rely on. options and recommendedOption are " +
+				"yes or no on something you are about to rely on; WIKI_CREATE to ask the owner to create a " +
+				"wiki, only from a workspace whose repository has no wiki, and only when the owner asked for " +
+				"one or this session has something worth a wiki. Never file WIKI_CREATE because a wiki_search " +
+				"found no wiki: carry on without it. For WIKI_CREATE Orbit fills in the title and the " +
+				"repository, so give only why and ifUnanswered. options and recommendedOption are " +
 				"only for DECISION, steps only for MANUAL_STEP and secretSpec only for SECRET; any other " +
 				"mix is refused. " +
 				"Do NOT file what you can read or do yourself: a request costs a person's attention.",
 			"inputSchema": obj(map[string]interface{}{
 				"kind": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM"},
+					"enum":        []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE"},
 					"description": "What you need from the owner. Use SECRET for any credential.",
 				},
 				"title": map[string]interface{}{
-					"type":        "string",
-					"description": "The line the owner reads first, and the body of the push notification. Up to 200 characters.",
+					"type": "string",
+					"description": "The line the owner reads first, and the body of the push notification. Up to 200 characters. " +
+						"Required for every kind but WIKI_CREATE, whose title Orbit writes: leave it out there.",
 				},
 				"why": map[string]interface{}{
 					"type":        "string",
@@ -3982,7 +3987,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Your own key for this request. A call retried under the same key " +
 						"returns the request already filed; omit it and every call is a new request.",
 				},
-			}, "kind", "title", "why"),
+			}, "kind", "why"),
 		},
 		{
 			"name": "withdraw_owner_request",
@@ -5575,10 +5580,16 @@ func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]in
 	kind := getString(args, "kind")
 	title := strings.TrimSpace(getString(args, "title"))
 	why := strings.TrimSpace(getString(args, "why"))
-	if kind == "" || title == "" || why == "" {
-		return nil, errors.New("kind, title and why are required")
+	if kind == "" || why == "" {
+		return nil, errors.New("kind and why are required")
 	}
-	body := map[string]interface{}{"kind": kind, "title": title, "why": why}
+	body := map[string]interface{}{"kind": kind, "why": why}
+	// A WIKI_CREATE's title is Orbit's to write (design §3.6); every other kind needs one.
+	if title != "" {
+		body["title"] = title
+	} else if kind != "WIKI_CREATE" {
+		return nil, errors.New("title is required for every kind but WIKI_CREATE")
+	}
 	copyIfPresent(body, args, "ifUnanswered", "steps", "secretSpec", "options", "recommendedOption", "clientRequestId")
 	if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
 		body["blocksTaskIds"] = blocked

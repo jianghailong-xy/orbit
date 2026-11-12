@@ -60,6 +60,9 @@ var wikiOpNames = []string{"add", "reinforce", "amend", "supersede", "retire", "
 // wikiSearchMatches is contracts/wiki.contract.json searchMatches: the legs that can find an entry.
 var wikiSearchMatches = []string{"keyword", "semantic", "path"}
 
+// wikiSearchUnavailable is contracts/wiki.contract.json searchUnavailable: why a search had no wiki to read.
+var wikiSearchUnavailable = []string{"no_wiki", "wiki_in_trash"}
+
 // wikiTrustLevels is contracts/wiki.contract.json trust.values, in its order: what a hit's trust can
 // say. `auto` and `unreviewed` are what a space's review mode leaves an entry it applied at once, and
 // an output schema that did not name them would call a correct answer malformed.
@@ -212,6 +215,11 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 						"anchorCheckedAt": map[string]interface{}{"type": "string",
 							"description": "When that check was made, ISO 8601 in UTC. A check finds the anchors as recorded or not; it does not re-read what the entry says."},
 					}, "id", "kind", "title"),
+				},
+				"unavailable": map[string]interface{}{
+					"type":        "string",
+					"enum":        wikiSearchUnavailable,
+					"description": "Present only when there was no wiki to search: no_wiki (this repository has none) or wiki_in_trash (its wiki is in Trash). hits is then empty.",
 				},
 			}, "hits"),
 			"annotations": map[string]interface{}{"readOnlyHint": true},
@@ -673,6 +681,8 @@ type wikiSearchAnswer struct {
 	Q        string          `json:"q"`
 	Semantic bool            `json:"semantic"`
 	Hits     []wikiSearchHit `json:"hits"`
+	// Unavailable is contract `searchUnavailable`: set only when the session has no wiki to search.
+	Unavailable string `json:"unavailable,omitempty"`
 }
 
 // wikiSearchHit is one entry as the search ranked it, and no more than that: the legs that found it
@@ -931,6 +941,13 @@ func describeWikiSearch(answer wikiSearchAnswer, query wikiSearchQuery) string {
 	asked := query.Q
 	if asked == "" {
 		asked = strings.Join(query.Paths, ", ")
+	}
+	// No wiki to search is not a search that found nothing (design §3.3): the agent carries on without it.
+	switch answer.Unavailable {
+	case "no_wiki":
+		return "No wiki for this repository yet, so there is nothing to look up. Carry on without it."
+	case "wiki_in_trash":
+		return "The wiki for this repository is in Trash: the owner restores it from Trash."
 	}
 	if len(answer.Hits) == 0 {
 		return fmt.Sprintf("No entry in this space matches %q. Try other words, an alias, or a repo-relative path; "+
