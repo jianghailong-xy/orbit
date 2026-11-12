@@ -365,3 +365,109 @@ func TestRunLoopStartsTheStartupReclaimInTheBackground(t *testing.T) {
 		t.Error("a claimed session is taken over before its reclaim start has settled")
 	}
 }
+
+// A merge or commit the heartbeat delivers for a session the reclaim has not started yet is left for a
+// later beat, not answered with the takeover fence's refusal: the control plane hands a pending one over
+// again on every beat. Once the start has ended, a beat is asked for, and the next delivery runs it
+// against the supervisor the start made. One delivered on a request made while the start was still
+// running waits too, even if the start has ended by the time the answer comes.
+func TestAHeartbeatMergeOrCommitForAReclaimingSessionWaitsForItsStart(t *testing.T) {
+	const id = reclaimOldestIdle
+	pool := newSessionPool(2)
+	gate := make(chan struct{})
+	entered := make(chan struct{})
+	_, endTakeover := pool.beginWorktreeTakeover(id)
+	starter := newReclaimStarter(pool, []reclaimedStart{{job: poolJob(id), endTakeover: endTakeover, status: stAwaitingInput}},
+		func(p reclaimedStart) {
+			close(entered)
+			<-gate
+			pool.register(p.job, func() {}, false)
+		})
+	var deferred reclaimDeferredOps
+	beats := make(chan struct{}, 4)
+	beatNow := func() { beats <- struct{}{} }
+	starter.onStarted = func(sessionID string) { deferred.started(sessionID, beatNow) }
+	starter.run(1, nil)
+	<-entered
+
+	telemetry := newHeartbeatTelemetryProbe(time.Hour, func(context.Context, []heartbeatTelemetryTarget) []heartbeatTelemetrySample { return nil })
+	var merges, commits int
+	merge := MergeCommand{SessionID: id, OperationID: "op-merge", WorkDir: t.TempDir()}
+	commit := CommitCommand{SessionID: id, OperationID: "op-commit"}
+	// What each of the heartbeat's two loops does with a delivered command (runloop.go).
+	deliver := func(supervisors map[string]heartbeatSupervisorSnapshot) (mergeRes, commitRes []string) {
+		if !deferred.deferForReclaim(pool, id, "merge", supervisors[id], beatNow) {
+			mergeRes = append(mergeRes, heartbeatMerge(pool, merge, supervisors[id], func(MergeCommand) mergeOutcome {
+				merges++
+				return mergeOutcome{Status: "merged"}
+			}).Status)
+		}
+		if !deferred.deferForReclaim(pool, id, "commit", supervisors[id], beatNow) {
+			commitRes = append(commitRes, heartbeatCommit(pool, commit, supervisors[id], func(CommitCommand) commitOutcome {
+				commits++
+				return commitOutcome{Status: "committed"}
+			}).Status)
+		}
+		return mergeRes, commitRes
+	}
+
+	// Delivered while the start is still running: no result of either, nothing run.
+	early, _ := pool.heartbeatSnapshot()
+	if s := early[id]; !s.reclaiming || s.supervisor != nil {
+		t.Fatalf("snapshot of a session still being reclaimed = %+v, want reclaiming with no supervisor", s)
+	}
+	if m, c := deliver(early); len(m) != 0 || len(c) != 0 || merges != 0 || commits != 0 {
+		t.Fatalf("a merge/commit for a session still being reclaimed was answered: merge %v, commit %v", m, c)
+	}
+	// Nothing reclaiming is advertised as supervised.
+	if _, supervised, _, _ := heartbeatSessionSnapshot(pool, telemetry); len(supervised) != 0 {
+		t.Fatalf("supervised ids while the start runs = %v, want none", supervised)
+	}
+
+	// Another request made now, answered only after the start has ended: still left for later.
+	late, _ := pool.heartbeatSnapshot()
+	close(gate)
+	starter.wait()
+	select {
+	case <-beats:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no beat was asked for once the session the merge waited for had started")
+	}
+	if m, c := deliver(late); len(m) != 0 || len(c) != 0 || merges != 0 || commits != 0 {
+		t.Fatalf("an answer to a request made during the start was carried out against it: merge %v, commit %v", m, c)
+	}
+
+	// The next delivery runs each, once, against the supervisor the start made.
+	now, _ := pool.heartbeatSnapshot()
+	if s := now[id]; s.reclaiming || s.supervisor == nil {
+		t.Fatalf("snapshot after the start = %+v, want a supervisor and not reclaiming", s)
+	}
+	m, c := deliver(now)
+	if strings.Join(m, ",") != "merged" || strings.Join(c, ",") != "committed" || merges != 1 || commits != 1 {
+		t.Fatalf("after the start: merge %v (ran %d), commit %v (ran %d); want each run once", m, merges, c, commits)
+	}
+	if _, supervised, _, _ := heartbeatSessionSnapshot(pool, telemetry); strings.Join(supervised, ",") != id {
+		t.Fatalf("supervised ids after the start = %v, want [%s]", supervised, id)
+	}
+}
+
+// Both heartbeat loops ask deferForReclaim before they take the operation on, and the starter is wired to it.
+func TestRunLoopDefersHeartbeatWorktreeOperationsForReclaimingSessions(t *testing.T) {
+	src, err := os.ReadFile("runloop.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	for _, loop := range []struct{ snapshot, check, busy string }{
+		{"snapshot := supervisors[m.SessionID]", `reclaimDeferred.deferForReclaim(pool, m.SessionID, "merge", snapshot, beatNow)`, "busy := mergingNow[m.SessionID]"},
+		{"snapshot := supervisors[c.SessionID]", "reclaimDeferred.deferForReclaim(pool, c.SessionID, operation, snapshot, beatNow)", "busy := committingNow[c.SessionID]"},
+	} {
+		at, check, busy := strings.Index(body, loop.snapshot), strings.Index(body, loop.check), strings.Index(body, loop.busy)
+		if at < 0 || check < at || busy < check {
+			t.Errorf("the heartbeat takes an operation on before asking whether its session is still being reclaimed: %s", loop.check)
+		}
+	}
+	if !strings.Contains(body, "startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }\n\t\tstartupStarts.run(") {
+		t.Error("the starter does not ask for a beat when a session an operation waited for has started")
+	}
+}

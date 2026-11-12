@@ -1,6 +1,9 @@
 package main
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // reclaimStartWorkers bounds how many reclaimed sessions start at once. Each start is a few git
 // commands and a volume sync, and git takes its own locks in the repository the sessions share, so a
@@ -26,6 +29,9 @@ const reclaimStartWorkers = 4
 type reclaimStarter struct {
 	pool  *sessionPool
 	start func(reclaimedStart)
+	// onStarted, if set before run, is told each session whose start has ended, once the pool no longer
+	// counts it as being reclaimed.
+	onStarted func(sessionID string)
 
 	mu    sync.Mutex
 	queue []*reclaimStartEntry
@@ -103,6 +109,9 @@ func (r *reclaimStarter) startEntry(e *reclaimStartEntry) {
 	r.start(e.pending)
 	e.pending.endTakeover()
 	r.pool.unmarkReclaiming(e.pending.job.SessionID)
+	if r.onStarted != nil {
+		r.onStarted(e.pending.job.SessionID)
+	}
 	close(e.done)
 	r.mu.Lock()
 	r.left--
@@ -146,6 +155,39 @@ func (r *reclaimStarter) finished() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// reclaimDeferredOps holds the sessions a heartbeat left a merge or commit unanswered for, because the
+// reclaim had not started them yet (deferForReclaim).
+type reclaimDeferredOps struct {
+	sessions sync.Map
+}
+
+// deferForReclaim decides whether a heartbeat-delivered merge or commit for sessionID waits for a later
+// beat: it does when the request that brought it was made while a reclaim's start of the session had not
+// ended (advertised.reclaiming). Until then the takeover's fence refuses the operation, and a refusal is
+// an error the person who pressed Merge or Commit would see; left unanswered instead, the control plane
+// hands it over again on every beat until it has an outcome (drainMergeRequests, drainCommitRequests),
+// and this one does it against the supervisor the start made. beatNow is asked for once the session's
+// start has ended (started), so that beat is not a tick away.
+func (d *reclaimDeferredOps) deferForReclaim(pool *sessionPool, sessionID, operation string, advertised heartbeatSupervisorSnapshot, beatNow func()) bool {
+	if !advertised.reclaiming {
+		return false
+	}
+	logln(fmt.Sprintf("%s for %s waits for its session to be started again after this runner's restart", operation, sessionID))
+	d.sessions.Store(sessionID, true)
+	// The start may have ended since the request was made: then nothing else asks for the beat.
+	if !pool.isReclaiming(sessionID) {
+		d.started(sessionID, beatNow)
+	}
+	return true
+}
+
+// started is the starter's onStarted: a session a merge or commit waited for has a beat asked for.
+func (d *reclaimDeferredOps) started(sessionID string, beatNow func()) {
+	if _, waited := d.sessions.LoadAndDelete(sessionID); waited {
+		beatNow()
 	}
 }
 

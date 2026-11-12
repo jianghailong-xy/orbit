@@ -122,6 +122,10 @@ type heartbeatSupervisorSnapshot struct {
 	supervisor       *liveSession
 	permitGeneration uint64
 	cancel           context.CancelFunc
+	// reclaiming says a reclaim's background start of this session had not ended when the request
+	// was made (reclaimStarter): its takeover fence may still be up, and its supervisor may not exist
+	// yet (supervisor nil). A merge or commit the answer delivers for it is left for a later beat.
+	reclaiming bool
 }
 
 // worktreeOperationState serializes heartbeat-delivered Commit/Merge work with
@@ -241,6 +245,14 @@ func (p *sessionPool) unmarkReclaiming(id string) {
 	p.mu.Lock()
 	delete(p.reclaiming, id)
 	p.mu.Unlock()
+}
+
+// isReclaiming reports whether a reclaim's start of id has yet to end.
+func (p *sessionPool) isReclaiming(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.reclaiming[id]
+	return ok
 }
 
 // sessionIDs is every session this process supervises right now, in whatever state: a cold
@@ -1528,6 +1540,13 @@ func (p *sessionPool) heartbeatSnapshot() (map[string]heartbeatSupervisorSnapsho
 				permitGeneration: s.permitGeneration,
 			})
 		}
+	}
+	// A session still being reclaimed is in the snapshot too, flagged, under the same lock as the
+	// supervisors: what the answer hands out for it is judged by what was true when it was asked for.
+	for id := range p.reclaiming {
+		snap := supervisors[id]
+		snap.reclaiming = true
+		supervisors[id] = snap
 	}
 	return supervisors, targets
 }

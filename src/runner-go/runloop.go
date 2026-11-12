@@ -1156,6 +1156,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		default:
 		}
 	}
+	// The merges and commits a beat left for later because their session's reclaim start had not ended.
+	var reclaimDeferred reclaimDeferredOps
 	// The owner's "Update Runner Now" (HeartbeatResponse.CheckSelfUpdate) runs the release check
 	// below without waiting for its next tick. Buffered by one, like hbNow.
 	checkSelfUpdateNow := make(chan struct{}, 1)
@@ -1738,6 +1740,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					continue
 				}
 				snapshot := supervisors[m.SessionID]
+				if reclaimDeferred.deferForReclaim(pool, m.SessionID, "merge", snapshot, beatNow) {
+					continue
+				}
 				mergeMu.Lock()
 				busy := mergingNow[m.SessionID]
 				if !busy {
@@ -1804,6 +1809,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					continue
 				}
 				snapshot := supervisors[c.SessionID]
+				operation := "commit"
+				if c.Discard {
+					operation = "discard"
+				}
+				if reclaimDeferred.deferForReclaim(pool, c.SessionID, operation, snapshot, beatNow) {
+					continue
+				}
 				mergeMu.Lock()
 				busy := committingNow[c.SessionID]
 				if !busy {
@@ -2229,6 +2241,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
 			startSession(pending.job, pending.initiallyActive)
 		})
+		startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }
 		startupStarts.run(reclaimStartWorkers, func() {
 			logln(fmt.Sprintf("startup reclaim finished: %d session(s) in %s (snapshot and takeovers %s)",
 				len(pendingStarts), time.Since(reclaimBegan).Round(time.Millisecond), answeredIn.Round(time.Millisecond)))
@@ -2238,8 +2251,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	// A self-managed runner's first heartbeat, now rather than at the first tick half a minute on: until
 	// it lands, this machine reads offline with nothing reported, and someone may be watching it come up
-	// (a machine just approved has never been heard from at all). Not before the reclaim above: a beat
-	// hands out work against the supervisors it advertises, and until then there are none. The engines
+	// (a machine just approved has never been heard from at all). Not before the reclaim above has
+	// answered: a beat hands out work against the supervisors it advertises. It no longer waits for the
+	// reclaimed sessions to be started (startupStarts), so it may hand out a merge or commit for one whose
+	// supervisor does not exist yet. The snapshot flags such a session (heartbeatSupervisorSnapshot's
+	// reclaiming), and the operation is left unanswered rather than refused by the session's takeover
+	// fence. The control plane delivers it again on every beat until it has an outcome, and the beat
+	// asked for when the session's start ends carries it to the supervisor that start made
+	// (reclaimDeferredOps). Nothing is advertised as supervised before its supervisor exists. The engines
 	// are a probe away, so what it finds gets a beat of its own. A managed instance has beaten already,
 	// or is waiting for that probe to (managedStartupBeat).
 	if currentManagedInstance() == nil {
