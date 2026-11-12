@@ -449,7 +449,9 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 }
                 workspaces.forEachIndexed { index, workspace ->
                     if (index > 0) HorizontalDivider()
-                    WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts)) { openWorkspace(workspace.text("id")) }
+                    WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts), isolation = {
+                        WorktreeIsolationSwitch(api, workspace, reload = { model.load() }, failed = notice::show)
+                    }) { openWorkspace(workspace.text("id")) }
                 }
             }
             FormSection(RunnerCopy.ABOUT, footer = if (runner.bool("runsAsRoot") == true) RunnerCopy.ROOT_NO_BYPASS else null) {
@@ -668,7 +670,7 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
 }
 
 @Composable
-private fun WorkspaceRow(workspace: JsonObject, running: Int, open: () -> Unit) {
+private fun WorkspaceRow(workspace: JsonObject, running: Int, isolation: @Composable () -> Unit = {}, open: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = open).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
@@ -676,6 +678,8 @@ private fun WorkspaceRow(workspace: JsonObject, running: Int, open: () -> Unit) 
             RunnerPage.workspaceLine(workspace).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1) }
         }
         if (running > 0) Text(RunnerCopy.workspaceRunning(running), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        // Worktree isolation, switched here as on web's runner page (board 04's dialogs say what it means for the main checkout).
+        isolation()
         Chevron()
     }
 }

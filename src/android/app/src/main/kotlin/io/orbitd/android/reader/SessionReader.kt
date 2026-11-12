@@ -165,6 +165,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         openRunner = { runner, engine -> latestOpen(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
         openSession = { latestOpen(OrbitRoute(Destination.SESSION, it)) },
         openDraft = { latestOpen(OrbitRoute(Destination.DRAFT, workspaceId = it)) }) }
+    // The main checkout of the session's workspace (docs/main-checkout-git-contract.md): its card, bar, review sheet and lines.
+    val mainCheckout = remember(handle, route.id) { MainCheckoutModel(api.mainCheckoutTransport(), route.id!!, app.processScope).also { mc ->
+        mc.prefill = { composer.putBack(it) }
+        mc.openDraft = { latestOpen(OrbitRoute(Destination.DRAFT, workspaceId = it)) }
+    } }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }
@@ -329,6 +334,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
     val worktreeState by worktree.state.collectAsState()
     LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
+    val sessionDetail = worktreeState.detail ?: snapshotDetail
+    val workspaceOfSession = (sessionDetail?.get("workspace") as? JsonObject)?.string("id") ?: sessionDetail?.string("workspaceId")
+    LaunchedEffect(workspaceOfSession) { mainCheckout.bind(workspaceOfSession) }
     // What a Retry re-sends when it is the reader's: the newest message of a person the window holds.
     LaunchedEffect(rows) { console.lastUser = rows.lastOrNull { it.event.type == "user" && it.event.personWords().isNotBlank() }?.event }
     // An Antigravity failure said here is read against the runner and the providers, once, when it first appears.
@@ -413,7 +421,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(targetNames) { wakeNames = targetNames }
     val exchangeTree = rememberExchangeTree(app, handle, state.session?.snapshot?.detail)
     CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
-        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
+        LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
         LocalExchangeTree provides exchangeTree) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -639,8 +647,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
                 // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
-                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Box(Modifier.padding(horizontal = 16.dp)) {
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Column(Modifier.padding(horizontal = 16.dp)) {
+                    // The main checkout's standing state, in Worktree and Shared sessions alike (board 01⑤, 02④).
+                    if (workspaceOfSession != null) MainCheckoutBar(mainCheckout, workspaceOfSession, isolated = sessionDetail?.string("isolationStatus") == "worktree")
                     WorktreeBar(worktree, sending = composerState.waiting || composerState.busy, open = openLink) } }
+                MainCheckoutSheets(mainCheckout, isolated = sessionDetail?.string("isolationStatus") == "worktree", sessionBranch = sessionDetail?.string("branch"),
+                    sessionTitle = sessionDetail?.string("title"))
                 // The landing this conversation's work fed, at the session's own bottom (owner 2026-10-19, board v4 06 e).
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SourceLandingChip(queuedDetail ?: detail) {
                     open(OrbitRoute(Destination.SESSION, it)) } }
