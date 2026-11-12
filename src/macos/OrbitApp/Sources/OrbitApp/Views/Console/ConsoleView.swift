@@ -921,6 +921,11 @@ struct TranscriptView: View {
         // showing are asked for again as the console refreshes — one write per publish that
         // costs a request only for what has gone stale, and no poll of the cards' own.
         .onChange(of: console.stateRevision) { app.linkCards?.refreshStale() }
+        // The rows a record link scrolls to are cut the way this list cuts them: background jobs fold
+        // only in a coordinator (`OrbitExchangeFold.orbitTurn`).
+        .onChange(of: app.session(id: console.sessionID)?.projectId, initial: true) { _, project in
+            console.coordinates = project != nil
+        }
         // The in-memory window cap trims the HEAD of the transcript, so it may only run while
         // the reader is pinned at the live tail — see `ConsoleModel.setReadingHistory`.
         // `initial: true` so a console opened (or switched to) already at the bottom is capped
@@ -1147,6 +1152,7 @@ struct TranscriptView: View {
                              clocks: console.receiptClocks,
                              recap: recapCard,
                              watchName: watchWakeName,
+                             coordinator: app.session(id: console.sessionID)?.projectId != nil,
                              createdWorkspace: console.createdWorkspaceLine)
     }
 

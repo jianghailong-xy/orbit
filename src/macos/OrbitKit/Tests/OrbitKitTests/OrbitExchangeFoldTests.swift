@@ -79,11 +79,11 @@ final class OrbitExchangeFoldTests: XCTestCase {
         exchange(50, delivery(50, "EVIDENCE_SUBMITTED", Self.b4, "B4 Link gateway", revision: 1), reply: "I confirmed B4.")
     }
 
-    private func rows(fold: Bool = true) throws -> [TranscriptRow] {
+    private func rows(fold: Bool = true, coordinator: Bool = true) throws -> [TranscriptRow] {
         var reducer = TranscriptReducer()
         for line in events { reducer.apply(try JSONDecoder().decode(RunEvent.self, from: Data(line.utf8))) }
         return TranscriptRows.build(state: reducer.state, statusCards: [], canPageOlder: false,
-                                    showWorkingIndicator: false, foldExchanges: fold)
+                                    showWorkingIndicator: false, foldExchanges: fold, coordinator: coordinator)
     }
 
     private func groups(_ rows: [TranscriptRow]) -> [[OrbitExchange]] {
@@ -98,6 +98,44 @@ final class OrbitExchangeFoldTests: XCTestCase {
             default: return nil
             }
         }
+    }
+
+    private func jobWake(_ id: String, _ name: String) -> [String: Any] {
+        let wake = [
+            "<background-job-wake>",
+            "  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:",
+            "    \(id)｜query｜bash q.sh｜\(name)",
+            "      ended｜completed｜exit code 0",
+            "      output /root/.orbit/runs/x/\(id).output｜this covers bytes 0–20",
+            "  The control plane recorded this for you; the user did not write it. Read the whole output with mcp__orbit__bg_output by id.",
+            "</background-job-wake>",
+        ].joined(separator: "\n")
+        return ["text": wake, "controlPlaneNote": wake]
+    }
+
+    /// Outside a coordinator a background job is the agent's work on what the reader asked: its turns
+    /// are the answer and stay drawn. In a coordinator they fold as before (owner, 2026-11-12).
+    func testABackgroundJobFoldsOnlyInACoordinator() throws {
+        exchange(0, ["text": "Why is 11-10 not ready?"], reply: "I started a query.", tools: [])
+        exchange(5, jobWake("bgj_1", "Ledger split by lane"), reply: "Waiting on one more reading.",
+                 tools: ["mcp__orbit__bg_output"])
+        exchange(10, jobWake("bgj_2", "Read the ready script"),
+                 reply: "Found it: the job waits on lane 7, which never arrives.", tools: ["mcp__orbit__bg_output"])
+        exchange(15, delivery(15, "EVIDENCE_SUBMITTED", Self.b1, "B1 Targeted hints", revision: 1), reply: "I confirmed B1.")
+        exchange(20, jobWake("bgj_3", "Clean up"), reply: "Done.", tools: ["mcp__orbit__bg_output"])
+
+        let plain = try rows(coordinator: false)
+        let drawn = texts(plain)
+        XCTAssertTrue(drawn.contains("Waiting on one more reading."))
+        XCTAssertTrue(drawn.contains("Found it: the job waits on lane 7, which never arrives."))
+        // What is not a job still folds there too.
+        XCTAssertEqual(groups(plain).map { $0.map(\.reply) }, [["I confirmed B1."]])
+
+        let coordinator = try rows(coordinator: true)
+        let group = try XCTUnwrap(groups(coordinator).first)
+        XCTAssertEqual(OrbitExchangeFold.groupCount(group.count), "3 Orbit updates handled")
+        XCTAssertEqual(OrbitExchangeFold.kinds(group), "1 evidence, 2 background jobs")
+        XCTAssertFalse(texts(coordinator).contains { $0.hasPrefix("Found it") })
     }
 
     func testARunOfOrbitTurnsIsOneGroupAndTheReaderAndTheNewestTurnStay() throws {

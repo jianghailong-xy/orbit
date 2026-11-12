@@ -74,6 +74,37 @@ class ExchangeFoldTest {
         assertEquals(3, shown.count { it.event.type == "user" && it.event.fields["coordinatorDelivery"] != null })
     }
 
+    @Test fun aBackgroundJobFoldsOnlyInACoordinator() {
+        fun job(id: String, name: String) = listOf(
+            "<background-job-wake>",
+            "  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:",
+            "    $id｜query｜bash q.sh｜$name",
+            "      ended｜completed｜exit code 0",
+            "  The control plane recorded this for you; the user did not write it.",
+            "</background-job-wake>",
+        ).joinToString("\n").let { wake -> buildJsonObject { put("text", wake); put("controlPlaneNote", wake) } }
+        fun turns(): Array<List<RunEvent>> {
+            seq = 0; turn = 0
+            return arrayOf(
+                exchange(said("Why is 11-10 not ready?"), "I started a query.", emptyList()),
+                exchange(job("bgj_1", "Ledger split by lane"), "Waiting on one more reading.", listOf("mcp__orbit__bg_output")),
+                exchange(job("bgj_2", "Read the ready script"), "Found it: the job waits on lane 7.", listOf("mcp__orbit__bg_output")),
+                exchange(delivery("EVIDENCE_SUBMITTED", b1, "B1 Targeted hints", 1), "I confirmed B1."),
+                exchange(job("bgj_3", "Clean up"), "Done.", listOf("mcp__orbit__bg_output")),
+            )
+        }
+        fun fold(coordinator: Boolean) = ExchangeFold.fold(Steps.group(transcriptRows(turns().toList().flatten())), coordinator = coordinator)
+
+        // Anywhere but a coordinator a job's turns are the agent's answer to the reader (owner, 2026-11-12); what is not a job still folds.
+        val plain = fold(coordinator = false)
+        assertTrue(texts(plain).containsAll(listOf("Waiting on one more reading.", "Found it: the job waits on lane 7.")))
+        assertEquals(listOf(listOf("I confirmed B1.")), plain.filter { it.exchanges.isNotEmpty() }.map { r -> r.exchanges.map { it.summary.reply } })
+
+        val coordinated = fold(coordinator = true)
+        assertEquals(listOf("job", "job", "evidence"), coordinated.single { it.exchanges.isNotEmpty() }.exchanges.map { it.summary.category })
+        assertFalse(texts(coordinated).any { it.startsWith("Found it") })
+    }
+
     @Test fun theNewestTurnNeverFolds() {
         val shown = rows(exchange(said("hi"), "Hello.", emptyList()), exchange(delivery("EVIDENCE_SUBMITTED", b1, "B1", 1), "I confirmed B1."))
         assertTrue(shown.none { it.exchanges.isNotEmpty() })

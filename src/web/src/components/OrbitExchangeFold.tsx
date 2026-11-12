@@ -32,8 +32,11 @@ import {
 export interface ExchangeTree {
   lookup: ExchangeTreeLookup;
   want: () => void;
+  /** The conversation coordinates a project. Only there do background jobs fold: anywhere else they
+   *  are the agent's work on what the reader asked, and their turns are the answer. */
+  coordinator: boolean;
 }
-export const ExchangeTreeCtx = createContext<ExchangeTree>({ lookup: EMPTY_TREE_LOOKUP, want: () => {} });
+export const ExchangeTreeCtx = createContext<ExchangeTree>({ lookup: EMPTY_TREE_LOOKUP, want: () => {}, coordinator: false });
 
 /** The event a find sends a fold's root, with `{ seq }` as its detail: open the way to that seq. */
 export const EXCHANGE_REVEAL_EVENT = 'orbit:reveal-exchange';
