@@ -134,10 +134,27 @@ test('both routes proxy exactly as the /api/ location does, to their upstream, a
     const d = directives(block(routes, header));
     assert.ok(d.includes(pass), `${pass}`);
     assert.ok(d.includes('proxy_connect_timeout 2s'));
-    assert.deepEqual(d.filter((x) => !x.startsWith('proxy_pass ') && x !== 'proxy_connect_timeout 2s').sort(), api);
+    assert.deepEqual(d.filter((x) => !/^(proxy_pass|error_page) /.test(x) && x !== 'proxy_connect_timeout 2s').sort(), api);
   }
-  // Nothing else is routed there: the two locations and no other.
-  assert.equal(uncommented(routes).match(/^location /gm).length, 2);
+  // Nothing else is routed there: the two locations, and the streams' fallback, which only nginx sends to.
+  assert.deepEqual(uncommented(routes).match(/^location \S+/gm), ['location ~', 'location @orbit_stream_any_apiserver', 'location =']);
+});
+
+test('a stream the gateway could not open is opened once more on any apiserver, a GET only (task 34wTlHHwbkvPyPDtw1Z88)', () => {
+  // Measured: after two apiservers were stopped one after the other, the stream upstream counted both as failed for a
+  // minute and answered 502 "no live upstreams" while one was up. Only the gateway's own 502 and 504 go there:
+  // proxy_intercept_errors is off, so an apiserver's own answer passes through.
+  const stream = directives(block(routes, /^location ~ \S+ \{/m));
+  assert.ok(stream.includes('error_page 502 504 = @orbit_stream_any_apiserver'));
+  assert.ok(!uncommented(routes).includes('proxy_intercept_errors'));
+  const body = block(routes, /^location @orbit_stream_any_apiserver \{/m);
+  // Nothing but a GET is sent again: anything else answers the 502 it had.
+  assert.match(body, /^\s*if \(\$request_method != GET\) \{\s*return 502;\s*\}/);
+  const d = directives(body.replace(/^\s*if [^{]*\{[^}]*\}/, ''));
+  // Every apiserver the alias resolves to now, through the server's resolver: no upstream, so no failure it remembers.
+  assert.deepEqual(d.slice(0, 2), ['set $orbit_any_apiserver orbit-apiservers:3000', 'proxy_pass http://$orbit_any_apiserver$request_uri']);
+  // And proxied as the stream location is.
+  assert.deepEqual(d.slice(2).sort(), stream.filter((x) => !/^(proxy_pass|error_page) /.test(x)).sort());
 });
 
 test('the directory is mounted where gateway/nginx.conf includes it: the staging stack and the deployment\'s override alike', () => {
