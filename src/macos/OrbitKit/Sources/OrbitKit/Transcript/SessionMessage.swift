@@ -128,17 +128,19 @@ public enum SessionMessageCard {
     public static let from = "From"
     /// What a session with no title is called where its title would be.
     public static let untitled = "Untitled session"
-    /// The foot line: who this is not.
+    /// Who this is not: the help and the accessibility label of the line that names the sender
+    /// (docs/mocks/session-message-bubble, owner 2026-11-12), no longer a sentence on screen.
     public static let notYou = "Sent by another Orbit session, not by you"
     public static let openTask = "Its task ↗"
     public static let undelivered = "The session has not confirmed it received this."
 
     /// A long message folds by its rendered height, not its length (docs/mocks/session-message-clamp,
-    /// approved 2026-11-11): taller than `clampFrom` lines, it shows its first `clampLines` and
-    /// `showMore`; opened, the whole text and `showLess`. Web: `SessionMessageCard.tsx`'s
+    /// approved 2026-11-11; 4 of 6 since docs/mocks/session-message-bubble, 2026-11-12): taller than
+    /// `clampFrom` lines, it shows its first `clampLines` and `showMore`; opened, the whole text and
+    /// `showLess`. Web: `SessionMessageCard.tsx`'s
     /// `SESSION_MESSAGE_CLAMP_*` and `SESSION_MESSAGE_SHOW_*`.
-    public static let clampLines = 8
-    public static let clampFrom = 12
+    public static let clampLines = 4
+    public static let clampFrom = 6
     public static let showMore = "Show more"
     public static let showLess = "Show less"
 
@@ -154,11 +156,11 @@ public enum SessionMessageCard {
         return title.isEmpty ? untitled : title
     }
 
-    /// "Sent by another Orbit session, not by you · 2m ago".
-    public static func meta(ts: String? = nil, now: Date = Date()) -> String {
-        var line = notYou
-        if let ts, let relative = RelativeTime.format(ts, now: now) { line += " · \(relative)" }
-        return line
+    /// The foot line's first item, when the message was sent: "2m ago". Nil with no time to say;
+    /// the task, the request and the attached note follow it on the same line, each after " · ".
+    public static func meta(ts: String? = nil, now: Date = Date()) -> String? {
+        guard let ts else { return nil }
+        return RelativeTime.format(ts, now: now)
     }
 
     /// What the bar pinned to the top of a console says about this turn: who sent it, and what it

@@ -21,7 +21,7 @@ import { type LoginEngine } from '@orbit/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, cleanUpWorkspaceRepo } from '../../api';
-import { routeId } from '../../lib/idCodec';
+import { encodeId, routeId } from '../../lib/idCodec';
 import { machineDraftPath } from '../../lib/machineSetup';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
@@ -92,9 +92,11 @@ import {
   runnerOfflineLastSeen,
   runnerRunningOf,
   runnerUpdatedFromTo,
+  runnerVersionUpdatingTo,
   runnerVersionTag,
   runnerWorkspaceRunning,
 } from '../../lib/runnerCopy';
+import { runnerUpdateCard } from '../../lib/runnerUpdateCard';
 import { useClaudeRegionCheckAgain } from '../../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../../lib/claudeRegionCopy';
 import { ago } from '../../lib/runnerEngines';
@@ -384,6 +386,12 @@ export function MachineSettingsPage() {
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
     if (stuck) return { text: stuck.short, warn: true };
     if (compareRunnerVersions(version, latestVersion) >= 0) return { text: RUNNER_VERSION_LATEST, warn: false };
+    // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`, in the card's amber.
+    const target = runner.selfUpdate?.targetVersion;
+    const phase = runner.selfUpdate?.phase;
+    if (target && (phase === 'draining' || phase === 'restarting')) {
+      return { text: runnerVersionUpdatingTo(target), warn: true };
+    }
     const state = runner.selfUpdate?.state;
     if (state === 'heldByRollout') return { text: RUNNER_VERSION_NOT_ROLLED_OUT, warn: false };
     if (state === 'enabled' || state === 'waitingForIdle') {
@@ -404,6 +412,8 @@ export function MachineSettingsPage() {
     return parts.filter(Boolean).join(RUNNER_LINE_SEPARATOR) || '—';
   })();
   const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
+  // Where a release it is behind stands, from a runner that says (null for one that doesn't).
+  const updateCard = runnerUpdateCard(runner.selfUpdate, nowMs, runner.updateTurns);
   // An engine update shares the runner's one relay slot with an engine's install. Only a run in
   // `update` mode is Engines' news; an install's belongs to the row that started it.
   const relay = runner.install;
@@ -618,6 +628,42 @@ export function MachineSettingsPage() {
         </div>
         {metaline.length > 0 && <div className="machine-metaline">{metaline.join(RUNNER_LINE_SEPARATOR)}</div>}
       </header>
+
+      {/* The Update card (board 4): a release this runner is behind, in the phase it reports. */}
+      {updateCard && (
+        <section className={`rd-update-card ${updateCard.tone}`} aria-label={updateCard.title} data-phase={updateCard.phase}>
+          <div className="rd-update-head">
+            <div className="rd-update-title">{updateCard.title}</div>
+            <div className="rd-update-tag">{updateCard.tag}</div>
+          </div>
+          <div className="rd-update-body">{updateCard.body}</div>
+          {updateCard.progress && (
+            <>
+              <div className="rd-update-progress-label">{updateCard.progress.label}</div>
+              <div
+                className="rd-update-progress"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(updateCard.progress.done * 100)}
+              >
+                <span style={{ width: `${updateCard.progress.done * 100}%` }} />
+              </div>
+            </>
+          )}
+          {updateCard.turns && updateCard.turns.length > 0 && (
+            <ul className="rd-update-turns">
+              {updateCard.turns.map((turn) => (
+                <li key={turn.id}>
+                  <Link to={`/sessions/${encodeId(turn.id)}`}>{turn.title}</Link>
+                  {turn.running && <span>{turn.running}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* Later ▾ and Update Now… go here (their own tasks). */}
+        </section>
+      )}
 
       {/* Only when something needs a person: each card says what happened, why it matters, and offers
           the one thing that fixes it. */}

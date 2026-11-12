@@ -181,12 +181,15 @@ final class WikiWiringTests: XCTestCase {
                               to: "default:                      EmptyView()")
         XCTAssertTrue(stack.contains("WikiHomeView(rowNavigation: .push)"))
         XCTAssertTrue(stack.contains(".drawerToggle(open: openDrawer)"))
-        XCTAssertTrue(stack.contains("case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)"))
+        // The entry page knows its shell pushes (a source row opens over it); the stack renders the
+        // task page a source or a footnote pushes.
+        XCTAssertTrue(stack.contains("case .wikiEntry(let entryID): WikiEntryView(entryID: entryID, rowNavigation: .push)"))
+        XCTAssertTrue(stack.contains("case .taskDetail(let taskID): TaskDetailPage(taskID: taskID)"))
         XCTAssertTrue(stack.contains("case .wikiReview:             WikiReviewView()"))
         XCTAssertTrue(stack.contains("case .wikiActivity:           WikiActivityView()"))
         // An `orbit-wiki:` link in a phone's conversation pushes the entry over it.
         let agents = try slice(shell, from: "case .console(let sessionID, _):", to: "default:                         EmptyView()")
-        XCTAssertTrue(agents.contains("case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)"))
+        XCTAssertTrue(agents.contains("case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)"))
     }
 
     /// The three-column shells (design §12.3, mock 32): the directory in the list column — the Contents
@@ -258,7 +261,7 @@ final class WikiWiringTests: XCTestCase {
         }
         let header = try slice(page, from: "private var header: some View {", to: "private func band(_ band: WikiLogic.HomeBand) -> some View {")
         assertOrder(header, ["Text(WikiCopy.title)", ".font(.largeTitle.bold())",
-                             "WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,"],
+                             "WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings)"],
                     "the header")
         XCTAssertTrue(page.contains("TextField(WikiCopy.searchPlaceholder, text: $query)"))
         XCTAssertTrue(page.contains(".redacted(reason: .placeholder)"), "grey bars while the first read is out")
@@ -495,7 +498,7 @@ final class WikiWiringTests: XCTestCase {
     func testTheMacSidebarDrawsNoWikiRowWithoutTheWiki() throws {
         let main = code(try source("Views/MainView.swift"))
         let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
-        XCTAssertTrue(sidebar.contains("ForEach(AppSection.visible(isAdmin: isAdmin, wiki: model.wiki?.shown == true)) { section in"))
+        XCTAssertTrue(sidebar.contains("if section != .wiki || model.wiki?.shown == true {"))
         XCTAssertTrue(sidebar.contains(".task { await model.wiki?.loadSpaces() }"))
     }
 

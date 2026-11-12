@@ -134,6 +134,20 @@ public enum OrbitExchangeFold {
     ]
 
     /// What a group holds, counted by kind: `3 evidence, 1 can start, 2 watches`.
+    /// How long an answer may be and still fold (web parity: `foldsAtLength` in lib/orbitExchangeFold).
+    /// Most of what Orbit opens is answered with a result or a question for the reader, and only a short
+    /// answer is routine: on 60 answers drawn and labeled on a self-hosted deployment (2026-11-12,
+    /// docs/mocks/conversation-fold-rules/02), a watch's under 220 characters and any other's under 80
+    /// folded 11 of the 14 routine ones and none of the 46 that said something. A reply from another
+    /// session never folds by length: a short one was as often a ruling as a receipt.
+    public static let watchFoldsBelow = 220
+    public static let otherFoldsBelow = 80
+
+    public static func foldsAtLength(_ category: ExchangeCategory, _ length: Int) -> Bool {
+        if category == .reply { return false }
+        return length < (category == .watch ? watchFoldsBelow : otherFoldsBelow)
+    }
+
     public static func kinds(_ exchanges: [OrbitExchange]) -> String {
         categoryWords.compactMap { category, one, many in
             let n = exchanges.filter { $0.category == category }.count
@@ -191,13 +205,12 @@ public enum OrbitExchangeFold {
     }
 
     /// What a turn's opening bubble says happened, when Orbit opened the turn and it is one the reader
-    /// can be spared: a fact told to a coordinator, a watch or (in a coordinator) a background job
-    /// coming back, another session's reply. Nil for everything else, and for those that went wrong — a refused start, a
+    /// can be spared: a fact told to a coordinator, a watch or a background job coming back, another
+    /// session's reply. Nil for everything else, and for those that went wrong — a refused start, a
     /// blocker, a stopped run, a failed target or job, a delivery nobody confirmed — which stay drawn.
     /// `rows` and `reply` are left for the caller to fill.
     public static func orbitTurn(_ bubble: UserBubble,
-                                 watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
-                                 coordinator: Bool = false) -> OrbitExchange? {
+                                 watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil) -> OrbitExchange? {
         if bubble.steer || bubble.queued || bubble.undelivered { return nil }
         if bubble.delivery == "failed" || bubble.delivery == "unconfirmed" { return nil }
         if bubble.itemCard != nil || bubble.ownerAnswer != nil
@@ -258,9 +271,6 @@ public enum OrbitExchangeFold {
                                  whatInTask: title, reply: "", category: .watch, target: target)
         }
         if let wake = BackgroundWakeText.parse(bubble.note) {
-            // Outside a coordinator a background job is the agent's work on what the reader asked: its
-            // turns are the answer, not news about it, so they stay drawn (owner, 2026-11-12).
-            guard coordinator else { return nil }
             if wake.jobs.contains(where: BackgroundWakeCard.isFailed) { return nil }
             let title = BackgroundWakeCard.title(wake)
             let name = BackgroundWakeCard.lineName(wake)
@@ -314,8 +324,7 @@ public enum OrbitExchangeFold {
     /// running. A turn with a card of its own drawn inside it — a question, a status card — is never
     /// folded either: a fold would hide something that is waiting on somebody.
     public static func fold(_ rows: [TranscriptRow],
-                            watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
-                            coordinator: Bool = false) -> [TranscriptRow] {
+                            watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil) -> [TranscriptRow] {
         var segments: [Segment] = []
         var open: (head: UserBubble, rows: [TranscriptRow])?
         func close() {
@@ -348,8 +357,7 @@ public enum OrbitExchangeFold {
                 flush()
                 out.append(row)
             case .turn(let head, let turnRows):
-                if index != lastTurn, let exchange = folded(head: head, rows: turnRows, watchName: watchName,
-                                                                coordinator: coordinator) {
+                if index != lastTurn, let exchange = folded(head: head, rows: turnRows, watchName: watchName) {
                     run.append(exchange)
                 } else {
                     flush()
@@ -362,9 +370,8 @@ public enum OrbitExchangeFold {
     }
 
     private static func folded(head: UserBubble, rows: [TranscriptRow],
-                               watchName: ((WatchWake, WatchWakeTarget) -> String?)?,
-                               coordinator: Bool) -> OrbitExchange? {
-        guard let orbit = orbitTurn(head, watchName: watchName, coordinator: coordinator) else { return nil }
+                               watchName: ((WatchWake, WatchWakeTarget) -> String?)?) -> OrbitExchange? {
+        guard let orbit = orbitTurn(head, watchName: watchName) else { return nil }
         var replies: [String] = []
         for row in rows {
             switch row {
@@ -385,6 +392,9 @@ public enum OrbitExchangeFold {
         // An exchange is the turn and its answer: one the agent has not answered yet is already the
         // single line its card draws, and folding it would only take that line away.
         guard let last = replies.last else { return nil }
+        // An answer long enough to say something stays drawn too (`foldsAtLength`). Counted in UTF-16
+        // units, as the browser counts it, so every client cuts at the same character.
+        guard foldsAtLength(orbit.category, replies.reduce(0) { $0 + $1.utf16.count }) else { return nil }
         return OrbitExchange(id: orbit.id, ts: orbit.ts, what: orbit.what, whatInTask: orbit.whatInTask,
                              reply: replyGist(last), category: orbit.category, target: orbit.target, rows: rows)
     }

@@ -1,13 +1,11 @@
 import Foundation
 
-// Pure logic for workspace navigation order. macOS renders runner groups; iOS uses the flat
-// workspace order shared with the web.
+// Pure logic for workspace navigation order. Every client's rail uses the flat workspace order shared
+// with the web.
 
 public struct AgentGroup: Equatable, Sendable, Identifiable {
     public let runnerId: String?
     public let agents: [Agent]
-    /// A machine with no workspace: its group has this one row instead of workspaces (rule 9).
-    public var setUp: MachineToSetUp? = nil
     public var id: String { runnerId ?? "host" }
 }
 
@@ -79,14 +77,6 @@ public enum AgentListLogic {
     /// `GET /runners`' answer for this machine, read the way the rest of the rail reads it.
     public static func isOnline(_ runner: Runner) -> Bool {
         WorkspaceRunnerAvailabilityLogic.onlineValue(explicit: runner.online, status: runner.status) == true
-    }
-
-    /// The macOS sidebar's groups: each machine's workspaces, then each machine that has none, with its
-    /// header and Set up row after every workspace (rule 9).
-    public static func sidebarGroups(_ agents: [Agent], runnerOrder: [String] = [],
-                                     machines: [MachineToSetUp]) -> [AgentGroup] {
-        grouped(agents, runnerOrder: runnerOrder)
-            + machines.map { AgentGroup(runnerId: $0.id, agents: [], setUp: $0) }
     }
 
     /// Where New session goes. `list` is the workspace list's state, `currentAgentID` the workspace ⌘N
