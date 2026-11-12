@@ -2101,3 +2101,14 @@ private struct RecapVisit: Equatable {
     let sessionID: String
     let rests: Bool
 }
+
+// The wiki chat's initializer lives beside `TranscriptView`'s private state rather than in
+// `WikiChatViews.swift`: a custom init in another file leaves the private `@State` default-value
+// expressions unresolved at link time under Xcode 27.0's Swift 6.4 IRGen (the symbol is emitted
+// file-private but referenced from the other file).
+extension TranscriptView {
+    init(wikiChat console: ConsoleModel) {
+        self.console = console
+        self.hidesStickyQuestion = true
+    }
+}

@@ -175,7 +175,12 @@ final class WikiChatWiringTests: XCTestCase {
     /// them for — a missing observable object is a crash on screen, not a compile error.
     func testTheConversationIsTheSessionPagesTranscript() throws {
         let views = code(try source("Views/WikiChatViews.swift"))
-        XCTAssertTrue(views.contains("init(wikiChat console: ConsoleModel) {\n        self.console = console\n        self.hidesStickyQuestion = true"))
+        // The initializer lives beside `TranscriptView`'s private `@State` (ConsoleView.swift): an
+        // init in another file leaves their default-value expressions unresolved at link time under
+        // Xcode 27.0's Swift 6.4 IRGen. What this test holds is that the panel gets that init, not
+        // which file spells it — the call below is still the assertion.
+        let transcriptView = code(try source("Views/Console/ConsoleView.swift"))
+        XCTAssertTrue(transcriptView.contains("init(wikiChat console: ConsoleModel) {\n        self.console = console\n        self.hidesStickyQuestion = true"))
         let conversation = try slice(views, from: "private struct WikiChatConversation: View {", to: "struct WikiChatComposer: View {")
         assertOrder(conversation, ["TranscriptView(wikiChat: console)", ".environment(registry.attachments)",
                                    ".environment(console.createdTasks)", ".environment(approvalReviewDrafts)",
