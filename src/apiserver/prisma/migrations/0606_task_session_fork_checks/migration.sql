@@ -1,13 +1,13 @@
--- 0541 — the rest of 0540 (task session fork): the five CHECKs it added NOT VALID, validated.
+-- 0606 — the rest of 0605 (task session fork): the five CHECKs it added NOT VALID, validated.
 --
--- A file of its own for the reason 0479 gives: each VALIDATE scans its table, and inside 0540's single
+-- A file of its own for the reason 0479 gives: each VALIDATE scans its table, and inside 0605's single
 -- transaction it would scan under the ACCESS EXCLUSIVE lock that file holds to its end. Here, with no DO
 -- block, Prisma sends the statements one at a time, outside any transaction, and VALIDATE CONSTRAINT takes
 -- SHARE UPDATE EXCLUSIVE, which conflicts with DDL and VACUUM alone: neither holding it nor waiting for it
 -- holds up a reader or a writer, so lock_timeout is lifted for them. statement_timeout still bounds each.
 -- Every statement is safe to run twice.
 --
--- IF IT FAILS: `prisma migrate resolve --rolled-back 0541_task_session_fork_checks`, then deploy again.
+-- IF IT FAILS: `prisma migrate resolve --rolled-back 0606_task_session_fork_checks`, then deploy again.
 
 SET lock_timeout = 0;
 

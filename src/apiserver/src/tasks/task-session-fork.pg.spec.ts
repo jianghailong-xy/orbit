@@ -13,7 +13,7 @@
  *   - FORK_SOURCE_NOT_REACHABLE, at the create door and again when a run would be placed elsewhere;
  *   - FORK_IN_BOUND_PROJECT, at the create door and again when the binding came after the task;
  *   - task_update refuses both: a reassignment to another machine and a move into a bound project;
- *   - the five fork columns cannot be rewritten (0540's guard), and a fork is only ever of the caller.
+ *   - the five fork columns cannot be rewritten (0605's guard), and a fork is only ever of the caller.
  *
  * Destructive only for the rows it makes (one owner, deleted at the end). Run it the way every pg spec
  * runs: `scripts/run-pg-spec.sh src/apiserver/src/tasks/task-session-fork.pg.spec.ts`.

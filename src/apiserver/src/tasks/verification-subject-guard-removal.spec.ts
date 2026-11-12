@@ -368,7 +368,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_wiki_chat_space_guard` to `session`, which refuses a write that would change the '
     + 'wiki space a session is a chat of, and 64 once 0484 made the Open list\'s data version '
     + 'cheap: three `open_list_epoch_*` triggers on `task`, three on `session`, and three plus '
-    + '`conversation_turn_evidence_review_deadline` on `conversation_turn`, and 65 once 0540 added '
+    + '`conversation_turn_evidence_review_deadline` on `conversation_turn`, and 65 once 0605 added '
     + '`task_fork_guard` to `task`, which refuses a write that would change where a forked task starts');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
@@ -411,7 +411,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_cursor_runner_acquisition_guard` and 0441\'s two `project_rollup_candidate_task_*` '
     + 'and 0476\'s `session_wiki_chat_space_guard`. '
     + '0484\'s nine `open_list_epoch_*` triggers and `conversation_turn_evidence_review_deadline`, '
-    + 'and 0540\'s `task_fork_guard`. '
+    + 'and 0605\'s `task_fork_guard`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(
