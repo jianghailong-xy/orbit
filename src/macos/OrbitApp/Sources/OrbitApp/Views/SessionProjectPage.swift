@@ -412,6 +412,10 @@ struct SessionProjectPage: View {
             }
         }
         .listStyle(.plain)
+        // The Sessions list's soft top edge, not the hard strip iOS 26 picks here: the pinned
+        // section header floats on it with no line (the owner, 2026-11-12,
+        // docs/mocks/ios-header-soft-edge/04-board.html).
+        .softTopEdgeEffect()
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .rowSwipeList(rowSwipe)

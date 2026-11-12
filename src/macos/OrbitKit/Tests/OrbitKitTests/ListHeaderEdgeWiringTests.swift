@@ -47,6 +47,17 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertTrue(tasks.contains(".softTopEdgeEffect()"), "the Tasks list")
     }
 
+    /// The project's sessions page and a folder's page, the same edge (the owner, 2026-11-12,
+    /// 04-board.html, D1–D3 = A); their two-line titles stay as the conversation's is.
+    func testTheProjectAndFolderPagesUseTheSoftEdge() throws {
+        let project = section(try source(views + "SessionProjectPage.swift"),
+                              from: "        List(selection: selection) {", to: ".refreshable {")
+        XCTAssertTrue(project.contains(".listStyle(.plain)") && project.contains(".softTopEdgeEffect()"), "the project page")
+        let folder = section(try source(views + "SessionFolderPage.swift"),
+                             from: ".listStyle(.plain)", to: ".refreshable {")
+        XCTAssertTrue(folder.contains(".softTopEdgeEffect()"), "the folder page")
+    }
+
     func testTheTranscriptStillHasNoEdgeEffect() throws {
         let console = try source(views + "Console/ConsoleView.swift")
         XCTAssertFalse(console.contains("softTopEdgeEffect"), "the transcript keeps the 11-11 rule")
