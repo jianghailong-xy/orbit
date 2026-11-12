@@ -193,7 +193,7 @@ describe('an answer refused because it could not be translated', () => {
   it('keeps the answer on the card with the foot of a held message', async () => {
     await answerThenRefuse();
     expect(decideMock).toHaveBeenCalledTimes(1);
-    expect(decideMock).toHaveBeenCalledWith('s1', 'ap1', 'allow', undefined, { '要用哪种修法？': ['预加载脚本'] }, undefined, undefined, undefined);
+    expect(decideMock).toHaveBeenCalledWith('s1', 'ap1', 'allow', undefined, { '要用哪种修法？': ['预加载脚本'] }, undefined, undefined);
     expect(foot()?.textContent).toBe(FOOT);
     expect(button('预加载脚本').className).toContain('is-picked');
     expect(button('Submit').disabled).toBe(false);
@@ -220,7 +220,7 @@ describe('an answer refused because it could not be translated', () => {
     await act(async () => button('Retry').click());
     await flush();
     expect(decideMock).toHaveBeenCalledTimes(2);
-    expect(decideMock.mock.calls[1]).toEqual(['s1', 'ap1', 'allow', undefined, { '要用哪种修法？': ['预加载脚本'] }, undefined, undefined, undefined]);
+    expect(decideMock.mock.calls[1]).toEqual(['s1', 'ap1', 'allow', undefined, { '要用哪种修法？': ['预加载脚本'] }, undefined, undefined]);
   });
 
   it('Send as written posts it again with sendAsWritten', async () => {
@@ -245,7 +245,7 @@ describe('an answer refused because it could not be translated', () => {
     expect(foot()).toBeNull();
   });
 
-  it("an approval's deny message is posted again the same way", async () => {
+  it("a tool card's Approve is posted again the same way", async () => {
     const tool = card('Bash', { command: 'npm test', description: 'Run the web tests' });
     listMock.mockResolvedValue([tool]);
     decideMock.mockRejectedValueOnce(untranslated());

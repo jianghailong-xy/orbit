@@ -40,7 +40,10 @@ export function useApprovalDecisions(
     if (!sessionId) return;
     setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
     try {
-      await decideApproval(sessionId, approvalId, behavior, message, answers, rememberRules, startAfterCreate, sendAsWritten);
+      // Every other press calls the door exactly as it always has, with no eighth argument.
+      await (sendAsWritten
+        ? decideApproval(sessionId, approvalId, behavior, message, answers, rememberRules, startAfterCreate, true)
+        : decideApproval(sessionId, approvalId, behavior, message, answers, rememberRules, startAfterCreate));
       setUntranslated((prev) => {
         if (!(approvalId in prev)) return prev;
         const rest = { ...prev };
