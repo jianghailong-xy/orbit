@@ -5,23 +5,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineHealth } from '@orbit/shared';
-import type { Runner } from '../components/TasksSidePanel';
-import { encodeId } from '../lib/idCodec';
-import type { ProviderRow } from '../lib/providerAdmin';
-import { SettingsVendorPage } from '../components/settings/SettingsProviderPages';
-import { InfrastructurePage } from './InfrastructurePage';
-import { ProviderPickPage } from './ProviderConnectPage';
+import type { Runner } from '../TasksSidePanel';
+import { encodeId } from '../../lib/idCodec';
+import type { ProviderRow } from '../../lib/providerAdmin';
+import { ProviderPickPage } from '../../pages/ProviderConnectPage';
+import { MachineSettingsPage } from './MachineSettingsPage';
+import { SettingsVendorPage } from './SettingsProviderPages';
 
 /**
- * Cursor CLI on /infrastructure (the owner's board, docs/mocks/cursor-engine Web 2 and Web 4): nothing of
- * it while no runner of the account knows it; once one does, the machines and accounts signed in to it,
- * and the Cursor keys with the model a session on one starts on (Auto) — nothing on a machine's card where
+ * Cursor CLI on a machine's Settings page and Cursor's vendor page (the owner's board, docs/mocks/cursor-engine Web 2 and Web 4): nothing of
+ * it while no runner of the account knows it; once one does, the accounts signed in to it on the machine,
+ * and the Cursor keys with the model a session on one starts on (Auto) — Sign in on the machine's row where
  * it is signed out — a Cursor card in the vendor gallery, and on a Cursor key's row what Cursor answered
  * the last check: refused, or out of reach, which is asked again from there.
  */
 
-vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
-const { api } = await import('../api');
+vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
+const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 const id = (n: number) => encodeId(`0195c0de-0000-7000-8000-${String(n).padStart(12, '0')}`);
@@ -118,8 +118,8 @@ async function settle() {
   }
 }
 
-/** /infrastructure for the machine's card; a Cursor key's vendor page, and picking a vendor, are Settings'. */
-async function mount(at = '/infrastructure') {
+/** The machine's Settings page; a Cursor key's vendor page, and picking a vendor, are Settings'. */
+async function mount(at = `/settings/machines/${HPC}`) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   host = document.createElement('div');
   document.body.appendChild(host);
@@ -129,7 +129,7 @@ async function mount(at = '/infrastructure') {
       <QueryClientProvider client={qc}>
         <MemoryRouter initialEntries={[at]}>
           <Routes>
-            <Route path="/infrastructure" element={<InfrastructurePage />} />
+            <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
             <Route path="/settings/providers/new" element={<ProviderPickPage />} />
             <Route path="/settings/providers/:vendor" element={<SettingsVendorPage />} />
             <Route path="*" element={<div>elsewhere</div>} />
@@ -143,7 +143,7 @@ async function mount(at = '/infrastructure') {
 
 const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
-describe('Cursor CLI on the Machines & models page and its vendor’s Settings page', () => {
+describe('Cursor CLI on a machine’s Settings page and its vendor’s', () => {
   it('is nowhere while no runner of the account knows it', async () => {
     runners = [hpc(null, [])];
     keys = [];
@@ -155,22 +155,22 @@ describe('Cursor CLI on the Machines & models page and its vendor’s Settings p
     expect(document.body.querySelector('a[href="/settings/providers/new/cursor-api"]')).toBeNull();
   });
 
-  it('chips the accounts signed in to it on the machine’s card, and starts each of its keys on Auto', async () => {
+  it('counts the accounts signed in to it on the machine’s row, and starts each of its keys on Auto', async () => {
     await mount();
-    // The machine's card chips both accounts, and the key's row says what a session on it starts on.
-    expect(text(document.body.querySelector('.re-runner-card .mc-row'))).toContain('Cursor CLI ×2');
+    // The machine's Cursor row counts both accounts, and the key's row says what a session on it starts on.
+    const row = document.body.querySelector('.machine-section-engines [data-engine="cursor"]');
+    expect(text(row?.querySelector('.re-meta'))).toBe(`${PIN} · 2 of 2 accounts available`);
     act(() => root?.unmount());
     host?.remove();
     await mount('/settings/providers/cursor-api');
     expect(text(document.body.querySelector('.settings-row .vk-model'))).toBe('· Starts on Auto');
   });
 
-  it('draws no chip on the machine’s card for Cursor CLI signed out there: its row, once open, says so', async () => {
+  it('offers Sign in on the machine’s Cursor CLI row where it is signed out there', async () => {
     runners = [hpc(cursor({ auth: 'no', accounts: [{ id: 'default', home: '/root/.orbit/cursor/default', auth: 'no' }] }))];
     await mount();
-    const head = document.body.querySelector<HTMLElement>('.re-runner-card .re-head')!;
-    expect([...head.querySelectorAll('.mc-chip')].map((chip) => text(chip))).toEqual(['Claude Code']);
-    expect(head.querySelector('button[aria-label="Sign in to Cursor CLI on HPC"]')).toBeNull();
+    const row = document.body.querySelector<HTMLElement>('.machine-section-engines [data-engine="cursor"]')!;
+    expect([...row.querySelectorAll(':scope > .re-act button')].map((b) => text(b))).toEqual(['Sign in']);
   });
 
   it('offers Cursor in the vendor gallery, on its own connect page, as already signed in on the machine', async () => {

@@ -65,15 +65,18 @@ vi.mock('./SettingsProviderPages', async (original) => {
   };
 });
 vi.mock('../../pages/ProviderPoolPage', () => ({ ProviderPoolPage: () => <p data-page="pool">pool</p> }));
-vi.mock('../../pages/RunnerDetailPage', async () => {
+vi.mock('./MachineSettingsPage', async () => {
   const { useParams } = await import('react-router-dom');
   return {
-    RunnerDetailPage: ({ runnerId, workspaceId }: { runnerId?: string; workspaceId?: string }) => {
-      const params = useParams();
-      return <p data-page={`machine:${runnerId ?? params.id}:${workspaceId ?? ''}`}>machine</p>;
-    },
+    MachineSettingsPage: () => <p data-page={`machine:${useParams().id}:`}>machine</p>,
   };
 });
+// Until task s5, a workspace's row opens the old inline editor, on its machine's workspaces.
+vi.mock('./MachineWorkspacesEditor', () => ({
+  MachineWorkspacesEditor: ({ runnerId, workspaceId }: { runnerId: string; workspaceId: string }) => (
+    <p data-page={`machine:${runnerId}:${workspaceId}`}>machine</p>
+  ),
+}));
 // Home lands in a workspace's console.
 vi.mock('../WorkspaceConsole', () => ({ WorkspaceConsole: () => <p data-page="console">console</p> }));
 vi.mock('../RunnerRegisterGuide', () => ({ RunnerRegisterGuide: () => <p data-page="register">register</p> }));
@@ -326,11 +329,11 @@ describe('the Settings window', () => {
     expect(addressBar()).toBe('/settings/providers/new');
     expect(page()).toBe('pick-vendor');
 
-    // Until Settings has its own new-workspace page: the first online machine's Add workspace.
+    // Until Settings has its own new-workspace page (task s5): the create form, on the first online machine.
     await go('/settings/general');
     await click(group('Workspaces').querySelector('.settings-nav-add'));
-    expect(addressBar()).toBe('/settings/machines/gpuBox?workspace=new');
-    expect(page()).toBe('machine:gpuBox:');
+    expect(addressBar()).toBe('/settings/workspaces/new?machine=gpuBox');
+    expect(page()).toBe('machine:gpuBox:new');
   });
 
   it('Back to Orbit returns to the page Settings was opened from, across pages inside it', async () => {

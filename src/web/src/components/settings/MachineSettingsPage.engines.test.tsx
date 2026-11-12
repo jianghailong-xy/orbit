@@ -5,9 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
-import type { Runner } from '../components/TasksSidePanel';
-import { openRunnerMenu } from '../components/RunnerEngines.test-helpers';
-import { RunnerDetailPage } from './RunnerDetailPage';
+import type { Runner } from '../TasksSidePanel';
+import { openRunnerMenu } from '../RunnerEngines.test-helpers';
+import { MachineSettingsPage } from './MachineSettingsPage';
 
 /**
  * A machine's Engines on its own page: the rows of its card in Infrastructure, so an engine is signed
@@ -16,8 +16,8 @@ import { RunnerDetailPage } from './RunnerDetailPage';
  * the update's report); among them, the CLIs those controls update that nothing signs in.
  */
 
-vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
-const { api } = await import('../api');
+vi.mock('../../api', async (original) => ({ ...(await original<typeof import('../../api')>()), api: vi.fn() }));
+const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
@@ -135,9 +135,9 @@ async function mount(runner: Runner) {
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+        <MemoryRouter initialEntries={[`/settings/machines/${RUNNER_ID}`]}>
           <Routes>
-            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+            <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
             <Route path="*" element={<div data-testid="elsewhere" />} />
           </Routes>
           <Here />
@@ -171,7 +171,7 @@ const button = (label: string, within: ParentNode = document.body) => {
   return found;
 };
 /** An engine's row in Engines, and the buttons on it (not the ones in a panel open under it). */
-const row = (engine: string) => $(`.rd-engines [data-engine="${engine}"]`);
+const row = (engine: string) => $(`.machine-section-engines [data-engine="${engine}"]`);
 const actions = (el: Element) => $$(':scope > .re-act button', el).map((b) => text(b) || b.getAttribute('aria-label'));
 const here = () => text($('[data-testid="here"]'));
 
@@ -184,12 +184,12 @@ describe('an engine on its machine’s page', () => {
 
     await click(button('Sign in', claude));
     // Its sign-in opens under the row, on this page.
-    expect(here()).toBe(`/runners/${RUNNER_ID}`);
+    expect(here()).toBe(`/settings/machines/${RUNNER_ID}`);
     expect(document.querySelector('[data-testid="elsewhere"]')).toBeNull();
     const panel = $('.re-panel', claude);
     await click(button('Sign in to Claude Code', panel));
     expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/login`, body: { engine: 'claude' } }]);
-    expect(here()).toBe(`/runners/${RUNNER_ID}`);
+    expect(here()).toBe(`/settings/machines/${RUNNER_ID}`);
   });
 
   it('installs one the machine lacks, from its row', async () => {
@@ -205,11 +205,11 @@ describe('an engine on its machine’s page', () => {
     const codex = row('codex');
     expect(text($('.re-meta', codex))).toBe('0.160.1 · 2 of 2 accounts available');
     // Folded at first, as on the machine's card: the head speaks for its accounts until it is opened.
-    expect($$('.rd-engines .re-acct')).toEqual([]);
+    expect($$('.machine-section-engines .re-acct')).toEqual([]);
     await click($('.re-grp-toggle', codex));
-    expect($$('.rd-engines .re-acct .re-name-text').map(text)).toEqual(['Default', 'Work']);
+    expect($$('.machine-section-engines .re-acct .re-name-text').map(text)).toEqual(['Default', 'Work']);
 
-    const work = $$('.rd-engines .re-acct')[1];
+    const work = $$('.machine-section-engines .re-acct')[1];
     const menu = await openRunnerMenu(work);
     expect($$('[role="menuitem"]', menu).map(text)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
 
@@ -241,11 +241,19 @@ describe('an engine’s quota on its machine’s page', () => {
 });
 
 describe('the machine’s own controls over its engines', () => {
-  it('re-reads the model lists and updates every CLI, from Engines’ head', async () => {
+  it('re-reads the model lists and updates every CLI, from the header’s ⋯', async () => {
     const { sent } = await mount(machine());
-    expect($$('.rd-engines .rd-section-head button').map(text)).toEqual(['Refresh models', 'Update engines']);
-    await click(button('Refresh models'));
-    await click(button('Update engines'));
+    const menu = async () => {
+      await click($('.machine-more'));
+      return $$('[role="menu"] [role="menuitem"]');
+    };
+    const items = await menu();
+    expect(items.map(text).filter((label) => label === 'Refresh models' || label === 'Update engines')).toEqual([
+      'Update engines',
+      'Refresh models',
+    ]);
+    await click(items.find((item) => text(item) === 'Refresh models')!);
+    await click((await menu()).find((item) => text(item) === 'Update engines')!);
     expect(sent).toEqual([
       { method: 'POST', path: `/runners/${RUNNER_ID}/refresh-models` },
       { method: 'POST', path: `/runners/${RUNNER_ID}/engine-update` },
@@ -263,7 +271,7 @@ describe('the machine’s own controls over its engines', () => {
         }),
       }),
     );
-    const report = $('.rd-engines .rd-engine-relay');
+    const report = $('.machine-section-engines .rd-engine-relay');
     expect(text($('.rd-engine-relay-row', report))).toBe(
       'Claude Code updated 2.1.290 → 2.1.291\nOpenCode — already up to date (1.18.33)',
     );
@@ -276,13 +284,13 @@ describe('the machine’s own controls over its engines', () => {
     await mount(
       machine({ install: relay({ status: 'failed', mode: 'install', engine: 'kimi', message: 'curl: (6) could not resolve host' }) }),
     );
-    expect(document.querySelector('.rd-engines .rd-engine-relay')).toBeNull();
+    expect(document.querySelector('.machine-section-engines .rd-engine-relay')).toBeNull();
     expect(text($('.re-panel.bad .re-panel-row', row('kimi')))).toBe('curl: (6) could not resolve host');
   });
 
   it('lists the CLIs it updates that nothing signs in, after the ones that sign in', async () => {
     await mount(machine());
-    expect($$('.rd-engines .re-row:not(.re-acct)').map((el) => el.dataset.engine)).toEqual([
+    expect($$('.machine-section-engines .re-row:not(.re-acct)').map((el) => el.dataset.engine)).toEqual([
       'claude',
       'codex',
       'antigravity',
@@ -326,15 +334,15 @@ describe('the machine’s own controls over its engines', () => {
       '2.1.226 → 2.1.228: `claude update` was still running after 5m1s and was stopped.',
     );
     expect(text($('.re-panel.warn .re-panel-hint', claude))).toBe('Orbit tries every 30 min.');
-    expect($$('.rd-engines a[href^="/runners/"]')).toEqual([]);
-    expect(text($('.rd-engines > .rd-hint'))).toBe(
+    expect($$('.machine-section-engines a[href^="/runners/"]')).toEqual([]);
+    expect(text($('.machine-section-engines > .rd-hint'))).toBe(
       'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.',
     );
   });
 
   it('never reads a runner that has not reported its engines as an empty machine', async () => {
     await mount(machine({ engines: null }));
-    expect(text($('.rd-engines .re-unreported'))).toMatch(/^This runner hasn't reported its engines yet\./);
-    expect(document.querySelector('.rd-engines > .rd-hint')).toBeNull();
+    expect(text($('.machine-section-engines .re-unreported'))).toMatch(/^This runner hasn't reported its engines yet\./);
+    expect(document.querySelector('.machine-section-engines > .rd-hint')).toBeNull();
   });
 });

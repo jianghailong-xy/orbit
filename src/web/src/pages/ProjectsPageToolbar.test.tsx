@@ -772,7 +772,7 @@ describe('ProjectsPage — starting a project', () => {
 
   it.each([
     { label: 'registration guide', runners: [], expected: '/runners/register' },
-    { label: 'only runner', runners: [{ id: R1 }], expected: `/runners/${encodeId(R1)}` },
+    { label: 'only runner', runners: [{ id: R1 }], expected: `/settings/machines/${encodeId(R1)}` },
     { label: 'machine list', runners: [{ id: R1 }, { id: R2 }], expected: '/infrastructure' },
   ])('uses the DefaultLanding $label when no workspace can open', async ({ runners, expected }) => {
     serve(

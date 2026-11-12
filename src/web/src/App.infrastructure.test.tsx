@@ -10,12 +10,14 @@ import type { Runner } from './components/TasksSidePanel';
 import { encodeId } from './lib/idCodec';
 
 /**
- * The Runners page is Infrastructure, and `/runners` still lands on it with the query it carried: a
+ * The Runners and Providers addresses still land where they meant, with the query they carried: a
  * bookmark, the sidebars of older macOS/iOS clients, and those clients' "Sign in on the web", which
- * opens `/providers?runner=<id>&engine=<engine>` — where that machine's card has to open on that engine,
- * as it did on Providers. The API keys and account pools are Settings' Providers pages
- * (docs/mocks/settings-redesign, board-4): `/providers`, `/admin/providers`, `/infrastructure#keys` and
- * `#pools`, and the pages under `/providers`, land there.
+ * opens `/providers?runner=<id>&engine=<engine>`. A machine is a Settings page now
+ * (/settings/machines/:id, docs/mocks/settings-redesign board-3), so `/runners`, `/infrastructure` and
+ * `/runners/:id` land on one — the named machine's, on the engine named, or the first machine's. The
+ * API keys and account pools are Settings' Providers pages (board-4): `/providers`, `/admin/providers`,
+ * `/infrastructure#keys` and `#pools`, and the pages under `/providers`, land there.
+ * /runners/register keeps its address.
  *
  * Mounted under the real BrowserRouter on jsdom's own history, the way main.tsx mounts it, so what
  * is checked is the address bar the redirect leaves behind.
@@ -25,6 +27,11 @@ vi.mock('./api', async (original) => ({ ...(await original<typeof import('./api'
 const { api } = await import('./api');
 const apiMock = vi.mocked(api);
 
+// Settings' window without its live updates.
+vi.mock('./lib/useControlPlane', async (original) => ({
+  ...(await original<typeof import('./lib/useControlPlane')>()),
+  ControlPlaneProvider: ({ children }: { children: ReactNode }) => children,
+}));
 // The routed page alone: the real shell would need every query it polls answered first.
 vi.mock('./components/AppShell', async () => {
   const { Outlet } = await import('react-router-dom');
@@ -36,7 +43,7 @@ vi.mock('./components/AppShell', async () => {
 });
 // The pages under the old addresses, drawn only to say which page answered.
 vi.mock('./components/RunnerRegisterGuide', () => ({ RunnerRegisterGuide: () => <p>register a machine</p> }));
-vi.mock('./pages/RunnerDetailPage', () => ({ RunnerDetailPage: () => <p>a machine’s page</p> }));
+vi.mock('./pages/settings/GeneralPage', () => ({ GeneralSettingsPage: () => <p>general settings</p> }));
 vi.mock('./pages/ProviderConnectPage', () => ({
   ProviderPickPage: () => <p>pick a vendor</p>,
   ProviderConnectPage: () => <p>a key’s page</p>,
@@ -46,10 +53,6 @@ vi.mock('./components/settings/SettingsProviderPages', async (original) => ({
   ...(await original<typeof import('./components/settings/SettingsProviderPages')>()),
   SettingsVendorPage: () => <p>a vendor’s page</p>,
   SettingsPoolsPage: () => <p>the pools page</p>,
-}));
-vi.mock('./lib/useControlPlane', async (original) => ({
-  ...(await original<typeof import('./lib/useControlPlane')>()),
-  ControlPlaneProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
 // = uuidToBase62(…): the cards' links encode it.
@@ -140,25 +143,27 @@ async function visit(path: string): Promise<void> {
 }
 
 const addressBar = (): string => window.location.pathname + window.location.search + window.location.hash;
-const headings = () => [...container.querySelectorAll('.re-sec-head h3')].map((h3) => h3.textContent);
-const card = (name: string) =>
-  [...container.querySelectorAll<HTMLElement>('.re-runner-card')].find(
-    (el) => el.querySelector('.re-runner')?.textContent === name,
-  )!;
-const isOpen = (name: string) => card(name).querySelector('.re-toggle')?.getAttribute('aria-expanded') === 'true';
 
 /** What the Settings window's right-hand column says: which page answered there. */
 const settingsPage = () => container.querySelector('.settings-column')?.textContent;
+const machineTitle = () => container.querySelector('.machine-title')?.textContent;
+const engineRow = (engine: string) => container.querySelector<HTMLElement>(`.re-row[data-engine="${engine}"]`)!;
 
 describe('the Runners and Providers addresses', () => {
-  it('/runners lands on the Machines & models page: its machines', async () => {
+  it('/runners lands on the first machine’s Settings page, by way of /infrastructure', async () => {
     await visit('/runners');
-    expect(addressBar()).toBe('/infrastructure');
-    expect(container.querySelector('h1')?.textContent).toBe('Machines & models');
-    expect(headings()).toEqual(['Machines']);
-    // Nothing named, so nothing opened for it, and nothing scrolled to.
-    expect([isOpen('Mac Studio'), isOpen('HPC')]).toEqual([false, false]);
+    expect(addressBar()).toBe(`/settings/machines/${MAC}`);
+    expect(machineTitle()).toBe('Mac Studio');
+    // Nothing named, so nothing marked, and nothing scrolled to.
+    expect(container.querySelectorAll('.re-row.focused')).toHaveLength(0);
     expect(scroll).not.toHaveBeenCalled();
+  });
+
+  it('/infrastructure with no machine lands on General', async () => {
+    apiMock.mockImplementation((async () => []) as typeof api);
+    await visit('/infrastructure');
+    expect(addressBar()).toBe('/settings/general');
+    expect(settingsPage()).toBe('general settings');
   });
 
   it.each(['/providers', '/admin/providers', '/infrastructure#keys'])(
@@ -183,12 +188,13 @@ describe('the Runners and Providers addresses', () => {
     expect(settingsPage()).toBe('the pools page');
   });
 
-  it('/providers?runner=<id>&engine=<engine> opens that machine’s card on that engine, as Providers did', async () => {    await visit(`/providers?runner=${MAC}&engine=codex`);
-    expect(addressBar()).toBe(`/infrastructure?runner=${MAC}&engine=codex`);
-    // That machine's card is open, the other one is not.
-    expect([isOpen('Mac Studio'), isOpen('HPC')]).toEqual([true, false]);
+  it('/providers?runner=<id>&engine=<engine> opens that machine’s page on that engine, as Providers did', async () => {
+    await visit(`/providers?runner=${MAC}&engine=codex`);
+    // The engine is taken from the address once its row is marked, so a reload doesn't do it again.
+    expect(addressBar()).toBe(`/settings/machines/${MAC}`);
+    expect(machineTitle()).toBe('Mac Studio');
     // The engine it named is marked, and is the one row brought into view.
-    const row = card('Mac Studio').querySelector<HTMLElement>('.re-row[data-engine="codex"]')!;
+    const row = engineRow('codex');
     expect(row.classList.contains('focused')).toBe(true);
     expect(container.querySelectorAll('.re-row.focused')).toHaveLength(1);
     expect(scroll.mock.calls).toEqual([[{ block: 'center' }]]);
@@ -199,16 +205,27 @@ describe('the Runners and Providers addresses', () => {
 
   it('keeps the query on /runners too, the old spelling of a machine named by its UUID included', async () => {
     await visit(`/runners?runner=0195c0de-0000-7000-8000-0000000000b2&engine=claude`);
-    expect(addressBar()).toBe('/infrastructure?runner=0195c0de-0000-7000-8000-0000000000b2&engine=claude');
-    expect([isOpen('Mac Studio'), isOpen('HPC')]).toEqual([false, true]);
-    const row = card('HPC').querySelector<HTMLElement>('.re-row[data-engine="claude"]')!;
+    expect(addressBar()).toBe(`/settings/machines/${HPC}`);
+    expect(machineTitle()).toBe('HPC');
+    const row = engineRow('claude');
     expect(row.classList.contains('focused')).toBe(true);
     expect(scroll.mock.contexts).toEqual([row]);
   });
 
+  it('/runners/:id is that machine’s Settings page', async () => {
+    await visit(`/runners/${MAC}`);
+    expect(addressBar()).toBe(`/settings/machines/${MAC}`);
+    expect(machineTitle()).toBe('Mac Studio');
+  });
+
+  it('/runners/:id?workspace=<id>, which opened that workspace’s editor, is the workspace’s Settings page', async () => {
+    const workspace = encodeId('0195c0de-0000-7000-8000-0000000000d1');
+    await visit(`/runners/${MAC}?workspace=${workspace}`);
+    expect(addressBar()).toBe(`/settings/workspaces/${workspace}`);
+  });
+
   it.each([
     ['/runners/register', 'register a machine'],
-    [`/runners/${MAC}`, 'a machine’s page'],
   ])('leaves %s where it is', async (path, page) => {
     await visit(path);
     expect(addressBar()).toBe(path);

@@ -622,7 +622,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               label: 'Configure',
               onSelect: () => {
                 onNavigate?.();
-                navigate(`/runners/${encodeId(runnerId)}?workspace=${encodeId(a.id)}`);
+                navigate(`/settings/workspaces/${encodeId(a.id)}`);
               },
             },
             { type: 'separator' as const, key: 'divider' },

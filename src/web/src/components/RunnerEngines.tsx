@@ -1077,7 +1077,7 @@ function EngineRow({
             {!machinePage && (
               <>
                 {' '}
-                <Link to={`/runners/${encodeId(runner.id)}`}>Update this machine’s engines →</Link>
+                <Link to={`/settings/machines/${encodeId(runner.id)}`}>Update this machine’s engines →</Link>
               </>
             )}
           </div>
@@ -1869,7 +1869,7 @@ function RunnerEngineCard({
             CLI on the machine — so its object is the runner, and this is a page about identity
             where everything else is scoped to one (runner, engine) pair. It lives behind this
             link, next to the machine's own version and slots. */}
-        <Link className="re-manage" aria-label={`Details of ${name}`} to={`/runners/${encodeId(runner.id)}`}>
+        <Link className="re-manage" aria-label={`Details of ${name}`} to={`/settings/machines/${encodeId(runner.id)}`}>
           Details →
         </Link>
         <Menu

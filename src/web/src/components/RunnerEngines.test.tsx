@@ -485,7 +485,7 @@ describe('the "On your runners" section', () => {
     // machine, and every other control on this page is scoped to one (runner, engine) pair. It
     // lives on the machine's own page, which this card already links to.
     expect(html).not.toContain('Update engines');
-    expect(html).toContain(`/runners/${encodeId(box.id)}`);
+    expect(html).toContain(`/settings/machines/${encodeId(box.id)}`);
   });
 
   it('does not report an update run it no longer owns', () => {
@@ -626,7 +626,7 @@ describe('the "On your runners" section', () => {
     expect(html).toContain('EACCES');
     // No Retry: the same command will fail the same way. And no shell command either — telling
     // someone to open a terminal for something the UI can do was a symptom of the misplacement.
-    expect(html).toContain(`/runners/${encodeId(box.id)}`);
+    expect(html).toContain(`/settings/machines/${encodeId(box.id)}`);
     expect(html).not.toContain('orbit engine-update');
     expect(html).not.toContain('Retry');
   });

@@ -8047,7 +8047,7 @@ export function WorkspaceView({
       selectedRuntime === AgentProvider.DSH
         ? authErrorHelp.onEditDshKey
         : authErrorHelp.onOpenProviders,
-    openRunner: () => navigate(`/runners/${encodeId(runner.id)}`),
+    openRunner: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
     // The conversation is the other way to answer a refusal, so this only arms it:
     // the reader's own words are the point, and nothing is sent for them.
     chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),

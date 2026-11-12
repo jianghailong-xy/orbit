@@ -366,7 +366,7 @@ export function MachineSetupCard({
               setupUpdating(machine)
             ) : (
               <>
-                {setupNeedsUpdate(machine)} <Link to={`/runners/${encodeId(runner.id)}`}>{SETUP_OPEN_MACHINE}</Link>
+                {setupNeedsUpdate(machine)} <Link to={`/settings/machines/${encodeId(runner.id)}`}>{SETUP_OPEN_MACHINE}</Link>
               </>
             )}
           </div>
@@ -420,7 +420,7 @@ export function MachineSetupCard({
               {credential.step === 'notInstalled' ? (
                 <div className="msc-step-help msc-not-installed">
                   {setupNotInstalled(name, machine)}{' '}
-                  <Link to={`/runners/${encodeId(runner.id)}`}>{SETUP_OPEN_MACHINE}</Link>
+                  <Link to={`/settings/machines/${encodeId(runner.id)}`}>{SETUP_OPEN_MACHINE}</Link>
                 </div>
               ) : (
                 !offline && (
