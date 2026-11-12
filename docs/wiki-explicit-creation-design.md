@@ -1,6 +1,6 @@
 # Orbit Wiki：wiki 只由 owner 建（2026-11-12）
 
-> 状态：设计，等 owner 定 D1–D3。它改的是 `docs/wiki-design.md` §2.1、§12.3.1，`docs/wiki-contract.md` §2.1（`:218`）和
+> 状态：设计，等 owner 定 D2–D4（D1 owner 11-12 定：agent 要建 wiki，至少要 owner 确认，或者是 owner 主动要求的）。它改的是 `docs/wiki-design.md` §2.1、§12.3.1，`docs/wiki-contract.md` §2.1（`:218`）和
 > `plan.jobs.triggers` 里「会话提议时隐式建的 space」这一条；知识模型、审阅模式、维护、System model 都不变。
 >
 > 效果图：`docs/mocks/wiki/46-explicit-creation.html`（第 1–6 部分）。
@@ -12,7 +12,8 @@
 1. **今天，agent 的一次 `wiki_search` 就能建出一个 wiki。** 每个会话的系统提示都让 agent「改文件之前先用 `wiki_search` 搜这个路径」；
    服务端处理任何 wiki 工具调用（search、get、propose、draft、note）时，只要 workspace 有 `repo_url`、这个仓库还没有 space，就当场建一个，
    并排一次 plan 起草。
-2. **以后 wiki 只有 owner 能建。** 入口是 `POST /api/wiki/spaces`（Create wiki 表单）。工具调用不再建 space。
+2. **以后 wiki 只在 owner 点了之后才建。** 两条路：owner 自己从 Create wiki 表单建；或者 agent 发一张「Create a wiki for … ?」
+   确认卡，owner 按下 Create wiki 才建（§3.6）。owner 在会话里说「给这个仓库建个 wiki」，走的也是这张卡。工具调用本身再也不建 space。
 3. **没有 wiki 时，读照常回答，写被拒。** `wiki_search`、`wiki_get` 回答空结果并附一句说明；`wiki_propose`、`wiki_note`、`wiki_draft`
    以 `WIKI_SPACE_UNBOUND` 拒绝，原因写「这个仓库还没有 wiki」。
 4. **补上「建第二个 wiki」的入口。** 今天 `Create wiki…` 只在账号一个 wiki 都没有时出现（`WikiFirstStartCard`），所以后来的四个 wiki
@@ -33,6 +34,7 @@
 | 16:27:30.923 | `wiki_plan_job` `draft`，`trigger = space_created`，`requested_by_user_id = null`，因 `no_maintenance_workspace` 挂起 |
 
 这个会话根本不是在做 `lfs-builder` 的代码，只是想改一个系统文件，照提示先搜了一下。
+隐式建出来的 space 标题取的是 workspace 名（`lfs`），不是仓库名（会话 34w4lEYiiO93X35GjWd0a 独立查到同样的链路）。
 
 ### 1.2 账号里所有 wiki 的来历
 
@@ -85,6 +87,7 @@
 |---|---|---|
 | `POST /api/wiki/spaces`（Create wiki 表单） | 建 space、开维护、起草 plan | 不变 |
 | 会话的 wiki 工具（任何一个） | 仓库没有 space 就建 | **不建** |
+| agent 的确认卡（`request_owner_action`，kind `WIKI_CREATE`，§3.6） | 没有 | owner 按 Create wiki 时，以 owner 的身份走 `createSpace` |
 | 带会话头调 `POST /api/wiki/spaces`（agent 用 PAT 直接调路由；runner 的 CLI 没有这个命令） | 允许，只是不能带 `maintenance` | `WIKI_OWNER_CHANNEL_ONLY`（403），同 review mode 的规矩 |
 | 管理员、导入、维护作业 | 不建 | 不变 |
 
@@ -104,7 +107,7 @@
 |---|---|---|
 | `wiki_search` | `200`，`{ q, semantic: false, hits: [], unavailable: "no_wiki" }` | runner 把它渲染为 `No wiki for this repository yet, so there is nothing to look up. Carry on without it.` |
 | `wiki_get` | `404`，`WIKI_SPACE_UNBOUND` | `This workspace has no wiki.` |
-| `wiki_propose`、`wiki_note`、`wiki_draft` | `409`，`WIKI_SPACE_UNBOUND`（D1 = A） | `No wiki for this repository yet: the owner creates one in Wiki (Create wiki…). Nothing was recorded.` |
+| `wiki_propose`、`wiki_note`、`wiki_draft` | `409`，`WIKI_SPACE_UNBOUND` | `No wiki for this repository yet, so nothing was recorded. Only the owner can start one: if they asked for a wiki here, file request_owner_action with kind WIKI_CREATE; otherwise carry on without it.` |
 
 - 仓库有 space 但在 Trash：搜索同上（空），写入的原因换成 `The wiki for this repository is in Trash: the owner restores it from Trash.`
 - `wiki_search` 回答空结果而不是报错，是因为系统提示要求每次改文件前都搜一次：报错会让 agent 停下来解释，空结果不打扰它。
@@ -125,6 +128,30 @@
 - 账号还没有 wiki 时，侧栏没有 Wiki 组，入口照旧是 `Set up your first wiki` 卡。
 
 D2 问的是要不要再在 workspace 行的 ⋯ 菜单里加 `Create wiki…`。
+
+### 3.6 agent 请 owner 建 wiki：确认卡（D1，owner 11-12 定）
+
+owner 的要求：「Agent 建 space 的时候，至少需要 owner 确认，或者 owner 主动要求去建才创建。」两种情况走同一张卡：
+owner 在会话里要求了，agent 发卡，owner 当场一按；owner 没要求，agent 也只能发卡，不按就什么都不建。agent 没法证明「owner 要求过」，
+所以服务端不放第二条不经确认的路。
+
+**卡就是现有的 owner request**（`src/apiserver/src/owner-requests/`，`request_owner_action`），只给闭集 `OWNER_REQUEST_KINDS` 加一种 `WIKI_CREATE`。
+状态（PENDING → DONE / DECLINED / EXPIRED / WITHDRAWN）、推送、needs-you 计数、到期、撤回、结果作为一轮回到会话，全部沿用。
+
+| | 规则 |
+|---|---|
+| 谁能发 | 所在 workspace 有 `repo_url`、这个仓库没有在用的 wiki 的会话。字段只有 `why`（必填）和 `ifUnanswered`；`title`、仓库都由服务端从会话的 workspace 读出，agent 不写 |
+| 标题 | 服务端写：`Create a wiki for <repo name>?`；锁屏标题 `Create a wiki?` |
+| 卡上写什么 | 仓库（`github.com/…/lfs-builder`）、读哪个 workspace（发卡会话的 workspace，runner 离线时标 `offline`）、维护设置的默认值（`8 runs a day`、`last 14 days`）、agent 的 `why` |
+| 按钮 | `Create wiki`（主按钮，按卡上的值建）· `Change settings…`（打开 Create wiki 表单，预选这个 workspace）· `Not for this repository`（拒绝） |
+| 按下 Create wiki | 只认 owner 的登录（同 `WIKI_OWNER_CHANNEL_ONLY`）；同一个事务里建 space、开维护、起草 plan，卡记 DONE。从表单建也算：这个仓库有了在用的 wiki，所有还在等的 `WIKI_CREATE` 卡读时即为 DONE |
+| 回到会话的那一轮 | DONE：`The owner created the wiki <name>. You can propose to it now.` DECLINED：`The owner does not want a wiki for this repository. Do not ask again.` |
+| 不重复 | 同一仓库同一时刻至多一张在等的卡：再发一次回答已有的那张（`{ created: false }`），不再推送 |
+| 拒绝之后 | 这个仓库再发卡一律被拒：`WIKI_CREATE_DECLINED`，`The owner declined a wiki for this repository on <date>.`（D4）。owner 自己从 New wiki… 建不受影响 |
+| 到期 | 照 owner request 的默认；过期不算拒绝，之后可以再发 |
+| `wiki_search` | 永远不发卡。只有 agent 显式调 `request_owner_action` 才发 |
+
+为什么用确认卡而不是「agent 带着 owner 的话直接建」：服务端读不出 owner 那句话是不是真的；卡多一次点击，换来的是「wiki 只在 owner 点了之后出现」这一条规则不打折。
 
 ### 3.5 系统提示
 
@@ -148,7 +175,9 @@ D2 问的是要不要再在 workspace 行的 ⋯ 菜单里加 `Create wiki…`�
 - pg spec：同一仓库已经有 space 时，工具调用照旧把 workspace 绑进去（写一行），起草作业不新增。
 - pg spec：space 在 Trash 时，search 回答 `unavailable: "wiki_in_trash"`，写入的文字照 §3.3，不建新 space（替换今天的
   「made empty if there is none」用例）。
-- runner-go：`unavailable` 两个值的渲染文字。
+- runner-go：`unavailable` 两个值的渲染文字；`request_owner_action` 的 `WIKI_CREATE` 说明。
+- pg spec（owner requests）：发卡、重复发卡回答同一张、owner 按 Create wiki 建出 space 并记 DONE、从表单建也让卡读成 DONE、拒绝后再发被拒、
+  带会话头按 Create 被拒；发卡和建 space 之间没有 agent 能走的捷径。
 - 三端：侧栏 / 抽屉的 `New wiki…` 行打开 Create wiki 表单；下拉框里已有 wiki 的仓库灰掉并标 `Has a wiki`。
   三端用同一份 `src/shared/src/wiki-start.fixture.json`（加一组「已有 wiki 的仓库」用例）。
 - 文案是英文，`copyLanguage.test.ts` 照旧。
@@ -157,7 +186,7 @@ D2 问的是要不要再在 workspace 行的 ⋯ 菜单里加 `Create wiki…`�
 
 ## 6. 落地（按代价排）
 
-1. **服务端**（apiserver + shared + 契约）：删掉 `bindOnFirstUse` 的建 space 分支，`resolveSpaceForCall` 区分读和写，
+1. **服务端**（apiserver + shared + 契约）：owner request 加 `WIKI_CREATE`（闭集在 TS、Swift、Kotlin 各有一份，三端一起认）和它的 Create 按钮路由；删掉 `bindOnFirstUse` 的建 space 分支，`resolveSpaceForCall` 区分读和写，
    `WikiSearchOutcome.unavailable`，契约 §2.1、`plan.jobs.triggers`、错误文字。单独一次部署就止住了新 wiki 的出现。
 2. **runner-go**：渲染 `unavailable`；旧 runner 读到空 `hits` 也能正常工作，所以不必等 runner 发版。
 3. **web**：侧栏 `New wiki…`、页头切换器、Create wiki 表单里已有 wiki 的仓库灰掉。
@@ -170,6 +199,7 @@ D2 问的是要不要再在 workspace 行的 ⋯ 菜单里加 `Create wiki…`�
 
 | | A（推荐） | B |
 |---|---|---|
-| **D1** 没有 wiki 时，agent 的提议怎么办 | 拒绝，告诉 agent「这个仓库还没有 wiki」，什么都不记 | 照旧建 space，但不起草 plan、不出现在列表里，等 owner 打开（需要新的「隐藏」状态） |
+| ~~D1~~ 已定（owner 11-12） | agent 要建 wiki，必须经 owner 确认：确认卡 `WIKI_CREATE`（§3.6） | — |
 | **D2** 第二个 wiki 的入口 | 侧栏 Wiki 组的 `New wiki…` 行 + 页头切换器 | A，再加 workspace 行 ⋯ 菜单里的 `Create wiki…`（只对有仓库、还没有 wiki 的 workspace 显示） |
+| **D4** 拒绝一张建 wiki 卡之后 | 这个仓库永远不再问，owner 改主意就从 New wiki… 自己建 | 30 天后可以再问 |
 | **D3** `lfs-builder` | 上线后我征得你同意，在生产把它移进 Trash | 你自己从侧栏移 |
