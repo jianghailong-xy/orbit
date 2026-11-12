@@ -2172,23 +2172,36 @@ describe('a turn the owner’s Update Now cut, and the turn Orbit sent to contin
   const continuation =
     '[Orbit] The runner update interrupted this turn; continue. Orbit updated its runner to 0.1.254 at the owner’s request, ' +
     'which stopped this turn; the conversation so far has been restored.\n\nThe interrupted message:\nBackfill the missing shard rows.';
-  const doc = () => new JSDOM(renderToStaticMarkup(
+  const doc = (drop?: number) => new JSDOM(renderToStaticMarkup(
     <Transcript
-      events={[
+      events={([
         { seq: 1, type: 'user', turnId: 't1', ts: '2026-11-12T12:19:00.000Z', payload: { text: 'Backfill the missing shard rows.' } },
         { seq: 2, type: 'assistant', turnId: 't1', ts: '2026-11-12T12:19:10.000Z', payload: { text: 'Step 3 of 8.' } },
+        // The call the cut stopped, and the runner's synthetic result that answers it (interrupted_tool_calls.go).
+        { seq: 21, type: 'tool_use', turnId: 't1', ts: '2026-11-12T12:20:00.000Z',
+          payload: { id: 'exec-cut', name: 'Bash', input: { command: 'sleep 25; echo step 4 >> steps.log' } } },
+        { seq: 22, type: 'tool_result', turnId: 't1', ts: '2026-11-12T12:20:26.000Z',
+          payload: { toolUseId: 'exec-cut', isError: true, interrupted: 'runner_update',
+            content: '[Tool call interrupted: the runner update stopped this turn before this call\'s result was recorded, so its outcome is unknown.]' } },
         { seq: 3, type: 'interrupt', turnId: 't1', ts: '2026-11-12T12:20:26.000Z', payload: { reason: 'runner_update', targetVersion: '0.1.254' } },
         { seq: 4, type: 'user', turnId: 't1', ts: '2026-11-12T12:21:01.000Z',
           payload: { text: continuation + '\n\n<background-jobs>\nnone\n</background-jobs>', controlPlaneNote: '\n\n<background-jobs>\nnone\n</background-jobs>' } },
         { seq: 5, type: 'assistant', turnId: 't1', ts: '2026-11-12T12:21:05.000Z', payload: { text: 'Checking steps.log first.' } },
         { seq: 6, type: 'interrupt', turnId: 't2', ts: '2026-11-12T12:30:00.000Z', payload: { reason: 'runner_update' } },
-      ]}
+      ] as RunEvent[]).filter((ev) => ev.seq !== drop)}
     />,
   )).window.document;
 
   it('says the runner updated, and to which release', () => {
     expect(doc().querySelector('.chat-note[data-seq="3"]')?.textContent).toBe('⊘ interrupted — the runner updated to 0.1.254');
     expect(doc().querySelector('.chat-note[data-seq="6"]')?.textContent).toBe('⊘ interrupted — the runner updated');
+  });
+
+  it('leaves no call the cut stopped drawn as pending: it reads as interrupted', () => {
+    // Folded, the steps line counts the call as settled — failed, since its outcome is unknown.
+    expect(doc().querySelector('.chat-steps-failed')?.textContent).toBe(' · 1 failed');
+    // Control: without the runner's synthetic result the same call settles as nothing at all.
+    expect(doc(22).querySelector('.chat-steps-failed')).toBeNull();
   });
 
   it('draws the continuation as one Orbit line, not the reader’s bubble', () => {

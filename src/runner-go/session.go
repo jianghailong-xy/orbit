@@ -964,8 +964,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// once emitFor exists: the server's next-message guess for an engine without one
 	// (orbit_prompt_suggestion.go), filed against the turn it follows like the engine's own.
 	var requestOrbitSuggestion func(turnID string, at int)
-	// emitThrough buffers one event, filed against turnID, if gate still admits it.
-	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+	// emitOne buffers one event, filed against turnID, if gate still admits it (emitThrough).
+	emitOne := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		// Every owner-request secret this runner holds is scrubbed from every string of the payload before anything
 		// below reads it, the spool included (secret_store.go).
 		payload = runnerSecrets().scrubPayload(payload)
@@ -1014,6 +1014,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Do NOT postEvents inline: emit runs on the stdout-reader goroutine, and a
 		// slow post must never stall draining claude's stdout (backpressure freeze).
 		// The 250ms flush goroutine owns all network sends.
+	}
+	// The tool calls each turn has open, so a runner stop that cuts the turn answers them in the
+	// transcript before its interrupt (interrupted_tool_calls.go): every engine's events pass here.
+	toolCalls := &interruptedToolCalls{}
+	// emitThrough buffers one event, filed against turnID, if gate still admits it — preceded, for a
+	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open.
+	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
+		for _, result := range toolCalls.observe(turnID, eventType, payload) {
+			emitOne(gate, turnID, evToolResult, result)
+		}
+		emitOne(gate, turnID, eventType, payload)
 	}
 	// emitFor files one event against a turn the caller names, instead of against whatever
 	// the attribution cursor happens to hold. Only one thing needs it: a steer's own `user`
