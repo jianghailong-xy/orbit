@@ -509,6 +509,22 @@ public struct RunnerSelfUpdateRequest: Codable, Equatable, Sendable {
     public let requestedAt: String?
 }
 
+/// POST /runners/:id/self-update/postpone (Later, shared `RunnerSelfUpdatePostponeRequest`): until when,
+/// and the reader's zone the server caps it in.
+public struct RunnerSelfUpdatePostponeRequest: Codable, Equatable, Sendable {
+    public let until: String
+    public let timeZone: String?
+    public init(until: String, timeZone: String?) {
+        self.until = until
+        self.timeZone = timeZone
+    }
+}
+
+/// Its answer: the time the runner was asked to wait until, after the cap.
+public struct RunnerSelfUpdatePostponeResponse: Codable, Equatable, Sendable {
+    public let until: String
+}
+
 /// POST /runners/:id/region-check (Check again, docs/claude-region-check-contract.md §7) answers when
 /// the check was asked for (shared `ClaudeRegionCheckRequest`); the runner checks once per value.
 public struct ClaudeRegionCheckRequest: Codable, Equatable, Sendable {

@@ -1255,6 +1255,11 @@ export interface RunnerHeartbeatResponse {
    *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
    *  Absent from an older server, to which such a runner sends no claim while it drains. */
   drainScopedClaims?: boolean;
+  /** The owner's Later (ISO time): stop draining for the waiting release now and put it off until
+   *  then, when it waits for idle again under a fresh deferral limit. Set once per request and
+   *  cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
+   *  SELF_UPDATE_POSTPONE_V1 is asked. */
+  postponeSelfUpdateUntil?: string;
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1331,6 +1336,23 @@ export interface RunnerHeartbeatResponse {
   secretGrants?: Array<{ id: string; expiresAt: string }>;
   /** Grants of this runner being removed: remove the copy if held, then confirm with /removed either way. */
   secretGrantsRemoving?: string[];
+}
+
+/** Declared by a runner that honours the owner's Later (`postponeSelfUpdateUntil`,
+ *  docs/runner-update-drain-design.md §4). A runner without it is refused a postpone as too old.
+ *  runner-go asserts the same string. */
+export const SELF_UPDATE_POSTPONE_V1 = 'self-update-postpone/v1';
+
+/** The body of POST /runners/:id/self-update/postpone. `timeZone` is the owner's IANA zone, which
+ *  `until` is capped in: at most 09:00 tomorrow there (D2). */
+export interface RunnerSelfUpdatePostponeRequest {
+  until: string;
+  timeZone?: string;
+}
+
+/** Its answer: the time the runner is asked to wait until, after the cap. */
+export interface RunnerSelfUpdatePostponeResponse {
+  until: string;
 }
 
 // ── Claude region check (docs/claude-region-check-contract.md) ──

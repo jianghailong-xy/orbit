@@ -376,6 +376,9 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
     var choosingReserve by remember { mutableStateOf(false) }
     var confirmingRotate by remember { mutableStateOf(false) }
     var confirmingRemove by remember { mutableStateOf(false) }
+    // The postponed Update card's Update Now… asks first.
+    var confirmingUpdateNow by remember { mutableStateOf(false) }
+    val updateVersion = runner.obj("selfUpdate")?.str("targetVersion")
     var rotatedToken by remember(id) { mutableStateOf<String?>(null) }
     fun show(failure: String?) { failure?.let(notice::show) }
     fun keepFree(mb: Int?) {
@@ -392,7 +395,17 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             RunnerHead(runner, now)
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
-            RunnerPage.updateCard(runner, now)?.let { UpdateCardView(it) { session -> open(OrbitRoute(Destination.SESSION, session, origin = Origin.LINK)) } }
+            RunnerPage.updateCard(runner, now)?.let { card ->
+                val laterActions: (@Composable () -> Unit)? = if (card.phase == "draining" || card.phase == "postponed") { {
+                    RunnerUpdateLaterButton(updateVersion, RunnerPage.displayName(runner), { until ->
+                        model.press { api.post(RunnerUpdateLater.path(id).joinToString("/"), RunnerUpdateLater.body(until)) }
+                    }, change = card.phase == "postponed")
+                    if (card.phase == "postponed") OutlinedButton({ confirmingUpdateNow = true }, Modifier.testTag("runner-update-now")) {
+                        Text(RunnerUpdateLater.UPDATE_NOW)
+                    }
+                } } else null
+                UpdateCardView(card, laterActions) { session -> open(OrbitRoute(Destination.SESSION, session, origin = Origin.LINK)) }
+            }
             if (items.isNotEmpty()) FormSection(RunnerCopy.NEEDS_ATTENTION) {
                 items.forEachIndexed { index, item ->
                     if (index > 0) HorizontalDivider()
@@ -491,6 +504,10 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 catch (e: CancellationException) { throw e } catch (e: Exception) { notice.show(personalFailure(e)) }
             } }) { Text("Rotate Token", color = Ink.red) }
         }, dismissButton = { TextButton(onClick = { confirmingRotate = false }) { Text("Cancel") } })
+    if (confirmingUpdateNow) AlertDialog(onDismissRequest = { confirmingUpdateNow = false },
+        title = { Text(RunnerUpdateLater.updateNowConfirmTitle(updateVersion ?: "")) }, text = { Text(RunnerUpdateLater.UPDATE_NOW_CONFIRM_BODY) },
+        confirmButton = { TextButton(onClick = { confirmingUpdateNow = false; updateRunner() }) { Text(RunnerUpdateLater.UPDATE_NOW_CONFIRM) } },
+        dismissButton = { TextButton(onClick = { confirmingUpdateNow = false }) { Text("Cancel") } })
     if (confirmingRemove) AlertDialog(onDismissRequest = { confirmingRemove = false }, title = { Text("Remove “$name”?") },
         text = { Text(RunnerCopy.REMOVE_FOOTER) }, confirmButton = {
             TextButton(onClick = { confirmingRemove = false; scope.launch {
@@ -1505,9 +1522,10 @@ internal fun AddRunnerDialog(api: ManagementApi, onDismiss: () -> Unit, open: (S
 }
 
 /** The Update card (board 4) above Needs Attention: title and phase tag, what happens, and while draining the turns it waits for
- * with a bar. Later ▾ and Update Now… join it in their own tasks. */
+ * with a bar. [actions]: Later… while draining, Change… and Update Now… once postponed (Update Now… while draining comes with its
+ * own task). */
 @Composable
-internal fun UpdateCardView(card: RunnerPage.UpdateCard, openSession: (String) -> Unit = {}) {
+internal fun UpdateCardView(card: RunnerPage.UpdateCard, actions: (@Composable () -> Unit)? = null, openSession: (String) -> Unit = {}) {
     val tint = if (card.warn) Ink.amber else Ink.muted
     Surface(Modifier.fillMaxWidth().padding(top = 16.dp).testTag("runner-update-card"), shape = RoundedCornerShape(12.dp),
         color = if (card.warn) Ink.amber.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1537,6 +1555,7 @@ internal fun UpdateCardView(card: RunnerPage.UpdateCard, openSession: (String) -
                     }
                 }
             }
+            actions?.let { Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { it() } }
         }
     }
 }

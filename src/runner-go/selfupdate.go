@@ -278,6 +278,11 @@ const (
 	selfUpdatePhasePostponed = "postponed"
 )
 
+// selfUpdatePostponeCapabilityV1 declares that this runner honours the owner's Later
+// (HeartbeatResponse.PostponeSelfUpdateUntil): @orbit/shared's SELF_UPDATE_POSTPONE_V1. The control
+// plane refuses a postpone for a runner that does not declare it, which would drop it unread.
+const selfUpdatePostponeCapabilityV1 = "self-update-postpone/v1"
+
 // selfUpdatePhase is the part of the report about a waiting release; the zero value is none.
 type selfUpdatePhase struct {
 	phase, targetVersion                          string

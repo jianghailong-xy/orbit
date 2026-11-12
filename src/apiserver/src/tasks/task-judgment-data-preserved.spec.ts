@@ -2929,7 +2929,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0555 adds project.non_code_reason, the confirmed wording on project_criterion_confirmation
       // (backfilled only on rows whose revision is still the criterion's) and two partial indexes on
       // activity. No completion ledger, DONE fence, preserved trigger or function is changed.
-      '0555_project_done_card_records'],
+      '0555_project_done_card_records',
+      // 0571 adds one nullable TIMESTAMP(3) `self_update_postpone_until` on `runner` (no default, catalog-only); no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0571_runner_self_update_postpone'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

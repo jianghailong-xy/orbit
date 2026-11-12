@@ -143,6 +143,7 @@ class RunnerUpdateCardTest {
             if (screens.isEmpty() && candidate.isFile) screens = candidate.readText()
             dir = dir?.parentFile
         }
-        assertTrue(screens.contains("RunnerPage.updateCard(runner, now)?.let { UpdateCardView(it) { session -> open(OrbitRoute(Destination.SESSION, session, origin = Origin.LINK)) } }"))
+        assertTrue(screens.contains("RunnerPage.updateCard(runner, now)?.let { card ->"))
+        assertTrue(screens.contains("UpdateCardView(card, laterActions) { session -> open(OrbitRoute(Destination.SESSION, session, origin = Origin.LINK)) }"))
     }
 }

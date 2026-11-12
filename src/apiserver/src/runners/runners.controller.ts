@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import type { RunnerSelfUpdatePostponeRequest } from '@orbit/shared';
 import { isLoginEngine } from '../common/runner-engines';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -261,6 +262,18 @@ export class RunnersController {
   @Post(':id/self-update')
   requestSelfUpdate(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.requestSelfUpdate(user.userId, id);
+  }
+
+  // Later: end this runner's drain for its update now and put the release off until `until`, at most
+  // 09:00 tomorrow in the owner's zone. Owner-scoped like Update Runner Now, and recorded.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/self-update/postpone')
+  postponeSelfUpdate(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: RunnerSelfUpdatePostponeRequest,
+  ) {
+    return this.runners.postponeSelfUpdate(user.userId, id, body);
   }
 
   // Check again: have this machine check where its Claude connection to Anthropic comes out now

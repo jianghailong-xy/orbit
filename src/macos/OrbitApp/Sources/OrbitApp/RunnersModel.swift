@@ -131,6 +131,13 @@ final class RunnersModel {
         await press { _ = try await self.api.requestRunnerSelfUpdate(id) }
     }
 
+    /// Later: the machine ends its drain for the waiting release now and puts it off until `until`, in
+    /// the reader's zone (the server caps it at 09:00 tomorrow). Nil once taken; else why not.
+    @discardableResult
+    func postponeUpdate(_ id: String, until: Date) async -> String? {
+        await press { _ = try await self.api.postponeRunnerSelfUpdate(id, until: until) }
+    }
+
     /// The runners whose Check again is on its way (`checkRegion`): their presses hold until the check
     /// they asked for is answered.
     private(set) var regionChecking: Set<String> = []

@@ -489,6 +489,8 @@ struct RunnerDetailContent: View {
     @State private var choosingReserve = false
     @State private var confirmingRotate = false
     @State private var confirmingRemove = false
+    /// The postponed Update card's Update Now… asks first.
+    @State private var confirmingUpdateNow = false
     /// The token a rotation just minted: shown on this page once, and gone with it.
     @State private var rotatedToken: String?
     @State private var notice: String?
@@ -591,7 +593,8 @@ struct RunnerDetailContent: View {
     }
 
     /// The Update card (board 4): a release this runner is behind, in the phase it reports — amber
-    /// while it holds work back or restarts. Later ▾ and Update Now… join it in their own tasks.
+    /// while it holds work back or restarts. Later ▾ while draining; Change ▾ and Update Now… once
+    /// postponed (Update Now… while draining comes with its own task).
     @ViewBuilder private func updateSection(_ card: RunnerPageFormat.UpdateCard) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
@@ -637,6 +640,25 @@ struct RunnerDetailContent: View {
                     .contentShape(Rectangle())
                 }
                 .runnerRowButtonStyle()
+            }
+            if card.phase == "draining" || card.phase == "postponed" {
+                HStack(spacing: 8) {
+                    RunnerUpdateLaterControl(runnerID: runner.id, version: runner.selfUpdate?.targetVersion,
+                                             machine: RunnerPageFormat.displayName(runner),
+                                             change: card.phase == "postponed")
+                    if card.phase == "postponed" {
+                        Button(RunnerPageCopy.RUNNER_UPDATE_NOW) { confirmingUpdateNow = true }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("runner-update-now")
+                    }
+                }
+                .orbitConfirmation(RunnerPageCopy.runnerUpdateNowConfirmTitle(version: runner.selfUpdate?.targetVersion ?? ""),
+                                   isPresented: $confirmingUpdateNow) {
+                    Button(RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM) { updateRunner() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM_BODY)
+                }
             }
         }
     }

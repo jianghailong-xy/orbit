@@ -20,7 +20,8 @@ import type {
   SlashCommandInfo,
   RunnerUpdateTurn,
 } from '@orbit/shared';
-import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS } from '@orbit/shared';
+import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS, SELF_UPDATE_POSTPONE_V1 } from '@orbit/shared';
+import type { RunnerSelfUpdatePostponeRequest, RunnerSelfUpdatePostponeResponse } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
@@ -31,6 +32,7 @@ import {
 } from '../common/antigravity-readiness';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
+import { postponeUntil } from './self-update-postpone';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -67,6 +69,9 @@ const FINISHED_SESSION_STATUSES = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunSta
 // cannot brute-force another user's pending enrollment code online.
 const DEVICE_LOOKUP_WINDOW_MS = 5 * 60_000;
 const DEVICE_LOOKUP_MAX = 20;
+
+/** The activity row a Later writes (RunnersService.postponeSelfUpdate): who put which runner's update off, until when. */
+export const RUNNER_SELF_UPDATE_POSTPONED_ACTIVITY = 'runner.self_update.postponed';
 
 @Injectable()
 export class RunnersService {
@@ -1078,6 +1083,59 @@ export class RunnersService {
     await this.prisma.runner.update({ where: { id }, data: { selfUpdateRequestedAt: requestedAt } });
     this.realtime?.notifyRunnerWake(id);
     return { requestedAt: requestedAt.toISOString() };
+  }
+
+  /**
+   * Later (docs/runner-update-drain-design.md §4): put the release this runner waits to install off
+   * until `until`. The runner ends its drain at once and takes work again, and at `until` waits for
+   * idle again under a fresh one-hour limit. Like Update Runner Now, the request is one timestamp the
+   * next heartbeat hands over (`postponeSelfUpdateUntil`) and clears, and the runner's report —
+   * phase `postponed` with `postponedUntil` — is the answer.
+   *
+   * `until` is capped at 09:00 tomorrow in the owner's zone (D2), which the client names. Owner only;
+   * each request is recorded as a `runner.self_update.postponed` activity before it is stored. A
+   * runner that does not declare self-update-postpone/v1 would drop it unread, and is refused with
+   * Update Runner Now's "too old" sentence; one with no release waiting has nothing to postpone.
+   */
+  async postponeSelfUpdate(
+    ownerId: string,
+    id: string,
+    body: RunnerSelfUpdatePostponeRequest | undefined,
+  ): Promise<RunnerSelfUpdatePostponeResponse> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only postpone its update while connected');
+    }
+    if (!runner.capabilities.includes(SELF_UPDATE_POSTPONE_V1)) {
+      throw new BadRequestException('Runner is too old to update on request — it reports no self-update state');
+    }
+    const report = sanitizeRunnerSelfUpdate(runner.selfUpdate);
+    const phase = report?.phase;
+    if (phase !== 'available' && phase !== 'draining' && phase !== 'postponed') {
+      throw new BadRequestException('No update is waiting on this runner — there is nothing to postpone');
+    }
+    const now = new Date();
+    const { until, capped } = postponeUntil(now, body);
+    await this.prisma.activity.create({
+      data: {
+        actorId: ownerId,
+        type: RUNNER_SELF_UPDATE_POSTPONED_ACTIVITY,
+        payload: {
+          runnerId: id,
+          until: until.toISOString(),
+          asked: typeof body?.until === 'string' ? body.until : null,
+          timeZone: typeof body?.timeZone === 'string' ? body.timeZone : null,
+          capped,
+          phase,
+          targetVersion: report?.targetVersion ?? null,
+        },
+        credentialKind: 'LOGIN',
+      },
+    });
+    await this.prisma.runner.update({ where: { id }, data: { selfUpdatePostponeUntil: until } });
+    this.realtime?.notifyRunnerWake(id);
+    return { until: until.toISOString() };
   }
 
   /**

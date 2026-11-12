@@ -542,6 +542,31 @@ export const RUNNER_UPDATE_RESTARTING_BODY = 'Usually under a minute.';
 export function runnerUpdatePostponedTitle(version: string, until: string): string {
   return `${version} postponed until ${until}`;
 }
+// Later ▾ (board 3 ⑦ on the web; board 5's action sheet on iOS and Android)
+export const RUNNER_UPDATE_LATER = 'Later';
+/** The postponed card's Later, which picks a new time. */
+export const RUNNER_UPDATE_CHANGE = 'Change';
+export const RUNNER_UPDATE_LATER_HOUR = 'Postpone 1 hour';
+export const RUNNER_UPDATE_LATER_TONIGHT = 'Postpone until tonight';
+export const RUNNER_UPDATE_LATER_TOMORROW = 'Postpone until tomorrow';
+/** Beside Postpone 1 hour: `until 12:57`. */
+export function runnerUpdateLaterUntil(clock: string): string {
+  return `until ${clock}`;
+}
+/** The toast once the server took it: `Update postponed until 02:00 — the runner takes work again.` */
+export function runnerUpdatePostponedToast(clock: string): string {
+  return `Update postponed until ${clock} — the runner takes work again.`;
+}
+export const RUNNER_UPDATE_POSTPONE_FAILED = 'Couldn’t postpone the update';
+/** The postponed card's Update Now…: ends the postponement through Update Runner Now. */
+export const RUNNER_UPDATE_NOW = 'Update Now…';
+export function runnerUpdateNowConfirmTitle(version: string): string {
+  return `Update to ${version} now?`;
+}
+export const RUNNER_UPDATE_NOW_CONFIRM_BODY =
+  'The postponement ends. It installs as soon as no turn is running; if turns keep running for an hour, it stops taking new work so they can finish.';
+export const RUNNER_UPDATE_NOW_CONFIRM = 'Update Now';
+
 export function runnerUpdatePostponedBody(until: string): string {
   return `Taking work as usual. At ${until} it waits for the turns in flight again, for up to an hour.`;
 }

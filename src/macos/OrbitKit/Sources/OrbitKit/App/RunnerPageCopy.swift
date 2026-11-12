@@ -151,6 +151,21 @@ public enum RunnerPageCopy {
     public static func runnerUpdatePostponedTitle(version: String, until: String) -> String {
         "\(version) postponed until \(until)"
     }
+    public static let RUNNER_UPDATE_LATER = "Later"
+    public static let RUNNER_UPDATE_CHANGE = "Change"
+    public static let RUNNER_UPDATE_LATER_HOUR = "Postpone 1 hour"
+    public static let RUNNER_UPDATE_LATER_TONIGHT = "Postpone until tonight"
+    public static let RUNNER_UPDATE_LATER_TOMORROW = "Postpone until tomorrow"
+    public static func runnerUpdateLaterUntil(clock: String) -> String { "until \(clock)" }
+    public static func runnerUpdatePostponedToast(clock: String) -> String {
+        "Update postponed until \(clock) — the runner takes work again."
+    }
+    public static let RUNNER_UPDATE_POSTPONE_FAILED = "Couldn’t postpone the update"
+    public static let RUNNER_UPDATE_NOW = "Update Now…"
+    public static func runnerUpdateNowConfirmTitle(version: String) -> String { "Update to \(version) now?" }
+    public static let RUNNER_UPDATE_NOW_CONFIRM_BODY =
+        "The postponement ends. It installs as soon as no turn is running; if turns keep running for an hour, it stops taking new work so they can finish."
+    public static let RUNNER_UPDATE_NOW_CONFIRM = "Update Now"
     public static func runnerUpdatePostponedBody(until: String) -> String {
         "Taking work as usual. At \(until) it waits for the turns in flight again, for up to an hour."
     }

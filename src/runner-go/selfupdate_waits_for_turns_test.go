@@ -203,9 +203,9 @@ func TestTheRunLoopOnlyUpdatesThroughTheTurnGate(t *testing.T) {
 	}
 	body := string(src)
 	body = body[strings.Index(body, "func runLoop("):]
-	gated := strings.Count(body, "updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit, selfUpdateQuietWindow)")
+	gated := strings.Count(body, "newSelfUpdateGate(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit, selfUpdateQuietWindow)")
 	if gated != 1 || strings.Count(body, "availableSelfUpdate") != gated {
-		t.Fatal("runLoop checks for a release without updateWhenNoTurnInFlight: an update can stop the runner mid-turn")
+		t.Fatal("runLoop checks for a release without the turn gate (newSelfUpdateGate): an update can stop the runner mid-turn")
 	}
 }
 

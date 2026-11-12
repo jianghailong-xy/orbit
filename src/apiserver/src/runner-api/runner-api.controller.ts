@@ -2451,6 +2451,7 @@ export class RunnerApiController {
     let dirProbeRequest: RunnerHeartbeatResponse['dirProbeRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
     let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
+    let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
@@ -2510,6 +2511,7 @@ export class RunnerApiController {
       refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
       // The same kind of request, kept on the row the same way, so it goes last beside it.
       checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
+      postponeSelfUpdateUntil = await this.drainSelfUpdatePostpone(runner.id);
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
     } catch {
@@ -2568,6 +2570,7 @@ export class RunnerApiController {
       // To a draining beat: this server takes a claim scoped to named sessions (GET sessions/claim?drainScope=),
       // which is what a runner draining for an update claims with. A runner that sees no such word sends none.
       ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
+      postponeSelfUpdateUntil,
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -2936,6 +2939,23 @@ export class RunnerApiController {
       data: { selfUpdateRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * The owner's Later (RunnersService.postponeSelfUpdate): the time this runner is to put its waiting
+   * release off until, handed to one beat. Claimed like drainSelfUpdateRequest — the clear is the claim,
+   * predicated on the time read, so a second Later written between the read and the clear stays for
+   * the next beat — and the runner's `postponed` report is the answer.
+   */
+  private async drainSelfUpdatePostpone(runnerId: string): Promise<string | undefined> {
+    const row = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { selfUpdatePostponeUntil: true } });
+    const until = row?.selfUpdatePostponeUntil;
+    if (!until) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, selfUpdatePostponeUntil: until },
+      data: { selfUpdatePostponeUntil: null },
+    });
+    return claimed.count > 0 ? until.toISOString() : undefined;
   }
 
   /**

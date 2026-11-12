@@ -138,89 +138,169 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // An automatic update also waits for the runner to be quiet (quiet, selfUpdateQuietWindow in
 // runLoop): no turn ended and nothing claimed within it. Neither the drain nor the owner's Update
 // Runner Now (sessionPool.askForUpdateNow) waits for that: past the limit the drain has already
-// stopped new work, and the owner asked for the update now. The quiet window counts toward the
-// limit like a turn in flight does, so it cannot put an update off for longer than limit.
+// stopped new work, and the owner asked for the update now. Nor does a release the owner postponed
+// (Later) once its time comes: the owner chose that time. The quiet window counts toward the limit
+// like a turn in flight does, so it cannot put an update off for longer than limit.
 func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit, quiet time.Duration) selfUpdateChecker {
-	var mu sync.Mutex
-	var deferredSince, drainingSince time.Time
-	var draining string
-	var turnsAtDrain int
-	return func(ctx context.Context, server string) (string, bool) {
-		mu.Lock()
-		defer mu.Unlock()
-		remote := draining
-		if remote == "" {
-			var ok bool
-			if remote, ok = check(ctx, server); !ok {
-				pool.forgetUpdateAskedByOwner()
-				return "", false
-			}
-		}
-		window := quiet
-		if draining != "" || pool.updateIsAskedByOwner() {
-			window = 0
-		}
-		ops := operations()
-		turns := 0
-		var quietLeft time.Duration
-		if ops == 0 {
-			turns, quietLeft = pool.closeForUpdate(window)
-		}
-		if ops == 0 && turns == 0 && quietLeft == 0 {
-			// The heartbeat the check rides says so before the stop: the Update card's Restarting.
-			noteSelfUpdatePhase(selfUpdateStateEnabled, "", selfUpdatePhase{
-				phase: selfUpdatePhaseRestarting, targetVersion: remote,
-				availableSince: deferredSince, drainingSince: drainingSince,
-			})
-			return remote, true
-		}
-		if ops > 0 {
-			// The pool was not asked (closeForUpdate is for an update about to be taken); the card
-			// still counts the turns.
-			turns = pool.turnsInFlight()
-		}
-		now := pool.clock.Now()
-		if deferredSince.IsZero() {
-			deferredSince = now
-		}
-		busy := fmt.Sprintf("%d turn(s)", turns)
-		if ops > 0 {
-			busy = fmt.Sprintf("%d heartbeat operation(s)", ops)
-		}
-		if quietLeft > 0 {
-			logln(fmt.Sprintf("orbit %s update available; deferred — a turn ended or was claimed in the last %s, checking again in %s",
-				remote, quiet, interval))
-		}
-		if draining == "" && now.Sub(deferredSince) >= limit {
-			draining = remote
-			drainingSince = now
-			turnsAtDrain = turns
-			pool.drainForUpdate()
-			logln(fmt.Sprintf("orbit %s update deferred for %s; taking no new work until the %s in flight end, then updating",
-				remote, now.Sub(deferredSince).Round(time.Second), busy))
-		}
-		if draining != "" {
-			turnsAtDrain = max(turnsAtDrain, turns)
-			noteSelfUpdatePhase(selfUpdateStateWaitingForIdle,
-				fmt.Sprintf("deferred for %s, the limit; taking no new work until the %s in flight end",
-					now.Sub(deferredSince).Round(time.Second), busy),
-				selfUpdatePhase{
-					phase: selfUpdatePhaseDraining, targetVersion: remote,
-					availableSince: deferredSince, drainingSince: drainingSince,
-					turnsInFlight: turns, turnsAtDrain: turnsAtDrain,
-				})
+	return newSelfUpdateGate(check, pool, operations, interval, limit, quiet).take
+}
+
+// selfUpdateGate is updateWhenNoTurnInFlight's state, which the owner's Later changes too
+// (postpone, docs/runner-update-drain-design.md §4).
+type selfUpdateGate struct {
+	check                  selfUpdateChecker
+	pool                   *sessionPool
+	operations             func() int
+	interval, limit, quiet time.Duration
+
+	mu                                           sync.Mutex
+	deferredSince, drainingSince, postponedUntil time.Time
+	// draining is the release the pool drains for; target the last release a check found waiting.
+	draining, target string
+	turnsAtDrain     int
+	// restarting: a check has handed the release to the stop; a Later then comes too late.
+	restarting bool
+	// cameDue: a postponement ran out, so this release waits for the turns in flight only, not for
+	// the quiet window, until it is taken or postponed again.
+	cameDue bool
+}
+
+func newSelfUpdateGate(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit, quiet time.Duration) *selfUpdateGate {
+	return &selfUpdateGate{check: check, pool: pool, operations: operations, interval: interval, limit: limit, quiet: quiet}
+}
+
+// take is updateWhenNoTurnInFlight's check. While the owner's postponement lasts it reports the
+// release postponed and asks nothing; the first check at or after postponedUntil re-arms it under
+// a fresh deferral limit, measured from then: idle, the release installs (closeForUpdate(0), no
+// quiet window); busy, it waits for idle again, and drains only once limit has passed since.
+func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	now := g.pool.clock.Now()
+	if !g.postponedUntil.IsZero() {
+		if now.Before(g.postponedUntil) {
+			g.notePostponedLocked()
 			return "", false
 		}
-		if quietLeft == 0 {
-			logln(fmt.Sprintf("orbit %s update available; deferred — %s in flight, checking again in %s",
-				remote, busy, interval))
+		logln(fmt.Sprintf("orbit %s update postponed until %s; waiting for idle again, under a fresh %s limit",
+			g.target, g.postponedUntil.Format(time.RFC3339), g.limit))
+		g.postponedUntil = time.Time{}
+		g.deferredSince = now
+		g.cameDue = true
+	}
+	remote := g.draining
+	if remote == "" {
+		var ok bool
+		if remote, ok = g.check(ctx, server); !ok {
+			g.pool.forgetUpdateAskedByOwner()
+			g.target = ""
+			return "", false
 		}
-		noteSelfUpdatePhase(selfUpdateStateWaitingForIdle, "", selfUpdatePhase{
-			phase: selfUpdatePhaseAvailable, targetVersion: remote, availableSince: deferredSince,
-			turnsInFlight: turns,
+	}
+	g.target = remote
+	window := g.quiet
+	if g.draining != "" || g.cameDue || g.pool.updateIsAskedByOwner() {
+		window = 0
+	}
+	ops := g.operations()
+	turns := 0
+	var quietLeft time.Duration
+	if ops == 0 {
+		turns, quietLeft = g.pool.closeForUpdate(window)
+	}
+	if ops == 0 && turns == 0 && quietLeft == 0 {
+		g.restarting = true
+		// The heartbeat the check rides says so before the stop: the Update card's Restarting.
+		noteSelfUpdatePhase(selfUpdateStateEnabled, "", selfUpdatePhase{
+			phase: selfUpdatePhaseRestarting, targetVersion: remote,
+			availableSince: g.deferredSince, drainingSince: g.drainingSince,
 		})
+		return remote, true
+	}
+	if ops > 0 {
+		// The pool was not asked (closeForUpdate is for an update about to be taken); the card
+		// still counts the turns.
+		turns = g.pool.turnsInFlight()
+	}
+	if g.deferredSince.IsZero() {
+		g.deferredSince = now
+	}
+	busy := fmt.Sprintf("%d turn(s)", turns)
+	if ops > 0 {
+		busy = fmt.Sprintf("%d heartbeat operation(s)", ops)
+	}
+	if quietLeft > 0 {
+		logln(fmt.Sprintf("orbit %s update available; deferred — a turn ended or was claimed in the last %s, checking again in %s",
+			remote, g.quiet, g.interval))
+	}
+	if g.draining == "" && now.Sub(g.deferredSince) >= g.limit {
+		g.draining = remote
+		g.drainingSince = now
+		g.turnsAtDrain = turns
+		g.pool.drainForUpdate()
+		logln(fmt.Sprintf("orbit %s update deferred for %s; taking no new work until the %s in flight end, then updating",
+			remote, now.Sub(g.deferredSince).Round(time.Second), busy))
+	}
+	if g.draining != "" {
+		g.turnsAtDrain = max(g.turnsAtDrain, turns)
+		noteSelfUpdatePhase(selfUpdateStateWaitingForIdle,
+			fmt.Sprintf("deferred for %s, the limit; taking no new work until the %s in flight end",
+				now.Sub(g.deferredSince).Round(time.Second), busy),
+			selfUpdatePhase{
+				phase: selfUpdatePhaseDraining, targetVersion: remote,
+				availableSince: g.deferredSince, drainingSince: g.drainingSince,
+				turnsInFlight: turns, turnsAtDrain: g.turnsAtDrain,
+			})
 		return "", false
 	}
+	if quietLeft == 0 {
+		logln(fmt.Sprintf("orbit %s update available; deferred — %s in flight, checking again in %s",
+			remote, busy, g.interval))
+	}
+	noteSelfUpdatePhase(selfUpdateStateWaitingForIdle, "", selfUpdatePhase{
+		phase: selfUpdatePhaseAvailable, targetVersion: remote, availableSince: g.deferredSince,
+		turnsInFlight: turns,
+	})
+	return "", false
+}
+
+// postpone is the owner's Later (HeartbeatResponse.PostponeSelfUpdateUntil): the drain ends at
+// once — the pool claims again and the follow-ups it held start (endDrainForUpdate) — and the
+// deferral clock stops until until, when take re-arms it. It reports the release postponed. With
+// no release waiting, or one already handed to the stop, there is nothing to put off.
+func (g *selfUpdateGate) postpone(until time.Time) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.target == "" || g.restarting {
+		logln("runner update postpone requested by the control plane; no update is waiting to postpone")
+		return false
+	}
+	wasDraining := g.draining != ""
+	g.draining, g.drainingSince, g.turnsAtDrain = "", time.Time{}, 0
+	g.postponedUntil, g.cameDue = until, false
+	g.pool.endDrainForUpdate()
+	g.notePostponedLocked()
+	logln(fmt.Sprintf("orbit %s update postponed by the owner until %s (was draining: %t); taking work again",
+		g.target, until.Format(time.RFC3339), wasDraining))
+	return true
+}
+
+// endPostponement is the owner's Update Runner Now while the release is postponed: the
+// postponement ends now, and the check that request asks for re-arms the release as it would at
+// postponedUntil — idle, it installs; busy, it waits for idle under a fresh limit.
+func (g *selfUpdateGate) endPostponement() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if now := g.pool.clock.Now(); !g.postponedUntil.IsZero() && now.Before(g.postponedUntil) {
+		g.postponedUntil = now
+	}
+}
+
+func (g *selfUpdateGate) notePostponedLocked() {
+	noteSelfUpdatePhase(selfUpdateStateWaitingForIdle, "", selfUpdatePhase{
+		phase: selfUpdatePhasePostponed, targetVersion: g.target,
+		availableSince: g.deferredSince, postponedUntil: g.postponedUntil,
+	})
 }
 
 // drainClaimScope is what a pool with no capacity to admit work may still claim: while it drains for an
@@ -1252,8 +1332,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	handBackCtx, stopHandBacks := context.WithCancel(context.Background())
 	defer stopHandBacks()
 	var check selfUpdateChecker
+	var updateGate *selfUpdateGate
 	if selfUpdateEnabled() {
-		gated := updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit, selfUpdateQuietWindow)
+		updateGate = newSelfUpdateGate(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit, selfUpdateQuietWindow)
+		gated := updateGate.take
 		check = func(ctx context.Context, server string) (string, bool) {
 			remote, ok := gated(ctx, server)
 			// What the check found rides a beat now rather than up to half a minute from now: after
@@ -2038,12 +2120,33 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("runner update check requested by the control plane; self-update is off:", selfUpdateDisabledReason())
 				} else {
 					logln("runner update check requested by the control plane")
-					// The owner's update waits for the turns in flight, not for the quiet window.
+					// The owner's update waits for the turns in flight, not for the quiet window, and ends
+					// a postponement.
 					pool.askForUpdateNow()
+					updateGate.endPostponement()
 					select {
 					case checkSelfUpdateNow <- struct{}{}:
 					default:
 					}
+				}
+			}
+			// The owner's Later: end the drain now and put the release off until the time named
+			// (selfUpdateGate.postpone). A check at that time re-arms it under a fresh limit.
+			if resp.PostponeSelfUpdateUntil != "" {
+				until, err := time.Parse(time.RFC3339, resp.PostponeSelfUpdateUntil)
+				switch {
+				case err != nil:
+					logln("runner update postpone requested by the control plane with an unreadable time:", resp.PostponeSelfUpdateUntil)
+				case updateGate == nil:
+					logln("runner update postpone requested by the control plane; self-update is off:", selfUpdateDisabledReason())
+				case updateGate.postpone(until):
+					time.AfterFunc(time.Until(until), func() {
+						select {
+						case checkSelfUpdateNow <- struct{}{}:
+						default:
+						}
+					})
+					beatNow()
 				}
 			}
 			// Repair a shared checkout the user saw reported as wedged. Runs here, on the
