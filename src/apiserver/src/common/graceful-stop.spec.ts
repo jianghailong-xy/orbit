@@ -4,6 +4,7 @@ import { createServer, type ServerResponse } from 'node:http';
 import { connect, type AddressInfo } from 'node:net';
 import path from 'node:path';
 import { test } from 'node:test';
+import { Worker } from 'node:worker_threads';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { interval, map } from 'rxjs';
@@ -63,6 +64,8 @@ test('a stop refuses new connections, answers what is in flight with Connection:
   let cut: number | null = null;
   void drain.drain(began + 10_000).then((n) => (cut = n));
 
+  // The stop first takes in what had reached the listener, a few turns of the event loop; then it refuses.
+  await until('the listener has closed', () => !server.listening, 1_500);
   assert.ok(await refused(port), 'a new connection is refused once the stop began');
   await until('the idle connection is closed', () => idle.gone !== null);
   assert.equal(busy.gone, null, 'the busy connection stays open for its answer');
@@ -122,4 +125,82 @@ test('the whole stop ends inside the grace period docker stop gives the apiserve
   assert.ok(DRAIN_MS < STOP_MS, `the drain (${DRAIN_MS} ms) leaves the shutdown hooks no time before ${STOP_MS} ms`);
   assert.ok(LINGER_MS < STOP_MS, `the stop waits ${LINGER_MS} ms before it exits, past ${STOP_MS} ms`);
   assert.ok(STOP_MS < graceMs, `a stop may take ${STOP_MS} ms, and Docker SIGKILLs the apiserver after ${graceMs} ms`);
+  // STOP_MS counts from when the process gets SIGTERM, which on a loaded host comes late: 2 s after `docker stop` in the
+  // staging drill grace30-r2 (2026-11-11, load 34 to 45). So the stop leaves the grace period 5 s.
+  assert.ok(graceMs - STOP_MS >= 5_000, `a stop may take ${STOP_MS} ms of a ${graceMs} ms grace period, leaving less than 5 s for a late signal`);
 });
+
+/**
+ * A client on a thread of its own, so that it can connect and send while this thread's event loop stands still, as an
+ * apiserver's does under load. `fresh`: it connects and sends one POST once told to (flags[1]). `kept`: it connects,
+ * reads one answer, says it is idle (flags[2]), and once told to sends one POST on the same connection. Either way it
+ * says when its POST is with the kernel (flags[0]), and resolves with everything it read and how the connection ended.
+ */
+const LATE_CLIENT = `
+const { workerData, parentPort } = require('node:worker_threads');
+const net = require('node:net');
+const flags = new Int32Array(workerData.flags);
+const raise = (i) => { Atomics.store(flags, i, 1); Atomics.notify(flags, i); };
+const sock = net.connect(workerData.port, '127.0.0.1');
+let read = '';
+let error = null;
+sock.setEncoding('latin1');
+const post = () => sock.write('POST /late HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nContent-Type: text/plain\\r\\nContent-Length: 4\\r\\n\\r\\nlate', () => raise(0));
+sock.on('data', (chunk) => {
+  read += chunk;
+  if (workerData.mode === 'kept' && Atomics.load(flags, 2) === 0 && read.endsWith('first')) {
+    raise(2);
+    Atomics.wait(flags, 1, 0);
+    post();
+  }
+});
+sock.on('error', (e) => { error = e.code || e.message; });
+sock.on('close', () => parentPort.postMessage({ read, error }));
+sock.on('connect', () => {
+  if (workerData.mode === 'kept') sock.write('GET /first HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\n\\r\\n');
+  else { Atomics.wait(flags, 1, 0); post(); }
+});
+`;
+
+async function lateClient(port: number, mode: 'fresh' | 'kept') {
+  const flags = new Int32Array(new SharedArrayBuffer(12));
+  const worker = new Worker(LATE_CLIENT, { eval: true, workerData: { port, mode, flags: flags.buffer } });
+  const ended = new Promise<{ read: string; error: string | null }>((resolve, reject) => {
+    worker.once('message', resolve);
+    worker.once('error', reject);
+  });
+  await new Promise((resolve) => worker.once('online', resolve));
+  if (mode === 'kept') await until('the kept-alive connection has had its first answer', () => Atomics.load(flags, 2) === 1);
+  return {
+    /**
+     * Has the client send its POST while this thread's event loop stands still, and returns once it is with the
+     * kernel, the event loop still not having run: the stop that follows begins before the event loop has seen it.
+     */
+    sendWhileStill() {
+      Atomics.store(flags, 1, 1);
+      Atomics.notify(flags, 1);
+      assert.equal(Atomics.wait(flags, 0, 0, 5_000), 'ok', 'the client sent its POST');
+    },
+    ended: ended.finally(() => worker.terminate()),
+  };
+}
+
+for (const [mode, where] of [
+  ['fresh', 'on a connection still in the accept queue'],
+  ['kept', 'on a kept-alive connection idle between two requests'],
+] as const) {
+  test(`a POST sent ${where} just before the stop is answered, not reset`, async () => {
+    const { drain, port } = await listen((route, res) => res.end(route === '/first' ? 'first' : 'late'));
+    const client = await lateClient(port, mode);
+    client.sendWhileStill();
+    const drained = drain.drain(Date.now() + 5_000);
+    const { read, error } = await client.ended;
+    assert.equal(error, null, `the connection was ${error} with the POST on it: ${JSON.stringify(read)}`);
+    const answer = read.slice(read.lastIndexOf('HTTP/1.1 '));
+    assert.match(answer, /^HTTP\/1\.1 200 /, `the POST was answered: ${JSON.stringify(read)}`);
+    assert.match(answer, /\r\nConnection: close\r\n/i);
+    assert.ok(answer.endsWith('\r\n\r\nlate'), JSON.stringify(answer));
+    assert.equal(await drained, 0, 'nothing was cut');
+  });
+}
+

@@ -31,6 +31,7 @@ import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { isStopping, pauseUnlessStopping } from '../common/graceful-stop';
 import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
@@ -5995,8 +5996,9 @@ export class RunnerApiController {
           ...(a.startAfterCreate ? { startAfterCreate: true } : {}),
         };
       }
-      if (Date.now() >= deadline) return { id: a.id, status: 'PENDING' };
-      await new Promise((r) => setTimeout(r, APPROVAL_POLL_INTERVAL_MS));
+      // A stopping apiserver answers at once, as when the window elapses: the reader asks again, of another apiserver.
+      if (Date.now() >= deadline || isStopping()) return { id: a.id, status: 'PENDING' };
+      await pauseUnlessStopping(APPROVAL_POLL_INTERVAL_MS);
     }
   }
 
