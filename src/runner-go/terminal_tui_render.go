@@ -190,10 +190,16 @@ func (t *tuiTranscript) claimOwn(turnID, text string) bool {
 	return false
 }
 
-// messageSource names where a message not sent from this TUI came from. A Feishu group member is
-// recorded on the message; nothing records which of the owner's own devices sent one, so those
-// read "another device".
+// messageSource names where a message not sent from this TUI came from: the client the server
+// recorded on the turn (`sentFrom`, apiserver sessions/turn-sender-client.ts). A server older than
+// that field records only a Feishu group member (`externalSender`); anything else reads "another
+// device".
 func messageSource(p map[string]any) string {
+	if from := tuiMap(p["sentFrom"]); from != nil {
+		if label := sentFromLabel(from); label != "" {
+			return label
+		}
+	}
 	if ext := tuiMap(p["externalSender"]); ext != nil {
 		name := "Feishu"
 		if src := tuiStr(ext["source"]); src != "" && src != "FEISHU" {
@@ -205,6 +211,46 @@ func messageSource(p map[string]any) string {
 		return name
 	}
 	return "another device"
+}
+
+// sentFromLabel is the label for one `sentFrom` card, or "" for a client this build does not know.
+func sentFromLabel(from map[string]any) string {
+	switch tuiStr(from["client"]) {
+	case "ios":
+		if tuiStr(from["device"]) == "ipad" {
+			return "iPad"
+		}
+		return "iPhone"
+	case "macos":
+		return "Mac"
+	case "android":
+		return "Android"
+	case "web":
+		return "web"
+	case "terminal":
+		if machine := oneLine(tuiStr(from["machineName"])); machine != "" {
+			return "terminal on " + machine
+		}
+		return "a terminal"
+	case "feishu":
+		if who := oneLine(tuiStr(from["name"])); who != "" {
+			return "Feishu · " + who
+		}
+		return "Feishu"
+	case "session":
+		if title := oneLine(tuiStr(from["sessionTitle"])); title != "" {
+			return "session " + truncateRunes(title, 60)
+		}
+		return "another session"
+	case "runner":
+		return "the orbit CLI"
+	}
+	return ""
+}
+
+// oneLine folds a label's whitespace, newlines included, to single spaces.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // renderToolUse is one folded line per call (board-1 marker 2); an edit adds its diff.

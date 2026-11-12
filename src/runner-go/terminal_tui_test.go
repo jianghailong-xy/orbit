@@ -21,7 +21,8 @@ import (
 // assistant {text}, tool_use {id,name,input}, tool_result {toolUseId,content,isError}; session.go:
 // user {text,delivery}, turn_end {subtype,…}) and the server stores and streams them
 // (events/page {hasMore,events}; SSE data frames, pings, approval_request at seq 0 from
-// realtime.service.ts; externalSender added to a Feishu member's message).
+// realtime.service.ts; sentFrom added to a message by the server that recorded its client, and only
+// externalSender on a Feishu member's message from a server older than sentFrom).
 
 const tuiTestSession = "3xK9pQ2mW"
 
@@ -144,7 +145,7 @@ func TestTUIForeignMessageShowsItsSource(t *testing.T) {
 	got := tuiPlainLines(streamed)
 	want := strings.Join([]string{
 		"",
-		"› also add a test  · from another device",
+		"› also add a test  · from iPhone",
 		"",
 		"Adding a test for the limit.",
 		"",
@@ -162,6 +163,53 @@ func TestTUIForeignMessageShowsItsSource(t *testing.T) {
 	tr.ownTurns["t-9"] = true
 	if got := tuiPlainLines(tr.render(tuiEvent{Seq: 99, Type: "user", TurnID: "t-9", Payload: json.RawMessage(`{"text":"x"}`)})); got != "\n› x" {
 		t.Fatalf("own turn by id: %q", got)
+	}
+}
+
+// Each client the server records on a turn (`sentFrom`, apiserver sessions/turn-sender-client.ts)
+// reads as its own label; with no sentFrom — a server older than the field — a Feishu sender still
+// reads as Feishu and anything else as "another device".
+func TestTUIForeignMessageLabelsEachSenderClient(t *testing.T) {
+	cases := []struct {
+		payload string
+		want    string
+	}{
+		{`{"client":"ios","device":"iphone"}`, "iPhone"},
+		{`{"client":"ios","device":"ipad"}`, "iPad"},
+		{`{"client":"ios"}`, "iPhone"},
+		{`{"client":"macos"}`, "Mac"},
+		{`{"client":"android"}`, "Android"},
+		{`{"client":"web"}`, "web"},
+		{`{"client":"terminal","machineName":"build-box"}`, "terminal on build-box"},
+		{`{"client":"terminal"}`, "a terminal"},
+		{`{"client":"feishu","name":"Li Wei"}`, "Feishu · Li Wei"},
+		{`{"client":"feishu"}`, "Feishu"},
+		{`{"client":"session","sessionTitle":"Fix login\nredirect"}`, "session Fix login redirect"},
+		{`{"client":"session"}`, "another session"},
+		{`{"client":"runner"}`, "the orbit CLI"},
+		// A client this build does not know yet falls back as an absent field does.
+		{`{"client":"watch"}`, "another device"},
+	}
+	for i, c := range cases {
+		tr := newTUITranscript()
+		tr.live = true
+		ev := tuiEvent{Seq: int64(100 + i), Type: "user", TurnID: fmt.Sprintf("t-%d", i),
+			Payload: json.RawMessage(`{"text":"also add a test","sentFrom":` + c.payload + `}`)}
+		if got, want := tuiPlainLines(tr.render(ev)), "\n› also add a test  · from "+c.want; got != want {
+			t.Errorf("sentFrom %s: got %q, want %q", c.payload, got, want)
+		}
+	}
+	for payload, want := range map[string]string{
+		`{"text":"also add a test"}`: "another device",
+		`{"text":"also add a test","externalSender":{"source":"FEISHU","name":"Li Wei"}}`: "Feishu · Li Wei",
+		`{"text":"also add a test","sentFrom":"iPhone"}`:                                  "another device",
+	} {
+		tr := newTUITranscript()
+		tr.live = true
+		ev := tuiEvent{Seq: 200, Type: "user", TurnID: "t-old", Payload: json.RawMessage(payload)}
+		if got := tuiPlainLines(tr.render(ev)); got != "\n› also add a test  · from "+want {
+			t.Errorf("%s: got %q, want %q", payload, got, want)
+		}
 	}
 }
 
@@ -430,7 +478,7 @@ func TestTUIProgramEndToEnd(t *testing.T) {
 	}()
 	waitFor(t, "the streamed approval card", func() bool { return strings.Contains(tuiPlain(out.String()), "[a] Always allow npm test") })
 	waitFor(t, "the foreign message", func() bool {
-		return strings.Contains(tuiPlain(out.String()), "› also add a test  · from another device")
+		return strings.Contains(tuiPlain(out.String()), "› also add a test  · from iPhone")
 	})
 
 	type step struct {

@@ -95,3 +95,28 @@ export interface ExternalMessageFrom {
 
 /** The sources `ExternalMessageFrom.source` takes, for a reader that has to check a payload. */
 export const EXTERNAL_MESSAGE_SOURCES = ['FEISHU'] as const;
+
+/**
+ * Which client sent a `user` turn (`sentFrom` on the event's payload, migration 0595): what `orbit` in a terminal
+ * draws "· from iPhone" beside a message it did not send with. Recorded by the server from the door the turn came
+ * in through — the credential's kind, the `X-Orbit-Client` header the apps send on every request (and
+ * `X-Orbit-Device` for an iPhone or an iPad), the session an orchestration credential proved — never from a
+ * request body. Absent on a turn no door recorded one for (the platform's own deliveries, a turn written before
+ * 0595, a personal access token) and from a server older than the field.
+ */
+export interface MessageSentFrom {
+  client: MessageSenderClient;
+  /** An `ios` client's device, when it said: `iphone` or `ipad`. */
+  device?: 'iphone' | 'ipad';
+  /** A `terminal` client's machine: the name of the runner its credential is bound to. */
+  machineName?: string;
+  /** A `feishu` sender's name as Feishu gave it, when the turn is a group member's (`externalSender`). */
+  name?: string;
+  /** A `session` sender's title (`sessionMessage.fromTitle`). */
+  sessionTitle?: string;
+}
+
+/** The clients `MessageSentFrom.client` takes. `runner` is the runner's own credential without a calling session:
+ *  the `orbit` CLI or a script on the machine. */
+export const MESSAGE_SENDER_CLIENTS = ['web', 'ios', 'macos', 'android', 'terminal', 'feishu', 'session', 'runner'] as const;
+export type MessageSenderClient = (typeof MESSAGE_SENDER_CLIENTS)[number];

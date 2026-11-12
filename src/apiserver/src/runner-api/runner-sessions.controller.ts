@@ -378,6 +378,9 @@ export class RunnerSessionsController {
     const turn = { clientTurnId, content: dto.message };
     const charge = {
       senderSessionId,
+      // A headless credential is the runner's own: the `orbit` CLI or a script on the machine (turn-sender-client.ts).
+      // A session's message is said by its sender column instead.
+      ...(senderSessionId ? {} : { senderClient: { client: 'runner' as const } }),
       // AU3/TH3, but only for a NEW turn that has already passed idempotency and placement. The
       // callback runs under createTurn's Session lock and in its transaction: a retry observes the
       // durable clientTurnId first and spends nothing, while a refusal rolls back both charge and

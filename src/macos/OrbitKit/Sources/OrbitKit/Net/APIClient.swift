@@ -41,6 +41,26 @@ public final class APIClient: @unchecked Sendable {
         return "\(kind)/\(version ?? "unknown")"
     }()
 
+    /// `X-Orbit-Device: iphone` or `ipad` from the iOS app, nil from the Mac. The server records it
+    /// with the turns this device sends (apiserver sessions/turn-sender-client.ts), so `orbit` in a
+    /// terminal can say "· from iPad" rather than "· from iPhone". Read from the hardware model
+    /// (`hw.machine`, or the simulated one), which needs no main actor as `UIDevice` does.
+    static let deviceHeader: String? = {
+        #if os(iOS)
+        var model = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? ""
+        if model.isEmpty {
+            var size = 0
+            sysctlbyname("hw.machine", nil, &size, nil, 0)
+            var bytes = [UInt8](repeating: 0, count: size)
+            sysctlbyname("hw.machine", &bytes, &size, nil, 0)
+            model = String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
+        }
+        return model.hasPrefix("iPad") ? "ipad" : "iphone"
+        #else
+        return nil
+        #endif
+    }()
+
     public let baseURL: URL
     private let tokenStore: TokenStore
     private let session: URLSession
@@ -2148,6 +2168,7 @@ public final class APIClient: @unchecked Sendable {
         req.httpMethod = method
         if let timeout { req.timeoutInterval = timeout }
         req.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
+        if let device = Self.deviceHeader { req.setValue(device, forHTTPHeaderField: "X-Orbit-Device") }
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

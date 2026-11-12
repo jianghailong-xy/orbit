@@ -54,6 +54,7 @@ import {
   readSessionMessageFrom,
   type ExternalTurnSender,
 } from './session-message';
+import { senderClientColumns, type TurnSenderClient } from './turn-sender-client';
 import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
@@ -6044,6 +6045,9 @@ export class SessionsService {
       externalSenderSource?: string;
       externalSenderId?: string;
       externalSenderName?: string | null;
+      /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
+      senderClient?: string;
+      senderClientDetail?: string | null;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
     },
@@ -6272,6 +6276,12 @@ export class SessionsService {
        * §8.2). Like `senderSessionId`, an option of this call and never a field of `dto`. Written on a NEW turn only.
        */
       externalSender?: ExternalTurnSender;
+      /**
+       * Which client sent this turn (`conversation_turn.sender_client*`, migration 0595, turn-sender-client.ts),
+       * as the door derived it from its credential and the app's headers. Like `senderSessionId`, an option of
+       * this call and never a field of `dto`. Written on a NEW turn only.
+       */
+      senderClient?: TurnSenderClient;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
@@ -6595,6 +6605,7 @@ export class SessionsService {
         ...(targetTurnId ? { targetTurnId } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...externalSenderColumns(opts?.externalSender),
+        ...senderClientColumns(opts?.senderClient),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -9134,6 +9145,8 @@ export class SessionsService {
        * `senderSessionId` is: a request is no less a request for having woken its recipient up.
        */
       onTurnWritten?: (tx: Prisma.TransactionClient, turn: ConversationTurn) => Promise<void>;
+      /** Which client sent the turn — see `createTurn`'s own. Carried onto both branches. */
+      senderClient?: TurnSenderClient;
       /**
        * This request is a PERSON saying something now — the HTTP resume door, and only that one.
        *
@@ -9263,6 +9276,7 @@ export class SessionsService {
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
         senderSessionId: opts?.senderSessionId,
+        senderClient: opts?.senderClient,
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
       });
@@ -9555,6 +9569,7 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...senderClientColumns(opts?.senderClient),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
