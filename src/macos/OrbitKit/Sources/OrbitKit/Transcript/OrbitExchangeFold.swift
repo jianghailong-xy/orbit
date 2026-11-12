@@ -191,12 +191,13 @@ public enum OrbitExchangeFold {
     }
 
     /// What a turn's opening bubble says happened, when Orbit opened the turn and it is one the reader
-    /// can be spared: a fact told to a coordinator, a watch or a background job coming back, another
-    /// session's reply. Nil for everything else, and for those that went wrong — a refused start, a
+    /// can be spared: a fact told to a coordinator, a watch or (in a coordinator) a background job
+    /// coming back, another session's reply. Nil for everything else, and for those that went wrong — a refused start, a
     /// blocker, a stopped run, a failed target or job, a delivery nobody confirmed — which stay drawn.
     /// `rows` and `reply` are left for the caller to fill.
     public static func orbitTurn(_ bubble: UserBubble,
-                                 watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil) -> OrbitExchange? {
+                                 watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
+                                 coordinator: Bool = false) -> OrbitExchange? {
         if bubble.steer || bubble.queued || bubble.undelivered { return nil }
         if bubble.delivery == "failed" || bubble.delivery == "unconfirmed" { return nil }
         if bubble.itemCard != nil || bubble.ownerAnswer != nil
@@ -257,6 +258,9 @@ public enum OrbitExchangeFold {
                                  whatInTask: title, reply: "", category: .watch, target: target)
         }
         if let wake = BackgroundWakeText.parse(bubble.note) {
+            // Outside a coordinator a background job is the agent's work on what the reader asked: its
+            // turns are the answer, not news about it, so they stay drawn (owner, 2026-11-12).
+            guard coordinator else { return nil }
             if wake.jobs.contains(where: BackgroundWakeCard.isFailed) { return nil }
             let title = BackgroundWakeCard.title(wake)
             let name = BackgroundWakeCard.lineName(wake)
@@ -310,7 +314,8 @@ public enum OrbitExchangeFold {
     /// running. A turn with a card of its own drawn inside it — a question, a status card — is never
     /// folded either: a fold would hide something that is waiting on somebody.
     public static func fold(_ rows: [TranscriptRow],
-                            watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil) -> [TranscriptRow] {
+                            watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
+                            coordinator: Bool = false) -> [TranscriptRow] {
         var segments: [Segment] = []
         var open: (head: UserBubble, rows: [TranscriptRow])?
         func close() {
@@ -343,7 +348,8 @@ public enum OrbitExchangeFold {
                 flush()
                 out.append(row)
             case .turn(let head, let turnRows):
-                if index != lastTurn, let exchange = folded(head: head, rows: turnRows, watchName: watchName) {
+                if index != lastTurn, let exchange = folded(head: head, rows: turnRows, watchName: watchName,
+                                                                coordinator: coordinator) {
                     run.append(exchange)
                 } else {
                     flush()
@@ -356,8 +362,9 @@ public enum OrbitExchangeFold {
     }
 
     private static func folded(head: UserBubble, rows: [TranscriptRow],
-                               watchName: ((WatchWake, WatchWakeTarget) -> String?)?) -> OrbitExchange? {
-        guard let orbit = orbitTurn(head, watchName: watchName) else { return nil }
+                               watchName: ((WatchWake, WatchWakeTarget) -> String?)?,
+                               coordinator: Bool) -> OrbitExchange? {
+        guard let orbit = orbitTurn(head, watchName: watchName, coordinator: coordinator) else { return nil }
         var replies: [String] = []
         for row in rows {
             switch row {
