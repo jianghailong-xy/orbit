@@ -382,9 +382,9 @@ describe('a runner’s page, laid out as web.png', () => {
 
     await typeNumber(input, '8', 'blur');
     expect(sent).toEqual([{ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { maxConcurrent: 8 } }]);
-    // Past the ceiling is the ceiling, not an error.
+    // There is no ceiling: a big machine keeps what is typed.
     await typeNumber($<HTMLInputElement>('.rd-max-concurrent input'), '99', 'enter');
-    expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { maxConcurrent: 64 } });
+    expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { maxConcurrent: 99 } });
 
     expect(text($('.rd-keep-free'))).toBe('Off');
     const offered = await keepFreeOptions();
