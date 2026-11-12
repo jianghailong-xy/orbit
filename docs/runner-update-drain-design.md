@@ -1,6 +1,6 @@
 # Runner updates the owner can see, postpone and interrupt
 
-Status: design, waiting for the owner's decisions (D1–D5). Board: `docs/mocks/runner-update-drain/`.
+Status: owner took A for D1–D5 on 2026-11-12; project 34w72tJoQfAFqIW7dE4Pg. Board: `docs/mocks/runner-update-drain/`.
 
 ## 1. What happens today
 
