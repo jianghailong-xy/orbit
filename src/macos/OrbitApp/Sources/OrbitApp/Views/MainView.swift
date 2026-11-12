@@ -279,36 +279,38 @@ struct SectionSidebar: View {
     }
 
     /// The Workspaces one line each, in the drawer's runner-stable order, then a Set up row per machine
-    /// with no workspace.
-    @ViewBuilder
+    /// with no workspace. One flat ForEach over `AgentListLogic.sidebarRows`, one view per row: an
+    /// if/else or a second ForEach in here is the shape the outline list's row reload aborted on.
     private func workspaceRows(shortcutIndex: [String: Int]) -> some View {
-        if let agents = model.agents, !agents.orderedItems.isEmpty || !agents.machinesToSetUp.isEmpty {
-            ForEach(agents.orderedItems) { agent in
+        let agents = model.agents
+        return ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? [])) { row in
+            switch row {
+            case .agent(let agent):
+                let configured = agents?.configuredProviders ?? []
                 WorkspaceNavigationRow(
                     agent: agent,
-                    runnerLabel: agents.runnerLabel(agent.runnerId),
+                    runnerLabel: agents?.runnerLabel(agent.runnerId) ?? "",
                     // The system draws the selection, so the folder keeps one colour.
                     selected: false,
-                    offline: agents.runnerIsOffline(agent.runnerId),
+                    offline: agents?.runnerIsOffline(agent.runnerId) ?? false,
                     running: model.runningWorkspaceIDs.contains(agent.id),
                     jobs: model.jobWorkspaceIDs.contains(agent.id),
                     waiting: model.agentNeedsYou[agent.id] ?? 0,
                     shortcut: shortcutIndex[agent.id]
                 )
                 // What the two-line row used to say under the name: what its next session starts on, and where.
-                .help(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: agents.configuredProviders),
+                .help(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: configured),
                                                        provider: agent.defaultProvider,
-                                                       configured: agents.configuredProviders)
+                                                       configured: configured)
                       + (agent.workDir.map { " · \($0)" } ?? ""))
                 .tag(SidebarSelection.agent(agent.id))
-            }
-            ForEach(agents.machinesToSetUp) { machine in
+            case .setUp(let machine):
                 setUpRow(machine)
                     .tag(SidebarSelection.machine(machine.id))
+            case .placeholder:
+                Text(emptyWorkspacesText("No workspaces"))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
             }
-        } else {
-            Text(emptyWorkspacesText("No workspaces"))
-                .font(.orbitLabel).foregroundStyle(.secondary)
         }
     }
 
