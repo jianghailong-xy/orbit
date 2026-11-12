@@ -247,6 +247,12 @@ export interface ManagedRunnerBackend {
   readonly terms: ManagedRunnerBackendTerms;
   /** Where this backend's mappings live: recorded on every new mapping, and the key of its capacity pool. */
   readonly location: { readonly clusterKey: string; readonly namespace: string };
+  /**
+   * In this process, whether the backend's last word from its host was that it cannot be reached: set by
+   * a call that reached nothing, cleared by any answer. Placement skips such a host while another is
+   * reachable (managed-runner-placement.ts). Absent on a backend that does not track it (Kubernetes).
+   */
+  readonly unreachable?: boolean;
 
   /** The fixed names of one runner's objects, from its UUID alone. */
   names(runnerId: string): { volume: string; instance: string; credential: string };

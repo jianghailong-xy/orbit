@@ -183,13 +183,25 @@ export class DockerBackend implements ManagedRunnerBackend {
   readonly location: { readonly clusterKey: string; readonly namespace: string };
   /** The image the channel reported, on a profile that adopts it (D2), and when it was read. */
   private adopted?: { image: string; at: number };
+  private channelUnreachable = false;
+  private readonly channel: DockerChannel;
 
   constructor(
-    private readonly channel: DockerChannel,
+    channel: DockerChannel,
     private readonly profile: DockerRunnerProfile,
     private readonly now: () => number = Date.now,
   ) {
     this.location = { clusterKey: profile.clusterKey, namespace: profile.docker.instanceId };
+    this.channel = observedChannel(channel, (unreachable) => (this.channelUnreachable = unreachable));
+  }
+
+  /**
+   * The last channel call reached nothing (no connection made: `DockerChannelUnreachable` with
+   * `connected` false, what `failure` calls unreachable); cleared by any answer, a refusal included.
+   * A call that connected but lost its answer changes nothing. In process memory only.
+   */
+  get unreachable(): boolean {
+    return this.channelUnreachable;
   }
 
   names(runnerId: string) {
@@ -449,4 +461,31 @@ export class DockerBackend implements ManagedRunnerBackend {
       throw error;
     }
   }
+}
+
+/**
+ * The channel, every call of it reporting what it learned of the host: `true` when it reached nothing,
+ * `false` when the channel answered (a refusal is an answer), and nothing when it connected but lost the answer.
+ */
+function observedChannel(channel: DockerChannel, mark: (unreachable: boolean) => void): DockerChannel {
+  return new Proxy(channel, {
+    get(target, key, receiver) {
+      const value: unknown = Reflect.get(target, key, receiver);
+      if (typeof value !== 'function') return value;
+      return async (...args: unknown[]) => {
+        try {
+          const answer: unknown = await value.apply(target, args);
+          mark(false);
+          return answer;
+        } catch (error) {
+          if (error instanceof DockerChannelUnreachable) {
+            if (!error.connected) mark(true);
+          } else if (error instanceof DockerChannelError) {
+            mark(false);
+          }
+          throw error;
+        }
+      };
+    },
+  });
 }
