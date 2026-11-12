@@ -1,6 +1,6 @@
 # Managed runners on another Docker host (design, 2026-11-12)
 
-Status: proposal, waiting on the owner's decisions D1–D4 below. Board:
+Status: proposal. D1–D4 taken as recommended (A) on 2026-11-12; several hosts (D5–D7) waiting on the owner. Board:
 [docs/mocks/managed-runner-remote-host/board.html](mocks/managed-runner-remote-host/board.html).
 
 ## The ask
@@ -84,7 +84,10 @@ shares that host's kernel. On 10.66.0.3 that kernel also serves the Nextcloud da
 14.6 T disks and a root Orbit runner with the owner's engine sign-ins. A kernel or runtime escape from any
 account's runner reaches all of that. The firewall closes the network paths, not this one.
 
-## Decisions for the owner
+## Decisions
+
+D1–D4: the owner took A for all four on 2026-11-12.
+
 
 | | A (recommended) | B |
 | --- | --- | --- |
@@ -93,12 +96,45 @@ account's runner reaches all of that. The firewall closes the network paths, not
 | **D3 channel-host upgrades** | After each production deploy, the coordinator starts a session on the `workstation` runner that runs `remote-host upgrade <sha>` with the deployed commit. | The channel host follows production on a timer (reads `/dl/version.json`, builds when it moves). No human step, but builds land on that host at unplanned times. |
 | **D4 capacity on 10.66.0.3** | The derived default: the host less a quarter, so 6 CPUs and ~46 GiB, at 2 CPUs / 4 GiB per runner = 3 runners awake at once, 8 containers at most; sleeping runners hold no compute. | A stated smaller pool, 4 CPUs / 16 GiB (2 awake at once), leaving more room for Nextcloud and the root runner. |
 
+## Several channel hosts
+
+The owner asked (2026-11-12) whether several Docker machines can supply the compute. They can, and most of the
+data model already holds it:
+
+- A mapping stores its location, fixed at creation: `managed_runner.cluster_key` and `namespace`, which on Docker is
+  the channel's `instanceId` (`docker-backend.ts:184`, `managed-runner.service.ts:418`).
+- The capacity pool is one `managed_runner_capacity` row per `(cluster_key, namespace)`.
+- A runner's data volume is a local Docker volume, so a runner belongs to the host its volume is on.
+
+What is missing:
+
+| Today | Needed |
+| --- | --- |
+| The profile names one channel (`docker.channel`) | `docker.hosts`: a list, each with its own `instanceId`, channel URL, token file and optional capacity; one entry is today's single host |
+| `managed-runner-runtime.ts:65` makes one `DockerBackend` and one `ManagedRunnerManager` | One backend and one manager per host; each drives only the mappings of its location (filter on `backend` + `cluster_key` + `namespace`, not on `backend` alone) |
+| `createMapping` takes the one backend's location | Placement: a new account's runner goes to a host chosen at creation (D5), then stays there |
+| One pool | One pool per host, read from that host's `/v1/info`; a full host does not block the others |
+| A channel that cannot be reached stops every runner | Only that host's runners wait (`CHANNEL_UNREACHABLE` as now); the others keep running |
+| No move between hosts | D6 |
+
+Adding a host = run the channel-host kit's `install` there, add its entry to `docker.hosts`, recreate the apiserver.
+Removing one = mark it `draining` (no new placements), move or retire its runners, then drop the entry.
+
+| | A (recommended) | B |
+| --- | --- | --- |
+| **D5 placement** | Automatic, at creation: the host with the most free room in its pool (skipping `draining` hosts); sticky after that, because the volume is local. | The administrator assigns each account to a host by hand (Admin → Users). |
+| **D6 moving a runner between hosts** | Not automatic. An administrator moves a sleeping runner: back up its volume on host A, restore on host B, switch the mapping (`volume-switch` already does the last step for a restore). Shipped as one admin command later, when a second host exists. | Kubernetes backend instead of Docker (k3s across the machines + Ceph RBD): the cluster moves runners across nodes by itself, at the cost of running a cluster and Ceph on home machines. |
+| **D7 phasing** | Build the list form of the profile and one-manager-per-host now; go live with 10.66.0.3 as the only entry; placement and drain land in the same project right after go-live, checked with two channel hosts in the lab. | Finish several hosts before anything goes live. |
+
 ## Steps (each depends on the one before)
 
 1. Channel: private-address listener with `allowPeers`, validator and tests.
-2. Apiserver: `remote` profile, private channel URL, `https://` serverUrl rule, D2's image mode, tests.
+2. Apiserver: `remote` profile, private channel URL, `https://` serverUrl rule, D2's image mode, `docker.hosts` with
+   one manager per host, tests.
 3. Channel-host kit and `/upgrade` changes, docs, a two-host lab check (HPC as server, a VM or container host as
    channel host).
 4. Production rollout, with the owner's go: install on 10.66.0.3 through a `workstation` session, copy the
    profile and token to prod, `ORBIT_MANAGED_RUNNERS_ENABLED=true`, recreate the apiserver, check the first account's
    runner reaches READY and runs a session; rollback = the switch back to `false` and recreate (volumes kept).
+5. Several hosts: placement (D5), `draining`, per-host pools in Admin, a two-channel-host lab check.
+6. Moving a sleeping runner between hosts (D6 A), when a second host exists.

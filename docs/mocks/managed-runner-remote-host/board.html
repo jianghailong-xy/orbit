@@ -111,22 +111,71 @@
 </section>
 
 <section class="b-part" id="part-4">
-  <h2>待定 · 要你拍板</h2>
+  <h2>D1–D4 · 已定：全按推荐（A）</h2>
   <table>
     <tr><th style="width:13%"></th><th style="width:44%">方案 A</th><th>方案 B</th></tr>
     <tr><td><b>D1 通道传输</b></td>
-      <td class="rec">HTTP + token 走 wg1，只监听 10.66.0.3，allowPeers 只放 10.66.0.1。WireGuard 本身加密并认证对端。<span class="b-tag">推荐</span></td>
+      <td class="rec">HTTP + token 走 wg1，只监听 10.66.0.3，allowPeers 只放 10.66.0.1。WireGuard 本身加密并认证对端。<span class="b-tag">已选</span></td>
       <td>再加一层 TLS（固定自签证书）。能防一个被攻破的 wg1 对端伪造 10.66.0.1，代价是多一张证书要轮换。</td></tr>
     <tr><td><b>D2 镜像归属</b></td>
-      <td class="rec">通道主机负责镜像。prod 的 profile.json 写 <span class="b-mono">"image": "channel"</span>，apiserver 用通道报告的镜像 ID，继续校验 instanceId。一次升级只改一个文件。<span class="b-tag">推荐</span></td>
+      <td class="rec">通道主机负责镜像。prod 的 profile.json 写 <span class="b-mono">"image": "channel"</span>，apiserver 用通道报告的镜像 ID，继续校验 instanceId。一次升级只改一个文件。<span class="b-tag">已选</span></td>
       <td>保持两边都写死镜像 ID。每次 .3 升级后要把新 ID 拷到 prod 并重建 apiserver；漏一次，所有新 runner 都起不来。</td></tr>
     <tr><td><b>D3 通道主机怎么升级</b></td>
-      <td class="rec">每次 prod 发版后，协调者在 workstation runner 上开会话跑 <span class="b-mono">remote-host upgrade &lt;sha&gt;</span>，用刚部署的提交。<span class="b-tag">推荐</span></td>
+      <td class="rec">每次 prod 发版后，协调者在 workstation runner 上开会话跑 <span class="b-mono">remote-host upgrade &lt;sha&gt;</span>，用刚部署的提交。<span class="b-tag">已选</span></td>
       <td>通道主机定时跟随 prod（读 /dl/version.json，变了就构建）。不用人管，但构建会在不确定的时间压到这台机器上。</td></tr>
     <tr><td><b>D4 10.66.0.3 给多少算力</b></td>
-      <td class="rec">默认推导：主机减去四分之一 = 6 核 / 约 46 GiB；每个 runner 2 核 / 4 GiB → 同时醒着 3 个，最多 8 个容器；睡着的不占算力。<span class="b-tag">推荐</span></td>
+      <td class="rec">默认推导：主机减去四分之一 = 6 核 / 约 46 GiB；每个 runner 2 核 / 4 GiB → 同时醒着 3 个，最多 8 个容器；睡着的不占算力。<span class="b-tag">已选</span></td>
       <td>写死一个更小的池：4 核 / 16 GiB（同时醒 2 个），给 Nextcloud 和 root runner 多留余量。</td></tr>
   </table>
+</section>
+
+<section class="b-part" id="part-5">
+  <h2>⑤ 多台 Docker 机器一起提供算力</h2>
+  <p class="b-sub">数据模型已经有一半：每个托管 runner 的记录都存着它所在的位置（cluster_key + namespace = 通道 instanceId），容量池也是按位置一行。卷是本机 Docker 卷，所以 runner 跟着卷走，建在哪台就留在哪台。</p>
+  <div class="b-cols" style="grid-template-columns: 1fr 1fr 1fr">
+    <div class="b-host prod">
+      <h3>orbit-prod（apiserver）</h3>
+      <div class="b-box chg"><span class="b-n">1</span>profile.json：<span class="b-mono">docker.hosts: [ {instanceId, url, tokenFile, capacity?, draining?}, … ]</span></div>
+      <div class="b-box chg"><span class="b-n">2</span>每台主机一个 backend + 一个 manager，只管自己位置上的 runner</div>
+      <div class="b-box new"><span class="b-n">3</span>新账号的 runner 放到哪台：建的时候选池里空余最多的那台（D5）</div>
+      <div class="b-box new"><span class="b-n">4</span>Admin 里按主机看容量池；某台标 draining = 不再放新的</div>
+    </div>
+    <div class="b-host ch">
+      <h3>主机 A：10.66.0.3（先上线）</h3>
+      <div class="b-box">通道 + 防火墙 + 镜像（同 ②）</div>
+      <div class="b-box">池：6 核 / ~46 GiB → 同时醒 3 个</div>
+      <div class="b-box">账号 甲、乙、丙 的卷在这里</div>
+    </div>
+    <div class="b-host ch" style="border-style:dashed">
+      <h3>主机 B：以后加的任何一台</h3>
+      <div class="b-box">同一个套件 <span class="b-mono">remote-host install</span></div>
+      <div class="b-box">自己的池，满了不影响 A</div>
+      <div class="b-box">B 掉线时只有 B 上的 runner 等待，A 上的照常</div>
+    </div>
+  </div>
+  <div class="b-arrow"><b>加一台</b>：在那台机器上跑 install → 把它的条目加进 docker.hosts → 重建 apiserver。<b>撤一台</b>：标 draining → 把上面的 runner 迁走或停用 → 删条目。</div>
+  <h2 style="margin-top:22px">待定 · 要你拍板</h2>
+  <table>
+    <tr><th style="width:13%"></th><th style="width:44%">方案 A</th><th>方案 B</th></tr>
+    <tr><td><b>D5 新 runner 放哪台</b></td>
+      <td class="rec">自动：创建时选池里空余最多的主机（跳过 draining），之后固定在那台。<span class="b-tag">推荐</span></td>
+      <td>管理员在 Admin → Users 里给每个账号手动指定主机。</td></tr>
+    <tr><td><b>D6 runner 在主机间迁移</b></td>
+      <td class="rec">不自动。管理员迁一个睡着的 runner：A 上备份卷 → B 上恢复 → 切换记录（现有 volume-switch 已能做最后一步）。有第二台机器时再做成一条管理命令。<span class="b-tag">推荐</span></td>
+      <td>不用 Docker 后端，改用 Kubernetes（多台机器组 k3s + Ceph RBD）：集群自己跨节点挪 runner，但要在家里机器上维护集群和 Ceph。</td></tr>
+    <tr><td><b>D7 先后顺序</b></td>
+      <td class="rec">现在就把 profile 做成列表、每台一个 manager；先只用 10.66.0.3 上线；放置和 draining 在同一个项目里紧接着做，实验室里用两台通道主机验证。<span class="b-tag">推荐</span></td>
+      <td>多主机全部做完再上线。</td></tr>
+  </table>
+  <h2 style="margin-top:22px">落地（更新后）</h2>
+  <ol class="b-steps">
+    <li>通道：私网监听 + allowPeers</li>
+    <li>apiserver：remote profile、https serverUrl、镜像跟通道走、<b>docker.hosts 列表 + 每台一个 manager</b></li>
+    <li>通道主机套件 + /upgrade + 文档 + 两台主机的实验室验证</li>
+    <li>生产上线（只有 10.66.0.3，要你点头）</li>
+    <li><b>多主机</b>：放置（D5）、draining、Admin 按主机看池，实验室两台通道主机验证</li>
+    <li><b>主机间迁移</b>（D6 A），等真有第二台机器时做</li>
+  </ol>
 </section>
 
 </body>
