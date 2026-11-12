@@ -99,9 +99,12 @@ func TestMainCheckoutPushUpdatesUpstream(t *testing.T) {
 		t.Fatalf("local HEAD moved: %s", got)
 	}
 
-	// Again: nothing left to push.
-	if res := runPush(t, repo); res.Status != mainCheckoutRefused || res.Code != mainCheckoutNothingToPush {
-		t.Fatalf("want NOTHING_TO_PUSH, got %+v", res)
+	// Again, as a new request: nothing left to push. (The same request run again answers the push
+	// it made: main_checkout_relay_test.go.)
+	again := pushCmd(t, repo)
+	again.RequestID = "req-push-again"
+	if res, err := pushMainCheckout(context.Background(), again); err != nil || res.Status != mainCheckoutRefused || res.Code != mainCheckoutNothingToPush {
+		t.Fatalf("want NOTHING_TO_PUSH, got %+v (%v)", res, err)
 	}
 }
 
