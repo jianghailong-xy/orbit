@@ -33,6 +33,12 @@ struct TaskStartCardView: View {
     /// Where the project row goes: the app's own link door, which reads for the conversation that
     /// coordinates the project and falls back to the deployment's page when there is none.
     @Environment(AppModel.self) private var app: AppModel?
+    /// In a phone's conversation, the task this card names is pushed over it (see
+    /// `opensPagesOverConsole`), so the back swipe returns to the conversation.
+    @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell a task opens over the page instead of switching sections
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     @State private var showingDetails = false
     @State private var wholeCommand = false
     @State private var showingRaw = false
@@ -251,11 +257,17 @@ struct TaskStartCardView: View {
             }
             Spacer(minLength: 0)
             if let url = TaskStartCard.taskLink(card) {
-                Button(TaskStartCard.openTask) { openURL(url) }
+                Button(TaskStartCard.openTask) { openTaskLink(url) }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
             }
         }
         .animation(nil, value: showingDetails)
+    }
+
+    /// "Open the task ↗" through the app's own link door, told whether this card is in a phone's
+    /// conversation (the task is pushed over it) or on a wide shell (it opens over the page).
+    private func openTaskLink(_ url: URL) {
+        if app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }
     }
 
     /// The brief the agent was handed, exactly as it read it — one tap away and folded by default. It

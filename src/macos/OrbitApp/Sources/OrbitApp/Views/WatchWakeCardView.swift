@@ -19,8 +19,11 @@ import OrbitKit
 /// to the web's.
 struct WatchWakeCardView: View {
     @Environment(AppModel.self) private var model
-    /// A wide shell: a task this line names opens over the conversation it is in (owner decision
-    /// 2026-11-12). On a phone it keeps the route it always took.
+    /// In a phone's conversation, a target this wake names is pushed over it (see
+    /// `opensPagesOverConsole`), so the back swipe returns to the conversation; on a wide shell a
+    /// task opens over the conversation instead (see `opensTasksOverPage`, owner decision
+    /// 2026-11-12).
+    @Environment(\.opensPagesOverConsole) private var overConsole
     @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     /// The session's Tasks card, which names the tasks this conversation filed — set by the console.
     @Environment(CreatedTasksModel.self) private var createdTasks: CreatedTasksModel?
@@ -207,7 +210,7 @@ struct WatchWakeCardView: View {
         let tone = WatchWakeCard.isFailed(target) ? AnyShapeStyle(.red) : AnyShapeStyle(.tint)
         if let destination = route(for: target) {
             Button {
-                model.openFromConversation(destination, overConsole: false,
+                model.openFromConversation(destination, overConsole: overConsole,
                                            overPage: opensTasksOverPage)
             } label: {
                 Text(line).font(.orbitMeta).foregroundStyle(tone).lineLimit(1)
@@ -268,9 +271,11 @@ struct WatchWakeCardView: View {
     }
 
     private func route(for target: WatchWakeTarget) -> Route? {
+        // The wake's payload names each target by the stored UUID; the lists and every page read
+        // one by its public id, which is the spelling a pushed page hands the task detail store.
         switch target.kind {
-        case .session: return .session(target.id)
-        case .task: return .task(target.id)
+        case .session: return .session(PublicID.toPublic(target.id))
+        case .task: return .task(PublicID.toPublic(target.id))
         case .unknown: return nil
         }
     }

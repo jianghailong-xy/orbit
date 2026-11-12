@@ -133,7 +133,7 @@ final class TaskOverPageWiringTests: XCTestCase {
 
         let wake = code(try source("Views/WatchWakeCardView.swift"))
         XCTAssertTrue(wake.contains("@Environment(\\.opensTasksOverPage) private var opensTasksOverPage"))
-        XCTAssertTrue(wake.contains("model.openFromConversation(destination, overConsole: false,"))
+        XCTAssertTrue(wake.contains("model.openFromConversation(destination, overConsole: overConsole,"))
         XCTAssertTrue(wake.contains("overPage: opensTasksOverPage)"))
 
         let doc = code(try source("Views/WikiDocScreens.swift"))
@@ -141,8 +141,10 @@ final class TaskOverPageWiringTests: XCTestCase {
                       "a footnote's task opens over the document")
 
         let screens = code(try source("Views/WikiScreens.swift"))
-        XCTAssertTrue(screens.contains("openTask: { id in model.open(.task(id: PublicID.toPublic(id)), overPage: opensTasksOverPage) }"),
-                      "a source's task opens over the entry")
+        XCTAssertTrue(screens.contains("if rowNavigation == .push { model.push(.taskDetail(taskID: PublicID.toPublic(id))) }"),
+                      "the phone pushes a source's task over the entry")
+        XCTAssertTrue(screens.contains("else { model.open(.task(id: PublicID.toPublic(id)), overPage: opensTasksOverPage) }"),
+                      "a wide shell opens it over the entry instead")
 
         let cards = code(try source("OrbitLinkCards.swift"))
         XCTAssertTrue(cards.contains("case .task(let id):      openFromConversation(.task(id), overConsole: overConsole, overPage: overPage)"),

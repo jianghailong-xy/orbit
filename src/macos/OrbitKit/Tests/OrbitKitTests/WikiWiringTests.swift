@@ -181,12 +181,15 @@ final class WikiWiringTests: XCTestCase {
                               to: "default:                      EmptyView()")
         XCTAssertTrue(stack.contains("WikiHomeView(rowNavigation: .push)"))
         XCTAssertTrue(stack.contains(".drawerToggle(open: openDrawer)"))
-        XCTAssertTrue(stack.contains("case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)"))
+        // The entry page knows its shell pushes (a source row opens over it); the stack renders the
+        // task page a source or a footnote pushes.
+        XCTAssertTrue(stack.contains("case .wikiEntry(let entryID): WikiEntryView(entryID: entryID, rowNavigation: .push)"))
+        XCTAssertTrue(stack.contains("case .taskDetail(let taskID): TaskDetailPage(taskID: taskID)"))
         XCTAssertTrue(stack.contains("case .wikiReview:             WikiReviewView()"))
         XCTAssertTrue(stack.contains("case .wikiActivity:           WikiActivityView()"))
         // An `orbit-wiki:` link in a phone's conversation pushes the entry over it.
         let agents = try slice(shell, from: "case .console(let sessionID, _):", to: "default:                         EmptyView()")
-        XCTAssertTrue(agents.contains("case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)"))
+        XCTAssertTrue(agents.contains("case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)"))
     }
 
     /// The three-column shells (design §12.3, mock 32): the directory in the list column — the Contents
