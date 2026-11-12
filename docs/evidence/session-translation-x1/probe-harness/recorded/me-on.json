@@ -1,0 +1,17 @@
+{
+ "id": "34wNkisv588JOfofGIa6Q",
+ "email": "owner@example.com",
+ "name": "Owner",
+ "createdAt": "2026-11-12T15:51:42.610Z",
+ "preferences": {
+  "translationEnabled": true
+ },
+ "role": "ADMIN",
+ "avatarUpdatedAt": null,
+ "signInMethods": {
+  "password": true,
+  "google": null
+ },
+ "translationAvailable": true,
+ "publicId": "34wNkisv588JOfofGIa6Q"
+}

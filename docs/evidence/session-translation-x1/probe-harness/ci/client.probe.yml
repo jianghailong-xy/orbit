@@ -1,0 +1,89 @@
+# TEMPORARY evidence probe workflow (never merged; it lives on `probe/translation-x1` as
+# `.github/workflows/client.yml`): Translation X1's iPhone shots of Settings › Translation.
+name: Translation X1 probe (iPhone Settings shots)
+
+on:
+  push:
+    branches: ["probe/translation-x1"]
+  workflow_dispatch:
+
+jobs:
+  shots:
+    name: Translation shots (iPhone)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .tr-probe
+          cp -R docs/evidence/session-translation-x1/probe-harness/. .tr-probe/
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .tr-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .tr-probe/shots
+          cp run-output.log .tr-probe/shots/run-output.log 2>/dev/null || true
+          for log in .tr-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".tr-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".tr-probe/shots/tail-$base.txt" || true
+          done
+          find .tr-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .tr-probe/shots/outcomes.txt
+          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .tr-probe/shots/outcomes.txt
+          echo "sha=${{ github.sha }}" >> .tr-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: translation-x1-shots
+          path: .tr-probe/shots
+          include-hidden-files: true
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  publish:
+    name: Push the shots where a clone can read them
+    needs: [shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/translation-x1-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p out && cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "translation x1 probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/translation-x1-results
