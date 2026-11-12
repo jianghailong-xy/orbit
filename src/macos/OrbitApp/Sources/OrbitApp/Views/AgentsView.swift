@@ -189,7 +189,14 @@ struct AgentContentColumn: View {
                 }
             }
             #else
-            workspaceList
+            // A project's sessions page takes the column, as on the iPad: the sidebar's project row
+            // opens it (docs/mocks/macos-sidebar, owner 2026-11-12), the detail beside it following
+            // the member picked.
+            if let address = app.projectSessionsColumn, rowNavigation == .selection {
+                SessionProjectPage(address: address, rowNavigation: rowNavigation)
+            } else {
+                workspaceList
+            }
             #endif
         }
         #if os(iOS)
