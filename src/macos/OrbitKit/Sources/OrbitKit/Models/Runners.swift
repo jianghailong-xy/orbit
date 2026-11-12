@@ -480,6 +480,17 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
     public let lastUpdatedAt: String?
     public let lastUpdatedFrom: String?
     public let lastUpdatedTo: String?
+    /// Where a release the runner is behind stands, for the runner page's Update card: `available`,
+    /// `draining`, `restarting` or `postponed`, raw like `state`. Nil when none is waiting, and from a
+    /// runner too old to say, which keeps the page's wording from before it.
+    public var phase: String? = nil
+    public var targetVersion: String? = nil
+    public var availableSince: String? = nil
+    public var drainingSince: String? = nil
+    public var postponedUntil: String? = nil
+    /// While draining: the turns still in flight, and how many there were when the drain began.
+    public var turnsInFlight: Int? = nil
+    public var turnsAtDrain: Int? = nil
 }
 
 /// POST /runners/:id/self-update (Update Runner Now) acknowledges when the check was requested.

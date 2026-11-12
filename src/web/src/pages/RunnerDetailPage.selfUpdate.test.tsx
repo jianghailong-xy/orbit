@@ -468,3 +468,98 @@ describe('a runner too old to report it', () => {
     expect(aboutActions()).toEqual([]);
   });
 });
+
+// MARK: the Update card (docs/runner-update-drain-design.md §4, board 4)
+
+describe('the Update card, one per phase the runner reports', () => {
+  const at = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000).toISOString();
+  const clock = (iso: string) =>
+    new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const updateCard = () => {
+    const card = document.querySelector<HTMLElement>('.rd-update-card');
+    if (!card) return null;
+    const bar = card.querySelector<HTMLElement>('[role="progressbar"]');
+    return {
+      tone: card.className.replace('rd-update-card', '').trim(),
+      title: text(card.querySelector('.rd-update-title')),
+      tag: text(card.querySelector('.rd-update-tag')),
+      body: text(card.querySelector('.rd-update-body')),
+      progress: text(card.querySelector('.rd-update-progress-label')),
+      done: bar ? Number(bar.getAttribute('aria-valuenow')) : null,
+    };
+  };
+  const phase = (report: Partial<RunnerSelfUpdate>) =>
+    reporting('selfUpdate waitingForIdle and behind', { state: 'waitingForIdle', targetVersion: '0.1.197', ...report });
+
+  it('available: quiet, says when it installs and when it would stop taking work', async () => {
+    await mount(phase({ phase: 'available', availableSince: at(20), turnsInFlight: 3 }));
+    expect(updateCard()).toEqual({
+      tone: 'quiet',
+      title: '0.1.197 is available',
+      tag: 'Available',
+      body: 'It installs when no turn is running. If turns keep running for an hour, it stops taking new work so they can finish.',
+      progress: null,
+      done: null,
+    });
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+  });
+
+  it('draining: the turns it waits for, how long, a bar, and About says updating to', async () => {
+    const since = at(98);
+    await mount(phase({ phase: 'draining', availableSince: since, drainingSince: at(38), turnsInFlight: 2, turnsAtDrain: 8 }));
+    expect(updateCard()).toEqual({
+      tone: 'warn',
+      title: 'Updating to 0.1.197',
+      tag: 'Not taking new work',
+      body:
+        `0.1.197 has been waiting since ${clock(since)}. After an hour it stopped taking new work so the turns in ` +
+        'flight can finish; then it installs and restarts.',
+      progress: 'Waiting for 2 of 8 turns · 38 min',
+      done: 75,
+    });
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'updating to 0.1.197']);
+    expect($$('.rd-kv-value small.warn').map(text)).toEqual(['updating to 0.1.197']);
+  });
+
+  it('draining for over an hour, from a runner that did not count the turns at the start', async () => {
+    await mount(phase({ phase: 'draining', drainingSince: at(112), turnsInFlight: 1 }));
+    expect(updateCard()).toMatchObject({
+      body: 'It stopped taking new work so the turns in flight can finish; then it installs and restarts.',
+      progress: 'Waiting for 1 turn · 1 h 52 min',
+      done: 0,
+    });
+  });
+
+  it('restarting: amber, no bar, About still says updating to', async () => {
+    await mount(phase({ state: 'enabled', phase: 'restarting', drainingSince: at(40) }));
+    expect(updateCard()).toEqual({
+      tone: 'warn',
+      title: 'Restarting into 0.1.197…',
+      tag: 'Restarting',
+      body: 'Usually under a minute.',
+      progress: null,
+      done: null,
+    });
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'updating to 0.1.197']);
+  });
+
+  it('postponed: quiet, says until when and what happens then', async () => {
+    const until = new Date(NOW + 3 * 3_600_000).toISOString();
+    await mount(phase({ phase: 'postponed', postponedUntil: until }));
+    expect(updateCard()).toEqual({
+      tone: 'quiet',
+      title: `0.1.197 postponed until ${clock(until)}`,
+      tag: 'Postponed',
+      body: `Taking work as usual. At ${clock(until)} it waits for the turns in flight again, for up to an hour.`,
+      progress: null,
+      done: null,
+    });
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+  });
+
+  it('a runner that sends no phase: no card, and today’s wording', async () => {
+    await mount(inputOf('selfUpdate waitingForIdle and behind'));
+    expect(updateCard()).toBeNull();
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+  });
+});

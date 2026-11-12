@@ -391,6 +391,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             RunnerHead(runner, now)
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
+            RunnerPage.updateCard(runner, now)?.let { UpdateCardView(it) }
             if (items.isNotEmpty()) FormSection(RunnerCopy.NEEDS_ATTENTION) {
                 items.forEachIndexed { index, item ->
                     if (index > 0) HorizontalDivider()
@@ -1497,6 +1498,29 @@ internal fun AddRunnerDialog(api: ManagementApi, onDismiss: () -> Unit, open: (S
                     }
                     message?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
                 }
+            }
+        }
+    }
+}
+
+/** The Update card (board 4) above Needs Attention: title and phase tag, what happens, and while draining the turns it waits for
+ * with a bar. Later ▾ and Update Now… join it in their own tasks. */
+@Composable
+private fun UpdateCardView(card: RunnerPage.UpdateCard) {
+    val tint = if (card.warn) Ink.amber else Ink.muted
+    Surface(Modifier.fillMaxWidth().padding(top = 16.dp).testTag("runner-update-card"), shape = RoundedCornerShape(12.dp),
+        color = if (card.warn) Ink.amber.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(1.dp, tint.copy(alpha = 0.3f))) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(card.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(8.dp))
+                Text(card.tag, color = tint, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            }
+            Text(card.body, color = Ink.muted, style = MaterialTheme.typography.bodySmall)
+            card.progressLabel?.let { label ->
+                Text(label, Modifier.padding(top = 4.dp), color = Ink.muted, style = MaterialTheme.typography.labelMedium)
+                LinearProgressIndicator(progress = { card.progress ?: 0f }, modifier = Modifier.fillMaxWidth(), color = Ink.amber)
             }
         }
     }

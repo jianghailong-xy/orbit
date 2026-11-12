@@ -176,6 +176,10 @@ export const RUNNER_VERSION_LATEST = 'Latest';
 export const RUNNER_VERSION_INSTALLS_WHEN_IDLE = 'installs when no turn is running';
 /** Behind the latest release because its staged rollout hasn't reached this runner. */
 export const RUNNER_VERSION_NOT_ROLLED_OUT = 'not rolled out to it yet';
+/** About's Version note while the runner drains or restarts for a release: `updating to 0.1.254`. */
+export function runnerVersionUpdatingTo(version: string): string {
+  return `updating to ${version}`;
+}
 export const RUNNER_RUNS_AS_ROOT = 'root';
 export const RUNNER_RUNS_AS_REGULAR_USER = 'regular user';
 export const RUNNER_ROOT_NO_BYPASS = 'Runs as root, so sessions here can’t use Bypass permissions.';
@@ -468,4 +472,61 @@ export function attentionEngineUpdateFailed(engine: string): string {
 /** `note` is runnerEngines' updateNoteOf text, capitalized: `18d behind 2.1.270`. */
 export function attentionEngineUpdateDetail(note: string): string {
   return `${note}. Orbit retries every 30 min — Update Engines Now tries again right away.`;
+}
+
+// MARK: the Update card (docs/runner-update-drain-design.md, board 4)
+
+export const RUNNER_UPDATE_TAG_AVAILABLE = 'Available';
+export const RUNNER_UPDATE_TAG_DRAINING = 'Not taking new work';
+export const RUNNER_UPDATE_TAG_RESTARTING = 'Restarting';
+export const RUNNER_UPDATE_TAG_POSTPONED = 'Postponed';
+
+export function runnerUpdateAvailableTitle(version: string): string {
+  return `${version} is available`;
+}
+export const RUNNER_UPDATE_AVAILABLE_BODY =
+  'It installs when no turn is running. If turns keep running for an hour, it stops taking new ' +
+  'work so they can finish.';
+
+export function runnerUpdateDrainingTitle(version: string): string {
+  return `Updating to ${version}`;
+}
+/** `since`: the clock time the release was first found waiting. */
+export function runnerUpdateDrainingBody(version: string, since: string): string {
+  return `${version} has been waiting since ${since}. After an hour it stopped taking new work so the turns in flight can finish; then it installs and restarts.`;
+}
+/** The same, from a runner that didn't say since when. */
+export const RUNNER_UPDATE_DRAINING_BODY_NO_SINCE =
+  'It stopped taking new work so the turns in flight can finish; then it installs and restarts.';
+export const RUNNER_UPDATE_TURN = 'turn';
+export const RUNNER_UPDATE_TURNS = 'turns';
+/** The progress line's count: `Waiting for 2 of 8 turns`. */
+export function runnerUpdateWaitingForOf(left: number, of: number, unit: string): string {
+  return `Waiting for ${left} of ${of} ${unit}`;
+}
+/** From a runner that didn't say how many there were at the start: `Waiting for 2 turns`. */
+export function runnerUpdateWaitingFor(left: number, unit: string): string {
+  return `Waiting for ${left} ${unit}`;
+}
+/** How long it has waited, after the count and RUNNER_LINE_SEPARATOR: `38 min`, `1 h 52 min`, `2 h`. */
+export function runnerUpdateWaitedMinutes(minutes: number): string {
+  return `${minutes} min`;
+}
+export function runnerUpdateWaitedHoursMinutes(hours: number, minutes: number): string {
+  return `${hours} h ${minutes} min`;
+}
+export function runnerUpdateWaitedHours(hours: number): string {
+  return `${hours} h`;
+}
+
+export function runnerUpdateRestartingTitle(version: string): string {
+  return `Restarting into ${version}…`;
+}
+export const RUNNER_UPDATE_RESTARTING_BODY = 'Usually under a minute.';
+
+export function runnerUpdatePostponedTitle(version: string, until: string): string {
+  return `${version} postponed until ${until}`;
+}
+export function runnerUpdatePostponedBody(until: string): string {
+  return `Taking work as usual. At ${until} it waits for the turns in flight again, for up to an hour.`;
 }

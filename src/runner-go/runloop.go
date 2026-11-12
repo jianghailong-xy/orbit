@@ -130,8 +130,9 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // behind a release since it started.
 func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit time.Duration) selfUpdateChecker {
 	var mu sync.Mutex
-	var deferredSince time.Time
+	var deferredSince, drainingSince time.Time
 	var draining string
+	var turnsAtDrain int
 	return func(ctx context.Context, server string) (string, bool) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -148,7 +149,17 @@ func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operat
 			turns = pool.closeForUpdate()
 		}
 		if ops == 0 && turns == 0 {
+			// The heartbeat the check rides says so before the stop: the Update card's Restarting.
+			noteSelfUpdatePhase(selfUpdateStateEnabled, "", selfUpdatePhase{
+				phase: selfUpdatePhaseRestarting, targetVersion: remote,
+				availableSince: deferredSince, drainingSince: drainingSince,
+			})
 			return remote, true
+		}
+		if ops > 0 {
+			// The pool was not asked (closeForUpdate is for an update about to be taken); the card
+			// still counts the turns.
+			turns = pool.turnsInFlight()
 		}
 		now := pool.clock.Now()
 		if deferredSince.IsZero() {
@@ -160,19 +171,30 @@ func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operat
 		}
 		if draining == "" && now.Sub(deferredSince) >= limit {
 			draining = remote
+			drainingSince = now
+			turnsAtDrain = turns
 			pool.drainForUpdate()
 			logln(fmt.Sprintf("orbit %s update deferred for %s; taking no new work until the %s in flight end, then updating",
 				remote, now.Sub(deferredSince).Round(time.Second), busy))
 		}
 		if draining != "" {
-			noteSelfUpdate(selfUpdateStateWaitingForIdle,
+			turnsAtDrain = max(turnsAtDrain, turns)
+			noteSelfUpdatePhase(selfUpdateStateWaitingForIdle,
 				fmt.Sprintf("deferred for %s, the limit; taking no new work until the %s in flight end",
-					now.Sub(deferredSince).Round(time.Second), busy), "")
+					now.Sub(deferredSince).Round(time.Second), busy),
+				selfUpdatePhase{
+					phase: selfUpdatePhaseDraining, targetVersion: remote,
+					availableSince: deferredSince, drainingSince: drainingSince,
+					turnsInFlight: turns, turnsAtDrain: turnsAtDrain,
+				})
 			return "", false
 		}
 		logln(fmt.Sprintf("orbit %s update available; deferred — %s in flight, checking again in %s",
 			remote, busy, interval))
-		noteSelfUpdate(selfUpdateStateWaitingForIdle, "", "")
+		noteSelfUpdatePhase(selfUpdateStateWaitingForIdle, "", selfUpdatePhase{
+			phase: selfUpdatePhaseAvailable, targetVersion: remote, availableSince: deferredSince,
+			turnsInFlight: turns,
+		})
 		return "", false
 	}
 }

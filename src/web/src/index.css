@@ -2273,6 +2273,61 @@ button.toast--pill:focus-visible {
 .rd-attention-action {
   margin-top: 9px;
 }
+/* The Update card (board 4): a release this runner is behind, across both columns. Amber while it
+   holds work back or restarts, plain while work goes on as usual. */
+.rd-update-card {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+.rd-update-card.warn {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.rd-update-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rd-update-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.rd-update-tag {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rd-update-card.warn .rd-update-tag {
+  color: var(--warning);
+  font-weight: 500;
+}
+.rd-update-body {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.rd-update-progress-label {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rd-update-progress {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill-muted);
+  overflow: hidden;
+}
+.rd-update-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--warning);
+}
 /* The machine's contents on the left, its settings and facts in a narrower column on the right. */
 .rd-cols {
   display: grid;

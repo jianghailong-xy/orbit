@@ -502,6 +502,9 @@ struct RunnerDetailContent: View {
                                                     latestVersion: runners.latestVersion)
         Form {
             head(now: now)
+            if let card = RunnerPageFormat.updateCard(runner, now: now) {
+                updateSection(card)
+            }
             if !items.isEmpty {
                 attentionSection(items, now: now)
             }
@@ -584,6 +587,36 @@ struct RunnerDetailContent: View {
             .padding(.horizontal, 4)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        }
+    }
+
+    /// The Update card (board 4): a release this runner is behind, in the phase it reports — amber
+    /// while it holds work back or restarts. Later ▾ and Update Now… join it in their own tasks.
+    @ViewBuilder private func updateSection(_ card: RunnerPageFormat.UpdateCard) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(card.title)
+                        .fontWeight(.semibold)
+                    Spacer(minLength: 8)
+                    Text(card.tag)
+                        .font(.orbitLabel)
+                        .foregroundStyle(card.warn ? RunnerInk.amber : Color.secondary)
+                        .lineLimit(1)
+                }
+                Text(card.body)
+                    .foregroundStyle(Color.secondary)
+                if let label = card.progressLabel {
+                    Text(label)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.secondary)
+                        .padding(.top, 4)
+                    ProgressView(value: card.progress ?? 0)
+                        .tint(RunnerInk.amber)
+                }
+            }
+            .padding(.vertical, 4)
+            .listRowBackground(card.warn ? Color.orange.opacity(0.08) : nil)
         }
     }
 
