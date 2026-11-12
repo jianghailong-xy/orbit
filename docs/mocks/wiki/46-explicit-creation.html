@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>46 wiki: only the owner creates a wiki</title>
+<link rel="stylesheet" href="comment-session.css">
+<style>
+/* Board 46 only. s- is the web sidebar and wiki head picker; d- is the Create wiki dialog; b- is board chrome. */
+.b-part { padding: 2px 24px 18px; }
+.b-cap { font-size: 15px; font-weight: 700; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+.b-cap .n { width: 24px; height: 24px; border-radius: 50%; background: #16161a; color: #fff; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
+.b-cap small { font-weight: 500; color: #66666e; font-size: 13px; }
+.b-gap { height: 26px; }
+.b-tb { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.55; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.b-tb th { text-align: left; font-weight: 700; color: #34343c; padding: 10px 14px; background: #f6f6f8; border-bottom: 1px solid #dcdce2; }
+.b-tb td { padding: 9px 14px; border-bottom: 1px solid #ececf0; vertical-align: top; }
+.b-tb td.chg { background: #f2f8ff; }
+.b-tb td.bad { background: #fff5f4; }
+.b-tb code, .b-q code, .b-land code, .notes code, .b-seq code { font: 12.5px var(--mono); background: rgba(0,0,0,.06); padding: 0 4px; border-radius: 4px; }
+.b-qs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; }
+.b-q { background: #fff; border-radius: 12px; padding: 16px 18px 8px; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 13.5px; line-height: 1.6; }
+.b-q h3 { margin: 0 0 10px; font-size: 15px; }
+.b-q .opt { margin: 0 0 12px; padding-left: 14px; border-left: 3px solid #d0d0d8; }
+.b-q .opt.rec { border-left-color: #f08c00; }
+.b-q .opt b { color: #16161a; }
+.b-land { background: #fff; border-radius: 12px; padding: 14px 20px 6px 18px; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 13.5px; line-height: 1.65; }
+.b-land ol { margin: 0; padding-left: 20px; }
+.b-land li { margin-bottom: 8px; }
+.tag.done { background: #d9f2df; color: #1a6b33; }
+.tag.bad { background: #fde2df; color: #a8281f; }
+
+/* sequence */
+.b-seq { display: flex; align-items: stretch; gap: 0; background: #fff; border-radius: 12px; padding: 18px 18px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.b-seq .st { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid #dcdce2; border-radius: 10px; font-size: 13px; line-height: 1.55; background: #fafafb; }
+.b-seq .st.red { border-color: #f1b5ae; background: #fff5f4; }
+.b-seq .st .k { font-size: 11.5px; font-weight: 700; color: #77777f; letter-spacing: .03em; margin-bottom: 3px; }
+.b-seq .st .t { font-weight: 700; margin-bottom: 3px; }
+.b-seq .ar { flex: none; width: 34px; display: flex; align-items: center; justify-content: center; color: #9a9aa2; font-size: 20px; }
+
+/* web sidebar (tokens from index.css, drawn locally) */
+.s-nav { width: 260px; flex: none; background: var(--bg-sunken); border: 1px solid #d5d6db; border-radius: 12px; padding: 10px 8px 12px; font-size: 13.5px; color: var(--text-1); }
+.s-top { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 7px; color: var(--text-2); }
+.s-top.on { background: var(--brand-tint); color: var(--brand); font-weight: 600; }
+.s-div { border-top: 1px solid var(--border); margin: 8px 6px; }
+.s-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px 4px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.s-head .c { font-weight: 500; }
+.s-head .cr { margin-left: auto; font-size: 9px; }
+.s-it { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 7px; }
+.s-it .g { width: 16px; text-align: center; color: var(--text-3); flex: none; font-size: 13px; }
+.s-it .l { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.s-it .bd { min-width: 18px; height: 18px; border-radius: 9px; background: var(--warning-solid); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; padding: 0 5px; }
+.s-it .cnt { color: var(--text-3); font-size: 12px; }
+.s-it.on { background: var(--brand-tint); color: var(--brand); font-weight: 600; }
+.s-it.grey { color: var(--text-2); }
+.s-it.ghost { color: var(--text-3); text-decoration: line-through; }
+
+/* wiki head picker */
+.s-pick { width: 300px; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(31,35,41,.14); padding: 5px; font-size: 13.5px; }
+.s-pick .r { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; }
+.s-pick .r.on { background: var(--brand-tint); color: var(--brand); font-weight: 600; }
+.s-pick .r .ck { margin-left: auto; color: var(--brand); }
+.s-pick hr { border: 0; border-top: 1px solid var(--border-subtle); margin: 4px 2px; }
+.s-pick .r.add { color: var(--text-2); }
+.s-head2 { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 16px; padding: 0 0 8px 2px; }
+.s-head2 .cap { font-size: 10px; color: var(--text-3); }
+
+/* Create wiki dialog */
+.d-dlg { width: 470px; background: #fff; border-radius: 12px; box-shadow: 0 12px 32px rgba(31,35,41,.18); border: 1px solid var(--border); font-size: 13.5px; color: var(--text-1); position: relative; }
+.d-h { padding: 16px 20px 6px; font-size: 16px; font-weight: 700; }
+.d-b { padding: 6px 20px 8px; }
+.d-lab { font-weight: 600; margin: 8px 0 6px; font-size: 13px; }
+.d-sel { border: 1px solid var(--brand); border-radius: 7px; padding: 6px 10px; display: flex; align-items: center; box-shadow: 0 0 0 2px var(--brand-tint); }
+.d-sel .cr { margin-left: auto; font-size: 9px; color: var(--text-3); }
+.d-list { margin-top: 4px; border: 1px solid var(--border); border-radius: 8px; padding: 4px; box-shadow: 0 8px 20px rgba(31,35,41,.10); }
+.d-g { font-size: 11.5px; font-weight: 600; color: var(--text-3); padding: 7px 10px 3px; display: flex; gap: 8px; }
+.d-g .has { margin-left: auto; font-weight: 600; color: var(--text-3); background: var(--fill-muted); border-radius: 5px; padding: 0 6px; }
+.d-o { padding: 5px 10px 5px 18px; border-radius: 6px; display: flex; gap: 8px; align-items: center; }
+.d-o .m { color: var(--text-3); font-size: 12px; margin-left: auto; }
+.d-o.on { background: var(--brand-tint); color: var(--brand); }
+.d-o.off { color: var(--text-4); }
+.d-f { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; }
+.d-btn { border: 1px solid var(--border); border-radius: 7px; padding: 4px 14px; font-size: 13.5px; }
+.d-btn.pri { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+/* agent transcript snippet */
+.b-tr { width: 560px; flex: none; background: #fff; border: 1px solid #d5d6db; border-radius: 12px; padding: 14px 16px; font-size: 13px; line-height: 1.6; }
+.b-tr .tool { font: 12.5px var(--mono); background: #f4f5f7; border-radius: 7px; padding: 7px 10px; margin: 6px 0; }
+.b-tr .tool .nm { color: #5b2fb8; font-weight: 700; }
+.b-tr .tool .out { color: #34343c; display: block; margin-top: 4px; }
+.b-tr .tool.red .out { color: #a8281f; }
+.b-tr .who { font-size: 11.5px; font-weight: 700; color: #77777f; }
+</style>
+</head>
+<body>
+<div class="board">
+<h1 class="b-h1">46 · Wiki 只由你建：agent 搜一下不再建出一个 wiki</h1>
+<p class="b-sub">你的问题：「<code>github-com-jianghailong-xy-lfs-builder</code> 这个 wiki 出现的逻辑是什么，我并不需要」。答：它是 agent 在改文件前照系统提示调了一次 <code>wiki_search</code>，服务端顺手建出来的。
+这张图讲今天的链路、新的规则、补上的「建第二个 wiki」入口和三个待你定的选择。设计文档：<code>docs/wiki-explicit-creation-design.md</code>。第 1 部分的时间和数字取自生产库（只读）；其余窗口里的 wiki 名、仓库名是示意。</p>
+<div class="b-legend"><span><span class="tag new">新</span>这次要改的</span><span><span class="tag keep">沿用</span>照旧</span><span><span class="tag bad">今天的问题</span></span><span><span class="tag ask">待你定</span>各有推荐</span></div>
+
+<section class="b-part">
+<div class="band"><span class="bn">1</span>今天：lfs-builder 是怎么出现的 <small>· 11-11 UTC，生产库</small></div>
+<div class="b-seq">
+  <div class="st"><div class="k">系统提示（每个会话）</div><div class="t">「改文件前先 <code>wiki_search</code>」</div><code>agent_instructions.go:141</code>，11-05 起</div>
+  <div class="ar">→</div>
+  <div class="st"><div class="k">16:27:30.421 · workspace lfs</div><div class="t">一次网络探测会话</div>要改 <code>/etc/wireguard/wg1.conf</code>，先搜：<code>wiki_search "/etc/wireguard/wg1.conf"</code></div>
+  <div class="ar">→</div>
+  <div class="st red"><div class="k">16:27:30.819 · 服务端</div><div class="t">建 space</div><code>resolveSpaceForCall</code> → <code>bindOnFirstUse</code>：workspace 有 <code>repo_url</code>，仓库还没有 wiki，就建一个</div>
+  <div class="ar">→</div>
+  <div class="st red"><div class="k">16:27:30.923</div><div class="t">排 plan 起草作业</div><code>trigger = space_created</code>，没人要求（<code>requested_by_user_id</code> 空）；维护关着，挂起</div>
+  <div class="ar">→</div>
+  <div class="st red"><div class="k">之后</div><div class="t">删不掉</div>移进 Trash，下一个会话再搜一次就建出一个新的空 wiki</div>
+</div>
+<div class="b-gap"></div>
+<div class="row">
+<table class="b-tb" style="width:900px;flex:none">
+<tr><th>账号里的 wiki</th><th>怎么建的</th><th>之后你用了吗</th></tr>
+<tr><td><code>orbit</code>、<code>orbit-vllm-preview</code>（09-26、09-27）</td><td>早于起草作业，无从判断</td><td>用</td></tr>
+<tr><td><code>wikova</code>（10-07）</td><td class="bad">隐式</td><td>用：开了维护，确认了 plan，81 次运行</td></tr>
+<tr><td>一个 gitlab 文档仓库（10-15）</td><td class="bad">隐式</td><td>用：59 个审阅决定</td></tr>
+<tr><td>一个公司服务仓库（10-28）</td><td class="bad">隐式</td><td>用：96 个审阅决定</td></tr>
+<tr><td><code>lfs-builder</code>（11-11）</td><td class="bad">隐式</td><td>没用：0 条，维护关着</td></tr>
+</table>
+<div class="notes"><ol>
+  <li><span class="n">!</span><span class="tag bad">今天的问题</span><b>读也会建。</b>search、get、propose、draft、note 五个工具都先过 <code>resolveSpaceForCall</code>，哪个先到哪个建。</li>
+  <li><span class="n">!</span><span class="tag bad">今天的问题</span><b>和你 11-02 定的相反：</b>「建 wiki 就等于开维护，没有只建不开」。隐式建出来的维护都是关的。</li>
+  <li><span class="n">!</span><span class="tag bad">今天的问题</span><b>从来没有一个 wiki 是从 Create wiki 表单建的</b>（这类起草作业 0 个）：账号有了第一个 wiki 之后，界面上<b>没有任何地方能再建一个</b>，所以后面三个有用的也全是隐式建的。</li>
+</ol></div>
+</div>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">2</span>新规则：wiki 只由你建；没有 wiki 时，读照常、写被拒</div>
+<table class="b-tb">
+<tr><th style="width:250px">在没有 wiki 的 workspace 里</th><th>今天</th><th>新</th><th style="width:420px">agent 读到的（英文）</th></tr>
+<tr><td><code>wiki_search</code></td><td class="bad">有仓库地址：建 wiki，答空结果。没有仓库地址：报 <code>WIKI_SPACE_UNBOUND</code></td><td class="chg"><span class="tag new">新</span>不建；200，<code>hits: []</code>，多一个 <code>unavailable: "no_wiki"</code></td><td><code>No wiki for this repository yet, so there is nothing to look up. Carry on without it.</code></td></tr>
+<tr><td><code>wiki_get</code></td><td class="bad">同上，会建</td><td class="chg"><span class="tag new">新</span>不建；404 <code>WIKI_SPACE_UNBOUND</code></td><td><code>This workspace has no wiki.</code></td></tr>
+<tr><td><code>wiki_propose</code>、<code>wiki_note</code>、<code>wiki_draft</code></td><td class="bad">建 wiki，再写进去</td><td class="chg"><span class="tag ask">D1</span>不建；409 <code>WIKI_SPACE_UNBOUND</code>，什么都不记</td><td><code>No wiki for this repository yet: the owner creates one in Wiki (Create wiki…). Nothing was recorded.</code></td></tr>
+<tr><td>仓库的 wiki 在 Trash</td><td class="bad">建一个新的空 wiki</td><td class="chg"><span class="tag new">新</span>搜索空结果（<code>wiki_in_trash</code>）；写被拒</td><td><code>The wiki for this repository is in Trash: the owner restores it from Trash.</code></td></tr>
+<tr><td>带会话头调 <code>POST /api/wiki/spaces</code></td><td class="bad">允许（只是不能开维护）</td><td class="chg"><span class="tag new">新</span>403 <code>WIKI_OWNER_CHANNEL_ONLY</code></td><td>同 review mode 的规矩：只认你本人的登录</td></tr>
+<tr><td>仓库<b>已经有</b> wiki</td><td>workspace 自动算在里面</td><td><span class="tag keep">沿用</span>不变，第一次调工具时照旧写一行绑定</td><td>—</td></tr>
+</table>
+<div class="b-gap"></div>
+<div class="row">
+  <div class="b-tr">
+    <div class="who">会话里（新）· 一个没有 wiki 的仓库</div>
+    <div>I'll check for known pitfalls before editing the config.</div>
+    <div class="tool"><span class="nm">wiki_search</span> query: "/etc/wireguard/wg1.conf"<span class="out">No wiki for this repository yet, so there is nothing to look up. Carry on without it.</span></div>
+    <div>Nothing recorded for this file. Editing it now.</div>
+  </div>
+  <div class="notes"><ol>
+    <li><span class="n">1</span><span class="tag new">新</span><b>搜索回答空结果，不报错。</b>系统提示要每次改文件前都搜，报错会让 agent 停下来解释；空结果加一句说明，它接着干活。系统提示本身不改（它已经写了 "if your tool list has it"）。</li>
+    <li><span class="n">2</span><span class="tag new">新</span><code>unavailable</code> 是搜索回答新加的可选字段，闭集 <code>no_wiki</code> / <code>wiki_in_trash</code>：「搜了没搜到」和「根本没有 wiki」从此分得开。旧 runner 不认它也没事，照样读到空 <code>hits</code>。</li>
+    <li><span class="n">3</span><span class="tag keep">沿用</span>Create wiki 表单（<code>POST /api/wiki/spaces</code>）照旧一次建 wiki、开维护、起草 plan；起草作业从此只有这一个来源。</li>
+  </ol></div>
+</div>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">3</span>建第二个 wiki 的入口：侧栏 Wiki 组 <small>· web；iOS、macOS、Android 的抽屉加同一行</small></div>
+<div class="row">
+  <div>
+    <div class="b-cap"><span class="n">①</span>今天 <small>· 只有已有的 wiki 和 Trash</small></div>
+    <div class="s-nav">
+      <div class="s-top">⌂&nbsp; Home</div><div class="s-top">☰&nbsp; Tasks</div><div class="s-top on">▤&nbsp; Wiki</div>
+      <div class="s-div"></div>
+      <div class="s-head">Wiki <span class="c">3</span><span class="cr">▼</span></div>
+      <div class="s-it on"><span class="g">▤</span><span class="l">orbit</span><span class="bd">4</span></div>
+      <div class="s-it"><span class="g">▤</span><span class="l">docs-site</span></div>
+      <div class="s-it"><span class="g">▤</span><span class="l">billing-service</span></div>
+      <div class="s-it grey"><span class="g">🗑</span><span class="l">Trash</span><span class="cnt">1</span></div>
+      <div class="s-div"></div>
+      <div class="s-head">Projects <span class="c">2</span><span class="cr">▼</span></div>
+      <div class="s-it"><span class="g">◇</span><span class="l">Settings redesign</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="b-cap"><span class="n">②</span>新 <span class="tag new">新</span><small>· 最后一行 New wiki…</small></div>
+    <div class="s-nav">
+      <div class="s-top">⌂&nbsp; Home</div><div class="s-top">☰&nbsp; Tasks</div><div class="s-top on">▤&nbsp; Wiki</div>
+      <div class="s-div"></div>
+      <div class="s-head">Wiki <span class="c">3</span><span class="cr">▼</span></div>
+      <div class="s-it on"><span class="g">▤</span><span class="l">orbit</span><span class="bd">4</span></div>
+      <div class="s-it"><span class="g">▤</span><span class="l">docs-site</span></div>
+      <div class="s-it"><span class="g">▤</span><span class="l">billing-service</span></div>
+      <div class="s-it grey mk" data-n="1"><span class="g">＋</span><span class="l">New wiki…</span></div>
+      <div class="s-it grey"><span class="g">🗑</span><span class="l">Trash</span><span class="cnt">1</span></div>
+      <div class="s-div"></div>
+      <div class="s-head">Projects <span class="c">2</span><span class="cr">▼</span></div>
+      <div class="s-it"><span class="g">◇</span><span class="l">Settings redesign</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="b-cap"><span class="n">③</span>wiki 页头的切换器 <span class="tag new">新</span></div>
+    <div class="s-head2">orbit <span class="cap">▼</span></div>
+    <div class="s-pick">
+      <div class="r on">orbit<span class="ck">✓</span></div>
+      <div class="r">docs-site</div>
+      <div class="r">billing-service</div>
+      <hr>
+      <div class="r add mk" data-n="2">＋&nbsp; New wiki…</div>
+    </div>
+  </div>
+  <div class="notes" style="padding-top:34px"><ol>
+    <li><span class="n">1</span><span class="tag new">新</span>侧栏 Wiki 组：各个 wiki 之后、Trash 之前，一行灰字 <b>New wiki…</b>，样式照 Trash 行，不带数字。iOS、macOS、Android 的抽屉 Wiki 组加同一行。</li>
+    <li><span class="n">2</span><span class="tag new">新</span>页头切换器：分隔线下面一项 <b>New wiki…</b>。</li>
+    <li><span class="n">·</span><span class="tag keep">沿用</span>两个入口打开的都是<b>现有的</b> Create wiki 表单（第 4 部分）。账号一个 wiki 都没有时，侧栏没有 Wiki 组，入口照旧是 <code>Set up your first wiki</code> 卡。</li>
+    <li><span class="n">·</span><span class="tag ask">D2</span>要不要在 workspace 行的 ⋯ 菜单里也放 <code>Create wiki…</code>，见第 5 部分。</li>
+  </ol></div>
+</div>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">4</span>Create wiki 表单：已经有 wiki 的仓库灰掉</div>
+<div class="row">
+  <div class="d-dlg">
+    <div class="d-h">Create wiki</div>
+    <div class="d-b">
+      <div class="d-lab">Reads the repository from</div>
+      <div class="d-sel">lfs<span class="cr">▼</span></div>
+      <div class="d-list">
+        <div class="d-g">github.com/sample/orbit <span class="has mk" data-n="1">Has a wiki</span></div>
+        <div class="d-o off">orbit-develop</div>
+        <div class="d-o off">orbit-prod</div>
+        <div class="d-g">github.com/sample/lfs-builder</div>
+        <div class="d-o on">lfs</div>
+        <div class="d-g">github.com/sample/infra-scripts</div>
+        <div class="d-o">infra<span class="m">offline</span></div>
+      </div>
+      <div class="d-lab" style="margin-top:14px;color:var(--text-3)">Model · Daily limit · Look back <span style="font-weight:400">（照旧，略）</span></div>
+    </div>
+    <div class="d-f"><span class="d-btn">Cancel</span><span class="d-btn pri">Create wiki</span></div>
+  </div>
+  <div class="notes" style="padding-top:8px"><ol>
+    <li><span class="n">1</span><span class="tag new">新</span>同一仓库只能有一个 wiki（<code>unique (owner_id, repo_url_norm)</code>）。今天的表单只在第一个 wiki 时出现，不会碰到重复；有了 New wiki… 就会碰到。所以已经有 wiki 的仓库<b>整组灰掉，标 Has a wiki</b>，选不了。</li>
+    <li><span class="n">·</span><span class="tag new">新</span>服务端也挡：今天重复提交会撞唯一约束、答 500，改为先查、答 409 <code>WIKI_SPACE_EXISTS</code>（<code>This repository already has a wiki.</code>）。</li>
+    <li><span class="n">·</span><span class="tag keep">沿用</span>其余照旧：按仓库分组，没有仓库的 workspace 不列，离线的排最后；提交一次建 wiki、开维护、起草 plan，成功后进新 wiki。Model、Daily limit、Look back 几栏不动（图里略去）。</li>
+  </ol></div>
+</div>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">5</span>待定 · 要你拍板</div>
+<div class="b-qs">
+  <div class="b-q"><h3><span class="tag ask">D1</span>没有 wiki 时，agent 的提议怎么办</h3>
+    <div class="opt rec"><b>A（推荐）拒绝，什么都不记。</b>agent 读到「这个仓库还没有 wiki」。规则一句话说得清：wiki 只由你建。</div>
+    <div class="opt"><b>B 照旧建，但藏起来。</b>不起草 plan、不进侧栏，等你打开。要新造一个「隐藏」状态，三端都得认它；而且藏起来的 wiki 一样占着这个仓库。</div>
+  </div>
+  <div class="b-q"><h3><span class="tag ask">D2</span>第二个 wiki 的入口</h3>
+    <div class="opt rec"><b>A（推荐）侧栏 New wiki… + 页头切换器。</b>就是第 3 部分那两处，都在 wiki 旁边。</div>
+    <div class="opt"><b>B 再加 workspace 行 ⋯ 里的 Create wiki…</b>只对有仓库、还没有 wiki 的 workspace 显示。从 workspace 出发更顺手，但 ⋯ 菜单又多一项。</div>
+  </div>
+  <div class="b-q"><h3><span class="tag ask">D3</span>lfs-builder 这个 wiki</h3>
+    <div class="opt rec"><b>A（推荐）上线后由我在生产移进 Trash。</b>执行前我会再问你一次。现在移没用，下一个会话一搜它就回来了。</div>
+    <div class="opt"><b>B 你自己从侧栏它的 ⋯ 移。</b>同样要等上线之后。</div>
+    <div class="opt" style="border-left-color:#c8e6c9"><span class="tag keep">沿用</span>其余几个 wiki 都不动，也不批量清理。</div>
+  </div>
+</div>
+</section>
+
+<section class="b-part">
+<div class="band"><span class="bn">6</span>落地（按代价排）</div>
+<div class="b-land"><ol>
+  <li><b>服务端</b>（apiserver + shared + 契约）：删掉 <code>bindOnFirstUse</code> 里建 wiki 的分支；<code>resolveSpaceForCall</code> 分开读和写；搜索回答加 <code>unavailable</code>；带会话头的 <code>POST /wiki/spaces</code> 拒绝；重复仓库答 409。契约 §2.1 和 <code>plan.jobs.triggers</code> 一起改。<b>只部署这一步，新 wiki 就不会再冒出来。</b></li>
+  <li><b>runner-go</b>：把 <code>unavailable</code> 渲染成第 2 部分那两句。旧 runner 读到的也是空结果，不必等 runner 发版。</li>
+  <li><b>web</b>：侧栏 New wiki…、页头切换器、表单里已有 wiki 的仓库灰掉。</li>
+  <li><b>iOS / macOS</b>（OrbitKit 共用）和 <b>Android</b>：同第 3 步，三端对同一份 <code>wiki-start.fixture.json</code>。</li>
+  <li>按 D3 处理 <code>lfs-builder</code>。</li>
+</ol></div>
+</section>
+</div>
+</body>
+</html>
