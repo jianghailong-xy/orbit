@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<title>在终端里直接敲 orbit 开会话 · 设计板（第 2 轮）</title>
+<title>在终端里直接敲 orbit 开会话 · 设计板（已定）</title>
 <style>
   body { margin: 0; background: #f4f4f6; font: 15px/1.55 "Inter", "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif; color: #1d1d1f; }
   .b-part { width: 1400px; margin: 0 auto; padding: 36px 44px 40px; box-sizing: border-box; background: #fff; border-bottom: 1px solid #e3e3e8; }
@@ -55,8 +55,8 @@
 <body>
 
 <section class="b-part" id="part-1">
-  <h1>在终端里直接敲 <span class="b-mono" style="font-size:24px">orbit</span> 开会话 · 第 2 轮</h1>
-  <p class="b-sub">已拍板：D1 = B（Orbit 自己的终端客户端，走 REST API）· D2–D6 按建议 · 审批卡在终端里直接批。终端里的文字是产品文案，用英文。</p>
+  <h1>在终端里直接敲 <span class="b-mono" style="font-size:24px">orbit</span> 开会话 · 已定</h1>
+  <p class="b-sub">已拍板：D1 = B（Orbit 自己的终端客户端）· 审批卡在终端里直接批 · D2′ / D8 / D9 按建议 · D7 = 记住终端 30 天。终端里的文字是产品文案，用英文。</p>
   <div class="b-cols-w">
     <div>
       <h3>② 建议：终端就是又一个 Orbit 客户端</h3>
@@ -98,7 +98,7 @@ Usage:
 </section>
 
 <section class="b-part" id="part-2">
-  <h2>③ 启动 orbit：手机上点一下，给这个终端授权（D7）</h2>
+  <h2>③ 这台机器第一次敲 orbit：手机上点一下，记住这个终端 30 天（D7）</h2>
   <div class="b-cols">
     <div>
       <div class="b-term"><pre><span class="p">~/code/shop-api $</span> orbit
@@ -114,7 +114,7 @@ Usage:
       <div class="hd">Orbit</div>
       <div class="b-sheet">
         <div class="t">Approve a terminal?</div>
-        <div class="s">Terminal on dev-laptop · code 7KQ-4MZ<br>It can start sessions in your workspaces on this machine and answer their approval cards until it closes (12 h at most).</div>
+        <div class="s">Terminal on dev-laptop · code 7KQ-4MZ<br>It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it in Settings → Terminals.</div>
         <div class="b-btns"><div class="b-btn">Deny</div><div class="b-btn pri">Approve</div></div>
       </div>
       <div class="b-notes" style="grid-template-columns:1fr; margin:6px 16px 14px">
@@ -123,7 +123,7 @@ Usage:
     </div>
   </div>
   <div class="b-notes">
-    <p><span class="b-n">6</span>每次启动 <span class="b-mono">orbit</span> 都要在手机上点一下（D7 建议 A）。凭据只放在这个进程的内存里，进程退出就作废。</p>
+    <p><span class="b-n">6</span>每台机器第一次点一下，之后 30 天不用再点（D7 = B）。凭据存系统钥匙串；没有钥匙串的 Linux 存成 <span class="b-mono">0600</span> 文件。</p>
     <p><span class="b-n">8</span>当前目录不在 workspace 里：回车就建。现有的 <span class="b-mono">POST /sessions</span> 已经支持 <span class="b-mono">newWorkspace: { workDir }</span>，不用新路由。</p>
   </div>
   <h2 style="margin-top:28px">离开与重新打开</h2>
@@ -158,36 +158,40 @@ Usage:
     <div class="b-node"><b>任意引擎</b>Claude Code · Codex · Kimi · OpenCode · DeepSeek Harness · Cursor</div>
   </div>
   <p class="g6" style="font-size:14px;margin:6px 0 18px">手机 / 网页连的是同一个 apiserver、同一个会话 —— 不需要"终端占用"，所以第 1 轮的 D6 不再需要。</p>
-  <h3>终端凭据（credential_kind = TERMINAL）：在终端里批审批，但不给同机 agent 留口子</h3>
+  <h3>终端凭据（credential_kind = TERMINAL）：在终端里批审批，权限收窄到这台机器</h3>
   <table>
     <tr><th style="width:42%">限制</th><th>防的是什么</th></tr>
     <tr><td>只能由 owner 在 App 里点 Approve 签发（owner 渠道），令牌和 runner 都发不了</td><td>agent 给自己签一个</td></tr>
-    <tr><td>只放在 TUI 进程内存里，不写磁盘、不进环境变量</td><td>agent 从文件或 <span class="b-mono">env</span> 里读到</td></tr>
-    <tr><td>进程退出就作废，最长 12 小时</td><td>泄露出去的副本一直能用</td></tr>
-    <tr><td>只管这个终端开过的会话</td><td>拿它去批别的会话的请求</td></tr>
-    <tr><td>批审批必须在这个 TUI 自己的 TTY 上按键</td><td>脚本替人点</td></tr>
-    <tr><td>每次回答都记 <span class="b-mono">credential_kind = TERMINAL</span> + 机器名</td><td>事后查不到是谁批的</td></tr>
+    <tr><td>只绑定这台机器（它的 runner）和这台机器上的会话，别处的会话一律拒绝</td><td>凭据被拷走后拿去批别处的会话</td></tr>
+    <tr><td>存系统钥匙串（没有钥匙串时存 <span class="b-mono">0600</span> 文件），不进环境变量</td><td>从 <span class="b-mono">env</span> 或公开可读的文件里读到</td></tr>
+    <tr><td>30 天过期；App 设置 → Terminals 里列出来，可以撤销</td><td>泄露了也没人发现、一直能用</td></tr>
+    <tr><td>只放开：建 / 开会话、发消息、打断、读事件、批审批卡。证据裁决、验收标准、启动 / 完成项目等仍然拒绝</td><td>终端权限扩大成 owner 的全部权限</td></tr>
+        <tr><td>每次回答都记 <span class="b-mono">credential_kind = TERMINAL</span> + 机器名</td><td>事后查不到是谁批的</td></tr>
   </table>
   <div class="b-warn">
-    <b>剩下的风险：</b>和 TUI 同一个系统用户的 agent，理论上能用 <span class="b-mono">ptrace</span> 读它的内存。Linux 的 <span class="b-mono">ptrace_scope ≥ 1</span> 和 macOS 默认都会拒绝非父进程这样做。runner 用独立用户安装（hostd）时，这个风险就没有了。agent 也不能自己另起一个 <span class="b-mono">orbit</span>：每次启动都要手机上点一下，你会看到。<br>
+    <b>你接受的风险（D7 = B）：</b>和终端同一个系统用户的 agent，能读到存下来的凭据，直接调用审批路由批准它自己在这台机器上的请求。activity 里看得到，也可以撤销。runner 用独立用户安装（hostd）时，agent 碰不到你的钥匙串和家目录。<br>
     <span class="b-mono">human-only-authority.md</span> 加一行 TERMINAL：<b>只</b>放开审批卡，证据裁决、验收标准、启动 / 完成项目等仍然拒绝。
   </div>
 </section>
 
 <section class="b-part" id="part-4">
-  <h2>待定 · 要你拍板（第 2 轮）</h2>
+  <h2>决定汇总（2026-11-12）</h2>
   <table>
-    <tr><th style="width:52px"></th><th style="width:210px">问题</th><th>方案 A</th><th>方案 B</th></tr>
-    <tr><td>D2′</td><td>终端用什么凭据<br><span class="g6" style="font-size:13px">（第 1 轮选的是 runner 凭据，前提是 D1 = A）</span></td><td class="rec">全部用终端凭据：用户路由现成，<b>不用新做 runner 路由</b> <span class="b-tag">建议</span></td><td>建会话、发消息、读事件用 runner 凭据（要新做 runner 的事件流路由），终端凭据只用来批审批<br><span class="g6">两套凭据并存，多做一组路由。</span></td></tr>
-    <tr><td>D7</td><td>终端授权多久</td><td class="rec">每次启动 <span class="b-mono">orbit</span> 都在手机上点一下；凭据只放内存 <span class="b-tag">建议</span><br><span class="g6">最安全：agent 偷偷开终端你一定看得到。</span></td><td>记住这台终端 30 天（存系统钥匙串），只有第一次要点<br><span class="g6">更省事，但钥匙串里的凭据，同用户的 agent 也能拿出来用。</span></td></tr>
-    <tr><td>D8</td><td><span class="b-mono">orbit resume &lt;id&gt;</span></td><td class="rec">改成打开 Orbit 终端客户端（所有引擎）；原来开引擎 CLI 的行为改为 <span class="b-mono">--engine-cli</span> <span class="b-tag">建议</span></td><td>不变；终端客户端用 <span class="b-mono">orbit open &lt;id&gt;</span> 打开</td></tr>
-    <tr><td>D9</td><td>一轮还没跑完就离开终端</td><td class="rec">会话继续在 runner 上跑，可以随时用 <span class="b-mono">orbit resume</span> 或手机接着看 <span class="b-tag">建议</span></td><td>离开就打断这一轮（和退出 Claude Code 一样）</td></tr>
-    <tr><td class="done">D3–D5</td><td class="done">目录不在 workspace / 改动落点 / 命令名</td><td class="done" colspan="2">已定：问 [Y/n] 后新建 · 直接在当前目录、不建 worktree · 在 TTY 里只敲 <span class="b-mono">orbit</span> <span class="b-tag g">已定</span></td></tr>
-    <tr><td class="done">D6</td><td class="done">终端开着时手机发消息</td><td class="done" colspan="2">不再需要：B 方案下手机和终端都能直接发，和两个 App 窗口一样 <span class="b-tag g">作废</span></td></tr>
+    <tr><th style="width:52px"></th><th style="width:240px">问题</th><th>决定</th></tr>
+    <tr><td>D1</td><td>终端里跑什么</td><td>Orbit 自己的终端客户端，走 REST API（方案 B）</td></tr>
+    <tr><td>D2′</td><td>终端用什么凭据</td><td>全部用终端凭据；不新做 runner 路由</td></tr>
+    <tr><td>D3</td><td>目录不在 workspace 里</td><td>问 [Y/n] 后新建</td></tr>
+    <tr><td>D4</td><td>改动落在哪里</td><td>当前目录本身，不建 worktree</td></tr>
+    <tr><td>D5</td><td>命令名</td><td>在 TTY 里只敲 <span class="b-mono">orbit</span></td></tr>
+    <tr><td>D6</td><td>终端开着时手机发消息</td><td>作废：手机和终端都能直接发</td></tr>
+    <tr><td>审批</td><td>审批卡在哪里批</td><td>终端里直接批（TERMINAL 凭据）</td></tr>
+    <tr><td>D7</td><td>终端授权多久</td><td>记住 30 天，存系统钥匙串，只有第一次要点</td></tr>
+    <tr><td>D8</td><td><span class="b-mono">orbit resume &lt;id&gt;</span></td><td>改成打开终端客户端；原行为改为 <span class="b-mono">--engine-cli</span></td></tr>
+    <tr><td>D9</td><td>一轮没跑完就离开</td><td>会话继续跑</td></tr>
   </table>
   <h2 style="margin-top:28px">落地（按代价排）</h2>
   <ol class="b-steps">
-    <li><b>终端凭据</b>：复用 <span class="b-mono">pat-device-login</span> 的设备登录流程；App 里显示带机器名和校验码的授权卡；TERMINAL 凭据只放开会话、发消息、打断、事件流和审批这几类操作；记录 activity；<span class="b-mono">human-only-authority.md</span> 加一行。</li>
+    <li><b>终端凭据</b>：复用 <span class="b-mono">pat-device-login</span> 的设备登录流程；App 里显示带机器名和校验码的授权卡；钥匙串存储；设置 → Terminals 可撤销；TERMINAL 凭据只放开会话、发消息、打断、事件流和审批这几类操作；记录 activity；<span class="b-mono">human-only-authority.md</span> 加一行。</li>
     <li><b>TUI v1</b>：建会话或打开已有会话；转录（正文、折叠的工具调用、diff）；输入框；Esc 打断；审批卡 y / a / n。</li>
     <li><b>按目录找 workspace</b>：在本机 runner 上查；不在时问 [Y/n]，走 <span class="b-mono">newWorkspace</span> 新建；<span class="b-mono">POST /sessions</span> 加一个单次关掉 worktree 的字段。</li>
     <li><b><span class="b-mono">orbit resume</span></b> 改成打开 TUI（D8）。</li>
