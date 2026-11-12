@@ -66,6 +66,11 @@ import io.orbitd.android.cards.LocalWatchTargetNames
 import io.orbitd.android.cards.watchTargetName
 import io.orbitd.android.cards.OwnerRequestInConversation
 import io.orbitd.android.cards.OwnerRequestStore
+import io.orbitd.android.cards.CrossingCardStore
+import io.orbitd.android.cards.CrossingCardView
+import io.orbitd.android.cards.CrossingReviewSheet
+import io.orbitd.android.projects.CrossingCards
+import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.cards.runnerNames
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.watch.SessionWatches
@@ -236,6 +241,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         OwnerRequests.forSession(route.id!!, ownerState.list(OwnerRequestStore.ALL), ownerState.open)
     }
     val ownerRunner = remember(data.runners) { runnerNames(data.runners) }
+    // The cross-project requests its project was asked, as cards in the conversation that coordinates it (`CrossingCards`): read
+    // behind each of the session's snapshot reads, as the owner requests are. Only a coordinator's session names a project.
+    val coordinated = snapshotDetail?.text("projectId")
+    val crossingStore = remember(handle) { CrossingCardStore.of(app.session, handle, app.processScope) { app.canWrite(handle) } }
+    val crossingState by crossingStore.state.collectAsState()
+    LaunchedEffect(crossingStore, coordinated, state.session?.snapshotReads) { coordinated?.let(crossingStore::load) }
+    // A review open here is this conversation's: leaving it closes it.
+    DisposableEffect(crossingStore) { onDispose { crossingStore.close() } }
+    val crossingBatches = remember(crossingState.rows, coordinated) { coordinated?.let { crossingState.batches(it) }.orEmpty() }
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
     // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
     // answered here stops counting with the press, not with the read after it (A08-13).
@@ -465,6 +479,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val displayedWindow = state.window
                 // Inside the row it follows, so no list index moves: the reader's jumps count rows.
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
+                val crossingPlaced = remember(displayedRows, crossingBatches) { CrossingCards.place(displayedRows.map { it.event.ts }, crossingBatches) }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
                 // merely live: a turn stopped without a `turn_end` would count up for as long as the session waits (iOS reads `.running` too).
@@ -483,9 +498,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
-                        else ownerPlaced[-1]?.let { asked -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            asked.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
-                        } }
+                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
+                            crossingPlaced[-1]?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
+                        }
                     }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
                         item(key = "created-workspace") {
@@ -519,6 +535,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> if (it.steps.isNotEmpty()) "steps" else it.event.type }) { index, row ->
                         val asked = ownerPlaced[index]
+                        val crossings = crossingPlaced[index]
                         // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
                         val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
                         val drawRow: @Composable () -> Unit = {
@@ -528,10 +545,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 TurnHeadLine(head, ticking = sessionLive && row.event.seq == newestHead)
                             }
                         }
-                        if (asked == null) drawRow()
+                        if (asked == null && crossings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
-                            asked.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
+                            asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink) } }
+                            crossings?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
                     }
                     if (displayedWindow.seeded && displayedRows.isEmpty() && (live == null || accepted.isEmpty())) item(key = "empty") { Text("No messages yet") }
@@ -634,6 +652,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
         }
         if (!state.denied) CardReviewSheet(cards, reviewStates, openLink, discussCard)
+        if (!state.denied) CrossingReviewSheet(crossingStore, coordinated)
         if (!state.denied) CardReceiptSheet(cards, openLanding = { open(OrbitRoute(Destination.SESSION, it)) })
         if (!state.denied) EvidenceFilesSheet(cards)
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }

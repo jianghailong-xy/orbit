@@ -257,6 +257,9 @@ struct ApprovalReviewSheet: View {
     let target: ApprovalReviewTarget
     @State private var reviewStatusMessage: String?
     @State private var evidenceFiles: EvidenceFilesTarget?
+    /// A crossing batch stays in the conversation once answered, so its record can be opened again:
+    /// whether it was already answered here when this sheet opened, which is not a press to confirm.
+    @State private var crossingAnsweredAtOpen = false
 
     /// Whether a press in THIS window answered what the sheet shows, which is what takes the sheet
     /// away. Neither a request that went away underneath the reader nor a record opened from the
@@ -270,8 +273,17 @@ struct ApprovalReviewSheet: View {
             if case .coordinatorQuestion(let itemID) = card.kind {
                 return console.questionsAnsweredHere.contains(itemID)
             }
+            // A crossing batch is never closed: its card draws its own receipt.
+            if case .crossingBatch(let batchID) = card.kind {
+                return console.crossingAnsweredHere(batchID)
+            }
             return console.answeredHere(card)
         }
+    }
+
+    private var isCrossingBatch: Bool {
+        if case .delivered(let card) = target, case .crossingBatch = card.kind { return true }
+        return false
     }
 
     var body: some View {
@@ -344,8 +356,10 @@ struct ApprovalReviewSheet: View {
         // The record confirms the press, and then the sheet gets out of the way (the owner's call of
         // 2026-11-02). Long enough to see what was ticked, short enough not to be a thing to dismiss.
         // The ✕ stays live throughout, and a sheet closed by hand cancels this with the view.
+        .onAppear { crossingAnsweredAtOpen = isCrossingBatch && answeredHere }
         .task(id: answeredHere) {
             guard answeredHere else { return }
+            guard !crossingAnsweredAtOpen else { return }
             try? await Task.sleep(for: .seconds(2))
             if !Task.isCancelled { dismiss() }
         }

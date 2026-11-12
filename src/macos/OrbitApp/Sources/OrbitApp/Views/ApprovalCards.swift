@@ -2201,6 +2201,8 @@ struct DeliveredDecisionCardView: View {
                 PromotionReceiptLine(promotion: promotion)
             case .ownerRequest(let requestID):
                 OwnerRequestView(requestID: requestID)
+            case .crossingBatch(let batchID):
+                CrossingDecisionCard(console: console, batchID: batchID)
             }
         }
         .environment(\.approvalReviewTarget, .delivered(card))
