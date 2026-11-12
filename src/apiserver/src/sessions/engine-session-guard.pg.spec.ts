@@ -35,6 +35,7 @@ import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { SessionTagsService } from '../session-tags/session-tags.service';
 import { ShareLinksService } from '../share-links/share-links.service';
+import { SessionGuestsService } from '../session-guests/session-guests.service';
 import { WatchesService } from '../watches/watches.service';
 import { WatchEvaluatorService } from '../watches/watch-evaluator.service';
 import { ProvidersService } from '../providers/providers.service';
@@ -95,6 +96,7 @@ interface Stack {
   sessions: SessionsService;
   tags: SessionTagsService;
   shares: ShareLinksService;
+  guests: SessionGuestsService;
   attachments: AttachmentsService;
   watches: WatchesService;
   receipts: MergeReceiptService;
@@ -144,6 +146,7 @@ async function connect(): Promise<Stack> {
     sessions,
     tags: new SessionTagsService(prisma, realtime),
     shares: new ShareLinksService(prisma),
+    guests: new SessionGuestsService(prisma, sessions),
     attachments: new AttachmentsService(prisma),
     watches: new WatchesService(prisma, {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },
@@ -307,6 +310,8 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/share': (s, w, id) => s.shares.put(w.ownerId, 'SESSION', id, {}),
   'PUT /sessions/:id/share': (s, w, id) => s.shares.put(w.ownerId, 'SESSION', id, {}),
   'DELETE /sessions/:id/share': (s, w, id) => s.shares.turnOff(w.ownerId, 'SESSION', id),
+  'POST /sessions/:id/guests': (s, w, id) => s.guests.invite(w.ownerId, id, 'nobody@engine-session-guard.invalid'),
+  'DELETE /sessions/:id/guests/:userId': (s, w, id) => s.guests.remove(w.ownerId, id, randomUUID()),
 };
 
 /** The runner door's per-route drivers, keyed exactly as the route census keys them. */

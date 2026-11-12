@@ -221,7 +221,8 @@ struct SessionFolderPage: View {
         }
         .sheet(item: $sharingSession) { s in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(s, agents: app.agents))
             }
         }
         .sheet(item: $movingSession) { s in

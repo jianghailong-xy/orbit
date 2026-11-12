@@ -766,6 +766,19 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: "None inside. After commit, the standing grant of an allow that carried remember rules (rememberForWorkspace) and the APPROVAL_RESOLVED publish, both only when the decision landed.",
     answer: 'Typed 503 from the global boundary; the person, or the Feishu inbox, asks again, and the decision either landed or did not.',
   },
+  // A session guest's invitation ending — the owner's remove, or the guest's leave — with the guest's queued turns
+  // (docs/session-guests-design.md §6 rule 6).
+  {
+    at: 'session-guests/session-guests.service.ts#endInvitation',
+    shape: 'TX_RETRIED',
+    locks: "The session row FOR UPDATE (the lock createTurn, cancelQueuedTurn and the runner's claim take, rank 30 in createTurn's order); then one UPDATE of the guest's live session_guest row predicated on removed_at IS NULL; then the guest's PENDING message and steer conversation_turn rows on the session, read unlocked under the session lock, and one DELETE of them by id predicated on status PENDING (conversation_turn's own foreign keys cascade to its attachments' link rows); then, when the session was PENDING and no executable turn is left, one UPDATE of the session row it already holds. session_guest has no trigger.",
+    identity: "The session and the guest, fixed before the closure: a re-run finds the invitation live again only if the discarded attempt wrote nothing.",
+    isolation: '',
+    attempts: 4,
+    replay: "Every attempt re-reads the invitation, the queued turns and the session status under the session lock, so a re-run withdraws what is still queued and nothing a runner leased meanwhile; once one attempt committed, a second remove or leave finds no live invitation and answers 404.",
+    effects: "None inside. After commit, when a turn was withdrawn, SessionsService.announceQueuedTurnsChanged: the inbox hint to the session's runner and the queued-turns publish.",
+    answer: 'Typed 503 from the global boundary; the owner (or guest) presses again, and the invitation either ended or did not.',
+  },
   // Each account's own Feishu (Lark) app (docs/feishu-bot-design.md §4.1, migration 0489).
   {
     at: 'feishu/feishu-direct.service.ts#start',
@@ -2476,6 +2489,12 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'feishu/feishu-group.service.ts#registerTopic', under: 'feishu/feishu-group.service.ts#start, and sessions/sessions.service.ts#createTurn (onTurnWritten)' },
   { at: 'feishu/feishu-group.service.ts#reserve', under: 'feishu/feishu-group.service.ts#start (its first transaction)' },
   { at: 'feishu/feishu-group.service.ts#openReserved', under: 'feishu/feishu-group.service.ts#start (its second transaction)' },
+  // A guest turn's activity row (docs/session-guests-design.md §5 step 6): one INSERT into activity, which has no foreign
+  // key and no trigger, under the Session lock createTurn or resume holds.
+  // A guest turn's count against the guest's UTC day (§6 rule 5): one conditional UPDATE of the guest's live session_guest
+  // row, under the same Session lock; matching nothing refuses the turn, which rolls back with it.
+  { at: 'session-guests/session-guests.service.ts#countGuestTurn', under: 'sessions/sessions.service.ts#createTurn and #resume (onTurnWritten), from session-guests/session-guests.service.ts#turn' },
+  { at: 'session-guests/session-guests.service.ts#recordGuestTurn', under: 'sessions/sessions.service.ts#createTurn and #resume (onTurnWritten), from session-guests/session-guests.service.ts#turn' },
   { at: 'feishu/feishu-group.service.ts#recordActivity', under: 'feishu/feishu-group.service.ts#start, and sessions/sessions.service.ts#createTurn (onTurnWritten)' },
   { at: 'common/lock-order.ts#lockOwnerTaskGraph', under: 'every rank-10 caller (I1)' },
   // The repository operations' three participants (migration 0402, and 0406 for the files a read answers):
@@ -3077,6 +3096,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "providers/pool-notice.ts#owe", class: "ONE_ROW_CAS", statements: 1, note: "A login pool's transcript line owed to the session the gateway just refused or passed a spent answer to: one conditional UPDATE of that session's `pool_switch_notice`, only while it owes none (NULL), so a second request of the same kind owes nothing twice. No Session lock is taken first and none is needed: the column is written here, by the claim (resolvePoolMember / resolveSharedPool / resolveLoginPool) and cleared by the events transaction, and a race between them leaves either the older line or this one owed — never a torn one. Not a column a session trigger fires on. No carrier is queued with it: the turn it is about is still running and its failure drains the queue, so the next claim queues one (QueueService.resolveLoginPool). A failure is logged by the gateway and the request answered all the same." },
   { at: "providers/providers.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "providers/shared-pools.service.ts#addKey", class: "INSERT", statements: 1, note: "One key of a shared pool (migration 0321). Its composite foreign key names the contributor's provider_pool_person row, so a contributor who is not in the pool fails the insert itself; `pool_api_key_pool_id_key_fingerprint_key` refuses a second add of the same key to the pool, a P2002 answered as the 409 a check before it gives." },
+  { at: "session-guests/session-guests.service.ts#invite", class: "INSERT", statements: 1, note: "One INSERT into session_guest ... ON CONFLICT (session_id, user_id) WHERE removed_at IS NULL DO NOTHING, so inviting someone already invited leaves their live row as it was. Its foreign keys take FOR KEY SHARE on the session and the user rows; session_guest has no trigger. Inviting again after a removal is a new row (docs/session-guests-design.md §7)." },
+  { at: "session-guests/session-guests.service.ts#get", class: "ONE_ROW_CAS", statements: 1, note: "The guest's first open of the session: one UPDATE of their session_guest row by its id predicated on opened_at IS NULL, so only the first read stamps it and a concurrent one changes nothing. No foreign key changes and no trigger." },
   { at: "providers/shared-pools.service.ts#addPerson", class: "INSERT", statements: 1, note: "One INSERT ... ON CONFLICT DO NOTHING (createMany with skipDuplicates) on the person's primary key, so adding someone already in leaves their row, and their role, as it was. The pool may be a shared one or a Codex pool of its owner's own (migration 0358); either way the row's foreign keys are the pool and the user, and nothing else is written." },
   { at: "providers/shared-pools.service.ts#create", class: "INSERT", statements: 1, note: "One nested create: the shared pool and its creator's ADMIN row go in as one Prisma write. The slug guard and the P2002 re-pick are the ones providers.service.ts#create's entry describes." },
   { at: "providers/shared-pools.service.ts#leave", class: "ONE_ROW_BY_KEY", statements: 1, note: "The caller's own provider_pool_person row; their keys, those keys' ledger rows and their session tokens go with it by CASCADE." },
