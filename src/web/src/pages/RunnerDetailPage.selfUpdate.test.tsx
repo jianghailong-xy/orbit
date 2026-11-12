@@ -258,6 +258,7 @@ async function mount(input: RunnerAttentionInput, refuse?: string) {
     if (method !== 'GET') {
       sent.push({ method, path });
       if (refuse && path.endsWith('/self-update')) throw new Error(refuse);
+      if (path.endsWith('/self-update/postpone')) return { until: (options as { body?: { until: string } }).body!.until };
       return path.endsWith('/self-update') ? { requestedAt: new Date(NOW).toISOString() } : {};
     }
     if (path === '/runners') return [runner];
@@ -600,6 +601,46 @@ describe('the Update card, one per phase the runner reports', () => {
       done: null,
     });
     expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+  });
+
+  // Later ▾ (board 3 ⑦) while draining; Change ▾ and Update Now… once postponed; nothing in the other phases.
+  const actions = () => $$('.rd-update-card .rd-update-actions button').map(text);
+  it('the actions: Later while draining, Change and Update Now… once postponed, none otherwise', async () => {
+    await mount(phase({ phase: 'draining', drainingSince: at(38), turnsInFlight: 2 }));
+    expect(actions()).toEqual(['Later']);
+    act(() => root?.unmount());
+    await mount(phase({ phase: 'postponed', postponedUntil: new Date(NOW + 3_600_000).toISOString() }));
+    expect(actions()).toEqual(['Change', 'Update Now…']);
+    act(() => root?.unmount());
+    await mount(phase({ phase: 'available', availableSince: at(20), turnsInFlight: 3 }));
+    expect(actions()).toEqual([]);
+    act(() => root?.unmount());
+    await mount(phase({ state: 'enabled', phase: 'restarting' }));
+    expect(actions()).toEqual([]);
+  });
+
+  it('Later → Postpone until tomorrow asks the server to postpone; the toast says until when', async () => {
+    const { sent } = await mount(phase({ phase: 'draining', drainingSince: at(38), turnsInFlight: 2 }));
+    await click($$('.rd-update-card .rd-update-actions button')[0]);
+    const rows = $$('[role="menu"] [role="menuitem"]');
+    expect(rows.map(text)).toEqual([
+      `Postpone 1 houruntil ${clock(new Date(NOW + 3_600_000).toISOString())}`,
+      'Postpone until tonight02:00',
+      'Postpone until tomorrow09:00',
+    ]);
+    await click(rows[2]);
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update/postpone` }]);
+    expect(document.body.textContent).toContain('Update postponed until 09:00 — the runner takes work again.');
+  });
+
+  it('postponed → Update Now… confirms, then asks for Update Runner Now, which ends the postponement', async () => {
+    const { sent } = await mount(phase({ phase: 'postponed', postponedUntil: new Date(NOW + 3_600_000).toISOString() }));
+    await click($$('.rd-update-card .rd-update-actions button')[1]);
+    expect(document.body.textContent).toContain('Update to 0.1.197 now?');
+    expect(sent).toEqual([]);
+    const confirmButton = $$('button').find((b) => text(b) === 'Update Now')!;
+    await click(confirmButton);
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update` }]);
   });
 
   it('a runner that sends no phase: no card, and today’s wording', async () => {

@@ -88,6 +88,8 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
 import io.orbitd.android.management.LocalSessionRecaps
+import io.orbitd.android.management.RunnerUpdateLater
+import io.orbitd.android.management.RunnerUpdateLaterButton
 import io.orbitd.android.tasks.resolvedRunState
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastTone
@@ -181,6 +183,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld && RunnerUpdating.isRunnerUpdating(it.queuedGate)
     }?.queuedGate
     val runnerUpdatingMachine = listRow?.let { data.machineName(it.workspace) }
+    // Later… for the runner the update holds this session on (its workspace's runner).
+    val runnerUpdatingRunner = listRow?.let { row -> data.workspaces.firstOrNull { ObjectId.same(it.id, row.workspace) }?.runnerId }
+    val runnerUpdatingLater: (@Composable () -> Unit)? = runnerUpdatingRunner?.let { runnerId -> {
+        RunnerUpdateLaterButton(runnerUpdatingGate?.queuedRunnerUpdate?.targetVersion, runnerUpdatingMachine, { until ->
+            runCatching { api.mutate(RunnerUpdateLater.path(runnerId), body = RunnerUpdateLater.body(until)) }
+                .fold({ app.realtime.refreshDirectory(); null }, { it.message ?: RunnerUpdateLater.POSTPONE_FAILED })
+        })
+    } }
     val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(shownRows)
@@ -554,7 +564,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             if (head == null && held == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
                             else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
-                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine) }
+                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, later = runnerUpdatingLater) }
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
@@ -571,8 +581,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (runnerUpdatingPage != null) item(key = "runner-updating") {
                         val openTurn: (String) -> Unit = { open(OrbitRoute(Destination.SESSION, it)) }
                         if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn)
-                        } else RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn)
+                            RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn, later = runnerUpdatingLater)
+                        } else RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn, later = runnerUpdatingLater)
                     }
                     else if (displayedWindow.seeded && displayedRows.isEmpty() && (live == null || accepted.isEmpty())) item(key = "empty") { Text("No messages yet") }
                     if (live != null) {

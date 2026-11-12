@@ -181,6 +181,7 @@ export const HEARTBEAT_DELIVERIES = {
     how: 'EVERY_BEAT',
     reads: "the beat's own draining flag: a word about this server, which the quiet answer to a draining beat carries as the full one does",
   },
+  postponeSelfUpdateUntil: { how: 'MARKED', writers: ['runners/runners.service.ts#postponeSelfUpdate'], pending: 'until a beat claims it' },
   codexRateLimitResetRequest: {
     how: 'MARKED',
     writers: ['runners/codex-rate-limit-reset.service.ts#create'],
@@ -842,7 +843,8 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
              OR r."claude_history_status" IN ('pending', 'scanning')
              OR r."dir_probe_status" IN ('pending', 'probing')
              OR r."model_catalog_refresh_at" IS NOT NULL
-             OR r."self_update_requested_at" IS NOT NULL)
+             OR r."self_update_requested_at" IS NOT NULL
+             OR r."self_update_postpone_until" IS NOT NULL)
       )
     ) AS "pending"
   `;
@@ -873,6 +875,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.managedSleep !== undefined
     || answer.refreshModelCatalog === true
     || answer.checkSelfUpdate === true
+    || answer.postponeSelfUpdateUntil !== undefined
   );
 }
 

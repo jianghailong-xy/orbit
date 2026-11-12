@@ -821,6 +821,23 @@ func (p *sessionPool) drainForUpdate() {
 	p.drainingForUpdate = true
 }
 
+// endDrainForUpdate undoes drainForUpdate: the owner put the release off (selfUpdateGate.postpone).
+// The claim loop claims again at once, and every follow-up held for the update starts now — its
+// permit is still this runner's, so waitActive lets it through.
+func (p *sessionPool) endDrainForUpdate() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.drainingForUpdate = false
+	for _, s := range p.sessions {
+		if s.heldForUpdate {
+			s.heldForUpdate = false
+			close(s.wake)
+			s.wake = make(chan struct{})
+		}
+	}
+	p.signalLocked(nil) // the claim loop waiting for capacity looks again
+}
+
 // holdFollowUpForUpdate is what a turn's completion does instead of parking when the control plane
 // kept its permit for a queued follow-up (retainsTurnPermit): while the pool drains for an update,
 // the follow-up is held back (heldForUpdate), so that a session with a message queued at the end of

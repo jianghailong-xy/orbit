@@ -843,12 +843,12 @@ struct TranscriptView: View {
     private var runnerUpdatingFoot: RunnerUpdatingFoot? {
         guard let session = runnerUpdatingSession,
               let id = RunnerUpdating.footBubbleID(console.state.items) else { return nil }
-        return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName)
+        return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName, runnerID: console.runnerID)
     }
 
     @ViewBuilder private var runnerUpdatingPage: some View {
         if let session = runnerUpdatingSession, RunnerUpdating.footBubbleID(console.state.items) == nil {
-            RunnerUpdatingQueuedView(session: session, machine: console.runnerName,
+            RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
                                      onOpenSession: { app.route(to: .session($0)) })
         }
     }

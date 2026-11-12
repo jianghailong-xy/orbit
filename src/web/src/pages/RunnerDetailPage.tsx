@@ -106,6 +106,10 @@ import {
   RUNNER_MAX_CONCURRENT,
   RUNNER_NEEDS_ATTENTION,
   RUNNER_OFFLINE,
+  RUNNER_UPDATE_NOW,
+  RUNNER_UPDATE_NOW_CONFIRM,
+  RUNNER_UPDATE_NOW_CONFIRM_BODY,
+  runnerUpdateNowConfirmTitle,
   RUNNER_ONLINE,
   RUNNER_REPAIR,
   RUNNER_ROOT_NO_BYPASS,
@@ -131,6 +135,7 @@ import {
   runnerWorkspaceRunning,
 } from '../lib/runnerCopy';
 import { runnerQuietMinutes, runnerUpdateCard } from '../lib/runnerUpdateCard';
+import { RunnerUpdateLaterMenu } from '../components/RunnerUpdateLater';
 import { useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../lib/claudeRegionCopy';
 import { ago } from '../lib/runnerEngines';
@@ -1566,7 +1571,28 @@ export function RunnerDetailPage() {
               ))}
             </ul>
           )}
-          {/* Later ▾ and Update Now… go here (their own tasks). */}
+          {/* Later ▾ while draining (board 3 ⑦); Change ▾ and Update Now… once postponed. Update Now… while
+              draining comes with its own task. */}
+          {(updateCard.phase === 'draining' || updateCard.phase === 'postponed') && (
+            <div className="rd-update-actions">
+              <RunnerUpdateLaterMenu runnerId={runner.id} change={updateCard.phase === 'postponed'} />
+              {updateCard.phase === 'postponed' && (
+                <Button
+                  loading={runnerUpdate.isPending}
+                  onClick={() =>
+                    void confirm({
+                      title: runnerUpdateNowConfirmTitle(runner.selfUpdate?.targetVersion ?? ''),
+                      description: RUNNER_UPDATE_NOW_CONFIRM_BODY,
+                      confirmText: RUNNER_UPDATE_NOW_CONFIRM,
+                      onConfirm: () => runnerUpdate.mutateAsync(),
+                    })
+                  }
+                >
+                  {RUNNER_UPDATE_NOW}
+                </Button>
+              )}
+            </div>
+          )}
         </section>
       )}
 

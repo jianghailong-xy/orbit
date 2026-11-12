@@ -1805,6 +1805,15 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("runners/\(id)/self-update")
     }
 
+    /// Later: the runner ends its drain for the waiting release now and puts it off until `until`,
+    /// capped at 09:00 tomorrow in `timeZone`. Refused for a runner offline, too old to honour it, or
+    /// with nothing waiting.
+    @discardableResult
+    public func postponeRunnerSelfUpdate(_ id: String, until: Date,
+                                         timeZone: TimeZone = .current) async throws -> RunnerSelfUpdatePostponeResponse {
+        try await post("runners/\(id)/self-update/postpone", body: RunnerUpdateLater.request(until: until, timeZone: timeZone))
+    }
+
     /// Check again (docs/claude-region-check-contract.md §7): the runner checks its Claude region at
     /// once, and the answer lands in `Runner.region` like any other check's. Refused while the runner
     /// is offline, and for one that does not check.

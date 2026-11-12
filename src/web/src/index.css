@@ -2356,6 +2356,30 @@ button.toast--pill:focus-visible {
   flex: none;
   color: var(--text-3);
 }
+/* Later ▾ and Update Now… under the card (board 3 ⑦), and under the queued page's wait. */
+.rd-update-actions,
+.runner-update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.runner-update-actions {
+  justify-content: center;
+}
+.runner-updating-pop .runner-update-actions {
+  justify-content: flex-start;
+}
+/* A Later row: what it does on the left, the clock time on the right in the meta voice. */
+.runner-update-later-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  min-width: 240px;
+}
+.runner-update-later-time {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
 /* The machine's contents on the left, its settings and facts in a narrower column on the right. */
 .rd-cols {
   display: grid;

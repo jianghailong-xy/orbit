@@ -444,6 +444,11 @@ type HeartbeatResponse struct {
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
 	// runner claims nothing while it drains, as before.
 	DrainScopedClaims bool `json:"drainScopedClaims,omitempty"`
+	// The owner's Later (RFC3339): stop draining for the waiting release now and put it off until
+	// this time, then wait for idle again under a fresh deferral limit (selfUpdateGate.postpone).
+	// Handed over once and cleared, like CheckSelfUpdate; sent only to a runner that declares
+	// self-update-postpone/v1. Empty on older control planes.
+	PostponeSelfUpdateUntil string `json:"postponeSelfUpdateUntil,omitempty"`
 	// A working directory to report local Claude Code history for, answered by POSTing
 	// /runner/claude-history-result. Handed over once rather than redelivered: the form that asked
 	// is waiting on a person, and a retype asks again. Nil on older control planes and whenever
