@@ -189,7 +189,14 @@ struct AgentContentColumn: View {
                 }
             }
             #else
-            workspaceList
+            // A project's sessions page takes the column, as on the iPad: the sidebar's project row
+            // opens it (docs/mocks/macos-sidebar, owner 2026-11-12), the detail beside it following
+            // the member picked.
+            if let address = app.projectSessionsColumn, rowNavigation == .selection {
+                SessionProjectPage(address: address, rowNavigation: rowNavigation)
+            } else {
+                workspaceList
+            }
             #endif
         }
         #if os(iOS)
@@ -486,7 +493,6 @@ struct AgentPanes: View {
         // The phone's search field, in the bottom toolbar, gets out of the way while the list is read
         // downward (see the column's `sessionListSearch`).
         .revealsBottomSearchOnScroll(query: searchQuery, enabled: listPresentation.searchesFromBottom)
-        .keepsEmptySearchOnScroll(query: searchQuery)
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }

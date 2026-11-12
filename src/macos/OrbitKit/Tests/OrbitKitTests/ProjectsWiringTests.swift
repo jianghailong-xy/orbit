@@ -186,7 +186,7 @@ final class ProjectsWiringTests: XCTestCase {
                       "the selected row's tap only closes the drawer")
         XCTAssertTrue(entry.contains("nav.switchWorkspace(from: selectedAgentID, to: agentID, folders: sessionFolders)"),
                       "another workspace's row lands on the folder page its list was left on")
-        let project = try slice(app, from: "private func openProjectSessions(_ projectID: String, inColumn: Bool) {",
+        let project = try slice(app, from: "func openProjectSessions(_ projectID: String, inColumn: Bool) {",
                                 to: "\n    }\n")
         XCTAssertTrue(project.contains("$0.projectMembership?.role == .coordinator"), "over the coordinator's workspace")
         XCTAssertTrue(project.contains("nav.path = [.sessionProject(address, asDestination: true)]"),
@@ -249,9 +249,18 @@ final class ProjectsWiringTests: XCTestCase {
                       "every open project, as the drawer lists them")
         XCTAssertTrue(sidebar.contains("WorkspaceNavigationRow("), "the drawer's workspace row")
         XCTAssertTrue(sidebar.contains("shortcut: shortcutIndex[agent.id]"))
+        // The rail itself: everything before the workspace row's right-click menu.
+        let rail = try slice(sidebar, from: "struct SectionSidebar: View {", to: "private func workspaceMenu(")
         for gone in ["newSessionInCurrentAgent", ".following", ".admin", "AppSection.visible"] {
-            XCTAssertFalse(sidebar.contains(gone), "the rail has no \(gone)")
+            XCTAssertFalse(rail.contains(gone), "the rail has no \(gone)")
         }
+        // A project row opens the project's sessions page in the session column, as the iPad's does.
+        XCTAssertTrue(sidebar.contains("model.openProjectSessions(id, inColumn: true)"))
+        // A workspace row's right-click menu (board 01, owner 2026-11-12).
+        let menu = try slice(sidebar, from: "private func workspaceMenu(", to: "private func openWorkspace(")
+        try assertInOrder(menu, ["Button(\"New Session\")", "Button(\"Open Sessions\")", "Button(\"Workspace Settings…\")",
+                                 "Button(\"Copy Path\")", "Button(\"Show Machine\")"], "the menu's items")
+        XCTAssertTrue(sidebar.contains(".contextMenu { workspaceMenu(agent) }"))
         let footer = try slice(main, from: "struct AccountFooter: View {", to: "struct AccountAvatar: View {")
         try assertInOrder(footer, ["Button { model.selectedSection = .settings }",
                                    "Button(AppSection.settings.title) { model.selectedSection = .settings }",

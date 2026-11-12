@@ -292,7 +292,6 @@ struct SessionFolderPage: View {
         }
         .listStyle(.plain)
         .rowSwipeList(rowSwipe)
-        .keepsEmptySearchOnScroll(query: searchQuery?.wrappedValue ?? "")
         .refreshable {
             await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
         }
