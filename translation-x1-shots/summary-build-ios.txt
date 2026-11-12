@@ -1,0 +1,10 @@
+Test Case '-[TranslationProbeUITests.TranslationTests test1OffByDefault]' started.
+Test Case '-[TranslationProbeUITests.TranslationTests test1OffByDefault]' passed (285.073 seconds).
+Test Case '-[TranslationProbeUITests.TranslationTests test2SharedFromWeb]' started.
+Test Case '-[TranslationProbeUITests.TranslationTests test2SharedFromWeb]' passed (179.443 seconds).
+Test Case '-[TranslationProbeUITests.TranslationTests test3NoKey]' started.
+Test Case '-[TranslationProbeUITests.TranslationTests test3NoKey]' passed (194.366 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 658.882 (658.894) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 658.882 (658.902) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 658.882 (658.903) seconds
+** TEST SUCCEEDED **

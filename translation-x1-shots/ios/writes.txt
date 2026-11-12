@@ -1,0 +1,8 @@
+17:55:19 "POST /__reset HTTP/1.1" 200 -
+17:56:07 "POST /__note HTTP/1.1" 200 -
+17:59:05 PATCH /api/users/me/preferences BODY {"translationEnabled":true}
+17:59:05 "PATCH /api/users/me/preferences HTTP/1.1" 200 -
+17:59:59 "POST /__reset HTTP/1.1" 200 -
+18:00:13 "POST /__note HTTP/1.1" 200 -
+18:02:55 "POST /__reset HTTP/1.1" 200 -
+18:03:05 "POST /__note HTTP/1.1" 200 -

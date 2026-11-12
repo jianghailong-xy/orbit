@@ -1,0 +1,13 @@
+nokey: never between 120.0 and 700.0; last frame (40.0, 760.1666666666666, 112.33333333333331, 20.33333333333337)
+ios-translation-nokey: "Translation" exists=true y=536
+ios-translation-nokey: "Translate conversations" exists=true y=576
+ios-translation-nokey: "Your language" exists=true y=692
+ios-translation-nokey: "Agents work in" exists=true y=760
+ios-translation-nokey: "English" exists=true y=744
+ios-translation-nokey: "Chinese (Simplified)" exists=true y=692
+ios-translation-nokey: "Session orchestration" exists=true y=13
+ios-translation-nokey: "Default permission" exists=false
+ios-translation-nokey: "Session recaps" exists=true y=406
+ios-translation-nokey: footer hint+footnote exists=true
+ios-translation-nokey: notice exists=true
+ios-translation-nokey: switch exists=true value=Optional(0) enabled=false

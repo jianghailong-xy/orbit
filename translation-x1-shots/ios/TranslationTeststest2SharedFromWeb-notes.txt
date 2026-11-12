@@ -1,0 +1,13 @@
+on: never between 120.0 and 700.0; last frame (40.0, 760.1666666666666, 112.33333333333331, 20.333333333333258)
+ios-translation-on-from-web: "Translation" exists=true y=600
+ios-translation-on-from-web: "Translate conversations" exists=true y=640
+ios-translation-on-from-web: "Your language" exists=true y=692
+ios-translation-on-from-web: "Agents work in" exists=true y=760
+ios-translation-on-from-web: "English" exists=true y=744
+ios-translation-on-from-web: "Chinese (Simplified)" exists=true y=692
+ios-translation-on-from-web: "Session orchestration" exists=true y=77
+ios-translation-on-from-web: "Default permission" exists=false
+ios-translation-on-from-web: "Session recaps" exists=true y=470
+ios-translation-on-from-web: footer hint+footnote exists=true
+ios-translation-on-from-web: notice exists=false
+ios-translation-on-from-web: switch exists=true value=Optional(1) enabled=true

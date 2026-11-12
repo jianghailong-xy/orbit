@@ -1,0 +1,39 @@
+==> iPhone 5277349A-B219-4ED4-853A-8AE666B9F5B1
+    iPhone 17 Pro Max (5277349A-B219-4ED4-853A-8AE666B9F5B1) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 5395, after 2s)
+==> ios
+Test Case '-[TranslationProbeUITests.TranslationTests test1OffByDefault]' started.
+Test Case '-[TranslationProbeUITests.TranslationTests test1OffByDefault]' passed (285.073 seconds).
+Test Case '-[TranslationProbeUITests.TranslationTests test2SharedFromWeb]' started.
+Test Case '-[TranslationProbeUITests.TranslationTests test2SharedFromWeb]' passed (179.443 seconds).
+Test Case '-[TranslationProbeUITests.TranslationTests test3NoKey]' started.
+Test Case '-[TranslationProbeUITests.TranslationTests test3NoKey]' passed (194.366 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 658.882 (658.894) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 658.882 (658.902) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 658.882 (658.903) seconds
+** TEST SUCCEEDED **
+.tr-probe/run.sh: line 83:  5395 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+total 6344
+drwxr-xr-x  23 runner  staff     736 Nov 12 18:07 .
+drwxr-xr-x   3 runner  staff      96 Nov 12 17:40 ..
+drwxr-xr-x  21 runner  staff     672 Nov 12 18:07 attachments
+-rw-r--r--@  1 runner  staff   39641 Nov 12 17:59 ios-translation-after-press-tree.txt
+-rw-r--r--   1 runner  staff  489785 Nov 12 17:59 ios-translation-after-press.png
+-rw-r--r--   1 runner  staff  167728 Nov 12 17:59 ios-translation-languages.png
+-rw-r--r--@  1 runner  staff   40553 Nov 12 18:06 ios-translation-nokey-tree.txt
+-rw-r--r--   1 runner  staff  489672 Nov 12 18:06 ios-translation-nokey.png
+-rw-r--r--@  1 runner  staff   39641 Nov 12 17:58 ios-translation-off-tree.txt
+-rw-r--r--   1 runner  staff  488810 Nov 12 17:58 ios-translation-off.png
+-rw-r--r--@  1 runner  staff   39641 Nov 12 18:02 ios-translation-on-from-web-tree.txt
+-rw-r--r--   1 runner  staff  489785 Nov 12 18:02 ios-translation-on-from-web.png
+-rw-r--r--@  1 runner  staff   40553 Nov 12 18:05 missing-band-nokey.txt
+-rw-r--r--@  1 runner  staff   39641 Nov 12 17:58 missing-band-off.txt
+-rw-r--r--@  1 runner  staff   39641 Nov 12 18:02 missing-band-on.txt
+-rw-r--r--   1 runner  staff     148 Nov 12 18:07 not-served.txt
+-rw-r--r--   1 runner  staff   11575 Nov 12 18:06 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 12 17:44 requests.log.out
+-rw-r--r--@  1 runner  staff    1931 Nov 12 17:59 TranslationTeststest1OffByDefault-notes.txt
+-rw-r--r--@  1 runner  staff     886 Nov 12 18:02 TranslationTeststest2SharedFromWeb-notes.txt
+-rw-r--r--@  1 runner  staff     816 Nov 12 18:06 TranslationTeststest3NoKey-notes.txt
+-rw-r--r--   1 runner  staff     369 Nov 12 18:07 writes.txt
+-rw-r--r--   1 runner  staff  790753 Nov 12 18:07 xcodebuild-ios.log

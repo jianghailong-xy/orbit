@@ -1,0 +1,34 @@
+off: never between 120.0 and 700.0; last frame (40.0, 760.1666666666666, 112.33333333333331, 20.333333333333258)
+ios-translation-off: "Translation" exists=true y=600
+ios-translation-off: "Translate conversations" exists=true y=640
+ios-translation-off: "Your language" exists=true y=692
+ios-translation-off: "Agents work in" exists=true y=760
+ios-translation-off: "English" exists=true y=744
+ios-translation-off: "Chinese (Simplified)" exists=true y=692
+ios-translation-off: "Session orchestration" exists=true y=77
+ios-translation-off: "Default permission" exists=false
+ios-translation-off: "Session recaps" exists=true y=470
+ios-translation-off: footer hint+footnote exists=true
+ios-translation-off: notice exists=false
+ios-translation-off: switch exists=true value=Optional(0) enabled=true
+ios-translation-off: PATCH translationEnabled true logged=true
+ios-translation-after-press: "Translation" exists=true y=600
+ios-translation-after-press: "Translate conversations" exists=true y=640
+ios-translation-after-press: "Your language" exists=true y=692
+ios-translation-after-press: "Agents work in" exists=true y=760
+ios-translation-after-press: "English" exists=true y=744
+ios-translation-after-press: "Chinese (Simplified)" exists=true y=692
+ios-translation-after-press: "Session orchestration" exists=true y=77
+ios-translation-after-press: "Default permission" exists=false
+ios-translation-after-press: "Session recaps" exists=true y=470
+ios-translation-after-press: footer hint+footnote exists=true
+ios-translation-after-press: notice exists=false
+ios-translation-after-press: switch exists=true value=Optional(1) enabled=true
+language list: Chinese (Simplified) exists=true
+language list: Chinese (Traditional) exists=true
+language list: Japanese exists=true
+language list: Korean exists=true
+language list: Spanish exists=true
+language list: French exists=true
+language list: German exists=true
+language list: hint exists=true
