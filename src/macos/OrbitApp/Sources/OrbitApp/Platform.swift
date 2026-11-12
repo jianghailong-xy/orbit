@@ -344,8 +344,7 @@ private struct KeyboardDismissInstaller: UIViewRepresentable {
         // Ignore taps that land inside a text input, so tapping the composer field to move the cursor
         // keeps focus instead of dismissing-then-refocusing (a keyboard flicker).
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            // Every tap, the field's own included: the session search tells its close button from
-            // iOS ending search by itself with this (`BottomSearchMode`).
+            // Every tap: the session search spots a press of its X with this (`BottomSearchMode`).
             SearchCloseTap.record(touch)
             var view = touch.view
             while let current = view {
