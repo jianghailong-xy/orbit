@@ -3158,6 +3158,8 @@ model Project {
   nonCodeSetBy           String?   @map("non_code_set_by")
   nonCodeSetBySessionId  String?   @map("non_code_set_by_session_id") @db.Uuid
   nonCodeSetAt           DateTime? @map("non_code_set_at") @db.Timestamptz(3)
+  /// The short reason given with the mark's last write (migration 0555); null when none was.
+  nonCodeReason          String?   @map("non_code_reason")
 
   /// The account owner's Reopen project (migration 0469): when they pressed it, and what it was
   /// pressed over, the seal of the criteria and each task serving one by a digest of its facts
@@ -4258,6 +4260,11 @@ model ProjectCriterionConfirmation {
   /// What was checked: optional for every kind.
   note         String?
   attachmentIds String[]                             @default([]) @map("attachment_ids") @db.Uuid
+  /// The criterion's wording and verification method at `revision`, kept with the row (migration
+  /// 0555) so a stale confirmation can show what was confirmed. Null on an older row whose revision
+  /// had already moved when 0555 ran.
+  criterionText               String? @map("criterion_text")
+  criterionVerificationMethod String? @map("criterion_verification_method")
   createdAt    DateTime                              @default(now()) @map("created_at")
   /// When an Agent check reported its verdict. Equal to `createdAt` for the other two kinds.
   settledAt    DateTime?                             @map("settled_at")

@@ -42,6 +42,7 @@ import {
   doneFindingLine,
   isNonCode,
   nonCodeProvenance,
+  nonCodeReasonLine,
   doneProvenance,
   updateProjectStatus,
   formatDoneDate,
@@ -62,6 +63,7 @@ import { mainBranchName, projectStarted } from '../lib/projectStart';
 import { projectTaskPath } from '../lib/projectTaskRoute';
 import { AppLink } from './AppLink';
 import { ConfirmCriterionDialog, type ConfirmCriterionSubject } from './ConfirmCriterionDialog';
+import { MovedOutLines } from './ProjectAcceptanceCard';
 import { MoveCriterionDialog, type MoveCriterionSubject } from './MoveCriterionDialog';
 import { Alert } from './ui/Alert';
 import { Dialog } from './ui/Dialog';
@@ -1020,6 +1022,9 @@ function DoneWhenSummary({
           })}
         </ul>
       ) : null}
+      {project.criteriaMovedOut?.length ? (
+        <MovedOutLines movedOut={project.criteriaMovedOut} className="project-done-moved-out" />
+      ) : null}
     </div>
   );
 }
@@ -1028,6 +1033,7 @@ function DoneWhenSummary({
  *  which opens the project page at its Delivers row. */
 function NonCodeBanner({ project }: { project: ProjectDoneDocument }): JSX.Element {
   const provenance = nonCodeProvenance(project);
+  const reason = nonCodeReasonLine(project);
   return (
     <div className="project-done-non-code" role="note">
       <span className="project-done-non-code-icon" aria-hidden="true">i</span>
@@ -1040,6 +1046,7 @@ function NonCodeBanner({ project }: { project: ProjectDoneDocument }): JSX.Eleme
             <AppLink className="project-done-non-code-change" to={`/projects/${project.id}#${NON_CODE_ANCHOR}`}>{NON_CODE_CHANGE}</AppLink>
           </>
         ) : null}
+        {reason ? <span className="project-done-non-code-reason">{reason}</span> : null}
       </span>
     </div>
   );

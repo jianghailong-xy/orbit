@@ -422,6 +422,28 @@ test('a revision bump after a confirmation leaves the criterion stale through th
   assert.equal(confirmation.current?.revision, 1);
 });
 
+test('a confirmation keeps the wording it was given for, which a stale row shows beside the new one', async () => {
+  const { service, definition, confirmations } = fakeStack();
+  await service.confirm(OWNER, PROJECT, 'crit', { kind: 'OWNER' }, { attachmentIds: ['own-shot'] });
+  assert.equal(confirmations[0].criterionText, 'ICP filing approved');
+  assert.equal(confirmations[0].criterionVerificationMethod, 'Read the filing record');
+  definition.revision = 2;
+  definition.text = 'ICP filing approved for cbai.example.cn';
+  const { confirmation } = await service.startCheck(OWNER, PROJECT, 'crit', { kind: 'OWNER' }, {});
+  assert.equal(confirmation.state, 'STALE');
+  assert.equal(confirmation.current?.criterionText, 'ICP filing approved', 'the confirmed revision\'s words');
+  assert.equal(confirmation.current?.criterionVerificationMethod, 'Read the filing record');
+  assert.deepEqual(confirmation.current?.attachmentIds, ['own-shot'], 'and the screenshot it was given with');
+  // The check started on revision 2 keeps revision 2's words.
+  assert.equal(confirmations[1].criterionText, 'ICP filing approved for cbai.example.cn');
+});
+
+test('a row written before 0555 reads its wording as null rather than inventing one', () => {
+  const answer = satisfy(criterion({ satisfiedBy: 'CONFIRMATION', revision: 2, confirmations: [row({ revision: 1 })] }));
+  assert.equal(answer.confirmation?.current?.criterionText, null);
+  assert.equal(answer.confirmation?.current?.criterionVerificationMethod, null);
+});
+
 test('an Agent check is started as a codeless check task, and its PASS confirms', async () => {
   const { service, confirmations, created, executed } = fakeStack();
   const started = await service.startCheck(OWNER, PROJECT, 'crit', { kind: 'OWNER' }, { instructions: 'use the record' });

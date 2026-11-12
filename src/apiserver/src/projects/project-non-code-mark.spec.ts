@@ -164,6 +164,18 @@ test('the owner sets and clears the mark through PATCH /projects/:id, and it rea
   // Only a boolean.
   assert.equal((await patch({ nonCode: 'yes' })).status, 400);
   assert.equal((await patch({ nonCode: null })).status, 400);
+
+  // The reason (0555): optional, sent with the mark, trimmed, replaced by every mark write.
+  const reasoned = await patch({ nonCode: true, nonCodeReason: '  Vendor accounts only.  ' });
+  assert.equal(reasoned.status, 200, JSON.stringify(reasoned.body));
+  assert.equal(reasoned.body.nonCodeReason, 'Vendor accounts only.');
+  assert.equal(row.nonCodeReason, 'Vendor accounts only.');
+  const unreasoned = await patch({ nonCode: true });
+  assert.equal(unreasoned.body.nonCodeReason, null, 'a mark written with no reason keeps none');
+  // Alone it is refused: it is the reason for a write of the mark.
+  assert.equal((await patch({ nonCodeReason: 'why' })).status, 400);
+  assert.equal((await patch({ nonCode: true, nonCodeReason: 'x'.repeat(281) })).status, 400);
+  assert.equal(row.nonCodeReason, null);
 });
 
 test('the coordinator sets and clears the mark through project_update’s runner door, recorded as COORDINATOR with its session', async () => {
@@ -175,8 +187,11 @@ test('the coordinator sets and clears the mark through project_update’s runner
   (door as unknown as { projects: ProjectsService }).projects = service;
   const runner = { id: randomUUID(), ownerId: OWNER_ID } as never;
 
-  const set = await door.updateProject(runner, PROJECT_ID, COORDINATOR_SESSION_ID, { nonCode: true }) as ProjectRow;
+  const set = await door.updateProject(runner, PROJECT_ID, COORDINATOR_SESSION_ID, {
+    nonCode: true, nonCodeReason: 'All work is documents and vendor accounts; no repository.',
+  }) as ProjectRow;
   assert.equal(set.nonCode, true);
+  assert.equal(set.nonCodeReason, 'All work is documents and vendor accounts; no repository.');
   assert.equal(set.nonCodeSetBy, 'COORDINATOR');
   assert.equal(set.nonCodeSetBySessionId, COORDINATOR_SESSION_ID);
   assert.ok(set.nonCodeSetAt instanceof Date);

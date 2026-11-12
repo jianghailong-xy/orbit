@@ -74,6 +74,7 @@ import {
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
 import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
+import { readCriterionMoveRecord } from './criterion-move-record';
 import { settleTaskSegmentAfterMove } from './landing-session';
 import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
 import {
@@ -2717,6 +2718,7 @@ export class ProjectsService {
       blockers,
       standardSetConfirmation,
       mainBranchMemory,
+      moveRecord,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2775,6 +2777,10 @@ export class ProjectsService {
       // one statement keyed by the project: what a coordinator reads before it asks to start, to
       // know whether it has to suggest one.
       readMainBranchMemory(this.prisma, id),
+      // And the criterion move record (board 02 G/I): the criteria this project moved out to a
+      // follow-up, and where each of its own came from. One statement over the move activity rows,
+      // found by 0555's partial indexes and bounded by the moves, not by anything else the project holds.
+      readCriterionMoveRecord(this.prisma, ownerId, id, criterionKeyOf),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -2822,7 +2828,11 @@ export class ProjectsService {
         // is where the reason itself leaves the server, so that a reader who is shown a project
         // that will not settle is shown which criterion, which conversation, and what to do.
         ...criterionIndependenceAnswer(independent.get(item.id)),
+        // Where the criterion came from, when it was moved here from another project; else null.
+        movedFrom: moveRecord.movedFrom.get(item.id) ?? null,
       })),
+      // The criteria this project moved out to a follow-up, in the order they stood here.
+      criteriaMovedOut: moveRecord.movedOut,
       blockers,
       integration: {
         ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
@@ -3659,11 +3669,18 @@ export class ProjectsService {
    * whether a project reads landing at all, so it is not a side effect of some task's edit.
    */
   static nonCodeWriter(
-    dto: Pick<UpdateProjectDto, 'nonCode'>,
+    dto: Pick<UpdateProjectDto, 'nonCode' | 'nonCodeReason'>,
     actingSessionId: string | undefined,
     coordinatorSessionId: string | null,
   ): { by: 'OWNER' | 'COORDINATOR'; sessionId: string | null } | null {
-    if (dto.nonCode === undefined) return null;
+    if (dto.nonCode === undefined) {
+      if (dto.nonCodeReason !== undefined && dto.nonCodeReason !== null) {
+        throw new BadRequestException(
+          'nonCodeReason is the reason for the non-code mark: send it with nonCode, not on its own',
+        );
+      }
+      return null;
+    }
     const session = actingSessionId?.trim();
     if (!session) return { by: 'OWNER', sessionId: null };
     if (session !== coordinatorSessionId) {
@@ -3748,6 +3765,7 @@ export class ProjectsService {
           nonCodeSetBy: nonCodeWriter.by,
           nonCodeSetBySessionId: nonCodeWriter.sessionId,
           nonCodeSetAt: new Date(),
+          nonCodeReason: dto.nonCodeReason?.trim() || null,
         }
         : {}),
       // One bump per write of the authorization set, however many of its fields the write carried:

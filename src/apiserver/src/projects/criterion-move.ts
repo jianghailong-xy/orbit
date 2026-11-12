@@ -364,6 +364,14 @@ export async function writeCriterionMove(
 ): Promise<{ before: string; after: string }> {
   const { sourceId, targetId, criterionId, plan } = move;
   const before = await criteriaSeal(tx, sourceId);
+  // The number the source's cards gave the criterion ("Criterion 4"), kept on the record: once it
+  // has moved, nothing else remembers where in the source's list it stood.
+  const sourceOrder = await tx.projectAcceptanceCriterionDefinition.findMany({
+    where: { projectId: sourceId },
+    orderBy: [{ ordinal: 'asc' }, { id: 'asc' }],
+    select: { id: true },
+  });
+  const fromOrdinal = sourceOrder.findIndex((row) => row.id === criterionId) + 1;
 
   const last = await tx.projectAcceptanceCriterionDefinition.aggregate({
     where: { projectId: targetId },
@@ -424,6 +432,7 @@ export async function writeCriterionMove(
         criterionDefinitionId: criterionId,
         fromProjectId: sourceId,
         toProjectId: targetId,
+        fromOrdinal: fromOrdinal > 0 ? fromOrdinal : null,
         movedTaskIds: plan.movedTaskIds,
         keptTaskIds: plan.keptTaskIds,
         movedOpenItemIds: plan.movedOpenItemIds,

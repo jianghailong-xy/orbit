@@ -645,6 +645,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			}
 			body["nonCode"] = value
 		}
+		// The mark's optional reason travels with it; the server refuses it sent alone.
+		if reason, present := args["nonCodeReason"]; present && reason != nil {
+			value, ok := reason.(string)
+			if !ok {
+				return toolResult("nonCodeReason must be a string", true)
+			}
+			body["nonCodeReason"] = value
+		}
 		if structuredCriteria {
 			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], true)
 			if err != nil {
@@ -3827,7 +3835,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"reports nothing unlanded, and recording it done stores no landing gaps — while whether " +
 						"each criterion is met is unchanged. Only the conversation this project is coordinated " +
 						"from may write it; project_get returns it with nonCodeSetBy (OWNER or COORDINATOR), " +
-						"nonCodeSetBySessionId and nonCodeSetAt.",
+						"nonCodeSetBySessionId, nonCodeSetAt and nonCodeReason.",
+				},
+				"nonCodeReason": map[string]interface{}{
+					"type": "string",
+					"description": "Optional, sent only with nonCode: one short sentence (at most 280 characters) " +
+						"saying why, e.g. \"All work is documents and vendor accounts; no repository.\" The owner " +
+						"sees it under \"Marked by the coordinator\" on the project page and the done card. Each " +
+						"nonCode write replaces it; omit it to store none.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",

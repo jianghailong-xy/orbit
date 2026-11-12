@@ -884,6 +884,28 @@ func TestProjectUpdateSendsTheNonCodeMarkAsTheOwner(t *testing.T) {
 	}
 }
 
+func TestProjectUpdateSendsTheNonCodeReasonOnlyWithTheMark(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	err := cmdProjectCLI([]string{"update", "proj-1", "--non-code", "true", "--non-code-reason", "Vendor accounts only.", "--json"},
+		strings.NewReader(""), &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("project update --non-code-reason: %v", err)
+	}
+	if len(body) != 2 || body["nonCode"] != true || body["nonCodeReason"] != "Vendor accounts only." {
+		t.Fatalf("project update --non-code-reason body = %#v", body)
+	}
+	err = cmdProjectCLI([]string{"update", "proj-1", "--non-code-reason", "alone"}, strings.NewReader(""), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--non-code-reason goes with --non-code") {
+		t.Fatalf("project update --non-code-reason alone = %v", err)
+	}
+}
+
 func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	var body map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

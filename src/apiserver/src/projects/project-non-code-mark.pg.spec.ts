@@ -122,10 +122,14 @@ test('a project marked non-code reads no landing, and clearing the mark brings N
   });
 
   await t.test('the coordinator marks it through project_update: no landing anywhere', async () => {
-    await door.updateProject(runner, projectId, coordinatorSessionId, { nonCode: true } as never);
+    await door.updateProject(runner, projectId, coordinatorSessionId, {
+      nonCode: true, nonCodeReason: '  All work is documents and vendor accounts; no repository.  ',
+    } as never);
     const document = await projects.get(ownerId, projectId);
     assert.equal(document.nonCode, true);
     assert.equal(document.nonCodeSetBy, 'COORDINATOR');
+    // The mark's reason (0555), stored trimmed with who/when and served on the project document.
+    assert.equal(document.nonCodeReason, 'All work is documents and vendor accounts; no repository.');
     assert.equal(document.nonCodeSetBySessionId, coordinatorSessionId);
     assert.ok(document.nonCodeSetAt instanceof Date);
     assert.equal(document.derivedDone.nonCode, true);
@@ -142,12 +146,16 @@ test('a project marked non-code reads no landing, and clearing the mark brings N
     assert.equal(document.nonCode, false);
     assert.equal(document.nonCodeSetBy, 'OWNER');
     assert.equal(document.nonCodeSetBySessionId, null);
+    assert.equal(document.nonCodeReason, null, 'a write with no reason stores none, replacing the old one');
     assert.ok(document.derivedDone.withheld.includes('CRITERION_UNLANDED'));
     assert.deepEqual(await unlanded(), ['NO_BRANCH']);
   });
 
   await t.test('the owner marks it again and records it done: no landing gap is stored', async () => {
-    await projects.update(ownerId, projectId, { nonCode: true } as never);
+    await projects.update(ownerId, projectId, { nonCode: true, nonCodeReason: 'Filings only.' } as never);
+    const marked = await projects.get(ownerId, projectId);
+    assert.equal(marked.nonCodeReason, 'Filings only.', 'the owner may give a reason too');
+    assert.equal(marked.nonCodeSetBy, 'OWNER');
     const check = await acceptance.readProjectDoneCheck(ownerId, projectId);
     assert.deepEqual(check.findings, []);
     await acceptance.recordProjectDone(ownerId, projectId, {

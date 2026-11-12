@@ -113,6 +113,7 @@ import {
   NON_CODE_PROJECT_LINE,
   PROJECT_DONE_COPY,
   type ProjectDerivedDone,
+  type CriterionMovedOut,
   type ProjectDoneDocument,
 } from '../lib/projectDone';
 
@@ -217,6 +218,10 @@ interface ProjectDetail extends Omit<Project, 'integration'> {
   nonCode?: boolean;
   nonCodeSetBy?: 'OWNER' | 'COORDINATOR' | null;
   nonCodeSetAt?: string | null;
+  /** The short reason given with the mark (0555). */
+  nonCodeReason?: string | null;
+  /** The criteria this project moved out to a follow-up (board 02 G). */
+  criteriaMovedOut?: readonly CriterionMovedOut[];
 }
 
 export const STATUS_COLOR: Record<Project['status'], string> = {

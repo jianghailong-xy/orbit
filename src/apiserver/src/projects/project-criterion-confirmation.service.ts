@@ -101,6 +101,10 @@ export class ProjectCriterionConfirmationService {
         sessionId,
         note: dto.note?.trim() || null,
         attachmentIds,
+        // The words this confirmation is about, kept with it (0555): a revision later, the stale
+        // row shows them beside the criterion's own ("What changed").
+        criterionText: definition.text,
+        criterionVerificationMethod: definition.verificationMethod,
         createdAt: now,
         settledAt: now,
       },
@@ -180,6 +184,8 @@ export class ProjectCriterionConfirmationService {
         confirmerKind: 'AGENT_CHECK',
         outcome: 'PENDING',
         checkTaskId: task.id,
+        criterionText: definition.text,
+        criterionVerificationMethod: definition.verificationMethod,
       },
     });
     const run = await this.tasks.execute(ownerId, task.id);

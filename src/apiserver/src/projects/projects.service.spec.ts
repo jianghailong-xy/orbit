@@ -735,6 +735,8 @@ test('the detail item is the authored declaration, with no derived verdict besid
     independence: 'INDEPENDENT',
     conflicts: [],
     remedy: null,
+    // Board 02 I (0555): no move brought it here.
+    movedFrom: null,
   });
   assert.equal(project.acceptanceCriteriaItems[0].key, uuidToBase62(CRITERION_A_ID));
 

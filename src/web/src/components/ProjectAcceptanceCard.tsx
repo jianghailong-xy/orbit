@@ -1,9 +1,9 @@
 import { DownOutlined } from '@ant-design/icons';
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Markdown from './Markdown';
 import remarkGfm from 'remark-gfm';
-import { api } from '../api';
+import { api, fetchAttachmentObjectUrl } from '../api';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 import { useMediaQuery } from '../lib/useMediaQuery';
@@ -49,12 +49,25 @@ import {
   CRITERION_WHO_COORDINATOR,
   CRITERION_WHO_CHECK,
   CRITERION_WITHDRAW,
+  CRITERION_HIDE_CHANGES,
+  CRITERION_SCREENSHOT,
+  CRITERION_WHAT_CHANGED,
+  CRITERION_WORDING_CONFIRMED,
+  CRITERION_WORDING_NOT_KEPT,
+  CRITERION_WORDING_NOW,
+  CONFIRM_SHEET_HOW_CHECKED,
+  MOVED_FROM,
+  movedByLine,
+  movedOutLead,
+  screenshotCount,
   formatDoneDate,
   formatDoneDateTime,
   startCriterionCheck,
   withdrawCriterionConfirmation,
   type CriterionConfirmationStanding,
   type CriterionConfirmationView,
+  type CriterionMovedFrom,
+  type CriterionMovedOut,
   type CriterionSatisfiedBy,
 } from '../lib/projectDone';
 import { ago } from '../lib/watches';
@@ -180,11 +193,15 @@ export interface AcceptanceCriterionItem {
   /** Where its confirmation stands — a CONFIRMATION criterion only. */
   confirmation?: CriterionConfirmationStanding | null;
   completionCriterionOverrideReason?: string | null;
+  /** Where it came from, when it was moved here from another project (board 02 I). */
+  movedFrom?: CriterionMovedFrom | null;
 }
 
 /** The parts of the project detail document this card reads. */
 interface ProjectAcceptanceDetail {
   acceptanceCriteriaItems?: AcceptanceCriterionItem[];
+  /** The criteria this project moved out to a follow-up (board 02 G). */
+  criteriaMovedOut?: CriterionMovedOut[];
   /** The settings half of the project's integration line, which this document already carries: the
    *  branch a criterion's work can be met ON without being on main (§7.4 V11), and the project's main
    *  branch, which the landings name. */
@@ -377,8 +394,67 @@ function ConfirmationWork({
         {conversation && projectId ? <AppLink className="acceptance-held-up-title" to={sessionPath(conversation)}>{CRITERION_OPEN_CONVERSATION}</AppLink> : null}
       </div>
       {note ? <div className={`acceptance-confirmation-note${state === 'CHECK_FAILED' ? ' is-failed' : ''}`}>{note}</div> : null}
-      {projectId ? <ConfirmationActions criterion={criterion} projectId={projectId} met={met} running={running !== null} /> : null}
+      {projectId && current && current.attachmentIds.length > 0 ? <ConfirmationShots ids={current.attachmentIds} /> : null}
+      {projectId ? (
+        <ConfirmationActions
+          criterion={criterion}
+          projectId={projectId}
+          met={met}
+          running={running !== null}
+          stale={state === 'STALE' ? current : null}
+        />
+      ) : null}
     </>
+  );
+}
+
+/** The screenshot a confirmation was given with (board 03 E): a thumbnail that opens the image. */
+function ConfirmationShots({ ids }: { ids: readonly string[] }) {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true;
+    for (const id of ids) {
+      fetchAttachmentObjectUrl(id).then((url) => { if (live) setUrls((had) => ({ ...had, [id]: url })); }, () => undefined);
+    }
+    return () => { live = false; };
+  }, [ids]);
+  return (
+    <div className="acceptance-confirmation-shots">
+      {ids.map((id) => (urls[id] ? (
+        <a key={id} href={urls[id]} target="_blank" rel="noreferrer" className="acceptance-confirmation-shot">
+          <img src={urls[id]} alt={CRITERION_SCREENSHOT} />
+        </a>
+      ) : <span key={id} className="acceptance-confirmation-shot is-loading" aria-label={CRITERION_SCREENSHOT} />))}
+      <span className="acceptance-confirmation-shot-count">{screenshotCount(ids.length)}</span>
+    </div>
+  );
+}
+
+/** Board 03 J's "What changed": the wording that was confirmed beside the wording now. */
+function WhatChanged({ criterion, confirmed }: { criterion: AcceptanceCriterionItem; confirmed: CriterionConfirmationView }) {
+  const methodMoved = confirmed.criterionText !== null && confirmed.criterionText !== undefined
+    && (confirmed.criterionVerificationMethod ?? '') !== (criterion.verificationMethod ?? '');
+  return (
+    <div className="acceptance-what-changed">
+      <div className="acceptance-what-changed-side is-then">
+        <div className="acceptance-what-changed-label">{CRITERION_WORDING_CONFIRMED.replace('{r}', String(confirmed.revision))}</div>
+        {confirmed.criterionText ? (
+          <>
+            <div className="acceptance-what-changed-text">{confirmed.criterionText}</div>
+            {methodMoved && confirmed.criterionVerificationMethod ? (
+              <div className="acceptance-what-changed-method">{CONFIRM_SHEET_HOW_CHECKED} {confirmed.criterionVerificationMethod}</div>
+            ) : null}
+          </>
+        ) : <div className="acceptance-what-changed-missing">{CRITERION_WORDING_NOT_KEPT}</div>}
+      </div>
+      <div className="acceptance-what-changed-side is-now">
+        <div className="acceptance-what-changed-label">{CRITERION_WORDING_NOW.replace('{r}', String(criterion.revision ?? ''))}</div>
+        <div className="acceptance-what-changed-text">{criterion.text}</div>
+        {methodMoved && criterion.verificationMethod ? (
+          <div className="acceptance-what-changed-method">{CONFIRM_SHEET_HOW_CHECKED} {criterion.verificationMethod}</div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -389,14 +465,18 @@ function ConfirmationActions({
   projectId,
   met,
   running,
+  stale = null,
 }: {
   criterion: AcceptanceCriterionItem;
   projectId: string;
   met: boolean;
   running: boolean;
+  /** The confirmation of an earlier wording, when the row is STALE: What changed compares it. */
+  stale?: CriterionConfirmationView | null;
 }) {
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
+  const [comparing, setComparing] = useState(false);
   const reread = () => qc.invalidateQueries({ queryKey: ['project', projectId] });
   const withdraw = useMutation({ mutationFn: () => withdrawCriterionConfirmation(projectId, criterion.id), onSettled: reread });
   const check = useMutation({ mutationFn: () => startCriterionCheck(projectId, criterion.id), onSettled: reread });
@@ -417,9 +497,15 @@ function ConfirmationActions({
                 {state === 'CHECK_FAILED' ? CRITERION_RUN_CHECK_AGAIN : CRITERION_RUN_CHECK}
               </Button>
             )}
+            {stale ? (
+              <Button size="small" variant="text" aria-expanded={comparing} onClick={() => setComparing((open) => !open)}>
+                {comparing ? CRITERION_HIDE_CHANGES : CRITERION_WHAT_CHANGED}
+              </Button>
+            ) : null}
           </>
         )}
       </div>
+      {stale && comparing ? <WhatChanged criterion={criterion} confirmed={stale} /> : null}
       {error ? <Alert type="error" title={CRITERION_ACTION_FAILED} description={error.message} /> : null}
       {confirming ? (
         <ConfirmCriterionDialog
@@ -672,11 +758,39 @@ export function AcceptanceCriteriaList({
             >
               {c.text}
             </Markdown>
+            {projectId && c.movedFrom ? <MovedFromLine moved={c.movedFrom} /> : null}
             <CriterionWork criterion={c} integrationRef={integrationRef} mainBranch={mainBranch} projectId={projectId} />
             <CriterionMethod method={c.verificationMethod}>
               {projectId ? <CriterionModeMenu criterion={c} criteria={allCriteria} projectId={projectId} /> : null}
             </CriterionMethod>
           </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Board 02 I: "Moved from <project> by you · Nov 11" under a criterion that came from another project. */
+function MovedFromLine({ moved }: { moved: CriterionMovedFrom }) {
+  return (
+    <div className="acceptance-moved">
+      {MOVED_FROM}{' '}
+      <AppLink to={`/projects/${moved.fromProjectId}`}>{moved.fromProjectTitle}</AppLink>{' '}
+      {movedByLine(moved.movedAt, formatDoneDate)}
+    </div>
+  );
+}
+
+/** Board 02 G: the criteria this project moved out — "Criterion 4 moved to <project> by you · <when>". */
+export function MovedOutLines({ movedOut, className = 'acceptance-moved-out' }: { movedOut: readonly CriterionMovedOut[]; className?: string }) {
+  if (movedOut.length === 0) return null;
+  return (
+    <ul className={className}>
+      {movedOut.map((moved) => (
+        <li key={moved.definitionId}>
+          {movedOutLead(moved)}{' '}
+          <AppLink to={`/projects/${moved.toProjectId}`}>{moved.toProjectTitle}</AppLink>{' '}
+          {movedByLine(moved.movedAt)}
         </li>
       ))}
     </ul>
@@ -744,6 +858,7 @@ export function ProjectAcceptanceCard({
       pending={detail.isPending}
       error={detail.isError ? detail.error : null}
       criteria={Array.isArray(detail.data?.acceptanceCriteriaItems) ? detail.data.acceptanceCriteriaItems : []}
+      movedOut={Array.isArray(detail.data?.criteriaMovedOut) ? detail.data.criteriaMovedOut : []}
       integrationRef={detail.data?.integration?.ref ?? null}
       mainBranch={mainBranchName(detail.data?.integration?.upstreamRef)}
     />
@@ -763,8 +878,11 @@ export function AcceptanceCriteriaCard({
   pending = false,
   error = null,
   action,
+  movedOut = [],
 }: {
   criteria: AcceptanceCriterionItem[];
+  /** The criteria this project moved out to a follow-up (board 02 G); the project's own page only. */
+  movedOut?: readonly CriterionMovedOut[];
   integrationRef: string | null;
   /** The project's main branch by name; main where the page holds no read that names it. */
   mainBranch?: string;
@@ -805,9 +923,12 @@ export function AcceptanceCriteriaCard({
           />
         </div>
       ) : criteria.length === 0 ? (
-        <div className="acceptance-standing">
-          No criteria are stated for this project.
-        </div>
+        <>
+          <div className="acceptance-standing">
+            No criteria are stated for this project.
+          </div>
+          {projectId ? <MovedOutLines movedOut={movedOut} /> : null}
+        </>
       ) : (
         <>
           <div className="acceptance-standing">
@@ -860,6 +981,7 @@ export function AcceptanceCriteriaCard({
               </span>
             </div>
           ) : null}
+          {projectId ? <MovedOutLines movedOut={movedOut} /> : null}
           <OutcomeNote mixed={confirmed > 0} />
         </>
       )}

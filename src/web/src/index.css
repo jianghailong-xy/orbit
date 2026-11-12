@@ -27631,6 +27631,10 @@ button.agent-progress-agent:hover {
 .project-done-non-code-icon { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid var(--text-3);
   border-radius: 50%; color: var(--text-3); font-size: 10px; font-weight: 700; font-style: italic; line-height: 14px; text-align: center; }
 .project-done-non-code-change { color: var(--brand); font-weight: 600; }
+.project-done-non-code-reason { display: block; margin-top: 2px; color: var(--text-2); }
+.project-done-moved-out, .acceptance-moved-out { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px;
+  font-size: 12px; color: var(--text-3); }
+.project-done-moved-out a, .acceptance-moved-out a, .acceptance-moved a { color: var(--brand); }
 .project-done-blockers { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--error); border-radius: 10px;
   background: color-mix(in srgb, var(--error) 6%, transparent); font-size: 13px; line-height: 1.5; color: var(--text-1); }
 .project-done-blockers > b { display: block; margin-bottom: 6px; }
@@ -27649,6 +27653,7 @@ button.agent-progress-agent:hover {
 /* Project page: the non-code line where the branch would be, the Delivers provenance, and Landing Off. */
 .project-integration-non-code .project-integration-facts { color: var(--text-2); font-size: 12.5px; }
 .project-run-non-code-by { margin-top: 6px; color: var(--text-1); }
+.project-run-non-code-reason { margin-top: 2px; color: var(--text-2); }
 .project-run-non-code-consequence { margin: 10px 0 0; color: var(--text-1); }
 /* Acceptance rows met by confirmation (board 03 ⑤⑥) and the Met by menu. */
 .acceptance-confirmation { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
@@ -27656,6 +27661,18 @@ button.agent-progress-agent:hover {
 .acceptance-confirmation-note { margin-top: 4px; font-size: 12.5px; color: var(--text-2); }
 .acceptance-confirmation-note.is-failed { color: var(--error); }
 .acceptance-confirmation-actions { display: flex; gap: 6px; margin-top: 6px; }
+.acceptance-moved { margin-top: 2px; font-size: 12px; color: var(--text-3); }
+.acceptance-confirmation-shots { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.acceptance-confirmation-shot { display: block; width: 44px; height: 44px; border: 1px solid var(--border-subtle); border-radius: 6px;
+  overflow: hidden; background: var(--bg-subtle); }
+.acceptance-confirmation-shot img { width: 100%; height: 100%; object-fit: cover; }
+.acceptance-confirmation-shot-count { font-size: 12px; color: var(--text-3); }
+.acceptance-what-changed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; font-size: 12.5px; line-height: 1.5; }
+.acceptance-what-changed-side { padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
+.acceptance-what-changed-side.is-now { background: var(--bg-raised); }
+.acceptance-what-changed-label { margin-bottom: 3px; font-size: 11px; font-weight: 650; color: var(--text-3); }
+.acceptance-what-changed-text { color: var(--text-1); }
+.acceptance-what-changed-method, .acceptance-what-changed-missing { margin-top: 3px; color: var(--text-2); }
 .acceptance-mode-trigger { padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--text-3); cursor: pointer; }
 .acceptance-mode-trigger b { color: var(--text-2); font-weight: 600; }
 .acceptance-mode-option { display: grid; gap: 2px; max-width: 320px; white-space: normal; }
@@ -27677,4 +27694,11 @@ button.agent-progress-agent:hover {
 .move-criterion-meta { color: var(--text-3); font-size: 12px; }
 .confirm-criterion-text { padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
 .confirm-criterion-method { color: var(--text-2); }
+.confirm-criterion-drop { display: grid; gap: 2px; justify-items: center; padding: 14px 11px; border: 1px dashed var(--border-strong, var(--border-subtle));
+  border-radius: 8px; background: none; font: inherit; color: var(--text-3); cursor: pointer; }
+.confirm-criterion-drop:hover:not(:disabled) { border-color: var(--brand); }
+.confirm-criterion-drop-action { color: var(--brand); font-weight: 600; }
+.confirm-criterion-drop-hint { font-size: 12px; }
+.confirm-criterion-shot { display: flex; gap: 10px; align-items: flex-end; }
+.confirm-criterion-shot img { max-width: 220px; max-height: 140px; border: 1px solid var(--border-subtle); border-radius: 6px; }
 .acceptance-mode-row { margin-top: 4px; }

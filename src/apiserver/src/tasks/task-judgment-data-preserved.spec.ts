@@ -2925,7 +2925,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // project_criterion_confirmation table, and restates 0234's normalize function with the mode
       // as a third input (a TASKS row's hashes are computed exactly as before). No completion ledger,
       // DONE fence, preserved trigger or function is changed, and no row is written.
-      '0545_criterion_confirmation'],
+      '0545_criterion_confirmation',
+      // 0555 adds project.non_code_reason, the confirmed wording on project_criterion_confirmation
+      // (backfilled only on rows whose revision is still the criterion's) and two partial indexes on
+      // activity. No completion ledger, DONE fence, preserved trigger or function is changed.
+      '0555_project_done_card_records'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

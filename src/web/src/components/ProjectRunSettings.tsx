@@ -73,6 +73,7 @@ import {
   RUN_TO_NOT_CODE,
   formatDoneDateTime,
   nonCodeProvenance,
+  nonCodeReasonLine,
 } from '../lib/projectDone';
 import { projectIntegrationQuery, projectPromotionQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
@@ -198,6 +199,8 @@ export interface RunSettingsProject {
   nonCode?: boolean;
   nonCodeSetBy?: 'OWNER' | 'COORDINATOR' | null;
   nonCodeSetAt?: string | null;
+  /** The short reason given with the mark (0555). */
+  nonCodeReason?: string | null;
 }
 
 /** The block as the reader edits it: the number box can be empty mid-edit, the text box is text,
@@ -379,6 +382,7 @@ export function ProjectRunSettings({
   const writes = runSettingsWrites(view, project, draft);
   const dirty = writes.integration !== null || writes.authorization !== null || writes.nonCode !== null;
   const provenance = nonCodeProvenance(project, formatDoneDateTime);
+  const reason = nonCodeReasonLine(project);
   const complete = draft.maxConcurrentTasks !== null;
   const missingCheck = draft.line !== null && runMergeCheckMissing({ ...draft, line: draft.line });
   const branch = view.line === 'PROJECT_BRANCH' && view.ref ? view.ref : `project/${projectId}`;
@@ -454,7 +458,10 @@ export function ProjectRunSettings({
                 </Radio>
               </RadioGroup>
               {provenance && draft.nonCode ? (
-                <div className="project-integration-setting-hint project-run-non-code-by">{provenance}</div>
+                <div className="project-integration-setting-hint project-run-non-code-by">
+                  {provenance}
+                  {reason && project.nonCode ? <div className="project-run-non-code-reason">{reason}</div> : null}
+                </div>
               ) : null}
             </div>
           </div>

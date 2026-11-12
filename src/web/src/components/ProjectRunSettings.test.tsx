@@ -759,6 +759,17 @@ describe('How it runs — Delivers (board 01)', () => {
     expect(node.querySelector('.project-run-settings-summary')?.textContent).toContain('Non-code · 3 tasks at a time');
   });
 
+  it('quotes the reason the coordinator gave under who and when (board 01 B)', async () => {
+    const node = await mount(projectOf({
+      nonCode: true, nonCodeSetBy: 'COORDINATOR', nonCodeSetAt: '2026-11-11T10:20:00.000Z',
+      nonCodeReason: 'All work is documents and vendor accounts; no repository.',
+    }));
+    const by = settingRow(node, RUN_DELIVERS).querySelector('.project-run-non-code-by')!;
+    expect(by.textContent).toContain(`${NON_CODE_MARKED_BY_COORDINATOR} · Nov 11`);
+    expect(by.querySelector('.project-run-non-code-reason')!.textContent)
+      .toBe('“All work is documents and vendor accounts; no repository.”');
+  });
+
   it('says what switching to Not code does above Save, and writes the mark alone on the owner door', async () => {
     const node = await mount();
     expect(deliversInput(node, 'CODE').checked).toBe(true);

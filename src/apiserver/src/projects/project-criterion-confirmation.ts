@@ -44,6 +44,9 @@ export interface CriterionConfirmationFacts {
   checkTaskId: string | null;
   note: string | null;
   attachmentIds: string[];
+  /** The criterion's wording and verification method at `revision` (0555); null on an older row. */
+  criterionText?: string | null;
+  criterionVerificationMethod?: string | null;
   createdAt: Date;
   settledAt: Date | null;
   withdrawnAt: Date | null;
@@ -63,6 +66,11 @@ export interface CriterionConfirmationView {
   attachmentIds: string[];
   /** When it was said: the report of an Agent check, or the write of the other two. */
   at: Date;
+  /** The criterion's wording and verification method at `revision`, as they stood when it was
+   *  confirmed — what a STALE row's "What changed" shows beside the current ones. Null on a row
+   *  written before 0555 whose revision had already moved. */
+  criterionText: string | null;
+  criterionVerificationMethod: string | null;
 }
 
 export type CriterionConfirmationState = 'CONFIRMED' | 'CHECK_FAILED' | 'STALE' | 'UNCONFIRMED';
@@ -93,6 +101,8 @@ export const CRITERION_CONFIRMATION_SELECT = {
     checkTaskId: true,
     note: true,
     attachmentIds: true,
+    criterionText: true,
+    criterionVerificationMethod: true,
     createdAt: true,
     settledAt: true,
     withdrawnAt: true,
@@ -110,6 +120,8 @@ export function criterionConfirmationView(row: CriterionConfirmationFacts): Crit
     note: row.note,
     attachmentIds: row.attachmentIds,
     at: row.settledAt ?? row.createdAt,
+    criterionText: row.criterionText ?? null,
+    criterionVerificationMethod: row.criterionVerificationMethod ?? null,
   };
 }
 

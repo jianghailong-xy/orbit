@@ -105,6 +105,9 @@ export const SHA256_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
  * it alone", sending `null` means "make it null", and only the second is a claim about the value.
  * A field that CAN be nulled (`sessionBudgetPerDay`, the prose fields) keeps `@IsOptional()`.
  */
+/** How long the non-code mark's reason may be: a sentence, not a document. */
+export const MAX_NON_CODE_REASON_CHARS = 280;
+
 function IsSent(): PropertyDecorator {
   return ValidateIf((_object, value) => value !== undefined);
 }
@@ -350,6 +353,10 @@ export class UpdateProjectDto {
    *  Each write records who and when (`nonCodeSetBy`, `nonCodeSetBySessionId`, `nonCodeSetAt`).
    *  A marked project reads no landing; whether its criteria are met is unchanged. */
   @IsSent() @IsBoolean() nonCode?: boolean;
+  /** An optional short reason for the mark, sent with `nonCode` and stored with it (migration
+   *  0555): every `nonCode` write replaces it, null or blank when none is given. Refused 400 sent
+   *  without `nonCode`. */
+  @IsOptional() @IsString() @MaxLength(MAX_NON_CODE_REASON_CHARS) nonCodeReason?: string | null;
 
   /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The line is
    *  the account owner's alone, refused whole to a request carrying an acting session. The merge

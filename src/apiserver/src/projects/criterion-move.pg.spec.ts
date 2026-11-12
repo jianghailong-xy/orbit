@@ -34,6 +34,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { CRITERION_MOVED_ACTIVITY } from './criterion-move';
+import { readCriterionMoveRecord } from './criterion-move-record';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsService } from './projects.service';
 
@@ -182,6 +183,63 @@ test('an unmet criterion and its open tasks move to a follow-up project; each re
       assert.deepEqual(check.criteria.map((c) => c.stated.text), ['the first holds']);
       assert.deepEqual(await unsatisfied(s.a), []);
       assert.ok(check.findings.every((f) => f.criterion?.key !== s.c2Key));
+
+      // The move record on both project reads (board 02 G/I, 0555): A lists the criterion it moved
+      // out — its number on A's cards, its words, where it went and when — and B's criterion row
+      // says where it came from. B's own criterion came from nowhere.
+      const aRead = await projects.get(ownerId, s.a);
+      assert.equal(aRead.criteriaMovedOut.length, 1);
+      const out = aRead.criteriaMovedOut[0];
+      assert.equal(out.criterionKey, s.c2Key);
+      assert.equal(out.ordinal, 2);
+      assert.equal(out.text, definition.text);
+      assert.equal(out.toProjectId, b.id);
+      assert.equal(out.toProjectTitle, 'B, existing');
+      assert.equal(out.movedAt.getTime(), recorded.createdAt.getTime());
+      assert.ok(aRead.acceptanceCriteriaItems.every((item) => item.movedFrom === null));
+      const bRead = await projects.get(ownerId, b.id);
+      assert.deepEqual(bRead.criteriaMovedOut, []);
+      const moved = bRead.acceptanceCriteriaItems.find((item) => item.id === s.c2)!;
+      assert.equal(moved.movedFrom?.fromProjectId, s.a);
+      assert.equal(moved.movedFrom?.fromProjectTitle, 'A, existing');
+      assert.equal(moved.movedFrom?.movedAt.getTime(), recorded.createdAt.getTime());
+      assert.equal(bRead.acceptanceCriteriaItems.find((item) => item.id !== s.c2)!.movedFrom, null);
+
+      // Another owner's read of the same ids sees no record of this owner's move.
+      const stranger = randomUUID();
+      const none = await readCriterionMoveRecord(prisma, stranger, s.a, (id) => id);
+      assert.deepEqual(none.movedOut, []);
+
+      // The read is served by 0555's partial indexes — bounded by the move rows, never a scan of
+      // activity. (On a table this small the planner may read one of them whole rather than both.)
+      await sql.query('BEGIN');
+      try {
+        await sql.query('SET LOCAL enable_seqscan = off');
+        const { rows: plan } = await sql.query<{ 'QUERY PLAN': string }>(
+          `EXPLAIN SELECT a."id" FROM "activity" a
+            WHERE a."type" = 'project.criterion_moved' AND a."actor_id" = $1::uuid
+              AND (a.payload->>'fromProjectId' = $2 OR a.payload->>'toProjectId' = $2)`, [ownerId, s.a]);
+        const text = plan.map((row) => row['QUERY PLAN']).join('\n');
+        assert.match(text, /Index Scan on activity_criterion_moved_(from|to)_idx/);
+        assert.doesNotMatch(text, /Seq Scan on activity/);
+      } finally {
+        await sql.query('ROLLBACK');
+      }
+    });
+
+    await t.test('(1b) a criterion moved back is no longer "moved out", and reads "moved from" again', async () => {
+      const s = await shape('A, round trip');
+      const b = await project('B, round trip', ['B states this']);
+      await projects.moveCriterion(ownerId, s.a, s.c2Key, { toProjectId: b.id });
+      await prisma.task.updateMany({ where: { projectId: b.id, status: { notIn: ['DONE', 'CANCELLED'] } }, data: { status: 'CANCELLED' } });
+      await projects.moveCriterion(ownerId, b.id, s.c2Key, { toProjectId: s.a });
+      const aRead = await projects.get(ownerId, s.a);
+      assert.deepEqual(aRead.criteriaMovedOut, []);
+      assert.equal(aRead.acceptanceCriteriaItems.find((item) => item.id === s.c2)!.movedFrom?.fromProjectId, b.id);
+      const bRead = await projects.get(ownerId, b.id);
+      assert.equal(bRead.criteriaMovedOut.length, 1);
+      assert.equal(bRead.criteriaMovedOut[0].toProjectId, s.a);
+      assert.equal(bRead.criteriaMovedOut[0].ordinal, 2, 'its number on B, the project it left');
     });
 
     await t.test('(2) into a new project', async () => {

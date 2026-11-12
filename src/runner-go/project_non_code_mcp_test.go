@@ -39,3 +39,21 @@ func TestMCPProjectUpdateRefusesANonBooleanNonCode(t *testing.T) {
 		t.Fatalf("a string nonCode was not refused: %#v hits=%v", res, *hits)
 	}
 }
+
+func TestMCPProjectUpdateForwardsTheNonCodeReasonWithTheMark(t *testing.T) {
+	srv, _, _, written := mergeCheckServer(t, `{"status":"ALLOWED"}`)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1", "nonCode": true, "nonCodeReason": "All work is documents; no repository.",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_update returned an error: %#v", res["content"])
+	}
+	if (*written)["nonCodeReason"] != "All work is documents; no repository." || (*written)["nonCode"] != true {
+		t.Fatalf("written = %#v", *written)
+	}
+	bad := mcp.callTool("project_update", map[string]interface{}{"projectId": "proj-1", "nonCode": true, "nonCodeReason": 3})
+	if bad["isError"] != true {
+		t.Fatalf("a numeric nonCodeReason was not refused: %#v", bad)
+	}
+}

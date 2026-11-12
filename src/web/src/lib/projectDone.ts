@@ -66,6 +66,34 @@ export const RUN_LANDING_OFF_HINT = 'Off for a non-code project: Tasks land on, 
 export const RUN_TO_NOT_CODE = 'The done card stops reading where work landed. Work already on {branch} stays there.';
 export const RUN_TO_CODE = 'The done card will check where work landed again. Work that ran without a branch will show as “Ran without a branch”.';
 
+// The follow-up details (boards 01 B, 02 G/I, 03 Confirm sheet and stale row).
+/** The non-code mark's reason, quoted under "Marked by … · <when>". */
+export const NON_CODE_REASON = '“{reason}”';
+/** Board 02 G: the source project's line for a criterion it moved out; the project name is a link. */
+export const MOVED_OUT_CRITERION = 'Criterion {n} moved to';
+export const MOVED_OUT_UNNUMBERED = 'A criterion moved to';
+/** Board 02 I: the destination's criterion row; the project name is a link. */
+export const MOVED_FROM = 'Moved from';
+export const MOVED_BY_YOU = 'by you';
+/** Board 03 Confirm sheet: one optional screenshot. */
+export const CONFIRM_SHEET_SCREENSHOT = 'Screenshot';
+export const CONFIRM_SHEET_ATTACH = 'Attach a screenshot';
+export const CONFIRM_SHEET_DROP = 'Drop an image or paste it here';
+export const CONFIRM_SHEET_UPLOADING = 'Uploading…';
+export const CONFIRM_SHEET_REMOVE = 'Remove';
+export const CONFIRM_SHEET_NOT_AN_IMAGE = 'Attach an image: a PNG, JPEG, GIF or WebP file.';
+export const CONFIRM_SHEET_NOT_UPLOADED = 'The screenshot was not uploaded';
+/** The confirmer row's attachment. */
+export const CRITERION_SCREENSHOT = 'Screenshot';
+export const CRITERION_ONE_SCREENSHOT = '1 screenshot';
+export const CRITERION_SCREENSHOTS = '{n} screenshots';
+/** Board 03 J: a stale confirmation row's "What changed" — the confirmed wording beside today's. */
+export const CRITERION_WHAT_CHANGED = 'What changed';
+export const CRITERION_HIDE_CHANGES = 'Hide changes';
+export const CRITERION_WORDING_CONFIRMED = 'Confirmed · revision {r}';
+export const CRITERION_WORDING_NOW = 'Now · revision {r}';
+export const CRITERION_WORDING_NOT_KEPT = 'The wording confirmed then was not kept.';
+
 // The done card's findings, grouped by criterion with the unmet ones first (decided board ③ B–D).
 export const DONE_CARD_STANDS_IN_WAY_ONE = '1 thing stands in the way';
 export const DONE_CARD_STANDS_IN_WAY = '{n} things stand in the way';
@@ -334,6 +362,10 @@ export type CriterionConfirmationView = {
   note: string | null;
   attachmentIds: string[];
   at: string;
+  /** The criterion's wording and verification method at `revision`, kept with the confirmation
+   *  (0555); null on an older row. What a stale row's What changed shows. */
+  criterionText?: string | null;
+  criterionVerificationMethod?: string | null;
 };
 
 /** Where one CONFIRMATION criterion stands (server `CriterionConfirmationStanding`). */
@@ -386,6 +418,27 @@ export type ProjectDoneCriterionItem = {
   revision?: number;
   verificationMethod?: string | null;
   satisfiedBy?: CriterionSatisfiedBy;
+  /** Where the criterion came from, when it was moved here from another project (board 02 I). */
+  movedFrom?: CriterionMovedFrom | null;
+};
+
+/** Board 02 I: the project a criterion was moved from, and when. Only the owner moves one. */
+export type CriterionMovedFrom = {
+  fromProjectId: string;
+  fromProjectTitle: string;
+  movedAt: string;
+};
+
+/** Board 02 G: one criterion this project moved out to a follow-up. */
+export type CriterionMovedOut = {
+  criterionKey: string;
+  definitionId: string;
+  /** Its number on this project's cards when it moved; null on an older record. */
+  ordinal: number | null;
+  text: string;
+  toProjectId: string;
+  toProjectTitle: string;
+  movedAt: string;
 };
 
 export type ProjectDoneDocument = {
@@ -403,7 +456,34 @@ export type ProjectDoneDocument = {
   nonCode?: boolean;
   nonCodeSetBy?: 'OWNER' | 'COORDINATOR' | null;
   nonCodeSetAt?: string | null;
+  /** The short reason given with the mark (0555); null when none was. */
+  nonCodeReason?: string | null;
+  /** The criteria this project moved out to a follow-up (board 02 G). */
+  criteriaMovedOut?: readonly CriterionMovedOut[];
 };
+
+/** The mark's reason, quoted — or null when the project is unmarked or no reason was given. */
+export function nonCodeReasonLine(project: Pick<ProjectDoneDocument, 'nonCode' | 'nonCodeReason'>): string | null {
+  const reason = project.nonCodeReason?.trim();
+  return project.nonCode && reason ? NON_CODE_REASON.replace('{reason}', reason) : null;
+}
+
+/** "Criterion 4 moved to" — the words before the destination's linked name. */
+export function movedOutLead(moved: Pick<CriterionMovedOut, 'ordinal'>): string {
+  return moved.ordinal ? MOVED_OUT_CRITERION.replace('{n}', String(moved.ordinal)) : MOVED_OUT_UNNUMBERED;
+}
+
+/** "by you · Nov 11, 19:40" — the words after the linked name, on both sides of a move. */
+export function movedByLine(movedAt: string, format: (value: string | null | undefined) => string | null = formatDoneDateTime): string {
+  const when = format(movedAt);
+  return when ? `${MOVED_BY_YOU} · ${when}` : MOVED_BY_YOU;
+}
+
+/** "1 screenshot", "2 screenshots" — or null for none. */
+export function screenshotCount(count: number): string | null {
+  if (count <= 0) return null;
+  return count === 1 ? CRITERION_ONE_SCREENSHOT : CRITERION_SCREENSHOTS.replace('{n}', String(count));
+}
 
 /** The mark's provenance — "Marked by the coordinator · Nov 11" — or null for an unmarked project. */
 export function nonCodeProvenance(
@@ -689,7 +769,8 @@ export function confirmationLine(view: CriterionConfirmationView | null | undefi
   const who = view.confirmerKind === 'COORDINATOR'
     ? DONE_ROW_CONFIRMED_BY_COORDINATOR
     : view.confirmerKind === 'AGENT_CHECK' ? DONE_ROW_CONFIRMED_BY_CHECK : DONE_ROW_CONFIRMED_BY_YOU;
-  return [who, formatDoneDate(view.at), view.note ? `“${view.note}”` : null].filter(Boolean).join(' · ');
+  return [who, formatDoneDate(view.at), view.note ? `“${view.note}”` : null, screenshotCount(view.attachmentIds?.length ?? 0)]
+    .filter(Boolean).join(' · ');
 }
 
 /** "criterion 4", "criteria 3 and 4", "criteria 2, 3 and 4". */
@@ -724,7 +805,7 @@ export function moveCriterion(
 export function confirmCriterion(
   projectId: string,
   criterionId: string,
-  body: { note?: string; revision?: number },
+  body: { note?: string; revision?: number; attachmentIds?: string[] },
 ): Promise<unknown> {
   return api(`/projects/${encodeURIComponent(projectId)}/criteria/${encodeURIComponent(criterionId)}/confirmations`, { method: 'POST', body });
 }
