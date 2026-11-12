@@ -25,7 +25,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine, type RunnerRepoHealth } from '@orbit/shared';
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
@@ -45,6 +45,7 @@ import {
   meQuery,
   providersQuery,
   publishedRunnerVersionQuery,
+  sessionsQuery,
   workspacePermissionRulesQuery,
   workspaceSessionCountsQuery,
 } from '../lib/queries';
@@ -72,6 +73,14 @@ import { Switch } from '../components/ui/Switch';
 import { Textarea } from '../components/ui/Textarea';
 import { copyText } from '../lib/clipboard';
 import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
+import type { MainCheckoutRepoHealth } from '@orbit/shared';
+import type { MainCheckoutTarget } from '../lib/mainCheckout';
+import { useMainCheckoutController } from '../components/MainCheckoutDrawer';
+import {
+  WorktreeIsolationDialog,
+  worktreeIsolationDialogFor,
+  type WorktreeIsolationDialogKind,
+} from '../components/WorktreeIsolationDialog';
 import {
   KEEP_FREE_TIERS,
   compareRunnerVersions,
@@ -182,6 +191,8 @@ interface Workspace {
   /** The checkout workDir sits in, as the runner last saw it — stuck mid-merge is a Needs Attention
    *  item with a Repair. */
   repoHealth?: RunnerRepoHealth | null;
+  /** The runner declares main-checkout-git/v1: the main checkout's Review files can act. */
+  mainCheckoutActions?: boolean;
   /** The runner `git init`s a non-git workDir on the next run (set by the in-session
    *  "Initialize git…" action), which changes what a non-git path means here. */
   autoInitGit?: boolean;
@@ -425,6 +436,31 @@ export function RunnerDetailPage() {
   // edits are tracked so Cancel can't discard them silently.
   const [advOpen, setAdvOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // Board 04: the dialog flipping worktree isolation asks first, and the main checkout its Review files opens.
+  const [isolationDialog, setIsolationDialog] = useState<WorktreeIsolationDialogKind | null>(null);
+  const editingSessionsQ = useQuery({
+    ...sessionsQuery({ workspaceId: editing?.id ?? null, view: 'open' }),
+    enabled: !!editing?.id && formOpen,
+  });
+  const editingWorktrees = useMemo<MainCheckoutTarget[]>(
+    () =>
+      (editingSessionsQ.data ?? [])
+        .filter((s) => s.isolationStatus === 'worktree' && !!s.branch && s.mergeStatus !== 'merged' && s.branchMerged !== true)
+        .map((s) => ({
+          id: s.id,
+          title: s.title || 'Untitled session',
+          branch: s.branch,
+          busy: (s.runState ?? s.runStatus ?? s.status) === 'RUNNING',
+        })),
+    [editingSessionsQ.data],
+  );
+  const unmergedWorktrees = editingWorktrees.length;
+  const isolationCheckout = useMainCheckoutController({
+    workspaceId: editing?.id ?? null,
+    actionsSupported: editing?.mainCheckoutActions === true,
+    health: (editing?.repoHealth as MainCheckoutRepoHealth | null | undefined) ?? null,
+    targets: editingWorktrees,
+  });
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -852,10 +888,53 @@ export function RunnerDetailPage() {
         desc="Each session runs in its own git worktree. Off → sessions run directly in the working directory, sharing it."
         checked={fEnableWorktree}
         onChange={(v) => {
+          // Board 04: a saved workspace says what the switch means for its main checkout first; it never blocks.
+          const ask = editing
+            ? worktreeIsolationDialogFor(
+                v,
+                editing.repoHealth as MainCheckoutRepoHealth | null | undefined,
+                unmergedWorktrees,
+                editing.workDir ?? '',
+              )
+            : null;
+          if (ask) return setIsolationDialog(ask);
           setFEnableWorktree(v);
           setDirty(true);
         }}
       />
+      <WorktreeIsolationDialog
+        dialog={isolationDialog}
+        onCancel={() => setIsolationDialog(null)}
+        onConfirm={() => {
+          setFEnableWorktree(isolationDialog?.kind !== 'off');
+          setDirty(true);
+          setIsolationDialog(null);
+        }}
+        onReview={
+          editing?.mainCheckoutActions
+            ? () => {
+                setIsolationDialog(null);
+                isolationCheckout.host?.openReview();
+              }
+            : undefined
+        }
+        onCleanUp={
+          editing
+            ? () => {
+                const ws = editing.id;
+                setIsolationDialog(null);
+                const cleanup = repoCleanupConfirm(isolationDialog && 'root' in isolationDialog ? isolationDialog.root : '');
+                void confirm({
+                  title: cleanup.title,
+                  description: cleanup.content,
+                  confirmText: cleanup.okText,
+                  onConfirm: () => repairMut.mutateAsync(ws).catch(() => {}),
+                });
+              }
+            : undefined
+        }
+      />
+      {isolationCheckout.drawer}
       {/* Off by default, and only the owner's to turn on: it decides what task runs cost, so the
           agent tools cannot set it (docs/model-routing-design.md §7.2). */}
       {smartSelection && (

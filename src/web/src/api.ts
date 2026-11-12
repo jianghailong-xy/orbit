@@ -1,4 +1,4 @@
-import type { MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
+import type { MainCheckoutActionAnswer, MainCheckoutActionPost, MainCheckoutView, MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
 import type {
   BgShell,
   ConfirmationAnswersCard,
@@ -2144,5 +2144,23 @@ export const setWorkspaceWorktree = (workspaceId: string, enableWorktree: boolea
 export const cleanUpWorkspaceRepo = (workspaceId: string) =>
   api<{ repoCleanup?: { status: string; branch?: string | null; message?: string | null } | null }>(
     `/workspaces/${workspaceId}/repo-cleanup`,
+    { method: 'POST' },
+  );
+
+/** The main checkout as the workspace's runner sees it now, with the patches of `diffPaths`
+ *  (docs/main-checkout-git-contract.md §10.4). */
+export const getMainCheckout = (workspaceId: string, diffPaths: readonly string[] = [], signal?: AbortSignal) => {
+  const q = diffPaths.map((p) => `diff=${encodeURIComponent(p)}`).join('&');
+  return api<MainCheckoutView>(`/workspaces/${workspaceId}/main-checkout${q ? `?${q}` : ''}`, { signal });
+};
+
+/** Move, commit, push or rescue the main checkout. Repeating a requestId answers with the first request's state. */
+export const postMainCheckoutAction = (workspaceId: string, body: MainCheckoutActionPost) =>
+  api<MainCheckoutActionAnswer>(`/workspaces/${workspaceId}/main-checkout/actions`, { method: 'POST', body });
+
+/** Cancel an action its runner has not been handed yet. */
+export const cancelMainCheckoutAction = (workspaceId: string, requestId: string) =>
+  api<MainCheckoutActionAnswer>(
+    `/workspaces/${workspaceId}/main-checkout/actions/${encodeURIComponent(requestId)}/cancel`,
     { method: 'POST' },
   );

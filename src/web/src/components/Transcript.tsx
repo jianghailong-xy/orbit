@@ -85,6 +85,9 @@ import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { MainCheckoutCard, MainCheckoutResultRow } from './MainCheckout';
+import { isMainCheckoutChanged, isMainCheckoutResult } from '../lib/mainCheckout';
+import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit/shared';
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
@@ -656,7 +659,13 @@ type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
 /** A runner-side heads-up that isn't a failure: the turn worked, but something about WHERE it
  *  worked needs saying — today, edits it left in the machine's shared checkout instead of this
  *  session's worktree. Rendered as a calm note, not an error: nothing is broken yet. */
-type NoticeNode = { kind: 'notice'; seq: number; message: string };
+type NoticeNode = {
+  kind: 'notice';
+  seq: number;
+  message: string;
+  /** The main checkout's card (board 01) or an action's result line (board 03), drawn instead of the text. */
+  mainCheckout?: MainCheckoutChangedNotice | MainCheckoutResultNotice;
+};
 // A failure that fixes itself, so the card carries a pending retry rather than a remedy: the
 // account's quota spent, or the provider briefly unable to answer. `stale` marks every such
 // card but the most recent one — the armed retry is a single value on the session, so an older
@@ -1490,7 +1499,12 @@ function buildTranscript(
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
           lastStderr = undefined;
-          into(parent).push({ kind: 'notice', seq: ev.seq, message: String(p.notice) });
+          into(parent).push({
+            kind: 'notice',
+            seq: ev.seq,
+            message: String(p.notice),
+            ...(isMainCheckoutChanged(p) || isMainCheckoutResult(p) ? { mainCheckout: p } : {}),
+          });
           break;
         }
         // Runner stderr (e.g. "No conversation found with session ID: …") — surface as
@@ -2498,6 +2512,12 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       );
     }
     case 'notice':
+      if (node.mainCheckout && isMainCheckoutChanged(node.mainCheckout)) {
+        return <MainCheckoutCard notice={node.mainCheckout} seq={node.seq} />;
+      }
+      if (node.mainCheckout && isMainCheckoutResult(node.mainCheckout)) {
+        return <MainCheckoutResultRow notice={node.mainCheckout} seq={node.seq} />;
+      }
       return (
         <div className="chat-notice" data-seq={node.seq}>
           ⚠ {node.message}

@@ -27581,3 +27581,333 @@ button.agent-progress-agent:hover {
   color: var(--text-2);
   font-size: 12.5px;
 }
+
+/* Main checkout Git (docs/mocks/main-checkout-git boards 01–04): the card a worktree turn leaves when files
+   appear in the main checkout, its result lines, its bar above the worktree bar, the review drawer's
+   extras and the worktree isolation dialogs. */
+.mck-card {
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.mck-card-head {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px 10px;
+}
+.mck-card-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1px solid var(--warning-border);
+  border-radius: 50%;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.mck-card-heading {
+  min-width: 0;
+}
+.mck-card-title {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+.mck-card-sub {
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.mck-card-sub code,
+.mck-card-hint code,
+.mck-result-text code,
+.wt-iso-body code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.95em;
+  color: var(--text-1);
+}
+.mck-card-files {
+  padding: 6px 14px 8px 42px;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+}
+.mck-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.mck-file:disabled {
+  cursor: default;
+}
+.mck-file:hover:not(:disabled) .mck-file-path {
+  text-decoration: underline;
+}
+.mck-file-st {
+  flex: none;
+  width: 12px;
+  color: var(--warning-solid);
+}
+.mck-file-st.st-a {
+  color: var(--success-solid);
+}
+.mck-file-st.st-d {
+  color: var(--error-solid);
+}
+.mck-file-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mck-file-stat {
+  display: inline-flex;
+  gap: 6px;
+}
+.mck-file-stat .add {
+  color: var(--success-solid);
+}
+.mck-file-stat .del {
+  color: var(--error-solid);
+}
+.mck-card-more {
+  padding: 2px 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.mck-card-actions {
+  padding: 10px 14px 12px 42px;
+}
+.mck-card-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.mck-card-hint {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mck-btn {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 13px;
+  cursor: pointer;
+}
+.mck-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.mck-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.mck-btn-primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+.mck-btn-primary:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+.mck-btn-more {
+  border-color: transparent;
+  background: none;
+  color: var(--text-3);
+}
+/* Board 01④ / 02②: the hints wrap under their item at the board's width. */
+.orbit-menu.mck-menu {
+  max-width: min(420px, var(--available-width));
+}
+.mck-menu .orbit-menu-item {
+  white-space: normal;
+}
+.mck-menu-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: normal;
+}
+.mck-menu-label {
+  color: var(--text-1);
+}
+.mck-menu-hint {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mck-menu-branch {
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* A target running a turn: listed, not choosable (board 02②). */
+.mck-menu [data-disabled] .mck-menu-label {
+  color: var(--orbit-control-disabled-text);
+}
+.mck-result {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 6px 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.mck-result-icon {
+  flex: none;
+  font-size: 12px;
+}
+.mck-result-ok .mck-result-icon {
+  color: var(--success-solid);
+}
+.mck-result-refused .mck-result-icon,
+.mck-result-waiting .mck-result-icon {
+  color: var(--warning-solid);
+}
+.mck-result-text strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.mck-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+}
+.mck-link:hover {
+  text-decoration: underline;
+}
+.mck-bar .wt-row {
+  gap: 8px;
+}
+.mck-bar-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning-solid);
+}
+.mck-bar-label {
+  color: var(--text-2);
+}
+.mck-bar-branch {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-raised);
+  font-size: 11.5px;
+}
+.mck-bar-status {
+  color: var(--text-3);
+}
+.mck-drawer-file {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mck-drawer-file .session-file-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mck-drawer-head {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.mck-drawer-title {
+  font-weight: 600;
+}
+.mck-chip {
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 400;
+}
+.mck-chip-warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.mck-drawer-checked {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+.mck-drawer-choose {
+  padding: 4px 8px 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.mck-choose-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.mck-drawer-error {
+  color: var(--error);
+}
+.mck-drawer-note {
+  margin-top: auto;
+  padding: 8px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mck-drawer-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.mck-managed {
+  color: var(--warning);
+  font-size: 12.5px;
+}
+.mck-drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mck-commit-msg {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.wt-iso-body p {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.wt-iso-body p:last-child {
+  margin-bottom: 0;
+}

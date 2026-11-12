@@ -509,6 +509,9 @@ import {
 } from '../lib/sessionState';
 import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
+import { MainCheckoutCtx, type MainCheckoutTarget } from '../lib/mainCheckout';
+import { useMainCheckoutController } from './MainCheckoutDrawer';
+import type { MainCheckoutRepoHealth } from '@orbit/shared';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
@@ -7282,6 +7285,52 @@ export function WorkspaceView({
     if (held.content.trim()) restoreUndelivered?.(held.shell ? `!${held.content}` : held.content, held.attachments);
     else stageRestored(held.attachments);
   };
+  // The main checkout behind this console (docs/main-checkout-git-contract.md): its card and result lines in the
+  // conversation, its bar above the worktree bar, and the review drawer they open.
+  const consoleWorkspace = workspacesForRunner.find((a) => a.id === consoleWorkspaceId);
+  const [openDiffSignal, setOpenDiffSignal] = useState(0);
+  const mainCheckoutTargets = useMemo<MainCheckoutTarget[]>(
+    () =>
+      (sessionsQ.data ?? [])
+        .filter(
+          (s) =>
+            s.workspace?.id === consoleWorkspaceId &&
+            s.isolationStatus === 'worktree' &&
+            !!s.branch &&
+            s.mergeStatus !== 'merged' &&
+            s.branchMerged !== true &&
+            !s.deletedAt,
+        )
+        .map((s) => ({
+          id: s.id,
+          title: s.title || 'Untitled session',
+          branch: s.branch,
+          busy: (s.runState ?? s.runStatus ?? s.status) === 'RUNNING',
+        })),
+    [sessionsQ.data, consoleWorkspaceId],
+  );
+  const consoleRepoRoot = consoleWorkspaceRepoHealth?.root;
+  // Stable, so the main checkout's context changes only when what it says does.
+  const mainCheckoutCleanUp = useMemo(
+    () => (consoleWorkspaceId && consoleRepoRoot ? () => askCleanUpRepo(consoleWorkspaceId, consoleRepoRoot) : undefined),
+    // askCleanUpRepo reads only the confirm dialog and the mutation's stable mutateAsync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [consoleWorkspaceId, consoleRepoRoot],
+  );
+  const viewSessionChanges = useCallback(() => setOpenDiffSignal((n) => n + 1), []);
+  const mainCheckout = useMainCheckoutController({
+    workspaceId: consoleWorkspaceId,
+    sessionId: selectedId && !selectedTrashed && !selectedMissing ? selectedId : undefined,
+    sessionTitle: selectedSession?.title ?? undefined,
+    sessionBranch:
+      detailForSelected?.isolationStatus === 'worktree' ? (detailForSelected.branch ?? undefined) : undefined,
+    actionsSupported: consoleWorkspace?.mainCheckoutActions === true,
+    health: (consoleWorkspace?.repoHealth as MainCheckoutRepoHealth | null | undefined) ?? null,
+    targets: mainCheckoutTargets,
+    askAgent: restoreUndelivered ?? undefined,
+    cleanUp: mainCheckoutCleanUp,
+    viewChanges: viewSessionChanges,
+  });
   // Both steps done with a message waiting: it goes, with nobody pressing anything (rule 6). Once per
   // waiting message: the send makes a workspace, so it must not go twice, and a refusal leaves it
   // waiting on the person (`error`) rather than on another try.
@@ -9728,6 +9777,7 @@ export function WorkspaceView({
                   conversation instead of a blank pane. */}
               {placeholder === 'skeleton' && <TranscriptSkeleton />}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
+              <MainCheckoutCtx.Provider value={mainCheckout.host}>
               <SessionConversation
                 sessionId={selectedId}
                 stream={stream}
@@ -9743,6 +9793,7 @@ export function WorkspaceView({
                 answeredQuestions={answeredQuestions}
                 wikiChat={wikiChatCards}
               />
+              </MainCheckoutCtx.Provider>
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
                   which stay nearest the composer, and only once the transcript it sums up is drawn.
@@ -10160,7 +10211,10 @@ export function WorkspaceView({
         {selectedId && !selectedTrashed && (
           <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
         )}
+        {mainCheckout.drawer}
+        <MainCheckoutCtx.Provider value={mainCheckout.host}>
         <SessionOutputs
+          openDiffSignal={openDiffSignal}
           // Only the open session has a worktree to show. With nothing selected (new-session
           // draft, empty list) `keepPreviousData` still holds the previously-open session's
           // detail, which would render its stale branch/diff bar over a fresh draft — so gate
@@ -10258,6 +10312,7 @@ export function WorkspaceView({
               : undefined
           }
         />
+        </MainCheckoutCtx.Provider>
         {replyTo && (
           <div className="composer-replyto">
             <span className="composer-replyto-icon">↩</span>
