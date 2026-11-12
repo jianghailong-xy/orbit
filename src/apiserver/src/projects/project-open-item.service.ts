@@ -255,7 +255,8 @@ const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'
  * How many already-answered questions one binding reconsiders (§5.2 R11).
  *
  * A cap on the READ, not on the guarantee: an answer is redelivered while the work it unblocks is
- * still open, or to the one generation that replaced its asker, and both of those are self-limiting.
+ * still open, or to the one generation that replaced an asker it never reached, and both of those are
+ * self-limiting.
  * This only keeps a project with years of answered questions from re-reading all of them every time
  * a coordinator is bound.
  */
@@ -2845,10 +2846,13 @@ export class ProjectOpenItemService {
   /**
    * §5.2 R11: a conversation has just become this project's coordinator. Tell it the answers it
    * still needs — the ones to questions that block work nobody has settled, and the ones asked by the
-   * conversation it just replaced, which would otherwise have been answered to nobody.
+   * conversation it just replaced that it never received, which would otherwise have been answered to
+   * nobody.
    *
    * Not every answer this project ever got: an answer is context for work still in front of the new
-   * coordinator, and replaying a year of settled questions is noise, not a guarantee.
+   * coordinator, and replaying a year of settled questions is noise, not a guarantee. An answer the
+   * replaced conversation already read was acted on there; each one replayed is a whole-context turn
+   * the new coordinator spends saying so (33 of them on one rotation, 2026-11-12).
    */
   private async deliverAnsweredQuestions(
     projectId: string,
@@ -2868,12 +2872,22 @@ export class ProjectOpenItemService {
         resolution: 'ANSWERED',
         deliveries: { none: { sessionId, purpose: 'ANSWER' } },
       },
-      select: { id: true, payload: true, askedBySessionId: true },
+      select: {
+        id: true,
+        payload: true,
+        askedBySessionId: true,
+        // Whether the replaced conversation was told it; read only when there is one.
+        deliveries: {
+          where: { sessionId: replacedSessionId ?? sessionId, purpose: 'ANSWER' },
+          select: { itemId: true },
+        },
+      },
       orderBy: [{ resolvedAt: 'desc' }, { id: 'desc' }],
       take: ANSWERS_RECONSIDERED_PER_BINDING,
     });
     for (const item of answered.reverse()) {
-      const replaced = !!replacedSessionId && item.askedBySessionId === replacedSessionId;
+      const replaced = !!replacedSessionId && item.askedBySessionId === replacedSessionId
+        && item.deliveries.length === 0;
       const question = item.payload as unknown as CoordinatorQuestion;
       if (!replaced && !(await this.blocksUnsettledWork(project.ownerId, question.blocksTaskIds))) continue;
       await this.deliverAnswer(item.id);
