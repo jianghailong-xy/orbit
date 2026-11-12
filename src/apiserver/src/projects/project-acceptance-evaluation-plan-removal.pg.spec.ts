@@ -79,11 +79,17 @@ const KEPT_COLUMNS = [
   'verification_method',
 ] as const;
 
-/** The whole table after 0234, in ordinal order. */
+/**
+ * The whole table after 0234, in ordinal order, and after 0545 added `satisfied_by` (owner decision
+ * 2026-11-11): how the criterion is met, TASKS or CONFIRMATION. It is not an evaluation plan — it
+ * says which kind of fact meets the criterion, not how one is to be evaluated — and a TASKS row's
+ * hashes are computed exactly as 0234 left them.
+ */
 const TABLE_SHAPE = [
   'id', 'project_id', 'ordinal', 'text', 'revision', 'content_hash',
   'created_at', 'updated_at', 'verification_method',
   'completion_criterion_override_reason', 'semantic_revision', 'semantic_hash',
+  'satisfied_by',
 ] as const;
 
 /** The lanes that survive, read straight out of the row. */

@@ -137,6 +137,9 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
     // And what stands in their place is the whole remaining shape, in ordinal order: the assertion,
     // the method that decides it, the advisory override audit, and the identity/hash columns. An
     // exact list rather than a subset, so a column cannot be added back without saying so here.
+    // `satisfied_by` (0545, owner decision 2026-11-11) is how the criterion is met, TASKS or
+    // CONFIRMATION, authored with its text: it names no task and no command, so it is none of the
+    // four wiring columns coming back under another name.
     const { rows: shape } = await sql.query<{ column_name: string }>(
       `SELECT "column_name" FROM "information_schema"."columns"
         WHERE "table_schema" = 'public'
@@ -147,6 +150,7 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
       'id', 'project_id', 'ordinal', 'text', 'revision', 'content_hash',
       'created_at', 'updated_at', 'verification_method',
       'completion_criterion_override_reason', 'semantic_revision', 'semantic_hash',
+      'satisfied_by',
     ]);
   });
 
