@@ -2406,6 +2406,37 @@ button.toast--pill:focus-visible {
 .runner-updating-pop .runner-update-actions {
   justify-content: flex-start;
 }
+/* Board 3 ⑥: one line atop the conversation pane while the runner drains with the reader's work waiting. */
+.runner-drain-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--warning-bg, #fdf3e3);
+  border-bottom: 1px solid var(--warning-border, #f3dcb5);
+  font-size: 13px;
+}
+.runner-drain-banner-icon {
+  color: var(--warning, #c47a00);
+  flex: none;
+}
+.runner-drain-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+.runner-drain-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.runner-drain-banner-close {
+  border: 0;
+  background: none;
+  color: var(--text-tertiary, #8a8a8a);
+  cursor: pointer;
+  padding: 4px;
+}
 /* A Later row: what it does on the left, the clock time on the right in the meta voice. */
 .runner-update-later-item {
   display: flex;

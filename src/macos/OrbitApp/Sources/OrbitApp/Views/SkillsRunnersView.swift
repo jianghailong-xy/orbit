@@ -185,7 +185,7 @@ struct RunnersListView: View {
     /// A line of Needs you, opened: the machine's record, the pool's page.
     private func openAttention(_ item: Infrastructure.Attention) {
         switch item.kind {
-        case .offline(let runnerID), .noCliSignedIn(let runnerID):
+        case .offline(let runnerID), .noCliSignedIn(let runnerID), .updating(let runnerID):
             if rowNavigation == .selection {
                 model.selectedRunnerID = runnerID
             } else {
