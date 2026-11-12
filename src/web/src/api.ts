@@ -1,4 +1,11 @@
-import type { MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
+import type {
+  ApprovalTranslation,
+  MergeRecovery,
+  MergeRecoveryAction,
+  ReplyTranslationRetryResponse,
+  TranslationActionResponse,
+  TurnTranslation,
+} from '@orbit/shared';
 import type {
   BgShell,
   ConfirmationAnswersCard,
@@ -616,6 +623,8 @@ export const sendTurn = (
     kind: ConversationTurnKind;
     placement: SessionTurnPlacement;
     targetTurnId?: string;
+    /** Settings › Translation: TRANSLATING when the message is held to be translated first. */
+    translation?: TurnTranslation;
   }>(`/sessions/${sessionId}/turns/current-work-routing`, {
     method: 'POST',
     body: {
@@ -814,7 +823,25 @@ export interface ActiveSessionTurn extends TurnCards {
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
+  /** Settings › Translation: the owner's message as typed, and how far its translation got. While
+   *  TRANSLATING or FAILED the turn is held and not delivered; `content` is then what they typed. */
+  translation?: TurnTranslation;
 }
+
+/** Settings › Translation, a held message whose translation failed (1A): translate it again. */
+export const retryTurnTranslation = (sessionId: string, turnId: string) =>
+  api<TranslationActionResponse>(`/sessions/${sessionId}/turns/${turnId}/translation/retry`, { method: 'POST' });
+
+/** Settings › Translation, a held message whose translation failed (1A): deliver it untranslated. */
+export const sendTurnAsWritten = (sessionId: string, turnId: string) =>
+  api<TranslationActionResponse>(`/sessions/${sessionId}/turns/${turnId}/translation/send-as-written`, {
+    method: 'POST',
+  });
+
+/** Settings › Translation, an agent reply whose translation failed (2A): translate it again. The
+ *  result arrives on the stream as a `translation` event for `seq`. */
+export const retryReplyTranslation = (sessionId: string, seq: number) =>
+  api<ReplyTranslationRetryResponse>(`/sessions/${sessionId}/events/${seq}/translation/retry`, { method: 'POST' });
 
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
  *  bubbles on reopen and bridges the dequeue-to-first-event gap. The unqualified endpoint keeps
@@ -860,6 +887,8 @@ export const resumeSession = (
      *  ordinary resume, so an older server reads exactly as it always did. See
      *  `docs/session-message-routing-contract.md` §2.1. */
     routedToSessionId?: string;
+    /** Settings › Translation: TRANSLATING when the message is held to be translated first. */
+    translation?: TurnTranslation;
   }>(`/sessions/${sessionId}/resume`, {
     method: 'POST',
     body: {
@@ -886,6 +915,9 @@ export interface ApprovalInfo {
   message?: string;
   createdAt: string;
   decidedAt?: string;
+  /** Settings › Translation (3A): what the card shows, in the owner's language. Absent until the
+   *  server has translated it, and whenever translation is off. */
+  translation?: ApprovalTranslation;
 }
 
 /** Pending (default) tool-permission approvals awaiting a human allow/deny. */

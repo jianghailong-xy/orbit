@@ -8218,6 +8218,83 @@ button.chat-jump-start:hover {
   line-height: 1.4;
   color: var(--text-3);
 }
+/* Settings › Translation (docs/mocks/session-translation, frames 4–6): the foot under a translated
+   message — "Translated · Show original" and its flip — the chips while a translation is under way,
+   and the failures with their way out. Muted like the steer state; a failure owns the error colour. */
+.chat-translate-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.chat-translate-foot.is-reply {
+  display: flex;
+  margin: 2px 0 6px;
+  /* Under the reply's text, which .chat-assistant insets by 12px. */
+  padding: 0 12px;
+}
+.chat-translate-foot.is-error {
+  color: var(--error-solid);
+}
+.chat-translate-sep {
+  color: var(--text-3);
+}
+.chat-translate-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-2);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.chat-translate-foot.is-error .chat-translate-action {
+  color: var(--error-solid);
+}
+.chat-translate-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chat-translate-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--fill-2, rgba(0, 0, 0, 0.05));
+  color: var(--text-2);
+}
+/* A reply still in English because its translation is on its way (2A): greyed until it is swapped. */
+.chat-translated-reply.is-pending .chat-assistant {
+  color: var(--text-2);
+}
+/* The composer's "<Language> → English" tag (6A): a quiet pill that opens Settings › Translation. */
+.composer-translation-tag {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--text-2);
+  background: var(--fill-1, transparent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.composer-translation-tag:hover {
+  color: var(--text-1);
+}
+/* Frame 2: the server cannot translate, and says who can change that. */
+.settings-translation-notice {
+  margin: 4px 0 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--warning-border, rgba(217, 119, 6, 0.35));
+  border-radius: 6px;
+  background: var(--warning-bg, rgba(253, 230, 138, 0.25));
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
 /* The way to take a steer back sits in that same 12px line. On a touch screen it keeps its size
    and takes the height a finger needs; the margin gives the padding back, so the line stays put. */
 @media (hover: none) {
@@ -28040,3 +28117,10 @@ button.agent-progress-agent:hover {
 .confirm-criterion-shot { display: flex; gap: 10px; align-items: flex-end; }
 .confirm-criterion-shot img { max-width: 220px; max-height: 140px; border: 1px solid var(--border-subtle); border-radius: 6px; }
 .acceptance-mode-row { margin-top: 4px; }
+/* A tool card's description in the owner's language (Settings › Translation, 3A), over the input. */
+.approval-translated-desc {
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
