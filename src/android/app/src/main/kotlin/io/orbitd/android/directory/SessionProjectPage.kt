@@ -108,12 +108,20 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
     }
 }
 
+/** The words of the conversation bar's project sessions button and of the sheet it opens (owner 2026-11-11, docs/mocks/
+ * project-sessions-column board 5). Kept apart from [SessionProjectCopy], whose every word is held to OrbitKit's Swift: iOS has yet
+ * to land its own button. */
+internal object ProjectSessionsSheetCopy {
+    const val button = "Project sessions"
+    const val close = "Close"
+}
+
 /** The conversation bar's button for its project's sessions (owner 2026-11-11, docs/mocks/project-sessions-column board 5): the
  * project glyph and how many sessions the project has, left of the ⋮, on the coordinator's conversation and on every member's alike. */
 @Composable
 internal fun ProjectSessionsButton(count: Int?, onClick: () -> Unit) {
     TextButton(onClick, Modifier.heightIn(min = 48.dp).testTag("project-sessions-button")
-        .semantics(mergeDescendants = true) { contentDescription = SessionProjectCopy.sessionsButton },
+        .semantics(mergeDescendants = true) { contentDescription = ProjectSessionsSheetCopy.button },
         contentPadding = PaddingValues(horizontal = 8.dp),
         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
         Icon(painterResource(R.drawable.ic_grid), null, Modifier.size(18.dp))
@@ -482,7 +490,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     if (close != null) Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 4.dp).testTag("project-sessions-sheet-head"),
         verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = close, modifier = Modifier.testTag("project-sessions-sheet-close")) {
-            Icon(painterResource(R.drawable.ic_close), SessionProjectCopy.closeSheet)
+            Icon(painterResource(R.drawable.ic_close), ProjectSessionsSheetCopy.close)
         }
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
             Text(pageTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)

@@ -232,9 +232,6 @@ object SessionProjectCopy {
     fun pageSubtitle(sessions: Int) = "Project · $sessions sessions"
     /** Before the members have been read: no count it cannot vouch for yet. */
     const val pageSubtitleLoading = "Project"
-    /** The conversation bar's button that opens the project's sessions (owner 2026-11-11), and the ✕ of the sheet it opens. */
-    const val sessionsButton = "Project sessions"
-    const val closeSheet = "Close"
     const val coordinatorSection = "Coordinator"
     fun pageProgress(done: Int, total: Int, running: Int) = "$done/$total done · $running running"
     /** A project nobody has started says so, rather than reading like one that runs nothing. */
