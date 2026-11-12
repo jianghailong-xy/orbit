@@ -212,6 +212,13 @@ type sessionPool struct {
 	// selfUpdateDeferralLimit: this runner claims nothing more (admissionIdleCapacity) and tells
 	// the control plane it is draining, so the turns in flight run out and the update can follow.
 	drainingForUpdate bool
+	// lastActivityAt is when a turn last ended or a session or turn was last claimed here
+	// (markActivityLocked). An automatic update waits until it is selfUpdateQuietWindow behind
+	// (closeForUpdate): the gap between two turns of a conversation is not idle.
+	lastActivityAt time.Time
+	// updateAskedByOwner: the owner pressed Update Runner Now. Their update waits only for the turns
+	// in flight, not for the quiet window (updateWhenNoTurnInFlight).
+	updateAskedByOwner bool
 }
 
 func newSessionPool(max int) *sessionPool {
@@ -747,14 +754,53 @@ func (p *sessionPool) backgroundJobTotal() int {
 // stops. A claim that lands after this gets its permit, but waitActive holds its turn back until
 // the stop that follows, and the turn stays RUNNING for the updated runner to reclaim — the path
 // a claim racing any runner stop already takes. It never starts, so there is nothing to tear down.
-func (p *sessionPool) closeForUpdate() (turnsInFlight int) {
+//
+// quiet is the quiet window an automatic update also waits for (selfUpdateQuietWindow): while the
+// last turn end or claim here (lastActivityAt) is less than quiet ago, it refuses and reports how
+// much of the window is left. A conversation between two turns has nothing in flight, but its next
+// message is seconds away. A zero quiet asks only about the turns in flight: the owner's update and
+// a drain past selfUpdateDeferralLimit.
+func (p *sessionPool) closeForUpdate(quiet time.Duration) (turnsInFlight int, quietLeft time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if n := p.turnsInFlightLocked(); n > 0 {
-		return n
+		return n, 0
+	}
+	if quiet > 0 && !p.lastActivityAt.IsZero() {
+		if left := p.lastActivityAt.Add(quiet).Sub(p.clock.Now()); left > 0 {
+			return 0, left
+		}
 	}
 	p.closedForUpdate = true
-	return 0
+	return 0, 0
+}
+
+// markActivityLocked records a turn ending or a session or turn claimed now, for the quiet window
+// an automatic update waits for (closeForUpdate).
+func (p *sessionPool) markActivityLocked() {
+	p.lastActivityAt = p.clock.Now()
+}
+
+// askForUpdateNow records that the owner pressed Update Runner Now; it holds until a check finds
+// no release to install (takeUpdateAskedByOwner).
+func (p *sessionPool) askForUpdateNow() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.updateAskedByOwner = true
+}
+
+// updateIsAskedByOwner is whether the owner's Update Runner Now is still waiting to be served.
+func (p *sessionPool) updateIsAskedByOwner() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.updateAskedByOwner
+}
+
+// forgetUpdateAskedByOwner drops the owner's request once a check found no release: it was answered.
+func (p *sessionPool) forgetUpdateAskedByOwner() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.updateAskedByOwner = false
 }
 
 // drainForUpdate stops this runner taking new work so that the turns in flight can run out: from
@@ -970,6 +1016,7 @@ func (p *sessionPool) register(job *ClaimedSession, cancel context.CancelFunc, a
 	}
 	if active {
 		s.permitGeneration = 1
+		p.markActivityLocked()
 	}
 	p.sessions[s.id] = s
 	if active {
@@ -1138,6 +1185,7 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 		cancels = append(cancels, p.requestEvictLocked(s))
 	}
 	s.active = true
+	p.markActivityLocked()
 	p.fenceWorktreeOperationLocked(s.id)
 	s.permitGeneration++
 	s.idleGeneration++
@@ -1179,6 +1227,7 @@ func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 	}
 	s.active = false
 	s.lastOrbitTurnAt = p.clock.Now()
+	p.markActivityLocked()
 	p.releaseWorktreeFenceLocked(s.id, s)
 	p.armWarmTimerLocked(s)
 	p.signalLocked(s)
@@ -1266,6 +1315,7 @@ func (p *sessionPool) engineTurnEvent(s *liveSession, eventType string, payload 
 		return
 	}
 	s.selfDrivenTurn = false
+	p.markActivityLocked()
 	if !s.active {
 		p.armWarmTimerLocked(s)
 	}
@@ -1449,6 +1499,9 @@ func (p *sessionPool) remove(s *liveSession) {
 			s.warmTimer.Stop()
 			s.warmTimer = nil
 		}
+		if s.active || s.selfDrivenTurn {
+			p.markActivityLocked() // a turn ends with its supervisor
+		}
 		delete(p.sessions, s.id)
 		p.signalLocked(s)
 	}
@@ -1464,6 +1517,9 @@ func (p *sessionPool) finish(s *liveSession) {
 		if s.warmTimer != nil {
 			s.warmTimer.Stop()
 			s.warmTimer = nil
+		}
+		if s.active || s.selfDrivenTurn {
+			p.markActivityLocked() // a turn ends with its supervisor
 		}
 		delete(p.sessions, s.id)
 		// A detached supervisor's fence is the takeover's to lower — but only while there is

@@ -98,7 +98,7 @@ public enum RunnerPageCopy {
     public static let RUNNER_ABOUT_REGISTERED = "Registered"
     public static let RUNNER_ABOUT_LAST_UPDATE = "Last Update"
     public static let RUNNER_VERSION_LATEST = "Latest"
-    public static let RUNNER_VERSION_INSTALLS_WHEN_IDLE = "installs when no turn is running"
+    public static let RUNNER_VERSION_INSTALLS_WHEN_IDLE = "installs when the runner has been idle for 10 min"
     public static let RUNNER_VERSION_NOT_ROLLED_OUT = "not rolled out to it yet"
     public static let RUNNER_RUNS_AS_ROOT = "root"
     public static let RUNNER_RUNS_AS_REGULAR_USER = "regular user"
@@ -115,8 +115,8 @@ public enum RunnerPageCopy {
     public static let RUNNER_UPDATE_TAG_POSTPONED = "Postponed"
     public static func runnerUpdateAvailableTitle(version: String) -> String { "\(version) is available" }
     public static let RUNNER_UPDATE_AVAILABLE_BODY =
-        "It installs when no turn is running. If turns keep running for an hour, it stops taking new "
-        + "work so they can finish."
+        "It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, "
+        + "it stops taking new work so its turns can finish."
     public static func runnerUpdateDrainingTitle(version: String) -> String { "Updating to \(version)" }
     public static func runnerUpdateDrainingBody(version: String, since: String) -> String {
         "\(version) has been waiting since \(since). After an hour it stopped taking new work so the turns "

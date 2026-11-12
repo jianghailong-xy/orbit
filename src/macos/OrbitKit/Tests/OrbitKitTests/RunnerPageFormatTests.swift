@@ -603,7 +603,7 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.versionValue(wikova, latest: "0.1.197"), "0.1.197 · Latest")
         XCTAssertEqual(RunnerPageFormat.versionValue(wikova, latest: "0.1.180"), "0.1.197 · Latest")
         XCTAssertEqual(RunnerPageFormat.versionValue(wikova, latest: "0.1.198"),
-                       "0.1.197 · 0.1.198 installs when no turn is running")
+                       "0.1.197 · 0.1.198 installs when the runner has been idle for 10 min")
         XCTAssertEqual(RunnerPageFormat.versionValue(wikova, latest: nil), "0.1.197")
         XCTAssertEqual(RunnerPageFormat.versionValue(try macMini(), latest: "0.1.197"), "0.1.155",
                        "a runner that can't update itself says so in Needs Attention, not here")

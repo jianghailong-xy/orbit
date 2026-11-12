@@ -123,13 +123,13 @@ class RunnerPageTest {
         assertFalse("a runner too old to report it", RunnerPage.canUpdateNow(runnerOf(failed), failed["nowMs"]!!.jsonPrimitive.long))
 
         fun version(prefix: String) = RunnerPage.versionValue(runnerOf(case(prefix)), "0.1.197")
-        assertEquals("0.1.190 · 0.1.197 installs when no turn is running", version("selfUpdate waitingForIdle and behind"))
-        assertEquals("0.1.190 · 0.1.197 installs when no turn is running", version("selfUpdate enabled and behind"))
+        assertEquals("0.1.190 · 0.1.197 installs when the runner has been idle for 10 min", version("selfUpdate waitingForIdle and behind"))
+        assertEquals("0.1.190 · 0.1.197 installs when the runner has been idle for 10 min", version("selfUpdate enabled and behind"))
         assertEquals("0.1.190 · 0.1.197 not rolled out to it yet", version("selfUpdate heldByRollout and behind"))
         assertEquals("0.1.190", version("selfUpdate failed and behind"))
         assertEquals("0.1.197 · Latest", version("selfUpdate dirNotWritable on the latest release"))
         assertEquals("0.1.190", version("selfUpdate null"))
-        assertEquals("0.1.190 · 0.1.197 installs when no turn is running", RunnerPage.versionValue(runnerOf(failed), "0.1.197"))
+        assertEquals("0.1.190 · 0.1.197 installs when the runner has been idle for 10 min", RunnerPage.versionValue(runnerOf(failed), "0.1.197"))
 
         val shanghai = ZoneId.of("Asia/Shanghai")
         assertEquals("Sep 20, 4:00 PM · 0.1.189 → 0.1.190", RunnerPage.lastUpdate(runnerOf(case("selfUpdate enabled and behind")), shanghai))

@@ -232,8 +232,8 @@ final class RunnerSelfUpdateTests: XCTestCase {
             RunnerPageFormat.versionValue(try runner(try caseInput(prefix)), latest: "0.1.197")
         }
         XCTAssertEqual(try version("selfUpdate waitingForIdle and behind"),
-                       "0.1.190 · 0.1.197 installs when no turn is running")
-        XCTAssertEqual(try version("selfUpdate enabled and behind"), "0.1.190 · 0.1.197 installs when no turn is running")
+                       "0.1.190 · 0.1.197 installs when the runner has been idle for 10 min")
+        XCTAssertEqual(try version("selfUpdate enabled and behind"), "0.1.190 · 0.1.197 installs when the runner has been idle for 10 min")
         XCTAssertEqual(try version("selfUpdate heldByRollout and behind"), "0.1.190 · 0.1.197 not rolled out to it yet")
         // A card says the rest; here it is just the version.
         XCTAssertEqual(try version("selfUpdate dirNotWritable and behind"), "0.1.190")
@@ -248,7 +248,7 @@ final class RunnerSelfUpdateTests: XCTestCase {
             input["runner"] = runner
         })
         XCTAssertEqual(RunnerPageFormat.versionValue(root, latest: "0.1.197"),
-                       "0.1.190 · 0.1.197 installs when no turn is running")
+                       "0.1.190 · 0.1.197 installs when the runner has been idle for 10 min")
     }
 
     func testLastUpdateSaysWhenInTheReadersZoneAndBetweenWhichVersions() throws {

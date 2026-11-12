@@ -25,8 +25,8 @@ internal object RunnerCopy {
     const val UPDATE_TAG_RESTARTING = "Restarting"
     const val UPDATE_TAG_POSTPONED = "Postponed"
     fun updateAvailableTitle(version: String) = "$version is available"
-    const val UPDATE_AVAILABLE_BODY = "It installs when no turn is running. If turns keep running for an hour, it stops taking new " +
-        "work so they can finish."
+    const val UPDATE_AVAILABLE_BODY = "It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, " +
+        "it stops taking new work so its turns can finish."
     fun updateDrainingTitle(version: String) = "Updating to $version"
     fun updateDrainingBody(version: String, since: String) = "$version has been waiting since $since. After an hour it stopped taking " +
         "new work so the turns in flight can finish; then it installs and restarts."
@@ -1255,8 +1255,8 @@ internal object RunnerPage {
         val target = report?.str("targetVersion")
         if (target != null && report.str("phase") in setOf("draining", "restarting")) return version + RunnerCopy.SEP + RunnerCopy.versionUpdatingTo(target)
         val note = when (runner.obj("selfUpdate")?.str("state")) {
-            null -> if (runner.bool("runsAsRoot") == true) "installs when no turn is running" else null
-            "enabled", "waitingForIdle" -> "installs when no turn is running"
+            null -> if (runner.bool("runsAsRoot") == true) "installs when the runner has been idle for 10 min" else null
+            "enabled", "waitingForIdle" -> "installs when the runner has been idle for 10 min"
             "heldByRollout" -> "not rolled out to it yet"
             else -> null
         } ?: return version

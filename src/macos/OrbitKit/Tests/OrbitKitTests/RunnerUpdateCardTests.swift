@@ -54,11 +54,11 @@ final class RunnerUpdateCardTests: XCTestCase {
         let r = try runner(try report("available") { $0["targetVersion"] = "0.1.254" })
         let card = try XCTUnwrap(RunnerPageFormat.updateCard(r, now: try date("2023-11-14T22:33:20Z"), timeZone: Self.utc))
         XCTAssertEqual(card, .init(phase: "available", warn: false, title: "0.1.254 is available", tag: "Available",
-                                   body: "It installs when no turn is running. If turns keep running for an hour, "
-                                       + "it stops taking new work so they can finish.",
+                                   body: "It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, "
+                                       + "it stops taking new work so its turns can finish.",
                                    progressLabel: nil, progress: nil))
         XCTAssertEqual(RunnerPageFormat.versionValue(r, latest: "0.1.254"),
-                       "0.1.253 · 0.1.254 installs when no turn is running")
+                       "0.1.253 · 0.1.254 installs when the runner has been idle for 10 min")
     }
 
     func testDrainingCountsTheTurnsAndTheTimeAndAboutSaysUpdatingTo() throws {
@@ -119,7 +119,7 @@ final class RunnerUpdateCardTests: XCTestCase {
         let r = try runner(try report("oldRunner"))
         XCTAssertNil(RunnerPageFormat.updateCard(r, now: Date(), timeZone: Self.utc))
         XCTAssertEqual(RunnerPageFormat.versionValue(r, latest: "0.1.254"),
-                       "0.1.253 · 0.1.254 installs when no turn is running")
+                       "0.1.253 · 0.1.254 installs when the runner has been idle for 10 min")
         // And a phase this client doesn't know draws nothing rather than a guess.
         let unknown = try runner(["state": "waitingForIdle", "phase": "installing", "targetVersion": "0.1.254"])
         XCTAssertNil(RunnerPageFormat.updateCard(unknown, now: Date(), timeZone: Self.utc))

@@ -48,6 +48,12 @@ const (
 	// How often a draining runner looks again whether its turns have run out: the drain holds work
 	// back, so it should not outlast them by a whole check interval.
 	selfUpdateDrainCheckInterval = 15 * time.Second
+	// How long the runner must have been quiet — no turn ended, no session or turn claimed — before an
+	// automatic update installs (closeForUpdate). A conversation between two turns has nothing in
+	// flight, and an update taken then makes the owner's next message wait behind the restart and
+	// the reclaim (owner, 2026-11-12). It never outlasts selfUpdateDeferralLimit: the drain asks only
+	// for the turns in flight, and so does the owner's Update Runner Now.
+	selfUpdateQuietWindow = 10 * time.Minute
 )
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
@@ -128,7 +134,13 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // pool, and the install that follows the stop reads the assigned release anyway (selfUpdate). The
 // clock is not restarted by a check that finds nothing, a failed one included: the runner has been
 // behind a release since it started.
-func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit time.Duration) selfUpdateChecker {
+//
+// An automatic update also waits for the runner to be quiet (quiet, selfUpdateQuietWindow in
+// runLoop): no turn ended and nothing claimed within it. Neither the drain nor the owner's Update
+// Runner Now (sessionPool.askForUpdateNow) waits for that: past the limit the drain has already
+// stopped new work, and the owner asked for the update now. The quiet window counts toward the
+// limit like a turn in flight does, so it cannot put an update off for longer than limit.
+func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit, quiet time.Duration) selfUpdateChecker {
 	var mu sync.Mutex
 	var deferredSince, drainingSince time.Time
 	var draining string
@@ -140,15 +152,21 @@ func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operat
 		if remote == "" {
 			var ok bool
 			if remote, ok = check(ctx, server); !ok {
+				pool.forgetUpdateAskedByOwner()
 				return "", false
 			}
 		}
+		window := quiet
+		if draining != "" || pool.updateIsAskedByOwner() {
+			window = 0
+		}
 		ops := operations()
 		turns := 0
+		var quietLeft time.Duration
 		if ops == 0 {
-			turns = pool.closeForUpdate()
+			turns, quietLeft = pool.closeForUpdate(window)
 		}
-		if ops == 0 && turns == 0 {
+		if ops == 0 && turns == 0 && quietLeft == 0 {
 			// The heartbeat the check rides says so before the stop: the Update card's Restarting.
 			noteSelfUpdatePhase(selfUpdateStateEnabled, "", selfUpdatePhase{
 				phase: selfUpdatePhaseRestarting, targetVersion: remote,
@@ -168,6 +186,10 @@ func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operat
 		busy := fmt.Sprintf("%d turn(s)", turns)
 		if ops > 0 {
 			busy = fmt.Sprintf("%d heartbeat operation(s)", ops)
+		}
+		if quietLeft > 0 {
+			logln(fmt.Sprintf("orbit %s update available; deferred — a turn ended or was claimed in the last %s, checking again in %s",
+				remote, quiet, interval))
 		}
 		if draining == "" && now.Sub(deferredSince) >= limit {
 			draining = remote
@@ -189,8 +211,10 @@ func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, operat
 				})
 			return "", false
 		}
-		logln(fmt.Sprintf("orbit %s update available; deferred — %s in flight, checking again in %s",
-			remote, busy, interval))
+		if quietLeft == 0 {
+			logln(fmt.Sprintf("orbit %s update available; deferred — %s in flight, checking again in %s",
+				remote, busy, interval))
+		}
 		noteSelfUpdatePhase(selfUpdateStateWaitingForIdle, "", selfUpdatePhase{
 			phase: selfUpdatePhaseAvailable, targetVersion: remote, availableSince: deferredSince,
 			turnsInFlight: turns,
@@ -1207,7 +1231,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	defer stopHandBacks()
 	var check selfUpdateChecker
 	if selfUpdateEnabled() {
-		gated := updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit)
+		gated := updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit, selfUpdateQuietWindow)
 		check = func(ctx context.Context, server string) (string, bool) {
 			remote, ok := gated(ctx, server)
 			// What the check found rides a beat now rather than up to half a minute from now: after
@@ -1990,6 +2014,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("runner update check requested by the control plane; self-update is off:", selfUpdateDisabledReason())
 				} else {
 					logln("runner update check requested by the control plane")
+					// The owner's update waits for the turns in flight, not for the quiet window.
+					pool.askForUpdateNow()
 					select {
 					case checkSelfUpdateNow <- struct{}{}:
 					default:

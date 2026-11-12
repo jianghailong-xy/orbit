@@ -805,7 +805,7 @@ public enum RunnerPageFormat {
     // MARK: About This Runner
 
     /// `0.1.197 · Latest`; a runner that is behind and installs the release itself says so
-    /// (`0.1.194 · 0.1.197 installs when no turn is running`), and so does one a staged rollout holds
+    /// (`0.1.194 · 0.1.197 installs when the runner has been idle for 10 min`), and so does one a staged rollout holds
     /// back (`0.1.194 · 0.1.197 not rolled out to it yet`). One that can't update itself is Needs
     /// Attention's to say, and here is just its version. A runner that reports where its updates stand
     /// says which it is; an older one is judged by `runsAsRoot`, as before.
