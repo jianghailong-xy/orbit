@@ -37,6 +37,7 @@ import {
   PushpinOutlined,
   RightOutlined,
   SearchOutlined,
+  TeamOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
@@ -1308,6 +1309,16 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
   );
 }
 
+/** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
+ *  runner and permission mode, or the workspace's machine when the session names none. */
+const guestContextOf = (s: any, fallbackRunner: string) => ({
+  runnerName: s.assignedRunner?.displayName || s.assignedRunner?.name || fallbackRunner,
+  permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
+});
+
+/** What the two-person icon beside a row's time says: people the owner invited can reply here. */
+export const SESSION_GUESTS_TIP = 'People you invited can reply';
+
 /** What the globe beside a row's time says: a public link opens this session right now. */
 export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
 
@@ -1333,6 +1344,11 @@ export function SessionTitleRow({
       {s.shared === true && (
         <span className="session-shared" title={SESSION_SHARED_TIP} aria-label={SESSION_SHARED_TIP}>
           <GlobalOutlined />
+        </span>
+      )}
+      {s.hasGuests === true && (
+        <span className="session-guests" title={SESSION_GUESTS_TIP} aria-label={SESSION_GUESTS_TIP}>
+          <TeamOutlined />
         </span>
       )}
       <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
@@ -2384,7 +2400,7 @@ export function WorkspaceView({
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
   // A row's Share action opens the share dialog for that row rather than for the open session.
-  const [shareRowId, setShareRowId] = useState<string | null>(null);
+  const [shareRow, setShareRow] = useState<any>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
   const [moveTarget, setMoveTarget] = useState<(MoveDialogSession & {
     workspace?: { id: string; name: string };
@@ -3857,7 +3873,7 @@ export function WorkspaceView({
         .map((choice) => ({ engine: row.slug, provider: choice.slug })),
     );
     if (keyed[0]) pickDraft(keyed[0].engine, keyed[0].provider);
-    else navigate('/infrastructure#keys');
+    else navigate('/settings/providers');
   };
   // An account row under the draft engine's own sign-in: that sign-in, on that account — or on
   // Automatic (`null`). Like the provider, it binds the session being drafted and rewrites no
@@ -5909,7 +5925,7 @@ export function WorkspaceView({
       return;
     }
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`);
+    navigate(a ? `/workspaces/${encodeId(a)}${listSearch}` : `/settings/machines/${encodeId(runner.id)}${listSearch}`);
   };
   // After leaveIfOpen re-scopes to the workspace, the auto-open effect picks that workspace's
   // next session — but it reads the cached list, which still holds the row we just
@@ -6169,7 +6185,7 @@ export function WorkspaceView({
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
     else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt, projectId: s.projectMembership?.projectId });
-    else if (action === 'share') setShareRowId(s.id);
+    else if (action === 'share') setShareRow(s);
     else if (action === 'move') openMove(s);
     else if (action === 'delete') requestTrash(s, returnFocus);
     else confirmPurge({ id: s.id, title: s.title }, returnFocus);
@@ -7252,7 +7268,7 @@ export function WorkspaceView({
     if (!selected || shownProviderListed || isLoginProvider(shownProvider) || shownProvider === AgentProvider.OPENCODE) return null;
     if (configuredProviders.some((p) => p.slug === shownProvider) || !ownKeys.data) return null;
     const row = ownKeys.data.find((p) => p.slug === shownProvider);
-    if (row) return row.enabled ? null : { status: 'Turned off', href: `/providers/${encodeId(row.id)}` };
+    if (row) return row.enabled ? null : { status: 'Turned off', href: `/settings/providers/keys/${encodeId(row.id)}` };
     return shownProvider === AgentProvider.DSH ? null : { status: 'Key deleted' };
   })();
   // Where this session could move without changing engine: the credentials its engine runs on here.
@@ -7958,7 +7974,7 @@ export function WorkspaceView({
     setView(next);
     if (!selectedId) return;
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+    navigate(a ? `/workspaces/${encodeId(a)}` : `/settings/machines/${encodeId(runner.id)}`);
   };
   const activeTag = tagFilter ? (sessionTags.find((t) => t.id === tagFilter) ?? null) : null;
   // ── The composer's model control ───────────────────────────────────────────────────────────
@@ -7975,7 +7991,7 @@ export function WorkspaceView({
   const pickAccount = (account: string, signedOut: boolean): void => {
     if (!shownAccountEngine) return;
     if (signedOut) {
-      navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
+      navigate(`/settings/machines/${encodeId(runner.id)}?engine=${shownAccountEngine}`);
       return;
     }
     // A draft starts on it: nothing on the server yet, so the pick rides on the create.
@@ -8010,7 +8026,7 @@ export function WorkspaceView({
     if (picked?.unavailable) {
       navigate(
         picked.fixHref ??
-          `/infrastructure?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? shownEngine}`,
+          `/settings/machines/${encodeId(runner.id)}?engine=${picked.fixEngine ?? shownEngine}`,
       );
       return;
     }
@@ -8092,14 +8108,14 @@ export function WorkspaceView({
       runnerVersion: runner.version,
       googleLogin: runner.antigravity?.googleLogin,
       runtime: shownEngine,
-      onConnectGemini: () => navigate(geminiProvider ? `/providers/${encodeId(geminiProvider.id)}` : '/providers/new/gemini'),
+      onConnectGemini: () => navigate(geminiProvider ? `/settings/providers/keys/${encodeId(geminiProvider.id)}` : '/settings/providers/new/gemini'),
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
         ? () => pickProvider(geminiChoice.slug)
         : undefined,
-      onOpenProviders: () => navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=antigravity`),
+      onOpenProviders: () => navigate(`/settings/machines/${encodeId(runner.id)}?engine=antigravity`),
       onInstall: runner.online && runner.antigravity?.supported ? () => installAntigravity.mutate() : undefined,
       installDisabled: installAntigravity.isPending || installDsh.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
-      onEditDshKey: () => navigate(dshProviderRow ? `/providers/${encodeId(dshProviderRow.id)}` : '/infrastructure#keys'),
+      onEditDshKey: () => navigate(dshProviderRow ? `/settings/providers/keys/${encodeId(dshProviderRow.id)}` : '/settings/providers'),
       onInstallDsh: runner.online && runner.capabilities?.includes(DSH_RUNNER_CAPABILITY) ? () => installDsh.mutate() : undefined,
       onRetry:
         authRetryText && !selectedTrashed && !selectedMissing
@@ -8127,7 +8143,7 @@ export function WorkspaceView({
       onNeedRetryText: selectedId ? () => setRetryMessageAskedFor(selectedId) : undefined,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
       // whose key the user actually holds.
-      onUseApiKey: () => navigate('/infrastructure#keys'),
+      onUseApiKey: () => navigate('/settings/providers'),
     }),
     // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
     // rebuild this every render and re-render the card through the context.
@@ -8197,7 +8213,7 @@ export function WorkspaceView({
       selectedRuntime === AgentProvider.DSH
         ? authErrorHelp.onEditDshKey
         : authErrorHelp.onOpenProviders,
-    openRunner: () => navigate(`/runners/${encodeId(runner.id)}`),
+    openRunner: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
     // The conversation is the other way to answer a refusal, so this only arms it:
     // the reader's own words are the point, and nothing is sent for them.
     chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
@@ -8393,7 +8409,7 @@ export function WorkspaceView({
     const pick = (account: string, signedOut: boolean) => {
       if (here) return pickAccount(account, signedOut);
       if (signedOut) {
-        navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${engine}`);
+        navigate(`/settings/machines/${encodeId(runner.id)}?engine=${engine}`);
         return;
       }
       pickProvider(engine!, account);
@@ -9368,7 +9384,7 @@ export function WorkspaceView({
                   navigate(sessionPath(id), { state: stampFromList() }))}
               onBack={isMobile ? () => {
                 const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`;
+                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/settings/machines/${encodeId(runner.id)}${listSearch}`;
                 navigateWithPaneSlide('pop', () =>
                   arrivedFromList() ? navigate(-1) : navigate(list, { replace: true }),
                 );
@@ -9389,7 +9405,7 @@ export function WorkspaceView({
               aria-label="Back to sessions"
               onClick={() => {
                 const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`;
+                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/settings/machines/${encodeId(runner.id)}${listSearch}`;
                 // A real back when the list is the entry behind this one, so returning unwinds
                 // the push instead of stacking a third entry on top of it. A deep-linked
                 // conversation has no such entry: replace it, which still lands on the list —
@@ -9711,10 +9727,17 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
+            guests={guestContextOf(selected, machineName(runner))}
           />
         )}
-        {shareRowId && (
-          <ShareModal open onClose={() => setShareRowId(null)} kind="SESSION" rootId={shareRowId} />
+        {shareRow && (
+          <ShareModal
+            open
+            onClose={() => setShareRow(null)}
+            kind="SESSION"
+            rootId={shareRow.id}
+            guests={guestContextOf(shareRow, machineName(runner))}
+          />
         )}
         <SessionMoveModal
           open={!!moveTarget}

@@ -129,9 +129,10 @@ public struct SessionLine: Equatable, Sendable {
         SessionLine(text: "\(sender(from)): \(plainPreview(text))", tone: .preview)
     }
 
-    /// The line for a message somebody outside Orbit sent — a member of a connected Feishu group
-    /// (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2) — or nil for anybody else's: named the way
-    /// the conversation names them over their words, `From Feishu · <name>: …`, never "You". One message
+    /// The line for a message somebody other than the owner sent — a member of a connected Feishu group
+    /// (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2) or a guest the owner invited
+    /// (docs/session-guests-design.md §3) — or nil for anybody else's: named the way the conversation
+    /// names them over their words, `From Feishu · <name>: …` or `From <name>: …`, never "You". One message
     /// has one sender; the web asks it inside `sentBy`, before another session's title.
     static func externalLine(_ text: String, _ from: ExternalMessageFrom?) -> SessionLine? {
         guard let from else { return nil }

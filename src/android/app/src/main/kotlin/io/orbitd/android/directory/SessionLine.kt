@@ -90,9 +90,10 @@ data class SessionLine(val text: String, val tone: Tone) {
 
         private fun sentLine(text: String, from: SessionMessageFrom?) = SessionLine(SessionLineCopy.sent(sender(from), plainPreview(text)), Tone.PREVIEW)
 
-        /** The line for a message somebody outside Orbit sent — a connected Feishu group's member (OrbitKit `SessionLine.externalLine`,
-         * web `sentBy`; docs/feishu-bot-design.md §8.2) — or null for anybody else's: named as the conversation names them over their
-         * words, `From Feishu · <name>`, never "You". */
+        /** The line for a message somebody other than the owner sent — a connected Feishu group's member (OrbitKit
+         * `SessionLine.externalLine`, web `sentBy`; docs/feishu-bot-design.md §8.2) or a guest the owner invited
+         * (docs/session-guests-design.md §3) — or null for anybody else's: named as the conversation names them over their words,
+         * `From Feishu · <name>` or `From <name>`, never "You". */
         internal fun externalLine(text: String, from: ExternalMessageFrom?): SessionLine? =
             from?.let { SessionLine(SessionLineCopy.sent(ExternalSender.label(it), plainPreview(text)), Tone.PREVIEW) }
 
