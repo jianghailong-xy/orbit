@@ -49,12 +49,12 @@ const EXPORT_PAGE = 500;
 // NEWER_PAGE at a time — every WORKING_POLL_MS while it works or has just moved, and every
 // WAITING_POLL_MS while it waits on its owner, who may answer at any moment.
 const NEWER_PAGE = 200;
-const WORKING_POLL_MS = 4_000;
+export const WORKING_POLL_MS = 4_000;
 const WAITING_POLL_MS = 30_000;
 
 /** How long until a followed conversation is asked again, after an answer that did or did not bring
  *  anything new (`moved`); null once it has stopped and gone quiet — over, or filed Completed. */
-function followDelay(state: SessionStateSource, moved: boolean): number | null {
+export function followDelay(state: SessionStateSource, moved: boolean): number | null {
   if (moved || isSessionBusy(state)) return WORKING_POLL_MS;
   if (isSessionLive(state) && sessionLifecycleStateOf(state) !== 'COMPLETED') return WAITING_POLL_MS;
   return null;
@@ -101,7 +101,7 @@ export function SharedUnavailable() {
 }
 
 /** The status pill's colour for each run state, as the app's pills use them (index.css `.status-pill`). */
-const RUN_TONE: Record<SessionRunState, string> = {
+export const RUN_TONE: Record<SessionRunState, string> = {
   QUEUED: 'queued',
   RUNNING: 'running',
   AWAITING_INPUT: 'awaiting',

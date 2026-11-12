@@ -611,6 +611,9 @@ type TextNode = {
   // beside the echo (`externalSender`, lib/externalSender): still a bubble, headed `From Feishu · <name>`
   // so it does not read as the owner's own.
   externalSender?: ExternalMessageFrom;
+  // The reader's own words on a page where the conversation is somebody else's — the guest page
+  // (pages/GuestSessionPage), which marks the guest's own echoes `sentByReader`: headed `You`.
+  sentByReader?: boolean;
   // The outcomes of this session's own requests the turn handed back, when the control plane
   // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
   sessionReplies?: SessionReply[];
@@ -1292,6 +1295,7 @@ function buildTranscript(
             startedCard,
             sessionMessage,
             externalSender,
+            sentByReader: p.sentByReader === true || undefined,
             sessionReplies,
             reviewRequest,
             reviewReturn,
@@ -3155,6 +3159,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   return (
     <div className="chat-user-wrap">
       {node.externalSender && <div className="chat-user-from">{externalSenderLabel(node.externalSender)}</div>}
+      {node.sentByReader && <div className="chat-user-from">You</div>}
       <div
         className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
         data-seq={queued ? undefined : node.seq}

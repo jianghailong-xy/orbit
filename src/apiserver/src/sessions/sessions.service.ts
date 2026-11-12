@@ -3818,6 +3818,7 @@ export class SessionsService {
       pinnedAt: Date | null;
       folderId: string | null;
       shared: boolean;
+      hasGuests: boolean;
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
       runningBgShells: string[];
@@ -3936,6 +3937,12 @@ export class SessionsService {
              AND sl.revoked_at IS NULL
              AND (sl.expires_at IS NULL OR sl.expires_at > now())
         )) AS "shared",
+        -- Whether anyone the owner invited can reply here now (session_guest, 0560): the list's
+        -- two-person icon beside the globe (docs/session-guests-design.md §3).
+        EXISTS (
+          SELECT 1 FROM session_guest sg
+           WHERE sg.session_id = s.id AND sg.removed_at IS NULL
+        ) AS "hasGuests",
         COALESCE((
           SELECT json_agg(json_build_object(
                    'id', st.id, 'name', st.name, 'color', st.color,
@@ -4166,6 +4173,7 @@ export class SessionsService {
         pinnedAt: r.pinnedAt,
         folderId: r.folderId,
         shared: r.shared === true,
+        hasGuests: r.hasGuests === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,

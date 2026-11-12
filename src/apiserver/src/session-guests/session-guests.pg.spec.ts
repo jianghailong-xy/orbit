@@ -126,7 +126,28 @@ test('session guests: invite by email, a guest turn as ORBIT_GUEST, Shared with 
     assert.equal(page.json.title, 'a live conversation');
     assert.equal(page.json.ownerName, owner.name);
     assert.ok(Array.isArray(page.json.events));
+    assert.equal(page.json.waitingOnOwner, false, 'nothing waits on the owner yet');
     ok(await api('GET', `/guest-sessions/${sessionId}/events?after=0`, guestLogin), 'the guest page following');
+
+    // A card pending for the owner: the guest page is told the agent waits on them, and nothing of what it asks.
+    const card = await db.approval.create({
+      data: { sessionId, toolName: 'Bash', input: { command: `secret-${RUN}` }, status: 'PENDING' },
+      select: { id: true },
+    });
+    const waiting = ok(await api('GET', `/guest-sessions/${sessionId}/events?after=0`, guestLogin), 'following while it waits');
+    assert.equal(waiting.json.waitingOnOwner, true);
+    assert.ok(!waiting.text.includes(`secret-${RUN}`), 'what the card asks stays the owner’s');
+    assert.equal(ok(await api('GET', `/guest-sessions/${sessionId}`, guestLogin), 'the guest page while it waits').json.waitingOnOwner, true);
+    await db.approval.update({ where: { id: card.id }, data: { status: 'ALLOWED' } });
+    assert.equal(ok(await api('GET', `/guest-sessions/${sessionId}/events?after=0`, guestLogin), 'following after the answer').json.waitingOnOwner, false);
+
+    // The owner's list marks the session as having guests (the two-person icon).
+    const listRow = async () => {
+      const list = ok(await api('GET', `/sessions?workspaceId=${workspaceId}`, ownerLogin), "the owner's list");
+      const rows: { id: string; hasGuests: boolean }[] = Array.isArray(list.json) ? list.json : list.json.items;
+      return rows.find((r) => toUuid(r.id) === sessionId);
+    };
+    assert.equal((await listRow())?.hasGuests, true);
 
     // The stranger sees none of it.
     const strangerList = ok(await api('GET', '/guest-sessions', strangerLogin), "the stranger's Shared with me");
@@ -177,6 +198,7 @@ test('session guests: invite by email, a guest turn as ORBIT_GUEST, Shared with 
     assert.equal(after.status, 404, after.text);
     assert.equal(after.json.message, GUEST_SESSION_NOT_SHARED);
     assert.deepEqual(ok(await api('GET', '/guest-sessions', guestLogin), 'Shared with me after removal').json.sessions, []);
+    assert.equal((await listRow())?.hasGuests, false, 'no guest left: no two-person icon');
   });
 
   await t.test('(2) a guest turn to an ended session resumes it, with its own permission mode, model and provider', async () => {

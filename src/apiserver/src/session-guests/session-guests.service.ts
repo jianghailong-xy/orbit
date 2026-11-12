@@ -10,6 +10,7 @@ import type { ExternalTurnSender } from '../sessions/session-message';
 import { assertEngineSession } from '../sessions/engine-session';
 import { withSessionState } from '../sessions/session-state';
 import { parseMaxPayload } from '../sessions/truncate-payload';
+import { visibleQuestions } from '../sessions/run-question';
 
 /** The one answer a guest door gives when there is no live invitation: never invited, removed, left, or Trash. */
 export const GUEST_SESSION_NOT_SHARED = 'This conversation is no longer shared with you.';
@@ -287,7 +288,7 @@ export class SessionGuestsService {
       limit: num(query.limit),
       maxPayload: parseMaxPayload(query.maxPayload),
     });
-    return { ...transcript, ownerName: owner.name };
+    return { ...transcript, ownerName: owner.name, waitingOnOwner: await this.waitingOnOwner(sessionId) };
   }
 
   /** A page of the transcript, as `/shared/:token/events` pages it: after `after`, or before `before`, or the tail. */
@@ -295,9 +296,21 @@ export class SessionGuestsService {
     await this.invitation(guestId, sessionId);
     const opts = { limit: num(query.limit), maxPayload: parseMaxPayload(query.maxPayload) };
     const after = num(query.after);
-    return after !== undefined
-      ? this.sessions.getSharedEventsAfter(sessionId, { ...opts, after })
-      : this.sessions.getSharedEventPage(sessionId, { ...opts, before: num(query.before) });
+    if (after === undefined) return this.sessions.getSharedEventPage(sessionId, { ...opts, before: num(query.before) });
+    const page = await this.sessions.getSharedEventsAfter(sessionId, { ...opts, after });
+    return { ...page, waitingOnOwner: await this.waitingOnOwner(sessionId) };
+  }
+
+  /**
+   * Whether the agent is waiting on the owner — a permission card or a question still pending — which the guest page
+   * says as `Waiting for <owner> to approve` (§4). Only that it waits: what the card asks is the owner's alone.
+   */
+  private async waitingOnOwner(sessionId: string): Promise<boolean> {
+    const cards = await this.prisma.approval.findMany({
+      where: { sessionId, status: 'PENDING' },
+      select: { id: true, toolName: true },
+    });
+    return cards.length > 0 && (await visibleQuestions(this.prisma, cards)).length > 0;
   }
 
   /** One event, whole: what an expanded `truncated` card fetches. */
