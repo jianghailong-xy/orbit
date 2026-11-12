@@ -8,7 +8,9 @@
  *       work queuing in the same drain, push nothing more.
  *   (3) A drain that starts with work already waiting pushes at its first beat; a beat that is not draining ends the
  *       drain, and the next drain pushes once more.
- *   (4) Work that is not the owner's, cancelled or deleted is not waiting work, and a runner not draining never
+ *   (4) A message held for the update in a RUNNING session — undelivered, queued behind the running turn or held by
+ *       the runner — is waiting work on its own: 0 sessions, 1 message, and the push. A steer or an interrupt is not.
+ *   (5) Work that is not the owner's, cancelled or deleted is not waiting work, and a runner not draining never
  *       pushes, whatever waits on it.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runners/runner-drain-waiting-push.pg.spec.ts
@@ -155,7 +157,50 @@ test('one push per drain, only while something of the owner’s waits on it', {
     assert.equal(pushesFor(f.runnerId).length, 2, 'the second drain did not push exactly once');
   });
 
-  await t.test('(4) another account’s, cancelled and deleted work is not waiting work', async () => {
+  /** A message turn on `sessionId`: `PENDING` is undelivered — queued behind the running turn, or held for the update. */
+  async function turn(sessionId: string, seq: number, status: 'PENDING' | 'IN_FLIGHT' | 'ANSWERED', kind = 'message') {
+    await db.conversationTurn.create({ data: {
+      sessionId, seq, clientTurnId: randomUUID(), kind, status, content: 'and then this',
+      ...(status === 'PENDING' ? {} : { deliveredAt: new Date() }),
+    } });
+  }
+
+  await t.test('(4) a message held for the update in a RUNNING session is the only thing waiting: 0 sessions, 1 message, one push', async () => {
+    const f = await fixture();
+    // The running turn itself, delivered: the drain waits for it, nothing waits on it.
+    const running = await session(f, { status: RunStatus.RUNNING, numTurns: 2 });
+    await turn(running, 1, 'ANSWERED');
+    await turn(running, 2, 'IN_FLIGHT');
+    await beat(f.runnerId, true);
+    assert.equal(pushesFor(f.runnerId).length, 0);
+    assert.equal(await listed(f.ownerId, f.runnerId), undefined);
+
+    // The owner sends a message behind it: undelivered, it waits — queued now, held by the runner once the turn ends.
+    await turn(running, 3, 'PENDING');
+    // A steer joins the running turn and an interrupt is no message: neither waits.
+    await turn(running, 4, 'PENDING', 'steer');
+    await turn(running, 5, 'PENDING', 'interrupt');
+    await beat(f.runnerId, true);
+    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 0, messages: 1 });
+    const sent = pushesFor(f.runnerId);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].waiting, { sessions: 0, messages: 1 });
+    assert.equal(drainWaitingSentence(sent[0]), 'studio-mac is updating to 0.1.254 — 1 message is waiting for 2 turns to finish.');
+    await beat(f.runnerId, true);
+    assert.equal(pushesFor(f.runnerId).length, 1, 'the same drain pushed twice');
+
+    // A session waiting PENDING with its message as a turn counts that message once, not twice.
+    const followUp = await session(f, { numTurns: 3 });
+    await turn(followUp, 4, 'PENDING');
+    // And one PENDING after earlier turns with no message turn of its own still counts as one message.
+    await session(f, { numTurns: 1 });
+    // A new session's first message is a session, not a message.
+    const fresh = await session(f);
+    await turn(fresh, 1, 'PENDING');
+    assert.deepEqual(await listed(f.ownerId, f.runnerId), { sessions: 1, messages: 3 });
+  });
+
+  await t.test('(5) another account’s, cancelled and deleted work is not waiting work', async () => {
     const f = await fixture();
     const stranger = randomUUID();
     await db.user.create({ data: { id: stranger, email: `${stranger}@drain-push.invalid`, name: 'Stranger', passwordHash: 'x' } });

@@ -2322,7 +2322,10 @@ button.toast--pill:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 16px;
+  flex: none;
+  /* Edge to edge across the pane, over its top padding (board 3 ⑥); the header keeps its own spacing below. */
+  margin: -16px calc(-1 * var(--pane-gutter)) 16px;
+  padding: 10px var(--pane-gutter);
   background: var(--warning-bg, #fdf3e3);
   border-bottom: 1px solid var(--warning-border, #f3dcb5);
   font-size: 13px;
