@@ -67,7 +67,7 @@ func TestAFollowUpTheEngineAlreadyTookIsATurnInFlight(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if n := rig.pool.closeForUpdate(); n != 1 {
+	if n, _ := rig.pool.closeForUpdate(0); n != 1 {
 		t.Fatalf("closeForUpdate while the engine runs turn-2 = %d, want 1 and the pool left open", n)
 	}
 

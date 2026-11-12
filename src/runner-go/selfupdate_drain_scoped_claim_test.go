@@ -67,7 +67,7 @@ func TestAMessageClaimedWhileDrainingWaitsForTheUpdatedRunner(t *testing.T) {
 	if startsNow(p, s) {
 		t.Fatal("a message claimed while draining started before the update")
 	}
-	if n := p.closeForUpdate(); n != 1 {
+	if n, _ := p.closeForUpdate(0); n != 1 {
 		t.Fatalf("closeForUpdate during the engine's own turn = %d, want 1", n)
 	}
 	if scope := drainClaimScope(p, true); !slices.Equal(scope, []string{"self-driven"}) {
@@ -77,7 +77,7 @@ func TestAMessageClaimedWhileDrainingWaitsForTheUpdatedRunner(t *testing.T) {
 	if scope := drainClaimScope(p, true); scope != nil {
 		t.Fatalf("drain claim scope with only a held claim = %q, want none", scope)
 	}
-	if n := p.closeForUpdate(); n != 0 {
+	if n, _ := p.closeForUpdate(0); n != 0 {
 		t.Fatalf("closeForUpdate with only a held claim = %d, want 0: it never started, so nothing is cut", n)
 	}
 
