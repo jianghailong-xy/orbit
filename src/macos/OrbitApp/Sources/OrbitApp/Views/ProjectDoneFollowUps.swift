@@ -152,17 +152,22 @@ struct MovedOutLines: View {
 
     var body: some View {
         ForEach(movedOut) { moved in
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(ProjectDone.movedOutLead(moved)).foregroundStyle(.secondary)
+            // One sentence that wraps as one, the destination's name in the link colour.
+            let line = Text("\(ProjectDone.movedOutLead(moved)) ").foregroundColor(.secondary)
+                + Text(moved.toProjectTitle).foregroundColor(.accentColor)
+                + Text(" \(ProjectDone.movedByLine(moved.movedAt))").foregroundColor(.secondary)
+            Group {
                 if let openProject {
-                    Button(moved.toProjectTitle) { openProject(moved.toProjectId) }.linkButtonStyle()
+                    Button { openProject(moved.toProjectId) } label: { line.multilineTextAlignment(.leading) }
+                        .buttonStyle(.plain)
                 } else {
-                    Text(moved.toProjectTitle)
+                    line
                 }
-                Text(ProjectDone.movedByLine(moved.movedAt)).foregroundStyle(.secondary)
             }
             .font(.orbitLabel)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("moved-out-\(moved.ordinal ?? 0)")
         }
     }
 }
