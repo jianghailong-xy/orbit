@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Web 侧栏：Projects 只露 4 行，怎么办</title>
+<script src="marks-03.js"></script>
+<style>
+  body { margin: 0; background: #f2f2f5; color: #1f1f24; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; width: 1340px; padding: 28px 28px 34px; box-sizing: border-box; background: #f2f2f5; }
+  .b-part h2.b-h { font-size: 22px; letter-spacing: -.015em; margin: 0 0 6px; }
+  .b-sub { color: #4a4a52; margin: 0 0 20px; }
+  .b-row { display: flex; gap: 34px; align-items: flex-start; }
+  .b-frame { margin: 0; width: 280px; flex: none; }
+  .b-frame figcaption { font-size: 14px; color: #2a2a30; font-weight: 650; margin: 0 0 9px; line-height: 1.4; min-height: 40px; }
+  .b-frame figcaption .b-dim { display: block; font-weight: 500; color: #6a6a72; }
+  .b-shot { position: relative; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); }
+  .b-shot img { display: block; width: 100%; height: auto; border-radius: 12px; }
+  .b-ring { position: absolute; border: 2px dashed #f5222d; border-radius: 9px; pointer-events: none; }
+  .b-badge { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff;
+    font: 600 12px/22px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  .b-notes { flex: 1; min-width: 0; }
+  .b-notes ol { list-style: none; margin: 0; padding: 0; }
+  .b-notes li { display: flex; gap: 10px; margin: 0 0 14px; font-size: 14.5px; }
+  .b-n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff; font: 600 12px/22px Inter, sans-serif; text-align: center; margin-top: 1px; }
+  .b-tag { display: inline-block; font-size: 12.5px; font-weight: 650; padding: 1px 9px; border-radius: 999px; background: #e6e6ec; color: #3a3a40; margin-right: 6px; }
+  .b-tag.b-rec { background: #d7f2dd; color: #1d6b31; }
+  .b-tag.b-old { background: #fff1d6; color: #8a5a00; }
+  .b-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 26px; align-items: start; }
+  .b-opts h3 { font-size: 16.5px; margin: 0 0 10px; }
+  .b-opt { background: #fff; border-radius: 16px; padding: 14px 18px 8px; margin: 0 0 14px; }
+  .b-opt.b-pick { box-shadow: 0 0 0 2px #52c41a inset; }
+  .b-opt h4 { font-size: 15px; margin: 0 0 4px; }
+  .b-opt p { margin: 4px 0 8px; font-size: 14px; }
+  .b-pro::before { content: '＋ '; color: #1d6b31; font-weight: 700; }
+  .b-con::before { content: '－ '; color: #b42318; font-weight: 700; }
+  ol.b-land { margin: 0; padding-left: 22px; font-size: 14.5px; }
+  ol.b-land li { margin: 0 0 8px; }
+  code { font: 13px "DejaVu Sans Mono", monospace; background: #e6e6ec; padding: 0 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h2 class="b-h">① 今天：Projects 39 个，只露 4.4 行</h2>
+  <p class="b-sub">真实 Web 控制台截图（静态构建加假数据：main 4e70a8613），窗口 1440×1150，按你 11-12 截图的样子还原：12 个 Workspace、4 个 Wiki、39 个打开的项目（2 个等你、6 个在跑、2 个今天动过、29 个好几天没动）。名字是示例，红色虚线和数字是标注。</p>
+  <div class="b-row">
+    <figure class="b-frame" data-shot="today-rest" data-marks="1:ws,1:wk,2:pj">
+      <figcaption>刚打开<span class="b-dim">今天的规则：放得下就钉住</span></figcaption>
+      <div class="b-shot"><img src="shots/03/today-rest.png"></div>
+    </figure>
+    <figure class="b-frame" data-shot="today-scrolled" data-marks="3:pj">
+      <figcaption>滚到 Projects 底<span class="b-dim">只有这个小框在动</span></figcaption>
+      <div class="b-shot"><img src="shots/03/today-scrolled.png"></div>
+    </figure>
+    <div class="b-notes">
+      <ol>
+        <li><span class="b-n">1</span><span>Workspaces 12 行 + Wiki 4 行被钉住，占了 640 px。这些行很少变，Workspace 平时也是按 ⌘1–⌘9 跳过去的。</span></li>
+        <li><span class="b-n">2</span><span>每天要盯的 Projects 只剩 190 px：<b>4.4 行</b>，底下半行被切掉。39 个项目里，蓝点（在跑）和灰点（几天没动）平铺在一起。</span></li>
+        <li><span class="b-n">3</span><span>想看第 5 个以后的项目，只能在这个 4 行高的框里滚，滚轮还常常和外层抢。</span></li>
+        <li><span class="b-n" style="background:#8a5a00">!</span><span><span class="b-tag b-old">11-01 已定</span>板 02 你选了「照字面」：放得下就只滚 Projects，不给它保留行数。板 02 ③ 当时预言的「一条缝」，就是现在这样。那块板上还没有 Wiki 组，现在 Wiki 也算进钉住的部分，缝就更窄了。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2 class="b-h">② 三个方向：少列一些 · 一起滚 · Projects 放最上</h2>
+  <p class="b-sub">同样的数据、同样 1150 高（最后一张是 13 寸笔记本的 800 高）。A 是代码原型（<code>prototype-3.patch</code>，约 30 行）；B 和 C 是在原型上叠的几行 CSS，只为截图。</p>
+  <div class="b-row">
+    <figure class="b-frame" data-shot="a-rest" data-marks="4:pj">
+      <figcaption>A · 只列活跃项目<span class="b-dim">其它照今天</span></figcaption>
+      <div class="b-shot"><img src="shots/03/a-rest.png"></div>
+    </figure>
+    <figure class="b-frame" data-shot="ab-scrolled" data-marks="5:pjHead">
+      <figcaption>A + B · 一个滚动条<span class="b-dim">往下滚，组头吸顶</span></figcaption>
+      <div class="b-shot"><img src="shots/03/ab-scrolled.png"></div>
+    </figure>
+    <figure class="b-frame" data-shot="c-rest" data-marks="6:pj,7:quiet">
+      <figcaption>C · A + Projects 放最上 <span class="b-tag b-rec">推荐</span><span class="b-dim">刚打开</span></figcaption>
+      <div class="b-shot"><img src="shots/03/c-rest.png"></div>
+    </figure>
+    <figure class="b-frame" data-shot="c-laptop" data-marks="8:pj">
+      <figcaption>C · 13 寸笔记本<span class="b-dim">窗口 1440×800，刚打开</span></figcaption>
+      <div class="b-shot"><img src="shots/03/c-laptop.png"></div>
+    </figure>
+  </div>
+  <div class="b-notes" style="margin-top: 22px; columns: 2; column-gap: 34px;">
+    <ol>
+      <li><span class="b-n">4</span><span><b>A</b>：侧栏只列「等你、在跑、24 小时内动过」的项目：39 → 10 个。其余 29 个折成最后一行灰字「29 quiet projects」。<b>但只做 A，框还是 4.4 行</b>，空间问题没解决，只是要滚的少了。</span></li>
+      <li><span class="b-n">5</span><span><b>A + B</b>：去掉「钉住」，整栏只有一个滚动条，每组的组头滚到顶就停住。滚下去 10 个项目能全露出来，但刚打开时和今天一样，还是 4.4 行。</span></li>
+      <li><span class="b-n">6</span><span><b>C</b>：A + B，再把 Projects 挪到 Workspaces 上面。刚打开就能看全 10 个活跃项目；Workspaces 接在下面露 10.9 行，靠 ⌘1–⌘9 跳，看不看得见都能去。</span></li>
+      <li><span class="b-n">7</span><span>折起来的行是灰色、不带圆点，点它打开 Projects 页。那一页本来就列全部项目，侧栏不用再重复一遍。</span></li>
+      <li><span class="b-n">8</span><span>800 高时，Projects 还是完整的，Workspaces 只露 1 行，往下滚就是。一个滚动条，没有框里套框。</span></li>
+    </ol>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2 class="b-h">待定 · 要你拍板</h2>
+  <div class="b-opts">
+    <div>
+      <h3>拍板 1：侧栏列哪些项目</h3>
+      <div class="b-opt b-pick">
+        <h4><span class="b-tag b-rec">推荐</span>A1 · 只列活跃的，其余折成一行</h4>
+        <p>等你的、在跑的、24 小时内动过的。项目一安静下来，就自己退进「N quiet projects」。</p>
+        <p class="b-pro">列表短（这里 10 个），蓝点和琥珀色数字一眼看全</p>
+        <p class="b-con">要找一个安静的项目得多点一下（或者 ⌘P）</p>
+      </div>
+      <div class="b-opt">
+        <h4>A2 · 全列（今天）</h4>
+        <p class="b-pro">一个不少</p>
+        <p class="b-con">39 个里大多是灰点；只要项目一直打开着，列表就越来越长</p>
+      </div>
+      <p style="font-size: 14px; color: #4a4a52;">「最近」取多长：24 小时（原型）还是 3 天？</p>
+    </div>
+    <div>
+      <h3>拍板 2：顺序和滚动</h3>
+      <div class="b-opt b-pick">
+        <h4><span class="b-tag b-rec">推荐</span>C · Projects 放最上，一个滚动条</h4>
+        <p class="b-pro">刚打开就看到所有要盯的项目；不再有框里套框</p>
+        <p class="b-pro">去掉「放不放得下」的测量代码，规则更简单</p>
+        <p class="b-con">Workspaces 下移；iPhone / Android 抽屉也要照着改，三端顺序才一致</p>
+      </div>
+      <div class="b-opt">
+        <h4>B · Workspaces 还在上面，一个滚动条</h4>
+        <p class="b-pro">顺序不变，没有小框</p>
+        <p class="b-con">刚打开时 Projects 照样只露 4 行，要滚才看得到</p>
+      </div>
+      <div class="b-opt">
+        <h4>保持今天的钉住规则</h4>
+        <p class="b-con">配 A1 也只是「4 行里滚 10 个」</p>
+      </div>
+    </div>
+  </div>
+  <h3 style="font-size: 16.5px; margin: 10px 0 10px;">落地（按代价排）</h3>
+  <ol class="b-land">
+    <li>Web · 折叠安静项目（A1）：<code>prototype-3.patch</code> 加测试。</li>
+    <li>Web · Projects 挪到最上、改成一个滚动条（C）：主要是删代码（钉住的测量和 <code>.pin-workspaces</code> 规则），加上组头吸顶。</li>
+    <li>iPhone / Android 抽屉：同样的折叠规则和顺序（代码注释写着侧栏的 Projects 收尾「as they close the iPhone drawer」，三端一直是一致的）。</li>
+  </ol>
+</section>
+
+<script>
+window.drawMarks = () => {
+  for (const fig of document.querySelectorAll('[data-shot]')) {
+    const m = window.SHOT_MARKS[fig.dataset.shot];
+    const holder = fig.querySelector('.b-shot');
+    holder.querySelectorAll('.b-ring, .b-badge').forEach((e) => e.remove());
+    const scale = holder.clientWidth / m.w;
+    const lists = m.boxes.lists, floor = m.boxes.user ? m.boxes.user[1] : m.h;
+    for (const spec of (fig.dataset.marks || '').split(',').filter(Boolean)) {
+      const [n, key] = spec.split(':');
+      const b = m.boxes[key];
+      if (!b) { console.error('missing box', fig.dataset.shot, key); continue; }
+      const top = Math.max(lists[1], b[1]), bottom = Math.min(floor, b[1] + b[3]);
+      const pad = 3;
+      const x = Math.max(2, b[0] * scale - pad + 4), y = top * scale - pad;
+      const w = Math.min(holder.clientWidth - 4 - x, b[2] * scale + 2 * pad - 8), h = (bottom - top) * scale + 2 * pad;
+      const ring = document.createElement('div');
+      ring.className = 'b-ring';
+      Object.assign(ring.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+      const badge = document.createElement('div');
+      badge.className = 'b-badge';
+      badge.textContent = n;
+      Object.assign(badge.style, { left: `${Math.max(-8, x - 12)}px`, top: `${Math.max(-8, y - 12)}px` });
+      holder.append(ring, badge);
+    }
+  }
+};
+window.addEventListener('load', () => window.drawMarks());
+</script>
+</body>
+</html>

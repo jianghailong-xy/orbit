@@ -1,0 +1,75 @@
+diff --git a/src/web/src/components/TasksSidePanel.tsx b/src/web/src/components/TasksSidePanel.tsx
+index 8b091bd..59a4228 100644
+--- a/src/web/src/components/TasksSidePanel.tsx
++++ b/src/web/src/components/TasksSidePanel.tsx
+@@ -70,6 +70,7 @@ import { setupTitle } from '../lib/machineSetupCopy';
+ import { useThemeMode, type ThemeMode } from '../lib/theme';
+ import { useToast } from '../lib/toast';
+ import {
++  latestActivity,
+   projectIsWorking,
+   projectNeedsYouCount,
+   sidebarProjects,
+@@ -412,6 +413,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+   const projects = useQuery(openProjectsQuery());
+   const waitingOnYou = useWaitingOnYouCount();
+   const openProjects = useMemo(() => sidebarProjects(projects.data ?? []), [projects.data]);
++  // PROTOTYPE: the rail lists the live projects (waiting on you, work in flight, or touched in the
++  // last 24 h); the quiet rest are one row that opens the Projects page.
++  const liveProjects = openProjects.filter(
++    (p) => projectNeedsYouCount(p) > 0 || projectIsWorking(p)
++      || Date.now() - Date.parse(latestActivity(p) ?? p.createdAt) < 86_400_000,
++  );
++  const quietCount = openProjects.length - liveProjects.length;
+   // A project's own page lights its row in that group rather than the Projects entry, which stands
+   // for the index — the drawer's rule. A project the group does not list (a closed one) keeps the
+   // entry lit instead, so the rail still says where you are.
+@@ -1165,7 +1173,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+                 <CaretDownOutlined className={`tp-caret ${projectsOpen ? '' : 'collapsed'}`} />
+               </div>
+               {projectsOpen &&
+-                openProjects.map((project) => (
++                liveProjects.map((project) => (
+                   <ProjectRow
+                     key={project.id}
+                     project={project}
+@@ -1173,6 +1181,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+                     onOpen={openProject}
+                   />
+                 ))}
++              {projectsOpen && quietCount > 0 && (
++                <div className="tp-item tp-project-quiet" onClick={() => navigate('/projects')}>
++                  <span className="tp-ico tp-project-mark">
++                    <MoreOutlined rotate={90} />
++                  </span>
++                  <span className="tp-label">{quietCount} quiet projects</span>
++                </div>
++              )}
+             </div>
+           )}
+         </div>
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 1f44325..32d8d8b 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -27593,3 +27593,7 @@ button.agent-progress-agent:hover {
+   color: var(--text-2);
+   font-size: 12.5px;
+ }
++
++/* PROTOTYPE: the quiet projects' row, in the meta voice. */
++.tp-project-quiet { color: var(--text-3); }
++.tp-project-quiet .tp-ico { color: var(--text-3); font-size: 13px; }
+diff --git a/src/web/src/lib/projectAttention.ts b/src/web/src/lib/projectAttention.ts
+index 2ba520b..51a8d66 100644
+--- a/src/web/src/lib/projectAttention.ts
++++ b/src/web/src/lib/projectAttention.ts
+@@ -718,7 +718,7 @@ export function projectIsWorking(
+ }
+ 
+ /** The project's newest activity: its latest task write, or its coordinator's latest turn. */
+-function latestActivity(project: SidebarProject): string | null {
++export function latestActivity(project: SidebarProject): string | null {
+   const turn = project.coordinatorActivity?.lastTurnAt ?? null;
+   return instantRank(turn) > instantRank(project.lastActivityAt) ? turn : project.lastActivityAt;
+ }
