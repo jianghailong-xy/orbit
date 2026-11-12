@@ -1113,8 +1113,8 @@ export class TaskCompletionEvidenceService {
     });
     const revisions: TaskCompletionEvidenceDto[] = [];
     for (const row of rows) {
-      const checks = storedEvidenceEnvelope(row.evidence)?.checks ?? [];
-      revisions.push(response(row, checks.some((check) => check.kind === 'FILE')
+      const checks = storedEvidenceEnvelope(row.evidence)?.checks;
+      revisions.push(response(row, checks
         ? { citations: await describeEvidenceCitations(this.prisma, { ownerId, taskId }, checks), criterionMatch: null }
         : undefined));
     }

@@ -43,6 +43,8 @@ const suite = URL ? test : test.skip;
 
 const CRITERION_TEXT = 'task_evidence_submit refuses an envelope whose citations resolve to nothing';
 const GREEN_COMMAND = 'npm run test:outcome-reconciler:fast-gate';
+const BG_JOB_ID = 'bgj_0123456789ab';
+const BG_COMMAND = 'npm run test -w @orbit/apiserver';
 const CHECKPOINT_SHA = '4d1f0b6c2a8e77935cc0a1b2d3e4f50617283940';
 const ARTIFACT_REF = 'git-bundle://orbit/evidence-envelope/4d1f0b6c.bundle';
 const MERGED_SHA = 'a0b1c2d3e4f5061728394a5b6c7d8e9f01234567';
@@ -164,6 +166,14 @@ async function fixture(db: PrismaClient) {
         toolUseId: 'toolu_red',
         input: { command: 'npm run build', description: 'build' },
         isError: true,
+      },
+      {
+        // A run's bg_run, as the runner records it: the job id it returned is the call's handle.
+        sessionId,
+        name: 'mcp__orbit__bg_run',
+        toolUseId: BG_JOB_ID,
+        input: { command: BG_COMMAND, kind: 'job' },
+        isError: false,
       },
       {
         sessionId: otherSessionId,
@@ -446,18 +456,44 @@ suite('the evidence envelope is checked against rows, and the receipt says what 
     assert.deepEqual(unknownKey.criterionMatch, { key, text: CRITERION_TEXT, matchesLive: true });
   });
 
-  await t.test('the ledger stores the envelope and re-derives no citation but a file\'s', async () => {
-    // Which rows a citation resolved to is a fact about the moment it was submitted; the rows it
-    // named may have been deleted since, and a `resolved` that quietly meant "as of now" would be
-    // a different fact under the same name.
+  await t.test('the ledger tells every revision\'s citations as of the read', async () => {
     const ledger: EvidenceReceiptView[] = await service.list(f.ownerId, f.taskId);
     assert.deepEqual(ledger.map((row) => row.revision), ['1', '2', '3']);
-    assert.equal(ledger[1].citations, null);
+    // A revision with no file is told too: a judge who cannot see that a TOOL_CALL resolved sends
+    // valid evidence back (`TaskCompletionEvidenceDto.citations`).
+    assert.deepEqual(
+      ledger[1].citations?.map((citation) => [citation.kind, citation.ref, citation.resolved, citation.reason]),
+      [['TOOL_CALL', 'toolu_green', true, null]],
+    );
     assert.equal(ledger[1].criterionMatch, null);
-    // A revision that cites a file is told as of the read, for the file's sake (`TaskCompletionEvidenceDto.citations`).
     assert.equal(ledger[0].citations?.length, 6);
     assert.equal(ledger[0].criterionMatch, null);
     assert.equal((ledger[0].evidence as { checks: unknown[] }).checks.length, 6);
     assert.equal((ledger[0].evidence as { claim: string }).claim, 'the fast gate passed on this branch');
+  });
+
+  await t.test('a revision whose only check is a run\'s bg job lists that job as resolved', async () => {
+    const onlyBg = await submit(envelope({
+      claim: 'the apiserver suite passed in a runner-hosted job',
+      criterion: { key, text: CRITERION_TEXT },
+      checks: [{ kind: 'TOOL_CALL', ref: BG_JOB_ID, command: BG_COMMAND, succeeded: true }],
+    }), 'bg-job-only');
+    const ledger: EvidenceReceiptView[] = await service.list(f.ownerId, f.taskId);
+    const listed = ledger.find((row) => row.revision === onlyBg.revision);
+    assert.ok(listed, 'the revision is in the ledger');
+    assert.deepEqual(listed.citations, [{
+      kind: 'TOOL_CALL',
+      ref: BG_JOB_ID,
+      resolved: true,
+      reason: null,
+      label: `mcp__orbit__bg_run · ${BG_COMMAND}`,
+    }]);
+
+    // As of the read: a row gone since submission is told as unresolved, with why, not hidden.
+    await db.toolCall.deleteMany({ where: { toolUseId: BG_JOB_ID } });
+    const after: EvidenceReceiptView[] = await service.list(f.ownerId, f.taskId);
+    const gone = after.find((row) => row.revision === onlyBg.revision)?.citations;
+    assert.deepEqual(gone?.map((citation) => [citation.ref, citation.resolved]), [[BG_JOB_ID, false]]);
+    assert.equal(typeof gone?.[0].reason, 'string');
   });
 });
