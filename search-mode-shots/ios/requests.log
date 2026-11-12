@@ -1,0 +1,546 @@
+12:29:34 "GET /api/users/me HTTP/1.1" 200 -
+12:36:20 MODE live
+12:36:20 "GET /__mode/live HTTP/1.1" 200 -
+12:36:20 "POST /__reset HTTP/1.1" 200 -
+12:36:39 "GET /api/users/me HTTP/1.1" 200 -
+12:36:39 "GET /api/agents HTTP/1.1" 200 -
+12:36:39 "GET /api/task-lists HTTP/1.1" 200 -
+12:36:39 "GET /api/projects HTTP/1.1" 200 -
+12:36:39 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:36:39 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:36:40 "GET /api/users/me HTTP/1.1" 200 -
+12:36:40 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+12:36:40 NOT SERVED /api/wiki/trash
+12:36:40 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:36:40 "GET /api/runners HTTP/1.1" 200 -
+12:36:40 "GET /api/agents HTTP/1.1" 200 -
+12:36:40 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+12:36:40 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:36:41 "GET /api/providers HTTP/1.1" 200 -
+12:36:41 "GET /api/providers HTTP/1.1" 200 -
+12:36:41 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:36:41 "GET /api/providers/pools HTTP/1.1" 200 -
+12:36:41 "GET /api/providers/pools HTTP/1.1" 200 -
+12:36:41 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+12:36:41 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:36:41 "GET /api/session-folders HTTP/1.1" 200 -
+12:36:41 NOT SERVED /api/wiki/trash
+12:36:41 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:36:41 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:36:41 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:36:41 "GET /api/agents HTTP/1.1" 200 -
+12:36:41 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+12:36:42 "GET /api/watches HTTP/1.1" 200 -
+12:36:43 "GET /api/session-tags HTTP/1.1" 200 -
+12:36:43 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+12:36:44 "GET /api/runners HTTP/1.1" 200 -
+12:36:44 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:36:44 "GET /api/session-folders HTTP/1.1" 200 -
+12:36:44 NOT SERVED /api/owner-requests?state=open
+12:36:44 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+12:36:44 "GET /api/providers HTTP/1.1" 200 -
+12:36:44 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:36:44 "GET /api/projects HTTP/1.1" 200 -
+12:36:44 "GET /api/projects HTTP/1.1" 200 -
+12:36:44 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:36:44 "GET /api/providers/pools HTTP/1.1" 200 -
+12:36:44 NOT SERVED /api/auth/capabilities
+12:36:44 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:36:44 "GET /api/auth/capabilities HTTP/1.1" 404 -
+12:36:44 "GET /api/task-lists HTTP/1.1" 200 -
+12:36:44 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:36:48 APP TAP (220,904) UISearchBarTextField < UICorePlatformViewHost<PlatformViewRepresentableAdaptor<InlineSearchBarViewRepresentation>> < _UIInheritedView < UIPlatformGlassInteractionView < _UIInheritedView < _UIInheritedView < _UIInheritedView < _UIInheritedView < FloatingBarHostingView<FloatingBarContainer> < FloatingBarContainerView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:36:48 "POST /__note HTTP/1.1" 200 -
+12:36:48 APP SET on=true presented=false recentX=false
+12:36:48 APP SET on=true presented=true recentX=false
+12:36:48 "POST /__note HTTP/1.1" 200 -
+12:36:48 "POST /__note HTTP/1.1" 200 -
+12:36:55 "GET /api/runners HTTP/1.1" 200 -
+12:37:11 "GET /api/runners HTTP/1.1" 200 -
+12:37:28 "GET /api/runners HTTP/1.1" 200 -
+12:37:29 APP TAP (220,430) CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> < _UICollectionViewListCellContentView < ListCollectionViewCell < UpdateCoalescingCollectionView < UIKitPlatformViewHost<ListRepresentable<CollectionViewListDataSource<String>, SelectionManagerBox<String>>> < HostingView < UIViewControllerWrapperView < UINavigationTransitionView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:37:29 "POST /__note HTTP/1.1" 200 -
+12:37:30 APP SET on=true presented=true recentX=false
+12:37:30 APP SET on=true presented=true recentX=false
+12:37:30 "POST /__note HTTP/1.1" 200 -
+12:37:30 "POST /__note HTTP/1.1" 200 -
+12:37:41 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:37:44 "GET /api/runners HTTP/1.1" 200 -
+12:37:44 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+12:37:44 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+12:37:44 "GET /api/watches HTTP/1.1" 200 -
+12:37:44 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+12:37:44 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:37:44 "GET /api/projects HTTP/1.1" 200 -
+12:37:50 APP TAP (220,286) CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> < _UICollectionViewListCellContentView < ListCollectionViewCell < UpdateCoalescingCollectionView < UIKitPlatformViewHost<ListRepresentable<CollectionViewListDataSource<String>, SelectionManagerBox<String>>> < HostingView < UIViewControllerWrapperView < UINavigationTransitionView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:37:50 "POST /__note HTTP/1.1" 200 -
+12:38:01 "GET /api/runners HTTP/1.1" 200 -
+12:38:17 MODE short
+12:38:17 "GET /__mode/short HTTP/1.1" 200 -
+12:38:17 "POST /__reset HTTP/1.1" 200 -
+12:38:26 "GET /api/task-lists HTTP/1.1" 200 -
+12:38:26 "GET /api/users/me HTTP/1.1" 200 -
+12:38:26 "GET /api/agents HTTP/1.1" 200 -
+12:38:26 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:38:26 "GET /api/projects HTTP/1.1" 200 -
+12:38:26 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:38:27 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+12:38:27 "GET /api/users/me HTTP/1.1" 200 -
+12:38:27 "GET /api/runners HTTP/1.1" 200 -
+12:38:27 NOT SERVED /api/wiki/trash
+12:38:27 "GET /api/agents HTTP/1.1" 200 -
+12:38:27 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:38:27 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:38:27 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+12:38:27 "GET /api/runners HTTP/1.1" 200 -
+12:38:27 "GET /api/providers HTTP/1.1" 200 -
+12:38:27 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+12:38:27 "GET /api/providers/pools HTTP/1.1" 200 -
+12:38:27 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+12:38:27 "GET /api/providers HTTP/1.1" 200 -
+12:38:27 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:38:27 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:38:27 "GET /api/session-folders HTTP/1.1" 200 -
+12:38:27 NOT SERVED /api/wiki/trash
+12:38:27 "GET /api/watches HTTP/1.1" 200 -
+12:38:28 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:38:28 "GET /api/providers/pools HTTP/1.1" 200 -
+12:38:28 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+12:38:28 "GET /api/session-tags HTTP/1.1" 200 -
+12:38:29 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:38:29 "GET /api/agents HTTP/1.1" 200 -
+12:38:29 NOT SERVED /api/owner-requests?state=open
+12:38:29 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+12:38:29 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:38:29 "GET /api/session-folders HTTP/1.1" 200 -
+12:38:30 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:38:30 "GET /api/runners HTTP/1.1" 200 -
+12:38:30 "GET /api/projects HTTP/1.1" 200 -
+12:38:30 "GET /api/projects HTTP/1.1" 200 -
+12:38:30 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:38:30 "GET /api/providers HTTP/1.1" 200 -
+12:38:30 NOT SERVED /api/auth/capabilities
+12:38:30 "GET /api/auth/capabilities HTTP/1.1" 404 -
+12:38:30 "GET /api/providers/pools HTTP/1.1" 200 -
+12:38:30 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:38:30 "GET /api/task-lists HTTP/1.1" 200 -
+12:38:30 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:38:34 APP TAP (220,904) UISearchBarTextField < UICorePlatformViewHost<PlatformViewRepresentableAdaptor<InlineSearchBarViewRepresentation>> < _UIInheritedView < UIPlatformGlassInteractionView < _UIInheritedView < _UIInheritedView < _UIInheritedView < _UIInheritedView < FloatingBarHostingView<FloatingBarContainer> < FloatingBarContainerView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:38:34 APP SET on=true presented=false recentX=false
+12:38:34 "POST /__note HTTP/1.1" 200 -
+12:38:34 APP SET on=true presented=true recentX=false
+12:38:35 "POST /__note HTTP/1.1" 200 -
+12:38:35 "POST /__note HTTP/1.1" 200 -
+12:38:45 "GET /api/runners HTTP/1.1" 200 -
+12:38:50 APP TAP (220,506) UpdateCoalescingCollectionView < UIKitPlatformViewHost<ListRepresentable<CollectionViewListDataSource<String>, SelectionManagerBox<String>>> < HostingView < UIViewControllerWrapperView < UINavigationTransitionView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:38:50 "POST /__note HTTP/1.1" 200 -
+12:38:50 APP SET on=true presented=true recentX=false
+12:38:50 APP SET on=true presented=true recentX=false
+12:38:50 "POST /__note HTTP/1.1" 200 -
+12:38:51 "POST /__note HTTP/1.1" 200 -
+12:38:59 MODE live
+12:38:59 "GET /__mode/live HTTP/1.1" 200 -
+12:38:59 "POST /__reset HTTP/1.1" 200 -
+12:39:03 "GET /api/users/me HTTP/1.1" 200 -
+12:39:03 "GET /api/agents HTTP/1.1" 200 -
+12:39:03 "GET /api/projects HTTP/1.1" 200 -
+12:39:03 "GET /api/task-lists HTTP/1.1" 200 -
+12:39:03 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:39:03 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:39:04 "GET /api/users/me HTTP/1.1" 200 -
+12:39:04 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+12:39:04 NOT SERVED /api/wiki/trash
+12:39:04 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:39:04 "GET /api/agents HTTP/1.1" 200 -
+12:39:04 "GET /api/runners HTTP/1.1" 200 -
+12:39:04 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:39:04 "GET /api/providers HTTP/1.1" 200 -
+12:39:04 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+12:39:04 "GET /api/providers/pools HTTP/1.1" 200 -
+12:39:04 "GET /api/providers HTTP/1.1" 200 -
+12:39:04 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:39:04 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:39:04 "GET /api/session-folders HTTP/1.1" 200 -
+12:39:04 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+12:39:04 NOT SERVED /api/wiki/trash
+12:39:04 "GET /api/providers/pools HTTP/1.1" 200 -
+12:39:04 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:39:04 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+12:39:04 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:39:04 "GET /api/agents HTTP/1.1" 200 -
+12:39:04 "GET /api/watches HTTP/1.1" 200 -
+12:39:05 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+12:39:05 "GET /api/session-tags HTTP/1.1" 200 -
+12:39:06 "GET /api/runners HTTP/1.1" 200 -
+12:39:06 NOT SERVED /api/owner-requests?state=open
+12:39:06 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+12:39:06 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:39:06 "GET /api/session-folders HTTP/1.1" 200 -
+12:39:06 "GET /api/projects HTTP/1.1" 200 -
+12:39:06 "GET /api/providers HTTP/1.1" 200 -
+12:39:06 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:39:06 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:39:06 "GET /api/projects HTTP/1.1" 200 -
+12:39:06 "GET /api/providers/pools HTTP/1.1" 200 -
+12:39:06 NOT SERVED /api/auth/capabilities
+12:39:06 "GET /api/auth/capabilities HTTP/1.1" 404 -
+12:39:06 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:39:06 "GET /api/task-lists HTTP/1.1" 200 -
+12:39:06 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:39:09 APP TAP (220,904) UISearchBarTextField < UICorePlatformViewHost<PlatformViewRepresentableAdaptor<InlineSearchBarViewRepresentation>> < _UIInheritedView < UIPlatformGlassInteractionView < _UIInheritedView < _UIInheritedView < _UIInheritedView < _UIInheritedView < FloatingBarHostingView<FloatingBarContainer> < FloatingBarContainerView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:39:09 "POST /__note HTTP/1.1" 200 -
+12:39:09 APP SET on=true presented=false recentX=false
+12:39:09 "POST /__note HTTP/1.1" 200 -
+12:39:09 APP SET on=true presented=true recentX=false
+12:39:09 "POST /__note HTTP/1.1" 200 -
+12:39:21 "GET /api/runners HTTP/1.1" 200 -
+12:39:36 APP TAP (404,575) _UIButtonBarButton < ButtonWrapper < UICorePlatformViewHost<PlatformViewRepresentableAdaptor<ButtonRepresentation>> < _UIInheritedView < UIPlatformGlassInteractionView < _UIInheritedView < _UIInheritedView < _UIInheritedView < _UIInheritedView < FloatingBarHostingView<FloatingBarContainer> < FloatingBarContainerView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:39:37 "POST /__note HTTP/1.1" 200 -
+12:39:37 APP SET on=true presented=true recentX=true
+12:39:37 APP SET on=true presented=false recentX=true
+12:39:37 "POST /__note HTTP/1.1" 200 -
+12:39:37 "POST /__note HTTP/1.1" 200 -
+12:39:38 "GET /api/runners HTTP/1.1" 200 -
+12:39:54 APP TAP (220,904) UISearchBarTextField < UICorePlatformViewHost<PlatformViewRepresentableAdaptor<InlineSearchBarViewRepresentation>> < _UIInheritedView < UIPlatformGlassInteractionView < _UIInheritedView < _UIInheritedView < _UIInheritedView < _UIInheritedView < FloatingBarHostingView<FloatingBarContainer> < FloatingBarContainerView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:39:54 "POST /__note HTTP/1.1" 200 -
+12:39:55 APP SET on=true presented=false recentX=false
+12:39:55 "POST /__note HTTP/1.1" 200 -
+12:39:55 APP SET on=true presented=true recentX=false
+12:39:55 "POST /__note HTTP/1.1" 200 -
+12:39:55 "GET /api/runners HTTP/1.1" 200 -
+12:39:57 APP TAP (220,430) CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> < _UICollectionViewListCellContentView < ListCollectionViewCell < UpdateCoalescingCollectionView < UIKitPlatformViewHost<ListRepresentable<CollectionViewListDataSource<String>, SelectionManagerBox<String>>> < HostingView < UIViewControllerWrapperView < UINavigationTransitionView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:39:57 "POST /__note HTTP/1.1" 200 -
+12:39:58 APP SET on=true presented=true recentX=false
+12:39:58 "POST /__note HTTP/1.1" 200 -
+12:39:58 APP SET on=true presented=true recentX=false
+12:39:58 "POST /__note HTTP/1.1" 200 -
+12:40:04 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:40:07 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+12:40:07 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+12:40:07 "GET /api/watches HTTP/1.1" 200 -
+12:40:07 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+12:40:07 "GET /api/projects HTTP/1.1" 200 -
+12:40:07 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:40:11 "GET /api/runners HTTP/1.1" 200 -
+12:40:18 APP TAP (388,904) _UIButtonBarButton < ButtonWrapper < UICorePlatformViewHost<PlatformViewRepresentableAdaptor<ButtonRepresentation>> < _UIInheritedView < UIPlatformGlassInteractionView < _UIInheritedView < _UIInheritedView < _UIInheritedView < _UIInheritedView < FloatingBarHostingView<FloatingBarContainer> < FloatingBarContainerView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:40:18 "POST /__note HTTP/1.1" 200 -
+12:40:18 APP SET on=false presented=true recentX=true
+12:40:18 "POST /__note HTTP/1.1" 200 -
+12:40:18 APP SET on=false presented=false recentX=true
+12:40:18 "POST /__note HTTP/1.1" 200 -
+12:40:28 "GET /api/runners HTTP/1.1" 200 -
+12:40:44 MODE live
+12:40:44 "GET /__mode/live HTTP/1.1" 200 -
+12:40:44 "POST /__reset HTTP/1.1" 200 -
+12:40:52 "GET /api/users/me HTTP/1.1" 200 -
+12:40:52 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:40:52 "GET /api/agents HTTP/1.1" 200 -
+12:40:52 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:40:52 "GET /api/projects HTTP/1.1" 200 -
+12:40:52 "GET /api/task-lists HTTP/1.1" 200 -
+12:40:53 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+12:40:53 NOT SERVED /api/wiki/trash
+12:40:53 "GET /api/users/me HTTP/1.1" 200 -
+12:40:53 "GET /api/agents HTTP/1.1" 200 -
+12:40:53 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:40:53 "GET /api/runners HTTP/1.1" 200 -
+12:40:53 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:40:53 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+12:40:53 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+12:40:53 "GET /api/providers HTTP/1.1" 200 -
+12:40:53 "GET /api/providers HTTP/1.1" 200 -
+12:40:53 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+12:40:53 "GET /api/providers/pools HTTP/1.1" 200 -
+12:40:53 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:40:53 NOT SERVED /api/wiki/trash
+12:40:53 "GET /api/session-folders HTTP/1.1" 200 -
+12:40:53 "GET /api/providers/pools HTTP/1.1" 200 -
+12:40:53 "GET /api/watches HTTP/1.1" 200 -
+12:40:53 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:40:53 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:40:53 "GET /api/agents HTTP/1.1" 200 -
+12:40:54 "GET /api/runners HTTP/1.1" 200 -
+12:40:54 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+12:40:54 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:40:54 "GET /api/providers HTTP/1.1" 200 -
+12:40:54 NOT SERVED /api/owner-requests?state=open
+12:40:54 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+12:40:54 "GET /api/session-tags HTTP/1.1" 200 -
+12:40:56 "GET /api/providers/pools HTTP/1.1" 200 -
+12:40:56 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:40:56 "GET /api/projects HTTP/1.1" 200 -
+12:40:56 "GET /api/session-folders HTTP/1.1" 200 -
+12:40:56 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:40:56 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:40:56 NOT SERVED /api/auth/capabilities
+12:40:56 "GET /api/auth/capabilities HTTP/1.1" 404 -
+12:40:57 "GET /api/projects HTTP/1.1" 200 -
+12:40:57 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:40:57 "GET /api/task-lists HTTP/1.1" 200 -
+12:40:57 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:41:00 APP TAP (220,904) UISearchBarTextField < UICorePlatformViewHost<PlatformViewRepresentableAdaptor<InlineSearchBarViewRepresentation>> < _UIInheritedView < UIPlatformGlassInteractionView < _UIInheritedView < _UIInheritedView < _UIInheritedView < _UIInheritedView < FloatingBarHostingView<FloatingBarContainer> < FloatingBarContainerView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:41:00 "POST /__note HTTP/1.1" 200 -
+12:41:00 APP SET on=true presented=false recentX=false
+12:41:00 APP SET on=true presented=true recentX=false
+12:41:00 "POST /__note HTTP/1.1" 200 -
+12:41:00 "POST /__note HTTP/1.1" 200 -
+12:41:08 "GET /api/runners HTTP/1.1" 200 -
+12:41:24 "GET /api/runners HTTP/1.1" 200 -
+12:41:28 APP SET on=true presented=true recentX=false
+12:41:28 APP SET on=true presented=true recentX=false
+12:41:28 "POST /__note HTTP/1.1" 200 -
+12:41:28 "POST /__note HTTP/1.1" 200 -
+12:41:28 APP SET on=true presented=true recentX=false
+12:41:28 APP SET on=true presented=true recentX=false
+12:41:28 SEARCH q='l'
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:29 "GET /api/sessions/search?q=l&limit=20 HTTP/1.1" 200 -
+12:41:29 APP SET on=true presented=true recentX=false
+12:41:29 APP SET on=true presented=true recentX=false
+12:41:29 APP SET on=true presented=true recentX=false
+12:41:29 APP SET on=true presented=true recentX=false
+12:41:29 SEARCH q='ledger'
+12:41:29 APP SET on=true presented=true recentX=false
+12:41:29 APP SET on=true presented=true recentX=false
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:29 "GET /api/sessions/search?q=ledger&limit=20 HTTP/1.1" 200 -
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:29 APP SET on=true presented=true recentX=false
+12:41:29 APP SET on=true presented=true recentX=false
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:29 "POST /__note HTTP/1.1" 200 -
+12:41:41 "GET /api/runners HTTP/1.1" 200 -
+12:41:52 APP TAP (220,430) CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> < _UICollectionViewListCellContentView < ListCollectionViewCell < UpdateCoalescingCollectionView < UIKitPlatformViewHost<ListRepresentable<CollectionViewListDataSource<String>, SelectionManagerBox<String>>> < HostingView < UIViewControllerWrapperView < UINavigationTransitionView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:41:52 "POST /__note HTTP/1.1" 200 -
+12:41:53 APP SET on=true presented=true recentX=false
+12:41:53 "POST /__note HTTP/1.1" 200 -
+12:41:53 APP SET on=true presented=true recentX=false
+12:41:53 "POST /__note HTTP/1.1" 200 -
+12:41:53 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:41:57 "GET /api/runners HTTP/1.1" 200 -
+12:41:57 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+12:41:57 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+12:41:57 "GET /api/watches HTTP/1.1" 200 -
+12:41:57 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+12:41:57 "GET /api/projects HTTP/1.1" 200 -
+12:41:57 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:42:09 APP TAP (220,340) CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> < _UICollectionViewListCellContentView < ListCollectionViewCell < UpdateCoalescingCollectionView < UIKitPlatformViewHost<ListRepresentable<CollectionViewListDataSource<String>, SelectionManagerBox<String>>> < HostingView < UIViewControllerWrapperView < UINavigationTransitionView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:42:09 "POST /__note HTTP/1.1" 200 -
+12:42:11 NOT SERVED /api/sessions/F00/events/page?tail=200&maxPayload=2048
+12:42:11 "GET /api/sessions/F00/events/page?tail=200&maxPayload=2048 HTTP/1.1" 404 -
+12:42:11 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=F00
+12:42:11 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=F00 HTTP/1.1" 404 -
+12:42:11 NOT SERVED /api/sessions/F00/created-tasks
+12:42:11 "GET /api/sessions/F00/created-tasks HTTP/1.1" 404 -
+12:42:11 NOT SERVED /api/sessions/F00
+12:42:11 "GET /api/sessions/F00 HTTP/1.1" 404 -
+12:42:11 NOT SERVED /api/sessions/F00
+12:42:11 "GET /api/sessions/F00 HTTP/1.1" 404 -
+12:42:11 NOT SERVED /api/sessions/F00/approvals?status=PENDING
+12:42:11 NOT SERVED /api/sessions/F00/turns?view=active
+12:42:11 "GET /api/sessions/F00/turns?view=active HTTP/1.1" 404 -
+12:42:11 "GET /api/sessions/F00/approvals?status=PENDING HTTP/1.1" 404 -
+12:42:12 NOT SERVED /api/sessions/F00/events/page?tail=200&maxPayload=2048
+12:42:12 "GET /api/sessions/F00/events/page?tail=200&maxPayload=2048 HTTP/1.1" 404 -
+12:42:12 NOT SERVED /api/sessions/F00/events/page?tail=200&maxPayload=2048
+12:42:12 "GET /api/sessions/F00/events/page?tail=200&maxPayload=2048 HTTP/1.1" 404 -
+12:42:12 NOT SERVED /api/sessions/F00/events?sinceSeq=0&maxPayload=2048
+12:42:12 NOT SERVED /api/sessions/F00/background
+12:42:12 "GET /api/sessions/F00/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 404 -
+12:42:12 "GET /api/sessions/F00/background HTTP/1.1" 404 -
+12:42:13 "GET /api/runners HTTP/1.1" 200 -
+12:42:13 NOT SERVED /api/sessions/F00/turns?view=active
+12:42:13 NOT SERVED /api/sessions/F00/approvals?status=PENDING
+12:42:13 NOT SERVED /api/sessions/F00/background
+12:42:13 "GET /api/sessions/F00/approvals?status=PENDING HTTP/1.1" 404 -
+12:42:13 NOT SERVED /api/sessions/F00/events?sinceSeq=0&maxPayload=2048
+12:42:13 NOT SERVED /api/sessions/F00
+12:42:13 "GET /api/sessions/F00/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 404 -
+12:42:13 "GET /api/sessions/F00/background HTTP/1.1" 404 -
+12:42:13 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=F00
+12:42:13 "GET /api/sessions/F00 HTTP/1.1" 404 -
+12:42:13 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=F00 HTTP/1.1" 404 -
+12:42:13 "GET /api/sessions/F00/turns?view=active HTTP/1.1" 404 -
+12:42:16 NOT SERVED /api/sessions/F00/events?sinceSeq=0&maxPayload=2048
+12:42:16 "GET /api/sessions/F00/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 404 -
+12:42:16 NOT SERVED /api/sessions/F00/approvals?status=PENDING
+12:42:16 "GET /api/sessions/F00/approvals?status=PENDING HTTP/1.1" 404 -
+12:42:16 NOT SERVED /api/sessions/F00/background
+12:42:16 "GET /api/sessions/F00/background HTTP/1.1" 404 -
+12:42:16 NOT SERVED /api/sessions/F00/turns?view=active
+12:42:16 "GET /api/sessions/F00/turns?view=active HTTP/1.1" 404 -
+12:42:16 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=F00
+12:42:16 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=F00 HTTP/1.1" 404 -
+12:42:16 NOT SERVED /api/sessions/F00
+12:42:16 "GET /api/sessions/F00 HTTP/1.1" 404 -
+12:42:20 NOT SERVED /api/sessions/F00/approvals?status=PENDING
+12:42:20 NOT SERVED /api/sessions/F00
+12:42:20 "GET /api/sessions/F00 HTTP/1.1" 404 -
+12:42:20 NOT SERVED /api/sessions/F00/background
+12:42:20 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=F00
+12:42:20 NOT SERVED /api/sessions/F00/events?sinceSeq=0&maxPayload=2048
+12:42:20 NOT SERVED /api/sessions/F00/turns?view=active
+12:42:20 "GET /api/sessions/F00/turns?view=active HTTP/1.1" 404 -
+12:42:20 "GET /api/sessions/F00/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 404 -
+12:42:20 "GET /api/sessions/F00/approvals?status=PENDING HTTP/1.1" 404 -
+12:42:20 "GET /api/sessions/F00/background HTTP/1.1" 404 -
+12:42:20 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=F00 HTTP/1.1" 404 -
+12:42:23 APP TAP (42,84) _UIButtonBarButton < PlatterItemView < SubviewContainerView < PlatterGlassView < PlatterContentView < AnimationView < AnimationView < AnimationView < AnimationView < PlatterView < NavigationBarPlatterContainer < NavigationBarTransitionContainer < NavigationBarContentView < UIKitNavigationBar < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:42:23 "POST /__note HTTP/1.1" 200 -
+12:42:23 "GET /api/session-tags HTTP/1.1" 200 -
+12:42:24 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:42:24 "GET /api/session-folders HTTP/1.1" 200 -
+12:42:24 SEARCH q='ledger'
+12:42:24 "GET /api/sessions/search?q=ledger&limit=20 HTTP/1.1" 200 -
+12:42:24 "GET /api/projects HTTP/1.1" 200 -
+12:42:24 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:42:30 "GET /api/runners HTTP/1.1" 200 -
+12:42:40 APP TAP (388,904) _UIButtonBarButton < ButtonWrapper < UICorePlatformViewHost<PlatformViewRepresentableAdaptor<ButtonRepresentation>> < _UIInheritedView < UIPlatformGlassInteractionView < _UIInheritedView < _UIInheritedView < _UIInheritedView < _UIInheritedView < FloatingBarHostingView<FloatingBarContainer> < FloatingBarContainerView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:42:40 "POST /__note HTTP/1.1" 200 -
+12:42:40 APP SET on=false presented=true recentX=true
+12:42:40 "POST /__note HTTP/1.1" 200 -
+12:42:40 APP SET on=false presented=false recentX=true
+12:42:40 "POST /__note HTTP/1.1" 200 -
+12:42:46 "GET /api/runners HTTP/1.1" 200 -
+12:42:53 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:42:58 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+12:42:59 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+12:42:59 "GET /api/watches HTTP/1.1" 200 -
+12:42:59 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+12:42:59 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:42:59 "GET /api/projects HTTP/1.1" 200 -
+12:43:04 MODE live
+12:43:04 "GET /__mode/live HTTP/1.1" 200 -
+12:43:04 "POST /__reset HTTP/1.1" 200 -
+12:43:11 "GET /api/users/me HTTP/1.1" 200 -
+12:43:11 "GET /api/agents HTTP/1.1" 200 -
+12:43:11 "GET /api/projects HTTP/1.1" 200 -
+12:43:11 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:43:11 "GET /api/task-lists HTTP/1.1" 200 -
+12:43:11 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:43:12 NOT SERVED /api/wiki/trash
+12:43:12 "GET /api/users/me HTTP/1.1" 200 -
+12:43:12 "GET /api/agents HTTP/1.1" 200 -
+12:43:12 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:43:12 "GET /api/runners HTTP/1.1" 200 -
+12:43:12 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+12:43:12 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:43:12 "GET /api/providers HTTP/1.1" 200 -
+12:43:12 "GET /api/providers HTTP/1.1" 200 -
+12:43:12 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+12:43:12 "GET /api/providers/pools HTTP/1.1" 200 -
+12:43:12 "GET /api/providers/pools HTTP/1.1" 200 -
+12:43:12 "GET /api/session-folders HTTP/1.1" 200 -
+12:43:12 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+12:43:12 "GET /api/wiki/spaces HTTP/1.1" 200 -
+12:43:12 NOT SERVED /api/wiki/trash
+12:43:12 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:43:12 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:43:12 "GET /api/wiki/trash HTTP/1.1" 404 -
+12:43:12 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+12:43:12 "GET /api/watches HTTP/1.1" 200 -
+12:43:12 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+12:43:13 "GET /api/session-tags HTTP/1.1" 200 -
+12:43:14 "GET /api/agents HTTP/1.1" 200 -
+12:43:14 NOT SERVED /api/owner-requests?state=open
+12:43:14 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+12:43:14 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:43:14 "GET /api/session-folders HTTP/1.1" 200 -
+12:43:14 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:43:14 "GET /api/projects HTTP/1.1" 200 -
+12:43:14 "GET /api/runners HTTP/1.1" 200 -
+12:43:14 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:43:14 "GET /api/projects HTTP/1.1" 200 -
+12:43:14 NOT SERVED /api/auth/capabilities
+12:43:14 "GET /api/auth/capabilities HTTP/1.1" 404 -
+12:43:15 "GET /api/providers HTTP/1.1" 200 -
+12:43:15 "GET /api/providers/pools HTTP/1.1" 200 -
+12:43:15 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+12:43:15 "GET /api/task-lists HTTP/1.1" 200 -
+12:43:15 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+12:43:17 APP TAP (220,904) UISearchBarTextField < UICorePlatformViewHost<PlatformViewRepresentableAdaptor<InlineSearchBarViewRepresentation>> < _UIInheritedView < UIPlatformGlassInteractionView < _UIInheritedView < _UIInheritedView < _UIInheritedView < _UIInheritedView < FloatingBarHostingView<FloatingBarContainer> < FloatingBarContainerView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:43:17 "POST /__note HTTP/1.1" 200 -
+12:43:18 APP SET on=true presented=false recentX=false
+12:43:18 APP SET on=true presented=true recentX=false
+12:43:18 "POST /__note HTTP/1.1" 200 -
+12:43:18 "POST /__note HTTP/1.1" 200 -
+12:43:28 "GET /api/runners HTTP/1.1" 200 -
+12:43:42 APP TAP (108,440) CellHostingView<ModifiedContent<_ViewList_View, CollectionViewCellModifier>> < _UICollectionViewListCellContentView < ListCollectionViewCell < UpdateCoalescingCollectionView < UIKitPlatformViewHost<ListRepresentable<CollectionViewListDataSource<String>, SelectionManagerBox<String>>> < HostingView < UIViewControllerWrapperView < UINavigationTransitionView < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:43:42 "POST /__note HTTP/1.1" 200 -
+12:43:42 APP SET on=true presented=true recentX=false
+12:43:42 "POST /__note HTTP/1.1" 200 -
+12:43:42 APP SET on=true presented=true recentX=false
+12:43:42 "POST /__note HTTP/1.1" 200 -
+12:43:43 NOT SERVED /api/sessions/F01/events/page?tail=200&maxPayload=2048
+12:43:43 "GET /api/sessions/F01/events/page?tail=200&maxPayload=2048 HTTP/1.1" 404 -
+12:43:43 NOT SERVED /api/sessions/F01
+12:43:43 NOT SERVED /api/sessions/F01/created-tasks
+12:43:43 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=F01
+12:43:43 "GET /api/sessions/F01 HTTP/1.1" 404 -
+12:43:43 "GET /api/sessions/F01/created-tasks HTTP/1.1" 404 -
+12:43:43 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=F01 HTTP/1.1" 404 -
+12:43:43 NOT SERVED /api/sessions/F01/turns?view=active
+12:43:43 NOT SERVED /api/sessions/F01
+12:43:43 "GET /api/sessions/F01/turns?view=active HTTP/1.1" 404 -
+12:43:43 "GET /api/sessions/F01 HTTP/1.1" 404 -
+12:43:43 NOT SERVED /api/sessions/F01/approvals?status=PENDING
+12:43:43 "GET /api/sessions/F01/approvals?status=PENDING HTTP/1.1" 404 -
+12:43:44 NOT SERVED /api/sessions/F01/events/page?tail=200&maxPayload=2048
+12:43:44 "GET /api/sessions/F01/events/page?tail=200&maxPayload=2048 HTTP/1.1" 404 -
+12:43:44 NOT SERVED /api/sessions/F01/events/page?tail=200&maxPayload=2048
+12:43:44 "GET /api/sessions/F01/events/page?tail=200&maxPayload=2048 HTTP/1.1" 404 -
+12:43:44 NOT SERVED /api/sessions/F01/events?sinceSeq=0&maxPayload=2048
+12:43:44 "GET /api/sessions/F01/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 404 -
+12:43:44 NOT SERVED /api/sessions/F01/background
+12:43:44 "GET /api/sessions/F01/background HTTP/1.1" 404 -
+12:43:45 "GET /api/runners HTTP/1.1" 200 -
+12:43:45 NOT SERVED /api/sessions/F01/turns?view=active
+12:43:45 NOT SERVED /api/sessions/F01/events?sinceSeq=0&maxPayload=2048
+12:43:45 "GET /api/sessions/F01/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 404 -
+12:43:45 "GET /api/sessions/F01/turns?view=active HTTP/1.1" 404 -
+12:43:45 NOT SERVED /api/sessions/F01/background
+12:43:45 NOT SERVED /api/sessions/F01/approvals?status=PENDING
+12:43:45 "GET /api/sessions/F01/approvals?status=PENDING HTTP/1.1" 404 -
+12:43:45 "GET /api/sessions/F01/background HTTP/1.1" 404 -
+12:43:45 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=F01
+12:43:45 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=F01 HTTP/1.1" 404 -
+12:43:45 NOT SERVED /api/sessions/F01
+12:43:46 "GET /api/sessions/F01 HTTP/1.1" 404 -
+12:43:48 NOT SERVED /api/sessions/F01/events?sinceSeq=0&maxPayload=2048
+12:43:48 NOT SERVED /api/sessions/F01/approvals?status=PENDING
+12:43:48 "GET /api/sessions/F01/approvals?status=PENDING HTTP/1.1" 404 -
+12:43:48 NOT SERVED /api/sessions/F01/background
+12:43:48 "GET /api/sessions/F01/background HTTP/1.1" 404 -
+12:43:48 NOT SERVED /api/sessions/F01/turns?view=active
+12:43:48 "GET /api/sessions/F01/turns?view=active HTTP/1.1" 404 -
+12:43:48 "GET /api/sessions/F01/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 404 -
+12:43:48 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=F01
+12:43:48 NOT SERVED /api/sessions/F01
+12:43:48 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=F01 HTTP/1.1" 404 -
+12:43:48 "GET /api/sessions/F01 HTTP/1.1" 404 -
+12:43:53 NOT SERVED /api/sessions/F01/turns?view=active
+12:43:53 NOT SERVED /api/sessions/F01/background
+12:43:53 NOT SERVED /api/sessions/F01/events?sinceSeq=0&maxPayload=2048
+12:43:53 NOT SERVED /api/sessions/F01/approvals?status=PENDING
+12:43:53 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=F01
+12:43:53 "GET /api/sessions/F01/turns?view=active HTTP/1.1" 404 -
+12:43:53 NOT SERVED /api/sessions/F01
+12:43:53 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=F01 HTTP/1.1" 404 -
+12:43:53 "GET /api/sessions/F01 HTTP/1.1" 404 -
+12:43:53 "GET /api/sessions/F01/background HTTP/1.1" 404 -
+12:43:53 "GET /api/sessions/F01/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 404 -
+12:43:53 "GET /api/sessions/F01/approvals?status=PENDING HTTP/1.1" 404 -
+12:43:56 APP TAP (42,84) _UIButtonBarButton < PlatterItemView < SubviewContainerView < PlatterGlassView < PlatterContentView < AnimationView < AnimationView < AnimationView < AnimationView < PlatterView < NavigationBarPlatterContainer < NavigationBarTransitionContainer < NavigationBarContentView < UIKitNavigationBar < UILayoutContainerView < UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> < _UIHostingView<ModifiedContent<AnyView, RootModifier>> < UIDropShadowView < UITransitionView < UIWindow
+12:43:56 "POST /__note HTTP/1.1" 200 -
+12:43:56 "GET /api/session-tags HTTP/1.1" 200 -
+12:43:56 "GET /api/session-folders HTTP/1.1" 200 -
+12:43:56 "GET /api/sessions?view=open HTTP/1.1" 200 -
+12:43:56 "GET /api/projects/sidebar HTTP/1.1" 200 -
+12:43:56 "GET /api/projects HTTP/1.1" 200 -
+12:44:02 "GET /api/runners HTTP/1.1" 200 -
+12:44:12 "GET /api/sessions?view=open HTTP/1.1" 200 -

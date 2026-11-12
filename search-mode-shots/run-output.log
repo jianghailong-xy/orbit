@@ -1,0 +1,69 @@
+==> iPhone 5277349A-B219-4ED4-853A-8AE666B9F5B1
+    iPhone 17 Pro Max (5277349A-B219-4ED4-853A-8AE666B9F5B1) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 4326, after 2s)
+==> ios
+Test Case '-[SearchModeProbeUITests.SearchModeTests test1ScrollKeepsSearchMode]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test1ScrollKeepsSearchMode]' passed (123.394 seconds).
+Test Case '-[SearchModeProbeUITests.SearchModeTests test2TapElsewhereKeepsSearchMode]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test2TapElsewhereKeepsSearchMode]' passed (42.053 seconds).
+Test Case '-[SearchModeProbeUITests.SearchModeTests test3CloseEndsSearchMode]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test3CloseEndsSearchMode]' passed (105.761 seconds).
+Test Case '-[SearchModeProbeUITests.SearchModeTests test4QuerySurvivesAPush]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test4QuerySurvivesAPush]' passed (139.173 seconds).
+Test Case '-[SearchModeProbeUITests.SearchModeTests test5EmptySearchSurvivesAPush]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test5EmptySearchSurvivesAPush]' passed (70.091 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 480.472 (480.489) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 480.472 (480.491) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 480.472 (480.493) seconds
+** TEST SUCCEEDED **
+.sm-probe/run.sh: line 83:  4326 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+total 14320
+drwxr-xr-x  49 runner  staff    1568 Nov 12 12:45 .
+drwxr-xr-x   3 runner  staff      96 Nov 12 12:26 ..
+drwxr-xr-x  49 runner  staff    1568 Nov 12 12:45 attachments
+-rw-r--r--@  1 runner  staff   31721 Nov 12 12:39 close-a-opened-tree.txt
+-rw-r--r--   1 runner  staff  420501 Nov 12 12:39 close-a-opened.png
+-rw-r--r--@  1 runner  staff   27072 Nov 12 12:39 close-b-after-x-keyboard-up-tree.txt
+-rw-r--r--   1 runner  staff  337063 Nov 12 12:39 close-b-after-x-keyboard-up.png
+-rw-r--r--@  1 runner  staff   27393 Nov 12 12:40 close-c-scrolled-tree.txt
+-rw-r--r--   1 runner  staff  288209 Nov 12 12:40 close-c-scrolled.png
+-rw-r--r--@  1 runner  staff   28997 Nov 12 12:40 close-d-after-x-keyboard-down-tree.txt
+-rw-r--r--   1 runner  staff  304959 Nov 12 12:40 close-d-after-x-keyboard-down.png
+-rw-r--r--   1 runner  staff    1214 Nov 12 12:45 not-served.txt
+-rw-r--r--@  1 runner  staff   31721 Nov 12 12:43 push-a-opened-tree.txt
+-rw-r--r--   1 runner  staff  420227 Nov 12 12:43 push-a-opened.png
+-rw-r--r--@  1 runner  staff   13052 Nov 12 12:43 push-b-opened-tree.txt
+-rw-r--r--   1 runner  staff  155179 Nov 12 12:43 push-b-opened.png
+-rw-r--r--@  1 runner  staff   26261 Nov 12 12:44 push-c-back-tree.txt
+-rw-r--r--   1 runner  staff  327040 Nov 12 12:44 push-c-back.png
+-rw-r--r--@  1 runner  staff   31721 Nov 12 12:41 query-a-opened-tree.txt
+-rw-r--r--   1 runner  staff  420636 Nov 12 12:41 query-a-opened.png
+-rw-r--r--@  1 runner  staff   31749 Nov 12 12:41 query-b-typed-tree.txt
+-rw-r--r--   1 runner  staff  480687 Nov 12 12:41 query-b-typed.png
+-rw-r--r--@  1 runner  staff   26583 Nov 12 12:42 query-c-scrolled-tree.txt
+-rw-r--r--   1 runner  staff  370465 Nov 12 12:41 query-c-scrolled.png
+-rw-r--r--@  1 runner  staff   13052 Nov 12 12:42 query-d-opened-tree.txt
+-rw-r--r--   1 runner  staff  155179 Nov 12 12:42 query-d-opened.png
+-rw-r--r--@  1 runner  staff   26540 Nov 12 12:42 query-e-back-tree.txt
+-rw-r--r--   1 runner  staff  370487 Nov 12 12:42 query-e-back.png
+-rw-r--r--@  1 runner  staff   30132 Nov 12 12:43 query-f-after-x-tree.txt
+-rw-r--r--   1 runner  staff  321803 Nov 12 12:42 query-f-after-x.png
+-rw-r--r--   1 runner  staff   37939 Nov 12 12:44 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 12 12:29 requests.log.out
+-rw-r--r--@  1 runner  staff   31717 Nov 12 12:37 scroll-a-opened-tree.txt
+-rw-r--r--   1 runner  staff  421585 Nov 12 12:36 scroll-a-opened.png
+-rw-r--r--@  1 runner  staff   27398 Nov 12 12:37 scroll-b-after-swipe-tree.txt
+-rw-r--r--   1 runner  staff  306208 Nov 12 12:37 scroll-b-after-swipe.png
+-rw-r--r--@  1 runner  staff   26300 Nov 12 12:38 scroll-c-back-up-tree.txt
+-rw-r--r--   1 runner  staff  328521 Nov 12 12:37 scroll-c-back-up.png
+-rw-r--r--@  1 runner  staff    3428 Nov 12 12:38 SearchModeTeststest1ScrollKeepsSearchMode-notes.txt
+-rw-r--r--@  1 runner  staff    1018 Nov 12 12:38 SearchModeTeststest2TapElsewhereKeepsSearchMode-notes.txt
+-rw-r--r--@  1 runner  staff    4376 Nov 12 12:40 SearchModeTeststest3CloseEndsSearchMode-notes.txt
+-rw-r--r--@  1 runner  staff    6804 Nov 12 12:43 SearchModeTeststest4QuerySurvivesAPush-notes.txt
+-rw-r--r--@  1 runner  staff    3159 Nov 12 12:44 SearchModeTeststest5EmptySearchSurvivesAPush-notes.txt
+-rw-r--r--@  1 runner  staff   20770 Nov 12 12:38 tap-a-opened-tree.txt
+-rw-r--r--   1 runner  staff  270789 Nov 12 12:38 tap-a-opened.png
+-rw-r--r--@  1 runner  staff   15353 Nov 12 12:38 tap-b-after-tap-tree.txt
+-rw-r--r--   1 runner  staff  198245 Nov 12 12:38 tap-b-after-tap.png
+-rw-r--r--   1 runner  staff    2462 Nov 12 12:45 writes.txt
+-rw-r--r--   1 runner  staff  819041 Nov 12 12:45 xcodebuild-ios.log

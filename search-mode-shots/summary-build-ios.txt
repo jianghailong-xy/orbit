@@ -1,0 +1,14 @@
+Test Case '-[SearchModeProbeUITests.SearchModeTests test1ScrollKeepsSearchMode]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test1ScrollKeepsSearchMode]' passed (123.394 seconds).
+Test Case '-[SearchModeProbeUITests.SearchModeTests test2TapElsewhereKeepsSearchMode]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test2TapElsewhereKeepsSearchMode]' passed (42.053 seconds).
+Test Case '-[SearchModeProbeUITests.SearchModeTests test3CloseEndsSearchMode]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test3CloseEndsSearchMode]' passed (105.761 seconds).
+Test Case '-[SearchModeProbeUITests.SearchModeTests test4QuerySurvivesAPush]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test4QuerySurvivesAPush]' passed (139.173 seconds).
+Test Case '-[SearchModeProbeUITests.SearchModeTests test5EmptySearchSurvivesAPush]' started.
+Test Case '-[SearchModeProbeUITests.SearchModeTests test5EmptySearchSurvivesAPush]' passed (70.091 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 480.472 (480.489) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 480.472 (480.491) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 480.472 (480.493) seconds
+** TEST SUCCEEDED **

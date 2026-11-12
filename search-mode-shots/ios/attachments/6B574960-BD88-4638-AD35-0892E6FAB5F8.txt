@@ -1,0 +1,283 @@
+Attributes: Application, 0x11a24fd40, pid: 30770, label: 'SearchModeProbe'
+Element subtree:
+ →Application, 0x11a24fd40, pid: 30770, label: 'SearchModeProbe'
+    Window (Main), 0x11a24d900, {{0.0, 0.0}, {440.0, 956.0}}
+      Other, 0x11a24d180, {{0.0, 0.0}, {440.0, 956.0}}
+        Other, 0x11a24e580, {{0.0, 0.0}, {440.0, 956.0}}
+          Other, 0x11a24ebc0, {{0.0, 0.0}, {440.0, 956.0}}
+            Other, 0x11a24e080, {{0.0, 0.0}, {440.0, 956.0}}
+              Other, 0x11a24de00, {{0.0, 62.0}, {440.0, 860.0}}
+              Other, 0x11a24df40, {{0.0, 62.0}, {440.0, 860.0}}
+              StaticText, 0x11a24d400, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x11a24e1c0, {{270.0, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x11a24e300, {{0.0, 128.0}, {324.0, 828.0}}
+                Other, 0x11a24e800, {{0.0, -1528.0}, {324.0, 3614.3}}
+                Cell, 0x11a250000, {{0.0, 128.0}, {324.0, 44.3}}
+                  Other, 0x11a250280, {{0.0, 128.0}, {324.0, 44.3}}
+                    Other, 0x117c28dc0, {{0.0, 128.0}, {324.0, 44.3}}
+                      Other, 0x117c2a6c0, {{0.0, 128.0}, {324.0, 44.3}}
+                  Other, 0x117c29400, {{0.0, 128.0}, {324.0, 44.3}}
+                    Other, 0x117c2be80, {{0.0, 128.0}, {324.0, 44.3}}
+                      Other, 0x117c2a580, {{0.0, 128.0}, {324.0, 44.3}}
+                        Button, 0x117c28780, {{0.0, 128.0}, {324.0, 44.3}}, label: 'Projects'
+                          Image, 0x1179552c0, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x117955400, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x117954280, {{0.0, 172.3}, {324.0, 44.3}}
+                  Other, 0x117955900, {{0.0, 172.3}, {324.0, 44.3}}
+                    Other, 0x1179557c0, {{0.0, 172.3}, {324.0, 44.3}}
+                      Other, 0x117957480, {{0.0, 172.3}, {324.0, 44.3}}
+                  Other, 0x117957340, {{0.0, 172.3}, {324.0, 44.3}}
+                    Other, 0x117957e80, {{0.0, 172.3}, {324.0, 44.3}}
+                      Other, 0x117954780, {{0.0, 172.3}, {324.0, 44.3}}
+                        Button, 0x117957700, {{0.0, 172.3}, {324.0, 44.3}}, label: 'Tasks'
+                          Image, 0x1179570c0, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x117955a40, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x117956800, {{0.0, 216.7}, {324.0, 44.3}}
+                  Other, 0x117956a80, {{0.0, 216.7}, {324.0, 44.3}}
+                    Other, 0x117954140, {{0.0, 216.7}, {324.0, 44.3}}
+                      Other, 0x117954000, {{0.0, 216.7}, {324.0, 44.3}}
+                  Other, 0x117955e00, {{0.0, 216.7}, {324.0, 44.3}}
+                    Other, 0x117957980, {{0.0, 216.7}, {324.0, 44.3}}
+                      Other, 0x117954b40, {{0.0, 216.7}, {324.0, 44.3}}
+                        Button, 0x117956bc0, {{0.0, 216.7}, {324.0, 44.3}}, label: 'Wiki'
+                          Image, 0x117956300, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x117954a00, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x1179548c0, {{0.0, 261.0}, {324.0, 44.7}}
+                  Other, 0x117956080, {{0.0, 261.0}, {324.0, 44.7}}
+                    Other, 0x117957ac0, {{0.0, 261.0}, {324.0, 44.7}}
+                      Other, 0x117956f80, {{0.0, 261.0}, {324.0, 44.7}}
+                  Other, 0x117955540, {{0.0, 261.0}, {324.0, 44.7}}
+                    Other, 0x1179566c0, {{0.0, 261.0}, {324.0, 44.7}}
+                      Other, 0x117955cc0, {{0.0, 261.0}, {324.0, 44.7}}
+                        StaticText, 0x1179561c0, {{0.0, 261.0}, {324.0, 44.7}}, label: 'Workspaces'
+                Cell, 0x117956580, {{0.0, 305.7}, {324.0, 44.3}}
+                  Other, 0x117955680, {{0.0, 305.7}, {324.0, 44.3}}
+                    Other, 0x117956e40, {{0.0, 305.7}, {324.0, 44.3}}
+                      Other, 0x117957840, {{0.0, 305.7}, {324.0, 44.3}}
+                  Other, 0x117957d40, {{0.0, 305.7}, {324.0, 44.3}}
+                    Other, 0x1179543c0, {{0.0, 305.7}, {324.0, 44.3}}
+                      Other, 0x117955f40, {{0.0, 305.7}, {324.0, 44.3}}
+                        Button, 0x1179575c0, {{0.0, 305.7}, {324.0, 44.3}}, label: 'orbit-macos,  · wikova, 2 waiting for you'
+                          Other, 0x117957200, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x117956440, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x117955b80, {{58.0, 317.7}, {93.0, 20.3}}, label: 'orbit-macos'
+                          StaticText, 0x117957c00, {{151.0, 317.7}, {65.0, 20.3}}, label: ' · wikova'
+                          StaticText, 0x11a0fd400, {{280.7, 319.3}, {21.3, 17.3}}, label: '2 waiting for you'
+                Cell, 0x11a0fdf40, {{0.0, 350.0}, {324.0, 36.0}}
+                  Other, 0x11a0fde00, {{0.0, 350.0}, {324.0, 36.0}}
+                    Other, 0x11a0ff200, {{0.0, 350.0}, {324.0, 36.0}}
+                      Other, 0x11a0fda40, {{0.0, 350.0}, {324.0, 36.0}}
+                  Other, 0x11a0fcc80, {{0.0, 350.0}, {324.0, 36.0}}
+                    Other, 0x11a0fc8c0, {{0.0, 350.0}, {324.0, 36.0}}
+                      Other, 0x11a0fca00, {{0.0, 350.0}, {324.0, 36.0}}
+                        StaticText, 0x11a0fcb40, {{22.0, 364.0}, {59.0, 18.0}}, label: 'Projects'
+                        StaticText, 0x11a0fc500, {{89.0, 366.3}, {5.3, 13.3}}, label: '1'
+                Cell, 0x11a0fd680, {{0.0, 386.0}, {324.0, 44.3}}
+                  Other, 0x11a0fd7c0, {{0.0, 386.0}, {324.0, 44.3}}
+                    Other, 0x11a0fd900, {{0.0, 386.0}, {324.0, 44.3}}
+                      Other, 0x11a0fc640, {{0.0, 386.0}, {324.0, 44.3}}
+                  Other, 0x11a0fc780, {{0.0, 386.0}, {324.0, 44.3}}
+                    Other, 0x11a0fcf00, {{0.0, 386.0}, {324.0, 44.3}}
+                      Other, 0x11a0fd040, {{0.0, 386.0}, {324.0, 44.3}}
+                        Button, 0x11a0fd180, {{0.0, 386.0}, {324.0, 44.3}}, label: '落地会话：每次落地都有自己的会话、实时输出和 owner 门'
+                Other, 0x11a0fe080, {{291.0, 128.0}, {30.0, 828.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11a0fd540, {{318.0, 562.7}, {3.0, 390.3}}
+                Other, 0x11a0fd2c0, {{291.0, 128.0}, {30.0, 828.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11a0fdcc0, {{318.0, 562.7}, {3.0, 390.3}}
+              Button, 0x11a0fe300, {{10.0, 870.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x11a0fe440, {{31.0, 883.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x11a0fe580, {{57.0, 881.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x11a0fe6c0, {{270.0, 870.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x11a0fdb80, {{0.0, 0.0}, {440.0, 956.0}}
+                Other, 0x11a0fe940, {{0.0, 0.0}, {440.0, 956.0}}
+                  Other, 0x11a0fea80, {{0.0, 0.0}, {440.0, 956.0}}
+                    Other, 0x11a0febc0, {{0.0, 0.0}, {440.0, 956.0}}
+                      Other, 0x11a0fed00, {{0.0, 0.0}, {440.0, 956.0}}
+                        Other, 0x11a0fe1c0, {{0.0, 112.0}, {440.0, 758.0}}
+                        CollectionView, 0x11a0ff840, {{0.0, 0.0}, {440.0, 956.0}}
+                          Other, 0x11a0fef80, {{0.0, -1971.3}, {440.0, 4753.3}}
+                          Other, 0x11a0fee40, {{0.0, 0.0}, {440.0, 956.0}}
+                            Other, 0x11a0fcdc0, {{0.0, -0.0}, {440.0, 207.1}}
+                            Other, 0x11a0fe800, {{0.0, 815.2}, {440.0, 140.8}}
+                          Other, 0x11a0ff480, {{0.0, 0.0}, {440.0, 956.0}}
+                            Other, 0x11a0ff5c0, {{0.0, -0.0}, {440.0, 207.1}}
+                              Other, 0x11a0ff700, {{0.0, -0.0}, {440.0, 142.3}}
+                              Other, 0x11a0ffe80, {{0.0, -0.0}, {440.0, 207.1}}
+                                Other, 0x11a0ff0c0, {{0.0, -0.0}, {440.0, 207.1}}
+                              Other, 0x11a0ff980, {{0.0, -0.0}, {440.0, 207.1}}
+                                Other, 0x11a0ffac0, {{0.0, -0.0}, {440.0, 207.1}}
+                              Other, 0x11a0ffc00, {{0.0, -0.0}, {440.0, 207.1}}
+                                Other, 0x11a0ffd40, {{0.0, -0.0}, {440.0, 207.1}}
+                                Other, 0x11a0ff340, {{0.0, -0.0}, {440.0, 207.1}}
+                          Cell, 0x11ab58640, {{0.0, 3.0}, {440.0, 96.3}}
+                            Other, 0x11ab58140, {{0.0, 3.0}, {440.0, 96.3}}
+                              Other, 0x11ab58280, {{0.0, 3.0}, {440.0, 96.3}}
+                            Other, 0x11ab583c0, {{0.0, 3.0}, {440.0, 96.3}}
+                              Other, 0x11ab58000, {{0.0, 3.0}, {440.0, 96.3}}
+                                Other, 0x11ab58500, {{0.0, 3.0}, {440.0, 96.3}}
+                                  Button, 0x117bc5540, {{0.0, 3.0}, {440.0, 96.3}}, label: 'Waiting for your reply, 整理 release notes, orbit-macos, Waiting for your reply, in message, …before the ledger step, pull the base images…'
+                                    Image, 0x117bc4a00, {{21.3, 24.0}, {17.3, 14.3}}, identifier: 'message', label: 'Waiting for your reply'
+                                    StaticText, 0x117bc52c0, {{50.0, 21.0}, {140.0, 20.3}}, label: '整理 release notes'
+                                    StaticText, 0x117bc5400, {{50.0, 43.3}, {83.7, 18.0}}, label: 'orbit-macos'
+                                    StaticText, 0x117bc5680, {{138.7, 43.3}, {146.3, 18.0}}, label: 'Waiting for your reply'
+                                    StaticText, 0x117bc4b40, {{290.0, 43.3}, {77.7, 18.0}}, label: 'in message'
+                                    StaticText, 0x117bc57c0, {{50.0, 63.3}, {327.0, 18.0}}, label: '…before the ledger step, pull the base images…'
+                          Cell, 0x117bc5180, {{0.0, 99.3}, {440.0, 96.3}}
+                            Other, 0x117bc4640, {{0.0, 99.3}, {440.0, 96.3}}
+                              Other, 0x117bc4140, {{0.0, 99.3}, {440.0, 96.3}}
+                            Other, 0x117bc4500, {{0.0, 99.3}, {440.0, 96.3}}
+                              Other, 0x117bc4dc0, {{0.0, 99.3}, {440.0, 96.3}}
+                                Other, 0x117bc43c0, {{0.0, 99.3}, {440.0, 96.3}}
+                                  Button, 0x117bc4c80, {{0.0, 99.3}, {440.0, 96.3}}, label: 'Succeeded, Ledger migration order, orbit-macos, Succeeded, in message, …before the ledger step, pull the base images…', Selected
+                                    Image, 0x117bc5040, {{22.7, 120.0}, {15.0, 15.0}}, identifier: 'checkmark.circle.fill', label: 'Succeeded', Selected
+                                    StaticText, 0x117bc4f00, {{50.0, 117.3}, {174.7, 20.3}}, label: 'Ledger migration order'
+                                    StaticText, 0x117bc4280, {{50.0, 139.7}, {83.7, 18.0}}, label: 'orbit-macos'
+                                    StaticText, 0x117bc4000, {{138.7, 139.7}, {77.3, 18.0}}, label: 'Succeeded'
+                                    StaticText, 0x117bc48c0, {{221.0, 139.7}, {77.7, 18.0}}, label: 'in message'
+                                    StaticText, 0x117bc4780, {{50.0, 159.7}, {327.0, 18.0}}, label: '…before the ledger step, pull the base images…'
+                          Other, 0x117b3dcc0, {{50.0, 98.3}, {370.0, 1.0}}
+                          Cell, 0x117b3df40, {{0.0, 112.0}, {440.0, 40.3}}
+                            Other, 0x117b3f980, {{0.0, 112.0}, {440.0, 40.3}}
+                            Other, 0x11a0e7840, {{0.0, 112.0}, {440.0, 40.3}}
+                              Other, 0x11a0e75c0, {{0.0, 112.0}, {440.0, 40.3}}
+                                Other, 0x11a0e70c0, {{0.0, 112.0}, {440.0, 40.3}}
+                                  StaticText, 0x11a0e6440, {{0.0, 112.0}, {440.0, 40.3}}, label: 'All sessions'
+                          Cell, 0x11a0e7ac0, {{0.0, 195.7}, {440.0, 96.3}}
+                            Other, 0x11a0e6d00, {{0.0, 195.7}, {440.0, 96.3}}
+                              Other, 0x11a0e7d40, {{0.0, 195.7}, {440.0, 96.3}}
+                            Other, 0x11a0e6f80, {{0.0, 195.7}, {440.0, 96.3}}
+                              Other, 0x11a0e6e40, {{0.0, 195.7}, {440.0, 96.3}}
+                                Other, 0x11a0e7200, {{0.0, 195.7}, {440.0, 96.3}}
+                                  Button, 0x11a0e7700, {{0.0, 195.7}, {440.0, 96.3}}, label: 'Running, Rebuild the wiki articles report, orbit-macos, Running, in message, …before the ledger step, pull the base images…'
+                                    Other, 0x11a0e7c00, {{23.1, 216.3}, {14.6, 15.0}}, label: 'Running'
+                                    StaticText, 0x11a0e7340, {{50.0, 213.7}, {230.0, 20.3}}, label: 'Rebuild the wiki articles report'
+                                    StaticText, 0x11a0e6bc0, {{50.0, 236.0}, {83.7, 18.0}}, label: 'orbit-macos'
+                                    StaticText, 0x11a0e6580, {{138.7, 236.0}, {56.3, 18.0}}, label: 'Running'
+                                    StaticText, 0x11a0e7480, {{200.0, 236.0}, {77.7, 18.0}}, label: 'in message'
+                                    StaticText, 0x11a0e6800, {{50.0, 256.0}, {327.0, 18.0}}, label: '…before the ledger step, pull the base images…'
+                          Other, 0x11a0e6940, {{50.0, 194.7}, {370.0, 1.0}}
+                          Cell, 0x11a0e7e80, {{0.0, 292.0}, {440.0, 96.3}}
+                            Other, 0x11a0e66c0, {{0.0, 292.0}, {440.0, 96.3}}
+                              Other, 0x11a0e6a80, {{0.0, 292.0}, {440.0, 96.3}}
+                            Other, 0x11a0e7980, {{0.0, 292.0}, {440.0, 96.3}}
+                              Other, 0x117be1180, {{0.0, 292.0}, {440.0, 96.3}}
+                                Other, 0x117be2f80, {{0.0, 292.0}, {440.0, 96.3}}
+                                  Button, 0x117be1040, {{0.0, 292.0}, {440.0, 96.3}}, label: 'Succeeded, Deploy main for the sandbox, orbit-macos, Succeeded, in message, …before the ledger step, pull the base images…', Selected
+                                    Image, 0x117be2d00, {{22.7, 312.7}, {15.0, 15.0}}, identifier: 'checkmark.circle.fill', label: 'Succeeded', Selected
+                                    StaticText, 0x117be3200, {{50.0, 310.0}, {217.3, 20.3}}, label: 'Deploy main for the sandbox'
+                                    StaticText, 0x117be0500, {{50.0, 332.3}, {83.7, 18.0}}, label: 'orbit-macos'
+                                    StaticText, 0x117be03c0, {{138.7, 332.3}, {77.3, 18.0}}, label: 'Succeeded'
+                                    StaticText, 0x117be0780, {{221.0, 332.3}, {77.7, 18.0}}, label: 'in message'
+                                    StaticText, 0x117be0a00, {{50.0, 352.3}, {327.0, 18.0}}, label: '…before the ledger step, pull the base images…'
+                          Other, 0x117be0dc0, {{50.0, 291.0}, {370.0, 1.0}}
+                          Cell, 0x117be12c0, {{0.0, 388.3}, {440.0, 96.3}}
+                            Other, 0x117be1680, {{0.0, 388.3}, {440.0, 96.3}}
+                              Other, 0x117be3c00, {{0.0, 388.3}, {440.0, 96.3}}
+                            Other, 0x117be0b40, {{0.0, 388.3}, {440.0, 96.3}}
+                              Other, 0x117be2e40, {{0.0, 388.3}, {440.0, 96.3}}
+                                Other, 0x117be0280, {{0.0, 388.3}, {440.0, 96.3}}
+                                  Button, 0x117be3700, {{0.0, 388.3}, {440.0, 96.3}}, label: 'Succeeded, Wiki page creation flow, orbit-macos, Succeeded, in message, …before the ledger step, pull the base images…', Selected
+                                    Image, 0x117be0640, {{22.7, 409.0}, {15.0, 15.0}}, identifier: 'checkmark.circle.fill', label: 'Succeeded', Selected
+                                    StaticText, 0x117be35c0, {{50.0, 406.3}, {177.0, 20.3}}, label: 'Wiki page creation flow'
+                                    StaticText, 0x117be30c0, {{50.0, 428.7}, {83.7, 18.0}}, label: 'orbit-macos'
+                                    StaticText, 0x117be0f00, {{138.7, 428.7}, {77.3, 18.0}}, label: 'Succeeded'
+                                    StaticText, 0x117d67e80, {{221.0, 428.7}, {77.7, 18.0}}, label: 'in message'
+                                    StaticText, 0x117d65e00, {{50.0, 448.7}, {327.0, 18.0}}, label: '…before the ledger step, pull the base images…'
+                          Other, 0x117d66940, {{50.0, 387.3}, {370.0, 1.0}}
+                          Cell, 0x117d661c0, {{0.0, 484.7}, {440.0, 96.3}}
+                            Other, 0x117d66bc0, {{0.0, 484.7}, {440.0, 96.3}}
+                              Other, 0x117d65f40, {{0.0, 484.7}, {440.0, 96.3}}
+                            Other, 0x117d66300, {{0.0, 484.7}, {440.0, 96.3}}
+                              Other, 0x11a0d8140, {{0.0, 484.7}, {440.0, 96.3}}
+                                Other, 0x11a0da440, {{0.0, 484.7}, {440.0, 96.3}}
+                                  Button, 0x11a0dbc00, {{0.0, 484.7}, {440.0, 96.3}}, label: 'Succeeded, Session close state check, orbit-macos, Succeeded, in message, …before the ledger step, pull the base images…', Selected
+                                    Image, 0x11a0dbd40, {{22.7, 505.3}, {15.0, 15.0}}, identifier: 'checkmark.circle.fill', label: 'Succeeded', Selected
+                                    StaticText, 0x11a0dbe80, {{50.0, 502.7}, {196.7, 20.3}}, label: 'Session close state check'
+                                    StaticText, 0x11a0db5c0, {{50.0, 525.0}, {83.7, 18.0}}, label: 'orbit-macos'
+                                    StaticText, 0x11a0da580, {{138.7, 525.0}, {77.3, 18.0}}, label: 'Succeeded'
+                                    StaticText, 0x11a0db840, {{221.0, 525.0}, {77.7, 18.0}}, label: 'in message'
+                                    StaticText, 0x11a0dbac0, {{50.0, 545.0}, {327.0, 18.0}}, label: '…before the ledger step, pull the base images…'
+                          Other, 0x11a0da300, {{50.0, 483.7}, {370.0, 1.0}}
+                          Cell, 0x11a0db700, {{0.0, 581.0}, {440.0, 96.3}}
+                            Other, 0x11a0da6c0, {{0.0, 581.0}, {440.0, 96.3}}
+                              Other, 0x11a0da800, {{0.0, 581.0}, {440.0, 96.3}}
+                            Other, 0x11a0da940, {{0.0, 581.0}, {440.0, 96.3}}
+                              Other, 0x11a0daa80, {{0.0, 581.0}, {440.0, 96.3}}
+                                Other, 0x11a0dabc0, {{0.0, 581.0}, {440.0, 96.3}}
+                                  Button, 0x11a0dad00, {{0.0, 581.0}, {440.0, 96.3}}, label: 'Succeeded, WireGuard LAN feasibility, orbit-macos, Succeeded, in message, …before the ledger step, pull the base images…', Selected
+                                    Image, 0x11a0d97c0, {{22.7, 601.7}, {15.0, 15.0}}, identifier: 'checkmark.circle.fill', label: 'Succeeded', Selected
+                                    StaticText, 0x11a0d9a40, {{50.0, 599.0}, {194.3, 20.3}}, label: 'WireGuard LAN feasibility'
+                                    StaticText, 0x11a0d9b80, {{50.0, 621.3}, {83.7, 18.0}}, label: 'orbit-macos'
+                                    StaticText, 0x11a0d9cc0, {{138.7, 621.3}, {77.3, 18.0}}, label: 'Succeeded'
+                                    StaticText, 0x11a0d9e00, {{221.0, 621.3}, {77.7, 18.0}}, label: 'in message'
+                                    StaticText, 0x11a0db980, {{50.0, 641.3}, {327.0, 18.0}}, label: '…before the ledger step, pull the base images…'
+                          Other, 0x11a0d9900, {{50.0, 580.0}, {370.0, 1.0}}
+                          Cell, 0x11a0da1c0, {{0.0, 677.3}, {440.0, 96.3}}
+                            Other, 0x11a0daf80, {{0.0, 677.3}, {440.0, 96.3}}
+                              Other, 0x11a0db0c0, {{0.0, 677.3}, {440.0, 96.3}}
+                            Other, 0x11a0db200, {{0.0, 677.3}, {440.0, 96.3}}
+                              Other, 0x11a0db340, {{0.0, 677.3}, {440.0, 96.3}}
+                                Other, 0x11a0db480, {{0.0, 677.3}, {440.0, 96.3}}
+                                  Button, 0x11a0d8280, {{0.0, 677.3}, {440.0, 96.3}}, label: 'Succeeded, Project done-state check, orbit-macos, Succeeded, in message, …before the ledger step, pull the base images…', Selected
+                                    Image, 0x11a0d8500, {{22.7, 698.0}, {15.0, 15.0}}, identifier: 'checkmark.circle.fill', label: 'Succeeded', Selected
+                                    StaticText, 0x11a0d8a00, {{50.0, 695.3}, {192.3, 20.3}}, label: 'Project done-state check'
+                                    StaticText, 0x11a0dae40, {{50.0, 717.7}, {83.7, 18.0}}, label: 'orbit-macos'
+                                    StaticText, 0x11a0d8000, {{138.7, 717.7}, {77.3, 18.0}}, label: 'Succeeded'
+                                    StaticText, 0x11a0d8640, {{221.0, 717.7}, {77.7, 18.0}}, label: 'in message'
+                                    StaticText, 0x11a0d8780, {{50.0, 737.7}, {327.0, 18.0}}, label: '…before the ledger step, pull the base images…'
+                          Other, 0x11a0d83c0, {{50.0, 676.3}, {370.0, 1.0}}
+                          Cell, 0x11a0d9180, {{0.0, 773.7}, {440.0, 96.3}}
+                            Other, 0x11a0d92c0, {{0.0, 773.7}, {440.0, 96.3}}
+                              Other, 0x11a0d9400, {{0.0, 773.7}, {440.0, 96.3}}
+                            Other, 0x11a0d9540, {{0.0, 773.7}, {440.0, 96.3}}
+                              Other, 0x11a0d9680, {{0.0, 773.7}, {440.0, 96.3}}
+                                Other, 0x11a0d8b40, {{0.0, 773.7}, {440.0, 96.3}}
+                                  Button, 0x11a0d8c80, {{0.0, 773.7}, {440.0, 96.3}}, label: 'Succeeded, Wiki refresh investigation, orbit-macos, Succeeded, in message, …before the ledger step, pull the base images…', Selected
+                                    Image, 0x11a0d8dc0, {{22.7, 794.3}, {15.0, 15.0}}, identifier: 'checkmark.circle.fill', label: 'Succeeded', Selected
+                                    StaticText, 0x11a0d8f00, {{50.0, 791.7}, {191.3, 20.3}}, label: 'Wiki refresh investigation'
+                                    StaticText, 0x11a0d9040, {{50.0, 814.0}, {83.7, 18.0}}, label: 'orbit-macos'
+                                    StaticText, 0x11a0d88c0, {{138.7, 814.0}, {77.3, 18.0}}, label: 'Succeeded'
+                                    StaticText, 0x117b5d540, {{221.0, 814.0}, {77.7, 18.0}}, label: 'in message'
+                                    StaticText, 0x117b5e300, {{50.0, 834.0}, {327.0, 18.0}}, label: '…before the ledger step, pull the base images…'
+                          Other, 0x117b5e1c0, {{50.0, 772.7}, {370.0, 1.0}}
+                          Other, 0x117b5f480, {{50.0, 869.0}, {370.0, 1.0}}
+                          Other, 0x117b5e800, {{407.0, 112.0}, {30.0, 758.0}}, label: 'Vertical scroll bar, 2 pages', value: 100%
+                            Other, 0x117b5f340, {{434.0, 229.3}, {3.0, 637.7}}
+                          Other, 0x117b5df40, {{407.0, 112.0}, {30.0, 758.0}}, label: 'Vertical scroll bar, 2 pages', value: 100%
+                            Other, 0x117b5e940, {{434.0, 229.3}, {3.0, 637.7}}
+                        Button, 0x117b5f5c0, {{20.0, 62.0}, {400.0, 44.0}}, identifier: 'needs-you-bar', label: 'Question from coordinator, 落地会话：每次落地都有自己的会话、实时输出和 owner 门, +1'
+                          Image, 0x117b5da40, {{27.0, 69.0}, {30.0, 30.0}}, identifier: 'questionmark.bubble.fill', label: 'questionmark.bubble.fill'
+                          StaticText, 0x117b5de00, {{67.0, 67.2}, {189.0, 18.0}}, label: 'Question from coordinator'
+                          StaticText, 0x117b5d900, {{361.0, 71.2}, {13.0, 13.3}}, label: '+1'
+                          StaticText, 0x117b5d400, {{388.0, 69.2}, {16.0, 15.7}}, label: '2h'
+                          StaticText, 0x117b5dcc0, {{67.0, 85.2}, {335.0, 15.7}}, label: '落地会话：每次落地都有自己的会话、实时输出和 owner 门'
+                    Other, 0x10662fd40, {{0.0, 0.0}, {440.0, 956.0}}
+                      Other, 0x10662f5c0, {{0.0, 0.0}, {440.0, 956.0}}
+                        Other, 0x10662f980, {{0.0, 0.0}, {440.0, 956.0}}
+                Other, 0x10662fc00, {{0.0, 0.0}, {440.0, 956.0}}
+                  Other, 0x10662fe80, {{0.0, 0.0}, {440.0, 956.0}}
+                    Toolbar, 0x10662fac0, {{0.0, 870.0}, {440.0, 86.0}}, identifier: 'Toolbar', label: 'Toolbar'
+                      Other, 0x11a0dde00, {{28.0, 880.0}, {384.0, 48.0}}
+                        Other, 0x11a0dd400, {{28.0, 880.0}, {384.0, 48.0}}
+                          Other, 0x11a0de800, {{28.0, 880.0}, {0.0, 0.0}}
+                            Other, 0x11a0dc8c0, {{28.0, 880.0}, {324.0, 48.0}}
+                              Other, 0x11a0de440, {{28.0, 880.0}, {324.0, 48.0}}
+                                Other, 0x11a0df480, {{33.0, 885.0}, {314.0, 38.0}}
+                                  SearchField, 0x11a0dea80, {{33.0, 885.0}, {314.0, 38.0}}, label: 'Search sessions', placeholderValue: 'Search sessions', value: ledger
+                                    Image, 0x11a0dda40, {{46.0, 894.3}, {20.3, 18.7}}, identifier: 'magnifyingglass', label: 'Search'
+                                    Button, 0x11a0dfac0, {{312.7, 893.7}, {20.0, 20.0}}, label: 'Clear text'
+                            Other, 0x11a0df980, {{364.0, 880.0}, {48.0, 48.0}}
+                              Other, 0x11a0ded00, {{364.0, 880.0}, {48.0, 48.0}}
+                                Other, 0x11a0dd900, {{369.0, 885.0}, {38.0, 38.0}}
+                                  Other, 0x11a0ddcc0, {{369.0, 885.0}, {38.0, 38.0}}
+                                    Button, 0x11a0de080, {{369.0, 885.0}, {38.0, 38.0}}, label: 'close'
+    Window, 0x11a0df700, {{0.0, 0.0}, {440.0, 956.0}}
+      Other, 0x11a0de580, {{0.0, 0.0}, {440.0, 956.0}}
+        Other, 0x11a0de6c0, {{0.0, 0.0}, {440.0, 956.0}}
+Path to element:
+ →Application, 0x11a24fd40, pid: 30770, label: 'SearchModeProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.searchmodeprobe'
+  Output: {
+    Application, 0x11a0de1c0, pid: 30770, label: 'SearchModeProbe'
+  }

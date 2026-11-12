@@ -1,0 +1,333 @@
+Attributes: Application, 0x11b270140, pid: 30770, label: 'SearchModeProbe'
+Element subtree:
+ →Application, 0x11b270140, pid: 30770, label: 'SearchModeProbe'
+    Window (Main), 0x11b270000, {{0.0, 0.0}, {440.0, 956.0}}
+      Other, 0x11b270280, {{0.0, 0.0}, {440.0, 956.0}}
+        Other, 0x11b273480, {{0.0, 0.0}, {440.0, 956.0}}
+          Other, 0x11b271900, {{0.0, 0.0}, {440.0, 956.0}}
+            Other, 0x11b272800, {{0.0, 0.0}, {440.0, 956.0}}
+              Other, 0x11b272940, {{0.0, 62.0}, {440.0, 860.0}}
+              Other, 0x11b272a80, {{0.0, 62.0}, {440.0, 860.0}}
+              StaticText, 0x11b273200, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x11b273340, {{270.0, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x11b2721c0, {{0.0, 128.0}, {324.0, 828.0}}
+                Other, 0x11b272300, {{0.0, -1528.0}, {324.0, 3614.3}}
+                Cell, 0x11b272440, {{0.0, 128.0}, {324.0, 44.3}}
+                  Other, 0x11b270c80, {{0.0, 128.0}, {324.0, 44.3}}
+                    Other, 0x11b2726c0, {{0.0, 128.0}, {324.0, 44.3}}
+                      Other, 0x11b271b80, {{0.0, 128.0}, {324.0, 44.3}}
+                  Other, 0x11b271cc0, {{0.0, 128.0}, {324.0, 44.3}}
+                    Other, 0x11b271e00, {{0.0, 128.0}, {324.0, 44.3}}
+                      Other, 0x11b272bc0, {{0.0, 128.0}, {324.0, 44.3}}
+                        Button, 0x11b272080, {{0.0, 128.0}, {324.0, 44.3}}, label: 'Projects'
+                          Image, 0x11b271540, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x11b271680, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x11b2717c0, {{0.0, 172.3}, {324.0, 44.3}}
+                  Other, 0x11b272580, {{0.0, 172.3}, {324.0, 44.3}}
+                    Other, 0x11b271a40, {{0.0, 172.3}, {324.0, 44.3}}
+                      Other, 0x11b270dc0, {{0.0, 172.3}, {324.0, 44.3}}
+                  Other, 0x11b270f00, {{0.0, 172.3}, {324.0, 44.3}}
+                    Other, 0x11b271040, {{0.0, 172.3}, {324.0, 44.3}}
+                      Other, 0x11b271f40, {{0.0, 172.3}, {324.0, 44.3}}
+                        Button, 0x11b271400, {{0.0, 172.3}, {324.0, 44.3}}, label: 'Tasks'
+                          Image, 0x11b2712c0, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x11a130b40, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x11a133980, {{0.0, 216.7}, {324.0, 44.3}}
+                  Other, 0x11a132bc0, {{0.0, 216.7}, {324.0, 44.3}}
+                    Other, 0x11a131a40, {{0.0, 216.7}, {324.0, 44.3}}
+                      Other, 0x11a1308c0, {{0.0, 216.7}, {324.0, 44.3}}
+                  Other, 0x11a130c80, {{0.0, 216.7}, {324.0, 44.3}}
+                    Other, 0x11a133e80, {{0.0, 216.7}, {324.0, 44.3}}
+                      Other, 0x11a132f80, {{0.0, 216.7}, {324.0, 44.3}}
+                        Button, 0x11a1335c0, {{0.0, 216.7}, {324.0, 44.3}}, label: 'Wiki'
+                          Image, 0x11a133700, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x11a131e00, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x11a1312c0, {{0.0, 261.0}, {324.0, 44.7}}
+                  Other, 0x11a131180, {{0.0, 261.0}, {324.0, 44.7}}
+                    Other, 0x11a130780, {{0.0, 261.0}, {324.0, 44.7}}
+                      Other, 0x11a133d40, {{0.0, 261.0}, {324.0, 44.7}}
+                  Other, 0x11a131040, {{0.0, 261.0}, {324.0, 44.7}}
+                    Other, 0x11a130f00, {{0.0, 261.0}, {324.0, 44.7}}
+                      Other, 0x11a0e2580, {{0.0, 261.0}, {324.0, 44.7}}
+                        StaticText, 0x11a0e1e00, {{0.0, 261.0}, {324.0, 44.7}}, label: 'Workspaces'
+                Cell, 0x11a0e1cc0, {{0.0, 305.7}, {324.0, 44.3}}
+                  Other, 0x11a0e2800, {{0.0, 305.7}, {324.0, 44.3}}
+                    Other, 0x11a0e1540, {{0.0, 305.7}, {324.0, 44.3}}
+                      Other, 0x11a0e1680, {{0.0, 305.7}, {324.0, 44.3}}
+                  Other, 0x11a0e2d00, {{0.0, 305.7}, {324.0, 44.3}}
+                    Other, 0x11a0e1f40, {{0.0, 305.7}, {324.0, 44.3}}
+                      Other, 0x11a0e12c0, {{0.0, 305.7}, {324.0, 44.3}}
+                        Button, 0x11a0e21c0, {{0.0, 305.7}, {324.0, 44.3}}, label: 'orbit-macos,  · wikova, 2 waiting for you'
+                          Other, 0x11a0e1a40, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x11a0e17c0, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x11a0e2080, {{58.0, 317.7}, {93.0, 20.3}}, label: 'orbit-macos'
+                          StaticText, 0x11a0e26c0, {{151.0, 317.7}, {65.0, 20.3}}, label: ' · wikova'
+                          StaticText, 0x11a0e2bc0, {{280.7, 319.3}, {21.3, 17.3}}, label: '2 waiting for you'
+                Cell, 0x11a0e3e80, {{0.0, 350.0}, {324.0, 36.0}}
+                  Other, 0x11b25b840, {{0.0, 350.0}, {324.0, 36.0}}
+                    Other, 0x11b25bac0, {{0.0, 350.0}, {324.0, 36.0}}
+                      Other, 0x11b25bc00, {{0.0, 350.0}, {324.0, 36.0}}
+                  Other, 0x11b25b480, {{0.0, 350.0}, {324.0, 36.0}}
+                    Other, 0x11b25b5c0, {{0.0, 350.0}, {324.0, 36.0}}
+                      Other, 0x11b25b700, {{0.0, 350.0}, {324.0, 36.0}}
+                        StaticText, 0x11b25b340, {{22.0, 364.0}, {59.0, 18.0}}, label: 'Projects'
+                        StaticText, 0x11b25be80, {{89.0, 366.3}, {5.3, 13.3}}, label: '1'
+                Cell, 0x11b25b200, {{0.0, 386.0}, {324.0, 44.3}}
+                  Other, 0x11b25b980, {{0.0, 386.0}, {324.0, 44.3}}
+                    Other, 0x11b25bd40, {{0.0, 386.0}, {324.0, 44.3}}
+                      Other, 0x11b265f40, {{0.0, 386.0}, {324.0, 44.3}}
+                  Other, 0x11b266080, {{0.0, 386.0}, {324.0, 44.3}}
+                    Other, 0x11b265a40, {{0.0, 386.0}, {324.0, 44.3}}
+                      Other, 0x11b2643c0, {{0.0, 386.0}, {324.0, 44.3}}
+                        Button, 0x11b264500, {{0.0, 386.0}, {324.0, 44.3}}, label: '落地会话：每次落地都有自己的会话、实时输出和 owner 门'
+                Other, 0x11b264640, {{291.0, 128.0}, {30.0, 828.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11b264000, {{318.0, 562.7}, {3.0, 390.3}}
+                Other, 0x11b264a00, {{291.0, 128.0}, {30.0, 828.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11b264b40, {{318.0, 562.7}, {3.0, 390.3}}
+              Button, 0x11b264c80, {{10.0, 870.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x11b264140, {{31.0, 883.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x11b264280, {{57.0, 881.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x11b265040, {{270.0, 870.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x11b265180, {{0.0, 0.0}, {440.0, 956.0}}
+                NavigationBar, 0x11b2652c0, {{0.0, 62.0}, {440.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Other, 0x11b264780, {{24.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                    Other, 0x11b2648c0, {{24.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x11b265680, {{26.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                  Other, 0x11b2657c0, {{80.0, 73.7}, {97.7, 20.7}}, label: 'Workspace: orbit-macos'
+                    Other, 0x11b265900, {{80.0, 73.7}, {97.7, 20.7}}
+                      StaticText, 0x11b264dc0, {{80.0, 74.0}, {97.7, 20.3}}, label: 'Workspace: orbit-macos'
+                  Other, 0x11b264f00, {{317.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                    Other, 0x11b265b80, {{317.7, 66.0}, {41.7, 36.0}}
+                      Button, 0x11b265cc0, {{317.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                        Button, 0x11b265e00, {{317.7, 66.0}, {41.7, 36.0}}
+                          Image, 0x11b265400, {{327.3, 77.7}, {22.0, 13.0}}, identifier: 'line.3.horizontal.decrease', label: 'Filter'
+                  Button, 0x11b265540, {{375.3, 66.0}, {40.7, 36.0}}, label: 'Start a new session with orbit-macos'
+                Other, 0x11b260b40, {{0.0, 0.0}, {440.0, 956.0}}
+                  Other, 0x11b260c80, {{0.0, 0.0}, {440.0, 956.0}}
+                    Other, 0x11b260dc0, {{0.0, 0.0}, {440.0, 956.0}}
+                      Other, 0x11b260f00, {{0.0, 0.0}, {440.0, 956.0}}
+                        Other, 0x11b261900, {{0.0, 166.0}, {440.0, 704.0}}
+                        CollectionView, 0x11b261a40, {{0.0, 0.0}, {440.0, 956.0}}
+                          Other, 0x11b2630c0, {{0.0, -1940.7}, {440.0, 2966.7}}
+                          Cell, 0x11b263ac0, {{0.0, -28.7}, {440.0, 75.3}}
+                            Other, 0x11b263340, {{0.0, -28.7}, {440.0, 75.3}}
+                              Other, 0x11b263200, {{0.0, -28.7}, {440.0, 75.3}}
+                            Other, 0x11b263980, {{0.0, -28.7}, {440.0, 75.3}}
+                              Other, 0x11b263e80, {{0.0, -28.7}, {440.0, 75.3}}
+                                Other, 0x11b2635c0, {{0.0, -28.7}, {440.0, 75.3}}
+                                  Other, 0x11b263700, {{0.0, -24.3}, {150.0, 66.7}}
+                                  Other, 0x11b263840, {{220.0, -24.3}, {220.0, 66.7}}
+                                  Button, 0x11b263480, {{0.0, -28.7}, {440.0, 75.3}}, label: '整理 release notes, 12m ago, 导出好了，在 docs/release-notes.md。要我顺便生成一份英文版吗？英文版会按同样的顺序，条目一一对应。', value: Waiting for your r...
+                                    StaticText, 0x11b263c00, {{20.0, -11.7}, {140.0, 20.3}}, label: '整理 release notes'
+                                    StaticText, 0x11b263d40, {{375.7, -8.2}, {44.3, 13.3}}, label: '12m ago'
+                                    StaticText, 0x11b262f80, {{20.0, 11.7}, {385.7, 18.0}}, label: '导出好了，在 docs/release-notes.md。要我顺便生成一份英文版吗？英文版会按同样的顺序，条目一一对应。'
+                          Other, 0x11b262e40, {{0.0, 0.0}, {440.0, 956.0}}
+                            Other, 0x11b260500, {{0.0, 0.0}, {440.0, 170.8}}
+                            Other, 0x11b262800, {{0.0, 815.2}, {440.0, 140.8}}
+                          Other, 0x11b260000, {{0.0, 0.0}, {440.0, 956.0}}
+                            Other, 0x11b260140, {{0.0, 0.0}, {440.0, 170.8}}
+                              Image, 0x11b260280, {{-120.0, -166.0}, {680.0, 332.0}}, identifier: 'AdditionalDimmingOverlay'
+                              Other, 0x11b262d00, {{0.0, 0.0}, {440.0, 106.0}}
+                              Other, 0x11b2617c0, {{0.0, 0.0}, {440.0, 170.8}}
+                                Other, 0x11b2603c0, {{0.0, 0.0}, {440.0, 170.8}}
+                              Other, 0x11b261680, {{0.0, 0.0}, {440.0, 170.8}}
+                                Other, 0x11b260780, {{0.0, 0.0}, {440.0, 170.8}}
+                              Other, 0x11b261040, {{0.0, 0.0}, {440.0, 170.8}}
+                                Other, 0x11b261180, {{0.0, 0.0}, {440.0, 170.8}}
+                                Other, 0x11b261e00, {{0.0, 0.0}, {440.0, 170.8}}
+                            Other, 0x11b262940, {{0.0, 815.2}, {440.0, 140.8}}
+                              Image, 0x11b262a80, {{-120.0, 820.0}, {680.0, 272.0}}, identifier: 'AdditionalDimmingOverlay'
+                              Other, 0x11b262300, {{0.0, 815.2}, {440.0, 140.8}}
+                                Other, 0x11b2612c0, {{0.0, 815.2}, {440.0, 140.8}}
+                              Other, 0x11b262440, {{0.0, 815.2}, {440.0, 140.8}}
+                                Other, 0x11b262580, {{0.0, 815.2}, {440.0, 140.8}}
+                                Other, 0x11b2626c0, {{0.0, 815.2}, {440.0, 140.8}}
+                          Cell, 0x11b261cc0, {{0.0, 46.7}, {440.0, 75.3}}
+                            Other, 0x11b260640, {{0.0, 46.7}, {440.0, 75.3}}
+                              Other, 0x11b261f40, {{0.0, 46.7}, {440.0, 75.3}}
+                            Other, 0x11b262080, {{0.0, 46.7}, {440.0, 75.3}}
+                              Other, 0x11b2621c0, {{0.0, 46.7}, {440.0, 75.3}}
+                                Other, 0x11b261400, {{0.0, 46.7}, {440.0, 75.3}}
+                                  Other, 0x11b261b80, {{0.0, 51.0}, {80.0, 66.7}}
+                                  Other, 0x11a22be80, {{360.0, 51.0}, {80.0, 66.7}}
+                                  Button, 0x11a22ae40, {{0.0, 46.7}, {440.0, 75.3}}, label: '落地会话：每次落地都有自己的会话、实时输出和 owner 门, 15m ago, 1/3, Question from coordinator', value: Waiting for you
+                                    StaticText, 0x11a22a6c0, {{20.0, 63.7}, {303.3, 20.3}}, label: '落地会话：每次落地都有自己的会话、实时输出和 owner 门'
+                                    StaticText, 0x11a228f00, {{375.7, 67.2}, {44.3, 13.3}}, label: '15m ago'
+                                    Other, 0x11a22a440, {{26.0, 94.0}, {26.0, 4.0}}
+                                    StaticText, 0x11a229540, {{56.0, 89.3}, {18.3, 13.3}}, label: '1/3'
+                                    StaticText, 0x11a22b480, {{87.3, 87.0}, {180.3, 18.0}}, label: 'Question from coordinator'
+                          Cell, 0x11a229e00, {{0.0, 122.0}, {440.0, 75.3}}
+                            Other, 0x11a229f40, {{0.0, 122.0}, {440.0, 75.3}}
+                              Other, 0x11a22a080, {{0.0, 122.0}, {440.0, 75.3}}
+                            Other, 0x11a229a40, {{0.0, 122.0}, {440.0, 75.3}}
+                              Other, 0x11a229900, {{0.0, 122.0}, {440.0, 75.3}}
+                                Other, 0x11a22b340, {{0.0, 122.0}, {440.0, 75.3}}
+                                  Other, 0x11a2292c0, {{0.0, 126.3}, {150.0, 66.7}}
+                                  Other, 0x11a229400, {{220.0, 126.3}, {220.0, 66.7}}
+                                  Button, 0x11a228640, {{0.0, 122.0}, {440.0, 75.3}}, label: 'Rebuild the wiki articles report, 22m ago, Waiting for approval', value: Waiting for approval
+                                    StaticText, 0x11a22a300, {{20.0, 139.0}, {230.0, 20.3}}, label: 'Rebuild the wiki articles report'
+                                    StaticText, 0x11a2297c0, {{374.3, 142.5}, {45.7, 13.3}}, label: '22m ago'
+                                    StaticText, 0x11a228000, {{20.0, 162.3}, {137.0, 18.0}}, label: 'Waiting for approval'
+                          Cell, 0x11a229680, {{0.0, 197.3}, {440.0, 75.3}}
+                            Other, 0x11a22a580, {{0.0, 197.3}, {440.0, 75.3}}
+                              Other, 0x11a229cc0, {{0.0, 197.3}, {440.0, 75.3}}
+                            Other, 0x11a229180, {{0.0, 197.3}, {440.0, 75.3}}
+                              Other, 0x11a22ad00, {{0.0, 197.3}, {440.0, 75.3}}
+                                Other, 0x11a22a1c0, {{0.0, 197.3}, {440.0, 75.3}}
+                                  Other, 0x11a2283c0, {{0.0, 201.7}, {150.0, 66.7}}
+                                  Other, 0x11a229040, {{220.0, 201.7}, {220.0, 66.7}}
+                                  Button, 0x11a22aa80, {{0.0, 197.3}, {440.0, 75.3}}, label: 'Deploy main for the sandbox, 2h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a22b200, {{20.0, 214.3}, {217.3, 20.3}}, label: 'Deploy main for the sandbox'
+                                    StaticText, 0x11a228140, {{384.0, 217.8}, {36.0, 13.3}}, label: '2h ago'
+                                    StaticText, 0x11a228280, {{20.0, 237.7}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x11a228500, {{0.0, 272.7}, {440.0, 75.3}}
+                            Other, 0x11a22abc0, {{0.0, 272.7}, {440.0, 75.3}}
+                              Other, 0x11a229b80, {{0.0, 272.7}, {440.0, 75.3}}
+                            Other, 0x11a22a800, {{0.0, 272.7}, {440.0, 75.3}}
+                              Other, 0x11a22a940, {{0.0, 272.7}, {440.0, 75.3}}
+                                Other, 0x11a22bc00, {{0.0, 272.7}, {440.0, 75.3}}
+                                  Other, 0x11a22bd40, {{0.0, 277.0}, {150.0, 66.7}}
+                                  Other, 0x11a22b840, {{220.0, 277.0}, {220.0, 66.7}}
+                                  Button, 0x11a22b980, {{0.0, 272.7}, {440.0, 75.3}}, label: 'Wiki page creation flow, 3h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a258f00, {{20.0, 289.7}, {177.0, 20.3}}, label: 'Wiki page creation flow'
+                                    StaticText, 0x11a258c80, {{383.7, 293.2}, {36.3, 13.3}}, label: '3h ago'
+                                    StaticText, 0x11a259cc0, {{20.0, 313.0}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x11a259680, {{0.0, 348.0}, {440.0, 75.3}}
+                            Other, 0x11a25be80, {{0.0, 348.0}, {440.0, 75.3}}
+                              Other, 0x11a258780, {{0.0, 348.0}, {440.0, 75.3}}
+                            Other, 0x11a25b480, {{0.0, 348.0}, {440.0, 75.3}}
+                              Other, 0x11a259e00, {{0.0, 348.0}, {440.0, 75.3}}
+                                Other, 0x11a2588c0, {{0.0, 348.0}, {440.0, 75.3}}
+                                  Other, 0x11a2592c0, {{0.0, 352.3}, {150.0, 66.7}}
+                                  Other, 0x11a259040, {{220.0, 352.3}, {220.0, 66.7}}
+                                  Button, 0x11a259540, {{0.0, 348.0}, {440.0, 75.3}}, label: 'Session close state check, 4h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a258b40, {{20.0, 365.0}, {196.7, 20.3}}, label: 'Session close state check'
+                                    StaticText, 0x11a259a40, {{383.7, 368.5}, {36.3, 13.3}}, label: '4h ago'
+                                    StaticText, 0x11a258280, {{20.0, 388.3}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x11a259f40, {{0.0, 423.3}, {440.0, 75.3}}
+                            Other, 0x11a258640, {{0.0, 423.3}, {440.0, 75.3}}
+                              Other, 0x11a259400, {{0.0, 423.3}, {440.0, 75.3}}
+                            Other, 0x11a25a440, {{0.0, 423.3}, {440.0, 75.3}}
+                              Other, 0x11a25a300, {{0.0, 423.3}, {440.0, 75.3}}
+                                Other, 0x11a2583c0, {{0.0, 423.3}, {440.0, 75.3}}
+                                  Other, 0x11a258500, {{0.0, 427.7}, {150.0, 66.7}}
+                                  Other, 0x11a25a940, {{220.0, 427.7}, {220.0, 66.7}}
+                                  Button, 0x11a259b80, {{0.0, 423.3}, {440.0, 75.3}}, label: 'WireGuard LAN feasibility, 5h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a2597c0, {{20.0, 440.3}, {194.3, 20.3}}, label: 'WireGuard LAN feasibility'
+                                    StaticText, 0x11a25a080, {{383.7, 443.8}, {36.3, 13.3}}, label: '5h ago'
+                                    StaticText, 0x11a258140, {{20.0, 463.7}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x11a25bd40, {{0.0, 498.7}, {440.0, 75.3}}
+                            Other, 0x11a25a800, {{0.0, 498.7}, {440.0, 75.3}}
+                              Other, 0x11a25a1c0, {{0.0, 498.7}, {440.0, 75.3}}
+                            Other, 0x11a240280, {{0.0, 498.7}, {440.0, 75.3}}
+                              Other, 0x11a240dc0, {{0.0, 498.7}, {440.0, 75.3}}
+                                Other, 0x11a2430c0, {{0.0, 498.7}, {440.0, 75.3}}
+                                  Other, 0x11a240000, {{0.0, 503.0}, {150.0, 66.7}}
+                                  Other, 0x11a240f00, {{220.0, 503.0}, {220.0, 66.7}}
+                                  Button, 0x11a2408c0, {{0.0, 498.7}, {440.0, 75.3}}, label: 'Project done-state check, 6h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a243340, {{20.0, 515.7}, {192.3, 20.3}}, label: 'Project done-state check'
+                                    StaticText, 0x11a2435c0, {{383.7, 519.2}, {36.3, 13.3}}, label: '6h ago'
+                                    StaticText, 0x11a241e00, {{20.0, 539.0}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x11a2426c0, {{0.0, 574.0}, {440.0, 75.3}}
+                            Other, 0x11a242580, {{0.0, 574.0}, {440.0, 75.3}}
+                              Other, 0x11a240a00, {{0.0, 574.0}, {440.0, 75.3}}
+                            Other, 0x11a240b40, {{0.0, 574.0}, {440.0, 75.3}}
+                              Other, 0x11a242300, {{0.0, 574.0}, {440.0, 75.3}}
+                                Other, 0x11a242940, {{0.0, 574.0}, {440.0, 75.3}}
+                                  Other, 0x11a243980, {{0.0, 578.3}, {150.0, 66.7}}
+                                  Other, 0x11a243200, {{220.0, 578.3}, {220.0, 66.7}}
+                                  Button, 0x11a243480, {{0.0, 574.0}, {440.0, 75.3}}, label: 'Wiki refresh investigation, 7h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a242800, {{20.0, 591.0}, {191.3, 20.3}}, label: 'Wiki refresh investigation'
+                                    StaticText, 0x11a242440, {{384.3, 594.5}, {35.7, 13.3}}, label: '7h ago'
+                                    StaticText, 0x11a241b80, {{20.0, 614.3}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x11a241a40, {{0.0, 649.3}, {440.0, 75.3}}
+                            Other, 0x11a241180, {{0.0, 649.3}, {440.0, 75.3}}
+                              Other, 0x11a242080, {{0.0, 649.3}, {440.0, 75.3}}
+                            Other, 0x11a240140, {{0.0, 649.3}, {440.0, 75.3}}
+                              Other, 0x11a240780, {{0.0, 649.3}, {440.0, 75.3}}
+                                Other, 0x11a240c80, {{0.0, 649.3}, {440.0, 75.3}}
+                                  Other, 0x11a240640, {{0.0, 653.7}, {150.0, 66.7}}
+                                  Other, 0x11a2403c0, {{220.0, 653.7}, {220.0, 66.7}}
+                                  Button, 0x11a240500, {{0.0, 649.3}, {440.0, 75.3}}, label: 'Verify wiki auto-update, 8h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a243700, {{20.0, 666.3}, {176.3, 20.3}}, label: 'Verify wiki auto-update'
+                                    StaticText, 0x11a242f80, {{383.7, 669.8}, {36.3, 13.3}}, label: '8h ago'
+                                    StaticText, 0x11a2421c0, {{20.0, 689.7}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x11a2417c0, {{0.0, 724.7}, {440.0, 75.3}}
+                            Other, 0x11a241cc0, {{0.0, 724.7}, {440.0, 75.3}}
+                              Other, 0x11a242a80, {{0.0, 724.7}, {440.0, 75.3}}
+                            Other, 0x11a241f40, {{0.0, 724.7}, {440.0, 75.3}}
+                              Other, 0x11a243d40, {{0.0, 724.7}, {440.0, 75.3}}
+                                Other, 0x11a243e80, {{0.0, 724.7}, {440.0, 75.3}}
+                                  Other, 0x11a243ac0, {{0.0, 729.0}, {150.0, 66.7}}
+                                  Other, 0x11a242e40, {{220.0, 729.0}, {220.0, 66.7}}
+                                  Button, 0x11a242d00, {{0.0, 724.7}, {440.0, 75.3}}, label: 'Card display rules, 9h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a242bc0, {{20.0, 741.7}, {136.0, 20.3}}, label: 'Card display rules'
+                                    StaticText, 0x11a0dcdc0, {{383.7, 745.2}, {36.3, 13.3}}, label: '9h ago'
+                                    StaticText, 0x11a0df480, {{20.0, 765.0}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x11a0de300, {{0.0, 800.0}, {440.0, 75.3}}
+                            Other, 0x11a0de1c0, {{0.0, 800.0}, {440.0, 75.3}}
+                              Other, 0x11a0dfc00, {{0.0, 800.0}, {440.0, 75.3}}
+                            Other, 0x11a0ddb80, {{0.0, 800.0}, {440.0, 75.3}}
+                              Other, 0x11a0dea80, {{0.0, 800.0}, {440.0, 75.3}}
+                                Other, 0x11a0dfac0, {{0.0, 800.0}, {440.0, 75.3}}
+                                  Other, 0x11a0dda40, {{0.0, 804.3}, {150.0, 66.7}}
+                                  Other, 0x11a0dee40, {{220.0, 804.3}, {220.0, 66.7}}
+                                  Button, 0x11a0debc0, {{0.0, 800.0}, {440.0, 75.3}}, label: 'Runner max-concurrency default, 10h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a0dca00, {{20.0, 817.0}, {250.7, 20.3}}, label: 'Runner max-concurrency default'
+                                    StaticText, 0x11a0df840, {{378.7, 820.5}, {41.3, 13.3}}, label: '10h ago'
+                                    StaticText, 0x11a0ddf40, {{20.0, 840.3}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x11a0dcf00, {{0.0, 875.3}, {440.0, 75.3}}
+                            Other, 0x11a0ded00, {{0.0, 875.3}, {440.0, 75.3}}
+                              Other, 0x11a0dd900, {{0.0, 875.3}, {440.0, 75.3}}
+                            Other, 0x11a0de440, {{0.0, 875.3}, {440.0, 75.3}}
+                              Other, 0x11a0ddcc0, {{0.0, 875.3}, {440.0, 75.3}}
+                                Other, 0x11a0de080, {{0.0, 875.3}, {440.0, 75.3}}
+                                  Other, 0x11a0dc8c0, {{0.0, 879.7}, {150.0, 66.7}}
+                                  Other, 0x11a0df980, {{220.0, 879.7}, {220.0, 66.7}}
+                                  Button, 0x11a0de800, {{0.0, 875.3}, {440.0, 75.3}}, label: 'Compose upgrade dry run, 11h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x11a0dde00, {{20.0, 892.3}, {199.7, 20.3}}, label: 'Compose upgrade dry run'
+                                    StaticText, 0x117ae2940, {{380.3, 895.8}, {39.7, 13.3}}, label: '11h ago'
+                                    StaticText, 0x117958780, {{20.0, 915.7}, {77.3, 18.0}}, label: 'Succeeded'
+                          Cell, 0x117958640, {{0.0, 950.7}, {440.0, 75.3}}
+                            Other, 0x1179588c0, {{0.0, 950.7}, {440.0, 75.3}}
+                              Other, 0x117958a00, {{0.0, 950.7}, {440.0, 75.3}}
+                            Other, 0x1179583c0, {{0.0, 950.7}, {440.0, 75.3}}
+                              Other, 0x117958500, {{0.0, 950.7}, {440.0, 75.3}}
+                                Other, 0x117958280, {{0.0, 950.7}, {440.0, 75.3}}
+                                  Other, 0x117958140, {{0.0, 955.0}, {150.0, 66.7}}
+                                  Other, 0x117958000, {{220.0, 955.0}, {220.0, 66.7}}
+                                  Button, 0x117d1f840, {{0.0, 950.7}, {440.0, 75.3}}, label: 'Release 0.1.248, 12h ago, Succeeded', value: Succeeded
+                                    StaticText, 0x117d1ca00, {{20.0, 967.7}, {119.7, 20.3}}, label: 'Release 0.1.248'
+                                    StaticText, 0x117d1e1c0, {{378.7, 971.2}, {41.3, 13.3}}, label: '12h ago'
+                                    StaticText, 0x117d1fac0, {{20.0, 991.0}, {77.3, 18.0}}, label: 'Succeeded'
+                          Other, 0x117d1f480, {{407.0, 166.0}, {30.0, 704.0}}, label: 'Vertical scroll bar, 3 pages', value: 16%
+                            Other, 0x117d1cf00, {{434.0, 232.7}, {3.0, 312.0}}
+                          Other, 0x117d1e940, {{407.0, 166.0}, {30.0, 704.0}}, label: 'Vertical scroll bar, 3 pages', value: 16%
+                            Other, 0x117d1f980, {{434.0, 232.7}, {3.0, 312.0}}
+                        Button, 0x117d1fc00, {{20.0, 116.0}, {400.0, 44.0}}, identifier: 'needs-you-bar', label: 'Question from coordinator, 落地会话：每次落地都有自己的会话、实时输出和 owner 门, +1'
+                          Image, 0x117d1df40, {{27.0, 123.0}, {30.0, 30.0}}, identifier: 'questionmark.bubble.fill', label: 'questionmark.bubble.fill'
+                          StaticText, 0x117d1ee40, {{67.0, 121.2}, {189.0, 18.0}}, label: 'Question from coordinator'
+                          StaticText, 0x117d1e300, {{361.0, 125.2}, {13.0, 13.3}}, label: '+1'
+                          StaticText, 0x117d1fe80, {{388.0, 123.2}, {16.0, 15.7}}, label: '2h'
+                          StaticText, 0x117d1f0c0, {{67.0, 139.2}, {335.0, 15.7}}, label: '落地会话：每次落地都有自己的会话、实时输出和 owner 门'
+                Other, 0x117d1ef80, {{0.0, 0.0}, {440.0, 956.0}}
+                  Other, 0x117d1e580, {{0.0, 0.0}, {440.0, 956.0}}
+                    Other, 0x117d1e080, {{0.0, 870.0}, {440.0, 86.0}}
+                      Other, 0x117d1f200, {{28.0, 880.0}, {384.0, 48.0}}
+                        Other, 0x117d1fd40, {{28.0, 880.0}, {384.0, 48.0}}
+                          Other, 0x117d1c780, {{28.0, 880.0}, {0.0, 0.0}}
+                            Other, 0x117d1f340, {{28.0, 880.0}, {384.0, 48.0}}
+                              Other, 0x117d1ed00, {{28.0, 880.0}, {384.0, 48.0}}
+                                Other, 0x117d1cb40, {{33.0, 885.0}, {374.0, 38.0}}
+                                  SearchField, 0x117d1ea80, {{33.0, 885.0}, {374.0, 38.0}}, label: 'Search sessions', placeholderValue: 'Search sessions'
+                                    Image, 0x117d1c8c0, {{46.0, 894.3}, {20.3, 18.7}}, identifier: 'magnifyingglass', label: 'Search'
+    Window, 0x117d1f700, {{0.0, 0.0}, {440.0, 956.0}}
+      Other, 0x117d1ebc0, {{0.0, 0.0}, {440.0, 956.0}}
+        Other, 0x117d1f5c0, {{0.0, 0.0}, {440.0, 956.0}}
+Path to element:
+ →Application, 0x11b270140, pid: 30770, label: 'SearchModeProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.searchmodeprobe'
+  Output: {
+    Application, 0x117d1c500, pid: 30770, label: 'SearchModeProbe'
+  }

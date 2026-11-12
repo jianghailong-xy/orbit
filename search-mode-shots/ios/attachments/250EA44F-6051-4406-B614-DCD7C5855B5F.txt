@@ -1,0 +1,12 @@
+tap-a-opened: keyboard=true field.exists=true frame=(16.999999999999986, 556.0, 346.0, 38.0) value=`Search sessions`
+  button `Emoji` id=`` frame=(2.4525937651487624, 887.6989567998571, 80.1346396795296, 68.73516393505099)
+  button `Dictate` id=`dictation` frame=(357.41276655532164, 887.3656234665237, 80.13463967952958, 68.7351639350511)
+  button `New session` id=`` frame=(10.0, 559.6666666666666, 165.0, 43.0)
+  button `Settings` id=`gearshape` frame=(270.0, 559.0, 44.0, 44.0)
+  button `shift` id=`shift` frame=(4.666666666666657, 774.0, 56.0, 56.0)
+  button `search` id=`Search` frame=(329.33333333333326, 830.0, 108.33333333333331, 56.0)
+  button `close` id=`` frame=(385.0, 556.0, 38.0, 38.0)
+tap-b-after-tap: keyboard=false field.exists=true frame=(33.00000000000001, 885.0, 314.0, 38.0) value=`Search sessions`
+  button `New session` id=`` frame=(10.0, 870.6666666666666, 165.0, 43.0)
+  button `Settings` id=`gearshape` frame=(270.0, 870.0, 44.0, 44.0)
+  button `close` id=`` frame=(369.0, 885.0, 38.0, 38.0)
