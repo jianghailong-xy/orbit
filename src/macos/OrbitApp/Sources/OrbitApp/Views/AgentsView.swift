@@ -277,10 +277,9 @@ struct AgentContentColumn: View {
                            fromBottom: SessionListPresentation.resolve(
                                isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom,
                            isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection)
-        // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
-        // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
-        // rather than on the old workspace's search results.
-        .onChange(of: app.selectedAgentID) { _, _ in searchQuery = "" }
+        // The query outlives `AgentPanes`' rebuild on a workspace switch (`.id(a.id)`), and a switch
+        // keeps it: search mode ends only at the field's close button, and the hits span every
+        // workspace anyway.
         #endif
     }
 
@@ -523,6 +522,7 @@ struct AgentPanes: View {
         // The phone's search field, in the bottom toolbar, gets out of the way while the list is read
         // downward (see the column's `sessionListSearch`).
         .revealsBottomSearchOnScroll(query: searchQuery, enabled: listPresentation.searchesFromBottom)
+        .keepsEmptySearchOnScroll(query: searchQuery)
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
