@@ -9856,14 +9856,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // SR55: an edit may not move a forked task where its next run could only be refused — into a
     // project with a code binding, or onto a workspace on another machine than its snapshot's. Asked of
     // what the edit changes only, before the transaction, like every refusal on this path.
+    // `before` is the full row (loadDetail reads every column), so an ordinary task pays no query here.
     if ((dto.assigneeId || dto.projectId) && (dto.assigneeId !== before.assigneeId || dto.projectId !== before.projectId)) {
-      const fork = await this.prisma.task.findUnique({
-        where: { id: before.id },
-        select: { forkRunnerId: true, forkSessionId: true },
-      });
-      if (fork?.forkRunnerId && fork.forkSessionId) {
+      if (before.forkRunnerId && before.forkSessionId) {
         await assertForkPlacement(this.prisma, ownerId,
-          { forkRunnerId: fork.forkRunnerId, forkSessionId: fork.forkSessionId },
+          { forkRunnerId: before.forkRunnerId, forkSessionId: before.forkSessionId },
           {
             assigneeId: dto.assigneeId && dto.assigneeId !== before.assigneeId ? dto.assigneeId : null,
             projectId: dto.projectId && dto.projectId !== before.projectId ? dto.projectId : null,
