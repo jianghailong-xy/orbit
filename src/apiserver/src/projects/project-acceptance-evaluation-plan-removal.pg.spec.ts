@@ -169,11 +169,12 @@ test('T6: the criterion evaluation-plan lane is removed, and the contract-level 
     });
 
   // ═══ 2. the whole table, exactly ═══════════════════════════════════════════════════════════════
-  await t.test('the criterion definition is exactly twelve columns, in ordinal order', async () => {
+  await t.test('the criterion definition is exactly thirteen columns, in ordinal order', async () => {
     const columns = await criterionColumns();
     // Exact and ordered rather than a subset: the point of a census is that nobody adds or removes
-    // a column without saying so here. 0233 left fourteen; this removal leaves twelve.
-    assert.equal(columns.length, 12);
+    // a column without saying so here. 0233 left fourteen; this removal leaves twelve, and 0545's
+    // `satisfied_by` (see TABLE_SHAPE) makes thirteen.
+    assert.equal(columns.length, 13);
     assert.deepEqual(columns, [...TABLE_SHAPE]);
   });
 
