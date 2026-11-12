@@ -15359,6 +15359,203 @@ button.chat-jump-start:hover {
   flex: 1;
 }
 
+/* The task page led by the run (docs/mocks/task-detail-agent-first): Now, Evidence, the folded
+   brief, the plan in a sentence, the envelope as one line, and one Activity timeline. */
+.tdp-compose-target.orbit-segmented {
+  flex: none;
+  align-self: center;
+  font-size: 12px;
+}
+.tdp-link-button {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tdp-link-button:hover {
+  color: var(--brand-strong);
+}
+.tdp-acceptance-head .tdp-link-button {
+  margin-left: auto;
+}
+.tdp-now {
+  border: 1px solid var(--brand-border);
+  background: var(--brand-tint);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.tdp-now-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tdp-now-who {
+  min-width: 0;
+}
+.tdp-now-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.tdp-now-sub,
+.tdp-now-when {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.tdp-now-progress {
+  margin-top: 10px;
+}
+.tdp-now-step {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+}
+.tdp-now-step span {
+  color: var(--text-2);
+}
+.tdp-now-bar {
+  height: 6px;
+  margin: 6px 0;
+  border-radius: 3px;
+  background: var(--brand-tint-hover);
+  overflow: hidden;
+}
+.tdp-now-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brand);
+}
+.tdp-now-message {
+  font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg-raised);
+  border: 1px dashed var(--brand-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin: 6px 0 4px;
+  overflow-wrap: anywhere;
+}
+.tdp-evidence {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.tdp-evidence.tone-green {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.tdp-evidence.tone-amber {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.tdp-evidence-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.tdp-evidence-claim {
+  margin: 8px 0 4px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tdp-evidence-checks {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.tdp-evidence-checks li {
+  display: flex;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+.tdp-evidence-mark {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  color: var(--success);
+  font-weight: 700;
+}
+.tdp-evidence-mark.is-failed {
+  color: var(--error);
+}
+.tdp-evidence-gaps,
+.tdp-evidence-note {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--warning);
+}
+.tdp-brief {
+  margin-top: 14px;
+}
+.tdp-prose.is-folded {
+  max-height: 7.5em;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 60%, transparent);
+  mask-image: linear-gradient(#000 60%, transparent);
+}
+.tdp-plan-say {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.tdp-envelope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tdp-envelope-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-1);
+  font-size: 12.5px;
+}
+.tdp-envelope-chip-label {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.tdp-envelope-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.tdp-activity-row {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.tdp-activity-time {
+  flex: none;
+  min-width: 96px;
+  color: var(--text-3);
+  font-size: 12px;
+  padding-top: 1px;
+}
+
 /* Task comment @-mentions: highlighted chip in rendered comments + composer menu. */
 .tdp-mention {
   color: var(--brand);

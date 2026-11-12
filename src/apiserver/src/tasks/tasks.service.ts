@@ -9148,6 +9148,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // the route beside it says what smart selection picked, or would have picked.
             model: true,
             effort: true,
+            // What the run has cost so far, for the panel's status line and its Now card.
+            costUsd: true,
             workspace: { select: { name: true } },
           },
         },

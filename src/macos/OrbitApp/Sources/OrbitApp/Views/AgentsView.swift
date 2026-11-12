@@ -486,7 +486,6 @@ struct AgentPanes: View {
         // The phone's search field, in the bottom toolbar, gets out of the way while the list is read
         // downward (see the column's `sessionListSearch`).
         .revealsBottomSearchOnScroll(query: searchQuery, enabled: listPresentation.searchesFromBottom)
-        .keepsEmptySearchOnScroll(query: searchQuery)
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
