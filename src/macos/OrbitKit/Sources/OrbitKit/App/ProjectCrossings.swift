@@ -59,6 +59,18 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         }
     }
 
+    /// The session that asked for this crossing, by name. Nil from an older server that joined
+    /// none, and for a session since deleted — the row then names no asker.
+    public struct AskSession: Decodable, Equatable, Sendable {
+        public let id: String
+        public let title: String?
+
+        public init(id: String, title: String? = nil) {
+            self.id = id
+            self.title = title
+        }
+    }
+
     /// A criterion a move names: the target's it would count towards — whose `text` is nil once
     /// that criterion has been deleted — or the source's it serves now.
     public struct Criterion: Decodable, Equatable, Sendable {
@@ -92,6 +104,10 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
     /// `MOVE_TASK`: the source project's criterion the task declares today, which the move takes
     /// back. Nil when it declares none of the source project's.
     public let withdrawnCriterion: Criterion?
+    /// Who asked for this crossing, by name, when the server joined the asking session. Nil from
+    /// an older server, and for a session since deleted. The crossing card groups a move batch by
+    /// asker with it, and the row words never need more.
+    public let requestedBySession: AskSession?
     /// The digest of the two ends and the subject — the crossing itself, not the row recording it.
     /// An answer echoes it back (`acknowledgedCrossingKey`).
     public let crossingKey: String
@@ -108,7 +124,8 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
                 fromProjectPublicId: String? = nil, toProjectId: String, toProjectPublicId: String? = nil,
                 fromProject: ProjectEnd? = nil, toProject: ProjectEnd? = nil, kind: String,
                 subjectTaskId: String? = nil, subjectTaskPublicId: String? = nil,
-                subjectTask: SubjectTask? = nil, requestedCriterion: Criterion? = nil,
+                subjectTask: SubjectTask? = nil, requestedBySession: AskSession? = nil,
+                requestedCriterion: Criterion? = nil,
                 withdrawnCriterion: Criterion? = nil, crossingKey: String, state: String, title: String,
                 reason: String? = nil, requestedAt: String, decidedAt: String? = nil,
                 expiresAt: String? = nil) {
@@ -124,6 +141,7 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         self.subjectTaskId = subjectTaskId
         self.subjectTaskPublicId = subjectTaskPublicId
         self.subjectTask = subjectTask
+        self.requestedBySession = requestedBySession
         self.requestedCriterion = requestedCriterion
         self.withdrawnCriterion = withdrawnCriterion
         self.crossingKey = crossingKey
@@ -138,6 +156,7 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, publicId, fromProjectId, fromProjectPublicId, toProjectId, toProjectPublicId
         case fromProject, toProject, kind, subjectTaskId, subjectTaskPublicId, subjectTask
+        case requestedBySession
         case requestedCriterion, withdrawnCriterion, crossingKey, state, title, reason
         case requestedAt, decidedAt, expiresAt
     }
@@ -160,6 +179,7 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         subjectTaskId = try? c.decodeIfPresent(String.self, forKey: .subjectTaskId)
         subjectTaskPublicId = try? c.decodeIfPresent(String.self, forKey: .subjectTaskPublicId)
         subjectTask = try? c.decodeIfPresent(SubjectTask.self, forKey: .subjectTask)
+        requestedBySession = try? c.decodeIfPresent(AskSession.self, forKey: .requestedBySession)
         requestedCriterion = try? c.decodeIfPresent(Criterion.self, forKey: .requestedCriterion)
         withdrawnCriterion = try? c.decodeIfPresent(Criterion.self, forKey: .withdrawnCriterion)
         crossingKey = try c.decode(String.self, forKey: .crossingKey)

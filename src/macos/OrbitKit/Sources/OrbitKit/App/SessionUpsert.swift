@@ -56,6 +56,11 @@ public extension Session {
             // Travelling with the same count, and cleared by the same rule: a summary that says
             // nothing is waiting here has to be able to take the bar's card away with it.
             ownerItems: summary.ownerItems,
+            // The requests this session filed and the moves waiting on it travel with the same
+            // count, cleared by the same rule: the summary that answers the last one sends `[]`,
+            // and the row must stop lighting with it.
+            ownerRequests: summary.ownerRequests,
+            taskMoves: summary.taskMoves,
             // Overwritten with the same count, by the same rule: the summary that says a review is
             // over (null) is what turns the row from "Under review" to whatever comes next.
             confirmationUnderReview: summary.confirmationUnderReview,
@@ -151,6 +156,10 @@ public extension Session {
                          // Doubly optional for the same reason: nil keeps the row's items, and
                          // `.some([])` is the server saying there are none.
                          ownerItems: [SessionOwnerItem]?? = nil,
+                         // Doubly optional for the same reason: nil keeps the row's, and
+                         // `.some([])` is the server saying nothing is waiting.
+                         ownerRequests: [SessionOwnerRequest]?? = nil,
+                         taskMoves: [SessionTaskMoveGroup]?? = nil,
                          // Doubly optional for the same reason: `.some(nil)` is "none under review".
                          confirmationUnderReview: ConfirmationUnderReview?? = nil,
                          // Doubly optional for the same reason.
@@ -194,6 +203,8 @@ public extension Session {
                 pendingApprovals: pendingApprovals ?? self.pendingApprovals,
                 waitingKind: waitingKind ?? self.waitingKind,
                 ownerItems: ownerItems ?? self.ownerItems,
+                ownerRequests: ownerRequests ?? self.ownerRequests,
+                taskMoves: taskMoves ?? self.taskMoves,
                 taskId: taskId ?? self.taskId,
                 branch: branch,
                 updatedAt: updatedAt,
