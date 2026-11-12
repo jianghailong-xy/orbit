@@ -95,6 +95,8 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
     data: {
       id: runnerId, ownerId, name: 'the machine the parent runs on', tokenHash: `hash-${runnerId}`,
       status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
+      // What routing picks a SubAgent's model from (§4.2).
+      modelCatalog: { claude: [{ value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 }, { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 }] },
     },
   })) as Runner;
 

@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -230,5 +233,34 @@ func TestSubagentDefinitionPermissionModeIsSent(t *testing.T) {
 	}
 	if body := subagentStartBody(map[string]interface{}{}, definitionNamed(t, defs, "odd"), "toolu_1", false); body["permissionMode"] != nil {
 		t.Fatalf("an unknown permissionMode was sent: %v", body)
+	}
+}
+
+// A child that writes through a shell (Codex's printf, a codegen run) leaves no edit-tool path: its run's
+// changedFiles still name the file, read off the working tree, once beside what its edit tools named.
+func TestSubagentChangedFilesIncludeShellWrites(t *testing.T) {
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "base"}} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	before, ok := takeSubagentTreeSnapshot(dir)
+	if !ok {
+		t.Fatal("no snapshot of a git checkout")
+	}
+	c := newSubagentFileCollector(dir)
+	c.note(evToolUse, map[string]interface{}{"id": "w1", "name": "Write", "input": map[string]interface{}{"file_path": filepath.Join(dir, "a.txt")}})
+	c.note(evToolResult, map[string]interface{}{"toolUseId": "w1"})
+	for _, name := range []string{"a.txt", "notes/codex.txt"} {
+		_ = os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after, _ := takeSubagentTreeSnapshot(dir)
+	c.addTreeChanges(after.changedSince(before, nil))
+	if want := []string{"a.txt", "notes/codex.txt"}; !reflect.DeepEqual(c.changed, want) {
+		t.Fatalf("changedFiles = %v, want %v", c.changed, want)
 	}
 }

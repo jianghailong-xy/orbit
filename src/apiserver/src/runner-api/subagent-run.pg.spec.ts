@@ -1,18 +1,21 @@
 /**
  * SubAgent runs through the runner doors (docs/subagent-design.md §5.1, §6.1, §6.2), on a real PostgreSQL:
  *
- *   1. POST /runner/sessions/:id/subagents opens a run on the parent's own engine and model (routing is in
- *      shadow), PATCH …/:runId ends it DONE, and the one `subagent_run` row holds what was posted, the status,
- *      the changed files — while the parent's `cost_usd` rises by exactly the run's cost, once.
+ *   1. POST /runner/sessions/:id/subagents opens a run on the model routing picked (routing applies, §8 P3),
+ *      PATCH …/:runId ends it DONE, and the one `subagent_run` row holds what was posted, the status, the
+ *      changed files — while the parent's `cost_usd` rises by exactly the run's cost, once.
  *   2. The fifth POST on a session with four RUNNING is refused, and a POST for an agent with SubAgents
  *      turned off is refused.
  *   3. A top-level `mcp__orbit__delegate` tool_use joins `runningSubagents`, its `{ runId, status: "running" }`
  *      receipt leaves it there, and its terminal background_task removes it.
- *   4. The shadow decision (docs/subagent-design.md §4.1, §4.2): the row's decision names the tier, where it
- *      came from, Optimize For, the engine, provider, model and effort routing would pick, English reasons
- *      and each removed candidate with its reason — while the run's target is still the parent's model.
- *      Under Cost an account pool whose best account has 80% left is picked over the runner's own Claude
- *      sign-in at 70% used, and a Codex pool whose only account is at 96% is removed with its reason.
+ *   4. The applied decision (docs/subagent-design.md §4.1, §4.2): the row's decision names the tier, where it
+ *      came from, Optimize For, the engine, provider, model and effort it runs on, English reasons and each
+ *      removed candidate with its reason. Under Cost an account pool whose best account has 80% left is
+ *      picked over the runner's own Claude sign-in at 70% used, and a Codex pool whose only account is at 96%
+ *      is removed with its reason. The pool is the pick: the child runs on its member Bob's own credential,
+ *      the member is recorded on the run's attempt, and the parent session's pool fields are unchanged.
+ *   5. With nothing in the tier's pool the POST is refused NO_SUBAGENT_PROVIDER, listing each provider's
+ *      reason, and no run is opened — it never falls back onto the parent's model.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-run.pg.spec.ts
  *
@@ -71,8 +74,18 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
   await prisma.user.create({
     data: { id: ownerId, email: `subagent-${ownerId}@runner-door.invalid`, name: 'The account owner', passwordHash: 'x' },
   });
+  // Claude's catalogue is what routing picks from; with none, every SubAgent is refused NO_SUBAGENT_PROVIDER.
+  const claudeCatalog = {
+    claude: [
+      { value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 },
+      { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 },
+    ],
+  };
   const runner = (await prisma.runner.create({
-    data: { id: runnerId, name: 'the machine the parent runs on', ownerId, tokenHash: sha256(`subagent-${runnerId}`) },
+    data: {
+      id: runnerId, name: 'the machine the parent runs on', ownerId, tokenHash: sha256(`subagent-${runnerId}`),
+      modelCatalog: claudeCatalog,
+    },
   })) as Runner;
   const door = new RunnerApiController(prisma as never, silent(), silent(), silent(), silent(), silent());
   const subagents = new RunnerSubagentsController(prisma as never, silent(), silent());
@@ -117,11 +130,11 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(opened.status, 'RUNNING');
     assert.equal(opened.decision.tierSource, 'size');
     assert.equal(opened.decision.level, 'M');
-    assert.equal(opened.decision.applied, false, 'a shadow decision');
-    assert.equal(opened.decision.reasons.at(-1), "Shadow decision: this SubAgent runs on the parent's model, claude-opus-5-5");
-    assert.equal(opened.exec.provider, 'claude', "the target is the parent's own engine");
-    assert.equal(opened.exec.model, 'claude-opus-5-5', "and the parent's own model");
-    assert.equal(opened.exec.effort, 'high', "and the parent's own effort");
+    assert.equal(opened.decision.applied, true, 'routing applies');
+    assert.equal(opened.decision.reasons.some((r) => r.startsWith('Shadow')), false, 'and says nothing of a shadow');
+    assert.equal(opened.exec.provider, 'claude', 'the target is the routed engine');
+    assert.equal(opened.exec.model, 'claude-sonnet-5-5', "tier M's model, not the parent's Opus");
+    assert.equal(opened.exec.effort, 'medium', "and tier M's effort, not the parent's high");
     assert.ok(Array.isArray(opened.exec.allowedTools) && Array.isArray(opened.exec.disallowedTools),
       'in the shape a claim hands the runner');
 
@@ -246,7 +259,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.deepEqual(await running(), [], 'its terminal background_task removes it');
   });
 
-  await t.test('the shadow decision: tier, source, Optimize For, the pick, English reasons and every removal with its reason', async () => {
+  await t.test('the applied decision: tier, source, Optimize For, the pick, English reasons and every removal; a pool runs on its own member', async () => {
     // The parent runs Sonnet on a machine with Claude signed in, Codex signed out and Kimi not installed.
     const machineId = randomUUID();
     const inAnHour = new Date(Date.now() + 3_600_000).toISOString();
@@ -320,12 +333,33 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [glm] } } });
 
     const sessionId = await parentSession({ runnerId: machineId, model: 'claude-sonnet-5-5', effort: 'medium', optimizeFor: 'cost' });
+    const poolFields = { poolMemberProviderId: true, poolKeyId: true, poolCodexAccountId: true, poolSwitchNotice: true, provider: true } as const;
+    const parentBefore = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
     const opened = await routed.createSubagentRun(machine, sessionId, create({
-      toolUseId: 'toolu_01RoutedShadow', type: 'general', definitionSource: 'builtin',
+      toolUseId: 'toolu_01RoutedApplied', type: 'general', definitionSource: 'builtin',
       size: 'L', sizeReason: 'one service plus its spec',
     }));
-    assert.equal(opened.exec.provider, 'claude', "the target is still the parent's engine");
-    assert.equal(opened.exec.model, 'claude-sonnet-5-5', "and the parent's model, not the routed one");
+    assert.equal(opened.exec.provider, 'claude', "the pool's engine");
+    assert.equal(opened.exec.model, 'claude-opus-5-5', "tier L's model, not the parent's Sonnet");
+    assert.equal(opened.exec.effort, 'high');
+    const env = Object.values(opened.exec.env ?? {});
+    t.diagnostic(`exec.env names ${JSON.stringify(Object.keys(opened.exec.env ?? {}))}`);
+    assert.ok(env.includes(`sk-ant-oat01-${bob}`), "the child runs on the pool member Bob's own credential");
+    assert.ok(!env.includes(`sk-ant-oat01-${alice}`), 'not on Alice, whose quota is at 85%');
+    const attempts = (await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } })).attempts as unknown as Array<Record<string, unknown>>;
+    t.diagnostic(`subagent_run.attempts ${JSON.stringify(attempts)}`);
+    assert.deepEqual(attempts[0].poolMember, { providerId: bobRow.id, label: 'Bob' }, 'the member is recorded on the run');
+    assert.equal(attempts[0].provider, team.slug);
+    const parentAfter = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
+    t.diagnostic(`parent pool fields before ${JSON.stringify(parentBefore)} after ${JSON.stringify(parentAfter)}`);
+    assert.deepEqual(parentAfter, parentBefore, "the parent session's pool fields are unchanged");
+    // A retry answers on the same member, and still writes nothing onto the parent.
+    const retried = await routed.createSubagentRun(machine, sessionId, create({
+      toolUseId: 'toolu_01RoutedApplied', type: 'general', definitionSource: 'builtin', size: 'L',
+    }));
+    assert.equal(retried.runId, opened.runId);
+    assert.ok(Object.values(retried.exec.env ?? {}).includes(`sk-ant-oat01-${bob}`));
+    assert.deepEqual(await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields }), parentBefore);
 
     const row = await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } });
     const decision = row.decision as unknown as typeof opened.decision;
@@ -338,14 +372,15 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(decision.provider, team.slug, "Cost: the pool's 80% left before the sign-in's 30%, and both before the DeepSeek key");
     assert.equal(decision.model, 'claude-opus-5-5');
     assert.equal(decision.effort, 'high');
-    assert.equal(decision.applied, false);
-    assert.equal(decision.policyVersion, 'p2-shadow-1');
+    assert.equal(decision.applied, true);
+    assert.equal(decision.policyVersion, 'p3-applied-1');
+    assert.equal(decision.tierNote, 'Tier L, set by the caller');
+    assert.equal(decision.note, 'subscription pool, Bob with 80% quota left');
     assert.deepEqual(decision.reasons, [
       'Tier L, set by the caller: one service plus its spec',
       `Picked claude-opus-5-5 · high on ${team.slug} (claude) (Cost): a subscription pool whose account Bob has 80% of its quota left, used before any metered key`,
       '3 candidates in tier L; ties go by the owner\'s provider order',
       `${decision.candidates.length} candidates removed, each with its reason`,
-      "Shadow decision: this SubAgent runs on the parent's model, claude-sonnet-5-5",
     ]);
     const why = (provider: string) => decision.candidates
       .filter((c) => c.provider === provider).map((c) => [c.engine, c.model, c.reason]);
@@ -365,5 +400,44 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       ['opencode', null, "opencode is not installed on the parent's runner"],
       ['dsh', null, "dsh is not installed on the parent's runner"],
     ]);
+  });
+
+  await t.test('an empty pool is refused NO_SUBAGENT_PROVIDER with each provider\'s reason, and opens no run', async () => {
+    // An account of its own, with no keys, on a machine whose engines report no catalogue: no model anywhere has a tier.
+    const loneId = randomUUID();
+    await prisma.user.create({
+      data: { id: loneId, email: `subagent-lone-${loneId}@runner-door.invalid`, name: 'An account with no keys', passwordHash: 'x' },
+    });
+    const bareId = randomUUID();
+    const bare = (await prisma.runner.create({
+      data: {
+        id: bareId, name: 'a machine with no catalogue', ownerId: loneId, tokenHash: sha256(`subagent-bare-${bareId}`),
+        engines: [{ engine: 'claude', installed: true, auth: 'yes' }],
+      },
+    })) as Runner;
+    const workspaceId = randomUUID();
+    await prisma.workspace.create({ data: { id: workspaceId, ownerId: loneId, runnerId: bareId, name: `orbit-worker-${workspaceId.slice(-8)}`, enabled: true } });
+    const sessionId = randomUUID();
+    await prisma.session.create({
+      data: {
+        id: sessionId, ownerId: loneId, creatorId: loneId, workspaceId, assignedRunnerId: bareId,
+        title: 'split the parser work', prompt: 'split the parser work', provider: 'claude', engine: 'claude',
+        model: 'claude-opus-5-5', effort: 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      },
+    });
+    let refusal: { code?: string; message?: string } | null = null;
+    try {
+      await subagents.createSubagentRun(bare, sessionId, create({ toolUseId: 'toolu_01Empty', size: 'M' }));
+    } catch (error) {
+      assert.ok(error instanceof ConflictException, `refused 409, got ${String(error)}`);
+      refusal = error.getResponse() as { code?: string; message?: string };
+    }
+    t.diagnostic(`empty pool: ${JSON.stringify(refusal)}`);
+    assert.equal(refusal?.code, 'NO_SUBAGENT_PROVIDER');
+    assert.match(refusal!.message!, /^No provider is left to run this SubAgent in tier M\. Each provider's reason:/);
+    assert.ok(refusal!.message!.includes('- claude (claude): No models with a tier on claude'), 'the parent\'s own engine, with its reason');
+    assert.ok(refusal!.message!.includes("- codex (codex): codex is not installed on the parent's runner"), 'and every other provider');
+    assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 0, 'no run was opened on the parent\'s model');
   });
 });

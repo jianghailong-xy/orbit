@@ -65,7 +65,7 @@ import {
   type SubagentRunView,
   type TaskProgress,
 } from '@orbit/shared';
-import { DELEGATE_TOOL, delegateResultText, subagentMeta, subagentWhy } from '../lib/subagentRuns';
+import { DELEGATE_TOOL, delegateResultText, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import {
@@ -4307,11 +4307,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
       )}
       {hasDetail && open && (
         <div className="chat-tool-detail">
-          {why && (
-            <div className="chat-subagent-why">
-              <b>Why</b> · {why}
-            </div>
-          )}
+          {why && <SubagentWhy why={why} run={run} />}
           {/* A failed call is opened to find out why, and the input is rarely the answer — a
               heredoc alone clamps to sixteen lines, which is enough to push the reason off the
               bottom of the card. Put the error first when there is one; everywhere else the
@@ -4534,6 +4530,51 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
 
 /** A running background task's folded card: what its sub-agent is on right now — the last thing
     its relayed transcript did. Native parity: ToolCards.swift's `liveActivity`. */
+/**
+ * A SubAgent's grey Why: one line of clauses, at most two at a 900 px transcript. The router's full reasons and
+ * every candidate it removed are behind it — in its tooltip, and in the list `Details` opens.
+ */
+function SubagentWhy({ why, run }: { why: string; run: SubagentRunView | undefined }) {
+  const [open, setOpen] = useState(false);
+  const { reasons, removed } = subagentWhyDetails(run);
+  const more = reasons.length > 0 || removed.length > 0;
+  const tooltip = more
+    ? [...reasons, ...(removed.length ? ['Removed:', ...removed.map((line) => `- ${line}`)] : [])].join('\n')
+    : undefined;
+  return (
+    <>
+      <div className="chat-subagent-why" title={tooltip}>
+        <b>Why</b> · {why}
+        {more && (
+          <button
+            type="button"
+            className="chat-subagent-why-more"
+            aria-expanded={open}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+          >
+            {open ? 'Hide' : 'Details'}
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul className="chat-subagent-why-list">
+          {reasons.map((line, i) => (
+            <li key={`r${i}`}>{line}</li>
+          ))}
+          {removed.map((line, i) => (
+            <li key={`x${i}`} className="chat-subagent-why-removed">
+              Removed · {line}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
   const lookup = useContext(TaskLookupCtx);
   if (!lookup.running(node.id) && !(live && !node.result)) return null;

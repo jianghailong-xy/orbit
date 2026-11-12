@@ -59,7 +59,7 @@ import {
   firstAttempt,
   limitFailure,
   noProviderMessage,
-  shadowDecision,
+  appliedDecision,
   SUBAGENT_ATTEMPT_ERROR_MAX,
   SUBAGENT_MAX_MOVES,
   SubagentFallbackDto,
@@ -86,6 +86,22 @@ import {
 import { fileSubagentWake } from './subagent-wake';
 
 const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+
+/** How a SubAgent's child runs on one candidate: the claim-shaped config, and what it resolved to. */
+interface ChildExec {
+  exec: AgentExecConfig;
+  provider: string;
+  resolvedModel: string;
+  effort: string | undefined;
+  /** The account of an account pool chosen for this SubAgent alone. */
+  poolMember?: { providerId: string; label: string };
+}
+
+/** A refusal's own words. */
+function refusalText(error: HttpException): string {
+  const said = error.getResponse();
+  return typeof said === 'string' ? said : (said as { message?: string }).message ?? error.message;
+}
 
 /** What a SubAgent's run reads of its parent session. */
 const SUBAGENT_PARENT_SELECT = {
@@ -166,10 +182,14 @@ export class RunnerSubagentsController {
    * A parent session's `mcp__orbit__delegate` call opens a SubAgent run (docs/subagent-design.md §5.1 step 2).
    * Refused when the session's Agent has SubAgents turned off (403 SUBAGENTS_DISABLED) or already runs as many
    * as it allows at once (409 SUBAGENT_LIMIT_REACHED), counted under the parent row's lock so two calls cannot
-   * both take the last place. The row is written RUNNING with the router's decision (routeSubagent, §4.1,
-   * §4.2) — in shadow (§8 P2): the answer still runs the child on the parent's own engine, credential, model
-   * and effort, in the shape a claim hands the runner. A retry with the same tool_use id answers with the run
-   * it opened, whose decision is frozen.
+   * both take the last place. The router's decision (routeSubagent, §4.1, §4.2) applies (§8 P3): the answer runs
+   * the child on the engine, credential, model and effort it picked, in the shape a claim hands the runner — or,
+   * when the pick cannot be started on this runner, on the first of the tier's next candidates that can, the
+   * pick recorded as removed with its reason. A pool with nothing in it, or nothing that can start, is refused
+   * with 409 NO_SUBAGENT_PROVIDER listing each provider's reason; the SubAgent never falls back onto the
+   * parent's model. The row is written RUNNING with that decision, and an account pool's member chosen for it
+   * on its first attempt, never on the parent's session. A retry with the same tool_use id answers with the run
+   * it opened, whose decision is frozen, on the candidate its last attempt runs on.
    *
    * A call that names a `workspace` or `needs` capabilities is placed first (docs/subagent-design.md §10.1,
    * chooseSubagentWorkspace): on another workspace of the parent's repository it is opened there
@@ -235,43 +255,81 @@ export class RunnerSubagentsController {
           });
         }
       }
-      const { exec, provider, resolvedModel, effort } = await this.childExec(tx, sessionId, runner, session, dto);
-      const route = opened ? null : await planSubagentRoute(tx, {
+      // The parent's own engine, credential, model and effort: what the router weighs the pick against, and what
+      // a candidate that IS the parent's runs on, exactly as the parent does.
+      const parentBuilt = await this.childExec(tx, sessionId, runner, session, dto);
+      const parent = {
+        engine: parentBuilt.provider, provider: session.provider ?? parentBuilt.provider,
+        model: parentBuilt.resolvedModel, effort: parentBuilt.effort ?? null,
+      };
+      const isParent = (c: SubagentCandidateTarget) =>
+        c.engine === parent.engine && c.provider === parent.provider && c.model === parent.model;
+      const build = (c: SubagentCandidateTarget) =>
+        isParent(c) ? Promise.resolve(parentBuilt) : this.childExec(tx, sessionId, runner, session, dto, c);
+      if (opened) {
+        // A retry: the run as it stands, on the candidate its last attempt runs on.
+        const last = attemptsOf(opened.attempts).at(-1);
+        const built = last ? await build(last) : parentBuilt;
+        return {
+          runId: opened.id, status: opened.status as SubagentRunStatus,
+          decision: opened.decision as unknown as SubagentDecision, exec: built.exec,
+        };
+      }
+      const route = await planSubagentRoute(tx, {
         ownerId: session.ownerId,
         workspaceId: session.workspaceId,
         runnerId: session.assignedRunnerId,
         dto,
         planUsage: this.planUsage,
-        parent: { engine: provider, provider: session.provider ?? provider, model: resolvedModel, effort: effort ?? null },
+        parent,
       });
-      const decision = route ? shadowDecision(route, resolvedModel, effort ?? null) : null;
-      if (decision && workspaceReason) decision.reasons = [workspaceReason, ...decision.reasons];
-      const row =
-        opened ??
-        (await tx.subagentRun.create({
-          data: {
-            ownerId: session.ownerId,
-            sessionId,
-            toolUseId: dto.toolUseId,
-            type: dto.type,
-            definitionSource: dto.definitionSource,
-            background: dto.background ?? false,
-            // A background run is answered by the wake its end sends; nobody waits for it inline.
-            wakeOwed: dto.background ?? false,
-            ...(dto.description ? { description: stripNul(dto.description) } : {}),
-            status: 'RUNNING',
-            decision: decision as unknown as Prisma.InputJsonValue,
-            // The first attempt: the parent's own engine, credential and model while routing is in shadow (§8 P2).
-            attempts: [firstAttempt({
-              engine: provider, provider: session.provider ?? provider, model: resolvedModel, effort: effort ?? null,
-            })] as unknown as Prisma.InputJsonValue,
-          },
-        }));
+      // The pick, else the first of the tier's next candidates this runner can start.
+      const passedOver: Array<{ target: SubagentCandidateTarget; reason: string }> = [];
+      let chosen: { target: SubagentCandidateTarget; built: ChildExec } | null = null;
+      for (const target of fallbackCandidates(route)) {
+        try {
+          chosen = { target, built: await build(target) };
+          break;
+        } catch (error) {
+          if (!(error instanceof HttpException)) throw error;
+          passedOver.push({ target, reason: refusalText(error) });
+        }
+      }
+      if (!chosen) {
+        throw new ConflictException({
+          code: 'NO_SUBAGENT_PROVIDER',
+          message: noProviderMessage(route, [], passedOver.map((p) => `${p.target.provider} (${p.target.engine}), ${p.target.model}: ${p.reason}`)),
+        });
+      }
+      const decision = appliedDecision(route, chosen.target, passedOver);
+      // A call that asked for a workspace or capabilities and was placed here says why first (§10.1).
+      if (workspaceReason) decision.reasons = [workspaceReason, ...decision.reasons];
+      const { note: _note, ...target } = chosen.target;
+      const row = await tx.subagentRun.create({
+        data: {
+          ownerId: session.ownerId,
+          sessionId,
+          toolUseId: dto.toolUseId,
+          type: dto.type,
+          definitionSource: dto.definitionSource,
+          background: dto.background ?? false,
+          // A background run is answered by the wake its end sends; nobody waits for it inline.
+          wakeOwed: dto.background ?? false,
+          ...(dto.description ? { description: stripNul(dto.description) } : {}),
+          status: 'RUNNING',
+          decision: decision as unknown as Prisma.InputJsonValue,
+          // The first attempt: the candidate it opened on, with the pool account chosen for it, if any.
+          attempts: [{
+            ...firstAttempt({ ...target, effort: chosen.built.effort ?? target.effort }),
+            ...(chosen.built.poolMember ? { poolMember: chosen.built.poolMember } : {}),
+          }] as unknown as Prisma.InputJsonValue,
+        },
+      });
       return {
         runId: row.id,
         status: row.status as SubagentRunStatus,
-        decision: row.decision as unknown as SubagentDecision,
-        exec,
+        decision,
+        exec: chosen.built.exec,
       };
     }, loggedRetry(this.logger, 'runnerSubagents.createSubagentRun'));
   }
@@ -573,8 +631,8 @@ export class RunnerSubagentsController {
     session: SubagentParent,
     dto: { readonly?: boolean; permissionMode?: string },
     target?: SubagentCandidateTarget,
-  ): Promise<{ exec: AgentExecConfig; provider: string; resolvedModel: string; effort: string | undefined }> {
-    const resolved = await sessionProviderExec(tx, this.queue, sessionId, target);
+  ): Promise<ChildExec> {
+    const resolved = await sessionProviderExec(tx, this.queue, sessionId, target, this.planUsage);
     if (!resolved.exec) {
       throw new ConflictException(resolved.refusal ?? 'the session has no provider to run a SubAgent on');
     }
@@ -618,7 +676,7 @@ export class RunnerSubagentsController {
       effort,
       env: resolvedExec.env,
     };
-    return { exec, provider, resolvedModel: resolvedExec.model, effort };
+    return { exec, provider, resolvedModel: resolvedExec.model, effort, ...(resolved.poolMember ? { poolMember: resolved.poolMember } : {}) };
   }
 
   /**
@@ -673,25 +731,31 @@ export class RunnerSubagentsController {
       const skipped: string[] = [];
       for (const next of fallbackCandidates(decision)) {
         if (spent.has(next.provider)) continue;
-        let built: Awaited<ReturnType<RunnerSubagentsController['childExec']>>;
+        let built: ChildExec;
         try {
           built = await this.childExec(tx, sessionId, runner, session, dto, next);
         } catch (error) {
           if (!(error instanceof HttpException)) throw error;
-          const said = error.getResponse();
-          skipped.push(`${next.provider} (${next.engine}): ${typeof said === 'string' ? said : (said as { message?: string }).message ?? error.message}`);
+          skipped.push(`${next.provider} (${next.engine}): ${refusalText(error)}`);
           spent.add(next.provider);
           continue;
         }
         const reason = failure === 'AT_CAPACITY'
-          ? `Moved to ${next.model} after ${failed?.model ?? 'the first model'} was at capacity`
-          : `Moved to ${next.model} after ${failed?.model ?? 'the first model'}'s account hit its limit`;
+          ? `Moved to ${next.model} on ${next.provider} after ${failed?.model ?? 'the first model'} was at capacity`
+          : `Moved to ${next.model} on ${next.provider} after ${failed?.model ?? 'the first model'}'s account hit its limit`;
         const attempt = attempts.length + 1;
-        attempts.push({ ...next, attempt, outcome: 'RUNNING', startedAt: now });
+        const { note: _note, ...target } = next;
+        attempts.push({
+          ...target, attempt, outcome: 'RUNNING', startedAt: now,
+          ...(built.poolMember ? { poolMember: built.poolMember } : {}),
+        });
         const moved: SubagentDecision = {
           ...decision,
           reasons: [...decision.reasons, reason],
-          ...(decision.applied === false ? { runModel: next.model, runEffort: built.effort ?? null } : {}),
+          moves: [...(decision.moves ?? []), reason],
+          // What it runs on now, which the block's meta names; the pick stays what the router chose.
+          runModel: next.model,
+          runEffort: built.effort ?? null,
         };
         await save({ decision: moved as unknown as Prisma.InputJsonValue });
         return { answer: { runId: row.id, attempt, reason, decision: moved, exec: built.exec } };

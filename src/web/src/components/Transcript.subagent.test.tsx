@@ -63,6 +63,8 @@ const run = (over: Partial<SubagentRunView>): SubagentRunView => ({
   modelLabel: 'Sonnet 5.5',
   effort: null,
   reasons: ['Tier S, set by the caller: a search', 'Optimize For: Cost'],
+  why: null,
+  removed: [],
   costUsd: 0.21,
   resultSummary: 'Three callers, all in quota/.',
   createdAt: '2026-11-11T10:00:01.000Z',
@@ -70,7 +72,25 @@ const run = (over: Partial<SubagentRunView>): SubagentRunView => ({
   ...over,
 });
 
-const FG = run({});
+const REMOVED = Array.from({ length: 11 }, (_, i) => ({
+  provider: i === 0 ? 'kimi' : `key-${i}`,
+  engine: i === 0 ? 'kimi' : 'claude',
+  model: i === 0 ? null : `model-${i}`,
+  effort: null,
+  reason: i === 0 ? "kimi is not installed on the parent's runner" : 'The model has no tier',
+}));
+const FG_WHY =
+  'Tier S, set by the caller · Cost: claude-sonnet-5-5 · low on claude, subscription with 64% quota left · 11 others removed';
+const FG = run({
+  why: FG_WHY,
+  removed: REMOVED,
+  reasons: [
+    'Tier S, set by the caller: a search',
+    'Picked claude-sonnet-5-5 · low on claude (Cost): a subscription with 64% of its quota left, used before any metered key',
+    '3 candidates in tier S; ties go by the owner\'s provider order',
+    '11 candidates removed, each with its reason',
+  ],
+});
 const BG_RUNNING = run({
   toolUseId: 'toolu_bg',
   type: 'spec-writer',
@@ -166,7 +186,10 @@ describe('the SubAgent block', () => {
     const detail = fg.querySelector('.chat-tool-detail')!;
     const why = detail.firstElementChild!;
     expect(why.className).toBe('chat-subagent-why');
-    expect(why.textContent).toBe('Why · Tier S, set by the caller: a search · Optimize For: Cost');
+    // One clause per part, the provider named once, no shadow sentence; the full account is one click away.
+    expect(why.textContent).toBe(`Why · ${FG_WHY}Details`);
+    expect(why.textContent!.split(' on claude').length - 1).toBe(1);
+    expect(why.textContent).not.toMatch(/shadow|Picked|runs on/i);
     expect(text(why.querySelector('b'))).toBe('Why');
     expect(detail.querySelector('.chat-subagent')).not.toBeNull();
     expect(detail.textContent).toContain('Three callers, all in quota/.');
@@ -174,6 +197,39 @@ describe('the SubAgent block', () => {
     expect(detail.textContent).not.toContain('runId');
     // No prompt: the board opens on Why, steps and result.
     expect(detail.textContent).not.toContain('Find them.');
+  });
+
+  it('keeps the full reasons and every removed candidate behind the Why: a tooltip and a Details list', () => {
+    render([FG]);
+    const fg = card(1);
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    const why = fg.querySelector('.chat-subagent-why') as HTMLElement;
+    const tooltip = why.getAttribute('title')!;
+    expect(tooltip.split('\n')[0]).toBe('Tier S, set by the caller: a search');
+    expect(tooltip).toContain('Picked claude-sonnet-5-5 · low on claude (Cost)');
+    expect(tooltip).toContain("- kimi: kimi is not installed on the parent's runner");
+    expect(tooltip).toContain('- key-10 (claude), model-10: The model has no tier');
+    expect(fg.querySelector('.chat-subagent-why-list')).toBeNull();
+
+    const more = why.querySelector('.chat-subagent-why-more') as HTMLButtonElement;
+    act(() => more.click());
+    const items = [...fg.querySelectorAll('.chat-subagent-why-list li')].map((li) => li.textContent);
+    expect(items).toHaveLength(FG.reasons.length + 11);
+    expect(items.slice(0, FG.reasons.length)).toEqual(FG.reasons);
+    expect(items[FG.reasons.length]).toBe("Removed · kimi: kimi is not installed on the parent's runner");
+    expect(more.textContent).toBe('Hide');
+    // The block itself stays open: the button is not the row.
+    expect(fg.querySelector('.chat-tool-detail')).not.toBeNull();
+  });
+
+  it("an older run's Why is its reasons, with nothing behind it", () => {
+    render([run({ why: null, removed: [] })]);
+    const fg = card(1);
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    const why = fg.querySelector('.chat-subagent-why')!;
+    expect(why.textContent).toBe('Why · Tier S, set by the caller: a search · Optimize For: Cost');
+    expect(why.querySelector('.chat-subagent-why-more')).toBeNull();
+    expect(why.getAttribute('title')).toBeNull();
   });
 
   it("shows the result once when the child's own last message already says it", () => {

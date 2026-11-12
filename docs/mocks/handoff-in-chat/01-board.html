@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Move-task request as a chat decision card · board</title>
+<style>
+  body { margin:0; background:#ececf0; font-family:-apple-system, BlinkMacSystemFont, 'Inter', 'PingFang SC', 'Noto Sans SC', sans-serif; color:#1d1d1f; }
+  .board { width:1400px; padding:36px 40px 48px; box-sizing:border-box; }
+  h1 { font-size:26px; margin:0 0 6px; }
+  .sub { color:#555; font-size:15px; margin-bottom:26px; line-height:1.55; }
+  .row { display:flex; gap:40px; margin-bottom:34px; align-items:flex-start; }
+  .frame { width:393px; flex:none; }
+  .cap { font-size:15px; font-weight:600; margin:0 0 4px; }
+  .capnote { font-size:13px; color:#555; line-height:1.5; margin:0 0 10px; min-height:80px; }
+  .phone { width:393px; height:852px; border-radius:46px; overflow:hidden; background:#000; position:relative; box-shadow:0 0 0 7px #1b1b1d, 0 14px 40px rgba(0,0,0,.25); }
+  .phone img.shot { width:393px; height:852px; display:block; }
+  .mark { position:absolute; width:26px; height:26px; border-radius:13px; background:#ff375f; color:#fff; font:700 14px/26px 'Inter',sans-serif; text-align:center; box-shadow:0 0 0 2px #fff; z-index:20; }
+
+  /* ---------- in-phone (p-) ---------- */
+  .p { color:#fff; font-size:15px; line-height:1.38; letter-spacing:-.1px; }
+  .p-status { height:50px; display:flex; justify-content:space-between; align-items:flex-end; padding:0 30px 6px 40px; font-weight:600; font-size:16px; }
+  .p-nav { height:52px; display:flex; align-items:center; justify-content:space-between; padding:0 14px; }
+  .p-circ { width:42px; height:42px; border-radius:21px; background:#1c1c1e; display:flex; align-items:center; justify-content:center; font-size:20px; color:#fff; flex:none; }
+  .p-chip { background:#1c1c1e; border-radius:20px; padding:9px 16px; font-size:15px; max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .p-navtitle { font-weight:600; font-size:17px; }
+  .p-body { padding:10px 14px 0; }
+  .p-agent { color:#d1d1d6; font-size:15px; margin:4px 2px 12px; }
+  /* the app's approval chrome: tone border, toned chip, bold title, badge capsule */
+  .p-card { background:#1c1c1e; border:1px solid rgba(255,159,10,.55); border-radius:14px; padding:14px; }
+  .p-card.dim { border-color:#3a3a3c; opacity:.62; }
+  .p-head { display:flex; align-items:center; gap:8px; }
+  .p-ico { width:22px; height:22px; border-radius:6px; background:rgba(255,159,10,.16); color:#ff9f0a; font-size:13px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .p-ttl { font-weight:700; font-size:15.5px; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .p-badge { font:500 11.5px 'JetBrains Mono', ui-monospace, monospace; color:#ff9f0a; background:rgba(255,159,10,.16); border-radius:10px; padding:2px 7px; }
+  .p-sum { font-size:13px; color:#8e8e93; margin:8px 0 10px; line-height:1.42; }
+  .p-div { height:1px; background:#38383a; margin:0 -14px 0; }
+  .p-act { display:flex; justify-content:space-between; color:#0a84ff; font-size:13.5px; font-weight:600; padding-top:10px; }
+  .p-composer { position:absolute; left:12px; right:12px; bottom:26px; height:46px; border-radius:23px; background:#1c1c1e; color:#636366; display:flex; align-items:center; padding:0 18px; font-size:16px; }
+  /* review page */
+  .p-rv { padding:4px 16px 0; }
+  .p-rvbadge { color:#ff9f0a; font-weight:600; font-size:13px; margin-bottom:8px; }
+  .p-meta { font-size:13px; color:#8e8e93; margin-bottom:12px; }
+  .p-lab { font-size:13px; color:#8e8e93; font-weight:600; margin:12px 0 6px; }
+  .p-route { font-size:14px; margin-bottom:2px; }
+  .p-route span { color:#8e8e93; }
+  .p-list { background:#1c1c1e; border-radius:12px; padding:0 12px; }
+  .p-item { padding:8px 0; border-bottom:1px solid #38383a; }
+  .p-item:last-child { border-bottom:none; }
+  .p-it { font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .p-crit { font-size:12px; color:#8e8e93; margin-top:1px; }
+  .p-quote { font-size:13px; color:#d1d1d6; background:rgba(255,255,255,.05); border-radius:10px; padding:8px 10px; margin-top:10px; }
+  .p-note { font-size:12.5px; color:#8e8e93; margin-top:10px; line-height:1.45; }
+  .p-bar { position:absolute; left:0; right:0; bottom:0; background:rgba(28,28,30,.96); border-top:1px solid #38383a; padding:12px 16px 30px; }
+  .p-btn { border-radius:12px; text-align:center; padding:12px; font-size:16px; font-weight:600; margin-bottom:10px; }
+  .p-btn.pri { background:#0a84ff; color:#fff; }
+  .p-btn.sec { background:#2c2c2e; color:#0a84ff; }
+  .p-rec { font-size:14px; color:#d1d1d6; text-align:center; padding:10px 0 4px; }
+  .p-rec b { color:#30d158; }
+
+  /* ---------- notes ---------- */
+  .panel { background:#fff; border-radius:16px; padding:20px 24px; font-size:14px; line-height:1.6; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+  .panel h3 { margin:0 0 10px; font-size:17px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td:first-child { white-space:nowrap; } td, th { border-top:1px solid #e3e3e8; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { color:#666; font-weight:600; border-top:none; }
+  td code { word-break:break-all; }
+  code { font-family:'JetBrains Mono', ui-monospace, monospace; font-size:12px; background:#f2f2f6; padding:1px 4px; border-radius:4px; }
+  .q { margin:0 0 12px; }
+  .q b { color:#c2185b; }
+  .rec { color:#0a7d32; font-weight:600; }
+  .same { color:#0a7d32; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>移动任务请求 = 和“改验收标准”同一种聊天决定卡 · iOS 设计板</h1>
+  <div class="sub">
+    核实结论：改验收标准的卡片不经过 waiting for you（<code>request_owner_action</code>）。它是服务端从待批提案里读出来、直接画进项目协调者聊天的决定卡，按钮用你的登录凭据调用决定接口。移动任务请求现在没有这样的卡，只能去项目页批。<br>
+    提议：给移动任务请求加一张同样结构的卡片（同一套 iOS 卡片外框、预览、详情页和回执）。<b>waiting for you 卡片的逻辑一点不动。</b><br>
+    界面文案为英文；项目名和任务标题是用户数据。任务标题除第一条外为示意数据。
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <p class="cap">① 现状（你的截图）· 不改</p>
+      <p class="capnote">没有决定卡可用时，agent 只能用 waiting for you 卡片请你去项目页。这张卡片和它的逻辑保持原样；有了 ③ 之后，agent 就不需要再为移动任务发这种卡。</p>
+      <div class="phone"><img class="shot" src="00-today-ios.png"></div>
+    </div>
+
+    <div class="frame">
+      <p class="cap">② 参照：现在的“改验收标准”卡（已上线）</p>
+      <p class="capnote">协调者聊天里显示一张预览：图标 + 问题 + 标签 <code>criteria</code>，一行摘要，下面是 “View details &amp; act ›”，点开进详情页（④ 的样式）批。代码是 <code>ApprovalCards.swift</code> 的 <code>CriteriaDecisionCard</code>。</p>
+      <div class="phone p">
+        <div class="p-status"><span>5:33</span><span>●●● 86</span></div>
+        <div class="p-nav"><div class="p-circ">‹</div><div class="p-chip">Runner 链路加固</div><div class="p-circ">⋯</div></div>
+        <div class="p-body">
+          <div class="p-agent">Criterion 3 cannot be checked as written. I proposed rewording it so it names the probe we can actually run.</div>
+          <div class="p-card">
+            <div class="p-head"><div class="p-ico">⚠</div><div class="p-ttl">Weaken this ruler?</div><div class="p-badge">criteria</div></div>
+            <div class="p-sum">1 reworded · 10 criteria are unchanged by this proposal</div>
+            <div class="p-div"></div>
+            <div class="p-act"><span>View details &amp; act</span><span>›</span></div>
+          </div>
+        </div>
+        <div class="p-composer">Message…</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <p class="cap">③ 提议：移动任务请求，同一种卡</p>
+      <p class="capnote">同一位置（目标项目的协调者聊天）、同一外框。问题是 “Move these tasks here?”，标签 <code>move</code>，摘要写明从哪个项目、移几条、对应哪些标准。不显示任何 ID。</p>
+      <div class="phone p">
+        <div class="p-status"><span>5:33</span><span>●●● 86</span></div>
+        <div class="p-nav"><div class="p-circ">‹</div><div class="p-chip">Runner 链路加固</div><div class="p-circ">⋯</div></div>
+        <div class="p-body">
+          <div class="p-agent">Criteria 4–11 have no task in this project yet. I asked to move the 8 tasks that serve them from the finished v1 project.</div>
+          <div class="p-card">
+            <div class="p-head"><div class="p-ico">⇄</div><div class="p-ttl">Move these tasks here?</div><div class="p-badge">move</div></div>
+            <div class="p-sum">8 tasks from Runner 链路 v1：runner ↔ 控制面通信切换到 WebSocket · for criteria 4–11</div>
+            <div class="p-div"></div>
+            <div class="p-act"><span>View details &amp; act</span><span>›</span></div>
+          </div>
+        </div>
+        <div class="p-composer">Message…</div>
+        <div class="mark" style="left:356px;top:200px">1</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="frame">
+      <p class="cap">④ 点开：详情页，按钮固定在底部</p>
+      <p class="capnote">与改验收标准的详情页结构相同：顶部是 “From Orbit — not the requesting agent.”，中间是内容，底部固定两个按钮。字段和后果说明沿用项目页现有的跨项目请求文案（<code>ProjectCrossings.swift</code>）。</p>
+      <div class="phone p">
+        <div class="p-status"><span>5:33</span><span>●●● 86</span></div>
+        <div class="p-nav"><div class="p-circ">‹</div><div class="p-navtitle">Move these tasks here?</div><div style="width:42px"></div></div>
+        <div class="p-rv">
+          <div class="p-rvbadge">move · 8 waiting</div>
+          <div class="p-meta">From Orbit — not the requesting agent.</div>
+          <div class="p-route"><span>From</span> Runner 链路 v1：runner ↔ 控制面通信切换到 WebSocket</div>
+          <div class="p-route"><span>To</span> this project</div>
+          <div class="p-lab">Tasks to move</div>
+          <div class="p-list">
+            <div class="p-item"><div class="p-it">A later `sudo orbit …` runs the account's own binary as root</div><div class="p-crit">Target criterion requested: 4</div></div>
+            <div class="p-item"><div class="p-it">False offline alert after a link reconnect</div><div class="p-crit">Target criterion requested: 5</div></div>
+            <div class="p-item"><div class="p-it">Self-update waits forever on a busy runner</div><div class="p-crit">Target criterion requested: 6</div></div>
+            <div class="p-item"><div class="p-it" style="color:#0a84ff">Show 5 more</div></div>
+          </div>
+          <div class="p-quote">“These tasks serve criteria 4–11 here; their old project is done.”</div>
+          <div class="p-note">Confirming is the move: the tasks join the target project as soon as you answer, and nobody has to send the request again.</div>
+        </div>
+        <div class="p-bar">
+          <div class="p-btn pri">Approve</div>
+          <div class="p-btn sec">Refuse</div>
+        </div>
+        <div class="mark" style="left:352px;top:716px">2</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <p class="cap">⑤ 批完：和改验收标准一样留回执</p>
+      <p class="capnote">聊天里的卡片变暗，链接变成 “View details”，下面出现回执。如果在别处（项目页、另一台设备）批了，这里显示 “Approved at another end”。agent 由服务端的结果唤醒，不靠你在聊天里打字。</p>
+      <div class="phone p">
+        <div class="p-status"><span>5:34</span><span>●●● 86</span></div>
+        <div class="p-nav"><div class="p-circ">‹</div><div class="p-chip">Runner 链路加固</div><div class="p-circ">⋯</div></div>
+        <div class="p-body">
+          <div class="p-card dim">
+            <div class="p-head"><div class="p-ico">⇄</div><div class="p-ttl">Move these tasks here?</div><div class="p-badge">moved</div></div>
+            <div class="p-sum">8 tasks from Runner 链路 v1：runner ↔ 控制面通信切换到 WebSocket · for criteria 4–11</div>
+            <div class="p-div"></div>
+            <div class="p-act"><span>View details</span><span>›</span></div>
+          </div>
+          <div class="p-rec">Decision recorded · <b>✓ Approved by you at 5:34 PM</b></div>
+          <div class="p-agent" style="margin-top:14px">All 8 tasks are in. Criteria 4–11 each have a task now; starting 4 and 6, which have no dependencies.</div>
+        </div>
+        <div class="p-composer">Message…</div>
+        <div class="mark" style="left:4px;top:262px">3</div>
+      </div>
+    </div>
+
+    <div class="frame" style="width:454px">
+      <div class="panel">
+        <h3>逐项对照</h3>
+        <table>
+          <tr><th></th><th>改验收标准（现有）</th><th>移动任务（提议）</th></tr>
+          <tr><td>卡片从哪来</td><td>服务端读出的待批提案（<code>criteria-pending-decisions.ts</code>）</td><td class="same">服务端读出的待批请求（现有的 handoffs 列表，PENDING）</td></tr>
+          <tr><td>画在哪</td><td>该项目的协调者聊天</td><td class="same">目标项目的协调者聊天</td></tr>
+          <tr><td>谁能批</td><td>只有所有者</td><td class="same">同左；agent 接口本来就只读</td></tr>
+          <tr><td>按钮调哪里</td><td><code>…/criteria-decisions/:id</code></td><td class="same">现有 <code>…/handoffs/:id/decision</code></td></tr>
+          <tr><td>防伪标记</td><td>From Orbit — not the requesting agent.</td><td class="same">同左</td></tr>
+          <tr><td>回执和过期</td><td>Decision recorded；at another end</td><td class="same">同左</td></tr>
+          <tr><td>waiting for you</td><td>不经过</td><td class="same">不经过，也不改它</td></tr>
+        </table>
+        <h3 style="margin-top:16px">会改到的地方</h3>
+        <p style="margin:0 0 12px">iOS/macOS：<code>ApprovalCards.swift</code> 加卡片，复用 <code>ProjectCrossings.swift</code>。Web：<code>WorkspaceView.tsx</code> 挂卡片，复用 <code>ProjectCrossingsCard.tsx</code>。Android：<code>ProjectCrossings.kt</code>。服务端不加新接口。</p>
+        <h3>待你定</h3>
+        <p class="q"><b>Q1</b> 同一批 8 条合成一张卡、一次 Approve 全部批（<span class="rec">推荐</span>，就像一份改标准提案），还是每条一张卡？</p>
+        <p class="q"><b>Q2</b> 跨项目建任务、跨项目依赖两种请求也用这张卡（<span class="rec">推荐</span>），还是这次只做移动任务？</p>
+        <p class="q"><b>Q3</b> 先做 iOS + Web（<span class="rec">推荐</span>），还是四端一起？</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

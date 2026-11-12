@@ -72,9 +72,25 @@ export function subagentMeta(run: SubagentRunView | undefined): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 
-/** The opened block's first line, after its bold `Why`: the router's reasons, in order. */
+/**
+ * The opened block's first line, after its bold `Why`: the run's one-clause Why — the tier, the pick with its
+ * provider once and why, any move, how many candidates were removed — or, for a row from before it was kept,
+ * the router's reasons in order.
+ */
 export function subagentWhy(run: SubagentRunView | undefined): string | null {
-  return run && run.reasons.length ? run.reasons.join(' · ') : null;
+  if (!run) return null;
+  if (run.why) return run.why;
+  return run.reasons?.length ? run.reasons.join(' · ') : null;
+}
+
+/** What the Why line opens to: every reason the router gave, then every candidate it removed with its reason. */
+export function subagentWhyDetails(run: SubagentRunView | undefined): { reasons: string[]; removed: string[] } {
+  const removed = (run?.removed ?? []).map((c) => {
+    const engine = c.engine && c.engine !== c.provider ? ` (${c.engine})` : '';
+    const model = c.model ? `, ${c.model}${c.effort ? ` · ${c.effort}` : ''}` : '';
+    return `${c.provider}${engine}${model}: ${c.reason}`;
+  });
+  return { reasons: run?.why ? run.reasons : [], removed };
 }
 
 /**
