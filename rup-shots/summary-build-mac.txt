@@ -1,0 +1,10 @@
+Test Case '-[RupMacProbeUITests.RupShotTests test1QueuedPage]' started.
+Test Case '-[RupMacProbeUITests.RupShotTests test1QueuedPage]' passed (28.915 seconds).
+Test Case '-[RupMacProbeUITests.RupShotTests test2FootRow]' started.
+Test Case '-[RupMacProbeUITests.RupShotTests test2FootRow]' passed (33.973 seconds).
+Test Case '-[RupMacProbeUITests.RupShotTests test3List]' started.
+Test Case '-[RupMacProbeUITests.RupShotTests test3List]' passed (24.209 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 87.097 (87.104) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 87.097 (87.105) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 87.097 (87.106) seconds
+** TEST SUCCEEDED **

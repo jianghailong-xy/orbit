@@ -1,0 +1,4 @@
+A: full sentence: true
+A: title Runner updating: true
+A: Waiting 38 min: true
+A: foot tag (expected NO): false

@@ -1,0 +1,9 @@
+B-foot-row: no window after launch; pressing ⌘N
+B-foot-row: 1 window(s)
+B: tag shown: true
+B: Queued word: true
+B: queued page (expected NO): false
+B: press #1 on the button at (905.0, 151.5, 80.0, 13.0)
+B: popover shown: true
+B: popover text: true
+B: popover wait: true

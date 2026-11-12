@@ -1,0 +1,300 @@
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.rup-probe/.dd-mac/Build/Products/Debug/RupMacProbeUITests-Runner.app/Contents/PlugIns/RupMacProbeUITests.xctest (in target 'RupMacProbeUITests' from project 'RupProbe')
+    cd /Users/runner/work/orbit/orbit/.rup-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.rup-probe/.dd-mac/Build/Products/Debug/RupMacProbeUITests-Runner.app/Contents/PlugIns/RupMacProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.rup-probe/.dd-mac/Build/Products/Debug/RupMacProbeUITests-Runner.app/Contents/PlugIns/RupMacProbeUITests.xctest (in target 'RupMacProbeUITests' from project 'RupProbe')
+    cd /Users/runner/work/orbit/orbit/.rup-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.rup-probe/.dd-mac/Build/Products/Debug/RupMacProbeUITests-Runner.app/Contents/PlugIns/RupMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.rup-probe/.dd-mac/Build/Products/Debug/RupMacProbeUITests-Runner.app (in target 'RupMacProbeUITests' from project 'RupProbe')
+    cd /Users/runner/work/orbit/orbit/.rup-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.rup-probe/.dd-mac/Build/Intermediates.noindex/RupProbe.build/Debug/RupMacProbeUITests.build/RupMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.rup-probe/.dd-mac/Build/Products/Debug/RupMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.rup-probe/.dd-mac/Build/Products/Debug/RupMacProbeUITests-Runner.app: replacing existing signature
+
+2026-11-12 06:56:11.443865+0000 RupMacProbeUITests-Runner[12541:41156] [Default] Running tests...
+Test Suite 'All tests' started at 2026-11-12 06:56:12.987.
+Test Suite 'RupMacProbeUITests.xctest' started at 2026-11-12 06:56:12.988.
+Test Suite 'RupShotTests' started at 2026-11-12 06:56:12.988.
+Test Case '-[RupMacProbeUITests.RupShotTests test1QueuedPage]' started.
+    t =     0.00s Start Test at 2026-11-12 06:56:12.989
+    t =     1.14s Set Up
+    t =     1.32s Open io.orbitd.rupmacprobe
+    t =     1.32s     Launch io.orbitd.rupmacprobe
+2026-11-12 06:56:14.988 xcodebuild[3546:14446] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-12 06:56:14.989 xcodebuild[3546:14446] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.41s         Wait for accessibility to load
+    t =     3.90s         Setting up automation session
+    t =     3.98s         Wait for io.orbitd.rupmacprobe to idle
+    t =     4.17s Get number of matches for: Descendants matching type Window
+    t =     5.02s Get number of matches for: Descendants matching type Window
+    t =     5.55s Get number of matches for: Descendants matching type Window
+    t =     6.11s Get number of matches for: Descendants matching type Window
+    t =     6.64s Get number of matches for: Descendants matching type Window
+    t =     7.18s Get number of matches for: Descendants matching type Window
+    t =     7.71s Get number of matches for: Descendants matching type Window
+    t =     8.26s Get number of matches for: Descendants matching type Window
+    t =     8.79s Get number of matches for: Descendants matching type Window
+    t =     9.36s Get number of matches for: Descendants matching type Window
+    t =     9.88s Get number of matches for: Descendants matching type Window
+    t =    10.41s Get number of matches for: Descendants matching type Window
+    t =    10.93s Get number of matches for: Descendants matching type Window
+    t =    11.47s Get number of matches for: Descendants matching type Window
+    t =    11.99s Get number of matches for: Descendants matching type Window
+    t =    12.52s Get number of matches for: Descendants matching type Window
+    t =    13.05s Get number of matches for: Descendants matching type Window
+    t =    13.57s Get number of matches for: Descendants matching type Window
+    t =    14.10s Get number of matches for: Descendants matching type Window
+    t =    14.63s Get number of matches for: Descendants matching type Window
+    t =    15.16s Get number of matches for: Descendants matching type Window
+    t =    15.70s Get number of matches for: Descendants matching type Window
+    t =    16.23s Get number of matches for: Descendants matching type Window
+    t =    16.76s Get number of matches for: Descendants matching type Window
+    t =    17.29s Get number of matches for: Descendants matching type Window
+    t =    17.82s Get number of matches for: Descendants matching type Window
+    t =    18.33s Get number of matches for: Descendants matching type Window
+    t =    18.86s Get number of matches for: Descendants matching type Window
+    t =    19.38s Requesting snapshot of accessibility hierarchy for app with pid 12593
+    t =    19.42s Requesting snapshot of accessibility hierarchy for app with pid 12593
+    t =    19.45s Added attachment named 'no-window-A-queued-page.txt'
+    t =    19.46s Type 'n' key with modifiers '⌘' (0x10)
+    t =    19.46s     Wait for io.orbitd.rupmacprobe to idle
+    t =    19.46s     Find the Target Application 'io.orbitd.rupmacprobe'
+    t =    19.47s     Check for interrupting elements affecting "RupMacProbe" Application
+    t =    19.47s     Synthesize event
+    t =    20.50s     Wait for io.orbitd.rupmacprobe to idle
+    t =    20.50s Get number of matches for: Descendants matching type Window
+    t =    20.60s Get number of matches for: Descendants matching type Window
+    t =    20.63s Checking existence of `Any (First Match)`
+    t =    20.71s Checking existence of `StaticText (First Match)`
+    t =    20.75s Checking existence of `Any (First Match)`
+    t =    21.30s Checking existence of `Any (First Match)`
+    t =    21.34s Checking existence of `StaticText (First Match)`
+    t =    21.39s Checking existence of `Any (First Match)`
+    t =    21.93s Checking existence of `Any (First Match)`
+    t =    21.99s Checking existence of `StaticText (First Match)`
+    t =    22.03s Checking existence of `Any (First Match)`
+    t =    22.57s Checking existence of `Any (First Match)`
+    t =    22.61s Checking existence of `StaticText (First Match)`
+    t =    22.64s Checking existence of `Any (First Match)`
+    t =    23.18s Checking existence of `Any (First Match)`
+    t =    23.23s Checking existence of `StaticText (First Match)`
+    t =    23.42s Checking existence of `StaticText (First Match)`
+    t =    25.66s Checking existence of `Any (First Match)`
+    t =    25.76s Checking existence of `StaticText (First Match)`
+    t =    25.81s Checking existence of `StaticText (First Match)`
+    t =    25.86s Checking existence of `Any (First Match)`
+    t =    25.93s Checking existence of `StaticText (First Match)`
+    t =    25.96s Checking existence of `StaticText (First Match)`
+    t =    25.98s Checking existence of `Any (First Match)`
+    t =    26.04s Checking existence of `StaticText (First Match)`
+    t =    26.08s Checking existence of `StaticText (First Match)`
+    t =    26.12s Checking existence of `Any (First Match)`
+    t =    26.18s Checking existence of `StaticText (First Match)`
+    t =    26.23s Checking existence of `Any (First Match)`
+    t =    28.29s Checking existence of `Window (First Match)`
+    t =    28.29s Checking existence of `Window (First Match)`
+    t =    28.30s Find the Window (First Match)
+    t =    28.43s Added attachment named 'A-queued-page'
+    t =    28.44s Requesting snapshot of accessibility hierarchy for app with pid 12593
+    t =    28.55s Requesting snapshot of accessibility hierarchy for app with pid 12593
+    t =    28.66s Added attachment named 'tree-A-queued-page.txt'
+    t =    28.67s Tear Down
+    t =    28.67s     Added attachment named 'RupShotTeststest1QueuedPage-notes.txt'
+Test Case '-[RupMacProbeUITests.RupShotTests test1QueuedPage]' passed (28.915 seconds).
+Test Case '-[RupMacProbeUITests.RupShotTests test2FootRow]' started.
+    t =     0.00s Start Test at 2026-11-12 06:56:41.905
+    t =     0.08s Set Up
+    t =     0.09s Open io.orbitd.rupmacprobe
+    t =     0.09s     Launch io.orbitd.rupmacprobe
+    t =     0.09s         Terminate io.orbitd.rupmacprobe:12593
+2026-11-12 06:56:43.068 xcodebuild[3546:14446] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-12 06:56:43.068 xcodebuild[3546:14446] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.89s         Wait for accessibility to load
+    t =     1.99s         Setting up automation session
+    t =     2.00s         Wait for io.orbitd.rupmacprobe to idle
+    t =     2.01s Get number of matches for: Descendants matching type Window
+    t =     2.65s Get number of matches for: Descendants matching type Window
+    t =     3.17s Get number of matches for: Descendants matching type Window
+    t =     3.72s Get number of matches for: Descendants matching type Window
+    t =     4.27s Get number of matches for: Descendants matching type Window
+    t =     4.80s Get number of matches for: Descendants matching type Window
+    t =     5.32s Get number of matches for: Descendants matching type Window
+    t =     5.86s Get number of matches for: Descendants matching type Window
+    t =     6.39s Get number of matches for: Descendants matching type Window
+    t =     6.92s Get number of matches for: Descendants matching type Window
+    t =     7.46s Get number of matches for: Descendants matching type Window
+    t =     8.00s Get number of matches for: Descendants matching type Window
+    t =     8.53s Get number of matches for: Descendants matching type Window
+    t =     9.07s Get number of matches for: Descendants matching type Window
+    t =     9.60s Get number of matches for: Descendants matching type Window
+    t =    10.13s Get number of matches for: Descendants matching type Window
+    t =    10.65s Get number of matches for: Descendants matching type Window
+    t =    11.18s Get number of matches for: Descendants matching type Window
+    t =    11.70s Get number of matches for: Descendants matching type Window
+    t =    12.25s Get number of matches for: Descendants matching type Window
+    t =    12.79s Get number of matches for: Descendants matching type Window
+    t =    13.34s Get number of matches for: Descendants matching type Window
+    t =    13.88s Get number of matches for: Descendants matching type Window
+    t =    14.41s Get number of matches for: Descendants matching type Window
+    t =    14.95s Get number of matches for: Descendants matching type Window
+    t =    15.49s Get number of matches for: Descendants matching type Window
+    t =    16.03s Get number of matches for: Descendants matching type Window
+    t =    16.55s Get number of matches for: Descendants matching type Window
+    t =    17.08s Requesting snapshot of accessibility hierarchy for app with pid 13635
+    t =    17.15s Requesting snapshot of accessibility hierarchy for app with pid 13635
+    t =    17.20s Added attachment named 'no-window-B-foot-row.txt'
+    t =    17.20s Type 'n' key with modifiers '⌘' (0x10)
+    t =    17.20s     Wait for io.orbitd.rupmacprobe to idle
+    t =    17.21s     Find the Target Application 'io.orbitd.rupmacprobe'
+    t =    17.22s     Check for interrupting elements affecting "RupMacProbe" Application
+    t =    17.22s     Synthesize event
+    t =    18.12s     Wait for io.orbitd.rupmacprobe to idle
+    t =    18.12s Get number of matches for: Descendants matching type Window
+    t =    18.28s Get number of matches for: Descendants matching type Window
+    t =    18.34s Checking existence of `Any (First Match)`
+    t =    18.47s Checking existence of `StaticText (First Match)`
+    t =    18.55s Checking existence of `Any (First Match)`
+    t =    19.12s Checking existence of `Any (First Match)`
+    t =    19.33s Checking existence of `StaticText (First Match)`
+    t =    19.42s Checking existence of `Any (First Match)`
+    t =    20.04s Checking existence of `Any (First Match)`
+    t =    20.14s Checking existence of `StaticText (First Match)`
+    t =    20.24s Checking existence of `Any (First Match)`
+    t =    20.84s Checking existence of `Any (First Match)`
+    t =    20.95s Checking existence of `StaticText (First Match)`
+    t =    21.05s Checking existence of `Any (First Match)`
+    t =    21.65s Checking existence of `Any (First Match)`
+    t =    22.01s Checking existence of `StaticText (First Match)`
+    t =    22.31s Checking existence of `Any (First Match)`
+    t =    22.92s Checking existence of `Any (First Match)`
+    t =    23.07s Checking existence of `StaticText (First Match)`
+    t =    23.16s Checking existence of `StaticText (First Match)`
+    t =    25.23s Checking existence of `Any (First Match)`
+    t =    25.35s Checking existence of `Any (First Match)`
+    t =    25.42s Checking existence of `Any (First Match)`
+    t =    25.52s Checking existence of `Any (First Match)`
+    t =    25.61s Checking existence of `Any (First Match)`
+    t =    25.71s Checking existence of `StaticText (First Match)`
+    t =    25.81s Checking existence of `Any (First Match)`
+    t =    27.91s Checking existence of `Window (First Match)`
+    t =    27.92s Checking existence of `Window (First Match)`
+    t =    27.92s Find the Window (First Match)
+    t =    28.01s Added attachment named 'B-foot-row'
+    t =    28.02s Requesting snapshot of accessibility hierarchy for app with pid 13635
+    t =    28.23s Requesting snapshot of accessibility hierarchy for app with pid 13635
+    t =    28.40s Added attachment named 'tree-B-foot-row.txt'
+    t =    28.41s Checking existence of `Button (First Match)`
+    t =    28.51s Find the Button (First Match)
+    t =    28.59s Click "runner-updating-tag" Button
+    t =    28.60s     Wait for io.orbitd.rupmacprobe to idle
+    t =    28.60s     Find the "runner-updating-tag" Button
+    t =    28.70s     Check for interrupting elements affecting "runner-updating-tag" Button
+    t =    28.80s     Synthesize event
+    t =    30.08s     Wait for io.orbitd.rupmacprobe to idle
+    t =    30.08s Checking existence of `Any (First Match)`
+    t =    30.34s Checking existence of `StaticText (First Match)`
+    t =    30.45s Checking existence of `StaticText (First Match)`
+    t =    30.58s Checking existence of `Any (First Match)`
+    t =    30.70s Checking existence of `StaticText (First Match)`
+    t =    30.83s Checking existence of `StaticText (First Match)`
+    t =    30.96s Checking existence of `Any (First Match)`
+    t =    31.06s Checking existence of `StaticText (First Match)`
+    t =    31.14s Checking existence of `StaticText (First Match)`
+    t =    31.23s Checking existence of `Any (First Match)`
+    t =    31.32s Checking existence of `StaticText (First Match)`
+    t =    31.39s Checking existence of `StaticText (First Match)`
+    t =    33.14s Added attachment named 'B-popover'
+    t =    33.14s Requesting snapshot of accessibility hierarchy for app with pid 13635
+    t =    33.43s Requesting snapshot of accessibility hierarchy for app with pid 13635
+    t =    33.62s Added attachment named 'tree-B-popover.txt'
+    t =    33.63s Tear Down
+    t =    33.63s     Added attachment named 'RupShotTeststest2FootRow-notes.txt'
+Test Case '-[RupMacProbeUITests.RupShotTests test2FootRow]' passed (33.973 seconds).
+Test Case '-[RupMacProbeUITests.RupShotTests test3List]' started.
+    t =     0.00s Start Test at 2026-11-12 06:57:15.882
+    t =     0.19s Set Up
+    t =     0.23s Open io.orbitd.rupmacprobe
+    t =     0.23s     Launch io.orbitd.rupmacprobe
+    t =     0.23s         Terminate io.orbitd.rupmacprobe:13635
+2026-11-12 06:57:17.143 xcodebuild[3546:14446] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-12 06:57:17.143 xcodebuild[3546:14446] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.24s         Wait for accessibility to load
+    t =     2.48s         Setting up automation session
+    t =     2.49s         Wait for io.orbitd.rupmacprobe to idle
+    t =     2.50s Get number of matches for: Descendants matching type Window
+    t =     3.15s Get number of matches for: Descendants matching type Window
+    t =     3.71s Get number of matches for: Descendants matching type Window
+    t =     4.24s Get number of matches for: Descendants matching type Window
+    t =     4.78s Get number of matches for: Descendants matching type Window
+    t =     5.32s Get number of matches for: Descendants matching type Window
+    t =     5.85s Get number of matches for: Descendants matching type Window
+    t =     6.38s Get number of matches for: Descendants matching type Window
+    t =     6.91s Get number of matches for: Descendants matching type Window
+    t =     7.45s Get number of matches for: Descendants matching type Window
+    t =     7.98s Get number of matches for: Descendants matching type Window
+    t =     8.51s Get number of matches for: Descendants matching type Window
+    t =     9.05s Get number of matches for: Descendants matching type Window
+    t =     9.60s Get number of matches for: Descendants matching type Window
+    t =    10.12s Get number of matches for: Descendants matching type Window
+    t =    10.66s Get number of matches for: Descendants matching type Window
+    t =    11.19s Get number of matches for: Descendants matching type Window
+    t =    11.72s Get number of matches for: Descendants matching type Window
+    t =    12.25s Get number of matches for: Descendants matching type Window
+    t =    12.80s Get number of matches for: Descendants matching type Window
+    t =    13.33s Get number of matches for: Descendants matching type Window
+    t =    13.88s Get number of matches for: Descendants matching type Window
+    t =    14.41s Get number of matches for: Descendants matching type Window
+    t =    14.94s Get number of matches for: Descendants matching type Window
+    t =    15.48s Get number of matches for: Descendants matching type Window
+    t =    16.00s Get number of matches for: Descendants matching type Window
+    t =    16.52s Get number of matches for: Descendants matching type Window
+    t =    17.05s Get number of matches for: Descendants matching type Window
+    t =    17.60s Requesting snapshot of accessibility hierarchy for app with pid 14973
+    t =    17.66s Requesting snapshot of accessibility hierarchy for app with pid 14973
+    t =    17.70s Added attachment named 'no-window-C-list.txt'
+    t =    17.71s Type 'n' key with modifiers '⌘' (0x10)
+    t =    17.71s     Wait for io.orbitd.rupmacprobe to idle
+    t =    17.72s     Find the Target Application 'io.orbitd.rupmacprobe'
+    t =    17.74s     Check for interrupting elements affecting "RupMacProbe" Application
+    t =    17.74s     Synthesize event
+    t =    18.38s     Wait for io.orbitd.rupmacprobe to idle
+    t =    18.38s Get number of matches for: Descendants matching type Window
+    t =    18.52s Get number of matches for: Descendants matching type Window
+    t =    18.60s Checking existence of `Any (First Match)`
+    t =    18.67s Checking existence of `StaticText (First Match)`
+    t =    18.73s Checking existence of `Any (First Match)`
+    t =    19.29s Checking existence of `Any (First Match)`
+    t =    19.35s Checking existence of `StaticText (First Match)`
+    t =    19.41s Checking existence of `StaticText (First Match)`
+    t =    21.50s Checking existence of `Any (First Match)`
+    t =    21.61s Checking existence of `StaticText (First Match)`
+    t =    21.67s Checking existence of `StaticText (First Match)`
+    t =    23.74s Checking existence of `Window (First Match)`
+    t =    23.74s Checking existence of `Window (First Match)`
+    t =    23.75s Find the Window (First Match)
+    t =    23.80s Added attachment named 'C-list'
+    t =    23.80s Requesting snapshot of accessibility hierarchy for app with pid 14973
+    t =    23.89s Requesting snapshot of accessibility hierarchy for app with pid 14973
+    t =    23.95s Added attachment named 'tree-C-list.txt'
+    t =    23.96s Tear Down
+    t =    23.96s     Added attachment named 'RupShotTeststest3List-notes.txt'
+Test Case '-[RupMacProbeUITests.RupShotTests test3List]' passed (24.209 seconds).
+Test Suite 'RupShotTests' passed at 2026-11-12 06:57:40.092.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 87.097 (87.104) seconds
+Test Suite 'RupMacProbeUITests.xctest' passed at 2026-11-12 06:57:40.093.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 87.097 (87.105) seconds
+Test Suite 'All tests' passed at 2026-11-12 06:57:40.094.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 87.097 (87.106) seconds
+2026-11-12 06:57:40.655 xcodebuild[3546:14446] [MT] IDETestOperationsObserverDebug: 93.956 elapsed -- Testing started completed.
+2026-11-12 06:57:40.655 xcodebuild[3546:14446] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-12 06:57:40.655 xcodebuild[3546:14446] [MT] IDETestOperationsObserverDebug: 93.956 sec, +93.956 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.rup-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

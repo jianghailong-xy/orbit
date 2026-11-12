@@ -1,0 +1,10 @@
+Test Case '-[RupProbeUITests.RupShotTests test1QueuedPage]' started.
+Test Case '-[RupProbeUITests.RupShotTests test1QueuedPage]' passed (34.159 seconds).
+Test Case '-[RupProbeUITests.RupShotTests test2FootRow]' started.
+Test Case '-[RupProbeUITests.RupShotTests test2FootRow]' passed (31.873 seconds).
+Test Case '-[RupProbeUITests.RupShotTests test3List]' started.
+Test Case '-[RupProbeUITests.RupShotTests test3List]' passed (15.155 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 81.186 (81.191) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 81.186 (81.192) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 81.186 (81.202) seconds
+** TEST SUCCEEDED **

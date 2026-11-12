@@ -1,0 +1,7 @@
+B: tag shown: true
+B: Queued word: true
+B: queued page (expected NO): false
+B: press #1 on the button at (301.99999999999994, 192.33333333333334, 84.0, 13.333333333333314)
+B: popover shown: true
+B: popover text: true
+B: popover wait: true

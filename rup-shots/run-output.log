@@ -1,0 +1,62 @@
+==> stub ready after 2s
+==> mac
+Test Case '-[RupMacProbeUITests.RupShotTests test1QueuedPage]' started.
+Test Case '-[RupMacProbeUITests.RupShotTests test1QueuedPage]' passed (28.915 seconds).
+Test Case '-[RupMacProbeUITests.RupShotTests test2FootRow]' started.
+Test Case '-[RupMacProbeUITests.RupShotTests test2FootRow]' passed (33.973 seconds).
+Test Case '-[RupMacProbeUITests.RupShotTests test3List]' started.
+Test Case '-[RupMacProbeUITests.RupShotTests test3List]' passed (24.209 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 87.097 (87.104) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 87.097 (87.105) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 87.097 (87.106) seconds
+** TEST SUCCEEDED **
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC
+==> ios
+Test Case '-[RupProbeUITests.RupShotTests test1QueuedPage]' started.
+Test Case '-[RupProbeUITests.RupShotTests test1QueuedPage]' passed (34.159 seconds).
+Test Case '-[RupProbeUITests.RupShotTests test2FootRow]' started.
+Test Case '-[RupProbeUITests.RupShotTests test2FootRow]' passed (31.873 seconds).
+Test Case '-[RupProbeUITests.RupShotTests test3List]' started.
+Test Case '-[RupProbeUITests.RupShotTests test3List]' passed (15.155 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 81.186 (81.191) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 81.186 (81.192) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 81.186 (81.202) seconds
+** TEST SUCCEEDED **
+.rup-probe/run.sh: line 76:  3535 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" > "$OUT/stub.out" 2>&1
+/Users/runner/work/orbit/orbit/.rup-probe/shots/ios:
+total 1728
+drwxr-xr-x  15 runner  staff     480 Nov 12 07:14 .
+drwxr-xr-x   9 runner  staff     288 Nov 12 07:14 ..
+-rw-r--r--   1 runner  staff  167428 Nov 12 07:12 A-queued-page.png
+drwxr-xr-x  17 runner  staff     544 Nov 12 07:14 attachments
+-rw-r--r--   1 runner  staff  152641 Nov 12 07:13 B-foot-row.png
+-rw-r--r--   1 runner  staff  319896 Nov 12 07:13 B-popover.png
+-rw-r--r--   1 runner  staff  156062 Nov 12 07:13 C-list.png
+-rw-r--r--   1 runner  staff     262 Nov 12 07:14 Complete_Issue_Description.txt.txt
+-rw-r--r--@  1 runner  staff     110 Nov 12 07:12 RupShotTeststest1QueuedPage-notes.txt
+-rw-r--r--@  1 runner  staff     238 Nov 12 07:13 RupShotTeststest2FootRow-notes.txt
+-rw-r--r--@  1 runner  staff      29 Nov 12 07:13 RupShotTeststest3List-notes.txt
+-rw-r--r--@  1 runner  staff   11436 Nov 12 07:12 tree-A-queued-page.txt
+-rw-r--r--@  1 runner  staff   13767 Nov 12 07:13 tree-B-foot-row.txt
+-rw-r--r--@  1 runner  staff   15667 Nov 12 07:13 tree-B-popover.txt
+-rw-r--r--@  1 runner  staff   13827 Nov 12 07:13 tree-C-list.txt
+
+/Users/runner/work/orbit/orbit/.rup-probe/shots/mac:
+total 1088
+drwxr-xr-x  17 runner  staff     544 Nov 12 06:57 .
+drwxr-xr-x   9 runner  staff     288 Nov 12 07:14 ..
+-rw-r--r--   1 runner  staff   84559 Nov 12 06:57 A-queued-page.png
+drwxr-xr-x  17 runner  staff     544 Nov 12 06:57 attachments
+-rw-r--r--   1 runner  staff   79832 Nov 12 06:57 B-foot-row.png
+-rw-r--r--   1 runner  staff  163422 Nov 12 06:57 B-popover.png
+-rw-r--r--   1 runner  staff   61883 Nov 12 06:57 C-list.png
+-rw-r--r--   1 runner  staff   14802 Nov 12 06:57 no-window-A-queued-page.txt
+-rw-r--r--   1 runner  staff   14671 Nov 12 06:57 no-window-B-foot-row.txt
+-rw-r--r--   1 runner  staff   14802 Nov 12 06:57 no-window-C-list.txt
+-rw-r--r--   1 runner  staff     190 Nov 12 06:57 RupShotTeststest1QueuedPage-notes.txt
+-rw-r--r--   1 runner  staff     272 Nov 12 06:57 RupShotTeststest2FootRow-notes.txt
+-rw-r--r--   1 runner  staff      95 Nov 12 06:57 RupShotTeststest3List-notes.txt
+-rw-r--r--   1 runner  staff   22328 Nov 12 06:57 tree-A-queued-page.txt
+-rw-r--r--   1 runner  staff   22584 Nov 12 06:57 tree-B-foot-row.txt
+-rw-r--r--   1 runner  staff   23262 Nov 12 06:57 tree-B-popover.txt
+-rw-r--r--   1 runner  staff   20576 Nov 12 06:57 tree-C-list.txt
