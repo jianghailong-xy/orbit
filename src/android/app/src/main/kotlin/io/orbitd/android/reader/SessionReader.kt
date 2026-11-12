@@ -130,7 +130,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // Every other reading of the conversation keeps [rows], which hold each event. A watch's line names its target as the wake's own
     // line does, once the names below are known.
     var wakeNames by remember(handle, route.id) { mutableStateOf<(String, JsonObject) -> String?>({ _, _ -> null }) }
-    val shownRows = remember(rows, wakeNames) { ExchangeFold.fold(rows, wakeNames) }
+    // Background jobs fold only in a coordinator (`projectId` is the project it coordinates): anywhere else they are the answer.
+    val coordinator = state.session?.snapshot?.detail?.text("projectId") != null
+    val shownRows = remember(rows, wakeNames, coordinator) { ExchangeFold.fold(rows, wakeNames, coordinator) }
     // Each turn's head row, under the message that opened it (web `TurnHead`); only the newest may count up.
     val turnHeads = remember(state.window.events) { TurnHeads.of(state.window.events) }
     val newestHead = turnHeads.keys.maxOrNull()
