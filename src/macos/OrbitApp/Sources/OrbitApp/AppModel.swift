@@ -328,9 +328,8 @@ final class AppModel {
     /// blocked rows, not the list.
     private(set) var needsYouSessions: [Session] = []
     private(set) var agentNeedsYou: [String: Int] = [:]
-    #if os(iOS)
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
-    /// `agentNeedsYou` so the iPhone drawer and iPad sidebar never rescan Open once per row/render.
+    /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
     /// Workspace ids with a background job in flight and nobody generating — read off the same
     /// glyph, so the two marks can never disagree about one row. Drawn quieter than the spinner.
@@ -338,7 +337,6 @@ final class AppModel {
     /// Each project's coordinator conversation as the Open list shows it, by project — what the
     /// drawer's project rows read beside their fetched summaries (`ProjectCoordinatorPulse`).
     private(set) var projectCoordinators: [String: ProjectCoordinatorPulse] = [:]
-    #endif
 
     let tokenStore: TokenStore
     let notifications = NotificationManager()
@@ -955,10 +953,10 @@ final class AppModel {
         sessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
-        #if os(iOS)
         runningWorkspaceIDs = []
         jobWorkspaceIDs = []
         projectCoordinators = [:]
+        #if os(iOS)
         sessionFolders = []
         projectSessions = []
         projectSessionsAddress = nil
@@ -1861,13 +1859,9 @@ final class AppModel {
         // The ids are the same, so `filedSessions` keeps every entry it had.
         sessionDetails.reconcile(with: [row])
 
-        #if os(iOS)
         let activity = OpenListDerived.Activity(runningWorkspaceIDs: runningWorkspaceIDs,
                                                 jobWorkspaceIDs: jobWorkspaceIDs,
                                                 coordinatorPulses: projectCoordinators)
-        #else
-        let activity: OpenListDerived.Activity? = nil
-        #endif
         var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
                                       menu: menuSummary, activity: activity)
         derived.replace(old, with: row, in: sessions)
@@ -1877,13 +1871,11 @@ final class AppModel {
         #endif
         if derived.needsYou != needsYouSessions { needsYouSessions = derived.needsYou }
         if derived.agentNeedsYou != agentNeedsYou { agentNeedsYou = derived.agentNeedsYou }
-        #if os(iOS)
         if let marks = derived.activity {
             if marks.runningWorkspaceIDs != runningWorkspaceIDs { runningWorkspaceIDs = marks.runningWorkspaceIDs }
             if marks.jobWorkspaceIDs != jobWorkspaceIDs { jobWorkspaceIDs = marks.jobWorkspaceIDs }
             if marks.coordinatorPulses != projectCoordinators { projectCoordinators = marks.coordinatorPulses }
         }
-        #endif
         agents?.applyOpenRow(sessions, workspaceIDs: [old.agent?.id ?? old.agentId, row.agent?.id ?? row.agentId])
         if old.confirmationUnderReview?.dueAt != row.confirmationUnderReview?.dueAt {
             scheduleReviewDueRefresh(sessions)
@@ -1920,11 +1912,9 @@ final class AppModel {
         sessions = list
         needsYouSessions = SessionGrouping.group(list).needsYou
         agentNeedsYou = NeedsYouLogic.byAgent(list)
-        #if os(iOS)
         runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
         jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
         projectCoordinators = ProjectAttention.coordinatorPulses(list)
-        #endif
         // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
         // here instead of leaving it to fetch the identical payload on its own timer.
         agents?.applyOpenSnapshot(list)

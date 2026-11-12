@@ -158,6 +158,7 @@ code { font: 13px "DejaVu Sans Mono", monospace; background: #f0f0f4; padding: 1
 
 <section class="b-part" id="part-1">
   <h1>macOS 侧栏 — 照 iPad 的结构，用 Mac 的手感</h1>
+  <p class="lede" style="background:#e3f5e6;border-radius:10px;padding:10px 14px;color:#1f5f2c"><b>11-12 已定：</b>① 侧栏不放新建会话；② 工作区一行（A）；③ 项目组全部列出（A），网页也改回全部列出，不再折成「N quiet projects」。</p>
   <p class="lede">今天 Mac 的侧栏还是老的「Workspaces 展开组 + 一排板块」：工作区占满上半截、每行两行字，Projects / Tasks / Waiting on you 被挤到最底下；行上也没有「等你 / 在跑」的状态。iPad 的侧栏就是 iPhone 抽屉的同一个视图，结构已经定下来了。建议 Mac 照搬它的<b>结构、顺序、状态记号</b>，但<b>尺寸、选中样式、新建入口、设置入口</b>按 Mac 的习惯来。三张图用同一份示例数据：两台机器 12 个工作区、3 个进行中的项目。红色虚线是 Mac 默认窗口高度 720pt。</p>
   <div class="b-row" id="p1-frames"></div>
   <div class="b-row" style="margin-top: 30px;">
@@ -168,7 +169,7 @@ code { font: 13px "DejaVu Sans Mono", monospace; background: #f0f0f4; padding: 1
         <li><span class="b-num">3</span><b>工作区一行：文件夹 · 名字 · 机器</b>，和 iPad 同一种写法（同名的 orbit 靠机器区分）。引擎和目录从行里拿掉，放进鼠标悬停的提示（<code>.help</code>）。行高 44 → 30pt：12 个工作区从 528pt 变成 360pt。<span class="same">同 iPad</span>，行高按 Mac</li>
         <li><span class="b-num">4</span><b>右侧只有一个状态位</b>，优先级同 iPad：等你的数量（琥珀胶囊）＞ 正在生成（转圈）＞ 后台任务（呼吸的终端图标）。都没有时，前 9 个工作区显示淡灰的 ⌘1…⌘9 —— 保留 Mac 已有的快捷键提示。<span class="same">同 iPad</span> + <span class="diff">Mac 保留 ⌘N</span></li>
         <li><span class="b-num">5</span><b>进行中的项目接在最后</b>，和 iPad 一样：等你的排前面，然后按最近活动；点开是项目的会话页。<span class="same">同 iPad</span></li>
-        <li><span class="b-num">6</span><b>新建会话和搜索放在侧栏顶部的工具栏</b>（和「备忘录」「邮件」的写新邮件按钮同一个位置），对应 ⌘N 和 ⌘K。iPad 底部那条浮动「New session」胶囊不搬过来：Mac 上新建是工具栏 + 快捷键的事。<span class="diff">Mac 习惯</span>（待定 ①）</li>
+        <li><span class="b-num">6</span><b>侧栏顶部只放搜索</b>（⌘K）。<b>侧栏里不放新建会话</b>（11-12 定）：新建走 ⌘N 和 File ▸ New Session，iPad 底部那条浮动胶囊不搬过来。<span class="diff">Mac 习惯</span></li>
         <li><span class="b-num">7</span><b>底部保留账户行，右侧加一个齿轮</b>：齿轮 = 打开设置（同 iPad 的齿轮），点头像弹账户菜单。<b>Following、Settings、Admin 三行从侧栏拿掉</b>——iPad 本来就没有这三行：Settings 是齿轮，Admin 在设置和账户菜单里，Following 从会话里的卡片和链接进，菜单栏「Go」里也留一个。<span class="same">同 iPad</span></li>
       </ol>
     </div>
@@ -214,7 +215,7 @@ code { font: 13px "DejaVu Sans Mono", monospace; background: #f0f0f4; padding: 1
 </section>
 
 <section class="b-part" id="part-4">
-  <h2>待定 · 要你拍板</h2>
+  <h2>待定 · 要你拍板 <span style="font-size:15px;color:#1f5f2c">（11-12 已定：① 都不要，侧栏不放新建；② A；③ A，网页也改回）</span></h2>
 
   <div class="q"><h3>① 新建会话放哪</h3></div>
   <div class="b-row">
@@ -343,7 +344,7 @@ function macNew(o = {}) {
   const ws = o.ws || WS;
   let h = `<div class="mac${dark}" id="${id}"><div class="tb"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div><div style="flex:1"></div>`;
   if (o.fab) h += `<div class="tbtn">${ic('side', 17)}</div></div>`;
-  else h += `<div class="tbtn" id="${id}-tb" style="width:auto;padding:0 8px;gap:12px;border-radius:999px;display:flex"><span style="display:flex">${ic('search', 16)}</span><span style="display:flex">${ic('compose', 16)}</span><span style="display:flex">${ic('side', 17)}</span></div></div>`;
+  else h += `<div class="tbtn" id="${id}-tb" style="width:auto;padding:0 8px;gap:12px;border-radius:999px;display:flex"><span style="display:flex">${ic('search', 16)}</span><span style="display:flex">${ic('side', 17)}</span></div></div>`;
   h += `<div class="list">`;
   if (!o.noTop) {
     h += `<div id="${id}-top">`;

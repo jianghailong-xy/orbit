@@ -498,7 +498,7 @@ final class WikiWiringTests: XCTestCase {
     func testTheMacSidebarDrawsNoWikiRowWithoutTheWiki() throws {
         let main = code(try source("Views/MainView.swift"))
         let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
-        XCTAssertTrue(sidebar.contains("ForEach(AppSection.visible(isAdmin: isAdmin, wiki: model.wiki?.shown == true)) { section in"))
+        XCTAssertTrue(sidebar.contains("if section != .wiki || model.wiki?.shown == true {"))
         XCTAssertTrue(sidebar.contains(".task { await model.wiki?.loadSpaces() }"))
     }
 
