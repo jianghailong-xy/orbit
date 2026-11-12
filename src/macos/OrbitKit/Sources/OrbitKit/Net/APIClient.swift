@@ -988,10 +988,10 @@ public final class APIClient: @unchecked Sendable {
     /// the card read, and if any one names another crossing or is no longer waiting the server
     /// writes nothing and refuses the batch (`APPROVAL_TARGET_MISMATCH` /
     /// `HANDOFF_ALREADY_ANSWERED`). Answers the batch's rows as they stand now.
-    public func decideTaskMoveBatch(sessionID: String, batch: TaskMoveBatch,
+    public func decideTaskMoveBatch(sessionID: String, moves: [ProjectCrossing],
                                     _ decision: ProjectCrossingDecision) async throws -> [ProjectCrossing] {
         let data = try await postRaw("sessions/\(sessionID)/task-moves/decision",
-                                     body: TaskMoves.answer(batch, decision))
+                                     body: TaskMoves.answer(moves, decision))
         return try decoder.decode([ProjectCrossing].self, from: data)
     }
 

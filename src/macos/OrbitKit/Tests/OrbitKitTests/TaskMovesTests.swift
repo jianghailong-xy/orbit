@@ -2,13 +2,14 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// THE TASK-MOVE CARD: ITS READ, ITS ROW WORDS, AND THE ANSWER IT SENDS.
+/// THE TASK-MOVE ROW WORDS, AND THE ONE CARD THE MOVES ARE ANSWERED ON.
 ///
-/// The server counts waiting `MOVE_TASK` crossings on the session rows — the one that asked and the
-/// target project's coordinator — and serves them to a conversation as batches with one door that
-/// answers a whole batch. This client's half is `TaskMoveBatch` (the read), `TaskMoves` (the words
-/// and the answer body), and the row words `SessionHeader.waitingWord` gives `MOVE_REQUEST` /
-/// `OWNER_REQUEST`. The card itself is drawn in the app; what it says and sends is asserted here.
+/// The server counts open owner requests and PENDING task moves on session rows, and serves a
+/// session its MOVE_TASK batches (`GET /sessions/:id/task-moves`) with one door that answers a whole
+/// batch. The owner kept main's crossing decision card as the one card (`CrossingBatches` /
+/// `CrossingDecisionCard`); this task adds the row words, feeds the card from the session read when
+/// the conversation is the ASKER, and sends a move batch through the batch door. The app's wiring is
+/// asserted by reading its sources, as the other wiring tests do.
 final class TaskMovesTests: XCTestCase {
 
     // MARK: the row words
@@ -108,8 +109,8 @@ final class TaskMovesTests: XCTestCase {
 
     // MARK: the read
 
-    /// `GET /sessions/:id/task-moves` decodes into batches of crossings: the grouping the row's
-    /// count uses, each move with the task, the criterion and the crossing key the answer echoes.
+    /// `GET /sessions/:id/task-moves` decodes into batches of crossings: each move with the task,
+    /// the criterion and the crossing key, grouped as the server grouped them.
     func testTheReadDecodesIntoBatchesOfCrossings() throws {
         let batches = try JSONDecoder().decode([TaskMoveBatch].self, from: Data("""
             [{"batchKey":"b1","requestedBySessionId":"asker","fromProjectId":"p1","toProjectId":"p2",
@@ -137,115 +138,78 @@ final class TaskMovesTests: XCTestCase {
         XCTAssertEqual(waiting.count, 2)
         XCTAssertEqual(waiting.drawnAs, ["REQUESTER"])
         XCTAssertEqual(waiting.moves.first?.fromProject?.title, "Runner link v1")
-        XCTAssertEqual(waiting.moves.first?.fromProject?.status, "DONE")
         XCTAssertEqual(waiting.moves.first?.subjectTask?.title, "An apiserver never stops gracefully")
         XCTAssertEqual(waiting.moves.first?.requestedCriterion?.text, "An apiserver never stops gracefully")
-        XCTAssertEqual(TaskMoves.title(waiting.count), "Move 2 tasks into this project")
         XCTAssertFalse(batches[1].isWaiting)
         XCTAssertNotNil(batches[1].decidedAt)
     }
 
-    /// The id a row is drawn under, and where it goes: the same batch keeps its row as it becomes an
-    /// answer, and the card sits where it was asked.
-    func testTheCardKeepsItsRowAndSitsWhereItWasAsked() {
-        let card = DeliveredDecisionCard(kind: .taskMoveBatch(batchKey: "b1"))
-        XCTAssertEqual(card.id, "task-move-batch-b1")
-        XCTAssertEqual(DeliveryAnchor.onArrival(of: .taskMoveBatch(batchKey: "b1"), items: []), nil,
-                       "a batch is placed by its own moment, never only by arrival")
+    // MARK: one card, from either read
+
+    /// The session read becomes the same crossing card the project read draws — same rows, same
+    /// card id (the first row's door), so a session that is both ends of a batch draws ONE card.
+    func testTheSessionReadBecomesTheSameCrossingCard() throws {
+        let read = try XCTUnwrap(JSONDecoder().decode([TaskMoveBatch].self, from: Data("""
+            [{"batchKey":"b1","requestedBySessionId":"asker","fromProjectId":"p1","toProjectId":"p2",
+              "state":"PENDING","since":"2026-11-01T08:31:00.000Z","drawnAs":["REQUESTER"],
+              "moves":[
+                {"id":"h1","fromProjectId":"p1","toProjectId":"p2","kind":"MOVE_TASK",
+                 "fromProject":{"title":"Runner link v1","status":"DONE"},
+                 "toProject":{"title":"Runner link hardening","status":"OPEN"},
+                 "requestedBySession":{"id":"asker","title":"Runner link v1 coordinator"},
+                 "crossingKey":"a1aaaa","state":"PENDING","requestedAt":"2026-11-01T08:31:00Z"},
+                {"id":"h2","fromProjectId":"p1","toProjectId":"p2","kind":"MOVE_TASK",
+                 "toProject":{"title":"Runner link hardening","status":"OPEN"},
+                 "requestedBySession":{"id":"asker","title":"Runner link v1 coordinator"},
+                 "crossingKey":"a2aaaa","state":"PENDING","requestedAt":"2026-11-01T08:32:00Z"}]}]
+            """.utf8)).first)
+        let batch = try XCTUnwrap(CrossingBatches.batch(from: read, inTarget: false))
+        XCTAssertEqual(batch.id, "crossing-batch-h1")
+        XCTAssertEqual(batch.kind, ProjectCrossings.moveKind)
+        XCTAssertEqual(batch.rows.map(\.id), ["h1", "h2"])
+        XCTAssertTrue(batch.isLive)
+
+        // The project read groups the same rows under the same first row — one card.
+        let fromProject = CrossingBatches.batches(batch.rows, projectID: "p2")
+        XCTAssertEqual(fromProject.map(\.id), [batch.id])
+
+        // The asking session's copy names the project the work goes into; the target's says here.
+        XCTAssertEqual(CrossingBatches.title(batch), "Move these tasks into Runner link hardening?")
+        XCTAssertEqual(CrossingBatches.toText(batch), "Runner link hardening")
+        let target = try XCTUnwrap(CrossingBatches.batch(from: read, inTarget: true))
+        XCTAssertEqual(CrossingBatches.title(target), "Move these tasks here?")
+        XCTAssertEqual(CrossingBatches.toText(target), "this project")
     }
 
-    // MARK: the words
-
-    func testTheCardSaysWhatTheBoardSays() {
-        XCTAssertEqual(TaskMoves.title(1), "Move 1 task into this project")
-        XCTAssertEqual(TaskMoves.title(8), "Move 8 tasks into this project")
-        XCTAssertEqual(TaskMoves.approveAsk(8), "Approve 8 moves…")
-        XCTAssertEqual(TaskMoves.approveAsk(1), "Approve move…")
-        XCTAssertEqual(TaskMoves.approve(8), "Approve 8 moves")
-        XCTAssertEqual(TaskMoves.approve(1), "Approve move")
-        XCTAssertEqual(TaskMoves.refuse(8), "Refuse 8 moves")
-        XCTAssertEqual(TaskMoves.refuse(1), "Refuse move")
-        XCTAssertEqual(ProjectCrossings.refuseAsk, "Refuse…", "the first press refuses without a count")
-        XCTAssertEqual(TaskMoves.confirmTitle(8, .approve), "Approve 8 task moves?")
-        XCTAssertEqual(TaskMoves.confirmTitle(1, .deny), "Refuse 1 task move?")
-        XCTAssertEqual(TaskMoves.showAll(8), "Show all 8")
-        XCTAssertEqual(TaskMoves.showFewer, "Show fewer")
-        XCTAssertEqual(TaskMoves.more(5), "and 5 more")
-        XCTAssertEqual(TaskMoves.moved(1), "Moved 1 task into this project")
-        XCTAssertEqual(TaskMoves.moved(8), "Moved 8 tasks into this project")
-        XCTAssertEqual(TaskMoves.rowWord(1), "Approve task move")
-        XCTAssertEqual(TaskMoves.rowWord(8), "Approve 8 task moves")
-        // The consequence is the project page's own sentence, not a second wording of it.
-        XCTAssertEqual(TaskMoves.consequence(.approve), ProjectCrossings.moveApproveConsequence)
-        XCTAssertEqual(TaskMoves.consequence(.deny), ProjectCrossings.moveDenyConsequence)
+    /// An answered read is the card's receipt: fully answered, its verdict, and the line one place
+    /// shows when the other end answered it.
+    func testAnAnsweredReadIsTheCardsReceipt() throws {
+        let read = try XCTUnwrap(JSONDecoder().decode([TaskMoveBatch].self, from: Data("""
+            [{"batchKey":"b2","requestedBySessionId":"asker","fromProjectId":"p1","toProjectId":"p2",
+              "state":"APPLIED","since":"2026-11-01T08:31:00Z",
+              "decidedAt":"2026-11-01T09:00:00Z","drawnAs":["REQUESTER"],
+              "moves":[
+                {"id":"h1","fromProjectId":"p1","toProjectId":"p2","kind":"MOVE_TASK",
+                 "crossingKey":"a1aaaa","state":"APPLIED","decidedAt":"2026-11-01T09:00:00Z",
+                 "requestedAt":"2026-11-01T08:31:00Z"},
+                {"id":"h2","fromProjectId":"p1","toProjectId":"p2","kind":"MOVE_TASK",
+                 "crossingKey":"a2aaaa","state":"APPLIED","decidedAt":"2026-11-01T09:00:00Z",
+                 "requestedAt":"2026-11-01T08:32:00Z"}]}]
+            """.utf8)).first)
+        let batch = try XCTUnwrap(CrossingBatches.batch(from: read))
+        XCTAssertTrue(batch.answered)
+        XCTAssertEqual(batch.verdict, .approved)
+        XCTAssertEqual(batch.decidedAt, "2026-11-01T09:00:00Z")
+        let elsewhere = CrossingBatches.standing(batch, sawLive: true, pressedAt: nil)
+        XCTAssertEqual(CrossingBatches.receiptVerdict(elsewhere), "Approved at another end")
     }
 
-    /// The card's own heading and provenance differ in the two places it is drawn: the target's
-    /// coordinator says "into this project" and names who asked; the asking session says which
-    /// project the moves go into and that it asked here (Android's words, which web shares).
-    func testTheHeadingAndTheAskerNameTheTwoPlacesTheCardIsDrawn() {
-        let coordinator = batch(drawnAs: ["TARGET_COORDINATOR"])
-        XCTAssertEqual(TaskMoves.title(coordinator), "Move 2 tasks into this project")
-        XCTAssertTrue(TaskMoves.asked(coordinator).hasPrefix("Asked by Runner link v1 coordinator · Nov 1, 08:31"),
-                      TaskMoves.asked(coordinator))
+    // MARK: the batch answer
 
-        let asker = batch(drawnAs: ["REQUESTER"])
-        XCTAssertEqual(TaskMoves.title(asker), "Move 2 tasks into Runner link hardening")
-        XCTAssertTrue(TaskMoves.asked(asker).hasPrefix("Asked here · Nov 1, 08:31"),
-                      TaskMoves.asked(asker))
-
-        // No joined asker and no readable stamp: the board's own words, with no date bolted on.
-        let bare = batch(drawnAs: ["TARGET_COORDINATOR"], since: "not a date", asker: nil)
-        XCTAssertEqual(TaskMoves.asked(bare), "Asked by its coordinator")
-    }
-
-    func testAMoveLineNamesTheTaskAndItsTargetCriterion() {
-        let move = crossing(criterion: ("4", "Faster restarts"), key: "d81f99d9")
-        XCTAssertEqual(TaskMoves.moveLine(move),
-                       "Task to move · Target criterion requested: Faster restarts")
-        XCTAssertEqual(TaskMoves.confirmLine(move), "Faster restarts · key d81f99d9…")
-
-        let noCriterion = crossing(criterion: nil, key: "55db32cb")
-        XCTAssertEqual(TaskMoves.moveLine(noCriterion), "Task to move")
-        XCTAssertEqual(TaskMoves.confirmLine(noCriterion), "key 55db32cb…")
-
-        let gone = crossing(criterion: ("4", nil), key: "b09aa76d")
-        XCTAssertEqual(TaskMoves.moveLine(gone),
-                       "Task to move · Target criterion requested: The target project no longer states this criterion.")
-    }
-
-    /// The one line an answered batch is left as, per state the server can leave it in.
-    func testAnAnsweredBatchIsOneLine() {
-        for (state, line) in [
-            ("APPLIED", "Moved 3 tasks into this project"),
-            ("DENIED", "Refused 3 task moves into this project"),
-            ("APPROVED", "3 task moves into this project: \(ProjectCrossings.label("APPROVED"))"),
-        ] {
-            let batch = TaskMoveBatch(batchKey: "b", requestedBySessionId: "s",
-                                      fromProjectId: "p1", toProjectId: "p2", state: state,
-                                      since: "2026-11-01T08:31:00Z", moves: [])
-            let counted = TaskMoveBatch(batchKey: batch.batchKey,
-                                        requestedBySessionId: batch.requestedBySessionId,
-                                        fromProjectId: batch.fromProjectId,
-                                        toProjectId: batch.toProjectId, state: state,
-                                        since: batch.since, moves: Array(repeating: crossing(criterion: nil,
-                                                                                              key: "ab"),
-                                                                          count: 3))
-            XCTAssertEqual(TaskMoves.resolved(counted), line, state)
-        }
-    }
-
-    // MARK: the answer
-
-    /// The second press sends every move of the batch with the crossing key the card read, and the
-    /// one decision — the body the server's fence checks row by row.
-    func testTheAnswerCarriesEveryMoveAndItsKey() throws {
-        let moves = [crossing(id: "h1", criterion: nil, key: "a1"),
-                     crossing(id: "h2", criterion: nil, key: "a2")]
-        let batch = TaskMoveBatch(batchKey: "b", requestedBySessionId: "s", fromProjectId: "p1",
-                                  toProjectId: "p2", state: "PENDING",
-                                  since: "2026-11-01T08:31:00Z", moves: moves)
-        let body = TaskMoves.answer(batch, .approve)
+    /// One press answers every waiting move in one body, each with the crossing key the card read.
+    func testTheAnswerCarriesEveryWaitingMoveAndItsKey() throws {
+        let rows = [crossing(id: "h1", key: "a1"), crossing(id: "h2", key: "a2")]
+        let body = TaskMoves.answer(rows, .approve)
         XCTAssertEqual(body.decision, .approve)
         XCTAssertEqual(body.moves.map(\.handoffId), ["h1", "h2"])
         XCTAssertEqual(body.moves.map(\.crossingKey), ["a1", "a2"])
@@ -255,29 +219,93 @@ final class TaskMovesTests: XCTestCase {
         let sent = try XCTUnwrap(json?["moves"] as? [[String: String]])
         XCTAssertEqual(sent.first?["handoffId"], "h1")
         XCTAssertEqual(sent.first?["crossingKey"], "a1")
-        XCTAssertEqual(TaskMoves.answer(batch, .deny).decision, .deny)
+        XCTAssertEqual(TaskMoves.answer(rows, .deny).decision, .deny)
     }
 
-    // MARK: the shared copy
+    /// The batch door's 409 is the card's refusal: its code, and the sentence naming every move
+    /// whose key no longer matched (or that is no longer waiting).
+    func testTheFenceRefusalIsReadForTheCard() {
+        let fence = APIError.http(status: 409, body: """
+            {"statusCode":409,"error":"Conflict","code":"APPROVAL_TARGET_MISMATCH",
+             "message":"1 of the 2 moves in this answer cannot take it — 2wndAAHBC95f4Al8rNFxZ names a different crossing. Nothing was written; re-read the moves and answer what they say now"}
+            """)
+        let refusal = ProjectCrossings.refusal(fence)
+        XCTAssertEqual(refusal.code, "APPROVAL_TARGET_MISMATCH")
+        XCTAssertTrue(refusal.message.contains("Nothing was written"))
 
-    /// The row's words are the browser's, sentence for sentence: `@orbit/shared` declares them and
-    /// the web row reads them, so a client that says the same thing holds them to that source. The
-    /// card's own sentences have no web half yet; these are the ones both surfaces already say.
-    func testTheRowWordsAgreeWithTheSharedCopy() throws {
-        let shared = try source("src/shared/src/project-progress.ts")
-        for (kind, word) in [("DECISION", "Decision for you"), ("SECRET", "Key needed"),
-                             ("MANUAL_STEP", "Steps for you"), ("CONFIRM", "Confirm for you")] {
-            XCTAssertTrue(shared.contains("\(kind): '\(word)'"),
-                          "the shared row words no longer say \(kind) is \(word.debugDescription)")
-        }
-        XCTAssertTrue(shared.contains("return moves === 1 ? 'Approve task move' : `Approve ${moves} task moves`;"),
-                      "the shared row word for moves drifted from TaskMoves.rowWord")
+        let stale = APIError.http(status: 409, body: """
+            {"statusCode":409,"code":"HANDOFF_ALREADY_ANSWERED","message":"1 of the 2 moves in this answer cannot take it — 2wndAAHBC95f4Al8rNFxZ is APPLIED."}
+            """)
+        XCTAssertEqual(ProjectCrossings.refusal(stale).code, "HANDOFF_ALREADY_ANSWERED")
     }
 
-    private func source(_ relative: String) throws -> String {
+    // MARK: the card in the asking session
+
+    /// The batch a session asked for is grouped by asker as well as source, so the card the batch
+    /// door answers is one asker's: two sessions' moves from one project are two cards.
+    func testAMoveBatchIsOneAsker() {
+        let first = crossing(id: "h1", key: "a1", asker: "asker-a")
+        let second = crossing(id: "h2", key: "a2", asker: "asker-b")
+        XCTAssertEqual(CrossingBatches.batches([first, second], projectID: "p2").count, 2)
+        let same = [first, crossing(id: "h3", key: "a3", asker: "asker-a")]
+        XCTAssertEqual(CrossingBatches.batches(same, projectID: "p2").count, 1,
+                       "one asker's moves out of one project into another are one card")
+    }
+
+    // MARK: the app's wiring
+
+    /// The one card answers a move batch through the session door — ONE POST — and keeps its 409 on
+    /// the card; the session read feeds it in the asking conversation; no second move card exists.
+    func testTheAppAnswersMovesThroughTheBatchDoor() throws {
+        let console = try appSource("ConsoleModel.swift")
+        XCTAssertTrue(console.contains("if batch.kind == ProjectCrossings.moveKind {"))
+        XCTAssertTrue(console.contains("api.decideTaskMoveBatch(sessionID: sessionID, moves: batch.pending,"),
+                      "a MOVE_TASK batch is one POST of every waiting move")
+        XCTAssertTrue(console.contains("crossingBatchRefusals[batchID] = ProjectCrossings.refusal(error)"),
+                      "the server's 409 is kept on the card")
+        XCTAssertTrue(console.contains("api.sessionTaskMoves(sessionID: sessionID)"),
+                      "the asking session's batches come from the session read")
+        XCTAssertTrue(console.contains("CrossingBatches.batch(from: read, inTarget: inTarget)"))
+
+        let card = try appSource("Views/CrossingDecisionCard.swift")
+        XCTAssertTrue(card.contains("console.crossingBatchRefusals[batch.id]"),
+                      "the card draws the batch door's refusal")
+        XCTAssertTrue(card.contains("CrossingBatches.toText(batch)"),
+                      "the asking session names the target project rather than 'this project'")
+
+        // No second move card: the row kind, the view and the card copy this task first shipped are
+        // gone, and only the crossing card's kind remains.
+        let rows = try orbitKitSource("Transcript/TranscriptRows.swift")
+        XCTAssertFalse(rows.contains("taskMoveBatch"), "the task-move row case is gone")
+        XCTAssertTrue(rows.contains("case crossingBatch"), "the crossing card is the one card")
+        XCTAssertNil(try appSourceIfPresent("Views/TaskMoveCard.swift"),
+                     "this task's own move card view is removed")
+    }
+
+    // MARK: fixtures
+
+    private func decodeSession(_ json: String) throws -> Session {
+        try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+    }
+
+    private func crossing(id: String = "h1", key: String, asker: String? = nil,
+                          state: String = "PENDING") -> ProjectCrossing {
+        ProjectCrossing(
+            id: id, fromProjectId: "p1", toProjectId: "p2",
+            fromProject: .init(title: "Runner link v1", status: "DONE"),
+            toProject: .init(title: "Runner link hardening", status: "OPEN"), kind: "MOVE_TASK",
+            subjectTask: .init(id: "t1", title: "An apiserver never stops gracefully"),
+            requestedBySession: asker.map { .init(id: $0, title: "Asker") },
+            requestedCriterion: .init(key: "4", text: "Criterion 4"),
+            crossingKey: key, state: state, title: "asked title",
+            requestedAt: "2026-11-01T08:31:00Z")
+    }
+
+    /// An app source under `src/macos/OrbitApp/Sources/OrbitApp`, found above this test file.
+    private func appSource(_ relative: String) throws -> String {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {
-            let candidate = dir.appendingPathComponent(relative)
+            let candidate = dir.appendingPathComponent("OrbitApp/Sources/OrbitApp/\(relative)")
             if FileManager.default.fileExists(atPath: candidate.path) {
                 return try String(contentsOf: candidate, encoding: .utf8)
             }
@@ -286,38 +314,28 @@ final class TaskMovesTests: XCTestCase {
         throw XCTSkip("\(relative) was not found above this test file")
     }
 
-    // MARK: fixtures
-
-    /// Two moves out of Runner link v1 into Runner link hardening, as the read would hand them over.
-    private func batch(drawnAs: [String], since: String = "2026-11-01T08:31:00Z",
-                       asker: ProjectCrossing.AskSession? =
-                        .init(id: "asker", title: "Runner link v1 coordinator")) -> TaskMoveBatch {
-        func move(_ id: String) -> ProjectCrossing {
-            ProjectCrossing(
-                id: id, fromProjectId: "p1", toProjectId: "p2",
-                fromProject: .init(title: "Runner link v1", status: "DONE"),
-                toProject: .init(title: "Runner link hardening", status: "OPEN"), kind: "MOVE_TASK",
-                subjectTask: .init(id: "t", title: "A task"),
-                requestedBySession: asker, requestedCriterion: .init(key: "4", text: "Criterion 4"),
-                crossingKey: String(repeating: "a", count: 64), state: "PENDING",
-                title: "asked", requestedAt: since)
+    private func appSourceIfPresent(_ relative: String) throws -> String? {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent("OrbitApp/Sources/OrbitApp/\(relative)")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return try String(contentsOf: candidate, encoding: .utf8)
+            }
+            dir = dir.deletingLastPathComponent()
         }
-        return TaskMoveBatch(batchKey: "b", requestedBySessionId: "asker", fromProjectId: "p1",
-                             toProjectId: "p2", state: "PENDING", since: since,
-                             drawnAs: drawnAs, moves: [move("h1"), move("h2")])
+        return nil
     }
 
-    private func decodeSession(_ json: String) throws -> Session {
-        try JSONDecoder().decode(Session.self, from: Data(json.utf8))
-    }
-
-    private func crossing(id: String = "h1", criterion: (String, String?)?,
-                          key: String) -> ProjectCrossing {
-        ProjectCrossing(
-            id: id, fromProjectId: "p1", toProjectId: "p2", kind: "MOVE_TASK",
-            subjectTask: .init(id: "t1", title: "An apiserver never stops gracefully"),
-            requestedCriterion: criterion.map { .init(key: $0.0, text: $0.1) },
-            crossingKey: key, state: "PENDING", title: "asked title",
-            requestedAt: "2026-11-01T08:31:00Z")
+    /// A file under `src/macos/OrbitKit/Sources/OrbitKit`, found above this test file.
+    private func orbitKitSource(_ relative: String) throws -> String {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent("OrbitKit/Sources/OrbitKit/\(relative)")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return try String(contentsOf: candidate, encoding: .utf8)
+            }
+            dir = dir.deletingLastPathComponent()
+        }
+        throw XCTSkip("\(relative) was not found above this test file")
     }
 }

@@ -105,8 +105,8 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
     /// back. Nil when it declares none of the source project's.
     public let withdrawnCriterion: Criterion?
     /// Who asked for this crossing, by name, when the server joined the asking session. Nil from
-    /// an older server, and for a session since deleted. The task-move card's "Asked by …" line
-    /// reads it (`TaskMoves.asked`).
+    /// an older server, and for a session since deleted. The crossing card groups a move batch by
+    /// asker with it, and the row words never need more.
     public let requestedBySession: AskSession?
     /// The digest of the two ends and the subject — the crossing itself, not the row recording it.
     /// An answer echoes it back (`acknowledgedCrossingKey`).

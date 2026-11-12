@@ -1385,6 +1385,10 @@ final class ConsoleModel {
         // Fetch the durable queue so a follow-up sent from web is visible when this console opens.
         let queuedTurnsSeed = Task { [weak self] in await self?.refreshQueuedTurns() }
         defer { queuedTurnsSeed.cancel() }
+        // The move batches this conversation draws — as the session that asked, or as the target
+        // project's coordinator — and no stream event replays that read.
+        let taskMovesSeed = Task { [weak self] in await self?.refreshTaskMoves() }
+        defer { taskMovesSeed.cancel() }
 
         // Kick a reconnect the moment the network path is restored. This both cuts a pending backoff
         // wait short AND tears down a read left stalled on a silently-dropped socket — the server
@@ -1455,6 +1459,9 @@ final class ConsoleModel {
                 // reported while this socket was suspended puts a card here, and the read is the
                 // only way this window hears about it.
                 Task { [weak self] in await self?.refreshOwnerConfirmation(force: true) }
+                // And the move batches: one answered in a browser while this phone was asleep must
+                // become the line it is, not stay a card nobody can answer.
+                Task { [weak self] in await self?.refreshTaskMoves(force: true) }
                 // And the runner's row. The model menu's names, the plan-usage gauge and the `/`
                 // catalogue all come from the one read `loadContext` made when the console opened:
                 // without this, a failed read would stay failed until the console was opened again,
@@ -2350,6 +2357,14 @@ final class ConsoleModel {
         // START_REQUEST), and the card that asks it is drawn from the read this kicks.
         let waiting = "\(session.pendingApprovals ?? 0)|\(session.waitingKind?.rawValue ?? "")"
         sessionWaitingKind = session.waitingKind
+        // The moves this conversation draws move with this row even when the needs-you word does
+        // not: an answered batch drops the count to the same "0|" a row that never waited has,
+        // and the row's own updated time is what says it changed at all.
+        let movesSignal = "\(waiting)|\(session.updatedAt ?? "")|\(session.lastTurnAt ?? "")"
+        if movesSignal != taskMovesSignal {
+            taskMovesSignal = movesSignal
+            Task { [weak self] in await self?.refreshTaskMoves(force: true) }
+        }
         if waiting != waitingSignal {
             waitingSignal = waiting
             if projectID != nil {
@@ -4955,11 +4970,39 @@ final class ConsoleModel {
     private var crossingBatchesPressedAt: [String: Date] = [:]
     /// The door's refusal of the last answer sent for a row, by row id.
     private(set) var crossingRefusals: [String: ProjectCrossings.Refusal] = [:]
+    /// The batch door's refusal of the last answer sent for a whole move batch, by batch id. One
+    /// answer, so one refusal — it names every move whose crossing key no longer matched.
+    private(set) var crossingBatchRefusals: [String: ProjectCrossings.Refusal] = [:]
+    /// Move batches read from `GET /sessions/:id/task-moves`: the ones this conversation asked
+    /// for, and (for a coordinator) the ones into its project when the handoffs read has not
+    /// loaded yet. Keyed by the card id, which is the same row the handoffs read groups by.
+    private(set) var sessionMoveBatches: [String: CrossingBatch] = [:]
+    private var loadingTaskMoves = false
+    private var lastTaskMovesRead = Date.distantPast
+    /// The row facts the move read follows; a change is a reason to ask again.
+    private var taskMovesSignal = ""
 
-    /// The batches asking this project, oldest first.
+    /// The batches this conversation draws, oldest first: the crossings into the project it
+    /// coordinates, and the move batches it asked for. A batch both reads serve is one card — the
+    /// project read's, whose copy says "this project".
     var crossingBatches: [CrossingBatch] {
-        guard let crossings, let projectID else { return [] }
-        return CrossingBatches.batches(crossings, projectID: projectID)
+        var out: [CrossingBatch] = []
+        if let crossings, let projectID {
+            out = CrossingBatches.batches(crossings, projectID: projectID)
+        }
+        let seen = Set(out.map(\.id))
+        // A session batch already represented by a project batch — same card id, or the same
+        // waiting rows in a card the project read grouped from an earlier first row — is not drawn
+        // twice. (The two reads are the same request seen from its two ends.)
+        let drawnPending = Set(out.flatMap { $0.pending.map(\.id) })
+        out += sessionMoveBatches.values.filter { batch in
+            guard !seen.contains(batch.id) else { return false }
+            return batch.pending.isEmpty || !batch.pending.map(\.id).allSatisfy(drawnPending.contains)
+        }
+        return out.enumerated()
+            .sorted { CrossingBatches.isEarlier($0.element.moment, $1.element.moment)
+                || ($0.element.moment == $1.element.moment && $0.offset < $1.offset) }
+            .map(\.element)
     }
 
     func crossingBatch(_ batchID: String) -> CrossingBatch? {
@@ -4986,26 +5029,80 @@ final class ConsoleModel {
         }
     }
 
-    /// Answer every row of the batch still pending, one decision POST each with its own crossing
-    /// key, through the project page's door. A refused POST keeps the door's refusal on its row;
-    /// the ones taken are not rolled back. Then the handoffs are read again.
-    func decideCrossingBatch(_ batchID: String, _ decision: ProjectCrossingDecision) async {
-        guard let projectID, let batch = crossingBatch(batchID), batch.isLive else { return }
-        let pressedAt = Date()
-        var taken = 0
-        for (row, _) in CrossingBatches.requests(batch, decision) {
-            do {
-                try await api.decideProjectCrossing(projectID: projectID, crossing: row, decision)
-                crossingRefusals[row.id] = nil
-                taken += 1
-            } catch {
-                crossingRefusals[row.id] = ProjectCrossings.refusal(error)
-            }
+    /// Adopt a `GET /sessions/:id/task-moves` read: the batches this conversation draws as the
+    /// asking session (and, before the handoffs read lands, as the target's coordinator). Each is
+    /// delivered where its first move was asked, under the same card id the project read uses, so
+    /// the two reads cannot draw two cards for one batch.
+    private func adoptTaskMoveBatches(_ reads: [TaskMoveBatch]) {
+        var next: [String: CrossingBatch] = [:]
+        for read in reads {
+            let inTarget = read.drawnAs.contains("TARGET_COORDINATOR")
+            guard let batch = CrossingBatches.batch(from: read, inTarget: inTarget) else { continue }
+            next[batch.id] = batch
         }
-        if taken > 0 { crossingBatchesPressedAt[batchID] = pressedAt }
-        if let rows = try? await api.projectCrossings(projectID: projectID) {
+        // An answered card this conversation already drew stays even when the read's window slides
+        // past it: a record that disappeared would be a decision the conversation forgot.
+        for (id, old) in sessionMoveBatches where !old.isLive && next[id] == nil {
+            next[id] = old
+        }
+        sessionMoveBatches = next
+        for batch in next.values {
+            if batch.isLive { crossingBatchesSeenLive.insert(batch.id) }
+            deliver(.crossingBatch(batchID: batch.id), placement: .at(batch.moment))
+        }
+    }
+
+    /// Read the moves this conversation draws. Safe for every conversation — a session that neither
+    /// asked for a move nor coordinates a project answers `[]` — and throttled like the project
+    /// reads, because a recycled card re-fires its own `.task` every time it comes back on screen.
+    func refreshTaskMoves(force: Bool = false) async {
+        guard !isDraft, !loadingTaskMoves else { return }
+        if !force, Date().timeIntervalSince(lastTaskMovesRead) < Self.rulerReadThrottle { return }
+        loadingTaskMoves = true
+        defer { loadingTaskMoves = false }
+        if let reads = try? await api.sessionTaskMoves(sessionID: sessionID) {
+            adoptTaskMoveBatches(reads)
+        }
+        lastTaskMovesRead = Date()
+    }
+
+    /// Answer every row of the batch still pending.
+    ///
+    /// A MOVE_TASK batch goes through the session's own batch door in ONE POST — every waiting move
+    /// with the crossing key the card was drawn from; the server writes nothing if any of them names
+    /// another crossing, and its 409 is kept on the card. Any other kind keeps the per-row decision
+    /// the project page uses, a refused POST keeping its refusal on its row. Then both reads run
+    /// again — the project's handoffs, and the moves this session is served.
+    func decideCrossingBatch(_ batchID: String, _ decision: ProjectCrossingDecision) async {
+        guard let batch = crossingBatch(batchID), batch.isLive else { return }
+        let pressedAt = Date()
+        if batch.kind == ProjectCrossings.moveKind {
+            do {
+                _ = try await api.decideTaskMoveBatch(sessionID: sessionID, moves: batch.pending,
+                                                      decision)
+                crossingBatchRefusals[batchID] = nil
+                crossingBatchesPressedAt[batchID] = pressedAt
+            } catch {
+                crossingBatchRefusals[batchID] = ProjectCrossings.refusal(error)
+            }
+        } else {
+            guard let projectID else { return }
+            var taken = 0
+            for (row, _) in CrossingBatches.requests(batch, decision) {
+                do {
+                    try await api.decideProjectCrossing(projectID: projectID, crossing: row, decision)
+                    crossingRefusals[row.id] = nil
+                    taken += 1
+                } catch {
+                    crossingRefusals[row.id] = ProjectCrossings.refusal(error)
+                }
+            }
+            if taken > 0 { crossingBatchesPressedAt[batchID] = pressedAt }
+        }
+        if let projectID, let rows = try? await api.projectCrossings(projectID: projectID) {
             adoptCrossings(rows)
         }
+        await refreshTaskMoves(force: true)
     }
 
     private func deliver(_ kind: DeliveredDecisionCard.Kind,

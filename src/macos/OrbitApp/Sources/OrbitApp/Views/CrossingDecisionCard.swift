@@ -16,6 +16,9 @@ struct CrossingDecisionCard: View {
     var body: some View {
         if let batch = console.crossingBatch(batchID) {
             card(batch, standing: console.crossingStanding(batch))
+                // The session's move batches, re-read when the card comes into view: one answered
+                // at another end — the project page, a browser — must become its receipt here.
+                .task(id: batchID) { await console.refreshTaskMoves() }
         }
     }
 
@@ -47,6 +50,9 @@ struct CrossingDecisionCard: View {
                     receipt(standing)
                 }
             }
+            if let refusal = console.crossingBatchRefusals[batch.id] {
+                refused(refusal)
+            }
             if !inReview {
                 if let note = CrossingBatches.refusalNote(refusedCount(batch)) {
                     Label(note, systemImage: "exclamationmark.circle.fill")
@@ -56,6 +62,23 @@ struct CrossingDecisionCard: View {
                 if !live { receipt(standing) }
             }
         }
+    }
+
+    /// The batch door's refusal — the one answer it gives for a MOVE_TASK batch: its code and its
+    /// sentence, which names every move whose crossing key no longer matches.
+    private func refused(_ refusal: ProjectCrossings.Refusal) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(ProjectCrossings.notRecorded, systemImage: "exclamationmark.circle.fill")
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(.red)
+            (Text(refusal.code.map { "\($0) " } ?? "").font(.orbitMonoFine) + Text(refusal.message))
+                .font(.orbitLabel)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 
     /// `Decision recorded · ✓ Approved by you at 5:34 PM`, or `Approved at another end`.
@@ -84,7 +107,7 @@ struct CrossingDecisionCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         VStack(alignment: .leading, spacing: 2) {
             (Text("\(CrossingBatches.fromLabel) ").foregroundStyle(.secondary) + Text(batch.sourceTitle))
-            (Text("\(CrossingBatches.toLabel) ").foregroundStyle(.secondary) + Text(CrossingBatches.toThisProject))
+            (Text("\(CrossingBatches.toLabel) ").foregroundStyle(.secondary) + Text(CrossingBatches.toText(batch)))
         }
         .font(.orbitProse)
         .frame(maxWidth: .infinity, alignment: .leading)

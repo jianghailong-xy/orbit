@@ -26,11 +26,15 @@ public struct CrossingBatch: Equatable, Sendable, Identifiable {
     public let kind: String
     /// The rows, oldest first. Never empty.
     public let rows: [ProjectCrossing]
+    /// Whether this card is drawn in the TARGET project's conversation. False in the session that
+    /// asked: there "here" is not the project the work goes into, and the copy names it instead.
+    public let inTarget: Bool
 
-    public init(id: String, kind: String, rows: [ProjectCrossing]) {
+    public init(id: String, kind: String, rows: [ProjectCrossing], inTarget: Bool = true) {
         self.id = id
         self.kind = kind
         self.rows = rows
+        self.inTarget = inTarget
     }
 
     /// Where the card is placed in the transcript: when the first row was asked.
@@ -81,7 +85,10 @@ public enum CrossingBatches {
         var groups: [String: [ProjectCrossing]] = [:]
         var groupOrder: [String] = []
         for row in into {
-            let key = "\(row.fromProjectId)\u{1F}\(row.kind)"
+            // The move card is answered through the session's batch door, which takes one asker's
+            // moves out of one project into another; grouping by asker keeps one card = one answer.
+            let asker = row.kind == ProjectCrossings.moveKind ? (row.requestedBySession?.id ?? "") : ""
+            let key = "\(row.fromProjectId)\u{1F}\(row.kind)\u{1F}\(asker)"
             if groups[key] == nil { groupOrder.append(key) }
             groups[key, default: []].append(row)
         }
@@ -112,12 +119,29 @@ public enum CrossingBatches {
             .map(\.element)
     }
 
+    /// The same card for a batch a session is served directly (`GET /sessions/:id/task-moves`):
+    /// the moves it asked for, or the moves into a project it coordinates. Nil for a read with no
+    /// rows, and for a batch that is not a move.
+    ///
+    /// The id is the first row's door, the same spelling the project read gives the same batch, so
+    /// the two reads draw ONE card when a session is both ends of it.
+    public static func batch(from read: TaskMoveBatch,
+                             inTarget: Bool = true) -> CrossingBatch? {
+        guard let first = read.moves.first, first.kind == ProjectCrossings.moveKind else { return nil }
+        let rows = read.moves.enumerated()
+            .sorted { isEarlier($0.element.requestedAt, $1.element.requestedAt)
+                || ($0.element.requestedAt == $1.element.requestedAt && $0.offset < $1.offset) }
+            .map(\.element)
+        return CrossingBatch(id: idPrefix + ProjectCrossings.doorID(first), kind: first.kind,
+                             rows: rows, inTarget: inTarget)
+    }
+
     private static func batch(_ rows: [ProjectCrossing]) -> CrossingBatch {
         CrossingBatch(id: idPrefix + ProjectCrossings.doorID(rows[0]), kind: rows[0].kind, rows: rows)
     }
 
     /// `a` before `b`: by the instant when both parse, by the ISO string otherwise.
-    static func isEarlier(_ a: String, _ b: String) -> Bool {
+    public static func isEarlier(_ a: String, _ b: String) -> Bool {
         if let x = ThinkingSummary.date(a), let y = ThinkingSummary.date(b) { return x < y }
         return a < b
     }
@@ -152,11 +176,26 @@ public enum CrossingBatches {
 
     public static func title(_ batch: CrossingBatch) -> String {
         let one = batch.rows.count == 1
+        if batch.kind == ProjectCrossings.moveKind, !batch.inTarget {
+            return one ? "Move this task into \(targetTitle(batch))?"
+                       : "Move these tasks into \(targetTitle(batch))?"
+        }
         switch batch.kind {
         case ProjectCrossings.moveKind: return one ? "Move this task here?" : "Move these tasks here?"
         case dependKind: return one ? "Allow this dependency?" : "Allow these dependencies?"
         default: return one ? "File this task here?" : "File these tasks here?"
         }
+    }
+
+    /// The project the batch goes into, by name — what the asking session's card says where the
+    /// target's conversation says "this project".
+    public static func targetTitle(_ batch: CrossingBatch) -> String {
+        batch.rows.first?.toProject?.title ?? ProjectCrossings.unnamedProject
+    }
+
+    /// "this project" in the target's conversation; the target's name in the asking session.
+    public static func toText(_ batch: CrossingBatch) -> String {
+        batch.inTarget ? toThisProject : targetTitle(batch)
     }
 
     /// The live badge: what is being asked.
