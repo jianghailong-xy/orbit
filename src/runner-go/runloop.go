@@ -483,6 +483,35 @@ type reclaimedStart struct {
 	// endTakeover ends the takeover prepared for this row. The caller calls it once the
 	// supervisor is started; reclaim itself calls it for every row it hands to nobody.
 	endTakeover func()
+	// status is the row's status in the reclaim snapshot, which orders the starts
+	// (orderReclaimedStarts).
+	status string
+}
+
+// orderReclaimedStarts puts the starts a reclaim hands back in the order they are worth starting in:
+// the sessions somebody is most likely waiting on first. A RUNNING row (or a legacy server's statusless
+// one, which is RUNNING) had a turn in flight, a PENDING row has a turn queued, and anything else
+// (AWAITING_INPUT, INTERRUPTED) is idle until somebody speaks to it. Within each tier the newest
+// session goes first: the snapshot carries no recency field, but session ids are UUIDv7, so a
+// greater id is a later session. Deterministic for a given snapshot. Only the starts are ordered:
+// takeovers still run in ascending id order, the one order every process agrees on.
+func orderReclaimedStarts(starts []reclaimedStart) {
+	tier := func(status string) int {
+		switch status {
+		case "", stRunning:
+			return 0
+		case stPending:
+			return 1
+		default:
+			return 2
+		}
+	}
+	sort.SliceStable(starts, func(i, j int) bool {
+		if ti, tj := tier(starts[i].status), tier(starts[j].status); ti != tj {
+			return ti < tj
+		}
+		return starts[i].job.SessionID > starts[j].job.SessionID
+	})
 }
 
 // takeoverConflictLimit caps how many snapshot refreshes one session's takeover
@@ -626,6 +655,7 @@ func (s *worktreeSweeper) makeRoom(t *Transport, pool *sessionPool, pressure wor
 // response (the server may have committed PENDING -> RUNNING before the HTTP
 // response was lost). Every process takes rows over in stable session-id order,
 // and no supervisor starts until the whole snapshot's CAS operations succeed.
+// The starts come back in orderReclaimedStarts' order, not the takeovers'.
 // The bool result reports that at least one conflicted session was set aside;
 // the caller must schedule another reclaim so it does not stay unsupervised.
 func reclaimMissingSessions(
@@ -744,10 +774,12 @@ func reclaimMissingSessions(
 				job:             job,
 				initiallyActive: reclaimInitiallyActive(status),
 				endTakeover:     endTakeover,
+				status:          r.Status,
 			})
 		}
 		if !retrySnapshot {
 			endTakeoversExcept(pending)
+			orderReclaimedStarts(pending)
 			return pending, skippedAny, nil
 		}
 		// The refreshed snapshot prepares its own takeovers; end this pass's first.
@@ -2168,6 +2200,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// early to see it, so look once more when it has had time to land; zero means nothing is owed. On
 	// 2026-10-03 a session claimed while this reclaim was still running read "Starting" for 15 minutes.
 	lateClaimCheckAt := time.Now().Add(lateClaimWindow)
+	// The startup reclaim's sessions start in the background once their takeovers have answered
+	// (reclaimStarter); nil until then, and if the reclaim never answers.
+	var startupStarts *reclaimStarter
+	reclaimBegan := time.Now()
 	pendingStarts, reclaimSkipped, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 	if reclaimErr != nil && loopCtx.Err() == nil {
 		logln("reclaim permanently failed; stopping runner:", reclaimErr)
@@ -2186,11 +2222,17 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		if err := pruneOrchestrationCredentials(credentialLiveSet); err != nil {
 			logln("credential cleanup failed:", err)
 		}
-		for _, pending := range pendingStarts {
+		// Every session's takeover has answered and holds its fence; each start ends its own
+		// (reclaimStarter). The claim loop and the first heartbeat do not wait for them.
+		answeredIn := time.Since(reclaimBegan)
+		startupStarts = newReclaimStarter(pool, pendingStarts, func(pending reclaimedStart) {
 			logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
 			startSession(pending.job, pending.initiallyActive)
-			pending.endTakeover()
-		}
+		})
+		startupStarts.run(reclaimStartWorkers, func() {
+			logln(fmt.Sprintf("startup reclaim finished: %d session(s) in %s (snapshot and takeovers %s)",
+				len(pendingStarts), time.Since(reclaimBegan).Round(time.Millisecond), answeredIn.Round(time.Millisecond)))
+		})
 		reclaimed = true
 	}
 
@@ -2215,7 +2257,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	//
 	// This is now the FIRST sweep rather than the only one: the claim loop below repeats it on
 	// worktreeGCInterval, sharing this same gate through the sweeper's `armed` flag.
-	worktreeGC := worktreeSweeper{interval: worktreeGCInterval, armed: reclaimed && !reclaimSkipped}
+	//
+	// The reclaim's sessions are still being started in the background (startupStarts), and one not
+	// started yet has no supervisor either: the claim loop arms the sweeper once they all have.
+	worktreeGC := worktreeSweeper{interval: worktreeGCInterval, armed: reclaimed && !reclaimSkipped && startupStarts.finished()}
+	armOnceStarted := reclaimed && !reclaimSkipped && !worktreeGC.armed
 	// From here on, a session checkout made under a storage budget is counted on it until the channel measures it, and
 	// makes room for itself first, with this sweeper, when it would take the budget under its floor (checkoutRoom).
 	sessionCheckoutRoom.Store(&checkoutRoom{storage: &storage,
@@ -2251,11 +2297,24 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// waits for its answer nothing reconciles: a reclaim would start that session, and the answer would start it again.
 	var claims linkRequestIDs
 	for loopCtx.Err() == nil {
+		// The startup reclaim's last start has ended: every session it took over now has its supervisor,
+		// so the sweep, and the end of adopted jobs nobody is coming for, may run as they would have at
+		// startup (worktreeSweeper's `armed`).
+		if armOnceStarted && startupStarts.finished() {
+			armOnceStarted = false
+			worktreeGC.armed = true
+			pool.endUnclaimedHostlessJobs()
+			gcUploads(pool.ids())
+		}
 		// Sessions set aside by an earlier reclaim have authoritative rows but no local
 		// supervisor; their inbox is never polled until a takeover succeeds. Keep retrying
 		// here — the server fails an abandoned worktree operation over after its staleness
 		// window, at which point the takeover passes and the session re-attaches.
-		if !reclaimRetryAt.IsZero() && time.Now().After(reclaimRetryAt) && !claims.kept() {
+		//
+		// Not while the startup reclaim's sessions are still starting: one not started yet is missing from
+		// the pool, so this reclaim would take it over and start it a second time. So for the late check
+		// below and the reconciliations after a failed claim, which wait for the late check meanwhile.
+		if !reclaimRetryAt.IsZero() && time.Now().After(reclaimRetryAt) && !claims.kept() && startupStarts.finished() {
 			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 			if recoverErr != nil {
 				if loopCtx.Err() == nil {
@@ -2282,7 +2341,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				pool.endUnclaimedHostlessJobs()
 			}
 		}
-		if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) && !claims.kept() {
+		if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) && !claims.kept() && startupStarts.finished() {
 			lateClaimCheckAt = time.Time{}
 			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 			if recoverErr != nil {
@@ -2342,6 +2401,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				// No answer over the link: the claim goes again under its request id, and its answer is the session
 				// it claimed, if it claimed one. The reconciliation it owes is the late check's, once it is answered.
 				lateClaimCheckAt = time.Now()
+			} else if !startupStarts.finished() {
+				// The reconciliation would start the startup reclaim's unstarted sessions again; the late
+				// check runs it once they have all started, and no sooner than the failed request's claim
+				// may still commit (lateClaimWindow), so one check covers both.
+				lateClaimCheckAt = time.Now().Add(lateClaimWindow)
 			} else {
 				// The claim transaction may have committed before its response was lost.
 				// Reclaim all runner-owned rows and attach any authoritative RUNNING row
@@ -2384,6 +2448,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		if job == nil {
 			continue
 		}
+		// A session the startup reclaim has not started yet starts first, or its start is waited for:
+		// the claim then meets the supervisor the reclaim made, and never makes a second one.
+		startupStarts.settle(job.SessionID)
 		// A successful claim response can narrowly win the race with loopCtx
 		// cancellation. Register it rather than orphaning an already-claimed session;
 		// startSession observes the cancelled shutdown context and detaches without
@@ -2412,6 +2479,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				loopCancel()
 				break
 			}
+			if !startupStarts.finished() {
+				// As after a failed claim: the late check reconciles once the startup starts have ended.
+				lateClaimCheckAt = time.Now()
+				continue
+			}
 			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 			if recoverErr != nil {
 				if loopCtx.Err() == nil {
@@ -2435,6 +2507,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		endTakeover()
 	}
 
+	// A start still running registers its supervisor (it observes the cancelled loop context and
+	// detaches), and the drain below must see it.
+	startupStarts.wait()
 	logln("runner stopping; draining session supervisors...")
 	// Keep the heartbeat goroutine alive through the drain: the server's reaper force-fails
 	// any live session whose runner has been silent >90s, so going quiet while we finish an
