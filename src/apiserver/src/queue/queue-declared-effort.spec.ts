@@ -38,9 +38,18 @@ const vllmRow = (reasoningLevels?: string[]) => ({
   ],
 });
 
-function queueFor(opts: { effort: string | null; workspaceEffort?: string | null; row: unknown }) {
+type ClaimOpts = { effort: string | null; workspaceEffort?: string | null; row: unknown; sessionEnv?: Record<string, string> };
+
+/** The `updateMany` writes the last claim made: where the env stamp lands (envAppliedAt). */
+let sessionUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
+
+const ENV_CHANGED_AT = new Date('2026-11-11T10:00:00Z');
+
+function queueFor(opts: ClaimOpts) {
   const session = {
     id: SESSION_ID,
+    env: opts.sessionEnv ?? null,
+    envChangedAt: opts.sessionEnv ? ENV_CHANGED_AT : null,
     ownerId: '22222222-2222-4222-8222-222222222222',
     provider: 'local-vllm',
     providerBuiltin: false,
@@ -84,7 +93,14 @@ function queueFor(opts: { effort: string | null; workspaceEffort?: string | null
     conversationTurn: { findUnique: async () => ({ id: 'seed-turn' }), findFirst: async () => null, count: async () => 0 },
   };
   const prisma = {
-    session: { findUniqueOrThrow: async () => session, update: async () => session },
+    session: {
+      findUniqueOrThrow: async () => session,
+      update: async () => session,
+      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        sessionUpdates.push(args);
+        return { count: 1 };
+      },
+    },
     // run_event max(seq), the high-water mark buildSession continues from: raw SQL, never
     // `aggregate` (Prisma compiles that into an OFFSET subquery the planner cannot flatten).
     $queryRaw: async () => [{ max: 0 }],
@@ -97,7 +113,8 @@ function queueFor(opts: { effort: string | null; workspaceEffort?: string | null
   return new QueueService(prisma, { publishSessionUpdated() {} } as never);
 }
 
-async function claim(opts: { effort: string | null; workspaceEffort?: string | null; row: unknown }) {
+async function claim(opts: ClaimOpts) {
+  sessionUpdates = [];
   const queue = queueFor(opts);
   return (queue as unknown as { buildSession(id: string): Promise<ClaimedSession> }).buildSession(SESSION_ID);
 }
@@ -127,4 +144,20 @@ test("a session's own effort, and its workspace's, are moved onto the declared l
 test('a model that declares nothing is dispatched exactly as before', async () => {
   assert.equal((await claim({ effort: null, row: vllmRow() })).agent.effort, undefined);
   assert.equal((await claim({ effort: 'high', row: vllmRow() })).agent.effort, 'high');
+});
+
+test("the claim lays the session's env over the workspace's, under the provider's, and stamps envAppliedAt", async () => {
+  const claimed = await claim({
+    effort: null,
+    row: vllmRow(),
+    sessionEnv: { ANTHROPIC_BASE_URL: 'https://typed-into-the-session', MINE: 'from-the-session' },
+  });
+  // The session's own variable reaches the engine; the provider's endpoint still wins over both envs.
+  assert.equal(claimed.agent.env?.MINE, 'from-the-session');
+  assert.equal(claimed.agent.env?.ANTHROPIC_BASE_URL, 'http://127.0.0.1:8000');
+  // Stamped only while the env is the one this claim read.
+  const stamp = sessionUpdates.find((u) => 'envAppliedAt' in u.data);
+  assert.ok(stamp, 'envAppliedAt is stamped');
+  assert.ok(stamp.data.envAppliedAt instanceof Date);
+  assert.deepEqual(stamp.where, { id: SESSION_ID, envChangedAt: ENV_CHANGED_AT });
 });

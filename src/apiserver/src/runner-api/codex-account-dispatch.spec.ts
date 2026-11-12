@@ -147,6 +147,7 @@ function prismaFor(s: Scenario) {
     session: {
       findUniqueOrThrow: async () => row,
       findMany: async () => [row],
+      updateMany: async () => ({ count: 1 }),
     },
     modelProvider: {
       findFirst: async () => s.customRow ?? null,

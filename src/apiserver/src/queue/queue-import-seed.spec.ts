@@ -124,7 +124,7 @@ function harness(importSourceCwd: string | null, importedAt: Date | null, option
     attachment: { updateMany: async () => ({ count: 0 }) },
   };
   const prisma = {
-    session: { findUniqueOrThrow: async () => session },
+    session: { findUniqueOrThrow: async () => session, updateMany: async () => ({ count: 1 }) },
     // run_event max(seq), the high-water mark buildSession continues from: raw SQL, never
     // `aggregate` (Prisma compiles that into an OFFSET subquery the planner cannot flatten).
     $queryRaw: async () => [{ max: 0 }],

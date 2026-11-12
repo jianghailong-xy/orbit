@@ -85,6 +85,7 @@ function harness(
         return session;
       },
       update: async () => session,
+      updateMany: async () => ({ count: 1 }),
     },
     $executeRaw: async (...args: unknown[]) => {
       const { text, values } = renderRawQuery(args);

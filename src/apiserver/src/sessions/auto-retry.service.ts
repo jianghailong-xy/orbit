@@ -61,7 +61,7 @@ import { withActiveSessions } from '../providers/active-sessions';
 import { ACCOUNT_RESET_WAIT_MS, accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-accounts';
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
-import { isBuiltinProvider } from '../providers/custom-provider';
+import { engineBaseEnv, isBuiltinProvider } from '../providers/custom-provider';
 import { recordedEngine } from '../providers/session-engine';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import {
@@ -392,6 +392,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         antigravityAccountPinned: true,
         kimiAccountPinned: true,
         cursorAccountPinned: true,
+        env: true,
         workspace: {
           select: {
             env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
@@ -410,7 +411,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       const place = `${runnerId}:${engine}`;
       if (released.has(place)) continue;
       const column = ACCOUNT_CHOICE[engine];
-      const account = runAccount(engine, session.workspace?.env, { [column]: session[column] ?? session.workspace?.[column] }, runner, now);
+      const account = runAccount(engine, engineBaseEnv(session.workspace?.env as Record<string, string> | null, session.env), { [column]: session[column] ?? session.workspace?.[column] }, runner, now);
       const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
       if (!planUsageBlockedUntil(usage, engine, now, account)) continue;
       const elsewhere = accountAfterUsageLimitAt(
@@ -530,6 +531,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         kimiAccountPinned: true,
         cursorAccountPinned: true,
         providerBuiltin: true,
+        // The session's own env, laid over the workspace's as dispatch lays it (engineBaseEnv).
+        env: true,
         workspace: {
           select: {
             env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
@@ -697,7 +700,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               now,
               runAccount(
                 session.provider,
-                session.workspace?.env,
+                engineBaseEnv(session.workspace?.env as Record<string, string> | null, session.env),
                 {
                   codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
                   claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,

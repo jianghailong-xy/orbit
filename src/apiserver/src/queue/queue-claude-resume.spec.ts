@@ -77,6 +77,7 @@ function harness(
         sessionWrites.push(data);
         return session;
       },
+      updateMany: async () => ({ count: 1 }),
     },
     // run_event max(seq), the high-water mark buildSession continues from: raw SQL, never
     // `aggregate` (Prisma compiles that into an OFFSET subquery the planner cannot flatten).

@@ -83,7 +83,7 @@ async function claim(options: Options = {}): Promise<ClaimedSession> {
   };
   const prisma = {
     // findFirst: a task's session is asked whether it is a Wiki maintenance run (it is not).
-    session: { findUniqueOrThrow: async () => session, findFirst: async () => null, update: async () => session },
+    session: { findUniqueOrThrow: async () => session, findFirst: async () => null, update: async () => session, updateMany: async () => ({ count: 1 }) },
     $executeRaw: async () => 1,
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
     // run_event max(seq), the high-water mark buildSession continues from: raw SQL, never

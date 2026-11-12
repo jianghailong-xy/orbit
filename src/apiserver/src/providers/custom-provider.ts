@@ -27,6 +27,7 @@ import { ANTHROPIC_HOST } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
 import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
+import { stringEnv } from '../sessions/session-settings';
 import {
   firstRuntimeCatalogModel,
   runtimeCatalogModels,
@@ -582,6 +583,21 @@ function openCodeKeyConfig(row: OpenCodeKeyRow, model: string, base?: string, ap
 }
 
 /**
+ * The env an engine starts on before dispatch lays its own variables over it: the workspace's, with the
+ * session's own (Session.env, the Settings panel) over it, the session winning on the same name. An ORBIT_*
+ * name is Orbit's to set and never comes from the session's env: PATCH refuses one, and a stored one is
+ * dropped here too. Null when neither holds anything, as a workspace without env always was.
+ */
+export function engineBaseEnv(
+  workspaceEnv: Record<string, string> | null | undefined,
+  sessionEnv: unknown,
+): Record<string, string> | null {
+  const own = Object.entries(stringEnv(sessionEnv)).filter(([name]) => !name.toUpperCase().startsWith('ORBIT_'));
+  if (own.length === 0) return workspaceEnv ?? null;
+  return { ...(workspaceEnv ?? {}), ...Object.fromEntries(own) };
+}
+
+/**
  * Resolve how to actually run a session at dispatch: the engine the runner is handed, the model to
  * pass, and the process env. The engine is the SESSION's (`engine`, Session.engine — or, for a row
  * that has none yet, what session-engine.ts derived), and the credential only says where it sends its
@@ -625,6 +641,9 @@ export function resolveProviderExec(args: {
    * the runtime CLI's own endpoint (see runtimeCatalogDefault). */
   modelCatalog?: unknown;
   workspaceEnv?: Record<string, string> | null;
+  /** The session's own env (Session.env), laid over `workspaceEnv` (engineBaseEnv); what dispatch injects
+   *  below still wins over both. */
+  sessionEnv?: unknown;
   /** The Codex account slot this session runs on (Session.codexAccount ?? Workspace.codexAccount). Only a built-in
    *  Codex session reads it: it is resolved against `runner`'s report into the CODEX_HOME injected
    *  below, and a slot that runner does not report runs on Default — or, while the owner has removed
@@ -667,7 +686,9 @@ export function resolveProviderExec(args: {
    *  (declaredReasoningLevels): what every door that hands the engine an effort maps it onto. */
   reasoningLevels?: string[];
 } {
-  const { customRow, sessionModel, workspaceModel, workspaceEnv } = args;
+  const { customRow, sessionModel, workspaceModel } = args;
+  // The workspace's env with the session's own over it: everything below lays itself over this.
+  const workspaceEnv = engineBaseEnv(args.workspaceEnv, args.sessionEnv);
   if (customRow && !customRow.enabled) {
     throw new BadRequestException('provider is disabled');
   }

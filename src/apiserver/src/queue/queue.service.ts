@@ -23,6 +23,7 @@ import {
   accountPoolRuntime,
   adminOnlyProviderRefusal,
   builtinSessionEngine,
+  engineBaseEnv,
   ENGINE_INCOMPATIBLE_ERROR_LIKE,
   engineIncompatibleMessage,
   isBuiltinProvider,
@@ -769,6 +770,7 @@ export class QueueService {
     kimiAccountPinned: boolean;
     cursorAccount: string | null;
     cursorAccountPinned: boolean;
+    env: unknown;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: (AccountRunner & { accountNames: unknown; capabilities: string[] }) | null;
   }): Promise<WorkspaceAccountChoices> {
@@ -790,7 +792,8 @@ export class QueueService {
       session.assignedRunnerId!,
       engine,
       { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
-      workspace,
+      // The account a directory variable names is read off the env the engine starts on (engineBaseEnv).
+      workspace && { ...workspace, env: engineBaseEnv(workspace.env as Record<string, string> | null, session.env) },
       runner,
       new Date(),
     );
@@ -1009,6 +1012,8 @@ export class QueueService {
         workspaceModel: workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: workspace?.env as Record<string, string> | null,
+        // The session's own env (Settings panel), laid over the workspace's.
+        sessionEnv: session.env,
         // The account picked for this session, else its workspace's (accountsForClaim).
         codexAccount: accounts.codexAccount,
         claudeAccount: accounts.claudeAccount,
@@ -1045,6 +1050,13 @@ export class QueueService {
       }
     }
     const provider = exec.provider;
+    // The engine this claim starts is handed the session's env as it stands now (exec.env): the
+    // Settings panel owes no restart for it (sessionSettingsOf). Only while the env is still the one
+    // read: a PATCH landing since then is not in this engine, and stays owed.
+    await this.prisma.session.updateMany({
+      where: { id: session.id, envChangedAt: session.envChangedAt },
+      data: { envAppliedAt: new Date() },
+    });
     // What the runner is handed as the model: the session's own id, except an OpenCode session on a
     // key, which names it the way OpenCode selects it (resolveProviderExec `runnerModel`).
     const runnerModel = exec.runnerModel ?? exec.model;
