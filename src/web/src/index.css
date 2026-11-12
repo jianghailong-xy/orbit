@@ -12442,7 +12442,9 @@ button.chat-jump-start:hover {
 }
 .project-done-criteria-list li {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  /* number · text · state (decided board ③): the state reads on the right. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
   gap: 8px;
   padding: 7px 10px;
   border-top: 1px solid var(--border-subtle);
@@ -12451,9 +12453,15 @@ button.chat-jump-start:hover {
 }
 .project-done-criteria-list li:first-child { border-top: 0; }
 .project-done-criterion-state {
-  grid-column: 2;
+  grid-column: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: end;
+  text-align: right;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 .project-done-gap-list {
   margin: 0;
@@ -21219,6 +21227,11 @@ div.landing-jobs-open {
    the list. Styled as the quiet twisty it is rather than as a button: nothing about it should
    compete with the state sentence above it. */
 .acceptance-method {
+  /* How it's checked, and beside it the Met by menu (board 03 ③). */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
   margin-top: 5px;
   font-size: 12px;
   line-height: 1.55;
@@ -21251,6 +21264,9 @@ div.landing-jobs-open {
   text-decoration: none;
 }
 .acceptance-method-body {
+  /* Its own line under the toggle and the Met by menu, which share the row above it. */
+  flex-basis: 100%;
+  order: 1;
   margin-top: 4px;
   padding-inline-start: 10px;
   border-inline-start: 2px solid var(--border-subtle);
@@ -27516,11 +27532,13 @@ button.agent-progress-agent:hover {
 }
 
 .project-done-findings {
+  /* What Orbit cannot prove about where work landed: a warning, not a blocker (decided board ④). */
+  margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--error);
+  border: 1px solid var(--warning-border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--error) 8%, transparent);
-  color: var(--error);
+  background: var(--warning-bg);
+  color: var(--text-1);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -27598,13 +27616,10 @@ button.agent-progress-agent:hover {
    number · text · state, the state green when met and red when not; "Ran without a branch" and a confirmation of an
    earlier wording in the warning colour. What stands in the way is a red box naming its tasks; what Orbit cannot prove
    about landing is a yellow one. */
-.project-done-criteria-list li { grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; }
 .project-done-criteria-list .project-done-gap-number { width: 18px; height: 18px; line-height: 18px; font-size: 10px;
   background: transparent; color: var(--text-3); }
 .project-done-criterion-text { min-width: 0; color: var(--text-1); }
 .project-done-criterion-confirmed { display: block; margin-top: 2px; font-size: 11px; color: var(--text-3); }
-.project-done-criterion-state { grid-column: 3; display: inline-flex; align-items: center; gap: 8px; justify-self: end;
-  text-align: right; font-size: 11.5px; font-weight: 600; }
 .project-done-criterion-state.is-met { color: var(--success); }
 .project-done-criterion-state.is-unmet { color: var(--error); }
 .project-done-criterion-state.is-warn { color: var(--warning); }
@@ -27630,7 +27645,6 @@ button.agent-progress-agent:hover {
 .project-done-open { padding: 2px 10px; font-size: 12px; text-decoration: none; }
 .project-done-blocker-move { display: flex; gap: 10px; align-items: center; margin: 8px 0 0 26px; }
 .project-done-blocker-hint { font-size: 11.5px; color: var(--text-3); }
-.project-done-findings { margin-top: 10px; border-color: var(--warning-border); background: var(--warning-bg); color: var(--text-1); }
 .project-done-findings > b { display: block; margin-bottom: 4px; }
 /* Project page: the non-code line where the branch would be, the Delivers provenance, and Landing Off. */
 .project-integration-non-code .project-integration-facts { color: var(--text-2); font-size: 12.5px; }
@@ -27642,7 +27656,6 @@ button.agent-progress-agent:hover {
 .acceptance-confirmation-note { margin-top: 4px; font-size: 12.5px; color: var(--text-2); }
 .acceptance-confirmation-note.is-failed { color: var(--error); }
 .acceptance-confirmation-actions { display: flex; gap: 6px; margin-top: 6px; }
-.acceptance-method { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
 .acceptance-mode-trigger { padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--text-3); cursor: pointer; }
 .acceptance-mode-trigger b { color: var(--text-2); font-weight: 600; }
 .acceptance-mode-option { display: grid; gap: 2px; max-width: 320px; white-space: normal; }
