@@ -108,4 +108,16 @@ class StickySummaryTest {
             assertEquals(card, StickySummary.compactLabel(card))
         }
     }
+
+    /** A translated turn: the bar quotes what the owner wrote (`translation.original`), as the bubble does — not the English. */
+    @Test fun aTranslatedQuestionQuotesTheOwnersOwnWords() {
+        val english = "The Google sign-in button on the login page does nothing in Safari. Find out why and fix it."
+        val original = "登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好"
+        val translated = user(1, buildJsonObject {
+            put("text", english)
+            putJsonObject("translation") { put("state", "DONE"); put("from", "zh-Hans"); put("original", original) }
+        })
+        assertEquals("↑ Your question" to original, StickySummary.of(translated))
+        assertEquals("a message without translation is unchanged", "↑ Your question" to english, StickySummary.of(user(2, text(english))))
+    }
 }

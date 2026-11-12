@@ -21,6 +21,8 @@ import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.TranslationShown
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
@@ -94,7 +96,8 @@ internal object StickySummary {
         event.card(cards, "projectStarted")?.let { started ->
             return ARROW + (if (started.text("by") == "CONFIRMATION") "Project started" else "Project switched on") to started.text("projectTitle").orEmpty()
         }
-        return YOUR_QUESTION to event.personWords()
+        // The owner's own words, as the bubble under the bar shows them: what they typed, not the English the engine got.
+        return YOUR_QUESTION to TranslationShown.userWords(event.personWords(), Translation.turn(event.fields["translation"]), flipped = false)
     }
 
     private fun itemKindLabel(kind: String?) = when (kind) {
