@@ -52,6 +52,8 @@ extension AppModel {
 /// One document of the confirmed plan, read by its slug; a 404 is a document the plan does not have.
 struct WikiDocScreen: View {
     @Environment(AppModel.self) private var model
+    /// A wide shell: a footnote's task opens over the document (owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     let address: WikiDocAddress
 
     @State private var contentsShown = false
@@ -209,7 +211,7 @@ struct WikiDocScreen: View {
             if !model.openOrbitLink(SessionRecordLink.url(session: session, record: record)) {
                 model.open(.session(id: PublicID.toPublic(session)))
             }
-        case .task(let id):     model.open(.task(id: PublicID.toPublic(id)))
+        case .task(let id):     model.open(.task(id: PublicID.toPublic(id)), overPage: opensTasksOverPage)
         case .session(let id):  model.open(.session(id: PublicID.toPublic(id)))
         case .project(let id):  model.open(.project(id: PublicID.toPublic(id)))
         case .external(let url): model.openExternal(url)

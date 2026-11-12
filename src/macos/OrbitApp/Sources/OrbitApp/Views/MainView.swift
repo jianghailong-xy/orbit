@@ -47,11 +47,25 @@ struct MainView: View {
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
                 #endif
         } detail: {
-            SectionDetail(section: model.selectedSection)
-                .orbitPaneBackground()
+            // The page is kept mounted under the task, so the conversation's scroll position and
+            // its live transcript are exactly what closing returns to.
+            ZStack {
+                SectionDetail(section: model.selectedSection)
+                    .orbitPaneBackground()
+                    .accessibilityHidden(model.taskOverPageID != nil)
+                if model.taskOverPageID != nil { TaskOverPagePanel() }
+            }
         }
         .task { model.startPolling() }
+        // The wide shells' pages all open a pressed task over themselves (owner decision
+        // 2026-11-12): said once here, so a conversation, a wiki entry and every card in them give
+        // the same answer. The phone's shell never sets it.
+        .environment(\.opensTasksOverPage, true)
         .onAppear { columnVisibility = sidebarVisible ? .all : .doubleColumn }
+        // A task opened over a page belongs to that page: choosing another page from the sidebar
+        // takes it down with it (owner decision 2026-11-12). The shell's own write, so the model's
+        // section setter stays a plain section switch.
+        .onChange(of: model.selectedSection) { _, _ in model.closeTaskOverPage() }
         .onChange(of: columnVisibility) { _, now in
             // Brought back by hand while the chat is open: the reader's again, nothing to restore.
             if now == .all { foldedForChat = false }
@@ -399,5 +413,54 @@ struct ComingSoon: View {
     var body: some View {
         ContentUnavailableView(section.title, systemImage: section.systemImage, description: Text(note))
             .navigationTitle(section.title)
+    }
+}
+
+/// A task opened over the page it was pressed on — the wide shells' answer to a task link in a
+/// conversation, a wiki page or a watch card (owner decision 2026-11-12). It is the very same
+/// `TaskDetailPage` the Tasks section draws, laid over the detail column: the sidebar and the
+/// session list keep the conversation's place, and the page under it stays mounted, so Close puts
+/// the reader back exactly where they were.
+struct TaskOverPagePanel: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let taskID = model.taskOverPageID {
+            #if os(iOS)
+            // The task page's own actions (⋯, Share, Delete) are toolbar items, so the phone's
+            // panel gives them the bar they live in, with Close beside them.
+            NavigationStack {
+                TaskDetailPage(taskID: taskID, overPage: true)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { closeButton }
+                    }
+            }
+            .background(.background)
+            #else
+            // On the Mac those actions ride the window's toolbar, as they do in the Tasks pane;
+            // the panel's own bar carries the one control the page does not: Close.
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    closeButton
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.bar)
+                Divider()
+                TaskDetailPage(taskID: taskID, overPage: true)
+            }
+            .background(.background)
+            #endif
+        }
+    }
+
+    private var closeButton: some View {
+        Button { model.closeTaskOverPage() } label: {
+            Label("Close", systemImage: "xmark")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .keyboardShortcut(.cancelAction)
     }
 }

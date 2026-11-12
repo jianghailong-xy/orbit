@@ -19,6 +19,9 @@ import OrbitKit
 /// to the web's.
 struct WatchWakeCardView: View {
     @Environment(AppModel.self) private var model
+    /// A wide shell: a task this line names opens over the conversation it is in (owner decision
+    /// 2026-11-12). On a phone it keeps the route it always took.
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     /// The session's Tasks card, which names the tasks this conversation filed — set by the console.
     @Environment(CreatedTasksModel.self) private var createdTasks: CreatedTasksModel?
     let wake: WatchWake
@@ -203,7 +206,10 @@ struct WatchWakeCardView: View {
         let line = WatchWakeCard.changedLine(target, name: name(of: target))
         let tone = WatchWakeCard.isFailed(target) ? AnyShapeStyle(.red) : AnyShapeStyle(.tint)
         if let destination = route(for: target) {
-            Button { model.route(to: destination) } label: {
+            Button {
+                model.openFromConversation(destination, overConsole: false,
+                                           overPage: opensTasksOverPage)
+            } label: {
                 Text(line).font(.orbitMeta).foregroundStyle(tone).lineLimit(1)
             }
             .buttonStyle(.plain)

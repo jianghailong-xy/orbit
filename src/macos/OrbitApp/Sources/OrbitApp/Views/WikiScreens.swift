@@ -503,6 +503,8 @@ struct WikiIndexScreen: View {
 /// One entry's page, and the three forms its actions open.
 struct WikiEntryView: View {
     @Environment(AppModel.self) private var model
+    /// A wide shell: a source's task opens over the entry (owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     let entryID: String
 
     private enum Form: Identifiable {
@@ -594,7 +596,7 @@ struct WikiEntryView: View {
             retire: { retiring = true },
             copyLink: { copyLink(wiki, detail.entry) },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            openTask: { id in model.route(to: .task(PublicID.toPublic(id))) },
+            openTask: { id in model.open(.task(id: PublicID.toPublic(id)), overPage: opensTasksOverPage) },
             confirm: {
                 Task { finish(await wiki.confirm(detail.entry), done: WikiModeCopy.confirmed, failure: WikiCopy.entryConfirmFailed) }
             },

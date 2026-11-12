@@ -42,6 +42,9 @@ struct ConsoleView: View {
     @State private var bandOpened = false
     /// Bumped by the folded bar's ↓, which the transcript answers with the floating disc's jump.
     @State private var jumpRequest = 0
+    /// A wide shell: a task this conversation opens opens over it, not in the Tasks section
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -333,6 +336,12 @@ struct ConsoleView: View {
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
                 // The workspace's background agents and workflows, for the cards that draw them.
                 .environment(\.taskActivity, taskActivity(console))
+                // A task link in this conversation — prose on the Mac, a card's own button —
+                // opens over the conversation on a wide shell (owner decision 2026-11-12). With
+                // the flag false (every phone) this is the app's own door, word for word.
+                .environment(\.openURL, OpenURLAction { url in
+                    appModel.openOrbitLink(url, overPage: opensTasksOverPage) ? .handled : .leaving(url)
+                })
                 .environment(\.openPromotionReview, { promotionID in
                     promotionReview = PromotionReviewTarget(id: promotionID)
                 })
@@ -575,7 +584,8 @@ struct ConsoleView: View {
                 if let taskID = session.taskId {
                     Section {
                         Button {
-                            appModel.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                            appModel.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole,
+                                                          overPage: opensTasksOverPage)
                         } label: {
                             Label("Open Task", systemImage: "arrow.up.right")
                         }
