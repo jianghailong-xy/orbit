@@ -128,10 +128,10 @@ final class RunnerUpdatingTests: XCTestCase {
         XCTAssertNil(old.queuedReason)
         XCTAssertNil(old.queuedRunnerUpdate)
 
-        let stillQueued = s.applying(try summary(#"{"id":"S1","status":"PENDING","runState":"QUEUED"}"#))
+        let stillQueued = s.applying(try summary(#"{"id":"S1","status":"PENDING","runState":"QUEUED","pendingApprovals":0}"#))
         XCTAssertEqual(stillQueued.queuedReason, "runner_updating")
         XCTAssertEqual(stillQueued.queuedRunnerUpdate, s.queuedRunnerUpdate)
-        let started = s.applying(try summary(#"{"id":"S1","status":"RUNNING","runState":"RUNNING"}"#))
+        let started = s.applying(try summary(#"{"id":"S1","status":"RUNNING","runState":"RUNNING","pendingApprovals":0}"#))
         XCTAssertNil(started.queuedReason)
         XCTAssertNil(started.queuedRunnerUpdate)
     }
