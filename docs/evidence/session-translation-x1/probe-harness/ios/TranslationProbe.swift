@@ -19,10 +19,12 @@ struct TranslationProbeApp: App {
 
     var body: some Scene {
         WindowGroup {
+            // As OrbitiOSApp has it: the sheet inside, the model's environment outside, so the
+            // sheet's own content is given the model too.
             CompactShell()
-                .environment(model)
                 .settingsSheet(model)
                 .task { await land(model) }
+                .environment(model)
         }
     }
 }
