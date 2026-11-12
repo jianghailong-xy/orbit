@@ -13,6 +13,7 @@ async function clipOf(page) {
 }
 async function shot(browser, name, opts) {
   const { page, context, errors } = await open(browser, opts);
+  for (const sel of opts.click ?? []) { await page.locator(sel.css).nth(sel.n ?? 0).click(); await page.waitForTimeout(150); }
   await page.mouse.move(5, 5);
   await page.waitForTimeout(400); await settle(page);
   const clip = await clipOf(page);
@@ -23,6 +24,11 @@ async function shot(browser, name, opts) {
 const P = () => ({ events: plainEvents() });
 const C = () => ({ events: coordinatorEvents(), coordinator: true, title: 'Coordinator · Runner link v1' });
 const scenes = {
+  'n-p-today': (b) => shot(b, 'n-p-today', P()),
+  'n-p-new': (b) => shot(b, 'n-p-new', { ...P(), lengthRule: true }),
+  'n-c-today': (b) => shot(b, 'n-c-today', C()),
+  'n-c-new': (b) => shot(b, 'n-c-new', { ...C(), lengthRule: true }),
+  'n-c-new-open': (b) => shot(b, 'n-c-new-open', { ...C(), lengthRule: true, click: [{ css: '.orbit-exchanges-line', n: 0 }] }),
   'p-today': (b) => shot(b, 'p-today', P()),
   'p-job': (b) => shot(b, 'p-job', { ...P(), rules: ['job'] }),
   'p-question': (b) => shot(b, 'p-question', { ...P(), rules: ['question'] }),
